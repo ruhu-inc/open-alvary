@@ -7,8 +7,10 @@ from api.vercel import create_vercel_app
 from scripts import build_vercel
 
 
-def test_vercel_snapshot_serves_prefixed_api_and_verified_downloads():
-    client = TestClient(create_vercel_app())
+def test_vercel_snapshot_serves_prefixed_api_and_verified_downloads(tmp_path):
+    (tmp_path / "index.html").write_text("<h1>Open Alvary</h1>")
+    client = TestClient(create_vercel_app(frontend=tmp_path))
+    assert client.get("/").text == "<h1>Open Alvary</h1>"
     assert client.get("/api/healthz").json() == {"status": "ok"}
     assert client.get("/api/coverage").json()["catalogued_sources"] == 4
     assert client.get("/api/coverage").json()["open_full_text_sources"] == 0

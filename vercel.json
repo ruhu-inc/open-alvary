@@ -2,12 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "fastapi",
   "buildCommand": "python -m scripts.build_vercel",
-  "rewrites": [
-    {
-      "source": "/",
-      "destination": "/index.html"
-    }
-  ],
   "headers": [
     {
       "source": "/(.*)",
