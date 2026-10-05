@@ -1,18 +1,19 @@
 # Catalogue metadata licensing
 
-Status: pending owner approval
+Status: approved
 
-Proposed licence: Creative Commons Attribution 4.0 International (CC BY 4.0)
-for the original catalogue metadata authored by Open Alvary contributors.
-This proposal is not yet a licence grant. Public launch is blocked until the
-owner approves the terms and this file is updated.
+The original catalogue metadata authored by Open Alvary contributors is licensed
+under Creative Commons Attribution 4.0 International (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
 
-The proposed scope is independently authored bibliographic facts, catalogue notes
-and project-authored coverage/release descriptions. It excludes linked or fetched
-legal texts, third-party headnotes and compilations, licence/evidence documents,
-trademarks, personal data and source-specific permissions. A metadata licence can
-never widen the permissions recorded for a source document.
+Attribute Open Alvary contributors, link to the licence, and indicate changes.
+The scope covers original catalogue notes and project-authored bibliographic,
+coverage and release descriptions to the extent they are protected by applicable rights.
+
+It excludes linked or fetched legal texts, third-party headnotes and compilations,
+licence/evidence documents, trademarks, personal data and source-specific permissions.
+This metadata licence never widens the permissions recorded for a source document.
+No rights are asserted over facts not subject to copyright or similar rights.
 
 Software and project documentation are covered separately by LICENSE (MIT).
-The code reports the configured metadata licence through GET /project; deployment
-preflight requires both approved terms here and matching configuration.
+Maintainer: Ruhu, Inc.. Contact: hello@ruhu.ai.

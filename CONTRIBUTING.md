@@ -6,8 +6,8 @@ before proposing source data. The README contains the local setup and verificati
 
 Software and documentation contributions are submitted under the repository's MIT
 licence. Contribute only work you are entitled to licence. Original catalogue
-metadata terms are described separately in DATA-LICENSE.md; external data
-contributions are not accepted until those terms are approved.
+metadata contributions are submitted under CC BY 4.0 as described in DATA-LICENSE.md.
+Third-party content still requires source-specific permission and review.
 
 Useful first contributions include parser fixtures made from original synthetic
 text, accessibility fixes, schema feedback and official-source discovery. Include
