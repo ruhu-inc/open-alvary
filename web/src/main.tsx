@@ -1097,12 +1097,11 @@ function Privacy() {
             browser storage to track visitors.
           </p>
           <p>
-            The provided production configuration disables access logs for the
-            web server and API. Network infrastructure processes connection
-            information such as IP addresses; operational error logs may contain
-            request context. Application container logs rotate at three files of
-            up to 10 MiB each. Hosting-provider retention must be confirmed by
-            the operator.
+            Hosting infrastructure processes connection information such as IP
+            addresses and may retain request metadata and operational logs.
+            The Docker configuration disables application access logs; a managed
+            host such as Vercel has separate logging and retention settings.
+            The operator must verify those settings for the deployed service.
           </p>
           <p>
             Please avoid entering personal, confidential or client-specific

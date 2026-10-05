@@ -20,3 +20,8 @@ artifacts/
 !deployment/.env.example
 backups/
 *.dump
+
+# Generated Vercel frontend and local project link
+/public/
+.vercel/
+.vercel

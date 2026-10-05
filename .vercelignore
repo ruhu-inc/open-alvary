@@ -1,0 +1,17 @@
+.venv
+.git
+.pytest_cache
+.ruff_cache
+**/__pycache__
+**/*.pyc
+*.egg-info
+*.db
+*.db-*
+.env
+.env.*
+artifacts
+backups
+private-staging
+web/node_modules
+web/dist
+public

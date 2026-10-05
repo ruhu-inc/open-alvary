@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 from api.project import project_info
 
 
-def launch_errors(environ=None, data_licence_text=None):
+def public_identity_errors(environ=None, data_licence_text=None):
     env = environ if environ is not None else os.environ
     errors = []
     url = urlsplit(env.get("PUBLIC_REPOSITORY_URL", ""))
@@ -19,13 +19,19 @@ def launch_errors(environ=None, data_licence_text=None):
         errors.append("PUBLIC_MAINTAINER is required")
     if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", env.get("PUBLIC_CONTACT_EMAIL", "")):
         errors.append("PUBLIC_CONTACT_EMAIL must be a monitored email address")
+    licence_text = data_licence_text if data_licence_text is not None else Path("DATA-LICENSE.md").read_text()
+    if env.get("METADATA_LICENCE") != "CC-BY-4.0" or "Status: approved" not in licence_text:
+        errors.append("Original metadata licence requires recorded owner approval")
+    return errors
+
+
+def launch_errors(environ=None, data_licence_text=None):
+    env = environ if environ is not None else os.environ
+    errors = public_identity_errors(env, data_licence_text)
     if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}", env.get("PUBLIC_DOMAIN", "")):
         errors.append("PUBLIC_DOMAIN must be a hostname without scheme or path")
     if not re.fullmatch(r"[A-Za-z0-9]{32,}", env.get("POSTGRES_PASSWORD", "")):
         errors.append("POSTGRES_PASSWORD must be a generated alphanumeric secret of at least 32 characters")
-    licence_text = data_licence_text if data_licence_text is not None else Path("DATA-LICENSE.md").read_text()
-    if env.get("METADATA_LICENCE") != "CC-BY-4.0" or "Status: approved" not in licence_text:
-        errors.append("Original metadata licence requires recorded owner approval")
     return errors
 
 
