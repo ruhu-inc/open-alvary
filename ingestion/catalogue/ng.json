@@ -1,0 +1,151 @@
+{
+  "languages": [
+    {
+      "id": "en",
+      "name": "English",
+      "tag": "en"
+    }
+  ],
+  "jurisdictions": [
+    {
+      "id": "ng",
+      "name": "Nigeria",
+      "country_code": "NG",
+      "legal_systems": [
+        "common law",
+        "customary law",
+        "Islamic law"
+      ],
+      "languages": [
+        "en"
+      ]
+    }
+  ],
+  "authorities": [
+    {
+      "id": "ng-national-assembly",
+      "jurisdiction_id": "ng",
+      "name": "National Assembly of Nigeria",
+      "kind": "legislature",
+      "official_url": "https://nass.gov.ng/"
+    },
+    {
+      "id": "ng-federal-government",
+      "jurisdiction_id": "ng",
+      "name": "Federal Government of Nigeria",
+      "kind": "government",
+      "official_url": "https://www.justice.gov.ng/"
+    }
+  ],
+  "sources": [
+    {
+      "id": "ng-constitution-1999",
+      "title": "Constitution of the Federal Republic of Nigeria 1999",
+      "document_type": "constitution",
+      "canonical_url": "https://www.justice.gov.ng/nigerian-constitution/",
+      "url_kind": "landing_page",
+      "citation": "Constitution of Nigeria 1999",
+      "authority_id": "ng-federal-government",
+      "jurisdiction_id": "ng",
+      "language": "en",
+      "legal_status": "unknown",
+      "catalogue_note": "Consolidation and amendment coverage require verification; no current consolidated text is asserted."
+    },
+    {
+      "id": "ng-cbn-act-2007",
+      "title": "Central Bank of Nigeria Act 2007",
+      "document_type": "act",
+      "canonical_url": "https://www.cbn.gov.ng/OUT/CIRCULARS/CSD/2007/CBN%20ACT%202007.PDF",
+      "url_kind": "document",
+      "citation": "CBN Act 2007",
+      "authority_id": "ng-national-assembly",
+      "jurisdiction_id": "ng",
+      "language": "en",
+      "legal_status": "unknown",
+      "catalogue_note": "Official-host document located. Amendment coverage and redistribution rights remain unverified."
+    },
+    {
+      "id": "ng-foi-act-2011",
+      "title": "Freedom of Information Act 2011",
+      "document_type": "act",
+      "canonical_url": "https://www.justice.gov.ng/freedom-of-information-portal/",
+      "url_kind": "landing_page",
+      "citation": "FOI Act 2011",
+      "authority_id": "ng-national-assembly",
+      "jurisdiction_id": "ng",
+      "language": "en",
+      "legal_status": "unknown",
+      "catalogue_note": "Official ministry landing page. Follow the official document link only after an acquisition review."
+    },
+    {
+      "id": "ng-isa-2007",
+      "title": "Investments and Securities Act 2007",
+      "document_type": "act",
+      "canonical_url": "https://www.sec.gov.ng/our-mandate/regulation/acts/",
+      "url_kind": "landing_page",
+      "citation": "ISA 2007",
+      "authority_id": "ng-national-assembly",
+      "jurisdiction_id": "ng",
+      "language": "en",
+      "legal_status": "repealed",
+      "catalogue_note": "Historical candidate: SEC reports repeal by the 2025 Act. Effective dates and section-level effects need content review.",
+      "status_evidence": "https://www.sec.gov.ng/our-mandate/regulation/acts/"
+    }
+  ],
+  "rights": [
+    {
+      "id": "rights-ng-constitution-1999",
+      "source_id": "ng-constitution-1999",
+      "status": "RIGHTS_UNDER_REVIEW",
+      "metadata_public": true,
+      "metadata_basis": "Independently authored bibliographic catalogue entry with an official-source link; no source text, headnotes or compilation copied.",
+      "legal_note": "No redistribution permission verified. Official hosting is not a licence. Named legal reviewer and source-specific evidence required."
+    },
+    {
+      "id": "rights-ng-cbn-act-2007",
+      "source_id": "ng-cbn-act-2007",
+      "status": "RIGHTS_UNDER_REVIEW",
+      "metadata_public": true,
+      "metadata_basis": "Independently authored bibliographic catalogue entry with an official-source link; no source text, headnotes or compilation copied.",
+      "legal_note": "No redistribution permission verified. Official hosting is not a licence. Named legal reviewer and source-specific evidence required."
+    },
+    {
+      "id": "rights-ng-foi-act-2011",
+      "source_id": "ng-foi-act-2011",
+      "status": "RIGHTS_UNDER_REVIEW",
+      "metadata_public": true,
+      "metadata_basis": "Independently authored bibliographic catalogue entry with an official-source link; no source text, headnotes or compilation copied.",
+      "legal_note": "No redistribution permission verified. Official hosting is not a licence. Named legal reviewer and source-specific evidence required."
+    },
+    {
+      "id": "rights-ng-isa-2007",
+      "source_id": "ng-isa-2007",
+      "status": "RIGHTS_UNDER_REVIEW",
+      "metadata_public": true,
+      "metadata_basis": "Independently authored bibliographic catalogue entry with an official-source link; no source text, headnotes or compilation copied.",
+      "legal_note": "No redistribution permission verified. Official hosting is not a licence. Named legal reviewer and source-specific evidence required."
+    }
+  ],
+  "citations": [
+    {
+      "id": "citation-ng-constitution-1999",
+      "source_id": "ng-constitution-1999",
+      "value": "Constitution of Nigeria 1999"
+    },
+    {
+      "id": "citation-ng-cbn-act-2007",
+      "source_id": "ng-cbn-act-2007",
+      "value": "CBN Act 2007"
+    },
+    {
+      "id": "citation-ng-foi-act-2011",
+      "source_id": "ng-foi-act-2011",
+      "value": "FOI Act 2011"
+    },
+    {
+      "id": "citation-ng-isa-2007",
+      "source_id": "ng-isa-2007",
+      "value": "ISA 2007"
+    }
+  ]
+}

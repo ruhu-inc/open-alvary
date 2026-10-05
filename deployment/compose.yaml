@@ -1,0 +1,87 @@
+# Production pilot. Always pass --env-file deployment/.env.
+name: open-alvary
+x-app-environment: &app-environment
+  DATABASE_URL: postgresql+psycopg://open_alvary:${POSTGRES_PASSWORD:?Set a generated alphanumeric database password}@db:5432/open_alvary
+  PUBLIC_REPOSITORY_URL: ${PUBLIC_REPOSITORY_URL:?Set the public GitHub repository URL}
+  PUBLIC_MAINTAINER: ${PUBLIC_MAINTAINER:?Set the accountable maintainer name}
+  PUBLIC_CONTACT_EMAIL: ${PUBLIC_CONTACT_EMAIL:?Set a monitored public email}
+  METADATA_LICENCE: ${METADATA_LICENCE:?Confirm metadata licensing before launch}
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: open_alvary
+      POSTGRES_USER: open_alvary
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a generated alphanumeric database password}
+    volumes: ["corpus_db:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U open_alvary -d open_alvary"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 512m
+    logging: &logs
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  migrate:
+    build: {context: ..}
+    environment:
+      <<: *app-environment
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set the public hostname}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set the database password}
+    command: ["sh", "-c", "python -m scripts.check_launch && alembic upgrade head && python -m scripts.seed"]
+    depends_on:
+      db: {condition: service_healthy}
+    restart: "no"
+    logging: *logs
+  api:
+    build: {context: ..}
+    restart: unless-stopped
+    environment: *app-environment
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8018", "--no-access-log", "--limit-concurrency", "64", "--timeout-keep-alive", "5"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8018/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    logging: *logs
+  web:
+    build: {context: ../web}
+    restart: unless-stopped
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/api/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    mem_limit: 128m
+    logging: *logs
+  edge:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set the public hostname}
+      ACME_EMAIL: ${PUBLIC_CONTACT_EMAIL:?Set a monitored email}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      web: {condition: service_healthy}
+    mem_limit: 128m
+    logging: *logs
+volumes:
+  corpus_db:
+  caddy_data:
+  caddy_config:

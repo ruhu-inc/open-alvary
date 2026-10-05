@@ -1,0 +1,17 @@
+name: Bug report
+description: Report a reproducible software or website issue.
+body:
+  - type: markdown
+    attributes:
+      value: Do not post private documents, credentials, personal data or security exploit details here.
+  - type: textarea
+    id: behavior
+    attributes: {label: Expected and observed behaviour}
+    validations: {required: true}
+  - type: textarea
+    id: reproduce
+    attributes: {label: Steps to reproduce, description: Include route and release/version where relevant.}
+    validations: {required: true}
+  - type: textarea
+    id: environment
+    attributes: {label: Browser or environment}

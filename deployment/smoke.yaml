@@ -1,0 +1,6 @@
+# Disposable local tests bypass the public-identity/licensing launch gate only.
+services:
+  migrate:
+    command: ["sh", "-c", "alembic upgrade head && python -m scripts.seed"]
+  web:
+    ports: ["127.0.0.1:5179:80"]

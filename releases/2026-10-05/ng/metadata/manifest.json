@@ -1,0 +1,68 @@
+{
+  "coverage": {
+    "catalogued_sources": 4,
+    "jurisdictions": {
+      "ng": 4
+    },
+    "metadata_only_sources": 4,
+    "notice": "Catalogue coverage only; not a claim of complete or current law.",
+    "open_full_text_sources": 0,
+    "published_versions": 0
+  },
+  "data_licence": "Per-record; no blanket legal-text licence",
+  "files": {
+    "README.md": {
+      "sha256": "d65196bf6149a0853b38079e760b76ad843a1a666b05f8daefa86d19ce17f32b"
+    },
+    "amendments.jsonl": {
+      "records": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "authorities.jsonl": {
+      "records": 2,
+      "sha256": "66314106a234bcef78c454386be4888ec6e97b096110a0e8ddc7fd763781c25c"
+    },
+    "citations.jsonl": {
+      "records": 4,
+      "sha256": "43b6b6bdef1910051a72532b4ad3f0e35d8140ca59dedd793365cc0e7d44e0f0"
+    },
+    "coverage.json": {
+      "sha256": "72a59dc4af83390c70bd22ce00f53ac760c1386d8d494e7ac72dbb6ae8b928e0"
+    },
+    "jurisdictions.jsonl": {
+      "records": 1,
+      "sha256": "1a962e9000b9a4e54a1e5ab56a7376e128f6fbe2561d5da64b62127265049c5a"
+    },
+    "languages.jsonl": {
+      "records": 1,
+      "sha256": "271c7f0f7855bc5045df376476190da7cf7f0e56ce77638a9a26d18c6f023390"
+    },
+    "rights-summary.json": {
+      "sha256": "7b4219572a9dea41f31117f46062f4fe172bcb069f85b806cea9227382ee60b4"
+    },
+    "rights.jsonl": {
+      "records": 4,
+      "sha256": "2d264f24e3052fb345e0f8d02d0d7e2c839738951a8a1b5d4822fbfee25061f0"
+    },
+    "sources.jsonl": {
+      "records": 4,
+      "sha256": "37544a0265810b20d9b4bb6aae250c3e0f32a971502999466d4a9bbe52193107"
+    },
+    "structure.jsonl": {
+      "records": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "translations.jsonl": {
+      "records": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "versions.jsonl": {
+      "records": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "jurisdiction": "ng",
+  "mode": "metadata",
+  "release_id": "2026-10-05",
+  "schema_version": "0.1.0"
+}

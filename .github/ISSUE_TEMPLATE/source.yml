@@ -1,0 +1,22 @@
+name: Source discovery or correction
+description: Suggest an official source or correct catalogue facts; do not paste legal text.
+body:
+  - type: input
+    id: source
+    attributes: {label: Source ID or proposed title}
+    validations: {required: true}
+  - type: input
+    id: official_url
+    attributes: {label: Official source URL}
+    validations: {required: true}
+  - type: textarea
+    id: correction
+    attributes: {label: Proposed correction and supporting evidence}
+    validations: {required: true}
+  - type: checkboxes
+    id: permissions
+    attributes:
+      label: Rights boundary
+      options:
+        - label: I understand that public availability does not establish redistribution permission, and I have not attached uncleared legal text or private material.
+          required: true

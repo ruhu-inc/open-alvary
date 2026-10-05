@@ -1,0 +1,969 @@
+{
+  "$defs": {
+    "Amendment": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "target_source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Target Source Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "amends",
+            "repeals",
+            "supersedes",
+            "cross_reference"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "effective_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective Date"
+        },
+        "evidence_url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Evidence Url",
+          "type": "string"
+        },
+        "verified": {
+          "default": false,
+          "title": "Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "source_id",
+        "target_source_id",
+        "kind",
+        "evidence_url"
+      ],
+      "title": "Amendment",
+      "type": "object"
+    },
+    "Authority": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "jurisdiction_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Jurisdiction Id",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "legislature",
+            "court",
+            "regulator",
+            "government",
+            "other"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "official_url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Official Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "jurisdiction_id",
+        "name",
+        "kind",
+        "official_url"
+      ],
+      "title": "Authority",
+      "type": "object"
+    },
+    "Citation": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "value": {
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        },
+        "version_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version Id"
+        },
+        "node_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Node Id"
+        }
+      },
+      "required": [
+        "id",
+        "source_id",
+        "value"
+      ],
+      "title": "Citation",
+      "type": "object"
+    },
+    "Jurisdiction": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "country_code": {
+          "pattern": "^[A-Z]{2}$",
+          "title": "Country Code",
+          "type": "string"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Id"
+        },
+        "legal_systems": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Legal Systems",
+          "type": "array"
+        },
+        "languages": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Languages",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "country_code"
+      ],
+      "title": "Jurisdiction",
+      "type": "object"
+    },
+    "Language": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "tag": {
+          "minLength": 1,
+          "title": "Tag",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "tag"
+      ],
+      "title": "Language",
+      "type": "object"
+    },
+    "Permission": {
+      "enum": [
+        "yes",
+        "no",
+        "conditional",
+        "unknown"
+      ],
+      "title": "Permission",
+      "type": "string"
+    },
+    "RightsRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/RightsStatus",
+          "default": "RIGHTS_UNDER_REVIEW"
+        },
+        "rights_holder": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rights Holder"
+        },
+        "licence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Licence"
+        },
+        "licence_url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Licence Url"
+        },
+        "redistribution_allowed": {
+          "$ref": "#/$defs/Permission",
+          "default": "unknown"
+        },
+        "commercial_reuse_allowed": {
+          "$ref": "#/$defs/Permission",
+          "default": "unknown"
+        },
+        "derivatives_allowed": {
+          "$ref": "#/$defs/Permission",
+          "default": "unknown"
+        },
+        "attribution_required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribution Required"
+        },
+        "attribution_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribution Text"
+        },
+        "database_rights_notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Database Rights Notes"
+        },
+        "privacy_status": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "cleared",
+            "redacted",
+            "blocked"
+          ],
+          "title": "Privacy Status",
+          "type": "string"
+        },
+        "reviewer": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewer"
+        },
+        "reviewed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed At"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "evidence": {
+          "items": {
+            "format": "uri",
+            "maxLength": 2083,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "legal_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Legal Note"
+        },
+        "conditions": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Conditions",
+          "type": "array"
+        },
+        "conditions_satisfied": {
+          "default": false,
+          "title": "Conditions Satisfied",
+          "type": "boolean"
+        },
+        "approved_content_hashes": {
+          "items": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "title": "Approved Content Hashes",
+          "type": "array"
+        },
+        "metadata_public": {
+          "default": false,
+          "title": "Metadata Public",
+          "type": "boolean"
+        },
+        "metadata_basis": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metadata Basis"
+        }
+      },
+      "required": [
+        "id",
+        "source_id"
+      ],
+      "title": "RightsRecord",
+      "type": "object"
+    },
+    "RightsStatus": {
+      "enum": [
+        "OPEN",
+        "OPEN_WITH_CONDITIONS",
+        "LINK_ONLY",
+        "RESTRICTED",
+        "RIGHTS_UNDER_REVIEW"
+      ],
+      "title": "RightsStatus",
+      "type": "string"
+    },
+    "Source": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "jurisdiction_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Jurisdiction Id",
+          "type": "string"
+        },
+        "authority_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Authority Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "document_type": {
+          "enum": [
+            "constitution",
+            "act",
+            "regulation",
+            "judgment",
+            "gazette",
+            "guidance",
+            "other"
+          ],
+          "title": "Document Type",
+          "type": "string"
+        },
+        "canonical_url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Canonical Url",
+          "type": "string"
+        },
+        "url_kind": {
+          "default": "landing_page",
+          "enum": [
+            "document",
+            "landing_page",
+            "discovery"
+          ],
+          "title": "Url Kind",
+          "type": "string"
+        },
+        "citation": {
+          "minLength": 1,
+          "title": "Citation",
+          "type": "string"
+        },
+        "language": {
+          "default": "en",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Language",
+          "type": "string"
+        },
+        "legal_status": {
+          "default": "unknown",
+          "enum": [
+            "unknown",
+            "current",
+            "historical",
+            "repealed",
+            "superseded"
+          ],
+          "title": "Legal Status",
+          "type": "string"
+        },
+        "status_evidence": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status Evidence"
+        },
+        "catalogue_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Catalogue Note"
+        }
+      },
+      "required": [
+        "id",
+        "jurisdiction_id",
+        "authority_id",
+        "title",
+        "document_type",
+        "canonical_url",
+        "citation"
+      ],
+      "title": "Source",
+      "type": "object"
+    },
+    "SourceVersion": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "canonical_url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Canonical Url",
+          "type": "string"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "raw_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Raw Hash",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "canonical_text": {
+          "title": "Canonical Text",
+          "type": "string"
+        },
+        "parser": {
+          "minLength": 1,
+          "title": "Parser",
+          "type": "string"
+        },
+        "language": {
+          "default": "en",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Language",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "effective_until": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective Until"
+        },
+        "verification_status": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "verified",
+            "rejected"
+          ],
+          "title": "Verification Status",
+          "type": "string"
+        },
+        "content_verifier": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Verifier"
+        },
+        "content_verified_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Verified At"
+        }
+      },
+      "required": [
+        "id",
+        "source_id",
+        "canonical_url",
+        "retrieved_at",
+        "raw_hash",
+        "content_hash",
+        "canonical_text",
+        "parser"
+      ],
+      "title": "SourceVersion",
+      "type": "object"
+    },
+    "StructureNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "version_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Version Id",
+          "type": "string"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Id"
+        },
+        "kind": {
+          "enum": [
+            "document",
+            "part",
+            "chapter",
+            "section",
+            "subsection",
+            "paragraph",
+            "schedule"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "locator": {
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "order": {
+          "minimum": 0,
+          "title": "Order",
+          "type": "integer"
+        },
+        "start_byte": {
+          "minimum": 0,
+          "title": "Start Byte",
+          "type": "integer"
+        },
+        "end_byte": {
+          "minimum": 0,
+          "title": "End Byte",
+          "type": "integer"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "source_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Source Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source_id",
+        "version_id",
+        "kind",
+        "locator",
+        "order",
+        "start_byte",
+        "end_byte",
+        "source_hash"
+      ],
+      "title": "StructureNode",
+      "type": "object"
+    },
+    "Translation": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "source_version_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Version Id",
+          "type": "string"
+        },
+        "translated_version_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Translated Version Id",
+          "type": "string"
+        },
+        "language": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Language",
+          "type": "string"
+        },
+        "translator": {
+          "minLength": 1,
+          "title": "Translator",
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "official",
+            "human",
+            "machine"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "provenance_url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Provenance Url",
+          "type": "string"
+        },
+        "verified": {
+          "default": false,
+          "title": "Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "source_version_id",
+        "translated_version_id",
+        "language",
+        "translator",
+        "method",
+        "provenance_url"
+      ],
+      "title": "Translation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "jurisdictions": {
+      "items": {
+        "$ref": "#/$defs/Jurisdiction"
+      },
+      "title": "Jurisdictions",
+      "type": "array"
+    },
+    "authorities": {
+      "items": {
+        "$ref": "#/$defs/Authority"
+      },
+      "title": "Authorities",
+      "type": "array"
+    },
+    "languages": {
+      "items": {
+        "$ref": "#/$defs/Language"
+      },
+      "title": "Languages",
+      "type": "array"
+    },
+    "sources": {
+      "items": {
+        "$ref": "#/$defs/Source"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "rights": {
+      "items": {
+        "$ref": "#/$defs/RightsRecord"
+      },
+      "title": "Rights",
+      "type": "array"
+    },
+    "versions": {
+      "items": {
+        "$ref": "#/$defs/SourceVersion"
+      },
+      "title": "Versions",
+      "type": "array"
+    },
+    "structure": {
+      "items": {
+        "$ref": "#/$defs/StructureNode"
+      },
+      "title": "Structure",
+      "type": "array"
+    },
+    "citations": {
+      "items": {
+        "$ref": "#/$defs/Citation"
+      },
+      "title": "Citations",
+      "type": "array"
+    },
+    "amendments": {
+      "items": {
+        "$ref": "#/$defs/Amendment"
+      },
+      "title": "Amendments",
+      "type": "array"
+    },
+    "translations": {
+      "items": {
+        "$ref": "#/$defs/Translation"
+      },
+      "title": "Translations",
+      "type": "array"
+    }
+  },
+  "title": "Corpus",
+  "type": "object"
+}
