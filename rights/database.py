@@ -142,6 +142,12 @@ def provision_roles(conn: Connection, namespace: PolicyNamespace) -> dict[str, s
             "read_synthetic_artifact(uuid,text,text)",
         ):
             conn.execute(text(f"GRANT EXECUTE ON FUNCTION {p}.{signature} TO {acquisition}"))
+    if conn.scalar(
+        text("SELECT to_regprocedure(:name) IS NOT NULL"),
+        {"name": namespace.schema("policy") + ".reconcile_staging(jsonb)"},
+    ):
+        conn.execute(text(f"GRANT INSERT ON {p}.staging_lifecycle_event,{p}.lifecycle_receipt TO {guard}"))
+        conn.execute(text(f"GRANT EXECUTE ON FUNCTION {p}.reconcile_staging(jsonb) TO {acquisition}"))
     return roles
 
 

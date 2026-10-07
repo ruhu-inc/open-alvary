@@ -207,7 +207,29 @@ class CommandResult(CommandModel):
     replayed: bool = False
 
 
+class LifecycleRequest(CommandModel):
+    command_id: UUID
+    collection_id: CollectionID
+    after: UUID | None = None
+    limit: int = Field(default=50, ge=1, le=100, strict=True)
+    erase_due: bool = Field(default=False, strict=True)
+    reason: Reason
+
+
+class LifecycleResult(CommandModel):
+    command_id: UUID | None
+    status: Literal["applied", "conflict", "forbidden", "validation_failed", "unavailable"]
+    replayed: bool = False
+    scanned: int = Field(default=0, ge=0, le=100)
+    held: int = Field(default=0, ge=0, le=100)
+    erasure_required: int = Field(default=0, ge=0, le=100)
+    erased: int = Field(default=0, ge=0, le=100)
+    next_after: UUID | None = None
+
+
 class OperatorContracts(CommandModel):
-    schema_version: Literal["operator-command-2"] = "operator-command-2"
+    schema_version: Literal["operator-command-3"] = "operator-command-3"
     commands: tuple[OperatorCommand, ...] = ()
     results: tuple[CommandResult, ...] = ()
+    lifecycle_requests: tuple[LifecycleRequest, ...] = ()
+    lifecycle_results: tuple[LifecycleResult, ...] = ()

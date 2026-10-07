@@ -664,10 +664,12 @@ def test_acquisition_cli_commits_without_echoing_private_controller_contacts(ope
 
 def test_nonempty_acquisition_workflow_refuses_destructive_downgrade(chain):
     f, _, _, _, _, _ = chain
+    with f.engine.connect() as conn:
+        before = conn.scalar(text("SELECT version_num FROM alembic_version"))
     with pytest.raises(RuntimeError, match="requires forward repair"), f.engine.begin() as conn:
         config = Config("alembic.ini")
         config.attributes["connection"] = conn
         command.downgrade(config, "0004")
     with f.engine.connect() as conn:
-        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0005"
+        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == before
         assert conn.scalar(text(f"SELECT count(*) FROM {f.name(conn, 'policy', 'command_receipt')}")) == 3

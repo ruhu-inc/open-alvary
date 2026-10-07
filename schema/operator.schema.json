@@ -690,6 +690,139 @@
       "title": "EvidenceInput",
       "type": "object"
     },
+    "LifecycleRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "after": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "After"
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "erase_due": {
+          "default": false,
+          "title": "Erase Due",
+          "type": "boolean"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command_id",
+        "collection_id",
+        "reason"
+      ],
+      "title": "LifecycleRequest",
+      "type": "object"
+    },
+    "LifecycleResult": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Command Id"
+        },
+        "status": {
+          "enum": [
+            "applied",
+            "conflict",
+            "forbidden",
+            "validation_failed",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "replayed": {
+          "default": false,
+          "title": "Replayed",
+          "type": "boolean"
+        },
+        "scanned": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Scanned",
+          "type": "integer"
+        },
+        "held": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Held",
+          "type": "integer"
+        },
+        "erasure_required": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Erasure Required",
+          "type": "integer"
+        },
+        "erased": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Erased",
+          "type": "integer"
+        },
+        "next_after": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next After"
+        }
+      },
+      "required": [
+        "command_id",
+        "status"
+      ],
+      "title": "LifecycleResult",
+      "type": "object"
+    },
     "MaterialInput": {
       "additionalProperties": false,
       "properties": {
@@ -1011,8 +1144,8 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "operator-command-2",
-      "default": "operator-command-2",
+      "const": "operator-command-3",
+      "default": "operator-command-3",
       "title": "Schema Version",
       "type": "string"
     },
@@ -1060,6 +1193,22 @@
         "$ref": "#/$defs/CommandResult"
       },
       "title": "Results",
+      "type": "array"
+    },
+    "lifecycle_requests": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/LifecycleRequest"
+      },
+      "title": "Lifecycle Requests",
+      "type": "array"
+    },
+    "lifecycle_results": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/LifecycleResult"
+      },
+      "title": "Lifecycle Results",
       "type": "array"
     }
   },

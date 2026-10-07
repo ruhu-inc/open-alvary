@@ -12,16 +12,22 @@ from sqlalchemy.pool import NullPool
 
 from rights.commands import MAX_COMMAND_BYTES, OperatorCommands, parse_command
 from rights.database import PolicyNamespace
-from schema.operator import CommandResult
+from rights.lifecycle import AcquisitionLifecycle, parse_lifecycle_request
+from schema.operator import CommandResult, LifecycleResult
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Apply one private JSON operator command from stdin")
     parser.add_argument("--schema", default="public", help="Maintenance-selected foundation base schema")
+    parser.add_argument(
+        "--reconcile-staging", action="store_true", help="Apply one bounded private lifecycle request"
+    )
     args = parser.parse_args(argv)
-    result = CommandResult(command_id=None, status="validation_failed")
+    result_type = LifecycleResult if args.reconcile_staging else CommandResult
+    result = result_type(command_id=None, status="validation_failed")
     try:
-        command = parse_command(sys.stdin.buffer.read(MAX_COMMAND_BYTES + 1))
+        parse = parse_lifecycle_request if args.reconcile_staging else parse_command
+        command = parse(sys.stdin.buffer.read(MAX_COMMAND_BYTES + 1))
     except (ValidationError, ValueError):
         print(result.model_dump_json())
         return 2
@@ -36,9 +42,14 @@ def main(argv=None) -> int:
             connection.execute(text("SET LOCAL statement_timeout='30s'"))
             connection.execute(text("SET LOCAL lock_timeout='5s'"))
             connection.execute(text("SET LOCAL idle_in_transaction_session_timeout='30s'"))
-            result = OperatorCommands(connection, PolicyNamespace(args.schema)).apply(command)
+            namespace = PolicyNamespace(args.schema)
+            result = (
+                AcquisitionLifecycle(connection, namespace).reconcile(command)
+                if args.reconcile_staging
+                else OperatorCommands(connection, namespace).apply(command)
+            )
     except (SQLAlchemyError, ValueError):
-        result = CommandResult(command_id=command.command_id, status="unavailable")
+        result = result_type(command_id=command.command_id, status="unavailable")
     finally:
         if engine is not None:
             engine.dispose()
