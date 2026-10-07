@@ -14,9 +14,11 @@ from rights.approval import SyntheticApproval, parse_approval_command
 from rights.assembly import SyntheticAssembly, parse_assembly_command
 from rights.commands import MAX_COMMAND_BYTES, OperatorCommands, parse_command
 from rights.database import PolicyNamespace
+from rights.gazette import SyntheticGazette, parse_gazette_command
 from rights.lifecycle import AcquisitionLifecycle, parse_lifecycle_request
 from schema.approval import ApprovalResult
 from schema.assembly import AssemblyResult
+from schema.gazette import GazetteResult
 from schema.operator import CommandResult, LifecycleResult
 
 
@@ -31,9 +33,14 @@ def main(argv=None) -> int:
     modes.add_argument(
         "--approval", action="store_true", help="Apply one private original-synthetic approval command"
     )
+    modes.add_argument(
+        "--gazette", action="store_true", help="Apply one private synthetic gazette correspondence command"
+    )
     args = parser.parse_args(argv)
     result_type = (
-        ApprovalResult
+        GazetteResult
+        if args.gazette
+        else ApprovalResult
         if args.approval
         else AssemblyResult
         if args.assembly
@@ -44,7 +51,9 @@ def main(argv=None) -> int:
     result = result_type(command_id=None, status="validation_failed")
     try:
         parse = (
-            parse_approval_command
+            parse_gazette_command
+            if args.gazette
+            else parse_approval_command
             if args.approval
             else parse_assembly_command
             if args.assembly
@@ -69,7 +78,9 @@ def main(argv=None) -> int:
             connection.execute(text("SET LOCAL idle_in_transaction_session_timeout='30s'"))
             namespace = PolicyNamespace(args.schema)
             result = (
-                SyntheticApproval(connection, namespace).apply(command)
+                SyntheticGazette(connection, namespace).apply(command)
+                if args.gazette
+                else SyntheticApproval(connection, namespace).apply(command)
                 if args.approval
                 else SyntheticAssembly(connection, namespace).apply(command)
                 if args.assembly

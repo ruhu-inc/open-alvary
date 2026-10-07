@@ -869,13 +869,15 @@ def test_nonempty_approval_foundation_refuses_downgrade_without_losing_review(re
     from alembic.config import Config
 
     f, *_ = ready
+    with f.engine.connect() as conn:
+        before = conn.scalar(text("SELECT version_num FROM alembic_version"))
     with pytest.raises(RuntimeError, match="requires forward repair"), f.engine.begin() as conn:
         cfg = Config("alembic.ini")
         cfg.attributes["connection"] = conn
         command.downgrade(cfg, "0008")
     assert rows(f, "snapshot_review", "staging")[0]["payload"] is not None
     with f.engine.connect() as conn:
-        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0009"
+        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == before
 
 
 @pytest.mark.parametrize("change", ["expiry", "snapshot_edit"])

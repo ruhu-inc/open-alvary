@@ -220,6 +220,29 @@ def provision_roles(conn: Connection, namespace: PolicyNamespace) -> dict[str, s
         conn.execute(
             text(f"GRANT EXECUTE ON FUNCTION {p}.read_approved_synthetic_version(text,text) TO {acquisition}")
         )
+    if conn.scalar(
+        text("SELECT to_regclass(:name) IS NOT NULL"),
+        {"name": namespace.schema("staging") + ".gazette_item_binding"},
+    ):
+        conn.execute(text(f"GRANT UPDATE(state,payload) ON {s}.gazette_item_binding TO {guard}"))
+        conn.execute(
+            text(
+                f"GRANT INSERT,UPDATE(state,payload) ON {s}.gazette_item_review,{c}.gazette_correspondence TO {guard}"
+            )
+        )
+        conn.execute(text(f"GRANT INSERT,UPDATE ON {c}.gazette_correspondence_head TO {guard}"))
+        conn.execute(text(f"GRANT INSERT ON {p}.gazette_receipt TO {guard}"))
+        conn.execute(
+            text(
+                f"REVOKE EXECUTE ON FUNCTION {p}.read_approved_synthetic_version_m33(text,text) FROM {acquisition}"
+            )
+        )
+        conn.execute(
+            text(f"GRANT EXECUTE ON FUNCTION {p}.apply_gazette_command(jsonb) TO {review},{release}")
+        )
+        conn.execute(
+            text(f"GRANT EXECUTE ON FUNCTION {p}.read_gazette_projection(uuid,text) TO {acquisition}")
+        )
     return roles
 
 

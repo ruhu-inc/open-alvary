@@ -1,0 +1,473 @@
+{
+  "$defs": {
+    "GazetteProjection": {
+      "additionalProperties": false,
+      "properties": {
+        "correspondence_id": {
+          "format": "uuid",
+          "title": "Correspondence Id",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "integer"
+        },
+        "item_work_id": {
+          "pattern": "^wrk_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Item Work Id",
+          "type": "string"
+        },
+        "item_expression_id": {
+          "pattern": "^exp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Item Expression Id",
+          "type": "string"
+        },
+        "issue_version_id": {
+          "pattern": "^ver_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Issue Version Id",
+          "type": "string"
+        },
+        "representation_id": {
+          "pattern": "^prp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Representation Id",
+          "type": "string"
+        },
+        "notice_node_id": {
+          "pattern": "^nod_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Notice Node Id",
+          "type": "string"
+        },
+        "anchor_id": {
+          "pattern": "^anc_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Anchor Id",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "profile_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Profile Hash",
+          "type": "string"
+        },
+        "ranges": {
+          "items": {
+            "$ref": "#/$defs/NoticeRange"
+          },
+          "title": "Ranges",
+          "type": "array"
+        },
+        "projected_text": {
+          "title": "Projected Text",
+          "type": "string"
+        },
+        "publication_eligible": {
+          "const": false,
+          "title": "Publication Eligible",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "correspondence_id",
+        "revision",
+        "item_work_id",
+        "item_expression_id",
+        "issue_version_id",
+        "representation_id",
+        "notice_node_id",
+        "anchor_id",
+        "content_hash",
+        "profile_hash",
+        "ranges",
+        "projected_text",
+        "publication_eligible"
+      ],
+      "title": "GazetteProjection",
+      "type": "object"
+    },
+    "GazetteResult": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Command Id"
+        },
+        "status": {
+          "enum": [
+            "applied",
+            "conflict",
+            "forbidden",
+            "validation_failed",
+            "capacity_exceeded",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "replayed": {
+          "default": false,
+          "title": "Replayed",
+          "type": "boolean"
+        },
+        "review_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review Hash"
+        },
+        "correspondence_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correspondence Id"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision"
+        }
+      },
+      "required": [
+        "command_id",
+        "status"
+      ],
+      "title": "GazetteResult",
+      "type": "object"
+    },
+    "ItemApprovalCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "issue_collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Issue Collection Id",
+          "type": "string"
+        },
+        "item_collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Item Collection Id",
+          "type": "string"
+        },
+        "binding_id": {
+          "format": "uuid",
+          "title": "Binding Id",
+          "type": "string"
+        },
+        "purpose": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "action": {
+          "const": "approve_gazette_item_correspondence",
+          "title": "Action",
+          "type": "string"
+        },
+        "review_id": {
+          "format": "uuid",
+          "title": "Review Id",
+          "type": "string"
+        },
+        "review_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Review Hash",
+          "type": "string"
+        },
+        "correspondence_id": {
+          "format": "uuid",
+          "title": "Correspondence Id",
+          "type": "string"
+        },
+        "expected_revision": {
+          "maximum": 31,
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command_id",
+        "issue_collection_id",
+        "item_collection_id",
+        "binding_id",
+        "purpose",
+        "reason",
+        "action",
+        "review_id",
+        "review_hash",
+        "correspondence_id",
+        "expected_revision"
+      ],
+      "title": "ItemApprovalCommand",
+      "type": "object"
+    },
+    "ItemReviewCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "issue_collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Issue Collection Id",
+          "type": "string"
+        },
+        "item_collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Item Collection Id",
+          "type": "string"
+        },
+        "binding_id": {
+          "format": "uuid",
+          "title": "Binding Id",
+          "type": "string"
+        },
+        "purpose": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "action": {
+          "const": "record_gazette_item_review",
+          "title": "Action",
+          "type": "string"
+        },
+        "review_id": {
+          "format": "uuid",
+          "title": "Review Id",
+          "type": "string"
+        },
+        "binding_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Binding Hash",
+          "type": "string"
+        },
+        "issue_version_id": {
+          "pattern": "^ver_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Issue Version Id",
+          "type": "string"
+        },
+        "representation_id": {
+          "pattern": "^prp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Representation Id",
+          "type": "string"
+        },
+        "record_set_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Record Set Hash",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "profile_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Profile Hash",
+          "type": "string"
+        },
+        "ranges": {
+          "items": {
+            "$ref": "#/$defs/NoticeRange"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "title": "Ranges",
+          "type": "array"
+        },
+        "item_rights_revision": {
+          "exclusiveMinimum": 0,
+          "title": "Item Rights Revision",
+          "type": "integer"
+        },
+        "item_verification_revision": {
+          "exclusiveMinimum": 0,
+          "title": "Item Verification Revision",
+          "type": "integer"
+        },
+        "expected_revision": {
+          "maximum": 31,
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "identification_method": {
+          "const": "human_source_identification",
+          "title": "Identification Method",
+          "type": "string"
+        },
+        "review_scope": {
+          "const": "collection_policy",
+          "title": "Review Scope",
+          "type": "string"
+        },
+        "requires_exception_review": {
+          "const": false,
+          "title": "Requires Exception Review",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "command_id",
+        "issue_collection_id",
+        "item_collection_id",
+        "binding_id",
+        "purpose",
+        "reason",
+        "action",
+        "review_id",
+        "binding_hash",
+        "issue_version_id",
+        "representation_id",
+        "record_set_hash",
+        "content_hash",
+        "profile_hash",
+        "ranges",
+        "item_rights_revision",
+        "item_verification_revision",
+        "expected_revision",
+        "evidence_id",
+        "identification_method",
+        "review_scope",
+        "requires_exception_review"
+      ],
+      "title": "ItemReviewCommand",
+      "type": "object"
+    },
+    "NoticeRange": {
+      "additionalProperties": false,
+      "properties": {
+        "start_byte": {
+          "maximum": 131072,
+          "minimum": 0,
+          "title": "Start Byte",
+          "type": "integer"
+        },
+        "end_byte": {
+          "exclusiveMinimum": 0,
+          "maximum": 131072,
+          "title": "End Byte",
+          "type": "integer"
+        },
+        "span_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Span Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start_byte",
+        "end_byte",
+        "span_hash"
+      ],
+      "title": "NoticeRange",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "synthetic-gazette-1",
+      "default": "synthetic-gazette-1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "commands": {
+      "default": [],
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "approve_gazette_item_correspondence": "#/$defs/ItemApprovalCommand",
+            "record_gazette_item_review": "#/$defs/ItemReviewCommand"
+          },
+          "propertyName": "action"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/ItemReviewCommand"
+          },
+          {
+            "$ref": "#/$defs/ItemApprovalCommand"
+          }
+        ]
+      },
+      "title": "Commands",
+      "type": "array"
+    },
+    "results": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/GazetteResult"
+      },
+      "title": "Results",
+      "type": "array"
+    },
+    "private_projections": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/GazetteProjection"
+      },
+      "title": "Private Projections",
+      "type": "array"
+    }
+  },
+  "title": "GazetteContracts",
+  "type": "object"
+}

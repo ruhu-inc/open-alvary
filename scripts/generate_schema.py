@@ -3,6 +3,7 @@ from pathlib import Path
 
 from schema.approval import ApprovalContracts
 from schema.assembly import AssemblyContracts
+from schema.gazette import GazetteContracts
 from schema.identity import IdentityContracts
 from schema.models import Corpus
 from schema.operator import OperatorContracts
@@ -10,6 +11,9 @@ from schema.policy import PolicyContracts
 from schema.public import PublicContracts
 
 if __name__ == "__main__":
+    Path("schema/gazette.schema.json").write_text(
+        json.dumps(GazetteContracts.model_json_schema(), indent=2) + "\n"
+    )
     Path("schema/approval.schema.json").write_text(
         json.dumps(ApprovalContracts.model_json_schema(), indent=2) + "\n"
     )
