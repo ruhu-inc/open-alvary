@@ -346,6 +346,7 @@ def test_serializer_disagreement_cannot_persist_in_native_database_even_with_dir
                 },
             )
         assert failure.value.status == "validation_failed" and "private-do-not-echo" not in str(failure.value)
+        assert failure.value.reason_code == "serializer_mismatch"
         assert conn.scalar(text("SELECT 1")) == 1
     assert records(f, "canonical_proposal") == []
 

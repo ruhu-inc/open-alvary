@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from schema.canonical import CanonicalCommand, CanonicalView
+from schema.diagnostics import CanonicalReason
 from schema.identity import CollectionID
 from schema.models import Hash
 from schema.operator import Reason
@@ -153,6 +154,7 @@ class AssemblyResult(PrivateModel):
         "applied", "forbidden", "conflict", "validation_failed", "capacity_exceeded", "unavailable"
     ]
     replayed: bool = False
+    reason_code: CanonicalReason | None = None
     object_id: UUID | None = None
     revision: int | None = None
     output_hash: Hash | None = None
@@ -193,7 +195,7 @@ class SnapshotView(PrivateModel):
 
 
 class AssemblyContracts(PrivateModel):
-    schema_version: Literal["assembly-proposal-2"] = "assembly-proposal-2"
+    schema_version: Literal["assembly-proposal-3"] = "assembly-proposal-3"
     commands: tuple[AssemblyCommand, ...] = ()
     results: tuple[AssemblyResult, ...] = ()
     candidate_pages: tuple[CandidatePage, ...] = ()

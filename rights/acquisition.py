@@ -8,6 +8,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.exc import DBAPIError
 
 from rights.database import PolicyNamespace
+from schema.diagnostics import CANONICAL_REASONS
 
 MAX_ARTIFACT_BYTES = 10 * 1024 * 1024
 MAX_SYNTHETIC_COLLECTION_BYTES = 100 * 1024 * 1024
@@ -16,8 +17,9 @@ MAX_SYNTHETIC_COLLECTION_BYTES = 100 * 1024 * 1024
 class AcquisitionError(RuntimeError):
     """Safe failure for callers; database parameters/private bytes are never rendered."""
 
-    def __init__(self, status: str):
+    def __init__(self, status: str, reason_code: str | None = None):
         self.status = status
+        self.reason_code = reason_code if reason_code in CANONICAL_REASONS else None
         super().__init__("Private acquisition request " + status)
 
 
@@ -64,7 +66,8 @@ class SyntheticAcquisition:
                 if code and code[:2] in {"22", "23"}
                 else "unavailable"
             )
-            raise AcquisitionError(status) from None
+            detail = getattr(getattr(error.orig, "diag", None), "message_detail", None)
+            raise AcquisitionError(status, detail if status == "validation_failed" else None) from None
 
     def allowed(
         self,

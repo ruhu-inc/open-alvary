@@ -8,6 +8,7 @@ from uuid import UUID
 
 from schema.assembly import CandidateInput
 from schema.canonical import CanonicalPlan, ProjectionDetails
+from schema.diagnostics import CANONICAL_REASONS, CanonicalReason
 
 PROFILE_DESCRIPTOR = '{"id":"OA-text-1","scope":"original-synthetic","encoding":"UTF-8","normalization":"NFC","line_endings":"LF","whitespace":"literal","block_separator":"LF LF","table_column_separator":"TAB","table_row_separator":"LF","terminator":"one added LF","dehyphenation":"unsupported","alignment":"whole private candidate"}'
 PROFILE_HASH = sha256(PROFILE_DESCRIPTOR.encode()).hexdigest()
@@ -16,8 +17,11 @@ MAX_PAYLOAD_BYTES = 256 * 1024
 
 
 class CanonicalValidationError(ValueError):
-    def __init__(self):
-        super().__init__("Unsupported or inconsistent private canonical structure")
+    def __init__(self, reason_code: CanonicalReason):
+        if reason_code not in CANONICAL_REASONS:
+            raise ValueError("Unknown canonical diagnostic")
+        self.reason_code = reason_code
+        super().__init__("Private canonical structure rejected: " + reason_code)
 
 
 def normalize_literal(text: str) -> str:
@@ -30,48 +34,58 @@ class Projection:
     details: ProjectionDetails
 
 
-def compile_projection(
-    plan: CanonicalPlan, candidates: tuple[CandidateInput, ...], order: tuple[UUID, ...]
-) -> Projection:
-    """Every selected candidate is consumed exactly once or explicitly excluded."""
+class _ProjectionCompiler:
+    def __init__(self, plan, candidates, order):
+        self.plan = plan
+        self.candidates = candidates
+        self.order = order
+        self.source = {c.id: c for c in self.candidates}
+        if (
+            len(self.source) != len(self.candidates)
+            or set(self.source) != set(self.order)
+            or len(self.order) != len(self.source)
+        ):
+            self.fail("source_order_mismatch")
+        self.rank = {id: i for i, id in enumerate(self.order)}
+        self.result = bytearray()
+        self.used, self.body_order, self.headers, self.local_ids = ([], [], set(), set())
+        self.spans, self.normalizations, self.markers_out, self.notice_ranges, self.incomplete = (
+            [],
+            [],
+            [],
+            [],
+            [],
+        )
+        self.offsets = {key: [] for key in ("block", "cell", "column", "row", "terminator")}
+        self.grid_positions = 0
 
-    def fail():
-        raise CanonicalValidationError()
+    def fail(self, reason_code):
+        raise CanonicalValidationError(reason_code)
 
-    source = {c.id: c for c in candidates}
-    if len(source) != len(candidates) or set(source) != set(order) or len(order) != len(source):
-        fail()
-    rank = {id: i for i, id in enumerate(order)}
-    result = bytearray()
-    used, body_order, headers, local_ids = [], [], set(), set()
-    spans, normalizations, markers_out, notice_ranges, incomplete = [], [], [], [], []
-    offsets = {key: [] for key in ("block", "cell", "column", "row", "terminator")}
-    grid_positions = 0
+    def append(self, data: bytes):
+        self.result.extend(data)
+        if len(self.result) > MAX_CANONICAL_BYTES:
+            self.fail("canonical_byte_limit")
 
-    def append(data: bytes):
-        result.extend(data)
-        if len(result) > MAX_CANONICAL_BYTES:
-            fail()
+    def separator(self, kind):
+        self.offsets[kind].append(len(self.result))
+        self.append(b"\n\n" if kind in {"block", "cell"} else b"\t" if kind == "column" else b"\n")
 
-    def separator(kind):
-        offsets[kind].append(len(result))
-        append(b"\n\n" if kind in {"block", "cell"} else b"\t" if kind == "column" else b"\n")
+    def candidate(self, id, types):
+        if id not in self.source or id in self.used or self.source[id].block_type not in types:
+            self.fail("candidate_reuse_or_type")
+        self.used.append(id)
+        return self.source[id]
 
-    def candidate(id, types):
-        if id not in source or id in used or source[id].block_type not in types:
-            fail()
-        used.append(id)
-        return source[id]
-
-    def leaf(id, types, *, body=False):
-        c = candidate(id, types)
+    def leaf(self, id, types, *, body=False):
+        c = self.candidate(id, types)
         if body:
-            body_order.append(id)
+            self.body_order.append(id)
         literal = c.text.encode()
         lf = c.text.replace("\r\n", "\n").replace("\r", "\n")
         normalized = normalize_literal(c.text).encode()
         ops = (["lf"] if lf != c.text else []) + (["nfc"] if normalize_literal(c.text) != lf else [])
-        normalizations.append(
+        self.normalizations.append(
             dict(
                 candidate_id=id,
                 source_hash=sha256(literal).hexdigest(),
@@ -81,159 +95,186 @@ def compile_projection(
                 operations=ops,
             )
         )
-        start = len(result)
-        append(normalized)
+        start = len(self.result)
+        self.append(normalized)
         if normalized:
-            spans.append(
-                dict(candidate_id=id, start=start, end=len(result), span_hash=sha256(normalized).hexdigest())
+            self.spans.append(
+                dict(
+                    candidate_id=id,
+                    start=start,
+                    end=len(self.result),
+                    span_hash=sha256(normalized).hexdigest(),
+                )
             )
         return c
 
-    def block(item):
-        nonlocal grid_positions
+    def block(self, item):
         if item.kind == "text":
-            c = source.get(item.candidate_id)
+            c = self.source.get(item.candidate_id)
             if c is None or c.content_state != "present":
-                fail()
-            leaf(item.candidate_id, {"heading", "paragraph", "list_item"}, body=True)
+                self.fail("body_content_missing")
+            self.leaf(item.candidate_id, {"heading", "paragraph", "list_item"}, body=True)
             return
-        if item.table_local_id in local_ids:
-            fail()
-        local_ids.add(item.table_local_id)
-        grid_positions += item.rows * item.columns
-        if grid_positions > 10000:
-            fail()
-        positions, origins = {}, {}
+        if item.table_local_id in self.local_ids:
+            self.fail("duplicate_local_id")
+        self.local_ids.add(item.table_local_id)
+        self.grid_positions += item.rows * item.columns
+        if self.grid_positions > 10000:
+            self.fail("table_grid_limit")
+        origins, partial = self.table_grid(item)
+        for row in range(item.rows):
+            if row:
+                self.separator("row")
+            for col in range(item.columns):
+                if col:
+                    self.separator("column")
+                cell = origins.get((row, col))
+                if cell is None:
+                    continue
+                for index, id in enumerate(cell.candidates):
+                    if index:
+                        self.separator("cell")
+                    c = self.leaf(id, {"table_cell"}, body=True)
+                    partial |= c.content_state in {"illegible", "unsupported"}
+        if partial:
+            self.incomplete.append(item.table_local_id)
+
+    def scope(self, scope_id, blocks, footnotes, refs):
+        before = set(self.used)
+        for index, item in enumerate(blocks):
+            if index:
+                self.separator("block")
+            if item.kind == "notice":
+                if scope_id is not None or item.local_id in self.local_ids:
+                    self.fail("nested_or_duplicate_notice")
+                self.local_ids.add(item.local_id)
+                start = len(self.result)
+                self.scope(item.local_id, item.blocks, item.footnotes, item.markers)
+                self.notice_ranges.append(
+                    dict(
+                        local_id=item.local_id,
+                        start=start,
+                        end=len(self.result),
+                        content_hash=sha256(self.result[start:]).hexdigest(),
+                    )
+                )
+            else:
+                self.block(item)
+        direct = set(self.used) - before
+        if scope_id is None:
+            nested = {m["candidate_id"] for m in self.markers_out}
+            notice_candidates = set()
+            for value in self.notice_ranges:
+                notice_candidates.update(
+                    s["candidate_id"]
+                    for s in self.spans
+                    if value["start"] <= s["start"] and s["end"] <= value["end"]
+                )
+            direct -= notice_candidates | nested
+        self.emit_footnotes(scope_id, blocks, footnotes, refs, direct)
+
+    def table_grid(self, item):
+        positions, origins = ({}, {})
         table_candidates = set()
         for cell in item.cells:
             if len(set(cell.candidates)) != len(cell.candidates):
-                fail()
-            first = source.get(cell.candidates[0])
+                self.fail("duplicate_cell_candidate")
+            first = self.source.get(cell.candidates[0])
             if first is None or first.cell is None or first.cell.table_local_id != item.table_local_id:
-                fail()
+                self.fail("cell_shape_missing")
             shape = first.cell
             if shape.row + shape.row_span > item.rows or shape.column + shape.column_span > item.columns:
-                fail()
+                self.fail("cell_out_of_bounds")
             for id in cell.candidates:
-                c = source.get(id)
+                c = self.source.get(id)
                 if (
                     c is None
                     or c.cell != shape
                     or (len(cell.candidates) > 1 and c.content_state != "present")
                 ):
-                    fail()
+                    self.fail("cell_shape_mismatch")
                 if id in table_candidates:
-                    fail()
+                    self.fail("candidate_in_multiple_cells")
                 table_candidates.add(id)
             origins[shape.row, shape.column] = cell
             for row in range(shape.row, shape.row + shape.row_span):
                 for col in range(shape.column, shape.column + shape.column_span):
                     if (row, col) in positions:
-                        fail()
+                        self.fail("cell_overlap")
                     positions[row, col] = "covered"
         for absent in item.unavailable:
             if (
                 absent.row >= item.rows
                 or absent.column >= item.columns
                 or (absent.row, absent.column) in positions
-                or not absent.reason.strip()
+                or (not absent.reason.strip())
             ):
-                fail()
+                self.fail("unavailable_cell_conflict")
             positions[absent.row, absent.column] = "unavailable"
         if (
             len(positions) != item.rows * item.columns
             or len(set(item.headers)) != len(item.headers)
-            or not set(item.headers) <= table_candidates
+            or (not set(item.headers) <= table_candidates)
         ):
-            fail()
-        headers.update(item.headers)
+            self.fail("table_coverage_or_headers")
+        self.headers.update(item.headers)
         partial = bool(item.unavailable)
-        for row in range(item.rows):
-            if row:
-                separator("row")
-            for col in range(item.columns):
-                if col:
-                    separator("column")
-                cell = origins.get((row, col))
-                if cell is None:
-                    continue
-                for index, id in enumerate(cell.candidates):
-                    if index:
-                        separator("cell")
-                    c = leaf(id, {"table_cell"}, body=True)
-                    partial |= c.content_state in {"illegible", "unsupported"}
-        if partial:
-            incomplete.append(item.table_local_id)
+        return (origins, partial)
 
-    def scope(scope_id, blocks, footnotes, refs):
-        before = set(used)
-        for index, item in enumerate(blocks):
-            if index:
-                separator("block")
-            if item.kind == "notice":
-                if scope_id is not None or item.local_id in local_ids:
-                    fail()
-                local_ids.add(item.local_id)
-                start = len(result)
-                scope(item.local_id, item.blocks, item.footnotes, item.markers)
-                notice_ranges.append(
-                    dict(
-                        local_id=item.local_id,
-                        start=start,
-                        end=len(result),
-                        content_hash=sha256(result[start:]).hexdigest(),
-                    )
-                )
-            else:
-                block(item)
-        direct = set(used) - before
-        if scope_id is None:
-            # Document-level markers cannot target leaves belonging to a notice.
-            nested = {m["candidate_id"] for m in markers_out}
-            notice_candidates = set()
-            for value in notice_ranges:
-                notice_candidates.update(
-                    s["candidate_id"]
-                    for s in spans
-                    if value["start"] <= s["start"] and s["end"] <= value["end"]
-                )
-            direct -= notice_candidates | nested
+    def emit_footnotes(self, scope_id, blocks, footnotes, refs, direct):
         definitions = {f.local_id: f for f in footnotes}
         if len(definitions) != len(footnotes) or any(not f.candidates for f in footnotes):
-            fail()
+            self.fail("footnote_definitions")
         if any(
-            list(f.candidates) != sorted(f.candidates, key=lambda id: rank.get(id, -1)) for f in footnotes
+            list(f.candidates) != sorted(f.candidates, key=lambda id: self.rank.get(id, -1))
+            for f in footnotes
         ):
-            fail()
-        reference_order, seen_markers, previous_ends = [], set(), {}
-        for ref in sorted(refs, key=lambda r: (rank.get(r.candidate_id, -1), r.source_start)):
+            self.fail("footnote_order")
+        reference_order = self.map_markers(scope_id, refs, direct, definitions)
+        orphans = sorted(
+            (f.local_id for f in footnotes if f.local_id not in reference_order),
+            key=lambda id: self.rank.get(definitions[id].candidates[0], -1),
+        )
+        for index, id in enumerate(reference_order + orphans):
+            if blocks or index:
+                self.separator("block")
+            for child, cid in enumerate(definitions[id].candidates):
+                if self.source.get(cid) is None or self.source[cid].content_state != "present":
+                    self.fail("footnote_content_missing")
+                if child:
+                    self.separator("block")
+                self.leaf(cid, {"footnote"})
+
+    def map_markers(self, scope_id, refs, direct, definitions):
+        reference_order, seen_markers, previous_ends = ([], set(), {})
+        for ref in sorted(refs, key=lambda r: (self.rank.get(r.candidate_id, -1), r.source_start)):
             key = (ref.candidate_id, ref.source_start, ref.source_end)
             if ref.candidate_id not in direct or ref.footnote_id not in definitions or key in seen_markers:
-                fail()
+                self.fail("marker_scope_or_target")
             if ref.source_start < previous_ends.get(ref.candidate_id, 0):
-                fail()
+                self.fail("marker_overlap")
             previous_ends[ref.candidate_id] = ref.source_end
             seen_markers.add(key)
-            c = source[ref.candidate_id]
+            c = self.source[ref.candidate_id]
             raw = c.text.encode()
             try:
                 if not 0 <= ref.source_start < ref.source_end <= len(raw):
-                    fail()
+                    self.fail("marker_bounds")
                 prefix = normalize_literal(raw[: ref.source_start].decode()).encode()
                 ending = normalize_literal(raw[: ref.source_end].decode()).encode()
                 marker = normalize_literal(raw[ref.source_start : ref.source_end].decode()).encode()
             except UnicodeError:
-                fail()
+                self.fail("marker_utf8_boundary")
             full = normalize_literal(c.text).encode()
             if (
                 not full.startswith(prefix)
                 or not full.startswith(ending)
                 or full[len(prefix) : len(ending)] != marker
-                or not marker
+                or (not marker)
             ):
-                fail()
-            span = next(s for s in spans if s["candidate_id"] == ref.candidate_id)
-            markers_out.append(
+                self.fail("marker_normalization_boundary")
+            span = next(s for s in self.spans if s["candidate_id"] == ref.candidate_id)
+            self.markers_out.append(
                 dict(
                     candidate_id=ref.candidate_id,
                     source_start=ref.source_start,
@@ -247,68 +288,68 @@ def compile_projection(
             )
             if ref.footnote_id not in reference_order:
                 reference_order.append(ref.footnote_id)
-        orphans = sorted(
-            (f.local_id for f in footnotes if f.local_id not in reference_order),
-            key=lambda id: rank.get(definitions[id].candidates[0], -1),
-        )
-        for index, id in enumerate(reference_order + orphans):
-            if blocks or index:
-                separator("block")
-            for child, cid in enumerate(definitions[id].candidates):
-                if source.get(cid) is None or source[cid].content_state != "present":
-                    fail()
-                if child:
-                    separator("block")
-                leaf(cid, {"footnote"})
+        return reference_order
 
-    scope(None, plan.blocks, plan.footnotes, plan.markers)
-    emitted = list(used)
-    for exclude in plan.exclusions:
-        c = candidate(exclude.candidate_id, {"heading", "paragraph", "list_item", "table_cell", "footnote"})
-        if not exclude.reason.strip():
-            fail()
-        if exclude.kind == "repeated_header":
-            target = source.get(exclude.target_candidate_id)
-            if (
-                target is None
-                or target.id not in headers
-                or target.id not in emitted
-                or c.cell is None
-                or target.cell is None
-                or c.cell.table_local_id != target.cell.table_local_id
-                or normalize_literal(c.text) != normalize_literal(target.text)
-                or c.content_state != target.content_state
-            ):
-                fail()
-        elif exclude.target_candidate_id is not None:
-            fail()
-    if (
-        set(used) != set(order)
-        or len(used) != len(order)
-        or body_order != [id for id in order if id in body_order]
-    ):
-        fail()
-    if plan.blocks or plan.footnotes:
-        separator("terminator")
-    details = ProjectionDetails.model_validate(
-        dict(
-            spans=spans,
-            normalizations=normalizations,
-            separators=offsets,
-            markers=markers_out,
-            notice_ranges=notice_ranges,
-            incomplete_tables=incomplete,
-            publication_eligible=False,
+    def compile(self):
+        self.scope(None, self.plan.blocks, self.plan.footnotes, self.plan.markers)
+        emitted = list(self.used)
+        for exclude in self.plan.exclusions:
+            c = self.candidate(
+                exclude.candidate_id, {"heading", "paragraph", "list_item", "table_cell", "footnote"}
+            )
+            if not exclude.reason.strip():
+                self.fail("exclusion_reason_missing")
+            if exclude.kind == "repeated_header":
+                target = self.source.get(exclude.target_candidate_id)
+                if (
+                    target is None
+                    or target.id not in self.headers
+                    or target.id not in emitted
+                    or (c.cell is None)
+                    or (target.cell is None)
+                    or (c.cell.table_local_id != target.cell.table_local_id)
+                    or (normalize_literal(c.text) != normalize_literal(target.text))
+                    or (c.content_state != target.content_state)
+                ):
+                    self.fail("repeated_header_mismatch")
+            elif exclude.target_candidate_id is not None:
+                self.fail("furniture_target_forbidden")
+        if (
+            set(self.used) != set(self.order)
+            or len(self.used) != len(self.order)
+            or self.body_order != [id for id in self.order if id in self.body_order]
+        ):
+            self.fail("candidate_coverage_or_order")
+        if self.plan.blocks or self.plan.footnotes:
+            self.separator("terminator")
+        details = ProjectionDetails.model_validate(
+            dict(
+                spans=self.spans,
+                normalizations=self.normalizations,
+                separators=self.offsets,
+                markers=self.markers_out,
+                notice_ranges=self.notice_ranges,
+                incomplete_tables=self.incomplete,
+                publication_eligible=False,
+            )
         )
-    )
-    if (
-        len(
-            json.dumps(
-                {"plan": plan.model_dump(mode="json"), "projection": details.model_dump(mode="json")},
-                ensure_ascii=False,
-            ).encode()
-        )
-        > MAX_PAYLOAD_BYTES
-    ):
-        fail()
-    return Projection(bytes(result), details)
+        if (
+            len(
+                json.dumps(
+                    {
+                        "plan": self.plan.model_dump(mode="json"),
+                        "projection": details.model_dump(mode="json"),
+                    },
+                    ensure_ascii=False,
+                ).encode()
+            )
+            > MAX_PAYLOAD_BYTES
+        ):
+            self.fail("canonical_metadata_limit")
+        return Projection(bytes(self.result), details)
+
+
+def compile_projection(
+    plan: CanonicalPlan, candidates: tuple[CandidateInput, ...], order: tuple[UUID, ...]
+) -> Projection:
+    return _ProjectionCompiler(plan, candidates, order).compile()

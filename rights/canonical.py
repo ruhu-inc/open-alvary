@@ -35,10 +35,14 @@ class CanonicalAssembler(SyntheticAcquisition):
                     },
                 )
                 return AssemblyResult.model_validate(result)
-        except CanonicalValidationError:
-            return AssemblyResult(command_id=command.command_id, status="validation_failed")
+        except CanonicalValidationError as error:
+            return AssemblyResult(
+                command_id=command.command_id, status="validation_failed", reason_code=error.reason_code
+            )
         except AcquisitionError as error:
-            return AssemblyResult(command_id=command.command_id, status=error.status)
+            return AssemblyResult(
+                command_id=command.command_id, status=error.status, reason_code=error.reason_code
+            )
 
     def read(self, proposal_id: UUID, *, purpose: str) -> CanonicalView | None:
         fn = self.namespace.qualified(self.connection, "policy", "read_canonical_proposal")

@@ -1,0 +1,442 @@
+{
+  "profile_hash": "c7b0dc81d39406fb54870906ae273309d1994c056c444a84038645865015d589",
+  "cases": [
+    {
+      "name": "literal",
+      "candidates": [
+        {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "adapter_local_id": "local1",
+          "region_key": "region1",
+          "parent_local_id": null,
+          "artifact_class": "native_text",
+          "block_type": "paragraph",
+          "text": " Café\r\nلا⁧RTL⁩\t😀 ",
+          "content_state": "present",
+          "content_reason": null,
+          "unavailable_page_reason": "Original synthetic fixture has no page",
+          "unavailable_geometry_reason": "Original synthetic fixture has no geometry",
+          "language": null,
+          "direction": "unknown",
+          "quality_state": "unassessed",
+          "warnings": [],
+          "cell": null
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000002",
+          "adapter_local_id": "local2",
+          "region_key": "region2",
+          "parent_local_id": null,
+          "artifact_class": "native_text",
+          "block_type": "paragraph",
+          "text": "No 1,000.00 waiver.",
+          "content_state": "present",
+          "content_reason": null,
+          "unavailable_page_reason": "Original synthetic fixture has no page",
+          "unavailable_geometry_reason": "Original synthetic fixture has no geometry",
+          "language": null,
+          "direction": "unknown",
+          "quality_state": "unassessed",
+          "warnings": [],
+          "cell": null
+        }
+      ],
+      "order": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002"
+      ],
+      "plan": {
+        "blocks": [
+          {
+            "kind": "text",
+            "candidate_id": "00000000-0000-0000-0000-000000000001"
+          },
+          {
+            "kind": "text",
+            "candidate_id": "00000000-0000-0000-0000-000000000002"
+          }
+        ],
+        "footnotes": [],
+        "markers": [],
+        "exclusions": []
+      },
+      "expected_utf8": " Café\nلا⁧RTL⁩\t😀 \n\nNo 1,000.00 waiver.\n"
+    },
+    {
+      "name": "merged_empty_incomplete",
+      "candidates": [
+        {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "adapter_local_id": "local1",
+          "region_key": "region1",
+          "parent_local_id": null,
+          "artifact_class": "native_text",
+          "block_type": "table_cell",
+          "text": "Amount\tunit",
+          "content_state": "present",
+          "content_reason": null,
+          "unavailable_page_reason": "Original synthetic fixture has no page",
+          "unavailable_geometry_reason": "Original synthetic fixture has no geometry",
+          "language": null,
+          "direction": "unknown",
+          "quality_state": "unassessed",
+          "warnings": [],
+          "cell": {
+            "table_local_id": "t1",
+            "row": 0,
+            "column": 0,
+            "row_span": 1,
+            "column_span": 2
+          }
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000002",
+          "adapter_local_id": "local2",
+          "region_key": "region2",
+          "parent_local_id": null,
+          "artifact_class": "native_text",
+          "block_type": "table_cell",
+          "text": "",
+          "content_state": "empty",
+          "content_reason": null,
+          "unavailable_page_reason": "Original synthetic fixture has no page",
+          "unavailable_geometry_reason": "Original synthetic fixture has no geometry",
+          "language": null,
+          "direction": "unknown",
+          "quality_state": "unassessed",
+          "warnings": [],
+          "cell": {
+            "table_local_id": "t1",
+            "row": 0,
+            "column": 2,
+            "row_span": 1,
+            "column_span": 1
+          }
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000003",
+          "adapter_local_id": "local3",
+          "region_key": "region3",
+          "parent_local_id": null,
+          "artifact_class": "native_text",
+          "block_type": "table_cell",
+          "text": "1,000.00\nnot waived",
+          "content_state": "present",
+          "content_reason": null,
+          "unavailable_page_reason": "Original synthetic fixture has no page",
+          "unavailable_geometry_reason": "Original synthetic fixture has no geometry",
+          "language": null,
+          "direction": "unknown",
+          "quality_state": "unassessed",
+          "warnings": [],
+          "cell": {
+            "table_local_id": "t1",
+            "row": 1,
+            "column": 0,
+            "row_span": 1,
+            "column_span": 1
+          }
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000004",
+          "adapter_local_id": "local4",
+          "region_key": "region4",
+          "parent_local_id": null,
+          "artifact_class": "native_text",
+          "block_type": "table_cell",
+          "text": "",
+          "content_state": "illegible",
+          "content_reason": "Unreadable original synthetic cell",
+          "unavailable_page_reason": "Original synthetic fixture has no page",
+          "unavailable_geometry_reason": "Original synthetic fixture has no geometry",
+          "language": null,
+          "direction": "unknown",
+          "quality_state": "unassessed",
+          "warnings": [],
+          "cell": {
+            "table_local_id": "t1",
+            "row": 1,
+            "column": 1,
+            "row_span": 1,
+            "column_span": 1
+          }
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000005",
+          "adapter_local_id": "local5",
+          "region_key": "region5",
+          "parent_local_id": null,
+          "artifact_class": "native_text",
+          "block_type": "table_cell",
+          "text": "",
+          "content_state": "unsupported",
+          "content_reason": "Unsupported original synthetic cell",
+          "unavailable_page_reason": "Original synthetic fixture has no page",
+          "unavailable_geometry_reason": "Original synthetic fixture has no geometry",
+          "language": null,
+          "direction": "unknown",
+          "quality_state": "unassessed",
+          "warnings": [],
+          "cell": {
+            "table_local_id": "t1",
+            "row": 1,
+            "column": 2,
+            "row_span": 1,
+            "column_span": 1
+          }
+        }
+      ],
+      "order": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "00000000-0000-0000-0000-000000000003",
+        "00000000-0000-0000-0000-000000000004",
+        "00000000-0000-0000-0000-000000000005"
+      ],
+      "plan": {
+        "blocks": [
+          {
+            "kind": "table",
+            "table_local_id": "t1",
+            "rows": 2,
+            "columns": 3,
+            "cells": [
+              {
+                "candidates": [
+                  "00000000-0000-0000-0000-000000000001"
+                ]
+              },
+              {
+                "candidates": [
+                  "00000000-0000-0000-0000-000000000002"
+                ]
+              },
+              {
+                "candidates": [
+                  "00000000-0000-0000-0000-000000000003"
+                ]
+              },
+              {
+                "candidates": [
+                  "00000000-0000-0000-0000-000000000004"
+                ]
+              },
+              {
+                "candidates": [
+                  "00000000-0000-0000-0000-000000000005"
+                ]
+              }
+            ],
+            "headers": [
+              "00000000-0000-0000-0000-000000000001"
+            ],
+            "unavailable": []
+          }
+        ],
+        "footnotes": [],
+        "markers": [],
+        "exclusions": []
+      },
+      "expected_utf8": "Amount\tunit\t\t\n1,000.00\nnot waived\t\t\n"
+    },
+    {
+      "name": "repeat_exclusion",
+      "candidates": [
+        {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "adapter_local_id": "local1",
+          "region_key": "region1",
+          "parent_local_id": null,
+          "artifact_class": "native_text",
+          "block_type": "table_cell",
+          "text": "Header",
+          "content_state": "present",
+          "content_reason": null,
+          "unavailable_page_reason": "Original synthetic fixture has no page",
+          "unavailable_geometry_reason": "Original synthetic fixture has no geometry",
+          "language": null,
+          "direction": "unknown",
+          "quality_state": "unassessed",
+          "warnings": [],
+          "cell": {
+            "table_local_id": "t",
+            "row": 0,
+            "column": 0,
+            "row_span": 1,
+            "column_span": 1
+          }
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000002",
+          "adapter_local_id": "local2",
+          "region_key": "region2",
+          "parent_local_id": null,
+          "artifact_class": "native_text",
+          "block_type": "table_cell",
+          "text": "Header",
+          "content_state": "present",
+          "content_reason": null,
+          "unavailable_page_reason": "Original synthetic fixture has no page",
+          "unavailable_geometry_reason": "Original synthetic fixture has no geometry",
+          "language": null,
+          "direction": "unknown",
+          "quality_state": "unassessed",
+          "warnings": [],
+          "cell": {
+            "table_local_id": "t",
+            "row": 0,
+            "column": 0,
+            "row_span": 1,
+            "column_span": 1
+          }
+        }
+      ],
+      "order": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002"
+      ],
+      "plan": {
+        "blocks": [
+          {
+            "kind": "table",
+            "table_local_id": "t",
+            "rows": 1,
+            "columns": 1,
+            "cells": [
+              {
+                "candidates": [
+                  "00000000-0000-0000-0000-000000000001"
+                ]
+              }
+            ],
+            "headers": [
+              "00000000-0000-0000-0000-000000000001"
+            ],
+            "unavailable": []
+          }
+        ],
+        "footnotes": [],
+        "markers": [],
+        "exclusions": [
+          {
+            "candidate_id": "00000000-0000-0000-0000-000000000002",
+            "kind": "repeated_header",
+            "reason": "Original synthetic repeated heading",
+            "target_candidate_id": "00000000-0000-0000-0000-000000000001"
+          }
+        ]
+      },
+      "expected_utf8": "Header\n"
+    },
+    {
+      "name": "notice_footnote",
+      "candidates": [
+        {
+          "id": "00000000-0000-0000-0000-000000000001",
+          "adapter_local_id": "local1",
+          "region_key": "region1",
+          "parent_local_id": null,
+          "artifact_class": "native_text",
+          "block_type": "paragraph",
+          "text": "Body [n].",
+          "content_state": "present",
+          "content_reason": null,
+          "unavailable_page_reason": "Original synthetic fixture has no page",
+          "unavailable_geometry_reason": "Original synthetic fixture has no geometry",
+          "language": null,
+          "direction": "unknown",
+          "quality_state": "unassessed",
+          "warnings": [],
+          "cell": null
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000002",
+          "adapter_local_id": "local2",
+          "region_key": "region2",
+          "parent_local_id": null,
+          "artifact_class": "native_text",
+          "block_type": "footnote",
+          "text": "Note.",
+          "content_state": "present",
+          "content_reason": null,
+          "unavailable_page_reason": "Original synthetic fixture has no page",
+          "unavailable_geometry_reason": "Original synthetic fixture has no geometry",
+          "language": null,
+          "direction": "unknown",
+          "quality_state": "unassessed",
+          "warnings": [],
+          "cell": null
+        },
+        {
+          "id": "00000000-0000-0000-0000-000000000003",
+          "adapter_local_id": "local3",
+          "region_key": "region3",
+          "parent_local_id": null,
+          "artifact_class": "native_text",
+          "block_type": "paragraph",
+          "text": "Next notice.",
+          "content_state": "present",
+          "content_reason": null,
+          "unavailable_page_reason": "Original synthetic fixture has no page",
+          "unavailable_geometry_reason": "Original synthetic fixture has no geometry",
+          "language": null,
+          "direction": "unknown",
+          "quality_state": "unassessed",
+          "warnings": [],
+          "cell": null
+        }
+      ],
+      "order": [
+        "00000000-0000-0000-0000-000000000001",
+        "00000000-0000-0000-0000-000000000002",
+        "00000000-0000-0000-0000-000000000003"
+      ],
+      "plan": {
+        "blocks": [
+          {
+            "kind": "notice",
+            "local_id": "one",
+            "blocks": [
+              {
+                "kind": "text",
+                "candidate_id": "00000000-0000-0000-0000-000000000001"
+              }
+            ],
+            "footnotes": [
+              {
+                "local_id": "n",
+                "candidates": [
+                  "00000000-0000-0000-0000-000000000002"
+                ]
+              }
+            ],
+            "markers": [
+              {
+                "candidate_id": "00000000-0000-0000-0000-000000000001",
+                "source_start": 5,
+                "source_end": 8,
+                "footnote_id": "n"
+              }
+            ]
+          },
+          {
+            "kind": "notice",
+            "local_id": "two",
+            "blocks": [
+              {
+                "kind": "text",
+                "candidate_id": "00000000-0000-0000-0000-000000000003"
+              }
+            ],
+            "footnotes": [],
+            "markers": []
+          }
+        ],
+        "footnotes": [],
+        "markers": [],
+        "exclusions": []
+      },
+      "expected_utf8": "Body [n].\n\nNote.\n\nNext notice.\n"
+    }
+  ]
+}
