@@ -18,6 +18,8 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -28,6 +30,13 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: pip install -r requirements.lock && pip install --no-deps -e .
       - run: ruff check . && ruff format --check . && pytest -q
+      - name: Reject local-only design files in public tree
+        run: |
+          forbidden=$(git ls-files -- docs scripts/planning_contracts.py scripts/spec_models.py scripts/verify_spec.py tests/test_planning_execution.py tests/test_spec_contracts.py)
+          if [ -n "$forbidden" ]; then
+            echo "Local-only design files must not be tracked in the public tree."
+            exit 1
+          fi
       - run: python -m scripts.generate_schema && git diff --exit-code schema/corpus.schema.json
       - run: alembic upgrade head && python -m scripts.seed && python -m scripts.verify_database
         env:

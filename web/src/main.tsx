@@ -1064,11 +1064,11 @@ function About() {
           {project.repository_url && (
             <a
               className="text-link"
-              href={`${project.repository_url}/blob/main/docs/roadmap.md`}
+              href={project.repository_url}
               target="_blank"
               rel="noreferrer"
             >
-              Read the roadmap <ArrowRight size={16} />
+              View the repository <ArrowRight size={16} />
             </a>
           )}
         </section>

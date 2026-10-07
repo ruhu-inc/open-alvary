@@ -1,8 +1,8 @@
 # Contributing to Open Alvary
 
-Thank you for helping build reusable public legal-data infrastructure. Read
-[the contribution guide](docs/contribution-guide.md) and [rights policy](docs/rights-policy.md)
-before proposing source data. The README contains the local setup and verification commands.
+Thank you for helping build reusable public legal-data infrastructure. The README
+contains local setup and verification commands. Source data requires documented
+provenance, source-specific permissions and review before publication.
 
 Software and documentation contributions are submitted under the repository's MIT
 licence. Contribute only work you are entitled to licence. Original catalogue
@@ -16,5 +16,5 @@ Do not include customer information, secrets, commercial Alvary code, third-part
 compilations or legal text without documented permission and source review.
 
 Use an issue for ordinary bugs and source corrections. Do not post confidential
-rights complaints, private documents or vulnerabilities publicly; use the monitored
+rights complaints, private documents or vulnerabilities publicly; use the published
 contact shown on the deployed About page. No response-time SLA is promised in the pilot.

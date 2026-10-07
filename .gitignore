@@ -25,3 +25,11 @@ backups/
 /public/
 .vercel/
 .vercel
+
+# Local-only design package and its planning validation tools
+/docs/
+/scripts/planning_contracts.py
+/scripts/spec_models.py
+/scripts/verify_spec.py
+/tests/test_planning_execution.py
+/tests/test_spec_contracts.py

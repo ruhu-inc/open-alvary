@@ -15,3 +15,11 @@ private-staging
 web/node_modules
 web/dist
 public
+
+# Local design material must not enter deployment bundles
+docs/
+scripts/planning_contracts.py
+scripts/spec_models.py
+scripts/verify_spec.py
+tests/test_planning_execution.py
+tests/test_spec_contracts.py

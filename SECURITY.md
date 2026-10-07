@@ -1,7 +1,7 @@
 # Security reporting
 
 Do not post credentials, private legal material, personal data or exploit details
-in a public issue. Use the monitored maintainer contact on the site's About page
+in a public issue. Use the published maintainer contact on the site's About page
 or GitHub private vulnerability reporting when enabled for the published repository.
 
 The v0.1 pilot has no public write endpoints, accounts or upload facility. Report
