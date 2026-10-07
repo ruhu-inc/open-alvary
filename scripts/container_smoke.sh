@@ -3,8 +3,9 @@
 set -eu
 umask 077
 smoke_env=$(mktemp)
+smoke_project="open-alvary-smoke-$(openssl rand -hex 8)"
 cleanup() {
-  docker compose -p open-alvary-ci --env-file "$smoke_env" -f deployment/compose.yaml -f deployment/smoke.yaml down -v
+  docker compose -p "$smoke_project" --env-file "$smoke_env" -f deployment/compose.yaml -f deployment/smoke.yaml down -v
   rm -f "$smoke_env"
 }
 trap cleanup EXIT INT TERM
@@ -16,5 +17,6 @@ PUBLIC_CONTACT_EMAIL=test@example.org
 METADATA_LICENCE=pending
 POSTGRES_PASSWORD=$(openssl rand -hex 32)
 CONFIG
-docker compose -p open-alvary-ci --env-file "$smoke_env" -f deployment/compose.yaml -f deployment/smoke.yaml up --build -d --wait web
-python -m scripts.smoke_public http://127.0.0.1:5179
+docker compose -p "$smoke_project" --env-file "$smoke_env" -f deployment/compose.yaml -f deployment/smoke.yaml up --build -d --wait web
+smoke_address=$(docker compose -p "$smoke_project" --env-file "$smoke_env" -f deployment/compose.yaml -f deployment/smoke.yaml port web 80)
+python -m scripts.smoke_public "http://$smoke_address"

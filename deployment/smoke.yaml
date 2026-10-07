@@ -3,4 +3,4 @@ services:
   migrate:
     command: ["sh", "-c", "alembic upgrade head && python -m scripts.seed"]
   web:
-    ports: ["127.0.0.1:5179:80"]
+    ports: ["127.0.0.1::80"]
