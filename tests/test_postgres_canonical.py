@@ -404,12 +404,14 @@ def test_populated_0007_empty_upgrade_rollback_preserves_existing_private_bytes_
 
 def test_populated_canonical_state_refuses_destructive_downgrade(projection):
     f, *_ = projection
+    with f.engine.connect() as conn:
+        before = conn.scalar(text("SELECT version_num FROM alembic_version"))
     with pytest.raises(RuntimeError, match="requires forward repair"), f.engine.begin() as conn:
         cfg = Config("alembic.ini")
         cfg.attributes["connection"] = conn
         command.downgrade(cfg, "0007")
     with f.engine.connect() as conn:
-        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0008"
+        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == before
 
 
 def test_rejected_privacy_and_due_derivative_erasure_include_canonical_payload(projection):

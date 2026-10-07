@@ -10,10 +10,12 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.pool import NullPool
 
+from rights.approval import SyntheticApproval, parse_approval_command
 from rights.assembly import SyntheticAssembly, parse_assembly_command
 from rights.commands import MAX_COMMAND_BYTES, OperatorCommands, parse_command
 from rights.database import PolicyNamespace
 from rights.lifecycle import AcquisitionLifecycle, parse_lifecycle_request
+from schema.approval import ApprovalResult
 from schema.assembly import AssemblyResult
 from schema.operator import CommandResult, LifecycleResult
 
@@ -26,14 +28,25 @@ def main(argv=None) -> int:
         "--reconcile-staging", action="store_true", help="Apply one bounded private lifecycle request"
     )
     modes.add_argument("--assembly", action="store_true", help="Apply one private synthetic assembly command")
+    modes.add_argument(
+        "--approval", action="store_true", help="Apply one private original-synthetic approval command"
+    )
     args = parser.parse_args(argv)
     result_type = (
-        AssemblyResult if args.assembly else LifecycleResult if args.reconcile_staging else CommandResult
+        ApprovalResult
+        if args.approval
+        else AssemblyResult
+        if args.assembly
+        else LifecycleResult
+        if args.reconcile_staging
+        else CommandResult
     )
     result = result_type(command_id=None, status="validation_failed")
     try:
         parse = (
-            parse_assembly_command
+            parse_approval_command
+            if args.approval
+            else parse_assembly_command
             if args.assembly
             else parse_lifecycle_request
             if args.reconcile_staging
@@ -56,7 +69,9 @@ def main(argv=None) -> int:
             connection.execute(text("SET LOCAL idle_in_transaction_session_timeout='30s'"))
             namespace = PolicyNamespace(args.schema)
             result = (
-                SyntheticAssembly(connection, namespace).apply(command)
+                SyntheticApproval(connection, namespace).apply(command)
+                if args.approval
+                else SyntheticAssembly(connection, namespace).apply(command)
                 if args.assembly
                 else AcquisitionLifecycle(connection, namespace).reconcile(command)
                 if args.reconcile_staging

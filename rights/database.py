@@ -185,6 +185,41 @@ def provision_roles(conn: Connection, namespace: PolicyNamespace) -> dict[str, s
             "read_canonical_proposal(uuid,text)",
         ):
             conn.execute(text(f"GRANT EXECUTE ON FUNCTION {p}.{fn} TO {acquisition}"))
+    if conn.scalar(
+        text("SELECT to_regclass(:name) IS NOT NULL"),
+        {"name": namespace.schema("staging") + ".synthetic_expression_binding"},
+    ):
+        conn.execute(
+            text(
+                f"GRANT SELECT ON {quote(namespace.base)}.identity_works,{quote(namespace.base)}.identity_expressions,{quote(namespace.base)}.identity_manifestations,{quote(namespace.base)}.identity_work_manifestations TO {guard}"
+            )
+        )
+        conn.execute(text(f"GRANT UPDATE(state,payload) ON {s}.synthetic_expression_binding TO {guard}"))
+        conn.execute(text(f"GRANT INSERT,UPDATE(state,payload) ON {s}.snapshot_review TO {guard}"))
+        conn.execute(
+            text(f"GRANT INSERT,UPDATE(state,payload,canonical_bytes) ON {c}.approved_version TO {guard}")
+        )
+        conn.execute(text(f"GRANT INSERT,UPDATE(state,payload) ON {c}.representation_revision TO {guard}"))
+        conn.execute(text(f"GRANT INSERT,UPDATE ON {c}.version_head,{c}.representation_head TO {guard}"))
+        for table in (
+            "version_node",
+            "node_alignment",
+            "approved_anchor",
+            "approved_table",
+            "approved_cell",
+            "cell_node",
+            "document_order",
+            "unavailable_mapping",
+            "footnote_reference",
+        ):
+            conn.execute(text(f"GRANT INSERT ON {c}.{table} TO {guard}"))
+        conn.execute(text(f"GRANT INSERT ON {p}.approval_receipt,{p}.approval_commit TO {guard}"))
+        conn.execute(
+            text(f"GRANT EXECUTE ON FUNCTION {p}.apply_synthetic_approval(jsonb) TO {review},{release}")
+        )
+        conn.execute(
+            text(f"GRANT EXECUTE ON FUNCTION {p}.read_approved_synthetic_version(text,text) TO {acquisition}")
+        )
     return roles
 
 

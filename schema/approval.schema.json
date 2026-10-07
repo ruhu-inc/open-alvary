@@ -1,0 +1,460 @@
+{
+  "$defs": {
+    "ApprovalResult": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Command Id"
+        },
+        "status": {
+          "enum": [
+            "applied",
+            "conflict",
+            "forbidden",
+            "validation_failed",
+            "capacity_exceeded",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "replayed": {
+          "default": false,
+          "title": "Replayed",
+          "type": "boolean"
+        },
+        "review_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review Hash"
+        },
+        "version_id": {
+          "anyOf": [
+            {
+              "pattern": "^ver_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version Id"
+        },
+        "representation_id": {
+          "anyOf": [
+            {
+              "pattern": "^prp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Representation Id"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision"
+        },
+        "content_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Hash"
+        }
+      },
+      "required": [
+        "command_id",
+        "status"
+      ],
+      "title": "ApprovalResult",
+      "type": "object"
+    },
+    "ApproveVersionCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "purpose": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "action": {
+          "const": "approve_synthetic_version",
+          "title": "Action",
+          "type": "string"
+        },
+        "review_id": {
+          "format": "uuid",
+          "title": "Review Id",
+          "type": "string"
+        },
+        "review_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Review Hash",
+          "type": "string"
+        },
+        "rights_revision": {
+          "exclusiveMinimum": 0,
+          "title": "Rights Revision",
+          "type": "integer"
+        },
+        "verification_revision": {
+          "exclusiveMinimum": 0,
+          "title": "Verification Revision",
+          "type": "integer"
+        },
+        "version_id": {
+          "pattern": "^ver_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Version Id",
+          "type": "string"
+        },
+        "representation_id": {
+          "pattern": "^prp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Representation Id",
+          "type": "string"
+        },
+        "prior_version_id": {
+          "anyOf": [
+            {
+              "pattern": "^ver_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prior Version Id"
+        },
+        "mode": {
+          "enum": [
+            "new_version",
+            "representation_revision"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "expected_rep_revision": {
+          "default": 0,
+          "maximum": 32,
+          "minimum": 0,
+          "title": "Expected Rep Revision",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command_id",
+        "collection_id",
+        "purpose",
+        "reason",
+        "action",
+        "review_id",
+        "review_hash",
+        "rights_revision",
+        "verification_revision",
+        "version_id",
+        "representation_id",
+        "mode"
+      ],
+      "title": "ApproveVersionCommand",
+      "type": "object"
+    },
+    "PrivateVersionView": {
+      "additionalProperties": false,
+      "properties": {
+        "version_id": {
+          "pattern": "^ver_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Version Id",
+          "type": "string"
+        },
+        "expression_id": {
+          "pattern": "^exp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Expression Id",
+          "type": "string"
+        },
+        "current_rep_id": {
+          "pattern": "^prp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Current Rep Id",
+          "type": "string"
+        },
+        "rep_revision": {
+          "title": "Rep Revision",
+          "type": "integer"
+        },
+        "snapshot_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Snapshot Hash",
+          "type": "string"
+        },
+        "profile_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Profile Hash",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "serialization_profile_id": {
+          "const": "OA-text-1",
+          "title": "Serialization Profile Id",
+          "type": "string"
+        },
+        "canonical_text": {
+          "title": "Canonical Text",
+          "type": "string"
+        },
+        "record_set": {
+          "additionalProperties": true,
+          "title": "Record Set",
+          "type": "object"
+        },
+        "publication_eligible": {
+          "const": false,
+          "title": "Publication Eligible",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "version_id",
+        "expression_id",
+        "current_rep_id",
+        "rep_revision",
+        "snapshot_hash",
+        "profile_hash",
+        "content_hash",
+        "serialization_profile_id",
+        "canonical_text",
+        "record_set",
+        "publication_eligible"
+      ],
+      "title": "PrivateVersionView",
+      "type": "object"
+    },
+    "SnapshotReviewCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "purpose": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "action": {
+          "const": "record_snapshot_review",
+          "title": "Action",
+          "type": "string"
+        },
+        "review_id": {
+          "format": "uuid",
+          "title": "Review Id",
+          "type": "string"
+        },
+        "binding_id": {
+          "format": "uuid",
+          "title": "Binding Id",
+          "type": "string"
+        },
+        "binding_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Binding Hash",
+          "type": "string"
+        },
+        "proposal_id": {
+          "format": "uuid",
+          "title": "Proposal Id",
+          "type": "string"
+        },
+        "snapshot_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Snapshot Hash",
+          "type": "string"
+        },
+        "profile_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Profile Hash",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "verification_revision": {
+          "exclusiveMinimum": 0,
+          "title": "Verification Revision",
+          "type": "integer"
+        },
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "reviewed_candidate_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Reviewed Candidate Ids",
+          "type": "array"
+        },
+        "comparison_method": {
+          "const": "human_source_comparison",
+          "title": "Comparison Method",
+          "type": "string"
+        },
+        "review_scope": {
+          "const": "collection_policy",
+          "title": "Review Scope",
+          "type": "string"
+        },
+        "requires_exception_review": {
+          "const": false,
+          "title": "Requires Exception Review",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "command_id",
+        "collection_id",
+        "purpose",
+        "reason",
+        "action",
+        "review_id",
+        "binding_id",
+        "binding_hash",
+        "proposal_id",
+        "snapshot_hash",
+        "profile_hash",
+        "content_hash",
+        "verification_revision",
+        "evidence_id",
+        "reviewed_candidate_ids",
+        "comparison_method",
+        "review_scope",
+        "requires_exception_review"
+      ],
+      "title": "SnapshotReviewCommand",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "synthetic-approval-1",
+      "default": "synthetic-approval-1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "commands": {
+      "default": [],
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "approve_synthetic_version": "#/$defs/ApproveVersionCommand",
+            "record_snapshot_review": "#/$defs/SnapshotReviewCommand"
+          },
+          "propertyName": "action"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/SnapshotReviewCommand"
+          },
+          {
+            "$ref": "#/$defs/ApproveVersionCommand"
+          }
+        ]
+      },
+      "title": "Commands",
+      "type": "array"
+    },
+    "results": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ApprovalResult"
+      },
+      "title": "Results",
+      "type": "array"
+    },
+    "private_versions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PrivateVersionView"
+      },
+      "title": "Private Versions",
+      "type": "array"
+    }
+  },
+  "title": "ApprovalContracts",
+  "type": "object"
+}
