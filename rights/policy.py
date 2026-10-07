@@ -1,8 +1,17 @@
 """Fail-closed public projection shared by HTTP and release generation."""
 
 from datetime import UTC, datetime
+from typing import Protocol
 
-from schema.models import Corpus, Model, Permission, RightsRecord, RightsStatus, SourceVersion
+from schema.models import Corpus, Model, Permission, RightsRecord, RightsStatus
+
+
+class PublicationVersion(Protocol):
+    source_id: str
+    content_hash: str
+    verification_status: str
+    content_verifier: str | None
+    content_verified_at: datetime | None
 
 
 class Decision(Model):
@@ -12,7 +21,7 @@ class Decision(Model):
 
 
 def decide(
-    record: RightsRecord | None, version: SourceVersion | None = None, *, now: datetime | None = None
+    record: RightsRecord | None, version: PublicationVersion | None = None, *, now: datetime | None = None
 ) -> Decision:
     now = now or datetime.now(UTC)
     if record is None or record.status == RightsStatus.RESTRICTED:

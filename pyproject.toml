@@ -15,6 +15,10 @@ dev = ["pytest>=8,<10", "ruff>=0.9,<1"]
 [tool.setuptools.packages.find]
 include = ["api*", "schema*", "rights*", "ingestion*", "exports*"]
 
+[tool.setuptools.package-data]
+schema = ["*.json"]
+ingestion = ["catalogue/*.json"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]

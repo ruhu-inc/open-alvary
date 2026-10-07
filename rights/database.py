@@ -10,7 +10,7 @@ from hashlib import sha256
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-from schema.policy import PolicyResult, PublicMetadata
+from schema.policy import MetadataPage, PolicyResult, PublicMetadata
 
 
 @dataclass(frozen=True)
@@ -134,6 +134,22 @@ class PolicyRepository:
             .one_or_none()
         )
         return PublicMetadata.model_validate(dict(row)) if row is not None else None
+
+    def metadata_page(self, *, limit: int = 50, after: str | None = None) -> MetadataPage:
+        if not 1 <= limit <= 100:
+            raise ValueError("Invalid page bounds")
+        view = self.namespace.qualified(self.connection, "corpus", "eligible_metadata")
+        where = "WHERE work_id>:after" if after is not None else ""
+        rows = (
+            self.connection.execute(
+                text(f"SELECT * FROM {view} {where} ORDER BY work_id LIMIT :limit"),
+                {"after": after, "limit": limit + 1},
+            )
+            .mappings()
+            .all()
+        )
+        items = tuple(PublicMetadata.model_validate(dict(row)) for row in rows[:limit])
+        return MetadataPage(items=items, next_after=items[-1].work_id if len(rows) > limit else None)
 
     def lock_collection(self, collection_id: str, *, expected_revision: int) -> int:
         """Maintenance/release transaction interface; never usable by a serving role."""

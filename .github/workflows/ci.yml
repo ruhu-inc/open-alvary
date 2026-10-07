@@ -41,7 +41,7 @@ jobs:
             echo "Local-only design files must not be tracked in the public tree."
             exit 1
           fi
-      - run: python -m scripts.generate_schema && git diff --exit-code schema/corpus.schema.json schema/identity.schema.json schema/policy.schema.json
+      - run: python -m scripts.generate_schema && git diff --exit-code schema/corpus.schema.json schema/identity.schema.json schema/policy.schema.json schema/public.schema.json
       - run: alembic upgrade head && python -m scripts.seed && python -m scripts.verify_database
         env:
           DATABASE_URL: postgresql+psycopg://open_alvary:test-only@localhost:5432/open_alvary_test

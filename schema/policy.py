@@ -130,11 +130,18 @@ class PublicMetadata(BaseModel):
     reference_url: HttpUrl
 
 
+class MetadataPage(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    items: tuple[PublicMetadata, ...]
+    next_after: WorkID | None
+
+
 class PolicyContracts(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     schema_version: Literal["policy-foundation-1"] = "policy-foundation-1"
     results: tuple[PolicyResult, ...] = ()
     metadata: tuple[PublicMetadata, ...] = ()
+    metadata_pages: tuple[MetadataPage, ...] = ()
     controllers: tuple[ControllerRecord, ...] = ()
     privacy_reviews: tuple[PrivacyReview, ...] = ()
     assessments: tuple[AcquisitionAssessment, ...] = ()

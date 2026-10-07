@@ -481,6 +481,36 @@
       "title": "ControllerRecord",
       "type": "object"
     },
+    "MetadataPage": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/PublicMetadata"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_after": {
+          "anyOf": [
+            {
+              "pattern": "^wrk_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next After"
+        }
+      },
+      "required": [
+        "items",
+        "next_after"
+      ],
+      "title": "MetadataPage",
+      "type": "object"
+    },
     "PolicyResult": {
       "additionalProperties": false,
       "properties": {
@@ -1012,6 +1042,14 @@
         "$ref": "#/$defs/PublicMetadata"
       },
       "title": "Metadata",
+      "type": "array"
+    },
+    "metadata_pages": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/MetadataPage"
+      },
+      "title": "Metadata Pages",
       "type": "array"
     },
     "controllers": {

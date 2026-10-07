@@ -1,0 +1,941 @@
+{
+  "$defs": {
+    "CitationView": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "enum": [
+            "resolved",
+            "ambiguous",
+            "unresolved"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "matches": {
+          "items": {
+            "$ref": "#/$defs/SourceView"
+          },
+          "title": "Matches",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status",
+        "matches"
+      ],
+      "title": "CitationView",
+      "type": "object"
+    },
+    "CoverageView": {
+      "additionalProperties": false,
+      "properties": {
+        "catalogued_sources": {
+          "minimum": 0,
+          "title": "Catalogued Sources",
+          "type": "integer"
+        },
+        "open_full_text_sources": {
+          "minimum": 0,
+          "title": "Open Full Text Sources",
+          "type": "integer"
+        },
+        "metadata_only_sources": {
+          "minimum": 0,
+          "title": "Metadata Only Sources",
+          "type": "integer"
+        },
+        "published_versions": {
+          "minimum": 0,
+          "title": "Published Versions",
+          "type": "integer"
+        },
+        "jurisdictions": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Jurisdictions",
+          "type": "object"
+        },
+        "notice": {
+          "title": "Notice",
+          "type": "string"
+        }
+      },
+      "required": [
+        "catalogued_sources",
+        "open_full_text_sources",
+        "metadata_only_sources",
+        "published_versions",
+        "jurisdictions",
+        "notice"
+      ],
+      "title": "CoverageView",
+      "type": "object"
+    },
+    "DecisionView": {
+      "additionalProperties": false,
+      "properties": {
+        "metadata": {
+          "title": "Metadata",
+          "type": "boolean"
+        },
+        "full_text": {
+          "title": "Full Text",
+          "type": "boolean"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "metadata",
+        "full_text",
+        "reasons"
+      ],
+      "title": "DecisionView",
+      "type": "object"
+    },
+    "JurisdictionView": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "country_code": {
+          "pattern": "^[A-Z]{2}$",
+          "title": "Country Code",
+          "type": "string"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Id"
+        },
+        "legal_systems": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Legal Systems",
+          "type": "array"
+        },
+        "languages": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Languages",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "country_code"
+      ],
+      "title": "JurisdictionView",
+      "type": "object"
+    },
+    "NodeViewRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "version_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Version Id",
+          "type": "string"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Id"
+        },
+        "kind": {
+          "enum": [
+            "document",
+            "part",
+            "chapter",
+            "section",
+            "subsection",
+            "paragraph",
+            "schedule"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "locator": {
+          "minLength": 1,
+          "title": "Locator",
+          "type": "string"
+        },
+        "order": {
+          "minimum": 0,
+          "title": "Order",
+          "type": "integer"
+        },
+        "start_byte": {
+          "minimum": 0,
+          "title": "Start Byte",
+          "type": "integer"
+        },
+        "end_byte": {
+          "minimum": 0,
+          "title": "End Byte",
+          "type": "integer"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "source_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Source Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source_id",
+        "version_id",
+        "kind",
+        "locator",
+        "order",
+        "start_byte",
+        "end_byte",
+        "source_hash"
+      ],
+      "title": "NodeViewRecord",
+      "type": "object"
+    },
+    "Permission": {
+      "enum": [
+        "yes",
+        "no",
+        "conditional",
+        "unknown"
+      ],
+      "title": "Permission",
+      "type": "string"
+    },
+    "RightsStatus": {
+      "enum": [
+        "OPEN",
+        "OPEN_WITH_CONDITIONS",
+        "LINK_ONLY",
+        "RESTRICTED",
+        "RIGHTS_UNDER_REVIEW"
+      ],
+      "title": "RightsStatus",
+      "type": "string"
+    },
+    "RightsView": {
+      "additionalProperties": false,
+      "properties": {
+        "record": {
+          "$ref": "#/$defs/RightsViewRecord"
+        },
+        "decision": {
+          "$ref": "#/$defs/DecisionView"
+        }
+      },
+      "required": [
+        "record",
+        "decision"
+      ],
+      "title": "RightsView",
+      "type": "object"
+    },
+    "RightsViewRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/RightsStatus",
+          "default": "RIGHTS_UNDER_REVIEW"
+        },
+        "rights_holder": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rights Holder"
+        },
+        "licence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Licence"
+        },
+        "licence_url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Licence Url"
+        },
+        "redistribution_allowed": {
+          "$ref": "#/$defs/Permission",
+          "default": "unknown"
+        },
+        "commercial_reuse_allowed": {
+          "$ref": "#/$defs/Permission",
+          "default": "unknown"
+        },
+        "derivatives_allowed": {
+          "$ref": "#/$defs/Permission",
+          "default": "unknown"
+        },
+        "attribution_required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribution Required"
+        },
+        "attribution_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribution Text"
+        },
+        "database_rights_notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Database Rights Notes"
+        },
+        "privacy_status": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "cleared",
+            "redacted",
+            "blocked"
+          ],
+          "title": "Privacy Status",
+          "type": "string"
+        },
+        "reviewer": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewer"
+        },
+        "reviewed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed At"
+        },
+        "expires_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expires At"
+        },
+        "evidence": {
+          "default": [],
+          "items": {
+            "format": "uri",
+            "maxLength": 2083,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Evidence",
+          "type": "array"
+        },
+        "legal_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Legal Note"
+        },
+        "conditions": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Conditions",
+          "type": "array"
+        },
+        "conditions_satisfied": {
+          "default": false,
+          "title": "Conditions Satisfied",
+          "type": "boolean"
+        },
+        "approved_content_hashes": {
+          "default": [],
+          "items": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "title": "Approved Content Hashes",
+          "type": "array"
+        },
+        "metadata_public": {
+          "default": false,
+          "title": "Metadata Public",
+          "type": "boolean"
+        },
+        "metadata_basis": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Metadata Basis"
+        }
+      },
+      "required": [
+        "id",
+        "source_id"
+      ],
+      "title": "RightsViewRecord",
+      "type": "object"
+    },
+    "SearchPage": {
+      "additionalProperties": false,
+      "properties": {
+        "total": {
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/SourceView"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "scope": {
+          "const": "Catalogue metadata and cleared full text only",
+          "default": "Catalogue metadata and cleared full text only",
+          "title": "Scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "total",
+        "items"
+      ],
+      "title": "SearchPage",
+      "type": "object"
+    },
+    "SourcePage": {
+      "additionalProperties": false,
+      "properties": {
+        "total": {
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/SourceView"
+          },
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "total",
+        "items"
+      ],
+      "title": "SourcePage",
+      "type": "object"
+    },
+    "SourceView": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "jurisdiction_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Jurisdiction Id",
+          "type": "string"
+        },
+        "authority_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Authority Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "document_type": {
+          "enum": [
+            "constitution",
+            "act",
+            "regulation",
+            "judgment",
+            "gazette",
+            "guidance",
+            "other"
+          ],
+          "title": "Document Type",
+          "type": "string"
+        },
+        "canonical_url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Canonical Url",
+          "type": "string"
+        },
+        "url_kind": {
+          "default": "landing_page",
+          "enum": [
+            "document",
+            "landing_page",
+            "discovery"
+          ],
+          "title": "Url Kind",
+          "type": "string"
+        },
+        "citation": {
+          "minLength": 1,
+          "title": "Citation",
+          "type": "string"
+        },
+        "language": {
+          "default": "en",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Language",
+          "type": "string"
+        },
+        "legal_status": {
+          "default": "unknown",
+          "enum": [
+            "unknown",
+            "current",
+            "historical",
+            "repealed",
+            "superseded"
+          ],
+          "title": "Legal Status",
+          "type": "string"
+        },
+        "status_evidence": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status Evidence"
+        },
+        "catalogue_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Catalogue Note"
+        },
+        "access_mode": {
+          "enum": [
+            "open_full_text",
+            "metadata_link_only"
+          ],
+          "title": "Access Mode",
+          "type": "string"
+        },
+        "rights_status": {
+          "$ref": "#/$defs/RightsStatus"
+        },
+        "has_full_text": {
+          "title": "Has Full Text",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "jurisdiction_id",
+        "authority_id",
+        "title",
+        "document_type",
+        "canonical_url",
+        "citation",
+        "access_mode",
+        "rights_status",
+        "has_full_text"
+      ],
+      "title": "SourceView",
+      "type": "object"
+    },
+    "VersionPage": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/VersionViewRecord"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "rights": {
+          "$ref": "#/$defs/RightsViewRecord"
+        },
+        "structure": {
+          "items": {
+            "$ref": "#/$defs/NodeViewRecord"
+          },
+          "title": "Structure",
+          "type": "array"
+        },
+        "notice": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Notice"
+        }
+      },
+      "required": [
+        "items",
+        "rights",
+        "structure",
+        "notice"
+      ],
+      "title": "VersionPage",
+      "type": "object"
+    },
+    "VersionViewRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "canonical_url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Canonical Url",
+          "type": "string"
+        },
+        "retrieved_at": {
+          "format": "date-time",
+          "title": "Retrieved At",
+          "type": "string"
+        },
+        "raw_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Raw Hash",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "canonical_text": {
+          "title": "Canonical Text",
+          "type": "string"
+        },
+        "parser": {
+          "minLength": 1,
+          "title": "Parser",
+          "type": "string"
+        },
+        "language": {
+          "default": "en",
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Language",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "effective_until": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective Until"
+        },
+        "verification_status": {
+          "default": "pending",
+          "enum": [
+            "pending",
+            "verified",
+            "rejected"
+          ],
+          "title": "Verification Status",
+          "type": "string"
+        },
+        "content_verifier": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Verifier"
+        },
+        "content_verified_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Verified At"
+        }
+      },
+      "required": [
+        "id",
+        "source_id",
+        "canonical_url",
+        "retrieved_at",
+        "raw_hash",
+        "content_hash",
+        "canonical_text",
+        "parser"
+      ],
+      "title": "VersionViewRecord",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "pilot-public-1",
+      "default": "pilot-public-1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "sources": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SourcePage"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "searches": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SearchPage"
+      },
+      "title": "Searches",
+      "type": "array"
+    },
+    "versions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/VersionPage"
+      },
+      "title": "Versions",
+      "type": "array"
+    },
+    "rights": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RightsView"
+      },
+      "title": "Rights",
+      "type": "array"
+    },
+    "citations": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CitationView"
+      },
+      "title": "Citations",
+      "type": "array"
+    },
+    "jurisdictions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/JurisdictionView"
+      },
+      "title": "Jurisdictions",
+      "type": "array"
+    },
+    "coverage": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CoverageView"
+      },
+      "title": "Coverage",
+      "type": "array"
+    }
+  },
+  "title": "PublicContracts",
+  "type": "object"
+}
