@@ -1,0 +1,38 @@
+{
+  "revision": "0013",
+  "vocabulary": "policy-vocabulary-1",
+  "literals": {
+    "role_literal_e7ac078666": ":",
+    "role_literal_9f84896138": ":assembly:",
+    "role_literal_f46bd8af98": ":gazette-binding:",
+    "role_literal_7f5aac8ff7": ":gazette-command:",
+    "role_literal_91e81414d2": ":approve-expression:",
+    "role_literal_28fcec2be8": ":approval-command:",
+    "role_literal_0efa318b48": "_acquisition",
+    "role_literal_7d239390fb": "_release",
+    "role_literal_698c8026af": "_serving",
+    "role_literal_64bc633714": "_review",
+    "role_literal_fbce7fd9ca": "_guard",
+    "role_literal_5d06a72edb": ":lifecycle:",
+    "role_literal_2e686ad867": ":stage:"
+  },
+  "vocabulary_file": "vocabularies/v1.json",
+  "vocabulary_hash": "cac594e752fdb6c2cb6adfc63930ceea8a8fe8be3afe9570552d5c2f486d8c80",
+  "functions": [
+    {
+      "signature": "apply_synthetic_approval(jsonb)",
+      "file": "apply_synthetic_approval.sql",
+      "prior_body_hash": "e7ca9f7e3f7b76b126a658144fd322a3270cdc94ed454555fed4f2e4b06d78c9",
+      "current_body_hash": "4f610708a90b598bd02f36f18d9277c1a62a6dd963656603cdee18209157a7e6",
+      "prior_definition_hash": "b898cacfd597e78d45a875032a3ef5d445acbd51a7cbe48f8efd89d431de36d6",
+      "current_definition_hash": "9df5b1fbab7b747bb3177da09e050faaae12455065534d0140839238aa09a729",
+      "prior_file": "prior_apply_synthetic_approval.sql"
+    }
+  ],
+  "new_functions": [
+    {
+      "signature": "representation_identity_insert()",
+      "current_definition_hash": "dd22be68d2f74e60892b1b28b82a76ba9152b9da5f1df681c5ef394c06f183ea"
+    }
+  ]
+}

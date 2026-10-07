@@ -61,7 +61,7 @@
         "representation_id": {
           "anyOf": [
             {
-              "pattern": "^prp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "pattern": "^(rep|prp)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
               "type": "string"
             },
             {
@@ -160,7 +160,7 @@
           "type": "string"
         },
         "representation_id": {
-          "pattern": "^prp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "pattern": "^(rep|prp)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
           "title": "Representation Id",
           "type": "string"
         },
@@ -224,7 +224,7 @@
           "type": "string"
         },
         "current_rep_id": {
-          "pattern": "^prp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "pattern": "^(rep|prp)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
           "title": "Current Rep Id",
           "type": "string"
         },
@@ -411,8 +411,8 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "synthetic-approval-1",
-      "default": "synthetic-approval-1",
+      "const": "synthetic-approval-2",
+      "default": "synthetic-approval-2",
       "title": "Schema Version",
       "type": "string"
     },

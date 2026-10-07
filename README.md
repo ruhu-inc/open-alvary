@@ -492,7 +492,7 @@ forward repair. Public versions, anchors, text routes and atomic independent app
 work; all canonical projections carry `publication_eligible=false`.
 
 Migration `0009` adds private approval of **original synthetic fixtures only**, using the separate
-`schema/approval.schema.json` contract (`synthetic-approval-1`) and `alvary-operator --approval`.
+`schema/approval.schema.json` contract (`synthetic-approval-2`) and `alvary-operator --approval`.
 It exposes `record_snapshot_review` and `approve_synthetic_version`; it adds no publication command.
 An administrator explicitly declares an expression/manifestation/raw-artifact binding through
 `rights.approval.declare_synthetic_binding`, referencing existing identified work/expression and
@@ -540,7 +540,7 @@ any new binding/review/receipt/version history requires forward repair. All outp
 `publication_eligible=false` and the public pilot still has zero cleared full-text sources.
 
 Migration `0010` adds private correspondence for **original synthetic gazette fixtures only**, through
-`schema/gazette.schema.json` (`synthetic-gazette-1`) and `alvary-operator --gazette`. The separate
+`schema/gazette.schema.json` (`synthetic-gazette-2`) and `alvary-operator --gazette`. The separate
 commands are `record_gazette_item_review` and `approve_gazette_item_correspondence`. An administrator
 uses `rights.gazette.declare_synthetic_item_binding` to reference an existing identified item work/
 expression, its association with the issue manifestation, and a complete issue-owned root notice.
@@ -620,3 +620,21 @@ qualification, denial-journal/restore evidence and serving-role adoption. Synthe
 be relabelled or backfilled as qualified real approvals. Revoke the synthetic RPC grants from
 production groups when the qualified replacement is adopted; retain old immutable evidence and
 isolate fixtures in test environments. No flag activates real appointments or first-text publication.
+
+
+Migration `0013` gives new private representation records the `rep_` UUIDv4 prefix.
+Existing `prp_` identities, references, lifecycle history and exact retries remain valid;
+new `prp_` inserts are rejected by the database, including through historical RPC aliases.
+The private approval/gazette contracts advance to `synthetic-approval-2` and
+`synthetic-gazette-2`, accepting both prefixes for historical references. Clients must
+supply `rep_` for new representations. Applied migration and SQL resource bundles remain
+unchanged; `v0013` pins the reviewed function replacement and the new insert guard.
+Rollback is refused once any `rep_` history exists, including erased history.
+
+Native original-synthetic conformance combines one issue with three independently identified
+item works/expressions and distinct item policies. Tests verify NFC/LF, Arabic/bidi/non-BMP
+bytes, merged and empty cells, notice-scoped footnotes, repeated-header exclusion,
+representation versus byte correction, shared allocation, scoped native sessions, transaction
+rollback, conservative sibling withholding and whole-family row erasure. Incomplete material
+tables cannot acquire approval. Sampling, personal-data/exception release routes, qualified
+real-source review, public serving and operational recovery remain separate gates.

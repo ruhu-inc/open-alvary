@@ -10,7 +10,10 @@ from schema.models import Hash
 from schema.operator import Reason
 
 VersionID = Annotated[str, Field(pattern="^ver_" + UUID4_SUFFIX + "$")]
-RepresentationID = Annotated[str, Field(pattern="^prp_" + UUID4_SUFFIX + "$")]
+
+# Legacy prp_ references remain accepted for immutable reads and exact retries.
+# PostgreSQL migration 0013 requires rep_ for every newly inserted representation.
+RepresentationID = Annotated[str, Field(pattern="^(rep|prp)_" + UUID4_SUFFIX + "$")]
 
 
 class PrivateModel(BaseModel):
@@ -85,7 +88,7 @@ class PrivateVersionView(PrivateModel):
 
 
 class ApprovalContracts(PrivateModel):
-    schema_version: Literal["synthetic-approval-1"] = "synthetic-approval-1"
+    schema_version: Literal["synthetic-approval-2"] = "synthetic-approval-2"
     commands: tuple[ApprovalCommand, ...] = ()
     results: tuple[ApprovalResult, ...] = ()
     private_versions: tuple[PrivateVersionView, ...] = ()

@@ -75,7 +75,7 @@ def approval_command(f, review, result, **changes):
         rights_revision=1,
         verification_revision=1,
         version_id="ver_" + str(uuid4()),
-        representation_id="prp_" + str(uuid4()),
+        representation_id="rep_" + str(uuid4()),
         mode="new_version",
     )
     data.update(changes)
@@ -200,7 +200,7 @@ def test_approval_mints_one_private_version_with_exact_bytes_nodes_anchors_and_o
                 update={
                     "command_id": uuid4(),
                     "version_id": "ver_" + str(uuid4()),
-                    "representation_id": "prp_" + str(uuid4()),
+                    "representation_id": "rep_" + str(uuid4()),
                 }
             ),
         ).version_id
@@ -583,7 +583,7 @@ def test_concurrent_approval_mints_one_record_set_without_duplicate_nodes(ready,
             update={
                 "command_id": uuid4(),
                 "version_id": "ver_" + str(uuid4()),
-                "representation_id": "prp_" + str(uuid4()),
+                "representation_id": "rep_" + str(uuid4()),
             }
         )
     )

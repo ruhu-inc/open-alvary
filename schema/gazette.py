@@ -91,7 +91,7 @@ class GazetteProjection(PrivateModel):
 
 
 class GazetteContracts(PrivateModel):
-    schema_version: Literal["synthetic-gazette-1"] = "synthetic-gazette-1"
+    schema_version: Literal["synthetic-gazette-2"] = "synthetic-gazette-2"
     commands: tuple[GazetteCommand, ...] = ()
     results: tuple[GazetteResult, ...] = ()
     private_projections: tuple[GazetteProjection, ...] = ()
