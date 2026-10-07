@@ -148,6 +148,30 @@ def provision_roles(conn: Connection, namespace: PolicyNamespace) -> dict[str, s
     ):
         conn.execute(text(f"GRANT INSERT ON {p}.staging_lifecycle_event,{p}.lifecycle_receipt TO {guard}"))
         conn.execute(text(f"GRANT EXECUTE ON FUNCTION {p}.reconcile_staging(jsonb) TO {acquisition}"))
+    if conn.scalar(
+        text("SELECT to_regclass(:name) IS NOT NULL"),
+        {"name": namespace.schema("policy") + ".assembly_receipt"},
+    ):
+        for table in (
+            "synthetic_run",
+            "adapter_candidate",
+            "staging_snapshot",
+            "snapshot_head",
+            "snapshot_selection",
+            "snapshot_resolution",
+        ):
+            conn.execute(text(f"GRANT INSERT ON {s}.{table} TO {guard}"))
+        conn.execute(text(f"GRANT INSERT ON {p}.assembly_receipt,{p}.assembly_lifecycle_event TO {guard}"))
+        conn.execute(
+            text(f"GRANT UPDATE(state,payload) ON {s}.adapter_candidate,{s}.staging_snapshot TO {guard}")
+        )
+        conn.execute(text(f"GRANT UPDATE(revision) ON {s}.snapshot_head TO {guard}"))
+        for fn in (
+            "apply_assembly_command(jsonb)",
+            "read_candidates(uuid,text,uuid,integer)",
+            "read_snapshot(uuid,bigint,text)",
+        ):
+            conn.execute(text(f"GRANT EXECUTE ON FUNCTION {p}.{fn} TO {acquisition}"))
     return roles
 
 

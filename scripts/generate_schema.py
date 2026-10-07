@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from schema.assembly import AssemblyContracts
 from schema.identity import IdentityContracts
 from schema.models import Corpus
 from schema.operator import OperatorContracts
@@ -20,4 +21,7 @@ if __name__ == "__main__":
     )
     Path("schema/operator.schema.json").write_text(
         json.dumps(OperatorContracts.model_json_schema(), indent=2) + "\n"
+    )
+    Path("schema/assembly.schema.json").write_text(
+        json.dumps(AssemblyContracts.model_json_schema(), indent=2) + "\n"
     )

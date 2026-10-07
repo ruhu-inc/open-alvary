@@ -1,0 +1,885 @@
+{
+  "$defs": {
+    "AssemblyReconcileCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "action": {
+          "const": "reconcile_assembly",
+          "title": "Action",
+          "type": "string"
+        },
+        "after": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "After"
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "erase_due": {
+          "default": false,
+          "title": "Erase Due",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "command_id",
+        "collection_id",
+        "reason",
+        "action"
+      ],
+      "title": "AssemblyReconcileCommand",
+      "type": "object"
+    },
+    "AssemblyResult": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Command Id"
+        },
+        "status": {
+          "enum": [
+            "applied",
+            "forbidden",
+            "conflict",
+            "validation_failed",
+            "capacity_exceeded",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "replayed": {
+          "default": false,
+          "title": "Replayed",
+          "type": "boolean"
+        },
+        "object_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Object Id"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision"
+        },
+        "output_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Hash"
+        },
+        "scanned": {
+          "default": 0,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Scanned",
+          "type": "integer"
+        },
+        "held": {
+          "default": 0,
+          "maximum": 12800,
+          "minimum": 0,
+          "title": "Held",
+          "type": "integer"
+        },
+        "erasure_required": {
+          "default": 0,
+          "maximum": 12800,
+          "minimum": 0,
+          "title": "Erasure Required",
+          "type": "integer"
+        },
+        "erased": {
+          "default": 0,
+          "maximum": 12800,
+          "minimum": 0,
+          "title": "Erased",
+          "type": "integer"
+        },
+        "next_after": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next After"
+        }
+      },
+      "required": [
+        "command_id",
+        "status"
+      ],
+      "title": "AssemblyResult",
+      "type": "object"
+    },
+    "CandidateInput": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "adapter_local_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9:_-]+$",
+          "title": "Adapter Local Id",
+          "type": "string"
+        },
+        "region_key": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9:_-]+$",
+          "title": "Region Key",
+          "type": "string"
+        },
+        "parent_local_id": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9:_-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Local Id"
+        },
+        "artifact_class": {
+          "enum": [
+            "native_text",
+            "ocr_transcription"
+          ],
+          "title": "Artifact Class",
+          "type": "string"
+        },
+        "block_type": {
+          "enum": [
+            "heading",
+            "paragraph",
+            "list_item",
+            "table_cell",
+            "footnote"
+          ],
+          "title": "Block Type",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 8192,
+          "title": "Text",
+          "type": "string"
+        },
+        "content_state": {
+          "default": "present",
+          "enum": [
+            "present",
+            "empty",
+            "illegible",
+            "unsupported"
+          ],
+          "title": "Content State",
+          "type": "string"
+        },
+        "content_reason": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Content Reason"
+        },
+        "unavailable_page_reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Unavailable Page Reason",
+          "type": "string"
+        },
+        "unavailable_geometry_reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Unavailable Geometry Reason",
+          "type": "string"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9:_-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language"
+        },
+        "direction": {
+          "default": "unknown",
+          "enum": [
+            "ltr",
+            "rtl",
+            "unknown"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "quality_state": {
+          "const": "unassessed",
+          "default": "unassessed",
+          "title": "Quality State",
+          "type": "string"
+        },
+        "warnings": {
+          "default": [],
+          "items": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Warnings",
+          "type": "array"
+        },
+        "cell": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CellProposal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "adapter_local_id",
+        "region_key",
+        "artifact_class",
+        "block_type",
+        "text",
+        "unavailable_page_reason",
+        "unavailable_geometry_reason"
+      ],
+      "title": "CandidateInput",
+      "type": "object"
+    },
+    "CandidatePage": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CandidateView"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_after": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next After"
+        }
+      },
+      "title": "CandidatePage",
+      "type": "object"
+    },
+    "CandidateView": {
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "artifact_id": {
+          "format": "uuid",
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "assessment_id": {
+          "format": "uuid",
+          "title": "Assessment Id",
+          "type": "string"
+        },
+        "assessment_revision": {
+          "title": "Assessment Revision",
+          "type": "integer"
+        },
+        "artifact_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Artifact Hash",
+          "type": "string"
+        },
+        "purpose": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "retention_deadline": {
+          "format": "date-time",
+          "title": "Retention Deadline",
+          "type": "string"
+        },
+        "payload_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Payload Hash",
+          "type": "string"
+        },
+        "text_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Text Hash",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/CandidateInput"
+        }
+      },
+      "required": [
+        "run_id",
+        "artifact_id",
+        "collection_id",
+        "assessment_id",
+        "assessment_revision",
+        "artifact_hash",
+        "purpose",
+        "retention_deadline",
+        "payload_hash",
+        "text_hash",
+        "payload"
+      ],
+      "title": "CandidateView",
+      "type": "object"
+    },
+    "CellProposal": {
+      "additionalProperties": false,
+      "properties": {
+        "table_local_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9:_-]+$",
+          "title": "Table Local Id",
+          "type": "string"
+        },
+        "row": {
+          "maximum": 99,
+          "minimum": 0,
+          "title": "Row",
+          "type": "integer"
+        },
+        "column": {
+          "maximum": 99,
+          "minimum": 0,
+          "title": "Column",
+          "type": "integer"
+        },
+        "row_span": {
+          "default": 1,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Row Span",
+          "type": "integer"
+        },
+        "column_span": {
+          "default": 1,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Column Span",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "table_local_id",
+        "row",
+        "column"
+      ],
+      "title": "CellProposal",
+      "type": "object"
+    },
+    "Resolution": {
+      "additionalProperties": false,
+      "properties": {
+        "region_key": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9:_-]+$",
+          "title": "Region Key",
+          "type": "string"
+        },
+        "candidate_id": {
+          "format": "uuid",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "rejected_candidate_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 49,
+          "minItems": 1,
+          "title": "Rejected Candidate Ids",
+          "type": "array"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "region_key",
+        "candidate_id",
+        "rejected_candidate_ids",
+        "reason"
+      ],
+      "title": "Resolution",
+      "type": "object"
+    },
+    "Selection": {
+      "additionalProperties": false,
+      "properties": {
+        "region_key": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9:_-]+$",
+          "title": "Region Key",
+          "type": "string"
+        },
+        "candidate_id": {
+          "format": "uuid",
+          "title": "Candidate Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "region_key",
+        "candidate_id"
+      ],
+      "title": "Selection",
+      "type": "object"
+    },
+    "SnapshotBody": {
+      "additionalProperties": false,
+      "properties": {
+        "selections": {
+          "items": {
+            "$ref": "#/$defs/Selection"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Selections",
+          "type": "array"
+        },
+        "order": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Order",
+          "type": "array"
+        },
+        "resolutions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Resolution"
+          },
+          "maxItems": 50,
+          "title": "Resolutions",
+          "type": "array"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "selections",
+        "order",
+        "reason"
+      ],
+      "title": "SnapshotBody",
+      "type": "object"
+    },
+    "SnapshotCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "action": {
+          "const": "record_snapshot",
+          "title": "Action",
+          "type": "string"
+        },
+        "snapshot_id": {
+          "format": "uuid",
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "purpose": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "expected_revision": {
+          "maximum": 31,
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "parent_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Hash"
+        },
+        "payload": {
+          "$ref": "#/$defs/SnapshotBody"
+        }
+      },
+      "required": [
+        "command_id",
+        "collection_id",
+        "reason",
+        "action",
+        "snapshot_id",
+        "run_id",
+        "purpose",
+        "expected_revision",
+        "payload"
+      ],
+      "title": "SnapshotCommand",
+      "type": "object"
+    },
+    "SnapshotView": {
+      "additionalProperties": false,
+      "properties": {
+        "snapshot_id": {
+          "format": "uuid",
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "revision": {
+          "title": "Revision",
+          "type": "integer"
+        },
+        "parent_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent Hash"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "payload_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Payload Hash",
+          "type": "string"
+        },
+        "snapshot_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Snapshot Hash",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/SnapshotBody"
+        }
+      },
+      "required": [
+        "snapshot_id",
+        "revision",
+        "parent_hash",
+        "run_id",
+        "payload_hash",
+        "snapshot_hash",
+        "payload"
+      ],
+      "title": "SnapshotView",
+      "type": "object"
+    },
+    "SyntheticRunCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "action": {
+          "const": "record_synthetic_run",
+          "title": "Action",
+          "type": "string"
+        },
+        "run_id": {
+          "format": "uuid",
+          "title": "Run Id",
+          "type": "string"
+        },
+        "artifact_id": {
+          "format": "uuid",
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "assessment_id": {
+          "format": "uuid",
+          "title": "Assessment Id",
+          "type": "string"
+        },
+        "assessment_revision": {
+          "exclusiveMinimum": 0,
+          "title": "Assessment Revision",
+          "type": "integer"
+        },
+        "artifact_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Artifact Hash",
+          "type": "string"
+        },
+        "purpose": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "profile_key": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9:_-]+$",
+          "title": "Profile Key",
+          "type": "string"
+        },
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/CandidateInput"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Candidates",
+          "type": "array"
+        }
+      },
+      "required": [
+        "command_id",
+        "collection_id",
+        "reason",
+        "action",
+        "run_id",
+        "artifact_id",
+        "assessment_id",
+        "assessment_revision",
+        "artifact_hash",
+        "purpose",
+        "profile_key",
+        "candidates"
+      ],
+      "title": "SyntheticRunCommand",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "assembly-proposal-1",
+      "default": "assembly-proposal-1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "commands": {
+      "default": [],
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "reconcile_assembly": "#/$defs/AssemblyReconcileCommand",
+            "record_snapshot": "#/$defs/SnapshotCommand",
+            "record_synthetic_run": "#/$defs/SyntheticRunCommand"
+          },
+          "propertyName": "action"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/SyntheticRunCommand"
+          },
+          {
+            "$ref": "#/$defs/SnapshotCommand"
+          },
+          {
+            "$ref": "#/$defs/AssemblyReconcileCommand"
+          }
+        ]
+      },
+      "title": "Commands",
+      "type": "array"
+    },
+    "results": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AssemblyResult"
+      },
+      "title": "Results",
+      "type": "array"
+    },
+    "candidate_pages": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CandidatePage"
+      },
+      "title": "Candidate Pages",
+      "type": "array"
+    },
+    "snapshots": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SnapshotView"
+      },
+      "title": "Snapshots",
+      "type": "array"
+    }
+  },
+  "title": "AssemblyContracts",
+  "type": "object"
+}

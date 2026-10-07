@@ -431,12 +431,14 @@ def test_populated_lifecycle_refuses_downgrade_and_empty_restores_m22_validators
     f, _, worker, _, _, _ = chain
     declare(f)
     assert reconcile(f, worker).status == "applied"
+    with f.engine.connect() as conn:
+        before = conn.scalar(text("SELECT version_num FROM alembic_version"))
     with pytest.raises(RuntimeError, match="requires forward repair"), f.engine.begin() as conn:
         config = Config("alembic.ini")
         config.attributes["connection"] = conn
         command.downgrade(config, "0005")
     with f.engine.connect() as conn:
-        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0006"
+        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == before
 
 
 def test_populated_m22_upgrade_preserves_bytes_and_function_rollback_copies(chain):

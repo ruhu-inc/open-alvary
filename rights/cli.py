@@ -10,23 +10,35 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.pool import NullPool
 
+from rights.assembly import SyntheticAssembly, parse_assembly_command
 from rights.commands import MAX_COMMAND_BYTES, OperatorCommands, parse_command
 from rights.database import PolicyNamespace
 from rights.lifecycle import AcquisitionLifecycle, parse_lifecycle_request
+from schema.assembly import AssemblyResult
 from schema.operator import CommandResult, LifecycleResult
 
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Apply one private JSON operator command from stdin")
     parser.add_argument("--schema", default="public", help="Maintenance-selected foundation base schema")
-    parser.add_argument(
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
         "--reconcile-staging", action="store_true", help="Apply one bounded private lifecycle request"
     )
+    modes.add_argument("--assembly", action="store_true", help="Apply one private synthetic assembly command")
     args = parser.parse_args(argv)
-    result_type = LifecycleResult if args.reconcile_staging else CommandResult
+    result_type = (
+        AssemblyResult if args.assembly else LifecycleResult if args.reconcile_staging else CommandResult
+    )
     result = result_type(command_id=None, status="validation_failed")
     try:
-        parse = parse_lifecycle_request if args.reconcile_staging else parse_command
+        parse = (
+            parse_assembly_command
+            if args.assembly
+            else parse_lifecycle_request
+            if args.reconcile_staging
+            else parse_command
+        )
         command = parse(sys.stdin.buffer.read(MAX_COMMAND_BYTES + 1))
     except (ValidationError, ValueError):
         print(result.model_dump_json())
@@ -44,7 +56,9 @@ def main(argv=None) -> int:
             connection.execute(text("SET LOCAL idle_in_transaction_session_timeout='30s'"))
             namespace = PolicyNamespace(args.schema)
             result = (
-                AcquisitionLifecycle(connection, namespace).reconcile(command)
+                SyntheticAssembly(connection, namespace).apply(command)
+                if args.assembly
+                else AcquisitionLifecycle(connection, namespace).reconcile(command)
                 if args.reconcile_staging
                 else OperatorCommands(connection, namespace).apply(command)
             )
