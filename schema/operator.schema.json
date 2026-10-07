@@ -1,5 +1,201 @@
 {
   "$defs": {
+    "AcquisitionCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "expected_revision": {
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "action": {
+          "const": "record_acquisition_assessment",
+          "title": "Action",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/AcquisitionInput"
+        }
+      },
+      "required": [
+        "command_id",
+        "collection_id",
+        "expected_revision",
+        "reason",
+        "action",
+        "payload"
+      ],
+      "title": "AcquisitionCommand",
+      "type": "object"
+    },
+    "AcquisitionInput": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date-time",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "state": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "approved",
+            "revoked"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "discover": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Discover",
+          "type": "string"
+        },
+        "acquire": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Acquire",
+          "type": "string"
+        },
+        "retain": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Retain",
+          "type": "string"
+        },
+        "derive": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Derive",
+          "type": "string"
+        },
+        "privacy_class": {
+          "enum": [
+            "no_personal_data",
+            "personal_data",
+            "unknown"
+          ],
+          "title": "Privacy Class",
+          "type": "string"
+        },
+        "classification_reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Classification Reason",
+          "type": "string"
+        },
+        "privacy_review_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Privacy Review Id"
+        },
+        "privacy_review_revision": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Privacy Review Revision"
+        },
+        "purpose": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "retention_deadline": {
+          "format": "date-time",
+          "title": "Retention Deadline",
+          "type": "string"
+        },
+        "artifact_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Artifact Hash"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "valid_from",
+        "expires_at",
+        "id",
+        "privacy_class",
+        "classification_reason",
+        "purpose",
+        "retention_deadline"
+      ],
+      "title": "AcquisitionInput",
+      "type": "object"
+    },
     "CommandResult": {
       "additionalProperties": false,
       "properties": {
@@ -49,6 +245,127 @@
         "status"
       ],
       "title": "CommandResult",
+      "type": "object"
+    },
+    "ControllerCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "expected_revision": {
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "action": {
+          "const": "record_controller",
+          "title": "Action",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/ControllerInput"
+        }
+      },
+      "required": [
+        "command_id",
+        "collection_id",
+        "expected_revision",
+        "reason",
+        "action",
+        "payload"
+      ],
+      "title": "ControllerCommand",
+      "type": "object"
+    },
+    "ControllerInput": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date-time",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "state": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "approved",
+            "revoked"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "legal_name": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Legal Name",
+          "type": "string"
+        },
+        "postal_address": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Postal Address",
+          "type": "string"
+        },
+        "jurisdiction_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Jurisdiction Id",
+          "type": "string"
+        },
+        "privacy_contact": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Privacy Contact",
+          "type": "string"
+        },
+        "accountable_role": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Accountable Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "valid_from",
+        "expires_at",
+        "id",
+        "legal_name",
+        "postal_address",
+        "jurisdiction_id",
+        "privacy_contact",
+        "accountable_role"
+      ],
+      "title": "ControllerInput",
       "type": "object"
     },
     "DecisionCommand": {
@@ -436,6 +753,150 @@
       "title": "MaterialInput",
       "type": "object"
     },
+    "PrivacyCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "expected_revision": {
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "action": {
+          "const": "record_privacy_review",
+          "title": "Action",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/PrivacyInput"
+        }
+      },
+      "required": [
+        "command_id",
+        "collection_id",
+        "expected_revision",
+        "reason",
+        "action",
+        "payload"
+      ],
+      "title": "PrivacyCommand",
+      "type": "object"
+    },
+    "PrivacyInput": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date-time",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "state": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "approved",
+            "revoked"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "controller_id": {
+          "format": "uuid",
+          "title": "Controller Id",
+          "type": "string"
+        },
+        "controller_revision": {
+          "exclusiveMinimum": 0,
+          "title": "Controller Revision",
+          "type": "integer"
+        },
+        "purpose": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "lawful_basis": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Lawful Basis",
+          "type": "string"
+        },
+        "assessment_reference": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Assessment Reference",
+          "type": "string"
+        },
+        "clearance": {
+          "enum": [
+            "pending",
+            "cleared",
+            "redacted",
+            "rejected"
+          ],
+          "title": "Clearance",
+          "type": "string"
+        },
+        "cleared_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cleared Hash"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "valid_from",
+        "expires_at",
+        "id",
+        "controller_id",
+        "controller_revision",
+        "purpose",
+        "lawful_basis",
+        "assessment_reference",
+        "clearance"
+      ],
+      "title": "PrivacyInput",
+      "type": "object"
+    },
     "VerificationCommand": {
       "additionalProperties": false,
       "properties": {
@@ -550,8 +1011,8 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "operator-command-1",
-      "default": "operator-command-1",
+      "const": "operator-command-2",
+      "default": "operator-command-2",
       "title": "Schema Version",
       "type": "string"
     },
@@ -560,8 +1021,11 @@
       "items": {
         "discriminator": {
           "mapping": {
+            "record_acquisition_assessment": "#/$defs/AcquisitionCommand",
             "record_collection_decision": "#/$defs/DecisionCommand",
+            "record_controller": "#/$defs/ControllerCommand",
             "record_evidence": "#/$defs/EvidenceCommand",
+            "record_privacy_review": "#/$defs/PrivacyCommand",
             "record_verification_review": "#/$defs/VerificationCommand"
           },
           "propertyName": "action"
@@ -575,6 +1039,15 @@
           },
           {
             "$ref": "#/$defs/VerificationCommand"
+          },
+          {
+            "$ref": "#/$defs/ControllerCommand"
+          },
+          {
+            "$ref": "#/$defs/PrivacyCommand"
+          },
+          {
+            "$ref": "#/$defs/AcquisitionCommand"
           }
         ]
       },

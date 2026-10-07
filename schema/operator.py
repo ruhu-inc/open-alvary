@@ -6,7 +6,7 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from schema.identity import CollectionID
-from schema.models import Hash
+from schema.models import ID, Hash
 from schema.policy import PermissionVector
 
 Reason = Annotated[str, Field(min_length=1, max_length=2048)]
@@ -100,6 +100,57 @@ class VerificationInput(ReviewInput):
         return self
 
 
+class ControllerInput(ReviewInput):
+    id: UUID
+    legal_name: Reason
+    postal_address: Reason
+    jurisdiction_id: ID
+    privacy_contact: Reason
+    accountable_role: Reason
+
+
+class PrivacyInput(ReviewInput):
+    id: UUID
+    controller_id: UUID
+    controller_revision: int = Field(gt=0)
+    purpose: Reason
+    lawful_basis: Reason
+    assessment_reference: Reason
+    clearance: Literal["pending", "cleared", "redacted", "rejected"]
+    cleared_hash: Hash | None = None
+
+    @model_validator(mode="after")
+    def redaction(self):
+        if self.clearance == "redacted" and self.cleared_hash is None:
+            raise ValueError("Exact redacted artifact hash required")
+        return self
+
+
+class AcquisitionInput(ReviewInput):
+    id: UUID
+    discover: Literal["allow", "deny", "unknown"] = "unknown"
+    acquire: Literal["allow", "deny", "unknown"] = "unknown"
+    retain: Literal["allow", "deny", "unknown"] = "unknown"
+    derive: Literal["allow", "deny", "unknown"] = "unknown"
+    privacy_class: Literal["no_personal_data", "personal_data", "unknown"]
+    classification_reason: Reason
+    privacy_review_id: UUID | None = None
+    privacy_review_revision: int | None = Field(default=None, gt=0)
+    purpose: Reason
+    retention_deadline: AwareDatetime
+    artifact_hash: Hash | None = None
+
+    @model_validator(mode="after")
+    def privacy_and_retention(self):
+        if (self.privacy_review_id is None) != (self.privacy_review_revision is None):
+            raise ValueError("Incomplete privacy revision")
+        if self.privacy_class != "no_personal_data" and self.privacy_review_id is None:
+            raise ValueError("Privacy review required")
+        if not self.valid_from < self.retention_deadline <= self.expires_at:
+            raise ValueError("Invalid retention interval")
+        return self
+
+
 class CommandEnvelope(CommandModel):
     command_id: UUID
     collection_id: CollectionID
@@ -123,8 +174,29 @@ class VerificationCommand(CommandEnvelope):
     payload: VerificationInput
 
 
+class ControllerCommand(CommandEnvelope):
+    action: Literal["record_controller"]
+    payload: ControllerInput
+
+
+class PrivacyCommand(CommandEnvelope):
+    action: Literal["record_privacy_review"]
+    payload: PrivacyInput
+
+
+class AcquisitionCommand(CommandEnvelope):
+    action: Literal["record_acquisition_assessment"]
+    payload: AcquisitionInput
+
+
 OperatorCommand = Annotated[
-    EvidenceCommand | DecisionCommand | VerificationCommand, Field(discriminator="action")
+    EvidenceCommand
+    | DecisionCommand
+    | VerificationCommand
+    | ControllerCommand
+    | PrivacyCommand
+    | AcquisitionCommand,
+    Field(discriminator="action"),
 ]
 
 
@@ -136,6 +208,6 @@ class CommandResult(CommandModel):
 
 
 class OperatorContracts(CommandModel):
-    schema_version: Literal["operator-command-1"] = "operator-command-1"
+    schema_version: Literal["operator-command-2"] = "operator-command-2"
     commands: tuple[OperatorCommand, ...] = ()
     results: tuple[CommandResult, ...] = ()

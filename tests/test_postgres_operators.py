@@ -404,6 +404,8 @@ def test_command_denies_frozen_shadow_authority(operators):
 def test_registered_operator_downgrade_cannot_discard_bindings(operators):
     f, create, _ = operators
     rights = create("rights")
+    with f.engine.connect() as conn:
+        before_revision = conn.scalar(text("SELECT version_num FROM alembic_version"))
     with pytest.raises(RuntimeError, match="requires forward repair"), f.engine.begin() as conn:
         config = Config("alembic.ini")
         config.attributes["connection"] = conn
@@ -412,7 +414,7 @@ def test_registered_operator_downgrade_cannot_discard_bindings(operators):
         assert conn.scalar(
             text(f"SELECT active FROM {f.name(conn, 'policy', 'actor')} WHERE id=:id"), {"id": rights.actor}
         )
-        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0004"
+        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == before_revision
 
 
 def test_recreated_login_name_cannot_recover_old_actor_authority(operators):

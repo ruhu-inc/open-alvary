@@ -70,6 +70,17 @@ def provision_roles(conn: Connection, namespace: PolicyNamespace) -> dict[str, s
                 f"GRANT INSERT ON {p}.collection_decision,{p}.verification_policy,{p}.verification_material TO {guard}"
             )
         )
+    has_acquisition = conn.scalar(
+        text("SELECT to_regclass(:name) IS NOT NULL"),
+        {"name": namespace.schema("policy") + ".synthetic_staging_limit"},
+    )
+    if has_acquisition:
+        conn.execute(
+            text(
+                f"GRANT INSERT ON {p}.controller_record,{p}.privacy_review,{p}.acquisition_assessment,{s}.staged_artifact TO {guard}"
+            )
+        )
+        conn.execute(text(f"GRANT UPDATE(maximum_bytes) ON {p}.synthetic_staging_limit TO {guard}"))
     conn.execute(text(f"GRANT UPDATE ON {s}.staged_artifact TO {guard}"))
     conn.execute(text(f"GRANT CREATE ON SCHEMA {p},{c} TO {guard}"))
     functions = (
@@ -122,6 +133,15 @@ def provision_roles(conn: Connection, namespace: PolicyNamespace) -> dict[str, s
         conn.execute(text(f"GRANT EXECUTE ON FUNCTION {p}.{signature} TO {grantees}"))
     if has_commands:
         conn.execute(text(f"GRANT EXECUTE ON FUNCTION {p}.apply_operator_command(jsonb) TO {review}"))
+    if has_acquisition:
+        conn.execute(text(f"GRANT EXECUTE ON FUNCTION {p}.apply_acquisition_command(jsonb) TO {review}"))
+        for signature in (
+            "private_operation_allowed(uuid,bigint,text,text,text,text)",
+            "is_native_operator()",
+            "stage_synthetic_artifact(uuid,text,uuid,bigint,text,bytea,timestamptz)",
+            "read_synthetic_artifact(uuid,text,text)",
+        ):
+            conn.execute(text(f"GRANT EXECUTE ON FUNCTION {p}.{signature} TO {acquisition}"))
     return roles
 
 

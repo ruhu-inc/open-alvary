@@ -99,12 +99,14 @@ def test_issue_and_three_notices_share_evidence_without_merging_identity_or_perm
 def test_nonempty_foundation_downgrade_preserves_decisions_audit_and_revision(foundation):
     f = foundation
     f.decision(redistribute_metadata="deny")
+    with f.engine.connect() as conn:
+        before_revision = conn.scalar(text("SELECT version_num FROM alembic_version"))
     with pytest.raises(RuntimeError, match="requires forward repair"), f.engine.begin() as conn:
         config = Config("alembic.ini")
         config.attributes["connection"] = conn
         command.downgrade(config, "0002")
     with f.engine.connect() as conn:
-        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0004"
+        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == before_revision
     with f.as_role("review") as conn:
         assert conn.scalar(text(f"SELECT count(*) FROM {f.name(conn, 'policy', 'collection_decision')}")) == 1
         assert conn.scalar(text(f"SELECT count(*) FROM {f.name(conn, 'policy', 'audit_event')}")) == 1

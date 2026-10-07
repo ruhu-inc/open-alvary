@@ -33,7 +33,13 @@ class OperatorCommands:
         payload = json.dumps(command.model_dump(mode="json"), ensure_ascii=False)
         if len(payload.encode()) > MAX_COMMAND_BYTES:
             return CommandResult(command_id=command.command_id, status="validation_failed")
-        function = self.namespace.qualified(self.connection, "policy", "apply_operator_command")
+        name = (
+            "apply_acquisition_command"
+            if command.action
+            in {"record_controller", "record_privacy_review", "record_acquisition_assessment"}
+            else "apply_operator_command"
+        )
+        function = self.namespace.qualified(self.connection, "policy", name)
         try:
             with self.connection.begin_nested():
                 row = (
