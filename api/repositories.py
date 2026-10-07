@@ -6,9 +6,10 @@ canonical bodies; the shared policy runs on gate fields before an individual bod
 
 from collections.abc import Iterator
 
-from sqlalchemy import LargeBinary, and_, cast, func, select
+from sqlalchemy import LargeBinary, Text, and_, cast, false, func, literal, or_, select, text, true
 from sqlalchemy.engine import Connection
 
+from api.search import literal_pattern
 from api.store import RELATIONS, tables
 from schema.models import Source
 from schema.public import RightsViewRecord, VersionGate, VersionViewRecord
@@ -31,6 +32,7 @@ class LegacyRepository:
         self.connection = connection
         self._sources = tables["sources"]
         self._rights = tables["rights"]
+        self._indexed_metadata = None
 
     @staticmethod
     def _identity_matches(table):
@@ -75,18 +77,22 @@ class LegacyRepository:
         ).one_or_none()
         return self._pair(row) if row is not None else None
 
-    def source_page(self, *, limit: int, offset: int, jurisdiction: str | None = None):
+    def source_page(self, *, limit: int, offset: int, jurisdiction: str | None = None, where=None):
         if not 1 <= limit <= BATCH_SIZE or offset < 0:
             raise ValueError("Invalid page bounds")
         statement = self._select_sources(jurisdiction)
+        if where is not None:
+            statement = statement.where(where)
         total = self.connection.scalar(select(func.count()).select_from(statement.subquery()))
         rows = self.connection.execute(statement.order_by(self._sources.c.id).limit(limit).offset(offset))
         return total, tuple(self._pair(row) for row in rows)
 
-    def sources(self, jurisdiction=None) -> Iterator:
+    def sources(self, jurisdiction=None, *, where=None) -> Iterator:
         cursor = None
         while True:
             statement = self._select_sources(jurisdiction).order_by(self._sources.c.id).limit(BATCH_SIZE)
+            if where is not None:
+                statement = statement.where(where)
             if cursor is not None:
                 statement = statement.where(self._sources.c.id > cursor)
             rows = self.connection.execute(statement).all()
@@ -95,6 +101,49 @@ class LegacyRepository:
             if len(rows) < BATCH_SIZE:
                 return
             cursor = rows[-1].source["id"]
+
+    def potential_text(self):
+        hashes = self._rights.c.payload["approved_content_hashes"].as_string()
+        return and_(hashes.is_not(None), hashes.not_in(("[]", "", "null")))
+
+    def access_predicate(self, open_ids, access):
+        if access == "all":
+            return None
+        return self._sources.c.id.in_(open_ids) if access == "open" else self._sources.c.id.not_in(open_ids)
+
+    def search_predicates(self, term):
+        if self._indexed_metadata is None:
+            self._indexed_metadata = self.connection.dialect.name != "postgresql" or bool(
+                self.connection.scalar(
+                    text("SELECT to_regprocedure('legacy_metadata_normalize(text)') IS NOT NULL")
+                )
+            )
+        if not self._indexed_metadata:
+            # Preserve legacy read compatibility while an older schema is upgrading.
+            return false(), true()
+        payload = self._sources.c.payload
+        if self.connection.dialect.name == "postgresql":
+            title = payload.op("->>", return_type=Text)("title")
+            citation = payload.op("->>", return_type=Text)("citation")
+        else:
+            title, citation = payload["title"].as_string(), payload["citation"].as_string()
+        value = func.coalesce(title, "") + literal(" ") + func.coalesce(citation, "")
+        metadata = func.legacy_metadata_normalize(value).like(literal_pattern(term), escape="\\")
+        if self.connection.dialect.name == "postgresql":
+            non_ascii = func.octet_length(value) != func.length(value)
+            confirmed = and_(~non_ascii, metadata)
+            fallback = and_(~confirmed, or_(non_ascii, self.potential_text()))
+        else:
+            confirmed = metadata
+            fallback = and_(~confirmed, self.potential_text())
+        return confirmed, fallback
+
+    def search_page(self, term, matched_ids, *, jurisdiction, limit, offset, access_where=None):
+        confirmed, _ = self.search_predicates(term)
+        predicate = or_(confirmed, self._sources.c.id.in_(matched_ids))
+        if access_where is not None:
+            predicate = and_(predicate, access_where)
+        return self.source_page(limit=limit, offset=offset, jurisdiction=jurisdiction, where=predicate)
 
     def version_gates(self, source_id: str, hashes: tuple[str, ...]) -> Iterator[VersionGate]:
         if not hashes:

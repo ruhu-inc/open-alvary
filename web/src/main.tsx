@@ -1,4 +1,10 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowUpRight,
@@ -57,22 +63,27 @@ type Manifest = {
   coverage: Coverage;
 };
 function useData<T>(path: string) {
-  const [state, set] = useState<{ data?: T; error?: string }>({});
+  const [state, set] = useState<{ path: string; data?: T; error?: string }>({
+    path: "",
+  });
   useEffect(() => {
     const controller = new AbortController();
-    set({});
+    set({ path });
     fetch("/api" + path, { signal: controller.signal })
       .then((r) => {
         if (!r.ok) throw new Error(`Request failed (${r.status})`);
         return r.json();
       })
-      .then((data) => set({ data }))
+      .then((data) => {
+        if (!controller.signal.aborted) set({ path, data });
+      })
       .catch((e) => {
-        if (e.name !== "AbortError") set({ error: e.message });
+        if (!controller.signal.aborted && e.name !== "AbortError")
+          set({ path, error: e.message });
       });
     return () => controller.abort();
   }, [path]);
-  return state;
+  return state.path === path ? state : { data: undefined, error: undefined };
 }
 function Feedback({ error }: { error?: string }) {
   return (
@@ -423,7 +434,19 @@ function Home() {
     </>
   );
 }
-function SourceList({
+function SourceList(props: { compact?: boolean; q?: string; filter?: string }) {
+  return (
+    <SourcePageList
+      key={JSON.stringify([
+        props.q ?? "",
+        props.filter ?? "all",
+        props.compact ?? false,
+      ])}
+      {...props}
+    />
+  );
+}
+function SourcePageList({
   compact = false,
   q = "",
   filter = "all",
@@ -432,22 +455,49 @@ function SourceList({
   q?: string;
   filter?: string;
 }) {
+  const [offset, setOffset] = useState(0);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const pageNavigation = useRef(false);
+  const movePage = (next: number) => {
+    pageNavigation.current = true;
+    setOffset(next);
+  };
+  const limit = compact ? 6 : 25;
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+    access: filter,
+  });
+  if (q) params.set("q", q);
   const { data, error } = useData<{ items: Source[]; total: number }>(
-    q ? "/search?q=" + encodeURIComponent(q) : "/sources",
+    (q ? "/search?" : "/sources?") + params,
   );
-  if (!data) return <Feedback error={error} />;
-  const rows = data.items.filter(
-    (s) =>
-      filter === "all" ||
-      (filter === "open" ? s.has_full_text : !s.has_full_text),
-  );
+  useEffect(() => {
+    if (data && offset > 0 && offset >= data.total) {
+      setOffset(Math.max(0, Math.floor((data.total - 1) / limit) * limit));
+    }
+  }, [data, offset, limit]);
+  useEffect(() => {
+    if (data && offset < data.total && pageNavigation.current) {
+      resultsRef.current?.focus();
+      pageNavigation.current = false;
+    }
+  }, [data, offset]);
+  if (!data || (offset > 0 && offset >= data.total))
+    return <Feedback error={error} />;
   return (
     <>
-      <div className={"source-list " + (compact ? "compact" : "")}>
-        {rows.map((s, i) => (
+      <div
+        ref={resultsRef}
+        tabIndex={-1}
+        role="region"
+        aria-label="Catalogue results"
+        className={"source-list " + (compact ? "compact" : "")}
+      >
+        {data.items.map((s, i) => (
           <a className="source-row" key={s.id} href={"#/sources/" + s.id}>
             <span className="source-number">
-              {String(i + 1).padStart(2, "0")}
+              {String(offset + i + 1).padStart(2, "0")}
             </span>
             <span className="source-info">
               <span className="source-kicker">
@@ -469,7 +519,7 @@ function SourceList({
           </a>
         ))}
       </div>
-      {!rows.length && (
+      {!data.items.length && (
         <div className="empty">
           <BookOpen size={30} />
           <h3>No sources found</h3>
@@ -478,6 +528,35 @@ function SourceList({
             pilot.
           </p>
           <a href="#/browse">Reset search</a>
+        </div>
+      )}
+      {data.total > 0 && (
+        <div className="catalogue-pagination" aria-label="Catalogue pagination">
+          <p role="status">
+            Showing {offset + 1}–
+            {Math.min(offset + data.items.length, data.total)} of {data.total}{" "}
+            sources
+          </p>
+          {compact ? (
+            <a href={"#/browse" + (q ? "?q=" + encodeURIComponent(q) : "")}>
+              View all results <ArrowRight size={16} />
+            </a>
+          ) : (
+            <nav aria-label="Results pages">
+              <button
+                disabled={offset === 0}
+                onClick={() => movePage(Math.max(0, offset - limit))}
+              >
+                Previous
+              </button>
+              <button
+                disabled={offset + limit >= data.total}
+                onClick={() => movePage(offset + limit)}
+              >
+                Next
+              </button>
+            </nav>
+          )}
         </div>
       )}
     </>
@@ -1052,9 +1131,9 @@ function About() {
           <p>
             Qualified rights review, source-specific parsers, tested OCR
             integration, detailed legal anchors and review operations. Expansion
-            across African jurisdictions depends on verified permissions,
-            source availability, qualified reviewers and content quality.
-            Nigeria is the first implementation pilot.
+            across African jurisdictions depends on verified permissions, source
+            availability, qualified reviewers and content quality. Nigeria is
+            the first implementation pilot.
           </p>
           <p>
             We are preparing a funding application for development and
@@ -1098,10 +1177,10 @@ function Privacy() {
           </p>
           <p>
             Hosting infrastructure processes connection information such as IP
-            addresses and may retain request metadata and operational logs.
-            The Docker configuration disables application access logs; a managed
-            host such as Vercel has separate logging and retention settings.
-            The operator must verify those settings for the deployed service.
+            addresses and may retain request metadata and operational logs. The
+            Docker configuration disables application access logs; a managed
+            host such as Vercel has separate logging and retention settings. The
+            operator must verify those settings for the deployed service.
           </p>
           <p>
             Please avoid entering personal, confidential or client-specific

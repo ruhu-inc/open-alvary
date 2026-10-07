@@ -1316,3 +1316,31 @@ main:focus {
 .two-columns p a {
   overflow-wrap: anywhere;
 }
+
+.catalogue-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1.5rem 0;
+}
+.catalogue-pagination nav {
+  display: flex;
+  gap: 0.75rem;
+}
+.catalogue-pagination button {
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--line, #ddd);
+  background: transparent;
+  cursor: pointer;
+}
+.catalogue-pagination button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.catalogue-pagination a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}

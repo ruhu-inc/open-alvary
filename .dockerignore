@@ -24,3 +24,6 @@ scripts/spec_models.py
 scripts/verify_spec.py
 tests/test_planning_execution.py
 tests/test_spec_contracts.py
+
+# Reviewed immutable function resources are code; dumps remain excluded.
+!rights/sql/**/*.sql

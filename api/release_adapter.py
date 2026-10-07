@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 
 from api.store import Store
+from exports.identity import validate_release_id
 from exports.verify import release_available
 
 
@@ -36,9 +37,11 @@ class LegacyReleases:
         return result
 
     def file(self, release_id, jurisdiction, mode, filename) -> Path:
-        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", release_id) or not re.fullmatch(
-            r"[a-z0-9-]{2,30}", jurisdiction
-        ):
+        try:
+            validate_release_id(release_id)
+        except ValueError:
+            raise ReleaseMissing() from None
+        if not re.fullmatch(r"[a-z0-9-]{2,30}", jurisdiction):
             raise ReleaseMissing()
         if mode not in {"corpus", "metadata"}:
             raise ReleaseMissing()

@@ -5,11 +5,11 @@ import json
 import re
 import tempfile
 from collections import Counter
-from datetime import date
 from hashlib import sha256
 from pathlib import Path
 
 from api.store import ROOT, Store, engine_for
+from exports.identity import validate_release_id
 from rights.policy import public_corpus
 from schema.models import Corpus
 
@@ -29,7 +29,7 @@ def coverage(corpus: Corpus) -> dict:
 def write_release(
     corpus: Corpus, root: Path, release_id: str, jurisdiction: str, metadata_only: bool = False
 ) -> Path:
-    date.fromisoformat(release_id)
+    validate_release_id(release_id)
     if not re.fullmatch(r"[a-z0-9-]{2,30}", jurisdiction):
         raise ValueError("Invalid jurisdiction path")
     public = public_corpus(corpus, metadata_only=metadata_only)

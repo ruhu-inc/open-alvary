@@ -2,6 +2,7 @@ import json
 import logging
 from pathlib import Path
 from time import perf_counter
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -114,11 +115,12 @@ def create_app(store: Store | None = None, releases: Path | None = None) -> Fast
     @app.get("/sources")
     def sources(
         jurisdiction: str | None = None,
+        access: Literal["all", "open", "metadata"] = "all",
         limit: int = Query(50, ge=1, le=100),
         offset: int = Query(0, ge=0),
         service: LegacyCatalogue = Depends(catalogue),
     ) -> SourcePage:
-        return service.sources(jurisdiction=jurisdiction, limit=limit, offset=offset)
+        return service.sources(jurisdiction=jurisdiction, limit=limit, offset=offset, access=access)
 
     @app.get("/sources/{source_id}")
     def source(source_id: str, service: LegacyCatalogue = Depends(catalogue)) -> SourceView:
@@ -132,11 +134,12 @@ def create_app(store: Store | None = None, releases: Path | None = None) -> Fast
     def search(
         q: str = Query(min_length=1, max_length=200),
         jurisdiction: str | None = None,
+        access: Literal["all", "open", "metadata"] = "all",
         limit: int = Query(25, ge=1, le=100),
         offset: int = Query(0, ge=0),
         service: LegacyCatalogue = Depends(catalogue),
     ) -> SearchPage:
-        return service.search(q, jurisdiction=jurisdiction, limit=limit, offset=offset)
+        return service.search(q, jurisdiction=jurisdiction, limit=limit, offset=offset, access=access)
 
     @app.get("/citations/{citation:path}")
     def citations(citation: str, service: LegacyCatalogue = Depends(catalogue)) -> CitationView:

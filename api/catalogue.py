@@ -1,6 +1,5 @@
 """Catalogue domain services; injected repositories own no commits or HTTP behaviour."""
 
-import unicodedata
 from collections import Counter
 from datetime import UTC, datetime
 from typing import Protocol
@@ -12,6 +11,7 @@ from api.repositories import (
     PublicUnavailable,
     ResultTooLarge,
 )
+from api.search import normalize_citation as normalize_citation
 from rights.policy import decide
 from schema.models import Citation, Corpus
 from schema.policy import MetadataPage, PublicMetadata
@@ -27,10 +27,6 @@ from schema.public import (
     SourceView,
     VersionPage,
 )
-
-
-def normalize_citation(value: str) -> str:
-    return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
 
 
 class SourceUnavailable(LookupError):
@@ -97,8 +93,26 @@ class LegacyCatalogue:
     def source(self, source_id):
         return self._view(self._require(source_id))
 
-    def sources(self, *, jurisdiction=None, limit=50, offset=0):
-        total, pairs = self.repository.source_page(limit=limit, offset=offset, jurisdiction=jurisdiction)
+    def _access(self, access, jurisdiction):
+        if access not in {"all", "open", "metadata"}:
+            raise InvalidSearch("Invalid access filter")
+        if access == "all":
+            return None
+        open_ids = []
+        for source, rights in self.repository.sources(jurisdiction, where=self.repository.potential_text()):
+            if any(
+                decide(rights, gate, now=self.now).full_text
+                for gate in self.repository.version_gates(source.id, rights.approved_content_hashes)
+            ):
+                open_ids.append(source.id)
+                if len(open_ids) > 10000:
+                    raise ResultTooLarge("Pilot access filtering exceeds declared bound")
+        return self.repository.access_predicate(open_ids, access)
+
+    def sources(self, *, jurisdiction=None, limit=50, offset=0, access="all"):
+        total, pairs = self.repository.source_page(
+            limit=limit, offset=offset, jurisdiction=jurisdiction, where=self._access(access, jurisdiction)
+        )
         return SourcePage(total=total, items=tuple(self._view(pair) for pair in pairs))
 
     def versions(self, source_id):
@@ -160,25 +174,36 @@ class LegacyCatalogue:
             record=rights, decision=DecisionView.model_validate(decision.model_dump(mode="json"))
         )
 
-    def search(self, query, *, jurisdiction=None, limit=25, offset=0):
+    def search(self, query, *, jurisdiction=None, limit=25, offset=0, access="all"):
         term = normalize_citation(query)
         if not term:
             raise InvalidSearch("Search term must not be blank")
         if not 1 <= limit <= 100 or offset < 0:
             raise InvalidSearch("Invalid page bounds")
-        items = []
-        total = 0
-        for source, rights in self.repository.sources(jurisdiction):
+        access_where = self._access(access, jurisdiction)
+        _, fallback = self.repository.search_predicates(term)
+        matched_ids = []
+        examined = 0
+        for source, rights in self.repository.sources(jurisdiction, where=fallback):
+            examined += 1
+            if examined > 10000:
+                raise ResultTooLarge("Pilot Unicode/full-text fallback exceeds declared bound")
             matches = term in normalize_citation(source.title + " " + source.citation)
             if not matches:
                 matches = any(
                     term in version.canonical_text.casefold() for version in self._approved(source, rights)
                 )
             if matches:
-                if offset <= total < offset + limit:
-                    items.append(self._view((source, rights)))
-                total += 1
-        return SearchPage(total=total, items=tuple(items))
+                matched_ids.append(source.id)
+        total, pairs = self.repository.search_page(
+            term,
+            matched_ids,
+            jurisdiction=jurisdiction,
+            limit=limit,
+            offset=offset,
+            access_where=access_where,
+        )
+        return SearchPage(total=total, items=tuple(self._view(pair) for pair in pairs))
 
     def citations(self, value):
         term = normalize_citation(value)
