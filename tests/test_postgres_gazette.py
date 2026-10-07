@@ -182,8 +182,7 @@ def item_approval(g, review, result, **changes):
     return ItemApprovalCommand(**data)
 
 
-@pytest.fixture
-def gazette(operators, request):
+def make_gazette(operators, *, maximum=100 * 1024 * 1024, scenario=None):
     f, create, _ = operators
     item_collection, item_evidence = f.collection, f.evidence
     f.collection = mint("scp")
@@ -303,10 +302,12 @@ def gazette(operators, request):
     )
     # Snapshot body order follows body leaves; footnote source location is after its notice.
     candidates = [candidates[0], candidates[2], candidates[3], candidates[1], candidates[4]]
+    if scenario is not None:
+        candidates, plan = scenario
     raw = "\n".join(c.text for c in candidates).encode()
     acq = assessment(f, derive="allow", artifact_hash=sha256(raw).hexdigest())
     assert apply(f, rights, acq).status == "applied"
-    declare(f, maximum=getattr(request, "param", 100 * 1024 * 1024))
+    declare(f, maximum=maximum)
     artifact, _ = stage(f, worker, acq, private_bytes=raw)
     run = run_command(f, artifact, acq, candidates=candidates).model_copy(
         update={"artifact_hash": sha256(raw).hexdigest()}
@@ -342,6 +343,11 @@ def gazette(operators, request):
     g.binding, g.binding_hash = item_identity(g)
     g.review = item_review(g)
     return g
+
+
+@pytest.fixture
+def gazette(operators, request):
+    return make_gazette(operators, maximum=getattr(request, "param", 100 * 1024 * 1024))
 
 
 def test_notice_projection_reuses_issue_bytes_nodes_anchors_and_preserves_utf8_table_footnote(gazette):

@@ -17,7 +17,7 @@ from rights.sql_resources import bundle_hash, context, normalize_body
 
 def verify(conn):
     ns = PolicyNamespace(conn.scalar(text("SELECT current_schema()")))
-    for revision in ("0011", "0012"):
+    for revision in ("0011", "0012", "0013"):
         migration = next(Path("migrations/versions").glob(revision + "*.py"))
         tree = ast.parse(migration.read_text())
         pin = next(
@@ -28,14 +28,22 @@ def verify(conn):
         )
         if bundle_hash("v" + revision) != pin:
             raise ValueError("SQL revision resource pin differs")
-    root = files("rights").joinpath("sql/v0011")
-    manifest = json.loads(root.joinpath("manifest.json").read_text())
-    vocabulary = json.loads(files("schema").joinpath(manifest["vocabulary_file"]).read_text())
-    tokens = context(conn, ns, manifest["literals"], vocabulary)
-    for entry in manifest["functions"]:
+    # Later immutable bundles override only the reviewed signatures they replace.
+    installed = {}
+    for revision in ("v0011", "v0013"):
+        root = files("rights").joinpath("sql", revision)
+        manifest = json.loads(root.joinpath("manifest.json").read_text())
+        vocabulary_bytes = files("schema").joinpath(manifest["vocabulary_file"]).read_bytes()
+        vocabulary = json.loads(vocabulary_bytes)
+        if sha256(vocabulary_bytes).hexdigest() != manifest["vocabulary_hash"]:
+            raise ValueError("Pinned SQL vocabulary differs")
+        tokens = context(conn, ns, manifest["literals"], vocabulary)
+        for entry in manifest["functions"] + manifest.get("new_functions", []):
+            installed[entry["signature"]] = (entry, tokens)
+    for signature, (entry, tokens) in installed.items():
         definition = conn.scalar(
             text("SELECT pg_get_functiondef(to_regprocedure(:signature))"),
-            {"signature": tokens["policy"] + "." + entry["signature"]},
+            {"signature": tokens["policy"] + "." + signature},
         )
         if (
             definition is None
@@ -44,7 +52,7 @@ def verify(conn):
         ):
             raise ValueError("Installed SQL definition differs from reviewed revision")
     print(
-        f"PASS: two immutable SQL resource bundles; {len(manifest['functions'])} installed definitions, attributes and bodies match"
+        f"PASS: three immutable SQL resource bundles; {len(installed)} installed definitions, attributes and bodies match"
     )
 
 

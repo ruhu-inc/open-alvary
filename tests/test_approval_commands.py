@@ -45,7 +45,7 @@ def approval():
         rights_revision=1,
         verification_revision=1,
         version_id="ver_" + str(uuid4()),
-        representation_id="prp_" + str(uuid4()),
+        representation_id="rep_" + str(uuid4()),
         mode="new_version",
     )
 
@@ -54,7 +54,7 @@ def approval():
 def test_private_commands_round_trip_in_separate_versioned_contract(make):
     command = parse_approval_command(json.dumps(make()).encode())
     assert parse_approval_command(command.model_dump_json().encode()) == command
-    assert ApprovalContracts(commands=(command,)).schema_version == "synthetic-approval-1"
+    assert ApprovalContracts(commands=(command,)).schema_version == "synthetic-approval-2"
 
 
 @pytest.mark.parametrize("field", ["actor_id", "canonical_text", "published", "record_set", "geometry"])

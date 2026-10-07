@@ -28,7 +28,7 @@
           "type": "string"
         },
         "representation_id": {
-          "pattern": "^prp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "pattern": "^(rep|prp)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
           "title": "Representation Id",
           "type": "string"
         },
@@ -299,7 +299,7 @@
           "type": "string"
         },
         "representation_id": {
-          "pattern": "^prp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "pattern": "^(rep|prp)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
           "title": "Representation Id",
           "type": "string"
         },
@@ -424,8 +424,8 @@
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "synthetic-gazette-1",
-      "default": "synthetic-gazette-1",
+      "const": "synthetic-gazette-2",
+      "default": "synthetic-gazette-2",
       "title": "Schema Version",
       "type": "string"
     },

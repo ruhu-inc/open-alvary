@@ -22,7 +22,7 @@ def review():
         review_id=str(uuid4()),
         binding_hash="a" * 64,
         issue_version_id="ver_" + str(uuid4()),
-        representation_id="prp_" + str(uuid4()),
+        representation_id="rep_" + str(uuid4()),
         record_set_hash="b" * 64,
         content_hash="c" * 64,
         profile_hash="d" * 64,
@@ -66,7 +66,7 @@ def test_unreviewed_or_unbounded_projection_paths_rejected(field, value):
 def test_one_explicit_full_notice_range_contract_roundtrips():
     body = review()
     command = parse_gazette_command(json.dumps(body).encode())
-    assert GazetteContracts(commands=(command,)).schema_version == "synthetic-gazette-1"
+    assert GazetteContracts(commands=(command,)).schema_version == "synthetic-gazette-2"
     body["ranges"] *= 2
     with pytest.raises(ValueError):
         parse_gazette_command(json.dumps(body).encode())
