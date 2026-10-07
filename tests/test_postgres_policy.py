@@ -677,6 +677,7 @@ def test_search_path_cannot_redirect_security_definer_policy_reads(foundation):
         assert PolicyRepository(conn, f.ns).public_decision(f.collection, "redistribute_metadata").allowed
 
 
+@pytest.mark.fresh_migrations
 def test_populated_0002_upgrade_preserves_identity_shadows(pg_engine):
     migrate(pg_engine, "0002")
     store = Store(pg_engine)

@@ -44,6 +44,7 @@ def copy_shadow(engine):
         return backfill(conn, expected_epoch=0)
 
 
+@pytest.mark.fresh_migrations
 def test_upgrade_preserves_public_ids_and_backfill_is_repeatable(pg_engine):
     migrate(pg_engine, "0001")
     store = Store(pg_engine)
@@ -79,6 +80,7 @@ def test_upgrade_preserves_public_ids_and_backfill_is_repeatable(pg_engine):
     assert not public_corpus(store.load()).versions
 
 
+@pytest.mark.fresh_migrations
 def test_synthetic_legacy_bytes_and_approvals_are_preserved_not_qualified(pg_engine, cleared):
     migrate(pg_engine, "0001")
     Store(pg_engine).save(cleared)

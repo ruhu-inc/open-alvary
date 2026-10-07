@@ -568,6 +568,7 @@ def test_new_assessment_retry_does_not_restore_superseded_current_authority(chai
         )
 
 
+@pytest.mark.fresh_migrations
 def test_original_schema_upgrade_preserves_unqualified_records_without_fabrication(pg_engine):
     migrate(pg_engine, "0004")
     with pg_engine.connect() as conn:

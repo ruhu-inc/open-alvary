@@ -1,8 +1,10 @@
+import os
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
 
 import pytest
+from postgres_support import migrated_template
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
@@ -82,14 +84,42 @@ def store():
     engine.dispose()
 
 
+@pytest.fixture(scope="session")
+def pg_template():
+    with migrated_template() as result:
+        yield result
+
+
 def pytest_addoption(parser):
-    parser.addoption("--run-postgres", action="store_true", help="Require PostgreSQL integration tests")
+    parser.addoption("--run-postgres", action="store_true", help="Explicit PostgreSQL acceptance (default)")
+    parser.addoption(
+        "--fast", action="store_true", help="Explicitly skip PostgreSQL; not acceptance evidence"
+    )
+    parser.addoption(
+        "--fresh-postgres", action="store_true", help="Migrate each disposable database from scratch"
+    )
 
 
 def pytest_collection_modifyitems(config, items):
-    if not config.getoption("--run-postgres"):
+    if config.getoption("--fast") and (
+        config.getoption("--run-postgres") or config.getoption("--fresh-postgres")
+    ):
+        raise pytest.UsageError("--fast cannot be combined with PostgreSQL acceptance options")
+    if config.getoption("--fast"):
         for item in items:
             if "postgres" in item.keywords:
                 item.add_marker(
-                    pytest.mark.skip(reason="Use --run-postgres for PostgreSQL integration tests")
+                    pytest.mark.skip(reason="Explicit --fast run; PostgreSQL acceptance excluded")
                 )
+
+
+def pytest_collection_finish(session):
+    if (
+        not session.config.getoption("--fast")
+        and not session.config.option.collectonly
+        and any("postgres" in item.keywords for item in session.items)
+        and not os.getenv("TEST_DATABASE_URL")
+    ):
+        raise pytest.UsageError(
+            "Full acceptance requires TEST_DATABASE_URL; --fast explicitly excludes PostgreSQL"
+        )

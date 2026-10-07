@@ -18,3 +18,12 @@ compilations or legal text without documented permission and source review.
 Use an issue for ordinary bugs and source corrections. Do not post confidential
 rights complaints, private documents or vulnerabilities publicly; use the published
 contact shown on the deployed About page. No response-time SLA is promised in the pilot.
+
+
+Work on a topic branch, preserve previous checkpoints, and keep each commit focused. Applied
+migration files and their pinned SQL resources are immutable; changes require a new revision.
+SQL function changes must preserve intended ownership, grants, trigger bindings and caller scope.
+Run the mandatory PostgreSQL acceptance before requesting independent review; `pytest --fast`
+is explicitly a partial check. A green CI run and a recorded independent reviewer on the exact
+commit are required before merging substantial migration/authority changes or starting a dependent
+milestone. Keep local design documents and recovery archives out of commits and review payloads.

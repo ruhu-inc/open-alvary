@@ -509,6 +509,7 @@ def test_revocation_waits_for_current_transaction_then_rejects_new_commands(oper
         assert conn.scalar(text(f"SELECT count(*) FROM {f.name(conn, 'policy', 'operator_event')}")) == 3
 
 
+@pytest.mark.fresh_migrations
 def test_upgrade_with_existing_capability_owners_preserves_pilot_and_subjects(pg_engine):
     migrate(pg_engine, "0003")
     with pg_engine.begin() as conn:
@@ -553,6 +554,7 @@ def test_upgrade_with_existing_capability_owners_preserves_pilot_and_subjects(pg
                 conn.execute(text(f"DROP ROLE {quote(role)}"))
 
 
+@pytest.mark.fresh_migrations
 def test_upgrade_refuses_unrelated_guard_role_without_partial_ddl(pg_engine):
     migrate(pg_engine, "0003")
     with pg_engine.begin() as conn:
