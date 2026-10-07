@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
+from schema.canonical import CanonicalCommand, CanonicalView
 from schema.identity import CollectionID
 from schema.models import Hash
 from schema.operator import Reason
@@ -141,7 +142,8 @@ class AssemblyReconcileCommand(AssemblyEnvelope):
 
 
 AssemblyCommand = Annotated[
-    SyntheticRunCommand | SnapshotCommand | AssemblyReconcileCommand, Field(discriminator="action")
+    SyntheticRunCommand | SnapshotCommand | AssemblyReconcileCommand | CanonicalCommand,
+    Field(discriminator="action"),
 ]
 
 
@@ -191,8 +193,9 @@ class SnapshotView(PrivateModel):
 
 
 class AssemblyContracts(PrivateModel):
-    schema_version: Literal["assembly-proposal-1"] = "assembly-proposal-1"
+    schema_version: Literal["assembly-proposal-2"] = "assembly-proposal-2"
     commands: tuple[AssemblyCommand, ...] = ()
     results: tuple[AssemblyResult, ...] = ()
     candidate_pages: tuple[CandidatePage, ...] = ()
     snapshots: tuple[SnapshotView, ...] = ()
+    canonical_proposals: tuple[CanonicalView, ...] = ()

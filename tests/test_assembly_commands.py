@@ -138,3 +138,27 @@ def test_assembly_cli_fails_safely_without_echo(mode):
         "validation_failed" if mode in ("invalid_json", "oversize") else "unavailable"
     )
     assert "private-do-not-echo" not in result.stdout
+
+
+def test_canonical_commands_never_accept_supplied_text_approval_or_actor():
+    data = dict(
+        command_id=str(uuid4()),
+        collection_id=mint("scp"),
+        reason="Original synthetic assembly",
+        action="record_canonical_proposal",
+        proposal_id=str(uuid4()),
+        snapshot_id=str(uuid4()),
+        snapshot_revision=1,
+        snapshot_hash="a" * 64,
+        purpose="synthetic",
+        plan=dict(blocks=[]),
+    )
+    for field, value in [
+        ("canonical_text", "Private invented text"),
+        ("actor_id", str(uuid4())),
+        ("approved", True),
+        ("serialization_profile_id", "unknown"),
+        ("snapshot_revision", True),
+    ]:
+        with pytest.raises(ValidationError):
+            parse_assembly_command(json.dumps(data | {field: value}).encode())

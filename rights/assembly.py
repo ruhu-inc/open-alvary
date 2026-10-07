@@ -8,6 +8,7 @@ from sqlalchemy import text
 from rights.acquisition import AcquisitionError, SyntheticAcquisition
 from rights.commands import MAX_COMMAND_BYTES
 from schema.assembly import AssemblyCommand, AssemblyResult, CandidatePage, SnapshotView
+from schema.canonical import CanonicalCommand
 
 
 def parse_assembly_command(raw: bytes) -> AssemblyCommand:
@@ -18,6 +19,10 @@ def parse_assembly_command(raw: bytes) -> AssemblyCommand:
 
 class SyntheticAssembly(SyntheticAcquisition):
     def apply(self, command: AssemblyCommand) -> AssemblyResult:
+        if isinstance(command, CanonicalCommand):
+            from rights.canonical import CanonicalAssembler
+
+            return CanonicalAssembler(self.connection, self.namespace).apply(command)
         raw = command.model_dump_json()
         if len(raw.encode()) > MAX_COMMAND_BYTES:
             return AssemblyResult(command_id=command.command_id, status="validation_failed")

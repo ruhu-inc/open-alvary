@@ -371,6 +371,37 @@
       "title": "CandidatePage",
       "type": "object"
     },
+    "CandidateSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "format": "uuid",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "start": {
+          "title": "Start",
+          "type": "integer"
+        },
+        "end": {
+          "title": "End",
+          "type": "integer"
+        },
+        "span_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Span Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "start",
+        "end",
+        "span_hash"
+      ],
+      "title": "CandidateSpan",
+      "type": "object"
+    },
     "CandidateView": {
       "additionalProperties": false,
       "properties": {
@@ -444,6 +475,219 @@
       "title": "CandidateView",
       "type": "object"
     },
+    "CanonicalCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "action": {
+          "const": "record_canonical_proposal",
+          "title": "Action",
+          "type": "string"
+        },
+        "proposal_id": {
+          "format": "uuid",
+          "title": "Proposal Id",
+          "type": "string"
+        },
+        "snapshot_id": {
+          "format": "uuid",
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "snapshot_revision": {
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Snapshot Revision",
+          "type": "integer"
+        },
+        "snapshot_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Snapshot Hash",
+          "type": "string"
+        },
+        "purpose": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "serialization_profile_id": {
+          "const": "OA-text-1",
+          "default": "OA-text-1",
+          "title": "Serialization Profile Id",
+          "type": "string"
+        },
+        "plan": {
+          "$ref": "#/$defs/CanonicalPlan"
+        }
+      },
+      "required": [
+        "command_id",
+        "collection_id",
+        "reason",
+        "action",
+        "proposal_id",
+        "snapshot_id",
+        "snapshot_revision",
+        "snapshot_hash",
+        "purpose",
+        "plan"
+      ],
+      "title": "CanonicalCommand",
+      "type": "object"
+    },
+    "CanonicalPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "plan": {
+          "$ref": "#/$defs/CanonicalPlan"
+        },
+        "projection": {
+          "$ref": "#/$defs/ProjectionDetails"
+        }
+      },
+      "required": [
+        "plan",
+        "projection"
+      ],
+      "title": "CanonicalPayload",
+      "type": "object"
+    },
+    "CanonicalPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "blocks": {
+          "default": [],
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "notice": "#/$defs/NoticeBlock",
+                "table": "#/$defs/TableBlock",
+                "text": "#/$defs/TextBlock"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/TextBlock"
+              },
+              {
+                "$ref": "#/$defs/TableBlock"
+              },
+              {
+                "$ref": "#/$defs/NoticeBlock"
+              }
+            ]
+          },
+          "maxItems": 50,
+          "title": "Blocks",
+          "type": "array"
+        },
+        "footnotes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FootnoteDefinition"
+          },
+          "maxItems": 50,
+          "title": "Footnotes",
+          "type": "array"
+        },
+        "markers": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FootnoteMarker"
+          },
+          "maxItems": 100,
+          "title": "Markers",
+          "type": "array"
+        },
+        "exclusions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Exclusion"
+          },
+          "maxItems": 50,
+          "title": "Exclusions",
+          "type": "array"
+        }
+      },
+      "title": "CanonicalPlan",
+      "type": "object"
+    },
+    "CanonicalView": {
+      "additionalProperties": false,
+      "properties": {
+        "proposal_id": {
+          "format": "uuid",
+          "title": "Proposal Id",
+          "type": "string"
+        },
+        "snapshot_id": {
+          "format": "uuid",
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "snapshot_revision": {
+          "title": "Snapshot Revision",
+          "type": "integer"
+        },
+        "snapshot_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Snapshot Hash",
+          "type": "string"
+        },
+        "serialization_profile_id": {
+          "const": "OA-text-1",
+          "title": "Serialization Profile Id",
+          "type": "string"
+        },
+        "profile_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Profile Hash",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "canonical_text": {
+          "title": "Canonical Text",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/CanonicalPayload"
+        }
+      },
+      "required": [
+        "proposal_id",
+        "snapshot_id",
+        "snapshot_revision",
+        "snapshot_hash",
+        "serialization_profile_id",
+        "profile_hash",
+        "content_hash",
+        "canonical_text",
+        "payload"
+      ],
+      "title": "CanonicalView",
+      "type": "object"
+    },
     "CellProposal": {
       "additionalProperties": false,
       "properties": {
@@ -487,6 +731,408 @@
         "column"
       ],
       "title": "CellProposal",
+      "type": "object"
+    },
+    "CellSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "candidates": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Candidates",
+          "type": "array"
+        }
+      },
+      "required": [
+        "candidates"
+      ],
+      "title": "CellSelection",
+      "type": "object"
+    },
+    "Exclusion": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "format": "uuid",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "furniture",
+            "repeated_header"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "target_candidate_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Candidate Id"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "kind",
+        "reason"
+      ],
+      "title": "Exclusion",
+      "type": "object"
+    },
+    "FootnoteDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "local_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9:_-]+$",
+          "title": "Local Id",
+          "type": "string"
+        },
+        "candidates": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Candidates",
+          "type": "array"
+        }
+      },
+      "required": [
+        "local_id",
+        "candidates"
+      ],
+      "title": "FootnoteDefinition",
+      "type": "object"
+    },
+    "FootnoteMarker": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "format": "uuid",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "source_start": {
+          "maximum": 32768,
+          "minimum": 0,
+          "title": "Source Start",
+          "type": "integer"
+        },
+        "source_end": {
+          "exclusiveMinimum": 0,
+          "maximum": 32768,
+          "title": "Source End",
+          "type": "integer"
+        },
+        "footnote_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9:_-]+$",
+          "title": "Footnote Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "source_start",
+        "source_end",
+        "footnote_id"
+      ],
+      "title": "FootnoteMarker",
+      "type": "object"
+    },
+    "MarkerProjection": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "format": "uuid",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "source_start": {
+          "title": "Source Start",
+          "type": "integer"
+        },
+        "source_end": {
+          "title": "Source End",
+          "type": "integer"
+        },
+        "start": {
+          "title": "Start",
+          "type": "integer"
+        },
+        "end": {
+          "title": "End",
+          "type": "integer"
+        },
+        "marker_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Marker Hash",
+          "type": "string"
+        },
+        "footnote_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9:_-]+$",
+          "title": "Footnote Id",
+          "type": "string"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 1,
+              "pattern": "^[a-zA-Z0-9:_-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Scope"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "source_start",
+        "source_end",
+        "start",
+        "end",
+        "marker_hash",
+        "footnote_id",
+        "scope"
+      ],
+      "title": "MarkerProjection",
+      "type": "object"
+    },
+    "Normalization": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "format": "uuid",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "source_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Source Hash",
+          "type": "string"
+        },
+        "source_bytes": {
+          "title": "Source Bytes",
+          "type": "integer"
+        },
+        "normalized_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Normalized Hash",
+          "type": "string"
+        },
+        "normalized_bytes": {
+          "title": "Normalized Bytes",
+          "type": "integer"
+        },
+        "operations": {
+          "items": {
+            "enum": [
+              "lf",
+              "nfc"
+            ],
+            "type": "string"
+          },
+          "title": "Operations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "source_hash",
+        "source_bytes",
+        "normalized_hash",
+        "normalized_bytes",
+        "operations"
+      ],
+      "title": "Normalization",
+      "type": "object"
+    },
+    "NoticeBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "notice",
+          "title": "Kind",
+          "type": "string"
+        },
+        "local_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9:_-]+$",
+          "title": "Local Id",
+          "type": "string"
+        },
+        "blocks": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "table": "#/$defs/TableBlock",
+                "text": "#/$defs/TextBlock"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/TextBlock"
+              },
+              {
+                "$ref": "#/$defs/TableBlock"
+              }
+            ]
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Blocks",
+          "type": "array"
+        },
+        "footnotes": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FootnoteDefinition"
+          },
+          "maxItems": 50,
+          "title": "Footnotes",
+          "type": "array"
+        },
+        "markers": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FootnoteMarker"
+          },
+          "maxItems": 100,
+          "title": "Markers",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "local_id",
+        "blocks"
+      ],
+      "title": "NoticeBlock",
+      "type": "object"
+    },
+    "NoticeRange": {
+      "additionalProperties": false,
+      "properties": {
+        "local_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9:_-]+$",
+          "title": "Local Id",
+          "type": "string"
+        },
+        "start": {
+          "title": "Start",
+          "type": "integer"
+        },
+        "end": {
+          "title": "End",
+          "type": "integer"
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "local_id",
+        "start",
+        "end",
+        "content_hash"
+      ],
+      "title": "NoticeRange",
+      "type": "object"
+    },
+    "ProjectionDetails": {
+      "additionalProperties": false,
+      "properties": {
+        "spans": {
+          "items": {
+            "$ref": "#/$defs/CandidateSpan"
+          },
+          "title": "Spans",
+          "type": "array"
+        },
+        "normalizations": {
+          "items": {
+            "$ref": "#/$defs/Normalization"
+          },
+          "title": "Normalizations",
+          "type": "array"
+        },
+        "separators": {
+          "$ref": "#/$defs/SeparatorOffsets"
+        },
+        "markers": {
+          "items": {
+            "$ref": "#/$defs/MarkerProjection"
+          },
+          "title": "Markers",
+          "type": "array"
+        },
+        "notice_ranges": {
+          "items": {
+            "$ref": "#/$defs/NoticeRange"
+          },
+          "title": "Notice Ranges",
+          "type": "array"
+        },
+        "incomplete_tables": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9:_-]+$",
+            "type": "string"
+          },
+          "title": "Incomplete Tables",
+          "type": "array"
+        },
+        "publication_eligible": {
+          "const": false,
+          "default": false,
+          "title": "Publication Eligible",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "spans",
+        "normalizations",
+        "separators",
+        "markers",
+        "notice_ranges",
+        "incomplete_tables"
+      ],
+      "title": "ProjectionDetails",
       "type": "object"
     },
     "Resolution": {
@@ -551,6 +1197,53 @@
         "candidate_id"
       ],
       "title": "Selection",
+      "type": "object"
+    },
+    "SeparatorOffsets": {
+      "additionalProperties": false,
+      "properties": {
+        "block": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "title": "Block",
+          "type": "array"
+        },
+        "cell": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "title": "Cell",
+          "type": "array"
+        },
+        "column": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "title": "Column",
+          "type": "array"
+        },
+        "row": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "title": "Row",
+          "type": "array"
+        },
+        "terminator": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "title": "Terminator",
+          "type": "array"
+        }
+      },
+      "title": "SeparatorOffsets",
       "type": "object"
     },
     "SnapshotBody": {
@@ -819,13 +1512,139 @@
       ],
       "title": "SyntheticRunCommand",
       "type": "object"
+    },
+    "TableBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "table",
+          "title": "Kind",
+          "type": "string"
+        },
+        "table_local_id": {
+          "maxLength": 64,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9:_-]+$",
+          "title": "Table Local Id",
+          "type": "string"
+        },
+        "rows": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Rows",
+          "type": "integer"
+        },
+        "columns": {
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Columns",
+          "type": "integer"
+        },
+        "cells": {
+          "items": {
+            "$ref": "#/$defs/CellSelection"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Cells",
+          "type": "array"
+        },
+        "headers": {
+          "default": [],
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Headers",
+          "type": "array"
+        },
+        "unavailable": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/UnavailablePosition"
+          },
+          "maxItems": 10000,
+          "title": "Unavailable",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "table_local_id",
+        "rows",
+        "columns",
+        "cells"
+      ],
+      "title": "TableBlock",
+      "type": "object"
+    },
+    "TextBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "text",
+          "title": "Kind",
+          "type": "string"
+        },
+        "candidate_id": {
+          "format": "uuid",
+          "title": "Candidate Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "candidate_id"
+      ],
+      "title": "TextBlock",
+      "type": "object"
+    },
+    "UnavailablePosition": {
+      "additionalProperties": false,
+      "properties": {
+        "row": {
+          "maximum": 99,
+          "minimum": 0,
+          "title": "Row",
+          "type": "integer"
+        },
+        "column": {
+          "maximum": 99,
+          "minimum": 0,
+          "title": "Column",
+          "type": "integer"
+        },
+        "content_state": {
+          "enum": [
+            "illegible",
+            "unsupported"
+          ],
+          "title": "Content State",
+          "type": "string"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "row",
+        "column",
+        "content_state",
+        "reason"
+      ],
+      "title": "UnavailablePosition",
+      "type": "object"
     }
   },
   "additionalProperties": false,
   "properties": {
     "schema_version": {
-      "const": "assembly-proposal-1",
-      "default": "assembly-proposal-1",
+      "const": "assembly-proposal-2",
+      "default": "assembly-proposal-2",
       "title": "Schema Version",
       "type": "string"
     },
@@ -835,6 +1654,7 @@
         "discriminator": {
           "mapping": {
             "reconcile_assembly": "#/$defs/AssemblyReconcileCommand",
+            "record_canonical_proposal": "#/$defs/CanonicalCommand",
             "record_snapshot": "#/$defs/SnapshotCommand",
             "record_synthetic_run": "#/$defs/SyntheticRunCommand"
           },
@@ -849,6 +1669,9 @@
           },
           {
             "$ref": "#/$defs/AssemblyReconcileCommand"
+          },
+          {
+            "$ref": "#/$defs/CanonicalCommand"
           }
         ]
       },
@@ -877,6 +1700,14 @@
         "$ref": "#/$defs/SnapshotView"
       },
       "title": "Snapshots",
+      "type": "array"
+    },
+    "canonical_proposals": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CanonicalView"
+      },
+      "title": "Canonical Proposals",
       "type": "array"
     }
   },

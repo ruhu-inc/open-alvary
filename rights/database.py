@@ -172,6 +172,19 @@ def provision_roles(conn: Connection, namespace: PolicyNamespace) -> dict[str, s
             "read_snapshot(uuid,bigint,text)",
         ):
             conn.execute(text(f"GRANT EXECUTE ON FUNCTION {p}.{fn} TO {acquisition}"))
+    if conn.scalar(
+        text("SELECT to_regclass(:name) IS NOT NULL"),
+        {"name": namespace.schema("staging") + ".canonical_proposal"},
+    ):
+        conn.execute(
+            text(f"GRANT INSERT,UPDATE(state,payload,canonical_bytes) ON {s}.canonical_proposal TO {guard}")
+        )
+        for fn in (
+            "canonical_inputs(jsonb)",
+            "store_canonical_proposal(jsonb,bytea,jsonb)",
+            "read_canonical_proposal(uuid,text)",
+        ):
+            conn.execute(text(f"GRANT EXECUTE ON FUNCTION {p}.{fn} TO {acquisition}"))
     return roles
 
 

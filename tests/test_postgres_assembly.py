@@ -570,12 +570,14 @@ def test_assembly_cli_commits_safe_result_without_private_text_or_credentials(as
 
 def test_populated_assembly_refuses_downgrade(assembly):
     f, *_ = assembly
+    with f.engine.connect() as conn:
+        before = conn.scalar(text("SELECT version_num FROM alembic_version"))
     with pytest.raises(RuntimeError, match="requires forward repair"), f.engine.begin() as conn:
         config = Config("alembic.ini")
         config.attributes["connection"] = conn
         command.downgrade(config, "0006")
     with f.engine.connect() as conn:
-        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0007"
+        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == before
 
 
 def test_populated_m23_upgrade_and_empty_rollback_preserve_raw_records_and_validator(operators):
