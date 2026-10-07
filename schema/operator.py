@@ -8,11 +8,10 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validato
 from schema.identity import CollectionID
 from schema.models import ID, Hash
 from schema.policy import PermissionVector
+from schema.vocabularies import MATERIALS as MATERIALS
+from schema.vocabularies import MaterialClass
 
 Reason = Annotated[str, Field(min_length=1, max_length=2048)]
-MATERIALS = frozenset(
-    {"operative_tables", "amounts", "dates", "negations", "cross_references", "identity_citation"}
-)
 
 
 class CommandModel(BaseModel):
@@ -66,9 +65,7 @@ class DecisionInput(ReviewInput, PermissionVector):
 
 
 class MaterialInput(CommandModel):
-    material_class: Literal[
-        "operative_tables", "amounts", "dates", "negations", "cross_references", "identity_citation"
-    ]
+    material_class: MaterialClass
     method: Literal["human_source_comparison", "validated_native_sampling"]
     sample_numerator: int = Field(gt=0)
     sample_denominator: int = Field(gt=0)

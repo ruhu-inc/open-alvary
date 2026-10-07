@@ -7,6 +7,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl
 
 from schema.identity import CollectionID, WorkID
 from schema.models import ID, Hash, Nonempty
+from schema.vocabularies import MaterialClass
 
 Permission = Literal["allow", "deny", "unknown"]
 
@@ -105,9 +106,7 @@ class VerificationPolicy(ReviewedRecord):
 class VerificationMaterial(PrivateRecord):
     collection_id: CollectionID
     revision: int = Field(gt=0)
-    material_class: Literal[
-        "operative_tables", "amounts", "dates", "negations", "cross_references", "identity_citation"
-    ]
+    material_class: MaterialClass
     method: Literal["human_source_comparison", "validated_native_sampling"]
     sample_numerator: int = Field(gt=0)
     sample_denominator: int = Field(gt=0)

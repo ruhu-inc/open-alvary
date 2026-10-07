@@ -1,0 +1,912 @@
+{
+  "revision": "0011",
+  "vocabulary": "policy-vocabulary-1",
+  "functions": [
+    {
+      "signature": "acquisition_current(uuid, bigint, text, text, text)",
+      "file": "acquisition_current.sql",
+      "prior_body_hash": "f70329da5bb1582393126bca76ce4684b39be7adb817ff74b7d27e5fbdca00c9",
+      "current_body_hash": "f70329da5bb1582393126bca76ce4684b39be7adb817ff74b7d27e5fbdca00c9",
+      "prior_definition_hash": "41c1d4063a00b4b3ac055c616dae508a626eaa882f5136e8e3c49c728e14b150",
+      "current_definition_hash": "41c1d4063a00b4b3ac055c616dae508a626eaa882f5136e8e3c49c728e14b150"
+    },
+    {
+      "signature": "apply_acquisition_command(jsonb)",
+      "file": "apply_acquisition_command.sql",
+      "prior_body_hash": "52aa6c72442b60f612703773e276cb1891baa7dd3f1be6792aceb1e5ea5fa66b",
+      "current_body_hash": "52aa6c72442b60f612703773e276cb1891baa7dd3f1be6792aceb1e5ea5fa66b",
+      "prior_definition_hash": "98d6be860d77cb387ece59a7dd929b2c8181496801a152607caf190461e35973",
+      "current_definition_hash": "98d6be860d77cb387ece59a7dd929b2c8181496801a152607caf190461e35973"
+    },
+    {
+      "signature": "apply_assembly_command(jsonb)",
+      "file": "apply_assembly_command.sql",
+      "prior_body_hash": "7927531cddf3d643bce431961f6f01b09c67cf4c96724f2dab20b092f56ceaff",
+      "current_body_hash": "7927531cddf3d643bce431961f6f01b09c67cf4c96724f2dab20b092f56ceaff",
+      "prior_definition_hash": "56f58fe03ab6afb9ccceba122a578fb0ccdfa598a6bc4f71955e8efd4aa66abd",
+      "current_definition_hash": "56f58fe03ab6afb9ccceba122a578fb0ccdfa598a6bc4f71955e8efd4aa66abd"
+    },
+    {
+      "signature": "apply_assembly_command_m31(jsonb)",
+      "file": "apply_assembly_command_m31.sql",
+      "prior_body_hash": "ac2849e8ff5852c0f58e5d8f98e4748d2e46f97cc59741d6e2bf433f5089eb20",
+      "current_body_hash": "ac2849e8ff5852c0f58e5d8f98e4748d2e46f97cc59741d6e2bf433f5089eb20",
+      "prior_definition_hash": "d06d2f92fb85daa35cd30651d0b17c4ae67910bd7be9d13934f5a02bb5cfebd3",
+      "current_definition_hash": "d06d2f92fb85daa35cd30651d0b17c4ae67910bd7be9d13934f5a02bb5cfebd3"
+    },
+    {
+      "signature": "apply_assembly_command_m32(jsonb)",
+      "file": "apply_assembly_command_m32.sql",
+      "prior_body_hash": "35498d7db718b77037d8dd7e7397465386bc4ba8b04884ecfed3d107cd650c01",
+      "current_body_hash": "35498d7db718b77037d8dd7e7397465386bc4ba8b04884ecfed3d107cd650c01",
+      "prior_definition_hash": "aee57534d50e20dd10adc0dfb9cab1ad79c70ac8b0c94a8de501c7b559081fd1",
+      "current_definition_hash": "aee57534d50e20dd10adc0dfb9cab1ad79c70ac8b0c94a8de501c7b559081fd1"
+    },
+    {
+      "signature": "apply_assembly_command_m33(jsonb)",
+      "file": "apply_assembly_command_m33.sql",
+      "prior_body_hash": "eec15289ffb8606ffc67fa1b6d80d8509f0c8e0b31265d6ad02f2386186edc8a",
+      "current_body_hash": "eec15289ffb8606ffc67fa1b6d80d8509f0c8e0b31265d6ad02f2386186edc8a",
+      "prior_definition_hash": "f2bb443285d4242be3b3c8ba5bbe0fadd9f9ecb1920bda646d451a631811160e",
+      "current_definition_hash": "f2bb443285d4242be3b3c8ba5bbe0fadd9f9ecb1920bda646d451a631811160e"
+    },
+    {
+      "signature": "apply_gazette_command(jsonb)",
+      "file": "apply_gazette_command.sql",
+      "prior_body_hash": "00da597b15ee3a87f8094d24fa91ccd4e859e7c436ec3b007f270b8baf1a1b65",
+      "current_body_hash": "00da597b15ee3a87f8094d24fa91ccd4e859e7c436ec3b007f270b8baf1a1b65",
+      "prior_definition_hash": "2bf15c58b9da6b952dadc879617ec03b56d2d169019d27dbbaab9cc2e8c9f4bc",
+      "current_definition_hash": "2bf15c58b9da6b952dadc879617ec03b56d2d169019d27dbbaab9cc2e8c9f4bc"
+    },
+    {
+      "signature": "apply_operator_command(jsonb)",
+      "file": "apply_operator_command.sql",
+      "prior_body_hash": "94ad0634f907df917e52664adb5cc034a05d5e77315f9503335008574355f985",
+      "current_body_hash": "94ad0634f907df917e52664adb5cc034a05d5e77315f9503335008574355f985",
+      "prior_definition_hash": "7b72f680f0117cdc53ad957a6502db918bda10904cfec9dded357c63f3aa7094",
+      "current_definition_hash": "7b72f680f0117cdc53ad957a6502db918bda10904cfec9dded357c63f3aa7094"
+    },
+    {
+      "signature": "apply_synthetic_approval(jsonb)",
+      "file": "apply_synthetic_approval.sql",
+      "prior_body_hash": "e7ca9f7e3f7b76b126a658144fd322a3270cdc94ed454555fed4f2e4b06d78c9",
+      "current_body_hash": "e7ca9f7e3f7b76b126a658144fd322a3270cdc94ed454555fed4f2e4b06d78c9",
+      "prior_definition_hash": "b898cacfd597e78d45a875032a3ef5d445acbd51a7cbe48f8efd89d431de36d6",
+      "current_definition_hash": "b898cacfd597e78d45a875032a3ef5d445acbd51a7cbe48f8efd89d431de36d6"
+    },
+    {
+      "signature": "apply_synthetic_approval_m33(jsonb)",
+      "file": "apply_synthetic_approval_m33.sql",
+      "prior_body_hash": "7823116f532ca76125c6715a3afb1fb107e1e7204bd71f748449b2624abdd751",
+      "current_body_hash": "7823116f532ca76125c6715a3afb1fb107e1e7204bd71f748449b2624abdd751",
+      "prior_definition_hash": "765ff9e3a7bf9eb7163ab23f242033d9111745faf12cf61ea798369b111579f3",
+      "current_definition_hash": "765ff9e3a7bf9eb7163ab23f242033d9111745faf12cf61ea798369b111579f3"
+    },
+    {
+      "signature": "approval_leaf(jsonb, jsonb, text, text, text)",
+      "file": "approval_leaf.sql",
+      "prior_body_hash": "65721b39d92d43c1f5a44a030430f79bc19664078fb9a2d9668c6665fb5e32e9",
+      "current_body_hash": "65721b39d92d43c1f5a44a030430f79bc19664078fb9a2d9668c6665fb5e32e9",
+      "prior_definition_hash": "31e455aed8601d2fad6a6eb9f647c2e4b04c9d105081b8bce96181ac1e7e6eaa",
+      "current_definition_hash": "31e455aed8601d2fad6a6eb9f647c2e4b04c9d105081b8bce96181ac1e7e6eaa"
+    },
+    {
+      "signature": "approval_lifecycle()",
+      "file": "approval_lifecycle.sql",
+      "prior_body_hash": "8fb6edf892ab33b4b21a58694f570e4dd3524c22943435889ca6e356c4021b44",
+      "current_body_hash": "8fb6edf892ab33b4b21a58694f570e4dd3524c22943435889ca6e356c4021b44",
+      "prior_definition_hash": "45233ac922cc624ad3d2435d9e121b7931724d189e8f7531d1e66b858ffad387",
+      "current_definition_hash": "45233ac922cc624ad3d2435d9e121b7931724d189e8f7531d1e66b858ffad387"
+    },
+    {
+      "signature": "approval_policy_current(text, bigint, bigint)",
+      "file": "approval_policy_current.sql",
+      "prior_body_hash": "44eb1f6d853b88ba932e443c857a7e4364ddc604d758cdd121b6a0ca440b6a94",
+      "current_body_hash": "44eb1f6d853b88ba932e443c857a7e4364ddc604d758cdd121b6a0ca440b6a94",
+      "prior_definition_hash": "014a7cc12a5d7a1d75693cb9d6965d747b89dd85b6149b0d994a705003960e28",
+      "current_definition_hash": "014a7cc12a5d7a1d75693cb9d6965d747b89dd85b6149b0d994a705003960e28"
+    },
+    {
+      "signature": "approval_source(uuid, text, text, boolean)",
+      "file": "approval_source.sql",
+      "prior_body_hash": "4e911fd9ddbb90113453fa7851a7a7211451cc55d440f38d0ebd05993d465bbc",
+      "current_body_hash": "4e911fd9ddbb90113453fa7851a7a7211451cc55d440f38d0ebd05993d465bbc",
+      "prior_definition_hash": "e07e82b666dfa7230fd5fd9f510ee267d80921fcb0cc24092776c6edc56c7b4f",
+      "current_definition_hash": "e07e82b666dfa7230fd5fd9f510ee267d80921fcb0cc24092776c6edc56c7b4f"
+    },
+    {
+      "signature": "approval_structure(jsonb, jsonb, jsonb)",
+      "file": "approval_structure.sql",
+      "prior_body_hash": "f3da94856edeff8bdc1b470967fa209e59fc232f981dcfb57af3b0071c82ab4b",
+      "current_body_hash": "f3da94856edeff8bdc1b470967fa209e59fc232f981dcfb57af3b0071c82ab4b",
+      "prior_definition_hash": "715dea13336c9b01092bba8e93209877e0b7fecd210a5af31e1eb64be74ca2fd",
+      "current_definition_hash": "715dea13336c9b01092bba8e93209877e0b7fecd210a5af31e1eb64be74ca2fd"
+    },
+    {
+      "signature": "approval_structure_scope(jsonb, jsonb, jsonb, jsonb, text, text)",
+      "file": "approval_structure_scope.sql",
+      "prior_body_hash": "8c5a9d8b6528cd53f8a7410e176315797f48e13529f03036d3e3b4aac87d7126",
+      "current_body_hash": "8c5a9d8b6528cd53f8a7410e176315797f48e13529f03036d3e3b4aac87d7126",
+      "prior_definition_hash": "04b97f74f61cb192d69ffacbe074819438d5b896b82251ec6dc5c04dd090649a",
+      "current_definition_hash": "04b97f74f61cb192d69ffacbe074819438d5b896b82251ec6dc5c04dd090649a"
+    },
+    {
+      "signature": "approved_version_current(text, text)",
+      "file": "approved_version_current.sql",
+      "prior_body_hash": "10f3b41fb1918bc36a0f50dd5178860ef9eca0ba45ec7d30edc1e14c9f3cbeca",
+      "current_body_hash": "10f3b41fb1918bc36a0f50dd5178860ef9eca0ba45ec7d30edc1e14c9f3cbeca",
+      "prior_definition_hash": "3d912f958bed11ee937a9c9161ed82bc4c58db2ea46986dc4650059562a84847",
+      "current_definition_hash": "3d912f958bed11ee937a9c9161ed82bc4c58db2ea46986dc4650059562a84847"
+    },
+    {
+      "signature": "approved_version_current_m33(text, text)",
+      "file": "approved_version_current_m33.sql",
+      "prior_body_hash": "5563c11cf759629a9f442589ce4175ed50c6dd4cfcb3abc4b6bad89d5e64cec8",
+      "current_body_hash": "5563c11cf759629a9f442589ce4175ed50c6dd4cfcb3abc4b6bad89d5e64cec8",
+      "prior_definition_hash": "6dd00902d274fc7a017ff7b6f43235da8fded09c29d30955d93de278901db55a",
+      "current_definition_hash": "6dd00902d274fc7a017ff7b6f43235da8fded09c29d30955d93de278901db55a"
+    },
+    {
+      "signature": "assembly_input_current(uuid, text)",
+      "file": "assembly_input_current.sql",
+      "prior_body_hash": "b72ea7108274f35d96b604b46ab4d36c9f249521853b9f9a8de900ada7a05157",
+      "current_body_hash": "b72ea7108274f35d96b604b46ab4d36c9f249521853b9f9a8de900ada7a05157",
+      "prior_definition_hash": "ee159f5edec0c8fb35eec3cea7949e4c61bf7e0eee0d9f318d9e1ed808d69c0e",
+      "current_definition_hash": "ee159f5edec0c8fb35eec3cea7949e4c61bf7e0eee0d9f318d9e1ed808d69c0e"
+    },
+    {
+      "signature": "assembly_local_key(jsonb, boolean)",
+      "file": "assembly_local_key.sql",
+      "prior_body_hash": "c9fd371c4dda9a03bd10d2bcf37abdbbd536b1e585582b289ab6c392ff028a2a",
+      "current_body_hash": "c9fd371c4dda9a03bd10d2bcf37abdbbd536b1e585582b289ab6c392ff028a2a",
+      "prior_definition_hash": "0040946200843773b93d6fb420e51c990b2596efa83ead4e030467328dabb02c",
+      "current_definition_hash": "0040946200843773b93d6fb420e51c990b2596efa83ead4e030467328dabb02c"
+    },
+    {
+      "signature": "assembly_payload_valid(jsonb)",
+      "file": "assembly_payload_valid.sql",
+      "prior_body_hash": "0fcf28f5350c9607c723dae1dcd3fda79a63edf4495e92f05565a65fde0e4521",
+      "current_body_hash": "0fcf28f5350c9607c723dae1dcd3fda79a63edf4495e92f05565a65fde0e4521",
+      "prior_definition_hash": "24857a6d74827c0597de2bc89ee35300575d73b7e05bf313851b6fc2a03303ca",
+      "current_definition_hash": "24857a6d74827c0597de2bc89ee35300575d73b7e05bf313851b6fc2a03303ca"
+    },
+    {
+      "signature": "assigned(text, text)",
+      "file": "assigned.sql",
+      "prior_body_hash": "5afe7d4ca307bbd7768d5e2a49ff4a980c65639feeb8d0b80daf9d8a713199ce",
+      "current_body_hash": "5afe7d4ca307bbd7768d5e2a49ff4a980c65639feeb8d0b80daf9d8a713199ce",
+      "prior_definition_hash": "6663f36fb0900bd4d2c0ba7ed773dd336e98b57fc695899b7701baf34408131e",
+      "current_definition_hash": "6663f36fb0900bd4d2c0ba7ed773dd336e98b57fc695899b7701baf34408131e"
+    },
+    {
+      "signature": "binding_current(uuid)",
+      "file": "binding_current.sql",
+      "prior_body_hash": "9039a47e327db2c2a01c5f6c9e35cd18ceffcdc377691f1e0e8503bd18218c00",
+      "current_body_hash": "9039a47e327db2c2a01c5f6c9e35cd18ceffcdc377691f1e0e8503bd18218c00",
+      "prior_definition_hash": "4d007fecc95753f9ec98033960b4bde9fa53360d64831a8ad5ad0c0bd094797d",
+      "current_definition_hash": "4d007fecc95753f9ec98033960b4bde9fa53360d64831a8ad5ad0c0bd094797d"
+    },
+    {
+      "signature": "bound_identity_immutable()",
+      "file": "bound_identity_immutable.sql",
+      "prior_body_hash": "b43c13e42bb020b801f296aafaa354b42c4c394f0da239329caa7275af20dc87",
+      "current_body_hash": "b43c13e42bb020b801f296aafaa354b42c4c394f0da239329caa7275af20dc87",
+      "prior_definition_hash": "b60374c7fee7aee94e7318b34bfdacfc992f618ef38c3d5830383a1726c5e11f",
+      "current_definition_hash": "b60374c7fee7aee94e7318b34bfdacfc992f618ef38c3d5830383a1726c5e11f"
+    },
+    {
+      "signature": "bound_identity_immutable_m33()",
+      "file": "bound_identity_immutable_m33.sql",
+      "prior_body_hash": "76dbf8bb3093b3d825f10e66226e90e3ba2f24fa099d2790541a52c73ac6155a",
+      "current_body_hash": "76dbf8bb3093b3d825f10e66226e90e3ba2f24fa099d2790541a52c73ac6155a",
+      "prior_definition_hash": "3e03e704aec5ee6ecc16142730be51960fa1301484ac2b969277c166436838a1",
+      "current_definition_hash": "3e03e704aec5ee6ecc16142730be51960fa1301484ac2b969277c166436838a1"
+    },
+    {
+      "signature": "canonical_current(uuid, text)",
+      "file": "canonical_current.sql",
+      "prior_body_hash": "a61d722192dc4a995d25c59f6e18e03f0455befe4054cdcd954ea807a8fc48f8",
+      "current_body_hash": "a61d722192dc4a995d25c59f6e18e03f0455befe4054cdcd954ea807a8fc48f8",
+      "prior_definition_hash": "e6876dbdddf2703419f51b5dcdb6eacbe338509a2a0b064f075b3d596c455786",
+      "current_definition_hash": "e6876dbdddf2703419f51b5dcdb6eacbe338509a2a0b064f075b3d596c455786"
+    },
+    {
+      "signature": "canonical_inputs(jsonb)",
+      "file": "canonical_inputs.sql",
+      "prior_body_hash": "f1ccc48473aff270588e4b3fada3fb7316de37d4144ccefa1af217735382d137",
+      "current_body_hash": "f1ccc48473aff270588e4b3fada3fb7316de37d4144ccefa1af217735382d137",
+      "prior_definition_hash": "50945bc02ca6f35c9bb55f91eac568446f6e3663c3bce2914e170fb4000b7ab7",
+      "current_definition_hash": "50945bc02ca6f35c9bb55f91eac568446f6e3663c3bce2914e170fb4000b7ab7"
+    },
+    {
+      "signature": "collection_permission(text, text, text)",
+      "file": "collection_permission.sql",
+      "prior_body_hash": "0fc2d6c23dfa254dd4d4b3c133bfb9b5cee5f054023f9207b458477fa1d1d800",
+      "current_body_hash": "0fc2d6c23dfa254dd4d4b3c133bfb9b5cee5f054023f9207b458477fa1d1d800",
+      "prior_definition_hash": "3d0652f330b4abb417b24df6065c823e1c27dac78fb7db1c2a711d39311bfd3e",
+      "current_definition_hash": "3d0652f330b4abb417b24df6065c823e1c27dac78fb7db1c2a711d39311bfd3e"
+    },
+    {
+      "signature": "current_actor()",
+      "file": "current_actor.sql",
+      "prior_body_hash": "675960e37288b06c3b441428aa20e29567df359971e1822a3161c10522281ea0",
+      "current_body_hash": "675960e37288b06c3b441428aa20e29567df359971e1822a3161c10522281ea0",
+      "prior_definition_hash": "19d7887e919a917f86780c721894ca4fcef57e8ae3ba2aac04b284b80b7cb444",
+      "current_definition_hash": "19d7887e919a917f86780c721894ca4fcef57e8ae3ba2aac04b284b80b7cb444"
+    },
+    {
+      "signature": "erase_staged(uuid)",
+      "file": "erase_staged.sql",
+      "prior_body_hash": "64d2176012ef12092c538b6af1bab5ee189b83a4d005abefd88da255bb016501",
+      "current_body_hash": "64d2176012ef12092c538b6af1bab5ee189b83a4d005abefd88da255bb016501",
+      "prior_definition_hash": "6fe8180b3dfa3d70f2cd2358196afbf2546f35647d48b452d9885d9aeffe81f9",
+      "current_definition_hash": "6fe8180b3dfa3d70f2cd2358196afbf2546f35647d48b452d9885d9aeffe81f9"
+    },
+    {
+      "signature": "gazette_binding_hash(uuid)",
+      "file": "gazette_binding_hash.sql",
+      "prior_body_hash": "4807859e2da83ee07b9536923dcade3e29a546c693833a2e840d4a89c8104f78",
+      "current_body_hash": "4807859e2da83ee07b9536923dcade3e29a546c693833a2e840d4a89c8104f78",
+      "prior_definition_hash": "06c49bb571ae69a9a752d9069b51adb42916ab6115b48f12d35753b56351594b",
+      "current_definition_hash": "06c49bb571ae69a9a752d9069b51adb42916ab6115b48f12d35753b56351594b"
+    },
+    {
+      "signature": "gazette_correspondence_current(uuid, text)",
+      "file": "gazette_correspondence_current.sql",
+      "prior_body_hash": "41a182e6249da94d6098e6f81ddf14430cda3fd72abec62b1cd112f933afdd48",
+      "current_body_hash": "41a182e6249da94d6098e6f81ddf14430cda3fd72abec62b1cd112f933afdd48",
+      "prior_definition_hash": "af1833715613bc3e3bd02abfe5c94cdc49508a6709a07da3ee9759d589852c69",
+      "current_definition_hash": "af1833715613bc3e3bd02abfe5c94cdc49508a6709a07da3ee9759d589852c69"
+    },
+    {
+      "signature": "gazette_dependencies_current(text, text)",
+      "file": "gazette_dependencies_current.sql",
+      "prior_body_hash": "3ea1eaeadab4022218fbc7c692d59fbcd058d74507825206077a23d74100840d",
+      "current_body_hash": "3ea1eaeadab4022218fbc7c692d59fbcd058d74507825206077a23d74100840d",
+      "prior_definition_hash": "66d82f8feb9e786f08491629308fa67c9eb3f472ea474ac5f125444b5db07250",
+      "current_definition_hash": "66d82f8feb9e786f08491629308fa67c9eb3f472ea474ac5f125444b5db07250"
+    },
+    {
+      "signature": "gazette_identity_current(uuid)",
+      "file": "gazette_identity_current.sql",
+      "prior_body_hash": "a33721728448b0861d9e0bfcee03f781140ede9e95f7e57a98b5652c489ce1b6",
+      "current_body_hash": "a33721728448b0861d9e0bfcee03f781140ede9e95f7e57a98b5652c489ce1b6",
+      "prior_definition_hash": "deefa8988276ec16af65751b6b0cd7998624526eb59e0010f1651e5c0228be3e",
+      "current_definition_hash": "deefa8988276ec16af65751b6b0cd7998624526eb59e0010f1651e5c0228be3e"
+    },
+    {
+      "signature": "gazette_inputs(uuid, text, text, text, boolean)",
+      "file": "gazette_inputs.sql",
+      "prior_body_hash": "d5875ed9ab7ec75e649faa4c7d937190892e0bdb170d5084a9435ddf49bfa7c9",
+      "current_body_hash": "d5875ed9ab7ec75e649faa4c7d937190892e0bdb170d5084a9435ddf49bfa7c9",
+      "prior_definition_hash": "fe0a538ccb9835a7dd8dcce9328157d8a4c764b36a6844a783fd6d23723d1d39",
+      "current_definition_hash": "fe0a538ccb9835a7dd8dcce9328157d8a4c764b36a6844a783fd6d23723d1d39"
+    },
+    {
+      "signature": "gazette_item_policy_current(text, bigint, bigint)",
+      "file": "gazette_item_policy_current.sql",
+      "prior_body_hash": "4c41d6b812eb09fb8b459b926d27277063eebc5d6ac589e2ac5fdc53c49ceef7",
+      "current_body_hash": "4c41d6b812eb09fb8b459b926d27277063eebc5d6ac589e2ac5fdc53c49ceef7",
+      "prior_definition_hash": "88062ec3e4b5c6b3c9825c684584e44146301181a4fe6c5b11652a473d65b577",
+      "current_definition_hash": "88062ec3e4b5c6b3c9825c684584e44146301181a4fe6c5b11652a473d65b577"
+    },
+    {
+      "signature": "hold_stale_approval(uuid)",
+      "file": "hold_stale_approval.sql",
+      "prior_body_hash": "88f1e913366cdacb5e015f9aba506d97bb097e7819023929d654e82f786e8efb",
+      "current_body_hash": "88f1e913366cdacb5e015f9aba506d97bb097e7819023929d654e82f786e8efb",
+      "prior_definition_hash": "16670239e91658905bee7260d8fda152268c1becb5dfa52c47fe8c0ed575ac31",
+      "current_definition_hash": "16670239e91658905bee7260d8fda152268c1becb5dfa52c47fe8c0ed575ac31"
+    },
+    {
+      "signature": "hold_stale_approval_m33(uuid)",
+      "file": "hold_stale_approval_m33.sql",
+      "prior_body_hash": "172554a2c1d047b99d1b0ab460c5b774bd59f148a0994cece4d2c52b18a62b9d",
+      "current_body_hash": "172554a2c1d047b99d1b0ab460c5b774bd59f148a0994cece4d2c52b18a62b9d",
+      "prior_definition_hash": "4eed9480d39a92ecaf8ab716bc520b9cd740d9ccaca4df8f5e7333b77114f386",
+      "current_definition_hash": "4eed9480d39a92ecaf8ab716bc520b9cd740d9ccaca4df8f5e7333b77114f386"
+    },
+    {
+      "signature": "hold_stale_canonical(uuid)",
+      "file": "hold_stale_canonical.sql",
+      "prior_body_hash": "1d1d6f03f156864e798eeaee6f1af2bef720f44e8b93350c21f99c594745c778",
+      "current_body_hash": "1d1d6f03f156864e798eeaee6f1af2bef720f44e8b93350c21f99c594745c778",
+      "prior_definition_hash": "625693aa49d25283011a27c6454317e31836ab520f1c30beca60031cc8d4995f",
+      "current_definition_hash": "625693aa49d25283011a27c6454317e31836ab520f1c30beca60031cc8d4995f"
+    },
+    {
+      "signature": "hold_stale_gazette(uuid)",
+      "file": "hold_stale_gazette.sql",
+      "prior_body_hash": "95bf26d0a5c9a8c8d84f5f1616fc13a41a64d1562236e7ce6c069730f04557ce",
+      "current_body_hash": "95bf26d0a5c9a8c8d84f5f1616fc13a41a64d1562236e7ce6c069730f04557ce",
+      "prior_definition_hash": "b637949340440f264dab3e0e30c98e726e012f39abc3729b1cf08723d172aa0f",
+      "current_definition_hash": "b637949340440f264dab3e0e30c98e726e012f39abc3729b1cf08723d172aa0f"
+    },
+    {
+      "signature": "immutable_record()",
+      "file": "immutable_record.sql",
+      "prior_body_hash": "6b2d1e1fc7af6f43db0cf388cf2c2672353d30bc97e349463f5b3b23bdba8bde",
+      "current_body_hash": "6b2d1e1fc7af6f43db0cf388cf2c2672353d30bc97e349463f5b3b23bdba8bde",
+      "prior_definition_hash": "c17b099a9215c5d71da7807c38e124dde5cfcd8619d1be97524db4e74de0dace",
+      "current_definition_hash": "c17b099a9215c5d71da7807c38e124dde5cfcd8619d1be97524db4e74de0dace"
+    },
+    {
+      "signature": "is_native_operator()",
+      "file": "is_native_operator.sql",
+      "prior_body_hash": "3bbad8f4415efc7f5550a55e069d83405d3af120364c7ba7350a3b6cfd297364",
+      "current_body_hash": "3bbad8f4415efc7f5550a55e069d83405d3af120364c7ba7350a3b6cfd297364",
+      "prior_definition_hash": "e711597408d9da9fe6fb3d35fc9fbe5dd798c23739acfca0a1543c08c435452c",
+      "current_definition_hash": "e711597408d9da9fe6fb3d35fc9fbe5dd798c23739acfca0a1543c08c435452c"
+    },
+    {
+      "signature": "lifecycle_transition_allowed(uuid, text, text)",
+      "file": "lifecycle_transition_allowed.sql",
+      "prior_body_hash": "5129edeafeef3ea411a1bd183e5ec635c0d2126a2f573aa61dcfa419ab9418e0",
+      "current_body_hash": "5129edeafeef3ea411a1bd183e5ec635c0d2126a2f573aa61dcfa419ab9418e0",
+      "prior_definition_hash": "52eb2f2e322ac9192ea68a0cc7c9159305a6585dc427de278045062a77462060",
+      "current_definition_hash": "52eb2f2e322ac9192ea68a0cc7c9159305a6585dc427de278045062a77462060"
+    },
+    {
+      "signature": "lock_acquisition_authority(uuid, bigint, text)",
+      "file": "lock_acquisition_authority.sql",
+      "prior_body_hash": "58053907078e6558163137972e07f9ce1254dd636de3935502a629ab5881473d",
+      "current_body_hash": "58053907078e6558163137972e07f9ce1254dd636de3935502a629ab5881473d",
+      "prior_definition_hash": "69ad911f8da69aee74cfb97e5862d0d35a5131b97ab6cc610fbe00944a6221c9",
+      "current_definition_hash": "69ad911f8da69aee74cfb97e5862d0d35a5131b97ab6cc610fbe00944a6221c9"
+    },
+    {
+      "signature": "lock_approval_inputs(text, bigint, bigint)",
+      "file": "lock_approval_inputs.sql",
+      "prior_body_hash": "a8488f36195aea3addd71955a34aa8ab858624a98ef5daeef05753b35b4e2e5e",
+      "current_body_hash": "a8488f36195aea3addd71955a34aa8ab858624a98ef5daeef05753b35b4e2e5e",
+      "prior_definition_hash": "0b4c4164a4f7452d837380f74906b207247526c13557a7f95ee92b42ac2bfbd9",
+      "current_definition_hash": "0b4c4164a4f7452d837380f74906b207247526c13557a7f95ee92b42ac2bfbd9"
+    },
+    {
+      "signature": "lock_assembly_input(uuid, text, text, boolean)",
+      "file": "lock_assembly_input.sql",
+      "prior_body_hash": "1f32d5ee5f79886d3b835918c590a275d89378654b88759085f43472fe7f4e83",
+      "current_body_hash": "1f32d5ee5f79886d3b835918c590a275d89378654b88759085f43472fe7f4e83",
+      "prior_definition_hash": "abaf2a42400be93838a4f88015b5ed46dfa1e8a9a2ae1c60c6cecba621fce2f6",
+      "current_definition_hash": "abaf2a42400be93838a4f88015b5ed46dfa1e8a9a2ae1c60c6cecba621fce2f6"
+    },
+    {
+      "signature": "lock_collection(text, bigint)",
+      "file": "lock_collection.sql",
+      "prior_body_hash": "81a3fd640e6317bcf71f1c6bfdbe0ac62b8320e0a2846b3ae0c83cc9f5dda598",
+      "current_body_hash": "81a3fd640e6317bcf71f1c6bfdbe0ac62b8320e0a2846b3ae0c83cc9f5dda598",
+      "prior_definition_hash": "ea93b67a370e78e4bd10b8779e2228d3e4cf5a340dbccf0b17f5833d81779fe2",
+      "current_definition_hash": "ea93b67a370e78e4bd10b8779e2228d3e4cf5a340dbccf0b17f5833d81779fe2"
+    },
+    {
+      "signature": "lock_gazette_dependencies(text)",
+      "file": "lock_gazette_dependencies.sql",
+      "prior_body_hash": "ab0e13b81a9fcb8309e2807b723b8a47e6002422cf4d1fa8482ca8f30b9c0390",
+      "current_body_hash": "ab0e13b81a9fcb8309e2807b723b8a47e6002422cf4d1fa8482ca8f30b9c0390",
+      "prior_definition_hash": "ca9e7ab6b00ae90229c5e19dab7034ade8f6d4f1d1cef3225a9544f3eaf0a1d7",
+      "current_definition_hash": "ca9e7ab6b00ae90229c5e19dab7034ade8f6d4f1d1cef3225a9544f3eaf0a1d7"
+    },
+    {
+      "signature": "lock_synthetic_approval_policy(text, bigint, bigint)",
+      "file": "lock_synthetic_approval_policy.sql",
+      "prior_body_hash": "03c9a32e231c161a164a574e23bcdc41bfb00e9aefc05c92141e1c1b250bae3d",
+      "current_body_hash": "03c9a32e231c161a164a574e23bcdc41bfb00e9aefc05c92141e1c1b250bae3d",
+      "prior_definition_hash": "6d15e5fa8f35b0137aea7ba76a1343ba77cb0bb33674615b27e45311eae70605",
+      "current_definition_hash": "6d15e5fa8f35b0137aea7ba76a1343ba77cb0bb33674615b27e45311eae70605"
+    },
+    {
+      "signature": "metadata_allowed(text)",
+      "file": "metadata_allowed.sql",
+      "prior_body_hash": "4d4b6a06d8bdb60fa4187cd8184357a89e7f1333a7276c35215e5078dc5abddc",
+      "current_body_hash": "4d4b6a06d8bdb60fa4187cd8184357a89e7f1333a7276c35215e5078dc5abddc",
+      "prior_definition_hash": "efe6334d7cfc38913f51935c08e11a61481af2c58042d79d15475b0312e948ba",
+      "current_definition_hash": "efe6334d7cfc38913f51935c08e11a61481af2c58042d79d15475b0312e948ba"
+    },
+    {
+      "signature": "oa_block(jsonb, jsonb, jsonb)",
+      "file": "oa_block.sql",
+      "prior_body_hash": "26e83c6ac09a21e06568b91eb0c79da26a53d57a2330727f3ad030ec684a564f",
+      "current_body_hash": "26e83c6ac09a21e06568b91eb0c79da26a53d57a2330727f3ad030ec684a564f",
+      "prior_definition_hash": "b8156da2f13fa08ee512de990b6ffc6f445a95b1bcc2e943f253f434942fb07d",
+      "current_definition_hash": "b8156da2f13fa08ee512de990b6ffc6f445a95b1bcc2e943f253f434942fb07d"
+    },
+    {
+      "signature": "oa_compile(jsonb, jsonb)",
+      "file": "oa_compile.sql",
+      "prior_body_hash": "a049ab43f532e9ea77523470eadfdcbc312e8b53f3062144e5d5c292fa3670cb",
+      "current_body_hash": "a049ab43f532e9ea77523470eadfdcbc312e8b53f3062144e5d5c292fa3670cb",
+      "prior_definition_hash": "7a5c8bd0a4b25ffd8ec03c8381a8ac9454f0b8072cfb65bca548c69ddf4e2bae",
+      "current_definition_hash": "7a5c8bd0a4b25ffd8ec03c8381a8ac9454f0b8072cfb65bca548c69ddf4e2bae"
+    },
+    {
+      "signature": "oa_leaf(jsonb, jsonb, uuid, text[], boolean)",
+      "file": "oa_leaf.sql",
+      "prior_body_hash": "1741f5f48858280912b0c12e05ed65b5d0439967974029a097e9775c7bda2a99",
+      "current_body_hash": "1741f5f48858280912b0c12e05ed65b5d0439967974029a097e9775c7bda2a99",
+      "prior_definition_hash": "1f22e145d55e09fa80a55d4d1fdb2a7e47d3a9da18dffa1e63390d48a5d34b97",
+      "current_definition_hash": "1f22e145d55e09fa80a55d4d1fdb2a7e47d3a9da18dffa1e63390d48a5d34b97"
+    },
+    {
+      "signature": "oa_norm(text)",
+      "file": "oa_norm.sql",
+      "prior_body_hash": "267f186451b6682b004051206683ef5f73b27b1e7799786f9c8b0a8f054611bd",
+      "current_body_hash": "267f186451b6682b004051206683ef5f73b27b1e7799786f9c8b0a8f054611bd",
+      "prior_definition_hash": "17983e37cf8f4c0a74e0bde08c69231d8c5aae3e3400780276c277d0b222da34",
+      "current_definition_hash": "17983e37cf8f4c0a74e0bde08c69231d8c5aae3e3400780276c277d0b222da34"
+    },
+    {
+      "signature": "oa_scope(jsonb, jsonb, jsonb, text)",
+      "file": "oa_scope.sql",
+      "prior_body_hash": "8105e587991c1c8c0cc24d55b52cb9f79811139002a064d953ffaf1120aaaa4d",
+      "current_body_hash": "8105e587991c1c8c0cc24d55b52cb9f79811139002a064d953ffaf1120aaaa4d",
+      "prior_definition_hash": "69a9c231e935d09073ccb7a218a9ed13df36e68f87b069da65adad19a6bc2029",
+      "current_definition_hash": "69a9c231e935d09073ccb7a218a9ed13df36e68f87b069da65adad19a6bc2029"
+    },
+    {
+      "signature": "oa_separator(jsonb, text)",
+      "file": "oa_separator.sql",
+      "prior_body_hash": "d0168b25a9c6894507d37db14bbe127c08665f77e31c91d596725f7596754ca6",
+      "current_body_hash": "d0168b25a9c6894507d37db14bbe127c08665f77e31c91d596725f7596754ca6",
+      "prior_definition_hash": "c6bafb28bcb63eddb55cf14360ea920bccb3854e26834de1edad7f44ed380f8b",
+      "current_definition_hash": "c6bafb28bcb63eddb55cf14360ea920bccb3854e26834de1edad7f44ed380f8b"
+    },
+    {
+      "signature": "oa_shape(jsonb, text[], text[], text[])",
+      "file": "oa_shape.sql",
+      "prior_body_hash": "4e2e1119ff5ccc365fe28b7ccdc7773e756f2a0148298ab4b9795f2472117734",
+      "current_body_hash": "4e2e1119ff5ccc365fe28b7ccdc7773e756f2a0148298ab4b9795f2472117734",
+      "prior_definition_hash": "d9d725a7ea8c6cf52b363da216ef93859d465a87c3422ca69237fd76a3ea5bfa",
+      "current_definition_hash": "d9d725a7ea8c6cf52b363da216ef93859d465a87c3422ca69237fd76a3ea5bfa"
+    },
+    {
+      "signature": "operator_keys(jsonb, text[], text[])",
+      "file": "operator_keys.sql",
+      "prior_body_hash": "bdec711fac6f1546121b9b08e8dbc6abdb5d4d044ac7838b607ef5f60a74a712",
+      "current_body_hash": "bdec711fac6f1546121b9b08e8dbc6abdb5d4d044ac7838b607ef5f60a74a712",
+      "prior_definition_hash": "335a861d04ff17474c474bfbe97073cece3cf0060d788bf8c79f513350652a9b",
+      "current_definition_hash": "335a861d04ff17474c474bfbe97073cece3cf0060d788bf8c79f513350652a9b"
+    },
+    {
+      "signature": "operator_role_safe(oid)",
+      "file": "operator_role_safe.sql",
+      "prior_body_hash": "2662e9edf971edf00d1590601f87f9541a91d2846001c14cfa79c75d467db4fe",
+      "current_body_hash": "2662e9edf971edf00d1590601f87f9541a91d2846001c14cfa79c75d467db4fe",
+      "prior_definition_hash": "aa1aa50990548811bd12a2e52f7d7c1bd0557dd43af97a9b9501938d4a51cd59",
+      "current_definition_hash": "aa1aa50990548811bd12a2e52f7d7c1bd0557dd43af97a9b9501938d4a51cd59"
+    },
+    {
+      "signature": "privacy_current(uuid, bigint, text, text)",
+      "file": "privacy_current.sql",
+      "prior_body_hash": "b83c91b387730024bcefb9edaf8d6d15ba8b2c083ffcbd7fc5d8711e044f57d8",
+      "current_body_hash": "b83c91b387730024bcefb9edaf8d6d15ba8b2c083ffcbd7fc5d8711e044f57d8",
+      "prior_definition_hash": "89718314b706d5c66c55feea8107491c8e8a85c0b64e04989a027926bfc73f28",
+      "current_definition_hash": "89718314b706d5c66c55feea8107491c8e8a85c0b64e04989a027926bfc73f28"
+    },
+    {
+      "signature": "private_operation_allowed(uuid, bigint, text, text, text, text)",
+      "file": "private_operation_allowed.sql",
+      "prior_body_hash": "779268bb2aa5e406f7a87d84c785a974b4b149a67540530d5f4cdcbdde31f457",
+      "current_body_hash": "779268bb2aa5e406f7a87d84c785a974b4b149a67540530d5f4cdcbdde31f457",
+      "prior_definition_hash": "d02f6188edabd276d82ce9edfacb4cfaed5b26a79275ea3e2599d03b4271b475",
+      "current_definition_hash": "d02f6188edabd276d82ce9edfacb4cfaed5b26a79275ea3e2599d03b4271b475"
+    },
+    {
+      "signature": "read_approved_synthetic_version(text, text)",
+      "file": "read_approved_synthetic_version.sql",
+      "prior_body_hash": "0cebd1b058cd75002af2552fee9bf871efa9dc5810afc1fec965e3174b8799d9",
+      "current_body_hash": "0cebd1b058cd75002af2552fee9bf871efa9dc5810afc1fec965e3174b8799d9",
+      "prior_definition_hash": "ed04111c7066c1147bc57b25dd1ad0d63a99adfdd11d1e68526bf2a78d6aef8f",
+      "current_definition_hash": "ed04111c7066c1147bc57b25dd1ad0d63a99adfdd11d1e68526bf2a78d6aef8f"
+    },
+    {
+      "signature": "read_approved_synthetic_version_m33(text, text)",
+      "file": "read_approved_synthetic_version_m33.sql",
+      "prior_body_hash": "4dc111b35e16080bfebc263072af1242f4a2080dea7569b79035ede0ba87f8c5",
+      "current_body_hash": "4dc111b35e16080bfebc263072af1242f4a2080dea7569b79035ede0ba87f8c5",
+      "prior_definition_hash": "de5cfd90dd831a13bb22829e63df392931c2c80750c694b9e4a1afcd89bebb18",
+      "current_definition_hash": "de5cfd90dd831a13bb22829e63df392931c2c80750c694b9e4a1afcd89bebb18"
+    },
+    {
+      "signature": "read_candidates(uuid, text, uuid, integer)",
+      "file": "read_candidates.sql",
+      "prior_body_hash": "e53003917159d49095b64824f046c061e4b22bc07db0ec4227999029558003af",
+      "current_body_hash": "e53003917159d49095b64824f046c061e4b22bc07db0ec4227999029558003af",
+      "prior_definition_hash": "2fd25a54bda603c38e8998ca83790ca28c342bf1211ca4a90f32f464a09d3678",
+      "current_definition_hash": "2fd25a54bda603c38e8998ca83790ca28c342bf1211ca4a90f32f464a09d3678"
+    },
+    {
+      "signature": "read_canonical_proposal(uuid, text)",
+      "file": "read_canonical_proposal.sql",
+      "prior_body_hash": "2bae6d2c718de55fffa8a0de25f034b04d0967d03f78391966519663402f761d",
+      "current_body_hash": "2bae6d2c718de55fffa8a0de25f034b04d0967d03f78391966519663402f761d",
+      "prior_definition_hash": "125033b307ef5ccee8289553f6d5ea5cc218b205b5cd0ccda1fd06a5b8c6b02f",
+      "current_definition_hash": "125033b307ef5ccee8289553f6d5ea5cc218b205b5cd0ccda1fd06a5b8c6b02f"
+    },
+    {
+      "signature": "read_gazette_projection(uuid, text)",
+      "file": "read_gazette_projection.sql",
+      "prior_body_hash": "ed12fd523971352477bf0ce0bcf444ba2e775d20e19a80dca8a4692db03c91f9",
+      "current_body_hash": "ed12fd523971352477bf0ce0bcf444ba2e775d20e19a80dca8a4692db03c91f9",
+      "prior_definition_hash": "75c211ec4055135335685ac122491c1737e7be613a3b0934f93da46ea3f77dfa",
+      "current_definition_hash": "75c211ec4055135335685ac122491c1737e7be613a3b0934f93da46ea3f77dfa"
+    },
+    {
+      "signature": "read_snapshot(uuid, bigint, text)",
+      "file": "read_snapshot.sql",
+      "prior_body_hash": "85cc3a27454a31ca065d2efe03fa97d9f776327da284172147865a51f2a8c56f",
+      "current_body_hash": "85cc3a27454a31ca065d2efe03fa97d9f776327da284172147865a51f2a8c56f",
+      "prior_definition_hash": "aca5bb25cb4e5398189850b82a4cdda6d28171c8fbfa0fd178f6752bbae118b6",
+      "current_definition_hash": "aca5bb25cb4e5398189850b82a4cdda6d28171c8fbfa0fd178f6752bbae118b6"
+    },
+    {
+      "signature": "read_synthetic_artifact(uuid, text, text)",
+      "file": "read_synthetic_artifact.sql",
+      "prior_body_hash": "0db99b386b5202187a891917f82762f3bffa5b173b5ba1a66d5bdf18a1aaa52e",
+      "current_body_hash": "0db99b386b5202187a891917f82762f3bffa5b173b5ba1a66d5bdf18a1aaa52e",
+      "prior_definition_hash": "16b894e16378342082917829ec01bc06378783371ad0b0a930f0181cd6e0408a",
+      "current_definition_hash": "16b894e16378342082917829ec01bc06378783371ad0b0a930f0181cd6e0408a"
+    },
+    {
+      "signature": "reconcile_staging(jsonb)",
+      "file": "reconcile_staging.sql",
+      "prior_body_hash": "b4b34fba39e91d20b1da04b1d81ba05aaf9f9758d77d11ba3e43c6495bab80bb",
+      "current_body_hash": "b4b34fba39e91d20b1da04b1d81ba05aaf9f9758d77d11ba3e43c6495bab80bb",
+      "prior_definition_hash": "40deda2834b4e4c0b9289671f704c98c8d6b149c286b12990494731f56a6a727",
+      "current_definition_hash": "40deda2834b4e4c0b9289671f704c98c8d6b149c286b12990494731f56a6a727"
+    },
+    {
+      "signature": "record_material()",
+      "file": "record_material.sql",
+      "prior_body_hash": "a5384431635af354da6c234274313586d034ca429c7c814e05e9a4e43c04e7ec",
+      "current_body_hash": "a5384431635af354da6c234274313586d034ca429c7c814e05e9a4e43c04e7ec",
+      "prior_definition_hash": "46bc1e661e05ea35f8fd1d84f0f99d8f5d8b9ea25fbe711b0e0ff243c1472dc7",
+      "current_definition_hash": "46bc1e661e05ea35f8fd1d84f0f99d8f5d8b9ea25fbe711b0e0ff243c1472dc7"
+    },
+    {
+      "signature": "record_operator_assignment()",
+      "file": "record_operator_assignment.sql",
+      "prior_body_hash": "05baf03ba60d759d56e0c32df50ff1aadc0f811b2c649c293450ce95f1d57430",
+      "current_body_hash": "05baf03ba60d759d56e0c32df50ff1aadc0f811b2c649c293450ce95f1d57430",
+      "prior_definition_hash": "f0ffec5ab3e9b67844d0df9499204e132b6283b590ae3bc3c58d7893af48a613",
+      "current_definition_hash": "f0ffec5ab3e9b67844d0df9499204e132b6283b590ae3bc3c58d7893af48a613"
+    },
+    {
+      "signature": "record_operator_binding()",
+      "file": "record_operator_binding.sql",
+      "prior_body_hash": "81bf057e14393c5864712cf6263dfeff6b021df7bd59911db53f0e0fa2a2641e",
+      "current_body_hash": "81bf057e14393c5864712cf6263dfeff6b021df7bd59911db53f0e0fa2a2641e",
+      "prior_definition_hash": "bf39a4ba4fd1708816b906eb5ba5a697868dd4ed16906d6518dbc96847c810d8",
+      "current_definition_hash": "bf39a4ba4fd1708816b906eb5ba5a697868dd4ed16906d6518dbc96847c810d8"
+    },
+    {
+      "signature": "record_revision()",
+      "file": "record_revision.sql",
+      "prior_body_hash": "bf943354b814a7fbb8c638f06a2561d42c15885f34ecc1b8c5f7e1f53817caf1",
+      "current_body_hash": "bf943354b814a7fbb8c638f06a2561d42c15885f34ecc1b8c5f7e1f53817caf1",
+      "prior_definition_hash": "b4ac3025ed41b89bce8845afe9e9ed27370d4fc48e7a26e436c2d7259d1f9466",
+      "current_definition_hash": "b4ac3025ed41b89bce8845afe9e9ed27370d4fc48e7a26e436c2d7259d1f9466"
+    },
+    {
+      "signature": "record_staging_transition(uuid, text, text, uuid, bigint, bigint, bigint)",
+      "file": "record_staging_transition.sql",
+      "prior_body_hash": "f39a7361bdaadb7d29881a66c7d5627f3bfd21a2eaa905e5d578b31191933867",
+      "current_body_hash": "f39a7361bdaadb7d29881a66c7d5627f3bfd21a2eaa905e5d578b31191933867",
+      "prior_definition_hash": "f5e0f3126524281aedfa50020dd7bd2734666ce4aa8e0b6ce908c6e3db45dcd0",
+      "current_definition_hash": "f5e0f3126524281aedfa50020dd7bd2734666ce4aa8e0b6ce908c6e3db45dcd0"
+    },
+    {
+      "signature": "reserve_assembly_capacity(uuid, text, bigint, integer)",
+      "file": "reserve_assembly_capacity.sql",
+      "prior_body_hash": "930e080f7b2cc519f47684ce549860bdefbeb419508c2227b1fdf76e79da350b",
+      "current_body_hash": "930e080f7b2cc519f47684ce549860bdefbeb419508c2227b1fdf76e79da350b",
+      "prior_definition_hash": "80f54b15ae7d4bc61bdb95d9d38e3ec80d843b8feddb3b9303556a9be5e09587",
+      "current_definition_hash": "80f54b15ae7d4bc61bdb95d9d38e3ec80d843b8feddb3b9303556a9be5e09587"
+    },
+    {
+      "signature": "reserve_assembly_capacity_m31(uuid, text, bigint, integer)",
+      "file": "reserve_assembly_capacity_m31.sql",
+      "prior_body_hash": "452a637627ee037eb92c5314623dc27674d5b7c5ea453a0948c876bc8680f488",
+      "current_body_hash": "452a637627ee037eb92c5314623dc27674d5b7c5ea453a0948c876bc8680f488",
+      "prior_definition_hash": "78a652bde70fb1253f59b699bfd4c38c05024bb505e23346623fee1f70d7000a",
+      "current_definition_hash": "78a652bde70fb1253f59b699bfd4c38c05024bb505e23346623fee1f70d7000a"
+    },
+    {
+      "signature": "reserve_assembly_capacity_m32(uuid, text, bigint, integer)",
+      "file": "reserve_assembly_capacity_m32.sql",
+      "prior_body_hash": "25e250f596fd34ffc248d340d53af5fc04341d9c593fdeec2bd22f2e65433717",
+      "current_body_hash": "25e250f596fd34ffc248d340d53af5fc04341d9c593fdeec2bd22f2e65433717",
+      "prior_definition_hash": "52122766f31c8e2c8d9f84792f038d7626946ae6442b8655b99aa49f7eeac494",
+      "current_definition_hash": "52122766f31c8e2c8d9f84792f038d7626946ae6442b8655b99aa49f7eeac494"
+    },
+    {
+      "signature": "reserve_assembly_capacity_m33(uuid, text, bigint, integer)",
+      "file": "reserve_assembly_capacity_m33.sql",
+      "prior_body_hash": "6e0dbd3b22b29128cf473e744c969ccbc64f0a1ed06c51938bf56438fe478652",
+      "current_body_hash": "6e0dbd3b22b29128cf473e744c969ccbc64f0a1ed06c51938bf56438fe478652",
+      "prior_definition_hash": "b3ce2cdae96a18c07134a0b5bea82c4dd9674533440a37b2b23689e6c6e5c927",
+      "current_definition_hash": "b3ce2cdae96a18c07134a0b5bea82c4dd9674533440a37b2b23689e6c6e5c927"
+    },
+    {
+      "signature": "review_permission(text, text, text)",
+      "file": "review_permission.sql",
+      "prior_body_hash": "c0e93d15d6e861f836cdb265cd5aabd3942cf95c107ccca8397ec916b26644ed",
+      "current_body_hash": "c0e93d15d6e861f836cdb265cd5aabd3942cf95c107ccca8397ec916b26644ed",
+      "prior_definition_hash": "46be410a99c221c594a1c1ee9a7765bd2cc1ccfbe58197ba9b17f12b95783dac",
+      "current_definition_hash": "46be410a99c221c594a1c1ee9a7765bd2cc1ccfbe58197ba9b17f12b95783dac"
+    },
+    {
+      "signature": "stage_synthetic_artifact(uuid, text, uuid, bigint, text, bytea, timestamp with time zone)",
+      "file": "stage_synthetic_artifact.sql",
+      "prior_body_hash": "27e21f7e8f1e238a1df424ee2e7a8f22b7e74b8088c1cc5264b9e2659872d8e5",
+      "current_body_hash": "27e21f7e8f1e238a1df424ee2e7a8f22b7e74b8088c1cc5264b9e2659872d8e5",
+      "prior_definition_hash": "a4b11c1dc823ee81db8aadf52346c2fafd75493134f55f1552258e55f3b1366a",
+      "current_definition_hash": "a4b11c1dc823ee81db8aadf52346c2fafd75493134f55f1552258e55f3b1366a"
+    },
+    {
+      "signature": "staging_allowed(uuid, bigint, text, text)",
+      "file": "staging_allowed.sql",
+      "prior_body_hash": "35e5d20eee142ceb20bf119cc736c2319e558be86b3a953fbbbe59dc396d80d6",
+      "current_body_hash": "35e5d20eee142ceb20bf119cc736c2319e558be86b3a953fbbbe59dc396d80d6",
+      "prior_definition_hash": "451dfd2d8352aa620197a896fa698e134ca13557e8920916bbc58cd28a256f26",
+      "current_definition_hash": "451dfd2d8352aa620197a896fa698e134ca13557e8920916bbc58cd28a256f26"
+    },
+    {
+      "signature": "staging_live_bytes(text)",
+      "file": "staging_live_bytes.sql",
+      "prior_body_hash": "29e404e4db5d7566c02259b80542c682f4796f9f554195211800dbccfb7f2fb0",
+      "current_body_hash": "29e404e4db5d7566c02259b80542c682f4796f9f554195211800dbccfb7f2fb0",
+      "prior_definition_hash": "9af118fe62f359eae371a9f9536b8d2255aaa1caed53a918b5cec5a0d0d61163",
+      "current_definition_hash": "9af118fe62f359eae371a9f9536b8d2255aaa1caed53a918b5cec5a0d0d61163"
+    },
+    {
+      "signature": "staging_live_bytes_m31(text)",
+      "file": "staging_live_bytes_m31.sql",
+      "prior_body_hash": "19d801c867e60d68f077e683fcfe38d73a8a50fbe222e7a2ab8ecff541a52056",
+      "current_body_hash": "19d801c867e60d68f077e683fcfe38d73a8a50fbe222e7a2ab8ecff541a52056",
+      "prior_definition_hash": "77c1036e3421444ad71c948edfe908141523cb5fd866a60021f4c7ec10fc0e59",
+      "current_definition_hash": "77c1036e3421444ad71c948edfe908141523cb5fd866a60021f4c7ec10fc0e59"
+    },
+    {
+      "signature": "staging_live_bytes_m32(text)",
+      "file": "staging_live_bytes_m32.sql",
+      "prior_body_hash": "753140a335522037ed1e8b2c7e5f081584566fe329141c59ccd3dea816d51f15",
+      "current_body_hash": "753140a335522037ed1e8b2c7e5f081584566fe329141c59ccd3dea816d51f15",
+      "prior_definition_hash": "aa31828ff99755506222f7450858efc7f6b765ec173cf2e996fd4a803726847e",
+      "current_definition_hash": "aa31828ff99755506222f7450858efc7f6b765ec173cf2e996fd4a803726847e"
+    },
+    {
+      "signature": "staging_live_bytes_m33(text)",
+      "file": "staging_live_bytes_m33.sql",
+      "prior_body_hash": "07e5379fe8262c5a5eac6d33f4e20989dadb8d54dcf3002b39b55a91c37b7562",
+      "current_body_hash": "07e5379fe8262c5a5eac6d33f4e20989dadb8d54dcf3002b39b55a91c37b7562",
+      "prior_definition_hash": "8c398550392cb8932370d09fe93448f32a3c53a1466213d90b0c67d898965e0f",
+      "current_definition_hash": "8c398550392cb8932370d09fe93448f32a3c53a1466213d90b0c67d898965e0f"
+    },
+    {
+      "signature": "store_canonical_proposal(jsonb, bytea, jsonb)",
+      "file": "store_canonical_proposal.sql",
+      "prior_file": "prior_store_canonical_proposal.sql",
+      "prior_body_hash": "4959917e890debba343835022b89f820665b7db4ea3b0f3d012ff04d2612a048",
+      "current_body_hash": "f9e9c9caf4fe4fba1673d41535af714fdb15e08fa504a9878befba238c00150f",
+      "prior_definition_hash": "54aa4f908ec868dafec68f8b80050a0e6b6073e56fa860736c913c5f8b89c33a",
+      "current_definition_hash": "4acde946da8284c22fc1430c52a282b0ac2d4562d3c191e70dd5324769d3a17f"
+    },
+    {
+      "signature": "sync_assembly_parent()",
+      "file": "sync_assembly_parent.sql",
+      "prior_body_hash": "e21260e5674c5e0c5ced8a87f0ebd168c10cdb18423d73a950796ccb9ec7d9f3",
+      "current_body_hash": "e21260e5674c5e0c5ced8a87f0ebd168c10cdb18423d73a950796ccb9ec7d9f3",
+      "prior_definition_hash": "d4a663a552f2cb41ab40f73915304989497d3813a6d9d35b03c723820d77a785",
+      "current_definition_hash": "d4a663a552f2cb41ab40f73915304989497d3813a6d9d35b03c723820d77a785"
+    },
+    {
+      "signature": "synthetic_binding_hash(uuid)",
+      "file": "synthetic_binding_hash.sql",
+      "prior_body_hash": "60be092f91f0607e2ef24efdbc91144275e0608f096391ab6c6f7fd4cd728cf2",
+      "current_body_hash": "60be092f91f0607e2ef24efdbc91144275e0608f096391ab6c6f7fd4cd728cf2",
+      "prior_definition_hash": "49ecc41f2f0429e999fc32cf507b9b080d58cfe2c005693f0ae110c023c157f9",
+      "current_definition_hash": "49ecc41f2f0429e999fc32cf507b9b080d58cfe2c005693f0ae110c023c157f9"
+    },
+    {
+      "signature": "transition_assembly(uuid, text, text)",
+      "file": "transition_assembly.sql",
+      "prior_body_hash": "a40e5b38d10769273452cd6f027f418d0c029a3e60057b2bee007ffa803facb9",
+      "current_body_hash": "a40e5b38d10769273452cd6f027f418d0c029a3e60057b2bee007ffa803facb9",
+      "prior_definition_hash": "5b123e8df88f0226928e08106d90775d7abd7de51e7f42e8b0b1dad9624e78ec",
+      "current_definition_hash": "5b123e8df88f0226928e08106d90775d7abd7de51e7f42e8b0b1dad9624e78ec"
+    },
+    {
+      "signature": "transition_assembly_m31(uuid, text, text)",
+      "file": "transition_assembly_m31.sql",
+      "prior_body_hash": "845b4a6e7f5f2feb89b89ed24dc8a3a8932fe99c66683575dec1790740ad4f15",
+      "current_body_hash": "845b4a6e7f5f2feb89b89ed24dc8a3a8932fe99c66683575dec1790740ad4f15",
+      "prior_definition_hash": "f6d6ed000326db9562a8be87eddaa443a05521426ba914242f6d349058b9a66a",
+      "current_definition_hash": "f6d6ed000326db9562a8be87eddaa443a05521426ba914242f6d349058b9a66a"
+    },
+    {
+      "signature": "transition_assembly_m32(uuid, text, text)",
+      "file": "transition_assembly_m32.sql",
+      "prior_body_hash": "9dfed813772103afe5ebd47313c626a9bf588025ac0bc61624f2b487d060b9b2",
+      "current_body_hash": "9dfed813772103afe5ebd47313c626a9bf588025ac0bc61624f2b487d060b9b2",
+      "prior_definition_hash": "bd5a4091bcf2327036b460c2023da2b6986ba7cf67a253b637b28839d3cd5f48",
+      "current_definition_hash": "bd5a4091bcf2327036b460c2023da2b6986ba7cf67a253b637b28839d3cd5f48"
+    },
+    {
+      "signature": "transition_assembly_m33(uuid, text, text)",
+      "file": "transition_assembly_m33.sql",
+      "prior_body_hash": "84f5f5419656c129c8765d65816044cb2edfaccce5ef0b1cc3996fb3e415acd5",
+      "current_body_hash": "84f5f5419656c129c8765d65816044cb2edfaccce5ef0b1cc3996fb3e415acd5",
+      "prior_definition_hash": "e2aa2f9217c9a9e2da59840f0c14a3b5c8a469339e0a429fc89f41b4dfd451da",
+      "current_definition_hash": "e2aa2f9217c9a9e2da59840f0c14a3b5c8a469339e0a429fc89f41b4dfd451da"
+    },
+    {
+      "signature": "validate_approval_commit()",
+      "file": "validate_approval_commit.sql",
+      "prior_body_hash": "50e6cd84cb51161c9969b174e6592cb6db63ac09b26085d89f2f06cc9d0bf222",
+      "current_body_hash": "50e6cd84cb51161c9969b174e6592cb6db63ac09b26085d89f2f06cc9d0bf222",
+      "prior_definition_hash": "b1c0413624ee9d5503665d3c89624d4fe8cd95a1a1c61a869f83a8072011f1e6",
+      "current_definition_hash": "b1c0413624ee9d5503665d3c89624d4fe8cd95a1a1c61a869f83a8072011f1e6"
+    },
+    {
+      "signature": "validate_approval_commit_m33()",
+      "file": "validate_approval_commit_m33.sql",
+      "prior_body_hash": "e07cbe72afa898584854aa38ff524e1284aa1b26463f1110809bfc85c225705f",
+      "current_body_hash": "e07cbe72afa898584854aa38ff524e1284aa1b26463f1110809bfc85c225705f",
+      "prior_definition_hash": "82044ab3ead7344de021ae44865c9eed141ef10b0dde94ed1f9bc3437e2f3c40",
+      "current_definition_hash": "82044ab3ead7344de021ae44865c9eed141ef10b0dde94ed1f9bc3437e2f3c40"
+    },
+    {
+      "signature": "validate_approved_cell()",
+      "file": "validate_approved_cell.sql",
+      "prior_body_hash": "6fae55cabd63655eda1051b265391c1e93ce245a71969326093ba27d5b90bf76",
+      "current_body_hash": "6fae55cabd63655eda1051b265391c1e93ce245a71969326093ba27d5b90bf76",
+      "prior_definition_hash": "6d0cb27b1c864e05b91f5629b4c0bd35baf606a50068ef4760fa03fa810ea0c9",
+      "current_definition_hash": "6d0cb27b1c864e05b91f5629b4c0bd35baf606a50068ef4760fa03fa810ea0c9"
+    },
+    {
+      "signature": "validate_approved_grid()",
+      "file": "validate_approved_grid.sql",
+      "prior_body_hash": "b7262bd9abaae6ebc6d6f5153029fa597e940a7eaaee9c098e9f0900b938f042",
+      "current_body_hash": "b7262bd9abaae6ebc6d6f5153029fa597e940a7eaaee9c098e9f0900b938f042",
+      "prior_definition_hash": "ee7e4cb5e8b932478812d0badcb54f1556a1eb2bcc04b030907cabc16b95f6e0",
+      "current_definition_hash": "ee7e4cb5e8b932478812d0badcb54f1556a1eb2bcc04b030907cabc16b95f6e0"
+    },
+    {
+      "signature": "validate_approved_span()",
+      "file": "validate_approved_span.sql",
+      "prior_body_hash": "62e0b3b710885ea2374b9c95691d5f423967b1094740b1bc82051f7be6c5fbcb",
+      "current_body_hash": "62e0b3b710885ea2374b9c95691d5f423967b1094740b1bc82051f7be6c5fbcb",
+      "prior_definition_hash": "c065ba51d9737975f0a2e41bbb9b4a63d06cf154d4a8494aa4b2bb99c347e437",
+      "current_definition_hash": "c065ba51d9737975f0a2e41bbb9b4a63d06cf154d4a8494aa4b2bb99c347e437"
+    },
+    {
+      "signature": "validate_approved_tree()",
+      "file": "validate_approved_tree.sql",
+      "prior_body_hash": "83891f51f58d4317ce5eaae0d77f0db50459355cf00273255b68531c01523cf1",
+      "current_body_hash": "83891f51f58d4317ce5eaae0d77f0db50459355cf00273255b68531c01523cf1",
+      "prior_definition_hash": "1340102ee8987231b1e614ff4e107de4277ebae494e52f6bdd5cb7113a9fcabb",
+      "current_definition_hash": "1340102ee8987231b1e614ff4e107de4277ebae494e52f6bdd5cb7113a9fcabb"
+    },
+    {
+      "signature": "validate_assembly_update()",
+      "file": "validate_assembly_update.sql",
+      "prior_body_hash": "02b9d8e4bb7342d6f8683e177bd6188044e37f1a9ef89f46f9a3e22051d62dfe",
+      "current_body_hash": "02b9d8e4bb7342d6f8683e177bd6188044e37f1a9ef89f46f9a3e22051d62dfe",
+      "prior_definition_hash": "2280064958c950e25fd05e4072d335ba62a8d2b8e8bfa89346ad81c6ed7664d8",
+      "current_definition_hash": "2280064958c950e25fd05e4072d335ba62a8d2b8e8bfa89346ad81c6ed7664d8"
+    },
+    {
+      "signature": "validate_canonical_update()",
+      "file": "validate_canonical_update.sql",
+      "prior_body_hash": "447715bbecc2c339aaeb4c8bfcab8d36705c5041bf699380757a40da6c9ece71",
+      "current_body_hash": "447715bbecc2c339aaeb4c8bfcab8d36705c5041bf699380757a40da6c9ece71",
+      "prior_definition_hash": "32539db8c0bc1eab976cffa66dfc3e45f15dd75ae25a1d8129815ae9877828d2",
+      "current_definition_hash": "32539db8c0bc1eab976cffa66dfc3e45f15dd75ae25a1d8129815ae9877828d2"
+    },
+    {
+      "signature": "validate_gazette_binding()",
+      "file": "validate_gazette_binding.sql",
+      "prior_body_hash": "9b66387cf797d4670851debcf9b937d90124133a90d9160843e1d54b44431a49",
+      "current_body_hash": "9b66387cf797d4670851debcf9b937d90124133a90d9160843e1d54b44431a49",
+      "prior_definition_hash": "4a33c7e216ab01c4c0a77743792de57f0a7f88494ca62d5ab34a6ce109863001",
+      "current_definition_hash": "4a33c7e216ab01c4c0a77743792de57f0a7f88494ca62d5ab34a6ce109863001"
+    },
+    {
+      "signature": "validate_gazette_commit()",
+      "file": "validate_gazette_commit.sql",
+      "prior_body_hash": "5659d0ace55df315dfbb839fc9e260f4b3ff715ca2ca538945d559a8877d26f7",
+      "current_body_hash": "5659d0ace55df315dfbb839fc9e260f4b3ff715ca2ca538945d559a8877d26f7",
+      "prior_definition_hash": "a42deb38f6d771d8a782d3eb7b045abd1b527a089f97de2e8b4497ba12986b4b",
+      "current_definition_hash": "a42deb38f6d771d8a782d3eb7b045abd1b527a089f97de2e8b4497ba12986b4b"
+    },
+    {
+      "signature": "validate_gazette_correspondence()",
+      "file": "validate_gazette_correspondence.sql",
+      "prior_body_hash": "6c6aa02296a0d97d737acf2dce843eeb33edeed80f3280fd7d4c516370e4a0d4",
+      "current_body_hash": "6c6aa02296a0d97d737acf2dce843eeb33edeed80f3280fd7d4c516370e4a0d4",
+      "prior_definition_hash": "1f0e53d750568e3f3846eb9487dc7d5ce8ea6bb6b93a0f205c7fcdda5014ccba",
+      "current_definition_hash": "1f0e53d750568e3f3846eb9487dc7d5ce8ea6bb6b93a0f205c7fcdda5014ccba"
+    },
+    {
+      "signature": "validate_node_alignment()",
+      "file": "validate_node_alignment.sql",
+      "prior_body_hash": "5d72aef62da83093404bb6c2168ab49c009540760a6cfacd3d566d5c090a9fc0",
+      "current_body_hash": "5d72aef62da83093404bb6c2168ab49c009540760a6cfacd3d566d5c090a9fc0",
+      "prior_definition_hash": "80838893aae90628bc93abb4e2f61c2d42520f2dce15bb89c4145a4f34e9464c",
+      "current_definition_hash": "80838893aae90628bc93abb4e2f61c2d42520f2dce15bb89c4145a4f34e9464c"
+    },
+    {
+      "signature": "validate_snapshot_head()",
+      "file": "validate_snapshot_head.sql",
+      "prior_body_hash": "52cddc8b767a6825542e587ecb7bf315b8fddafe8f4a1d2cb01cbdd2f05a5de5",
+      "current_body_hash": "52cddc8b767a6825542e587ecb7bf315b8fddafe8f4a1d2cb01cbdd2f05a5de5",
+      "prior_definition_hash": "fd6bfd8e5be9ce79b23898a4c05a7344f1d0d8f38b8bf88fb348012b4f697a0b",
+      "current_definition_hash": "fd6bfd8e5be9ce79b23898a4c05a7344f1d0d8f38b8bf88fb348012b4f697a0b"
+    },
+    {
+      "signature": "validate_staging()",
+      "file": "validate_staging.sql",
+      "prior_body_hash": "9b3b941cb7640b303cc1d9b775ff3e39733dc6cc91249fefe2cfd6cff3ef3e67",
+      "current_body_hash": "9b3b941cb7640b303cc1d9b775ff3e39733dc6cc91249fefe2cfd6cff3ef3e67",
+      "prior_definition_hash": "7be34a42f01ab20209f5bd1c081fca3f23b071cc071fa08a1c2c042b310dd57c",
+      "current_definition_hash": "7be34a42f01ab20209f5bd1c081fca3f23b071cc071fa08a1c2c042b310dd57c"
+    },
+    {
+      "signature": "validate_staging_m22()",
+      "file": "validate_staging_m22.sql",
+      "prior_body_hash": "43288d87d791a58ac3918caf9e765e0cb9c8142d84d965d9474fc43d097b2b23",
+      "current_body_hash": "43288d87d791a58ac3918caf9e765e0cb9c8142d84d965d9474fc43d097b2b23",
+      "prior_definition_hash": "3ed633d50173e93cd3c03e20d24b4a6e6a4a4e735c3c5fdc15eeab4556e1fcb8",
+      "current_definition_hash": "3ed633d50173e93cd3c03e20d24b4a6e6a4a4e735c3c5fdc15eeab4556e1fcb8"
+    },
+    {
+      "signature": "validate_synthetic_binding()",
+      "file": "validate_synthetic_binding.sql",
+      "prior_body_hash": "250ecb25c3cee4ba2b51925606719eae02ab8ca8eb1da0275e5bcfa9a3ed8d14",
+      "current_body_hash": "250ecb25c3cee4ba2b51925606719eae02ab8ca8eb1da0275e5bcfa9a3ed8d14",
+      "prior_definition_hash": "3dd291a444b2c5aa66fa785acf0fd383f1e4c67fe937e0a8d84e42b8066f209e",
+      "current_definition_hash": "3dd291a444b2c5aa66fa785acf0fd383f1e4c67fe937e0a8d84e42b8066f209e"
+    },
+    {
+      "signature": "validate_synthetic_staging()",
+      "file": "validate_synthetic_staging.sql",
+      "prior_body_hash": "f48a12b353ea3b38b8cb09edcd2bc94ef01503bba815b2c6c8b1923d83eecb60",
+      "current_body_hash": "f48a12b353ea3b38b8cb09edcd2bc94ef01503bba815b2c6c8b1923d83eecb60",
+      "prior_definition_hash": "52a28aa7286fe781faf37c1c030e5cf8f6c2991c2f7fe6b75eabd0be0c1438d4",
+      "current_definition_hash": "52a28aa7286fe781faf37c1c030e5cf8f6c2991c2f7fe6b75eabd0be0c1438d4"
+    },
+    {
+      "signature": "validate_synthetic_staging_m22()",
+      "file": "validate_synthetic_staging_m22.sql",
+      "prior_body_hash": "f1adb6590f75712a1800398297069216d147292a9b7700c13596a7beb58df383",
+      "current_body_hash": "f1adb6590f75712a1800398297069216d147292a9b7700c13596a7beb58df383",
+      "prior_definition_hash": "11884ab775b91a6708cc8c4a55b57c173d9622cb91f6860c110c2b45d9b8fb38",
+      "current_definition_hash": "11884ab775b91a6708cc8c4a55b57c173d9622cb91f6860c110c2b45d9b8fb38"
+    },
+    {
+      "signature": "validate_synthetic_staging_m23()",
+      "file": "validate_synthetic_staging_m23.sql",
+      "prior_body_hash": "4391c973129d28ddb7512f7e67a163ab3f06308c12f8f0c45748ef658b13ee3f",
+      "current_body_hash": "4391c973129d28ddb7512f7e67a163ab3f06308c12f8f0c45748ef658b13ee3f",
+      "prior_definition_hash": "31aa96921725b125cef51febfa1afe7d69509c9ffad8734a4d1bd6babd8aff92",
+      "current_definition_hash": "31aa96921725b125cef51febfa1afe7d69509c9ffad8734a4d1bd6babd8aff92"
+    }
+  ],
+  "literals": {
+    "role_literal_e7ac078666": ":",
+    "role_literal_9f84896138": ":assembly:",
+    "role_literal_f46bd8af98": ":gazette-binding:",
+    "role_literal_7f5aac8ff7": ":gazette-command:",
+    "role_literal_91e81414d2": ":approve-expression:",
+    "role_literal_28fcec2be8": ":approval-command:",
+    "role_literal_0efa318b48": "_acquisition",
+    "role_literal_7d239390fb": "_release",
+    "role_literal_698c8026af": "_serving",
+    "role_literal_64bc633714": "_review",
+    "role_literal_fbce7fd9ca": "_guard",
+    "role_literal_5d06a72edb": ":lifecycle:",
+    "role_literal_2e686ad867": ":stage:"
+  },
+  "vocabulary_file": "vocabularies/v1.json",
+  "vocabulary_hash": "cac594e752fdb6c2cb6adfc63930ceea8a8fe8be3afe9570552d5c2f486d8c80"
+}

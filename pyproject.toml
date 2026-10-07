@@ -19,13 +19,14 @@ alvary-operator = "rights.cli:main"
 include = ["api*", "schema*", "rights*", "ingestion*", "exports*"]
 
 [tool.setuptools.package-data]
-schema = ["*.json"]
+schema = ["*.json", "vocabularies/*.json"]
+rights = ["sql/*/*.sql", "sql/*/*.json"]
 ingestion = ["catalogue/*.json"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
-markers = ["postgres: requires --run-postgres and an isolated PostgreSQL test database"]
+markers = ["postgres: requires an isolated PostgreSQL test database (excluded only by --fast)", "fresh_migrations: exercise actual empty/older-version upgrades instead of a migrated template"]
 
 [tool.ruff]
 line-length = 110

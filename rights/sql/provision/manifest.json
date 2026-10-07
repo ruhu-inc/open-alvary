@@ -1,0 +1,148 @@
+[
+  {
+    "revision": "0003",
+    "anchor": null,
+    "file": "v0003.sql",
+    "requires": [
+      "base.identity_collections",
+      "corpus.eligible_metadata",
+      "corpus.metadata_projection",
+      "policy.acquisition_assessment",
+      "policy.assigned",
+      "policy.audit_event",
+      "policy.collection_decision",
+      "policy.controller_record",
+      "policy.current_actor",
+      "policy.erase_staged",
+      "policy.evidence",
+      "policy.lock_approval_inputs",
+      "policy.lock_collection",
+      "policy.metadata_allowed",
+      "policy.privacy_review",
+      "policy.review_permission",
+      "policy.revision_head",
+      "policy.staging_allowed",
+      "policy.verification_material",
+      "policy.verification_policy",
+      "policy.version_binding",
+      "policy.version_override",
+      "staging.staged_artifact"
+    ]
+  },
+  {
+    "revision": "0004",
+    "anchor": "policy.command_receipt",
+    "file": "v0004.sql",
+    "requires": [
+      "policy.actor",
+      "policy.apply_operator_command",
+      "policy.collection_decision",
+      "policy.command_receipt",
+      "policy.evidence",
+      "policy.operator_event",
+      "policy.verification_material",
+      "policy.verification_policy"
+    ]
+  },
+  {
+    "revision": "0005",
+    "anchor": "policy.synthetic_staging_limit",
+    "file": "v0005.sql",
+    "requires": [
+      "policy.acquisition_assessment",
+      "policy.apply_acquisition_command",
+      "policy.controller_record",
+      "policy.is_native_operator",
+      "policy.privacy_review",
+      "policy.private_operation_allowed",
+      "policy.read_synthetic_artifact",
+      "policy.stage_synthetic_artifact",
+      "policy.synthetic_staging_limit",
+      "staging.staged_artifact"
+    ]
+  },
+  {
+    "revision": "0006",
+    "anchor": "policy.reconcile_staging",
+    "file": "v0006.sql",
+    "requires": [
+      "policy.lifecycle_receipt",
+      "policy.reconcile_staging",
+      "policy.staging_lifecycle_event"
+    ]
+  },
+  {
+    "revision": "0007",
+    "anchor": "policy.assembly_receipt",
+    "file": "v0007.sql",
+    "requires": [
+      "policy.apply_assembly_command",
+      "policy.assembly_lifecycle_event",
+      "policy.assembly_receipt",
+      "policy.read_candidates",
+      "policy.read_snapshot",
+      "staging.adapter_candidate",
+      "staging.snapshot_head",
+      "staging.snapshot_resolution",
+      "staging.snapshot_selection",
+      "staging.staging_snapshot",
+      "staging.synthetic_run"
+    ]
+  },
+  {
+    "revision": "0008",
+    "anchor": "staging.canonical_proposal",
+    "file": "v0008.sql",
+    "requires": [
+      "policy.canonical_inputs",
+      "policy.read_canonical_proposal",
+      "policy.store_canonical_proposal",
+      "staging.canonical_proposal"
+    ]
+  },
+  {
+    "revision": "0009",
+    "anchor": "staging.synthetic_expression_binding",
+    "file": "v0009.sql",
+    "requires": [
+      "base.identity_expressions",
+      "base.identity_manifestations",
+      "base.identity_work_manifestations",
+      "base.identity_works",
+      "corpus.approved_anchor",
+      "corpus.approved_cell",
+      "corpus.approved_table",
+      "corpus.approved_version",
+      "corpus.cell_node",
+      "corpus.document_order",
+      "corpus.footnote_reference",
+      "corpus.node_alignment",
+      "corpus.representation_head",
+      "corpus.representation_revision",
+      "corpus.unavailable_mapping",
+      "corpus.version_head",
+      "corpus.version_node",
+      "policy.apply_synthetic_approval",
+      "policy.approval_commit",
+      "policy.approval_receipt",
+      "policy.read_approved_synthetic_version",
+      "staging.snapshot_review",
+      "staging.synthetic_expression_binding"
+    ]
+  },
+  {
+    "revision": "0010",
+    "anchor": "staging.gazette_item_binding",
+    "file": "v0010.sql",
+    "requires": [
+      "corpus.gazette_correspondence",
+      "corpus.gazette_correspondence_head",
+      "policy.apply_gazette_command",
+      "policy.gazette_receipt",
+      "policy.read_approved_synthetic_version_m33",
+      "policy.read_gazette_projection",
+      "staging.gazette_item_binding",
+      "staging.gazette_item_review"
+    ]
+  }
+]

@@ -1,0 +1,18 @@
+GRANT SELECT ON {{base}}.identity_works,{{base}}.identity_expressions,{{base}}.identity_manifestations,{{base}}.identity_work_manifestations TO {{role_guard}};
+GRANT UPDATE(state,payload) ON {{staging}}.synthetic_expression_binding TO {{role_guard}};
+GRANT INSERT,UPDATE(state,payload) ON {{staging}}.snapshot_review TO {{role_guard}};
+GRANT INSERT,UPDATE(state,payload,canonical_bytes) ON {{corpus}}.approved_version TO {{role_guard}};
+GRANT INSERT,UPDATE(state,payload) ON {{corpus}}.representation_revision TO {{role_guard}};
+GRANT INSERT,UPDATE ON {{corpus}}.version_head,{{corpus}}.representation_head TO {{role_guard}};
+GRANT INSERT ON {{corpus}}.version_node TO {{role_guard}};
+GRANT INSERT ON {{corpus}}.node_alignment TO {{role_guard}};
+GRANT INSERT ON {{corpus}}.approved_anchor TO {{role_guard}};
+GRANT INSERT ON {{corpus}}.approved_table TO {{role_guard}};
+GRANT INSERT ON {{corpus}}.approved_cell TO {{role_guard}};
+GRANT INSERT ON {{corpus}}.cell_node TO {{role_guard}};
+GRANT INSERT ON {{corpus}}.document_order TO {{role_guard}};
+GRANT INSERT ON {{corpus}}.unavailable_mapping TO {{role_guard}};
+GRANT INSERT ON {{corpus}}.footnote_reference TO {{role_guard}};
+GRANT INSERT ON {{policy}}.approval_receipt,{{policy}}.approval_commit TO {{role_guard}};
+GRANT EXECUTE ON FUNCTION {{policy}}.apply_synthetic_approval(jsonb) TO {{role_review}},{{role_release}};
+GRANT EXECUTE ON FUNCTION {{policy}}.read_approved_synthetic_version(text,text) TO {{role_acquisition}};

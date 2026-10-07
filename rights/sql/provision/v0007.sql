@@ -1,0 +1,12 @@
+GRANT INSERT ON {{staging}}.synthetic_run TO {{role_guard}};
+GRANT INSERT ON {{staging}}.adapter_candidate TO {{role_guard}};
+GRANT INSERT ON {{staging}}.staging_snapshot TO {{role_guard}};
+GRANT INSERT ON {{staging}}.snapshot_head TO {{role_guard}};
+GRANT INSERT ON {{staging}}.snapshot_selection TO {{role_guard}};
+GRANT INSERT ON {{staging}}.snapshot_resolution TO {{role_guard}};
+GRANT INSERT ON {{policy}}.assembly_receipt,{{policy}}.assembly_lifecycle_event TO {{role_guard}};
+GRANT UPDATE(state,payload) ON {{staging}}.adapter_candidate,{{staging}}.staging_snapshot TO {{role_guard}};
+GRANT UPDATE(revision) ON {{staging}}.snapshot_head TO {{role_guard}};
+GRANT EXECUTE ON FUNCTION {{policy}}.apply_assembly_command(jsonb) TO {{role_acquisition}};
+GRANT EXECUTE ON FUNCTION {{policy}}.read_candidates(uuid,text,uuid,integer) TO {{role_acquisition}};
+GRANT EXECUTE ON FUNCTION {{policy}}.read_snapshot(uuid,bigint,text) TO {{role_acquisition}};

@@ -1,0 +1,23 @@
+{
+  "version": "policy-vocabulary-1",
+  "permissions": [
+    "discover",
+    "acquire",
+    "retain",
+    "external_process",
+    "redistribute_metadata",
+    "redistribute_text",
+    "quote",
+    "derive",
+    "commercial_reuse",
+    "publish_fixture"
+  ],
+  "materials": [
+    "operative_tables",
+    "amounts",
+    "dates",
+    "negations",
+    "cross_references",
+    "identity_citation"
+  ]
+}
