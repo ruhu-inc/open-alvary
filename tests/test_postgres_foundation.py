@@ -104,7 +104,7 @@ def test_nonempty_foundation_downgrade_preserves_decisions_audit_and_revision(fo
         config.attributes["connection"] = conn
         command.downgrade(config, "0002")
     with f.engine.connect() as conn:
-        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0003"
+        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0004"
     with f.as_role("review") as conn:
         assert conn.scalar(text(f"SELECT count(*) FROM {f.name(conn, 'policy', 'collection_decision')}")) == 1
         assert conn.scalar(text(f"SELECT count(*) FROM {f.name(conn, 'policy', 'audit_event')}")) == 1

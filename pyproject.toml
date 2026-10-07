@@ -12,6 +12,9 @@ dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "pydantic>=2.10,<3", "s
 [project.optional-dependencies]
 dev = ["pytest>=8,<10", "ruff>=0.9,<1"]
 
+[project.scripts]
+alvary-operator = "rights.cli:main"
+
 [tool.setuptools.packages.find]
 include = ["api*", "schema*", "rights*", "ingestion*", "exports*"]
 

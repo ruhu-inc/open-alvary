@@ -58,6 +58,18 @@ def provision_roles(conn: Connection, namespace: PolicyNamespace) -> dict[str, s
     conn.execute(text(f"GRANT SELECT ON {quote(namespace.base)}.identity_collections TO {guard}"))
     conn.execute(text(f"GRANT INSERT,UPDATE ON {p}.revision_head TO {guard}"))
     conn.execute(text(f"GRANT INSERT ON {p}.audit_event TO {guard}"))
+    has_commands = conn.scalar(
+        text("SELECT to_regclass(:name) IS NOT NULL"),
+        {"name": namespace.schema("policy") + ".command_receipt"},
+    )
+    if has_commands:
+        conn.execute(text(f"GRANT INSERT ON {p}.command_receipt,{p}.operator_event,{p}.evidence TO {guard}"))
+        conn.execute(text(f"GRANT UPDATE(active) ON {p}.actor TO {guard}"))
+        conn.execute(
+            text(
+                f"GRANT INSERT ON {p}.collection_decision,{p}.verification_policy,{p}.verification_material TO {guard}"
+            )
+        )
     conn.execute(text(f"GRANT UPDATE ON {s}.staged_artifact TO {guard}"))
     conn.execute(text(f"GRANT CREATE ON SCHEMA {p},{c} TO {guard}"))
     functions = (
@@ -108,6 +120,8 @@ def provision_roles(conn: Connection, namespace: PolicyNamespace) -> dict[str, s
         ("erase_staged(uuid)", acquisition),
     ):
         conn.execute(text(f"GRANT EXECUTE ON FUNCTION {p}.{signature} TO {grantees}"))
+    if has_commands:
+        conn.execute(text(f"GRANT EXECUTE ON FUNCTION {p}.apply_operator_command(jsonb) TO {review}"))
     return roles
 
 

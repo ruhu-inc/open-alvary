@@ -1,0 +1,595 @@
+{
+  "$defs": {
+    "CommandResult": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Command Id"
+        },
+        "status": {
+          "enum": [
+            "applied",
+            "conflict",
+            "forbidden",
+            "validation_failed",
+            "unavailable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision"
+        },
+        "replayed": {
+          "default": false,
+          "title": "Replayed",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "command_id",
+        "status"
+      ],
+      "title": "CommandResult",
+      "type": "object"
+    },
+    "DecisionCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "expected_revision": {
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "action": {
+          "const": "record_collection_decision",
+          "title": "Action",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/DecisionInput"
+        }
+      },
+      "required": [
+        "command_id",
+        "collection_id",
+        "expected_revision",
+        "reason",
+        "action",
+        "payload"
+      ],
+      "title": "DecisionCommand",
+      "type": "object"
+    },
+    "DecisionInput": {
+      "additionalProperties": false,
+      "properties": {
+        "discover": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Discover",
+          "type": "string"
+        },
+        "acquire": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Acquire",
+          "type": "string"
+        },
+        "retain": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Retain",
+          "type": "string"
+        },
+        "external_process": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "External Process",
+          "type": "string"
+        },
+        "redistribute_metadata": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Redistribute Metadata",
+          "type": "string"
+        },
+        "redistribute_text": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Redistribute Text",
+          "type": "string"
+        },
+        "quote": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Quote",
+          "type": "string"
+        },
+        "derive": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Derive",
+          "type": "string"
+        },
+        "commercial_reuse": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Commercial Reuse",
+          "type": "string"
+        },
+        "publish_fixture": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Publish Fixture",
+          "type": "string"
+        },
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date-time",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "state": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "approved",
+            "revoked"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "basis_type": {
+          "enum": [
+            "open_licence",
+            "direct_permission",
+            "statutory_exclusion",
+            "public_domain_expiry",
+            "government_work_rule",
+            "original_authorship",
+            "statutory_exception",
+            "unknown"
+          ],
+          "title": "Basis Type",
+          "type": "string"
+        },
+        "conditions_satisfied": {
+          "default": false,
+          "title": "Conditions Satisfied",
+          "type": "boolean"
+        },
+        "metadata_privacy_class": {
+          "enum": [
+            "no_personal_data",
+            "personal_data",
+            "unknown"
+          ],
+          "title": "Metadata Privacy Class",
+          "type": "string"
+        },
+        "privacy_reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Privacy Reason",
+          "type": "string"
+        },
+        "privacy_review_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Privacy Review Id"
+        },
+        "privacy_review_revision": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Privacy Review Revision"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "valid_from",
+        "expires_at",
+        "basis_type",
+        "metadata_privacy_class",
+        "privacy_reason"
+      ],
+      "title": "DecisionInput",
+      "type": "object"
+    },
+    "EvidenceCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "expected_revision": {
+          "const": 0,
+          "default": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "action": {
+          "const": "record_evidence",
+          "title": "Action",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/EvidenceInput"
+        }
+      },
+      "required": [
+        "command_id",
+        "collection_id",
+        "reason",
+        "action",
+        "payload"
+      ],
+      "title": "EvidenceCommand",
+      "type": "object"
+    },
+    "EvidenceInput": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "private_reference": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Private Reference",
+          "type": "string"
+        },
+        "evidence_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Evidence Hash",
+          "type": "string"
+        },
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "private_reference",
+        "evidence_hash",
+        "observed_at"
+      ],
+      "title": "EvidenceInput",
+      "type": "object"
+    },
+    "MaterialInput": {
+      "additionalProperties": false,
+      "properties": {
+        "material_class": {
+          "enum": [
+            "operative_tables",
+            "amounts",
+            "dates",
+            "negations",
+            "cross_references",
+            "identity_citation"
+          ],
+          "title": "Material Class",
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "human_source_comparison",
+            "validated_native_sampling"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "sample_numerator": {
+          "exclusiveMinimum": 0,
+          "title": "Sample Numerator",
+          "type": "integer"
+        },
+        "sample_denominator": {
+          "exclusiveMinimum": 0,
+          "title": "Sample Denominator",
+          "type": "integer"
+        },
+        "competence_evidence_id": {
+          "format": "uuid",
+          "title": "Competence Evidence Id",
+          "type": "string"
+        },
+        "escalation_rule": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Escalation Rule",
+          "type": "string"
+        },
+        "exclusion_rule": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Exclusion Rule",
+          "type": "string"
+        }
+      },
+      "required": [
+        "material_class",
+        "method",
+        "sample_numerator",
+        "sample_denominator",
+        "competence_evidence_id",
+        "escalation_rule",
+        "exclusion_rule"
+      ],
+      "title": "MaterialInput",
+      "type": "object"
+    },
+    "VerificationCommand": {
+      "additionalProperties": false,
+      "properties": {
+        "command_id": {
+          "format": "uuid",
+          "title": "Command Id",
+          "type": "string"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "expected_revision": {
+          "minimum": 0,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "reason": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "action": {
+          "const": "record_verification_review",
+          "title": "Action",
+          "type": "string"
+        },
+        "payload": {
+          "$ref": "#/$defs/VerificationInput"
+        }
+      },
+      "required": [
+        "command_id",
+        "collection_id",
+        "expected_revision",
+        "reason",
+        "action",
+        "payload"
+      ],
+      "title": "VerificationCommand",
+      "type": "object"
+    },
+    "VerificationInput": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date-time",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "state": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "approved",
+            "revoked"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "sample_numerator": {
+          "exclusiveMinimum": 0,
+          "title": "Sample Numerator",
+          "type": "integer"
+        },
+        "sample_denominator": {
+          "exclusiveMinimum": 0,
+          "title": "Sample Denominator",
+          "type": "integer"
+        },
+        "escalation_rule": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Escalation Rule",
+          "type": "string"
+        },
+        "materials": {
+          "items": {
+            "$ref": "#/$defs/MaterialInput"
+          },
+          "maxItems": 6,
+          "minItems": 6,
+          "title": "Materials",
+          "type": "array"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "valid_from",
+        "expires_at",
+        "sample_numerator",
+        "sample_denominator",
+        "escalation_rule",
+        "materials"
+      ],
+      "title": "VerificationInput",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "operator-command-1",
+      "default": "operator-command-1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "commands": {
+      "default": [],
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "record_collection_decision": "#/$defs/DecisionCommand",
+            "record_evidence": "#/$defs/EvidenceCommand",
+            "record_verification_review": "#/$defs/VerificationCommand"
+          },
+          "propertyName": "action"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/EvidenceCommand"
+          },
+          {
+            "$ref": "#/$defs/DecisionCommand"
+          },
+          {
+            "$ref": "#/$defs/VerificationCommand"
+          }
+        ]
+      },
+      "title": "Commands",
+      "type": "array"
+    },
+    "results": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CommandResult"
+      },
+      "title": "Results",
+      "type": "array"
+    }
+  },
+  "title": "OperatorContracts",
+  "type": "object"
+}
