@@ -15,6 +15,7 @@ services:
   api:
     build: .
     environment:
+      ALVARY_RUNTIME_MODE: persistent
       DATABASE_URL: postgresql+psycopg://open_alvary:local-development-only@db:5432/open_alvary
     command: ["sh", "-c", "alembic upgrade head && python -m scripts.seed && uvicorn api.main:app --host 0.0.0.0 --port 8018"]
     ports: ["127.0.0.1:8018:8018"]

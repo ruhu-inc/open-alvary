@@ -11,7 +11,7 @@ jobs:
         env:
           POSTGRES_USER: open_alvary
           POSTGRES_PASSWORD: test-only
-          POSTGRES_DB: open_alvary
+          POSTGRES_DB: open_alvary_test
         ports: ['5432:5432']
         options: >-
           --health-cmd "pg_isready -U open_alvary"
@@ -30,6 +30,10 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: pip install -r requirements.lock && pip install --no-deps -e .
       - run: ruff check . && ruff format --check . && pytest -q
+      - name: PostgreSQL integration contracts
+        run: pytest -q -m postgres --run-postgres
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://open_alvary:test-only@localhost:5432/open_alvary_test
       - name: Reject local-only design files in public tree
         run: |
           forbidden=$(git ls-files -- docs scripts/planning_contracts.py scripts/spec_models.py scripts/verify_spec.py tests/test_planning_execution.py tests/test_spec_contracts.py)
@@ -37,9 +41,9 @@ jobs:
             echo "Local-only design files must not be tracked in the public tree."
             exit 1
           fi
-      - run: python -m scripts.generate_schema && git diff --exit-code schema/corpus.schema.json
+      - run: python -m scripts.generate_schema && git diff --exit-code schema/corpus.schema.json schema/identity.schema.json schema/policy.schema.json
       - run: alembic upgrade head && python -m scripts.seed && python -m scripts.verify_database
         env:
-          DATABASE_URL: postgresql+psycopg://open_alvary:test-only@localhost:5432/open_alvary
+          DATABASE_URL: postgresql+psycopg://open_alvary:test-only@localhost:5432/open_alvary_test
       - run: npm --prefix web ci && npm --prefix web run build
       - run: scripts/container_smoke.sh

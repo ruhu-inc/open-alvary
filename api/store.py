@@ -3,8 +3,8 @@
 import os
 from pathlib import Path
 
-from sqlalchemy import JSON, Column, ForeignKey, MetaData, String, Table, create_engine, event, select
-from sqlalchemy.engine import Engine
+from sqlalchemy import JSON, Column, ForeignKey, MetaData, String, Table, create_engine, event, select, text
+from sqlalchemy.engine import Connection, Engine, make_url
 
 from schema.models import Corpus
 
@@ -49,7 +49,21 @@ tables = {
 
 
 def engine_for(url: str | None = None) -> Engine:
-    url = url or os.getenv("DATABASE_URL", f"sqlite:///{ROOT / 'open_alvary.db'}")
+    mode = os.getenv("ALVARY_RUNTIME_MODE", "development")
+    if mode not in {"development", "persistent"}:
+        raise ValueError("ALVARY_RUNTIME_MODE must be development or persistent")
+    url = url or os.getenv("DATABASE_URL")
+    if mode == "persistent":
+        if not url:
+            raise ValueError("Persistent mode requires DATABASE_URL")
+        try:
+            parsed = make_url(url)
+            valid = parsed.drivername == "postgresql+psycopg" and bool(parsed.database)
+        except Exception:
+            valid = False
+        if not valid:
+            raise ValueError("Persistent mode requires a postgresql+psycopg database URL") from None
+    url = url or f"sqlite:///{ROOT / 'open_alvary.db'}"
     engine = create_engine(url, connect_args={"check_same_thread": False} if url.startswith("sqlite") else {})
     if url.startswith("sqlite"):
 
@@ -60,12 +74,22 @@ def engine_for(url: str | None = None) -> Engine:
     return engine
 
 
+def check_legacy_authority(connection: Connection, *, write: bool) -> None:
+    """Hold the migrated PG fence through caller commit; SQLite/0001 remain pilots."""
+    if (
+        connection.dialect.name == "postgresql"
+        and connection.scalar(text("SELECT to_regclass('identity_migration_state')")) is not None
+    ):
+        connection.execute(text("SELECT identity_check_legacy_authority(:write)"), {"write": write})
+
+
 class Store:
     def __init__(self, engine: Engine):
         self.engine = engine
 
     def load(self) -> Corpus:
-        with self.engine.connect() as conn:
+        with self.engine.begin() as conn:
+            check_legacy_authority(conn, write=False)
             return Corpus.model_validate(
                 {
                     name: list(conn.scalars(select(table.c.payload).order_by(table.c.id)))
@@ -76,6 +100,7 @@ class Store:
     def save(self, corpus: Corpus) -> None:
         corpus = Corpus.model_validate(corpus.model_dump(mode="json"))
         with self.engine.begin() as conn:
+            check_legacy_authority(conn, write=True)
             for name, table in tables.items():
                 for model in getattr(corpus, name):
                     payload = model.model_dump(mode="json")

@@ -80,3 +80,16 @@ def store():
     metadata.create_all(engine)
     yield Store(engine)
     engine.dispose()
+
+
+def pytest_addoption(parser):
+    parser.addoption("--run-postgres", action="store_true", help="Require PostgreSQL integration tests")
+
+
+def pytest_collection_modifyitems(config, items):
+    if not config.getoption("--run-postgres"):
+        for item in items:
+            if "postgres" in item.keywords:
+                item.add_marker(
+                    pytest.mark.skip(reason="Use --run-postgres for PostgreSQL integration tests")
+                )

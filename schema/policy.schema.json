@@ -1,0 +1,1076 @@
+{
+  "$defs": {
+    "AcquisitionAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "exclusiveMinimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "actor_id": {
+          "format": "uuid",
+          "title": "Actor Id",
+          "type": "string"
+        },
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date-time",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "state": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "approved",
+            "revoked"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "discover": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Discover",
+          "type": "string"
+        },
+        "acquire": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Acquire",
+          "type": "string"
+        },
+        "retain": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Retain",
+          "type": "string"
+        },
+        "derive": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Derive",
+          "type": "string"
+        },
+        "privacy_class": {
+          "enum": [
+            "no_personal_data",
+            "personal_data",
+            "unknown"
+          ],
+          "title": "Privacy Class",
+          "type": "string"
+        },
+        "classification_reason": {
+          "minLength": 1,
+          "title": "Classification Reason",
+          "type": "string"
+        },
+        "privacy_review_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Privacy Review Id"
+        },
+        "privacy_review_revision": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Privacy Review Revision"
+        },
+        "purpose": {
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "retention_deadline": {
+          "format": "date-time",
+          "title": "Retention Deadline",
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision",
+        "collection_id",
+        "actor_id",
+        "evidence_id",
+        "valid_from",
+        "expires_at",
+        "reason",
+        "id",
+        "privacy_class",
+        "classification_reason",
+        "purpose",
+        "retention_deadline"
+      ],
+      "title": "AcquisitionAssessment",
+      "type": "object"
+    },
+    "CollectionDecision": {
+      "additionalProperties": false,
+      "properties": {
+        "discover": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Discover",
+          "type": "string"
+        },
+        "acquire": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Acquire",
+          "type": "string"
+        },
+        "retain": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Retain",
+          "type": "string"
+        },
+        "external_process": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "External Process",
+          "type": "string"
+        },
+        "redistribute_metadata": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Redistribute Metadata",
+          "type": "string"
+        },
+        "redistribute_text": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Redistribute Text",
+          "type": "string"
+        },
+        "quote": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Quote",
+          "type": "string"
+        },
+        "derive": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Derive",
+          "type": "string"
+        },
+        "commercial_reuse": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Commercial Reuse",
+          "type": "string"
+        },
+        "publish_fixture": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Publish Fixture",
+          "type": "string"
+        },
+        "revision": {
+          "exclusiveMinimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "actor_id": {
+          "format": "uuid",
+          "title": "Actor Id",
+          "type": "string"
+        },
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date-time",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "state": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "approved",
+            "revoked"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "basis_type": {
+          "enum": [
+            "open_licence",
+            "direct_permission",
+            "statutory_exclusion",
+            "public_domain_expiry",
+            "government_work_rule",
+            "original_authorship",
+            "statutory_exception",
+            "unknown"
+          ],
+          "title": "Basis Type",
+          "type": "string"
+        },
+        "conditions_satisfied": {
+          "default": false,
+          "title": "Conditions Satisfied",
+          "type": "boolean"
+        },
+        "metadata_privacy_class": {
+          "enum": [
+            "no_personal_data",
+            "personal_data",
+            "unknown"
+          ],
+          "title": "Metadata Privacy Class",
+          "type": "string"
+        },
+        "privacy_reason": {
+          "minLength": 1,
+          "title": "Privacy Reason",
+          "type": "string"
+        },
+        "privacy_review_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Privacy Review Id"
+        },
+        "privacy_review_revision": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Privacy Review Revision"
+        }
+      },
+      "required": [
+        "revision",
+        "collection_id",
+        "actor_id",
+        "evidence_id",
+        "valid_from",
+        "expires_at",
+        "reason",
+        "basis_type",
+        "metadata_privacy_class",
+        "privacy_reason"
+      ],
+      "title": "CollectionDecision",
+      "type": "object"
+    },
+    "ControllerRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "exclusiveMinimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "actor_id": {
+          "format": "uuid",
+          "title": "Actor Id",
+          "type": "string"
+        },
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date-time",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "state": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "approved",
+            "revoked"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "legal_name": {
+          "minLength": 1,
+          "title": "Legal Name",
+          "type": "string"
+        },
+        "postal_address": {
+          "minLength": 1,
+          "title": "Postal Address",
+          "type": "string"
+        },
+        "jurisdiction_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Jurisdiction Id",
+          "type": "string"
+        },
+        "privacy_contact": {
+          "minLength": 1,
+          "title": "Privacy Contact",
+          "type": "string"
+        },
+        "accountable_role": {
+          "minLength": 1,
+          "title": "Accountable Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision",
+        "collection_id",
+        "actor_id",
+        "evidence_id",
+        "valid_from",
+        "expires_at",
+        "reason",
+        "id",
+        "legal_name",
+        "postal_address",
+        "jurisdiction_id",
+        "privacy_contact",
+        "accountable_role"
+      ],
+      "title": "ControllerRecord",
+      "type": "object"
+    },
+    "PolicyResult": {
+      "additionalProperties": false,
+      "properties": {
+        "allowed": {
+          "title": "Allowed",
+          "type": "boolean"
+        },
+        "reason": {
+          "enum": [
+            "permitted",
+            "policy_denied",
+            "runtime_capability_unavailable"
+          ],
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "allowed",
+        "reason"
+      ],
+      "title": "PolicyResult",
+      "type": "object"
+    },
+    "PrivacyReview": {
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "exclusiveMinimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "actor_id": {
+          "format": "uuid",
+          "title": "Actor Id",
+          "type": "string"
+        },
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date-time",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "state": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "approved",
+            "revoked"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "controller_id": {
+          "format": "uuid",
+          "title": "Controller Id",
+          "type": "string"
+        },
+        "controller_revision": {
+          "exclusiveMinimum": 0,
+          "title": "Controller Revision",
+          "type": "integer"
+        },
+        "purpose": {
+          "minLength": 1,
+          "title": "Purpose",
+          "type": "string"
+        },
+        "lawful_basis": {
+          "minLength": 1,
+          "title": "Lawful Basis",
+          "type": "string"
+        },
+        "assessment_reference": {
+          "minLength": 1,
+          "title": "Assessment Reference",
+          "type": "string"
+        },
+        "clearance": {
+          "enum": [
+            "pending",
+            "cleared",
+            "redacted",
+            "rejected"
+          ],
+          "title": "Clearance",
+          "type": "string"
+        },
+        "cleared_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cleared Hash"
+        }
+      },
+      "required": [
+        "revision",
+        "collection_id",
+        "actor_id",
+        "evidence_id",
+        "valid_from",
+        "expires_at",
+        "reason",
+        "id",
+        "controller_id",
+        "controller_revision",
+        "purpose",
+        "lawful_basis",
+        "assessment_reference",
+        "clearance"
+      ],
+      "title": "PrivacyReview",
+      "type": "object"
+    },
+    "PublicMetadata": {
+      "additionalProperties": false,
+      "properties": {
+        "work_id": {
+          "pattern": "^wrk_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Work Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "citation": {
+          "minLength": 1,
+          "title": "Citation",
+          "type": "string"
+        },
+        "reference_url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Reference Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "work_id",
+        "title",
+        "citation",
+        "reference_url"
+      ],
+      "title": "PublicMetadata",
+      "type": "object"
+    },
+    "VerificationMaterial": {
+      "additionalProperties": false,
+      "properties": {
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "revision": {
+          "exclusiveMinimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "material_class": {
+          "enum": [
+            "operative_tables",
+            "amounts",
+            "dates",
+            "negations",
+            "cross_references",
+            "identity_citation"
+          ],
+          "title": "Material Class",
+          "type": "string"
+        },
+        "method": {
+          "enum": [
+            "human_source_comparison",
+            "validated_native_sampling"
+          ],
+          "title": "Method",
+          "type": "string"
+        },
+        "sample_numerator": {
+          "exclusiveMinimum": 0,
+          "title": "Sample Numerator",
+          "type": "integer"
+        },
+        "sample_denominator": {
+          "exclusiveMinimum": 0,
+          "title": "Sample Denominator",
+          "type": "integer"
+        },
+        "competence_evidence_id": {
+          "format": "uuid",
+          "title": "Competence Evidence Id",
+          "type": "string"
+        },
+        "escalation_rule": {
+          "minLength": 1,
+          "title": "Escalation Rule",
+          "type": "string"
+        },
+        "exclusion_rule": {
+          "minLength": 1,
+          "title": "Exclusion Rule",
+          "type": "string"
+        }
+      },
+      "required": [
+        "collection_id",
+        "revision",
+        "material_class",
+        "method",
+        "sample_numerator",
+        "sample_denominator",
+        "competence_evidence_id",
+        "escalation_rule",
+        "exclusion_rule"
+      ],
+      "title": "VerificationMaterial",
+      "type": "object"
+    },
+    "VerificationPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "exclusiveMinimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "actor_id": {
+          "format": "uuid",
+          "title": "Actor Id",
+          "type": "string"
+        },
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date-time",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "state": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "approved",
+            "revoked"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "sample_numerator": {
+          "exclusiveMinimum": 0,
+          "title": "Sample Numerator",
+          "type": "integer"
+        },
+        "sample_denominator": {
+          "exclusiveMinimum": 0,
+          "title": "Sample Denominator",
+          "type": "integer"
+        },
+        "escalation_rule": {
+          "minLength": 1,
+          "title": "Escalation Rule",
+          "type": "string"
+        },
+        "material_classes": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Material Classes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "revision",
+        "collection_id",
+        "actor_id",
+        "evidence_id",
+        "valid_from",
+        "expires_at",
+        "reason",
+        "sample_numerator",
+        "sample_denominator",
+        "escalation_rule",
+        "material_classes"
+      ],
+      "title": "VerificationPolicy",
+      "type": "object"
+    },
+    "VersionOverride": {
+      "additionalProperties": false,
+      "properties": {
+        "discover": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Discover",
+          "type": "string"
+        },
+        "acquire": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Acquire",
+          "type": "string"
+        },
+        "retain": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Retain",
+          "type": "string"
+        },
+        "external_process": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "External Process",
+          "type": "string"
+        },
+        "redistribute_metadata": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Redistribute Metadata",
+          "type": "string"
+        },
+        "redistribute_text": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Redistribute Text",
+          "type": "string"
+        },
+        "quote": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Quote",
+          "type": "string"
+        },
+        "derive": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Derive",
+          "type": "string"
+        },
+        "commercial_reuse": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Commercial Reuse",
+          "type": "string"
+        },
+        "publish_fixture": {
+          "default": "unknown",
+          "enum": [
+            "allow",
+            "deny",
+            "unknown"
+          ],
+          "title": "Publish Fixture",
+          "type": "string"
+        },
+        "revision": {
+          "exclusiveMinimum": 0,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "collection_id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Collection Id",
+          "type": "string"
+        },
+        "actor_id": {
+          "format": "uuid",
+          "title": "Actor Id",
+          "type": "string"
+        },
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date-time",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "expires_at": {
+          "format": "date-time",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "state": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "approved",
+            "revoked"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "reason": {
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "version_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Version Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision",
+        "collection_id",
+        "actor_id",
+        "evidence_id",
+        "valid_from",
+        "expires_at",
+        "reason",
+        "version_id"
+      ],
+      "title": "VersionOverride",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "policy-foundation-1",
+      "default": "policy-foundation-1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "results": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PolicyResult"
+      },
+      "title": "Results",
+      "type": "array"
+    },
+    "metadata": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PublicMetadata"
+      },
+      "title": "Metadata",
+      "type": "array"
+    },
+    "controllers": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ControllerRecord"
+      },
+      "title": "Controllers",
+      "type": "array"
+    },
+    "privacy_reviews": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PrivacyReview"
+      },
+      "title": "Privacy Reviews",
+      "type": "array"
+    },
+    "assessments": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AcquisitionAssessment"
+      },
+      "title": "Assessments",
+      "type": "array"
+    },
+    "decisions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CollectionDecision"
+      },
+      "title": "Decisions",
+      "type": "array"
+    },
+    "overrides": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/VersionOverride"
+      },
+      "title": "Overrides",
+      "type": "array"
+    },
+    "verification_policies": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/VerificationPolicy"
+      },
+      "title": "Verification Policies",
+      "type": "array"
+    },
+    "verification_materials": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/VerificationMaterial"
+      },
+      "title": "Verification Materials",
+      "type": "array"
+    }
+  },
+  "title": "PolicyContracts",
+  "type": "object"
+}

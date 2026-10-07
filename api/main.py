@@ -1,7 +1,10 @@
 import json
+import logging
 import re
 import unicodedata
 from pathlib import Path
+from time import perf_counter
+from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
@@ -29,10 +32,35 @@ def create_app(store: Store | None = None, releases: Path | None = None) -> Fast
 
     @app.middleware("http")
     async def no_stale_publication(request, call_next):
-        response = await call_next(request)
-        response.headers["Cache-Control"] = "no-store"
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        return response
+        # Generate our own ID; never trust caller headers as log content or identity.
+        request_id = str(uuid4())
+        request.state.request_id = request_id
+        started = perf_counter()
+        status = 500
+        try:
+            response = await call_next(request)
+            status = response.status_code
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["X-Request-ID"] = request_id
+            return response
+        finally:
+            method = (
+                request.method
+                if request.method in {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}
+                else "OTHER"
+            )
+            logging.getLogger("open_alvary.requests").info(
+                json.dumps(
+                    {
+                        "event": "http_request",
+                        "request_id": request_id,
+                        "method": method,
+                        "status": status,
+                        "response_headers_ms": round((perf_counter() - started) * 1000, 2),
+                    }
+                )
+            )
 
     app.state.store = store or Store(engine_for())
     release_root = releases or ROOT / "releases"

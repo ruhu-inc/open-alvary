@@ -1,0 +1,543 @@
+{
+  "$defs": {
+    "Collection": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "jurisdiction_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Jurisdiction Id",
+          "type": "string"
+        },
+        "document_class": {
+          "enum": [
+            "constitution",
+            "act",
+            "regulation",
+            "judgment",
+            "gazette",
+            "guidance",
+            "other"
+          ],
+          "title": "Document Class",
+          "type": "string"
+        },
+        "provider_key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Provider Key",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "jurisdiction_id",
+        "document_class",
+        "provider_key",
+        "created_at"
+      ],
+      "title": "Collection",
+      "type": "object"
+    },
+    "Expression": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^exp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "work_id": {
+          "pattern": "^wrk_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Work Id",
+          "type": "string"
+        },
+        "language_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Language Id",
+          "type": "string"
+        },
+        "edition_kind": {
+          "enum": [
+            "original",
+            "official_consolidation",
+            "unofficial_consolidation",
+            "translation"
+          ],
+          "title": "Edition Kind",
+          "type": "string"
+        },
+        "edition_key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Edition Key",
+          "type": "string"
+        },
+        "edition_as_of": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Edition As Of"
+        },
+        "edition_date_unknown_reason": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Edition Date Unknown Reason"
+        },
+        "authenticity": {
+          "enum": [
+            "unknown",
+            "official",
+            "unofficial"
+          ],
+          "title": "Authenticity",
+          "type": "string"
+        },
+        "authenticity_unknown_reason": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Authenticity Unknown Reason"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "work_id",
+        "language_id",
+        "edition_kind",
+        "edition_key",
+        "edition_as_of",
+        "edition_date_unknown_reason",
+        "authenticity",
+        "authenticity_unknown_reason",
+        "created_at"
+      ],
+      "title": "Expression",
+      "type": "object"
+    },
+    "Manifestation": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^man_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "raw_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Raw Hash",
+          "type": "string"
+        },
+        "media_type": {
+          "pattern": "^[a-z0-9.+-]+/[a-z0-9.+-]+$",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "size_bytes": {
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "provenance_reference": {
+          "minLength": 1,
+          "title": "Provenance Reference",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "raw_hash",
+        "media_type",
+        "size_bytes",
+        "provenance_reference",
+        "created_at"
+      ],
+      "title": "Manifestation",
+      "type": "object"
+    },
+    "Observation": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^obs_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "manifestation_id": {
+          "pattern": "^man_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Manifestation Id",
+          "type": "string"
+        },
+        "provider_key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Provider Key",
+          "type": "string"
+        },
+        "retrieval_key": {
+          "maxLength": 160,
+          "minLength": 1,
+          "title": "Retrieval Key",
+          "type": "string"
+        },
+        "requested_url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Requested Url",
+          "type": "string"
+        },
+        "final_url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Final Url",
+          "type": "string"
+        },
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        },
+        "response_status": {
+          "maximum": 599,
+          "minimum": 100,
+          "title": "Response Status",
+          "type": "integer"
+        },
+        "processing_config_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Processing Config Hash",
+          "type": "string"
+        },
+        "acquisition_reference": {
+          "minLength": 1,
+          "title": "Acquisition Reference",
+          "type": "string"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "manifestation_id",
+        "provider_key",
+        "retrieval_key",
+        "requested_url",
+        "final_url",
+        "observed_at",
+        "response_status",
+        "processing_config_hash",
+        "acquisition_reference",
+        "created_at"
+      ],
+      "title": "Observation",
+      "type": "object"
+    },
+    "PublicWorkIdentity": {
+      "additionalProperties": false,
+      "description": "Only usable after current legacy metadata policy permits the source.",
+      "properties": {
+        "legacy_source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Legacy Source Id",
+          "type": "string"
+        },
+        "work_id": {
+          "pattern": "^wrk_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Work Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "citation": {
+          "minLength": 1,
+          "title": "Citation",
+          "type": "string"
+        },
+        "reference_url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Reference Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "legacy_source_id",
+        "work_id",
+        "title",
+        "citation",
+        "reference_url"
+      ],
+      "title": "PublicWorkIdentity",
+      "type": "object"
+    },
+    "Work": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^wrk_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "jurisdiction_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Jurisdiction Id",
+          "type": "string"
+        },
+        "authority_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Authority Id",
+          "type": "string"
+        },
+        "document_class": {
+          "enum": [
+            "constitution",
+            "act",
+            "regulation",
+            "judgment",
+            "gazette",
+            "guidance",
+            "other"
+          ],
+          "title": "Document Class",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "citation": {
+          "minLength": 1,
+          "title": "Citation",
+          "type": "string"
+        },
+        "reference_url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Reference Url",
+          "type": "string"
+        },
+        "reference_kind": {
+          "enum": [
+            "document",
+            "landing_page",
+            "discovery"
+          ],
+          "title": "Reference Kind",
+          "type": "string"
+        },
+        "catalogue_language_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Catalogue Language Id",
+          "type": "string"
+        },
+        "legacy_legal_status": {
+          "enum": [
+            "unknown",
+            "current",
+            "historical",
+            "repealed",
+            "superseded"
+          ],
+          "title": "Legacy Legal Status",
+          "type": "string"
+        },
+        "status_evidence_url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Status Evidence Url"
+        },
+        "catalogue_note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Catalogue Note"
+        },
+        "identity_status": {
+          "enum": [
+            "legacy_unreviewed",
+            "identified"
+          ],
+          "title": "Identity Status",
+          "type": "string"
+        },
+        "collection_id": {
+          "anyOf": [
+            {
+              "pattern": "^scp_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Collection Id"
+        },
+        "collection_unknown_reason": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Collection Unknown Reason"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "updated_at": {
+          "format": "date-time",
+          "title": "Updated At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "jurisdiction_id",
+        "authority_id",
+        "document_class",
+        "title",
+        "citation",
+        "reference_url",
+        "reference_kind",
+        "catalogue_language_id",
+        "legacy_legal_status",
+        "status_evidence_url",
+        "catalogue_note",
+        "identity_status",
+        "collection_id",
+        "collection_unknown_reason",
+        "created_at",
+        "updated_at"
+      ],
+      "title": "Work",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "identity-1",
+      "default": "identity-1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "works": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Work"
+      },
+      "title": "Works",
+      "type": "array"
+    },
+    "expressions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Expression"
+      },
+      "title": "Expressions",
+      "type": "array"
+    },
+    "manifestations": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Manifestation"
+      },
+      "title": "Manifestations",
+      "type": "array"
+    },
+    "observations": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Observation"
+      },
+      "title": "Observations",
+      "type": "array"
+    },
+    "collections": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Collection"
+      },
+      "title": "Collections",
+      "type": "array"
+    },
+    "public_identities": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/PublicWorkIdentity"
+      },
+      "title": "Public Identities",
+      "type": "array"
+    }
+  },
+  "title": "IdentityContracts",
+  "type": "object"
+}

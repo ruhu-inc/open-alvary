@@ -18,6 +18,7 @@ include = ["api*", "schema*", "rights*", "ingestion*", "exports*"]
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = ["postgres: requires --run-postgres and an isolated PostgreSQL test database"]
 
 [tool.ruff]
 line-length = 110

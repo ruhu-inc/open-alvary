@@ -1,6 +1,7 @@
 # Production pilot. Always pass --env-file deployment/.env.
 name: open-alvary
 x-app-environment: &app-environment
+  ALVARY_RUNTIME_MODE: persistent
   DATABASE_URL: postgresql+psycopg://open_alvary:${POSTGRES_PASSWORD:?Set a generated alphanumeric database password}@db:5432/open_alvary
   PUBLIC_REPOSITORY_URL: ${PUBLIC_REPOSITORY_URL:?Set the public GitHub repository URL}
   PUBLIC_MAINTAINER: ${PUBLIC_MAINTAINER:?Set the accountable maintainer name}
