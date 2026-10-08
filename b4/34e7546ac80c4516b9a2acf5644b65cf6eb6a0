@@ -1,0 +1,26 @@
+api/admission.py
+  s_b82616e2476856::t_ecb599d5b678e6 273-297
+tests/test_admission.py
+  s_b82616e2476856::t_ecb599d5b678e6 182-202
+api/main.py
+  s_b82616e2476856::t_ecb599d5b678e6 15,95-97
+  s_b82616e2476856::t_af4eec8b912417 98
+README.md
+  s_b82616e2476856::t_13ced830dfc920 638-640
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b434e7546ac80c4516b9a2acf5644b65cf6eb6a0",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
