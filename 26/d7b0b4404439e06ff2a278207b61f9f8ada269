@@ -1,0 +1,63 @@
+rights/sql/v0020/reconcile_bytes.sql
+  s_b82616e2476856::t_87bba992730e83 1-12,14-17,30-47
+  s_b82616e2476856::t_72cb982993e8b9 13,20,24,26,28-29
+  s_b82616e2476856::t_cc1e13c53db4a7 18-19,21-23,25,27
+README.md
+  s_b82616e2476856::t_95855fdcee1383 675-683
+tests/test_postgres_denial_journal.py
+  s_b82616e2476856::t_57414bd764f2c2 233,240
+  s_b82616e2476856::t_3664afc2b4b6b4 143-145
+  s_b82616e2476856::t_9e6998bc0cfb42 224-232,234-239,241-252
+rights/sql/v0020/downgrade.sql
+  s_b82616e2476856::t_a4a20cc7772668 19
+  s_b82616e2476856::t_4c47b0b9594ed5 1-18
+tests/test_risk_remediation.py
+  s_b82616e2476856::t_95855fdcee1383 76
+rights/sql/v0020/manifest.json
+  s_b82616e2476856::t_4c47b0b9594ed5 1-38
+rights/journal_delivery.py
+  s_b82616e2476856::t_b464211a9ed038 44-48,51
+  s_b82616e2476856::t_3664afc2b4b6b4 49-50
+rights/sql/v0020/prior_reconcile_bytes.sql
+  s_b82616e2476856::t_87bba992730e83 1-36
+tests/test_postgres_representation_identity.py
+  s_b82616e2476856::t_de5728e6399dcf 184
+  s_b82616e2476856::t_0734537f8450f9 340-367
+rights/sql/v0020/hardening.sql
+  s_b82616e2476856::t_a4a20cc7772668 11
+  s_b82616e2476856::t_4c47b0b9594ed5 1-10,12-89
+migrations/versions/0020_recovery_hardening.py
+  s_b82616e2476856::t_dc69b7cc99e003 1-12,14-36
+  s_b82616e2476856::t_a4a20cc7772668 13
+deployment/runbook.md
+  s_b82616e2476856::t_95855fdcee1383 92-94
+rights/sql/v0020/prior_journal_permission_denial.sql
+  s_b82616e2476856::t_87bba992730e83 1-34
+scripts/verify_sql_resources.py
+  s_b82616e2476856::t_0734537f8450f9 128-137,139,142-144
+  s_b82616e2476856::t_889019c5b0662a 6,15,97-127,138,140-141,145-187
+rights/recovery.py
+  s_b82616e2476856::t_b464211a9ed038 16,122-129,156-158,176-178,197-199,215-217,223,265-268,308
+  s_b82616e2476856::t_50444f53fface4 93-94,101,105-121,130-140,142,150-154,160-161,163,165,167-169,172-175,185,187,191-192,196,200-201,203-214,218-220,225,227,283-284,313
+rights/sql/v0020/journal_permission_denial.sql
+  s_b82616e2476856::t_87bba992730e83 1-10,16,19-22,26-29,43,58-62
+  s_b82616e2476856::t_ef070f2d45b30a 11-15,17-18,23-25,30-42,44-57
+tests/test_postgres_recovery.py
+  s_b82616e2476856::t_9e6998bc0cfb42 203-297
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "26d7b0b4404439e06ff2a278207b61f9f8ada269",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
