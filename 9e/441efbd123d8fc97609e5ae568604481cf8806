@@ -1,0 +1,50 @@
+rights/sql/v0018/downgrade.sql
+  s_b82616e2476856::t_3b06b85768e93e 1-2
+tests/test_risk_remediation.py
+  s_b82616e2476856::t_2307f3eb95884a 76
+rights/sql/provision/v0003.sql
+  s_b82616e2476856::t_da932ac156ae57 11
+tests/test_postgres_recovery.py
+  s_b82616e2476856::t_dfaca24e2d22ae 177,179
+tests/test_postgres_representation_identity.py
+  s_b82616e2476856::t_2307f3eb95884a 184
+rights/sql/provision/manifest.json
+  s_b82616e2476856::t_da932ac156ae57 182-191
+tests/test_postgres_release.py
+  s_b82616e2476856::t_32af79d2ece9e8 8
+  s_b82616e2476856::t_72a1e733c75fc8 1-7,9-101
+tests/test_postgres_services.py
+  s_b82616e2476856::t_72a1e733c75fc8 69-70,93
+rights/capabilities.py
+  s_b82616e2476856::t_da932ac156ae57 11
+rights/sql/v0018/manifest.json
+  s_b82616e2476856::t_da932ac156ae57 1-15
+README.md
+  s_b82616e2476856::t_2307f3eb95884a 661-665
+tests/test_postgres_policy.py
+  s_b82616e2476856::t_dfaca24e2d22ae 3,63-91,251
+tests/test_postgres_denial_journal.py
+  s_b82616e2476856::t_dfaca24e2d22ae 104-105
+rights/sql/v0018/release.sql
+  s_b82616e2476856::t_3b06b85768e93e 1-90
+rights/sql/provision/v0018.sql
+  s_b82616e2476856::t_da932ac156ae57 1-3
+migrations/versions/0018_release_command.py
+  s_b82616e2476856::t_562d5f1163762d 1-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9e441efbd123d8fc97609e5ae568604481cf8806",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
