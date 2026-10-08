@@ -298,3 +298,42 @@ def test_existing_guard_upgrade_works_with_nonsuperuser_native_migration_owner(r
             conn.execute(text("DROP OWNED BY " + quote(role)))
             conn.execute(text("DROP ROLE " + quote(role)))
 
+
+def test_sql_bundle_tool_pins_an_edited_function_without_touching_the_database(
+    pg_engine, tmp_path, monkeypatch
+):
+    import shutil
+
+    from scripts import sql_bundle
+
+    migrate(pg_engine)
+    (tmp_path / "v0013").mkdir()
+    shutil.copy(sql_bundle.ROOT / "v0013" / "manifest.json", tmp_path / "v0013")
+    monkeypatch.setattr(sql_bundle, "ROOT", tmp_path)
+    monkeypatch.setattr(sql_bundle, "bundle_hash", lambda revision: "pinned")
+    signature = "apply_operator_command(jsonb)"
+    with pg_engine.connect() as conn:
+        ns = PolicyNamespace(conn.scalar(text("SELECT current_schema()")))
+        before = fingerprint_of(conn, ns, signature)
+        sql_bundle.init(conn, ns, "v0014", [signature])
+        conn.rollback()
+        source = tmp_path / "v0014" / "apply_operator_command.sql"
+        edited = source.read_text().replace("BEGIN", "BEGIN\n    -- reviewed edit", 1)
+        source.write_text(edited.replace("CREATE OR REPLACE FUNCTION", "create or replace function", 1))
+        with pytest.raises(SystemExit, match="normalized"):
+            sql_bundle.pin(conn, ns, "v0014")
+        assert source.read_text() == edited
+        sql_bundle.pin(conn, ns, "v0014")
+        assert fingerprint_of(conn, ns, signature) == before
+    entry = json.loads((tmp_path / "v0014" / "manifest.json").read_text())["functions"][0]
+    assert entry["prior_definition_hash"] != entry["current_definition_hash"]
+    assert not (tmp_path / "v0014" / "draft.json").exists()
+
+
+def fingerprint_of(conn, ns, signature):
+    return conn.execute(
+        text(
+            "SELECT oid,proowner,proacl,md5(pg_get_functiondef(oid)) FROM pg_proc WHERE oid=to_regprocedure(:fn)"
+        ),
+        {"fn": ns.qualified(conn, "policy", "x").rsplit(".", 1)[0] + "." + signature},
+    ).one()

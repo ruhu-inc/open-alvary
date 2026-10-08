@@ -585,7 +585,12 @@ in `rights/sql/v0011`: one reviewed SQL file per installed function, with pinned
 body and definition hashes. PostgreSQL compiles each definition under `check_function_bodies=on`;
 upgrade/downgrade preserve function OIDs, ownership, ACLs and trigger bindings. Unknown installed
 edits or unsafe guard/reader grants require boundary review. Keep each applied resource revision
-unchanged and add a new resource/migration revision for future SQL changes. Historical Python SQL
+unchanged and add a new resource/migration revision for future SQL changes. To prepare one, point
+`DATABASE_URL` at an isolated `*_test` database migrated to the previous head and run
+`python -m scripts.sql_bundle init v0014 'function(argtypes)'`. Edit the generated `<function>.sql`
+(`prior_<function>.sql` records the installed definition), then run `python -m scripts.sql_bundle pin v0014`.
+It compiles each edit in a rolled-back transaction, rewrites it into PostgreSQL's normalized form if needed,
+writes `manifest.json` and prints the `RESOURCE_HASH` for the new migration. Historical Python SQL
 is retained for reproducible older installs. New grant capabilities belong in the declarative
 `rights/sql/provision` inventory; provisioning validates the installed objects before creating roles.
 Those grant files are hash-pinned by `rights.capabilities.PROVISION_HASH`, so a grant edit needs a
