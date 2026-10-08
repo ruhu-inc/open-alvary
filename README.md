@@ -95,7 +95,7 @@ a narrow audited function. The metadata view checks current policy on each state
 final emission checks, restore/journal guarantees and real publication remain unimplemented.
 
 `PolicyRepository` uses caller-owned transactions, bounded metadata lookups and revision
-locks. Its approval preflight checks distinct current reviewers and all six required
+locks. Its approval preflight checks current rights and content reviews and all six required
 material coverage records; it does not mint approved text versions. The guard owns narrow
 functions/view, never private tables, and has no schema CREATE after provisioning. Runtime
 groups cannot assume it. Nonempty policy foundations require forward repair; downgrade
@@ -142,7 +142,8 @@ waits for an active command's transaction, records its own private maintenance e
 removes the login's capability group memberships.
 These shadow commands also hold the legacy authority fence: frozen/rehearsal phases deny
 them. Rights and content use their own sessions/assignments; release preflight still
-requires two distinct reviewers. Holding both roles cannot satisfy independent review.
+requires a current rights decision and a current content verification. Since migration `0019`
+one accountable person holding both assignments may record both.
 Session expiry closes new writes; earlier review records retain their own validity until
 expiry or explicit actor revocation. Assignment additions/removals are audited and
 coordinate through the same actor lock; scope removal denies subsequent command retries.
@@ -504,7 +505,7 @@ Bound identity facts become immutable; correcting them requires a separate forwa
 The current collection content reviewer records an exact source-comparison attestation with private
 scoped evidence, binding/snapshot/profile/content hashes and every selected candidate, including
 exclusions. The release maintainer must have native release and acquisition assignments and recheck
-two distinct current rights/content reviewers, six material coverage classes, collection permission,
+current rights/content reviews, six material coverage classes, collection permission,
 source authority and the exact reviewed proposal. The database reconstructs bytes and structure
 again; incomplete material content cannot be approved. This initial slice supports complete human
 source comparison under collection-policy inheritance and no-personal-data authority. Per-version

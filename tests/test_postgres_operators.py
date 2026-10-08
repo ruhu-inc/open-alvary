@@ -243,14 +243,15 @@ def test_independent_collection_reviews_are_atomic_and_do_not_publish(operators)
         assert conn.scalar(text("SELECT count(*) FROM versions")) == 0
 
 
-def test_one_operator_holding_both_roles_cannot_supply_independent_review(operators):
+def test_one_operator_holding_both_roles_may_record_both_reviews(operators):
     f, create, _ = operators
     both = create("rights", assignments=((f.collection, "rights"), (f.collection, "content")))
     assert apply(f, both, decision_command(f)).status == "applied"
     assert apply(f, both, verification_command(f)).status == "applied"
-    with pytest.raises(DBAPIError) as denied, f.as_role("release") as conn:
-        PolicyRepository(conn, f.ns).lock_approval_inputs(f.collection, rights_revision=1, content_revision=1)
-    assert denied.value.orig.sqlstate == "42501"
+    with f.as_role("release") as conn:
+        assert PolicyRepository(conn, f.ns).lock_approval_inputs(
+            f.collection, rights_revision=1, content_revision=1
+        )
 
 
 def test_verification_failure_rolls_back_policy_materials_audit_and_receipt(operators):
