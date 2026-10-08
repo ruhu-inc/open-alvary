@@ -13,7 +13,7 @@ database: markers are appended between committed database steps, never inside on
 import hashlib
 import json
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from sqlalchemy import text
@@ -90,19 +90,56 @@ def publication_revision(conn, t: Tables, lock=False) -> int:
     return conn.scalar(text(f"SELECT revision FROM {t.revision} WHERE singleton{suffix}"))
 
 
-def marker(epoch_id: UUID, kind: str, revision: int, event_id: UUID) -> Event:
+def marker(epoch_id: UUID, kind: str, revision: int, event_id: UUID, occurred_at: datetime) -> Event:
+    """Epoch markers are deterministic from stored epoch state, so every retry is identical."""
     return Event(
         event_id=event_id,
         kind=kind,
         affected=(str(epoch_id),),
         revision=revision,
         revision_domain="publication",
-        occurred_at=datetime.now(UTC),
+        occurred_at=occurred_at,
     )
 
 
+def journal_known(conn, t: Tables) -> set:
+    """Every journal event this database can explain: deliveries and epoch markers."""
+    known = {row[0] for row in conn.execute(text(f"SELECT event_id FROM {t.delivery}"))}
+    for epoch_id, state in conn.execute(text(f"SELECT epoch_id,state FROM {t.epoch}")):
+        known.add(epoch_id)
+        if state in ("closing", "closed", "abandoned"):
+            known.add(close_event_id(epoch_id))
+    return known
+
+
+def fence_if_behind_journal(conn, t: Tables, journal) -> None:
+    """Fail closed when the journal holds events this database cannot explain.
+
+    That happens when the database lost history (for example an in-place restore that kept
+    the same instance identity). Serving is fenced and recovery becomes mandatory.
+    """
+    known = journal_known(conn, t)
+    # A recovery on this exact instance already accounted for the journal up to its watermark.
+    accounted = conn.scalar(
+        text(
+            f"SELECT coalesce(max(r.journal_sequence),0) FROM {t.record} r JOIN {t.binding} b"
+            " ON b.system_identifier=r.system_identifier AND b.database_oid=r.database_oid"
+        )
+    )
+    if all(event.event_id in known for receipt, event in all_events(journal) if receipt.sequence > accounted):
+        return
+    conn.execute(
+        text(
+            f"UPDATE {t.epoch} SET state='abandoned',closed_at=coalesce(closed_at,statement_timestamp())"
+            " WHERE state IN ('opening','open','closing')"
+        )
+    )
+    conn.execute(text(f"UPDATE {t.binding} SET database_oid=0"))
+    raise RecoveryRequired("The journal is ahead of this database; recover before serving")
+
+
 def open_epoch(engine: Engine, ns: PolicyNamespace, journal) -> UUID:
-    """Commit 'opening', persist the journal open marker, then commit 'open'."""
+    """Commit 'opening' with its marker values, journal the open marker, then commit 'open'."""
     with engine.begin() as conn:
         t = Tables(conn, ns)
         conn.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": EPOCH_LOCK})
@@ -110,56 +147,84 @@ def open_epoch(engine: Engine, ns: PolicyNamespace, journal) -> UUID:
             raise RecoveryRequired("Database instance requires recovery before serving")
         if conn.scalar(text(f"SELECT count(*) FROM {t.delivery} WHERE durability='pending'")):
             raise EpochRefused("Deliver pending denials before opening a serving epoch")
+        try:
+            fence_if_behind_journal(conn, t, journal)
+        except RecoveryRequired:
+            conn.commit()  # keep the fence, then refuse
+            raise
         active = conn.execute(
-            text(f"SELECT epoch_id,state FROM {t.epoch} WHERE state IN ('opening','open')")
+            text(
+                f"SELECT epoch_id,state,opened_at,open_revision FROM {t.epoch} WHERE state IN ('opening','open','closing')"
+            )
         ).one_or_none()
-        if active is not None and active.state == "open":
-            raise EpochRefused("A serving epoch is already open")
-        epoch_id = active.epoch_id if active is not None else uuid4()
+        if active is not None and active.state != "opening":
+            raise EpochRefused("A serving epoch is already open or closing")
         if active is None:
+            epoch_id = uuid4()
             system_identifier, oid = instance(conn)
-            conn.execute(
+            row = conn.execute(
                 text(
-                    f"INSERT INTO {t.epoch}(epoch_id,system_identifier,database_oid,state)"
-                    " VALUES (:id,:sid,:oid,'opening')"
+                    f"INSERT INTO {t.epoch}(epoch_id,system_identifier,database_oid,state,open_revision)"
+                    f" VALUES (:id,:sid,:oid,'opening',(SELECT revision FROM {t.revision} WHERE singleton))"
+                    " RETURNING epoch_id,opened_at,open_revision"
                 ),
                 {"id": epoch_id, "sid": system_identifier, "oid": oid},
-            )
-        revision = publication_revision(conn, t)
-    # Retry-safe: the open marker's event ID is the epoch ID.
-    receipt = journal.append(marker(epoch_id, "epoch_open", revision, epoch_id))
+            ).one()
+        else:
+            row = active
+    # Retry-safe: event ID, revision and timestamp all come from the committed 'opening' row.
+    receipt = journal.append(
+        marker(row.epoch_id, "epoch_open", row.open_revision, row.epoch_id, row.opened_at)
+    )
     with engine.begin() as conn:
         t = Tables(conn, ns)
         conn.execute(
             text(
                 f"UPDATE {t.epoch} SET state='open',open_sequence=:seq WHERE epoch_id=:id AND state='opening'"
             ),
-            {"seq": receipt.sequence, "id": epoch_id},
+            {"seq": receipt.sequence, "id": row.epoch_id},
         )
-    return epoch_id
+    return row.epoch_id
 
 
 def close_epoch(engine: Engine, ns: PolicyNamespace, journal) -> UUID:
-    """Clean close: fence denials, require none pending, journal the final checkpoint."""
+    """Clean close in two phases: 'closing' stops serving and fixes the checkpoint before the
+    close marker is journaled, so the journal can never claim a close the database did not make."""
     with engine.begin() as conn:
         t = Tables(conn, ns)
         conn.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": EPOCH_LOCK})
-        # Holding the allocator row fences new denials until this close commits.
-        revision = publication_revision(conn, t, lock=True)
-        if conn.scalar(text(f"SELECT count(*) FROM {t.delivery} WHERE durability='pending'")):
-            raise EpochRefused("Deliver pending denials before closing the serving epoch")
-        epoch_id = conn.scalar(text(f"SELECT epoch_id FROM {t.epoch} WHERE state='open'"))
-        if epoch_id is None:
+        row = conn.execute(
+            text(
+                f"SELECT epoch_id,state,close_revision,closed_at FROM {t.epoch} WHERE state IN ('open','closing')"
+            )
+        ).one_or_none()
+        if row is None:
             raise EpochRefused("No open serving epoch")
-        receipt = journal.append(marker(epoch_id, "epoch_close", revision, close_event_id(epoch_id)))
+        if row.state == "open":
+            # Holding the allocator row fences new denials while the checkpoint is fixed.
+            revision = publication_revision(conn, t, lock=True)
+            if conn.scalar(text(f"SELECT count(*) FROM {t.delivery} WHERE durability='pending'")):
+                raise EpochRefused("Deliver pending denials before closing the serving epoch")
+            row = conn.execute(
+                text(
+                    f"UPDATE {t.epoch} SET state='closing',close_revision=:rev,closed_at=statement_timestamp()"
+                    " WHERE epoch_id=:id RETURNING epoch_id,state,close_revision,closed_at"
+                ),
+                {"rev": revision, "id": row.epoch_id},
+            ).one()
+    event = marker(
+        row.epoch_id, "epoch_close", row.close_revision, close_event_id(row.epoch_id), row.closed_at
+    )
+    receipt = journal.append(event)
+    with engine.begin() as conn:
+        t = Tables(conn, ns)
         conn.execute(
             text(
-                f"UPDATE {t.epoch} SET state='closed',closed_at=statement_timestamp(),"
-                " close_sequence=:seq,close_revision=:rev WHERE epoch_id=:id"
+                f"UPDATE {t.epoch} SET state='closed',close_sequence=:seq WHERE epoch_id=:id AND state='closing'"
             ),
-            {"seq": receipt.sequence, "rev": revision, "id": epoch_id},
+            {"seq": receipt.sequence, "id": row.epoch_id},
         )
-    return epoch_id
+    return row.epoch_id
 
 
 def recover(
@@ -197,6 +262,10 @@ def recover(
                 "reason": reason,
             },
         )
+        # Raise the allocator floor first: replay's own denials must get revisions above every
+        # revision the journal has seen, preserving commit order equals revision order.
+        floor = max([e.revision for _, e in events if e.revision_domain == "publication"], default=0)
+        conn.execute(text(f"UPDATE {t.revision} SET revision=greatest(revision,:floor)"), {"floor": floor})
         replay(conn, t, [e for r, e in events if r.sequence > start], recovery_id)
         reconcile_pending(conn, t, journal)
         if decision == "conservative_reset":
@@ -209,13 +278,10 @@ def recover(
                 ),
                 {"rid": recovery_id},
             )
-        # Allocator floor above every revision the journal has seen; new feed epoch follows.
-        floor = max([e.revision for _, e in events if e.revision_domain == "publication"], default=0)
-        conn.execute(text(f"UPDATE {t.revision} SET revision=greatest(revision,:floor)"), {"floor": floor})
         conn.execute(
             text(
-                f"UPDATE {t.epoch} SET state='abandoned',closed_at=statement_timestamp()"
-                " WHERE state IN ('opening','open')"
+                f"UPDATE {t.epoch} SET state='abandoned',closed_at=coalesce(closed_at,statement_timestamp())"
+                " WHERE state IN ('opening','open','closing')"
             )
         )
         conn.execute(
@@ -239,12 +305,12 @@ def continuity(conn, t, journal, events, checkpoint, start, watermark) -> dict:
         start == 0 or expected_chain is None or chain_at == expected_chain
     )
     restored = conn.execute(
-        text(f"SELECT epoch_id,state FROM {t.epoch} WHERE state IN ('opening','open')")
+        text(f"SELECT epoch_id,state FROM {t.epoch} WHERE state IN ('opening','open','closing')")
     ).all()
     later = [e.event_id for r, e in events if e.kind == "epoch_open" and r.sequence > start]
     # An 'opening' epoch without a journal marker never served. Every epoch that was open in the
     # backup, or opened after it, needs a durable clean-close marker; otherwise it was unclean.
-    must_close = [r.epoch_id for r in restored if r.state == "open" or r.epoch_id in by_id] + later
+    must_close = [r.epoch_id for r in restored if r.state != "opening" or r.epoch_id in by_id] + later
     unclean = [str(epoch) for epoch in dict.fromkeys(must_close) if close_event_id(epoch) not in by_id]
     checks["epochs_cleanly_closed"] = not unclean
     pending = conn.execute(

@@ -1,0 +1,38 @@
+{
+  "vocabulary": "policy-vocabulary-1",
+  "literals": {},
+  "vocabulary_file": "vocabularies/v1.json",
+  "vocabulary_hash": "cac594e752fdb6c2cb6adfc63930ceea8a8fe8be3afe9570552d5c2f486d8c80",
+  "revision": "0020",
+  "functions": [
+    {
+      "signature": "journal_permission_denial()",
+      "file": "journal_permission_denial.sql",
+      "prior_file": "prior_journal_permission_denial.sql",
+      "prior_body_hash": "fe872174778b5e451c99b2396a1323f9cafe08c8b0d5e4dfe90b95dec6cfc5b6",
+      "current_body_hash": "a09635e0a89e20434e99aeaa584ec733613c8b3fc9b02a4f85ddbf0ba1a5934d",
+      "prior_definition_hash": "25132c2ccd0484b1557233ec0335ecf70d5a5a25a30685f1d77499aaff64b9a1",
+      "current_definition_hash": "15e9c73e1247b32ecfc036004c9f011000ac1a5c3e579861148219f37b7ef452"
+    },
+    {
+      "signature": "reconcile_bytes(numeric, numeric)",
+      "file": "reconcile_bytes.sql",
+      "prior_file": "prior_reconcile_bytes.sql",
+      "prior_body_hash": "c401a4ad57b18b48af7ccfdf594b4127632b040b0bb14afe9a7654e642a3d7b4",
+      "current_body_hash": "e60170c866932bb65bfe72348a148ec47925fbaa1af91d97433fefc670691ed9",
+      "prior_definition_hash": "1c985283e3e850982db473db1b7d2cef8a9a2afe421705a515a6712f48f99ad8",
+      "current_definition_hash": "377fcf991eccdf27421997d097694c70c6163ed8dfaa3eb517487946d6e6cc35"
+    }
+  ],
+  "ddl": "hardening.sql",
+  "new_functions": [
+    {
+      "signature": "journal_privacy_denial()",
+      "current_definition_hash": "6cb2062a4b072b1907410c2d6baa7ac7f6726ae80a0369aa548deb3de1ab708c"
+    },
+    {
+      "signature": "journal_actor_denial()",
+      "current_definition_hash": "aa9b499b4ae0b12c7caf4a438f044808a354906c7ba021e813be947d40764a8b"
+    }
+  ]
+}

@@ -3,6 +3,7 @@
 import ast
 import json
 import os
+import re
 from hashlib import sha256
 from importlib.resources import files
 from pathlib import Path
@@ -11,7 +12,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
-from rights.capabilities import PROVISION_HASH
+from rights.capabilities import PROVISION_HASH, selected_grants
 from rights.database import PolicyNamespace
 from rights.sql_resources import bundle_hash, context, normalize_body
 
@@ -93,6 +94,97 @@ def verify_authority(conn, ns, installed):
     allowed = owners | (set(roles.values()) if provisioned else set())
     if any("PUBLIC" in r.grantees or set(r.grantees) - allowed for r in rows):
         raise ValueError("Policy function EXECUTE grant outside the capability roles")
+    disabled = conn.scalar(
+        text("""
+        SELECT count(*) FROM pg_catalog.pg_trigger g JOIN pg_catalog.pg_class c ON c.oid=g.tgrelid
+        JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+        WHERE NOT g.tgisinternal AND g.tgenabled='D' AND n.nspname = ANY(:schemas)
+        """),
+        {"schemas": [ns.base, *(ns.schema(k) for k in ("policy", "staging", "corpus"))]},
+    )
+    if disabled:
+        raise ValueError("A policy, journal or fence trigger is disabled")
+    if provisioned:
+        verify_capability_grants(conn, ns, roles, rows)
+
+
+GRANT = re.compile(r"GRANT (.+?) ON (FUNCTION )?(.+) TO (.+?);?$", re.S)
+
+
+def split_objects(objects):
+    """Split a comma-separated object list whose function signatures contain commas."""
+    parts, depth, current = [], 0, ""
+    for char in objects:
+        depth += char == "("
+        depth -= char == ")"
+        if char == "," and depth == 0:
+            parts.append(current.strip())
+            current = ""
+        else:
+            current += char
+    return [*parts, current.strip()]
+
+
+TYPE_ALIASES = {
+    "timestamptz": "timestampwithtimezone",
+    "int": "integer",
+    "int4": "integer",
+    "int8": "bigint",
+    "bool": "boolean",
+    "varchar": "charactervarying",
+}
+
+
+def bare(name):
+    """Unqualified object name, whitespace/quotes removed and type aliases canonical, for comparison."""
+    name = name.replace('"', "").replace(" ", "")
+    head, _, rest = name.partition("(")
+    if rest:
+        types = [TYPE_ALIASES.get(t, t) for t in rest.rstrip(")").split(",")] if rest != ")" else []
+        rest = ",".join(types) + ")"
+    return head.rsplit(".", 1)[-1] + ("(" + rest if rest else "")
+
+
+def verify_capability_grants(conn, ns, roles, functions):
+    """Runtime roles hold exactly the function and table privileges the pinned bundles grant."""
+    grants, _ = selected_grants(conn, ns)
+    runtime = {roles[k] for k in ("serving", "acquisition", "review", "release")}
+    expected_functions, expected_tables = set(), set()
+    for statement in (s.strip() for g in grants for s in g.split(";\n") if s.strip()):
+        match = GRANT.match(statement.strip().rstrip(";"))
+        if not match or " SCHEMA " in f" {match[3]} " or match[3].startswith("ALL TABLES"):
+            continue
+        grantees = {g.strip().replace('"', "") for g in match[4].split(",")} & runtime
+        for target in split_objects(match[3]):
+            for grantee in grantees:
+                if match[2]:
+                    expected_functions.add((bare(target), grantee))
+                else:
+                    for privilege in match[1].split(","):
+                        expected_tables.add((bare(target), privilege.strip().upper(), grantee))
+    actual_functions = {
+        (r.signature.replace(" ", ""), grantee)
+        for r in functions
+        for grantee in r.grantees
+        if grantee in runtime
+    }
+    if actual_functions - expected_functions:
+        raise ValueError("A runtime role holds an unreviewed function grant")
+    actual_tables = {
+        (row.relname, row.privilege, row.grantee)
+        for row in conn.execute(
+            text("""
+            SELECT c.relname, a.privilege_type AS privilege, pg_catalog.pg_get_userbyid(a.grantee) AS grantee
+            FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
+            CROSS JOIN LATERAL aclexplode(c.relacl) a
+            WHERE n.nspname = ANY(:schemas) AND c.relacl IS NOT NULL
+            """),
+            {"schemas": [ns.base, *(ns.schema(k) for k in ("policy", "staging", "corpus"))]},
+        )
+        if row.grantee in runtime
+    }
+    if actual_tables - expected_tables:
+        raise ValueError("A runtime role holds an unreviewed table privilege")
 
 
 if __name__ == "__main__":
