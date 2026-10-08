@@ -1,0 +1,24 @@
+{
+  "policy_revision": "anon-2026-10-07",
+  "capacity": 300,
+  "refill_per_minute": 300,
+  "identity_concurrency": 100,
+  "global_concurrency": 32,
+  "lease_seconds": 30,
+  "queue_size": 256,
+  "queue_deadline_seconds": 10,
+  "trusted_proxies": 1,
+  "hmac_secret": "REPLACE_WITH_openssl_rand_-hex_32",
+  "db_connections": 100,
+  "operator_reserve": 10,
+  "other_workers": 10,
+  "public_pool_size": 40,
+  "api_replicas": 2,
+  "byte_limits": {
+    "capacity": 67108864,
+    "refill_per_minute": 33554432,
+    "global_capacity": 1073741824,
+    "global_refill_per_minute": 536870912,
+    "emission_lease_seconds": 60
+  }
+}
