@@ -77,23 +77,38 @@ def test_concurrent_appends_get_unique_contiguous_sequences(journal_db):
 def test_writer_role_can_append_but_not_rewrite(journal_db):
     role = "journal_writer_" + uuid4().hex[:8]
     with journal_db.begin() as conn:
-        conn.execute(text(f'CREATE ROLE "{role}" NOLOGIN'))
+        conn.execute(text(f"CREATE ROLE \"{role}\" LOGIN PASSWORD 'synthetic-journal-only'"))
     install(journal_db, writer_role=role)
+    writer = create_engine(
+        journal_db.url.set(username=role, password="synthetic-journal-only"), poolclass=NullPool
+    )
     try:
-        with journal_db.begin() as conn:
-            conn.execute(text(f'SET LOCAL ROLE "{role}"'))
-            conn.execute(
-                text(
-                    "INSERT INTO journal_event(sequence,event_id,payload,payload_sha256,chain_sha256)"
-                    " VALUES (1,:id,'{}',repeat('a',64),repeat('b',64))"
-                ),
-                {"id": uuid4()},
+        with writer.connect() as conn:
+            assert conn.scalar(text("SELECT current_user")) == role
+            assert not conn.scalar(
+                text("SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname=current_user")
             )
-        with pytest.raises(DBAPIError) as denied, journal_db.begin() as conn:
-            conn.execute(text(f'SET LOCAL ROLE "{role}"'))
-            conn.execute(text("ALTER TABLE journal_event DISABLE TRIGGER journal_event_append_only"))
-        assert denied.value.orig.sqlstate == "42501"
+        journal = PostgresJournal(writer)
+        event = deny()
+        receipt = journal.append(event)
+        assert journal.append(event) == receipt
+        with ThreadPoolExecutor(8) as pool:
+            receipts = list(pool.map(lambda _: journal.append(deny()), range(24)))
+        assert sorted(r.sequence for r in receipts) == list(range(2, 26))
+        assert journal.high_watermark()[0] == 25
+        assert journal.receipt(event.event_id) == receipt
+        assert [r.sequence for r, _ in journal.read()] == list(range(1, 26))
+        for statement in (
+            "ALTER TABLE journal_event DISABLE TRIGGER journal_event_append_only",
+            "UPDATE journal_event SET sequence=99",
+            "DELETE FROM journal_event",
+            "TRUNCATE journal_event",
+        ):
+            with pytest.raises(DBAPIError) as denied, writer.begin() as conn:
+                conn.execute(text(statement))
+            assert denied.value.orig.sqlstate == "42501"
     finally:
+        writer.dispose()
         with journal_db.begin() as conn:
             conn.execute(text(f'DROP OWNED BY "{role}"'))
             conn.execute(text(f'DROP ROLE "{role}"'))

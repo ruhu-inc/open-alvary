@@ -3,7 +3,7 @@
 Deploy it on a different host/provider from the corpus database (an independent failure
 domain, SYS-07). The table is append-only even for its owner (a trigger rejects UPDATE,
 DELETE and TRUNCATE); the runtime writer role gets only SELECT and INSERT. Sequences are
-assigned under an exclusive table lock, so the journal, not the client, decides order.
+assigned under a transaction advisory lock, so the journal, not the client, decides order.
 It passes the same conformance drills as the reference FileJournal.
 """
 
@@ -86,7 +86,11 @@ class PostgresJournal:
         payload = hashlib.sha256(event.canonical()).hexdigest()
         try:
             with self.engine.begin() as conn:
-                conn.exec_driver_sql("LOCK TABLE journal_event IN EXCLUSIVE MODE")
+                # An EXCLUSIVE table lock requires UPDATE/DELETE/TRUNCATE privileges,
+                # which the append-only writer deliberately lacks. The database-scoped
+                # relation OID gives all backend instances the same transaction mutex
+                # without granting mutation privileges; commit/rollback releases it.
+                conn.exec_driver_sql("SELECT pg_advisory_xact_lock('journal_event'::regclass::oid::bigint)")
                 existing = conn.execute(
                     text(
                         "SELECT sequence,payload,payload_sha256,chain_sha256 FROM journal_event WHERE event_id=:id"
