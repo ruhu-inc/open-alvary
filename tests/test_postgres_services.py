@@ -66,14 +66,8 @@ def test_target_service_reads_only_eligible_view_and_keys_its_page(foundation):
             ),
             {"id": f.collection},
         )
-    with f.as_role("release") as conn:
-        for work in works:
-            conn.execute(
-                text(
-                    f"INSERT INTO {f.name(conn, 'corpus', 'metadata_projection')} VALUES (:work,:cid,'Synthetic','Fixture','https://example.org/synthetic',false)"
-                ),
-                {"work": work, "cid": f.collection},
-            )
+    for work in works:
+        f.release(work=work, title="Synthetic", citation="Fixture")
     with f.as_role("serving") as conn:
         service = TargetCatalogue(PolicyRepository(conn, f.ns))
         first = service.page(limit=2)
@@ -96,12 +90,7 @@ def test_services_never_commit_the_callers_transaction(foundation):
         transaction = conn.begin()
         role = conn.dialect.identifier_preparer.quote_identifier(f.roles["release"])
         conn.execute(text(f"SET LOCAL SESSION AUTHORIZATION {role}"))
-        conn.execute(
-            text(
-                f"INSERT INTO {f.name(conn, 'corpus', 'metadata_projection')} VALUES (:work,:cid,'Synthetic','Fixture','https://example.org/synthetic',false)"
-            ),
-            {"work": f.work, "cid": f.collection},
-        )
+        f.release(conn=conn)
         repository = PolicyRepository(conn, f.ns)
         assert TargetCatalogue(repository).metadata(f.work) is not None
         assert repository.lock_collection(f.collection, expected_revision=1) == 1

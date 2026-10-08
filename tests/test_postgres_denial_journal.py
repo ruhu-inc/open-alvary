@@ -101,13 +101,8 @@ def test_rolled_back_denial_leaves_no_delivery_record(foundation):
 def test_metadata_suspension_records_a_denial(foundation):
     f = foundation
     f.decision(redistribute_metadata="allow")
-    with f.as_role("release") as conn:
-        table = f.name(conn, "corpus", "metadata_projection")
-        conn.execute(
-            text(f"INSERT INTO {table} VALUES (:w,:c,'Synthetic','Fixture','https://example.org/s',false)"),
-            {"w": f.work, "c": f.collection},
-        )
-        conn.execute(text(f"UPDATE {table} SET suspended=true WHERE work_id=:w"), {"w": f.work})
+    f.release()
+    f.release("suspend_metadata", expected=1)
     assert [(r.kind, r.affected) for r in deliveries(f)] == [("publication_deny", [f.work])]
 
 

@@ -658,6 +658,11 @@ uncompressed bytes against the identity and global byte budgets before the check
 durably, and settle at the payload length; without `byte_limits` such responses are refused (`503`)
 because missing byte limits block text launch. Single responses are capped at 10 MiB.
 
+Migration `0018` routes metadata publication through `policy.apply_release_command`: an assigned
+release maintainer projects or suspends a work's metadata with evidence, an expected revision and a
+reason; each change records an actor-bound idempotent receipt and an audit event, and suspension
+journals a denial. The release role can no longer write `corpus.metadata_projection` directly.
+
 Full acceptance runs PostgreSQL by default. Supply an isolated `TEST_DATABASE_URL` ending in `_test`
 whose maintenance account can create disposable databases and roles, then run `pytest -q`.
 `pytest --fast -q` explicitly skips PostgreSQL and cannot be treated as acceptance. Most tests clone

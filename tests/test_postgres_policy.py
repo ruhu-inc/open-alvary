@@ -1,5 +1,6 @@
 """Real migrations and synthetic, non-superuser capability subjects; no real approvals."""
 
+import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -58,6 +59,35 @@ class Foundation:
         journal = FileJournal(Path(tempfile.mkdtemp(prefix="oa-journal-")))
         recover(self.engine, self.ns, journal, None, "Synthetic test instance binding")
         open_epoch(self.engine, self.ns, journal)
+
+    def release(self, action="project_metadata", *, work=None, expected=0, conn=None, **payload):
+        """Project or suspend metadata through the audited release command."""
+        envelope = {
+            "command_id": str(uuid4()),
+            "collection_id": self.collection,
+            "work_id": work or self.work,
+            "action": action,
+            "expected_revision": expected,
+            "evidence_id": str(self.evidence),
+            "reason": "Synthetic release decision",
+        }
+        if action == "project_metadata":
+            envelope["payload"] = {
+                "title": payload.get("title", "Original synthetic title"),
+                "citation": payload.get("citation", "Synthetic citation"),
+                "reference_url": payload.get("reference_url", "https://example.org/synthetic"),
+            }
+
+        def run(connection):
+            fn = self.name(connection, "policy", "apply_release_command")
+            return connection.execute(
+                text(f"SELECT * FROM {fn}(CAST(:e AS jsonb))"), {"e": json.dumps(envelope)}
+            ).one()
+
+        if conn is not None:
+            return run(conn)
+        with self.as_role("release") as connection:
+            return run(connection)
 
     def name(self, conn, kind, table):
         return self.ns.qualified(conn, kind, table)
@@ -218,14 +248,7 @@ def test_serving_view_contains_only_eligible_safe_metadata(foundation):
     f = foundation
     f.decision(redistribute_metadata="allow")
     f.serve()
-    with f.as_role("release") as conn:
-        conn.execute(
-            text(f"""
-            INSERT INTO {f.name(conn, "corpus", "metadata_projection")}
-                VALUES (:work,:collection,'Original synthetic title','Synthetic citation','https://example.org/synthetic',false)
-        """),
-            {"work": f.work, "collection": f.collection},
-        )
+    assert f.release().revision == 1
     with f.as_role("serving") as conn:
         repo = PolicyRepository(conn, f.ns)
         result = repo.metadata(f.work)

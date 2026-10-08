@@ -174,22 +174,9 @@ def test_replay_reapplies_metadata_suspension_and_raises_allocator_floor(foundat
     f = foundation
     journal = FileJournal(tmp_path)
     f.decision(redistribute_metadata="allow")
-    with f.as_role("release") as conn:
-        conn.execute(
-            text(
-                f"INSERT INTO {f.name(conn, 'corpus', 'metadata_projection')}"
-                " VALUES (:w,:c,'Synthetic','Fixture','https://example.org/s',false)"
-            ),
-            {"w": f.work, "c": f.collection},
-        )
+    f.release()
     with snapshot(f) as restored:
-        with f.as_role("release") as conn:
-            conn.execute(
-                text(
-                    f"UPDATE {f.name(conn, 'corpus', 'metadata_projection')} SET suspended=true WHERE work_id=:w"
-                ),
-                {"w": f.work},
-            )
+        f.release("suspend_metadata", expected=1)
         deliver(f, journal)
         recover(restored.engine, f.ns, journal, None, "Synthetic replay")
         with restored.engine.connect() as conn:
