@@ -1,0 +1,45 @@
+deployment/backup.Dockerfile
+  s_b82616e2476856::t_36358c90ab1df9 1-7
+deployment/.env.example
+  s_b82616e2476856::t_36358c90ab1df9 10-19
+operations/backup.py
+  s_b82616e2476856::t_52cf73ea3465de 1-23,25-100,104-155,169-210,212-279,281-316,320-394,398-426
+  s_b82616e2476856::t_2e4804de18f630 24,156-168,211,280
+  s_b82616e2476856::t_f3e8c5fbcff044 101-103,317-319,395-397
+README.md
+  s_b82616e2476856::t_060a71967c6783 609-615
+scripts/smoke_public.py
+  s_b82616e2476856::t_e01fd1e27b9eff 41-43
+pyproject.toml
+  s_b82616e2476856::t_f3e8c5fbcff044 19
+deployment/backup.yaml
+  s_b82616e2476856::t_36358c90ab1df9 1-18
+deployment/backup.sh
+  s_b82616e2476856::t_36358c90ab1df9 2-5,8-18
+deployment/runbook.md
+  s_b82616e2476856::t_23ef4a60aa1af0 41-67
+  s_b82616e2476856::t_060a71967c6783 68-70
+operations/__init__.py
+  s_b82616e2476856::t_df2dc4d9c1f7ba 1
+tests/test_backup.py
+  s_b82616e2476856::t_73a1e4673305c7 1-80,84-89,93-95,106-120,123,136-154,158-195,199-239
+  s_b82616e2476856::t_f3e8c5fbcff044 81-83,96-105,155-157,196-198
+  s_b82616e2476856::t_2e4804de18f630 121-122,124-135
+  s_b82616e2476856::t_2103b80e01ffaf 90-92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8d63fc774562d54b426965804a153308794af6e8",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
