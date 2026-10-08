@@ -7,8 +7,8 @@ only, so ``ALVARY_PG_TOOL_PREFIX`` (for example ``docker exec -i -e PGPASSWORD d
 supply a server-matched toolchain. Passwords travel through ``PGPASSWORD``, never argv.
 
 Destination, recipient key, retention counts and alert command are operator decisions;
-nothing here supplies a default for them. The independent denial-journal checkpoint is
-recorded as unavailable until that authority exists; restored policy must stay closed.
+nothing here supplies a default for them. Metadata records the delivered denial-journal
+checkpoint; restored policy stays closed until journal replay and reconciliation.
 """
 
 import argparse
@@ -196,6 +196,29 @@ def table_inventory(tools, plain: Path) -> list[str]:
 
 
 REVISION_SQL = "SELECT version_num FROM alembic_version;"
+# Read before the dump starts, so it is a lower bound: recovery replays every journal event
+# after this sequence, and replay is idempotent for events the dump already contains.
+CHECKPOINT_SQL = """
+SELECT CASE WHEN to_regclass('policy.denial_delivery') IS NULL THEN 'absent' ELSE (
+    SELECT coalesce(max(journal_sequence),0)::text || ' ' || coalesce((SELECT journal_chain
+        FROM policy.denial_delivery WHERE journal_sequence IS NOT NULL
+        ORDER BY journal_sequence DESC LIMIT 1),'') || ' ' || count(*) FILTER (WHERE durability='pending')
+    FROM policy.denial_delivery) END;
+"""
+
+
+def checkpoint(tools, database):
+    rows = tools.query("dump", database, CHECKPOINT_SQL)
+    if len(rows) != 1:
+        raise BackupError("dump")
+    if rows[0][0] == "absent":
+        return None
+    sequence, chain, pending = rows[0][0].split(" ")
+    return {
+        "journal_sequence": int(sequence),
+        "journal_chain": chain or None,
+        "pending_denials": int(pending),
+    }
 
 
 def revision(tools, stage, database) -> str:
@@ -213,6 +236,7 @@ def create(database, recipient_file: Path, destination, tools, now: datetime) ->
         os.chmod(work, 0o700)
         fingerprints = recipient_fingerprints(home, recipient_file)
         before = revision(tools, "dump", database)
+        journal = checkpoint(tools, database)
         plain = work / "database.dump"
         with plain.open("xb") as writer:
             tools.run(
@@ -249,9 +273,9 @@ def create(database, recipient_file: Path, destination, tools, now: datetime) ->
             "encrypted_sha256": sha256(encrypted),
             "encryption": {"method": "openpgp-public-key", "recipients": fingerprints},
             "tables": tables,
-            # M4.2 supplies the independent denial-journal checkpoint; until then a restore
-            # cannot prove denial continuity and must stay closed to serving.
-            "journal_checkpoint": None,
+            # Delivered-journal lower bound (None before denial delivery exists). Recovery must
+            # still replay the journal and reconcile pending denials before any serving epoch.
+            "journal_checkpoint": journal,
         }
         sidecar = work / (name + ".json")
         sidecar.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")

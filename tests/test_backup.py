@@ -211,7 +211,12 @@ def test_encrypted_backup_restores_into_isolated_database_with_identical_content
     metadata = create(drill["source"], public, destination, drill["tools"], datetime.now(UTC))
     stored = offhost / metadata["backup"]
     assert b"identity_collections" not in stored.read_bytes()  # ciphertext, not a plain dump
-    assert metadata["journal_checkpoint"] is None and metadata["encryption"]["recipients"]
+    assert metadata["journal_checkpoint"] == {
+        "journal_sequence": 0,
+        "journal_chain": None,
+        "pending_denials": 0,
+    }
+    assert metadata["encryption"]["recipients"]
     report = restore_verify(metadata["backup"], destination, secret, drill["target"], drill["tools"])
     assert report["serving"] == "closed" and report["tables"] == len(metadata["tables"])
     assert content(drill["engines"]["source"], metadata["tables"]) == content(

@@ -1,0 +1,31 @@
+{
+  "vocabulary": "policy-vocabulary-1",
+  "vocabulary_file": "vocabularies/v1.json",
+  "vocabulary_hash": "cac594e752fdb6c2cb6adfc63930ceea8a8fe8be3afe9570552d5c2f486d8c80",
+  "revision": "0014",
+  "literals": {},
+  "ddl": "journal.sql",
+  "functions": [],
+  "new_functions": [
+    {
+      "signature": "record_denial(text, text[], boolean)",
+      "current_definition_hash": "ef8c6475b0785c4c6c7810f43da635b90daba693e81d325f13c40172736689f0"
+    },
+    {
+      "signature": "journal_permission_denial()",
+      "current_definition_hash": "25132c2ccd0484b1557233ec0335ecf70d5a5a25a30685f1d77499aaff64b9a1"
+    },
+    {
+      "signature": "journal_metadata_suspension()",
+      "current_definition_hash": "7da25170ed49af075ab9f02ec88dd90dc99932027b07e4ae588d038ddecd3cdc"
+    },
+    {
+      "signature": "journal_staging_erasure()",
+      "current_definition_hash": "1dc2b1e8adb5e786ed3c1b4633ca8c632e08b764e8ba2eb5a60f1659904adcb5"
+    },
+    {
+      "signature": "denial_delivery_immutable()",
+      "current_definition_hash": "9431b826bbfb6cc212c638fba25aecc9a90f5d0967daa6473d5e9e2097f0f1bf"
+    }
+  ]
+}

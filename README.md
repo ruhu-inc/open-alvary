@@ -590,7 +590,9 @@ unchanged and add a new resource/migration revision for future SQL changes. To p
 `python -m scripts.sql_bundle init v0014 'function(argtypes)'`. Edit the generated `<function>.sql`
 (`prior_<function>.sql` records the installed definition), then run `python -m scripts.sql_bundle pin v0014`.
 It compiles each edit in a rolled-back transaction, rewrites it into PostgreSQL's normalized form if needed,
-writes `manifest.json` and prints the `RESOURCE_HASH` for the new migration. Historical Python SQL
+writes `manifest.json` and prints the `RESOURCE_HASH` for the new migration. A revision that creates
+functions first records its DDL with `python -m scripts.sql_bundle new v0014 journal.sql 'fn(argtypes)'`;
+`pin` runs that DDL before compiling replacements, and the verifier discovers every pinned bundle. Historical Python SQL
 is retained for reproducible older installs. New grant capabilities belong in the declarative
 `rights/sql/provision` inventory; provisioning validates the installed objects before creating roles.
 Those grant files are hash-pinned by `rights.capabilities.PROVISION_HASH`, so a grant edit needs a
@@ -612,6 +614,15 @@ targets empty `_restore`/`_test` databases, and storage, key custody, retention 
 explicit operator settings without defaults. The backup tests need PostgreSQL client tools no older
 than the server; set `ALVARY_TEST_PG_TOOL_PREFIX` (and `ALVARY_TEST_PG_TOOL_HOSTPORT`) to run them
 through a version-matched container.
+
+Migration `0014` adds SYS-07 step 1: withdrawing a previously approved operation, suspending
+metadata or erasing staged bytes commits a pending `policy.denial_delivery` record with a
+publication revision from one locked allocator row, in the same transaction. Records are
+append-only except the pending-to-durable receipt. `rights.journal_delivery` delivers them in
+revision order to an `operations.journal` backend that assigns gapless global sequences, returns
+the original receipt on retry, rejects reused IDs with different payloads and hash-chains every
+record. `FileJournal` is a reference backend; `tests/journal_conformance.py` holds the drills a
+production journal (D7) must pass. Recovery replay, serving epochs and conservative reset follow.
 
 Full acceptance runs PostgreSQL by default. Supply an isolated `TEST_DATABASE_URL` ending in `_test`
 whose maintenance account can create disposable databases and roles, then run `pytest -q`.

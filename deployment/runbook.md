@@ -65,9 +65,21 @@ client is older than the server. The command checks the archive and dump hashes,
 non-empty or non-isolated target, restores without owners or grants, and verifies the
 migration revision and every table. Record the backup name, timestamp and result; then run
 migrations/seed and public smoke checks against that test deployment. Do not run the seed
-smoke check expecting four sources once the corpus has expanded. Backup metadata records
-`journal_checkpoint: null` until the independent denial journal exists, so a restored database
-cannot prove that recent withdrawals survived and must stay closed to serving.
+smoke check expecting four sources once the corpus has expanded. Backup metadata records the
+delivered denial-journal checkpoint (sequence, chain hash and pending count) read before the dump.
+A restored database must stay closed to serving until journal replay and reconciliation from that
+checkpoint exist and pass; that recovery workflow is not yet implemented.
+
+## Denial journal delivery
+
+Every withdrawal of a previously approved operation, metadata suspension and staged-byte erasure
+commits a pending `policy.denial_delivery` record in the same transaction (migration `0014`), and
+takes effect immediately in policy. `python -m rights.journal_delivery --journal <dir>` (maintenance
+`DATABASE_URL`) appends pending records to the independent journal in revision order and marks
+them durable. Exit status 1 means denials remain pending: they still deny, but are not yet
+durable outside the database. Run it after each withdrawal and on a schedule; alert on pending
+records. The file journal is a reference backend: its location must be a separate failure domain,
+and the production journal service, access control and encryption are decision D7.
 
 The policy foundation currently binds synthetic actors to PostgreSQL role OIDs. A
 database dump does not preserve authenticated subjects or recreate their role OIDs

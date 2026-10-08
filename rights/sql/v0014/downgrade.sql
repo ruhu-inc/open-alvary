@@ -1,0 +1,11 @@
+DROP TRIGGER journal_permission_denial ON {{policy}}.collection_decision;
+DROP TRIGGER journal_permission_denial ON {{policy}}.version_override;
+DROP TRIGGER journal_metadata_suspension ON {{corpus}}.metadata_projection;
+DROP TRIGGER journal_staging_erasure ON {{staging}}.staged_artifact;
+DROP TABLE {{policy}}.denial_delivery;
+DROP TABLE {{policy}}.publication_revision;
+DROP FUNCTION {{policy}}.denial_delivery_immutable();
+DROP FUNCTION {{policy}}.journal_staging_erasure();
+DROP FUNCTION {{policy}}.journal_metadata_suspension();
+DROP FUNCTION {{policy}}.journal_permission_denial();
+DROP FUNCTION {{policy}}.record_denial(text, text[], boolean);

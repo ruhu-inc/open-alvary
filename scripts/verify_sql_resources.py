@@ -15,24 +15,31 @@ from rights.capabilities import PROVISION_HASH
 from rights.database import PolicyNamespace
 from rights.sql_resources import bundle_hash, context, normalize_body
 
+MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations" / "versions"
+
 
 def verify(conn):
     ns = PolicyNamespace(conn.scalar(text("SELECT current_schema()")))
-    for revision in ("0011", "0012", "0013"):
-        migration = next(Path("migrations/versions").glob(revision + "*.py"))
+    pinned = 0
+    for migration in sorted(MIGRATIONS.glob("[0-9][0-9][0-9][0-9]_*.py")):
         tree = ast.parse(migration.read_text())
-        pin = next(
+        pins = [
             ast.literal_eval(n.value)
             for n in tree.body
             if isinstance(n, ast.Assign)
             and any(isinstance(t, ast.Name) and t.id == "RESOURCE_HASH" for t in n.targets)
-        )
-        if bundle_hash("v" + revision) != pin:
-            raise ValueError("SQL revision resource pin differs")
+        ]
+        for pin in pins:
+            pinned += 1
+            if bundle_hash("v" + migration.name[:4]) != pin:
+                raise ValueError("SQL revision resource pin differs")
     # Later immutable bundles override only the reviewed signatures they replace.
     installed = {}
-    for revision in ("v0011", "v0013"):
+    bundles = sorted(r.name for r in files("rights").joinpath("sql").iterdir() if r.name[:1] == "v")
+    for revision in bundles:
         root = files("rights").joinpath("sql", revision)
+        if not root.joinpath("manifest.json").is_file():
+            continue
         manifest = json.loads(root.joinpath("manifest.json").read_text())
         vocabulary_bytes = files("schema").joinpath(manifest["vocabulary_file"]).read_bytes()
         vocabulary = json.loads(vocabulary_bytes)
@@ -54,7 +61,7 @@ def verify(conn):
             raise ValueError("Installed SQL definition differs from reviewed revision")
     verify_authority(conn, ns, installed)
     print(
-        f"PASS: three immutable SQL resource bundles and pinned grants; {len(installed)} installed "
+        f"PASS: {pinned} immutable SQL resource bundles and pinned grants; {len(installed)} installed "
         "definitions, bodies, owners and EXECUTE grantees match"
     )
 
