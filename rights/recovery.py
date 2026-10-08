@@ -352,7 +352,7 @@ def main(argv=None) -> int:
     from operations.journal import FileJournal
 
     parser = argparse.ArgumentParser(description="Serving epochs and restore recovery (maintenance)")
-    parser.add_argument("action", choices=["open", "close", "recover"])
+    parser.add_argument("action", choices=["restore-grants", "recover", "open", "close"])
     parser.add_argument(
         "--journal", type=Path, required=True, help="Reference journal directory (D7 decides)"
     )
@@ -368,7 +368,13 @@ def main(argv=None) -> int:
     engine = create_engine(url, poolclass=NullPool)
     ns, journal = PolicyNamespace(args.schema), FileJournal(args.journal)
     try:
-        if args.action == "open":
+        if args.action == "restore-grants":
+            from rights.database import restore_grants
+
+            with engine.begin() as conn:
+                restore_grants(conn, ns)
+            result = {"grants": "restored"}
+        elif args.action == "open":
             result = {"epoch_id": str(open_epoch(engine, ns, journal))}
         elif args.action == "close":
             result = {"epoch_id": str(close_epoch(engine, ns, journal))}

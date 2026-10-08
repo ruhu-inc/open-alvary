@@ -195,25 +195,33 @@ def table_inventory(tools, plain: Path) -> list[str]:
     return tables
 
 
-REVISION_SQL = "SELECT version_num FROM alembic_version;"
+REVISION_SQL = 'SELECT version_num FROM :"base".alembic_version;'
+JOURNAL_PRESENT_SQL = "SELECT to_regclass(format('%I.denial_delivery', :'policy')) IS NOT NULL;"
 # Read before the dump starts, so it is a lower bound: recovery replays every journal event
 # after this sequence, and replay is idempotent for events the dump already contains.
 CHECKPOINT_SQL = """
-SELECT CASE WHEN to_regclass('policy.denial_delivery') IS NULL THEN 'absent' ELSE (
-    SELECT coalesce(max(journal_sequence),0)::text || ' ' || coalesce((SELECT journal_chain
-        FROM policy.denial_delivery WHERE journal_sequence IS NOT NULL
-        ORDER BY journal_sequence DESC LIMIT 1),'') || ' ' || count(*) FILTER (WHERE durability='pending')
-    FROM policy.denial_delivery) END;
+SELECT coalesce(max(journal_sequence),0), coalesce((SELECT journal_chain FROM :"policy".denial_delivery
+    WHERE journal_sequence IS NOT NULL ORDER BY journal_sequence DESC LIMIT 1),''),
+    count(*) FILTER (WHERE durability='pending')
+FROM :"policy".denial_delivery;
 """
 
 
-def checkpoint(tools, database):
-    rows = tools.query("dump", database, CHECKPOINT_SQL)
+def schemas(base: str) -> dict:
+    """Same naming rule as rights.database.PolicyNamespace, without importing it."""
+    if not re.fullmatch(r"[a-z_][a-z0-9_]{0,62}", base):
+        raise BackupError("configuration")
+    return {"base": base, "policy": f"{base}_policy" if base.startswith("test_") else "policy"}
+
+
+def checkpoint(tools, database, base):
+    names = schemas(base)
+    if tools.query("dump", database, JOURNAL_PRESENT_SQL, names) == [["f"]]:
+        return None
+    rows = tools.query("dump", database, CHECKPOINT_SQL, names)
     if len(rows) != 1:
         raise BackupError("dump")
-    if rows[0][0] == "absent":
-        return None
-    sequence, chain, pending = rows[0][0].split(" ")
+    sequence, chain, pending = rows[0]
     return {
         "journal_sequence": int(sequence),
         "journal_chain": chain or None,
@@ -221,22 +229,22 @@ def checkpoint(tools, database):
     }
 
 
-def revision(tools, stage, database) -> str:
-    rows = tools.query(stage, database, REVISION_SQL)
+def revision(tools, stage, database, base) -> str:
+    rows = tools.query(stage, database, REVISION_SQL, schemas(base))
     if len(rows) != 1:
         raise BackupError(stage)
     return rows[0][0]
 
 
-def create(database, recipient_file: Path, destination, tools, now: datetime) -> dict:
+def create(database, recipient_file: Path, destination, tools, now: datetime, base="public") -> dict:
     stamp = now.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
     name = f"open-alvary-{stamp}.dump.gpg"
     with tempfile.TemporaryDirectory(prefix="oa-backup-") as tmp, gpg_home() as home:
         work = Path(tmp)
         os.chmod(work, 0o700)
         fingerprints = recipient_fingerprints(home, recipient_file)
-        before = revision(tools, "dump", database)
-        journal = checkpoint(tools, database)
+        before = revision(tools, "dump", database, base)
+        journal = checkpoint(tools, database, base)
         plain = work / "database.dump"
         with plain.open("xb") as writer:
             tools.run(
@@ -245,7 +253,7 @@ def create(database, recipient_file: Path, destination, tools, now: datetime) ->
                 database,
                 stdout=writer,
             )
-        if revision(tools, "dump", database) != before:
+        if revision(tools, "dump", database, base) != before:
             raise BackupError("dump")
         tables = table_inventory(tools, plain)
         dump_hash, dump_bytes = sha256(plain), plain.stat().st_size
@@ -297,7 +305,7 @@ WHERE n.nspname NOT IN ('pg_catalog','information_schema') AND n.nspname NOT LIK
 """
 
 
-def restore_verify(name, destination, identity_file: Path, target, tools) -> dict:
+def restore_verify(name, destination, identity_file: Path, target, tools, base="public") -> dict:
     """Restore into an empty isolated database and verify; never targets a serving database."""
     if not NAME.fullmatch(name) or not ISOLATED_TARGET.fullmatch(target.name):
         raise BackupError("configuration")
@@ -336,7 +344,7 @@ def restore_verify(name, destination, identity_file: Path, target, tools) -> dic
                 stdin=reader,
             )
         plain.unlink()
-    if revision(tools, "verify", target) != metadata["alembic_revision"]:
+    if revision(tools, "verify", target, base) != metadata["alembic_revision"]:
         raise BackupError("verify")
     counts = dict(
         map(tuple, tools.query("verify", target, COUNT_SQL, {"tables": json.dumps(metadata["tables"])}))
@@ -423,6 +431,8 @@ def main(argv=None) -> int:
     prune.add_argument("--destination", type=Path, required=True)
     prune.add_argument("--keep-daily", type=int, required=True)
     prune.add_argument("--keep-weekly", type=int, required=True)
+    for command in (make, check):
+        command.add_argument("--schema", default="public", help="Base schema of the application tables")
     args = parser.parse_args(argv)
     os.umask(0o077)
     try:
@@ -430,11 +440,11 @@ def main(argv=None) -> int:
         tools = Tools.from_environment()
         if args.command == "create":
             database = Database.from_url(required_env("ALVARY_BACKUP_DATABASE_URL"))
-            result = create(database, args.recipient_file, destination, tools, datetime.now(UTC))
+            result = create(database, args.recipient_file, destination, tools, datetime.now(UTC), args.schema)
             result = {k: result[k] for k in ("backup", "created_at", "alembic_revision", "encrypted_sha256")}
         elif args.command == "restore-verify":
             target = Database.from_url(required_env("ALVARY_RESTORE_DATABASE_URL"))
-            result = restore_verify(args.backup, destination, args.identity_file, target, tools)
+            result = restore_verify(args.backup, destination, args.identity_file, target, tools, args.schema)
         else:
             result = purge(destination, args.keep_daily, args.keep_weekly)
     except BackupError as error:
