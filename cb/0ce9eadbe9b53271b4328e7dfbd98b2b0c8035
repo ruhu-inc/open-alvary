@@ -1,0 +1,41 @@
+rights/sql/v0019/prior_lock_approval_inputs.sql
+  s_b82616e2476856::t_a812ab123ee4a0 1-32
+rights/sql/v0019/lock_approval_inputs.sql
+  s_b82616e2476856::t_a812ab123ee4a0 1-32
+README.md
+  s_b82616e2476856::t_5552249252757d 98,145-146,508
+tests/test_postgres_approval.py
+  s_b82616e2476856::t_4d8cfbae21398e 732,755-756
+rights/sql/v0019/approval_policy_current.sql
+  s_b82616e2476856::t_a812ab123ee4a0 1-19
+rights/sql/v0019/manifest.json
+  s_b82616e2476856::t_a812ab123ee4a0 1-27
+rights/database.py
+  s_b82616e2476856::t_6c4ab71f7d4548 161
+tests/test_postgres_operators.py
+  s_b82616e2476856::t_4d8cfbae21398e 246,251-254
+tests/test_risk_remediation.py
+  s_b82616e2476856::t_5552249252757d 76
+rights/sql/v0019/prior_approval_policy_current.sql
+  s_b82616e2476856::t_a812ab123ee4a0 1-19
+migrations/versions/0019_single_reviewer.py
+  s_b82616e2476856::t_246cfd60317281 1-34
+tests/test_postgres_policy.py
+  s_b82616e2476856::t_4d8cfbae21398e 484,536-539
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cb0ce9eadbe9b53271b4328e7dfbd98b2b0c8035",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
