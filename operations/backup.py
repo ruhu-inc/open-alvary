@@ -145,6 +145,54 @@ class DirectoryDestination:
         (self.root / name).unlink(missing_ok=True)
 
 
+class RcloneDestination:
+    """Object storage through rclone (Cloudflare R2 by default deployment).
+
+    Credentials come only from rclone's environment configuration (RCLONE_CONFIG_<REMOTE>_*),
+    never argv or files written here. Uploads never overwrite: an existing name is refused
+    before upload and ``--immutable`` makes rclone refuse a concurrent different object.
+    """
+
+    REMOTE = re.compile(r"[A-Za-z0-9_-]+:[A-Za-z0-9._/-]+\Z")
+
+    def __init__(self, remote: str, binary: str = "rclone"):
+        if not self.REMOTE.fullmatch(remote) or ".." in remote:
+            raise BackupError("destination")
+        self.remote = remote.rstrip("/")
+        self.binary = binary
+
+    def _run(self, *args, empty_on_missing=False) -> bytes:
+        try:
+            completed = subprocess.run([self.binary, *args], capture_output=True, check=False, timeout=3600)
+        except (OSError, subprocess.SubprocessError):
+            raise BackupError("destination") from None
+        if empty_on_missing and completed.returncode == 3:
+            return b""  # rclone: directory not found, i.e. nothing stored under this prefix yet
+        if completed.returncode != 0:
+            raise BackupError("destination")
+        return completed.stdout
+
+    def _object(self, name: str) -> str:
+        if "/" in name or name.startswith(".") or not name:
+            raise BackupError("destination")
+        return f"{self.remote}/{name}"
+
+    def put(self, name: str, source: Path) -> None:
+        if name in self.names():
+            raise BackupError("destination")
+        self._run("copyto", "--immutable", "--s3-no-check-bucket", str(source), self._object(name))
+
+    def get(self, name: str, target: Path) -> None:
+        self._run("copyto", self._object(name), str(target))
+
+    def names(self) -> list[str]:
+        listing = self._run("lsf", "--files-only", self.remote, empty_on_missing=True).decode()
+        return sorted(line for line in listing.splitlines() if line and not line.startswith("."))
+
+    def delete(self, name: str) -> None:
+        self._run("deletefile", self._object(name))
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as reader:
@@ -420,15 +468,21 @@ def main(argv=None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     make = commands.add_parser("create", help="Dump ALVARY_BACKUP_DATABASE_URL, encrypt and store")
     make.add_argument("--recipient-file", type=Path, required=True, help="Public OpenPGP key only")
-    make.add_argument("--destination", type=Path, required=True)
+    make_where = make.add_mutually_exclusive_group(required=True)
+    make_where.add_argument("--destination", type=Path, help="Mounted directory")
+    make_where.add_argument("--remote", help="rclone remote such as r2:bucket/prefix")
     check = commands.add_parser("restore-verify", help="Restore into ALVARY_RESTORE_DATABASE_URL and verify")
     check.add_argument("backup")
-    check.add_argument("--destination", type=Path, required=True)
+    check_where = check.add_mutually_exclusive_group(required=True)
+    check_where.add_argument("--destination", type=Path, help="Mounted directory")
+    check_where.add_argument("--remote", help="rclone remote such as r2:bucket/prefix")
     check.add_argument(
         "--identity-file", type=Path, required=True, help="Private key, held off the backup host"
     )
     prune = commands.add_parser("purge", help="Apply an explicit retention decision")
-    prune.add_argument("--destination", type=Path, required=True)
+    prune_where = prune.add_mutually_exclusive_group(required=True)
+    prune_where.add_argument("--destination", type=Path, help="Mounted directory")
+    prune_where.add_argument("--remote", help="rclone remote such as r2:bucket/prefix")
     prune.add_argument("--keep-daily", type=int, required=True)
     prune.add_argument("--keep-weekly", type=int, required=True)
     for command in (make, check):
@@ -436,7 +490,9 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     os.umask(0o077)
     try:
-        destination = DirectoryDestination(args.destination)
+        destination = (
+            RcloneDestination(args.remote) if args.remote else DirectoryDestination(args.destination)
+        )
         tools = Tools.from_environment()
         if args.command == "create":
             database = Database.from_url(required_env("ALVARY_BACKUP_DATABASE_URL"))
