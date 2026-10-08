@@ -73,3 +73,5 @@ def test_protocol_errors_notifications_and_origin_checks(client):
     assert note.status_code == 202
     assert rpc(client, "ping", origin="https://evil.example").status_code == 403
     assert rpc(client, "ping", origin="http://testserver").json()["result"] == {}
+    # Behind the TLS edge the browser origin is https while the proxied request is http.
+    assert rpc(client, "ping", origin="https://testserver").json()["result"] == {}

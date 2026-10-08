@@ -1,5 +1,10 @@
 # Admission values (owner-delegated best practice, 2026-10-07)
 
+Enable with the overlay: `docker compose --env-file deployment/.env -f deployment/compose.yaml
+-f deployment/admission.yaml up -d`, with `ADMISSION_CONFIG_FILE` naming a private copy of
+`admission.example.json` (fill `hmac_secret`). The overlay raises uvicorn's `--limit-concurrency`
+to 320 so that admitted work (G = 32) plus the ingress queue (256) is governed by admission.
+
 `admission.example.json` holds the initial ACS/BUD values. They are derived from the
 specification's own fixtures, not measured production traffic; re-measure with
 `scripts/load_fixture.py` on the real host and revise before raising any public promise.
@@ -12,7 +17,7 @@ specification's own fixtures, not measured production traffic; re-measure with
 | queue_size / queue_deadline_seconds | 256 / 10 | Bounded ingress; deadline equals the 10-second retrieval budget. |
 | lease_seconds | 30 | Covers a bounded request; leases release on completion. |
 | db_connections C / operator_reserve R / other_workers O | 100 / 10 / 10 | PostgreSQL default max_connections; R keeps withdrawal possible under saturation; O covers backup, journal delivery and reconciliation. |
-| public_pool_size P / api_replicas | 40 / 2 | P <= C − R − O = 80 leaves headroom; 20 connections per replica, no overflow. |
+| public_pool_size P / api_replicas | 40 / 1 | P <= C − R − O = 80 leaves headroom; the compose stack runs one API replica (raise `api_replicas` when scaling out; each replica gets P / replicas). |
 | trusted_proxies | 1 | Caddy sets X-Forwarded-For from the real client; nginx forwards it unchanged. |
 | byte capacity / refill | 64 MiB / 32 MiB per min | ≥ 10 MiB single response (MIN); 25 browsers × 3 text reads of typical statutes fit without 429. |
 | global byte capacity / refill | 1 GiB / 512 MiB per min | About 70 Mbit/s sustained egress ceiling for the first collection. |

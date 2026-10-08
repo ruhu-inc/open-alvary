@@ -162,7 +162,9 @@ needed. Keep GitHub notifications for this repository enabled.
   `R2_READONLY_SECRET_ACCESS_KEY` (a read-only token for the backup bucket) and the variable
   `BACKUP_BUCKET_PREFIX` (for example `open-alvary-backups/production`).
 - Host jobs (backup failures) open `operations-alert` issues via `deployment/alert_github_issue.sh`.
-- Both workflows run only once these files are on GitHub; GitHub may delay scheduled runs.
+- Both workflows run only once these files are on GitHub; GitHub may delay scheduled runs, and
+  it disables scheduled workflows after 60 days without repository activity. Check the Actions
+  tab monthly (or after any quiet period) and re-enable them if GitHub has paused them.
   Primary operator: the maintainer; name a backup operator before advertising any SLA.
 
 ## Upgrade and rollback

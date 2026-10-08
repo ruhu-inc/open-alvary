@@ -445,13 +445,13 @@ def purge(destination, keep_daily: int, keep_weekly: int) -> dict:
     return {"kept": sorted(keep), "removed": sorted(removed)}
 
 
-def alert(stage: str) -> None:
+def alert(event: str, stage: str) -> None:
     command = os.environ.get("ALVARY_BACKUP_ALERT_COMMAND")
     if not command:
         print("WARNING: no ALVARY_BACKUP_ALERT_COMMAND configured; failure not delivered", file=sys.stderr)
         return
     try:
-        subprocess.run([*shlex.split(command), "backup-failed", stage], timeout=30, check=False)
+        subprocess.run([*shlex.split(command), event, stage], timeout=30, check=False)
     except (OSError, subprocess.SubprocessError):
         print("WARNING: backup alert command failed", file=sys.stderr)
 
@@ -504,12 +504,15 @@ def main(argv=None) -> int:
         else:
             result = purge(destination, args.keep_daily, args.keep_weekly)
     except BackupError as error:
-        if args.command != "purge":
-            alert(error.stage)
-        print(json.dumps({"status": "failed", "stage": error.stage}))
-        return 1
-    print(json.dumps({"status": "ok", **result}, sort_keys=True))
-    return 0
+        stage = error.stage
+    except Exception:
+        stage = "unexpected"  # never render the exception: it may contain paths or parameters
+    else:
+        print(json.dumps({"status": "ok", **result}, sort_keys=True))
+        return 0
+    alert(f"{args.command}-failed", stage)
+    print(json.dumps({"status": "failed", "stage": stage}))
+    return 1
 
 
 if __name__ == "__main__":

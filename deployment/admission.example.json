@@ -13,7 +13,7 @@
   "operator_reserve": 10,
   "other_workers": 10,
   "public_pool_size": 40,
-  "api_replicas": 2,
+  "api_replicas": 1,
   "byte_limits": {
     "capacity": 67108864,
     "refill_per_minute": 33554432,
