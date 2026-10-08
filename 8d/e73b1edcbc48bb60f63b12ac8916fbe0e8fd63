@@ -1,0 +1,37 @@
+scripts/backup_keygen.sh
+  s_b82616e2476856::t_d24a5d215bea7b 1-19
+deployment/.env.example
+  s_b82616e2476856::t_972ecf8bba199d 10-16,18-25
+deployment/backup.Dockerfile
+  s_b82616e2476856::t_d24a5d215bea7b 3
+deployment/backup.yaml
+  s_b82616e2476856::t_d24a5d215bea7b 1,9-17,20
+operations/backup.py
+  s_b82616e2476856::t_9f0405163ce83e 148-163,165-168,171-188,190-195,471-473,476-478,483-485,493-495
+  s_b82616e2476856::t_8b2fa8b3493a76 164,169-170,189
+deployment/backup.sh
+  s_b82616e2476856::t_d24a5d215bea7b 2-3,10-11,13
+tests/test_backup.py
+  s_b82616e2476856::t_1de19c90eea464 245-258,262-317
+  s_b82616e2476856::t_8b2fa8b3493a76 259-261
+deployment/runbook.md
+  s_b82616e2476856::t_972ecf8bba199d 41-46,48,50-61,65
+deployment/alert_github_issue.sh
+  s_b82616e2476856::t_d24a5d215bea7b 1-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8de73b1edcbc48bb60f63b12ac8916fbe0e8fd63",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
