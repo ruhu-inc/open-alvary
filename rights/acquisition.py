@@ -44,6 +44,20 @@ def declare_synthetic_staging_limit(
     )
 
 
+def sqlstate_status(error: DBAPIError) -> str:
+    """Map a database failure to a safe status; parameters and messages are never rendered."""
+    code = getattr(error.orig, "sqlstate", None)
+    if code == "42501":
+        return "forbidden"
+    if code in {"40001", "40P01", "23505"}:
+        return "conflict"
+    if code == "54000":
+        return "capacity_exceeded"
+    if code and code[:2] in {"22", "23"}:
+        return "validation_failed"
+    return "unavailable"
+
+
 class SyntheticAcquisition:
     def __init__(self, connection: Connection, namespace: PolicyNamespace):
         self.connection = connection
@@ -54,18 +68,7 @@ class SyntheticAcquisition:
             with self.connection.begin_nested():
                 return self.connection.scalar(statement, parameters)
         except DBAPIError as error:
-            code = getattr(error.orig, "sqlstate", None)
-            status = (
-                "forbidden"
-                if code == "42501"
-                else "conflict"
-                if code in {"40001", "40P01", "23505"}
-                else "capacity_exceeded"
-                if code == "54000"
-                else "validation_failed"
-                if code and code[:2] in {"22", "23"}
-                else "unavailable"
-            )
+            status = sqlstate_status(error)
             detail = getattr(getattr(error.orig, "diag", None), "message_detail", None)
             raise AcquisitionError(status, detail if status == "validation_failed" else None) from None
 

@@ -184,6 +184,41 @@ def test_current_resource_verifier_tracks_replacement_and_new_trigger(pg_engine,
     assert "112 installed" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "GRANT EXECUTE ON FUNCTION {policy}.apply_operator_command(jsonb) TO PUBLIC",
+        "CREATE FUNCTION {policy}.unreviewed() RETURNS int LANGUAGE sql AS 'SELECT 1'",
+    ],
+)
+def test_resource_verifier_rejects_public_execute_and_unreviewed_functions(pg_engine, tamper):
+    migrate(pg_engine)
+    from scripts.verify_sql_resources import verify
+
+    with pg_engine.connect() as conn:
+        policy = PolicyNamespace(conn.scalar(text("SELECT current_schema()"))).qualified(conn, "policy", "x")
+        conn.execute(text(tamper.format(policy=policy.rsplit(".", 1)[0])))
+        with pytest.raises(ValueError):
+            verify(conn)
+        conn.rollback()
+
+
+def test_resource_verifier_accepts_provisioned_guard_and_rejects_stray_grantee(foundation, capsys):
+    from scripts.verify_sql_resources import verify
+
+    f = foundation
+    with f.engine.connect() as conn:
+        verify(conn)
+        assert "owners and EXECUTE grantees match" in capsys.readouterr().out
+        stray = "stray_" + uuid4().hex
+        conn.execute(text(f'CREATE ROLE "{stray}" NOLOGIN'))
+        fn = f.ns.qualified(conn, "policy", "apply_operator_command")
+        conn.execute(text(f'GRANT EXECUTE ON FUNCTION {fn}(jsonb) TO "{stray}"'))
+        with pytest.raises(ValueError, match="EXECUTE grant"):
+            verify(conn)
+        conn.rollback()
+
+
 def test_new_insert_guard_has_no_runtime_execute_or_schema_create_authority(ready):
     f, _, worker, editor, maintainer, *_ = ready
     with f.engine.connect() as conn:
@@ -262,3 +297,4 @@ def test_existing_guard_upgrade_works_with_nonsuperuser_native_migration_owner(r
             quote = conn.dialect.identifier_preparer.quote_identifier
             conn.execute(text("DROP OWNED BY " + quote(role)))
             conn.execute(text("DROP ROLE " + quote(role)))
+

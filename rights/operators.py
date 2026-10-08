@@ -115,16 +115,26 @@ def register_operator(
 def revoke_operator(
     connection: Connection, namespace: PolicyNamespace, actor_id: UUID, *, reason: str
 ) -> None:
-    """Administrator revocation: locks out new commands and current policy actor checks."""
+    """Administrator revocation: locks out new commands and current policy actor checks.
+
+    Capability group memberships granted at registration are also removed, so revoked logins
+    keep no privilege that a future grant outside actor-checked policy could reach.
+    """
     reason = reason.strip()
     if not 1 <= len(reason) <= 2048:
         raise ValueError("Bounded reason required")
     actor = namespace.qualified(connection, "policy", "actor")
-    result = connection.execute(
+    login = connection.execute(
         text(
-            f"UPDATE {actor} SET active=false,registration_reason=:reason WHERE id=:id AND database_role_name IS NOT NULL"
+            f"""UPDATE {actor} a SET active=false,registration_reason=:reason
+            WHERE a.id=:id AND a.database_role_name IS NOT NULL
+            RETURNING (SELECT r.rolname FROM pg_catalog.pg_roles r WHERE r.oid=a.database_role)"""
         ),
         {"id": actor_id, "reason": reason},
-    )
-    if result.rowcount != 1:
+    ).all()
+    if len(login) != 1:
         raise ValueError("Registered operator required")
+    if login[0][0] is not None:
+        quote = connection.dialect.identifier_preparer.quote_identifier
+        groups = ",".join(quote(namespace.role(kind)) for kind in ("review", "acquisition", "release"))
+        connection.execute(text(f"REVOKE {groups} FROM {quote(login[0][0])}"))

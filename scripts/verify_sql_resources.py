@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.pool import NullPool
 
+from rights.capabilities import PROVISION_HASH
 from rights.database import PolicyNamespace
 from rights.sql_resources import bundle_hash, context, normalize_body
 
@@ -51,9 +52,40 @@ def verify(conn):
             != entry["current_definition_hash"]
         ):
             raise ValueError("Installed SQL definition differs from reviewed revision")
+    verify_authority(conn, ns, installed)
     print(
-        f"PASS: three immutable SQL resource bundles; {len(installed)} installed definitions, attributes and bodies match"
+        f"PASS: three immutable SQL resource bundles and pinned grants; {len(installed)} installed "
+        "definitions, bodies, owners and EXECUTE grantees match"
     )
+
+
+def verify_authority(conn, ns, installed):
+    """Every private policy function is pinned, uniformly owned and never PUBLIC-executable."""
+    if bundle_hash("provision") != PROVISION_HASH:
+        raise ValueError("Capability grant bundles differ from the reviewed pin")
+    roles = {kind: ns.role(kind) for kind in ("guard", "serving", "acquisition", "review", "release")}
+    rows = conn.execute(
+        text("""
+        SELECT p.proname || '(' || coalesce((SELECT string_agg(format_type(t, NULL), ', ' ORDER BY i)
+                FROM unnest(p.proargtypes::oid[]) WITH ORDINALITY u(t, i)), '') || ')' AS signature,
+            pg_catalog.pg_get_userbyid(p.proowner) AS owner,
+            ARRAY(SELECT CASE WHEN a.grantee=0 THEN 'PUBLIC' ELSE pg_catalog.pg_get_userbyid(a.grantee) END
+                FROM aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                WHERE a.privilege_type='EXECUTE') AS grantees
+        FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
+        WHERE n.nspname=:policy
+        """),
+        {"policy": ns.schema("policy")},
+    ).all()
+    if {r.signature for r in rows} != set(installed):
+        raise ValueError("Policy functions differ from the reviewed SQL inventory")
+    provisioned = conn.scalar(text("SELECT to_regrole(:guard) IS NOT NULL"), {"guard": roles["guard"]})
+    owners = {r.owner for r in rows}
+    if len(owners) != 1 or (provisioned and owners != {roles["guard"]}):
+        raise ValueError("Policy function ownership differs from the guard boundary")
+    allowed = owners | (set(roles.values()) if provisioned else set())
+    if any("PUBLIC" in r.grantees or set(r.grantees) - allowed for r in rows):
+        raise ValueError("Policy function EXECUTE grant outside the capability roles")
 
 
 if __name__ == "__main__":

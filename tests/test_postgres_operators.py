@@ -631,3 +631,17 @@ def test_old_command_retry_cannot_restore_a_superseded_permission(operators):
             == 2
         )
         assert conn.scalar(text(f"SELECT count(*) FROM {f.name(conn, 'policy', 'audit_event')}")) == 2
+
+
+def test_revocation_removes_capability_group_memberships(operators):
+    f, create, _ = operators
+    rights = create("rights")
+    member = text(
+        "SELECT pg_has_role(:login, :group, 'MEMBER') AND EXISTS(SELECT 1 FROM pg_auth_members m "
+        "WHERE m.member=to_regrole(:login) AND m.roleid=to_regrole(:group))"
+    )
+    with f.engine.begin() as conn:
+        assert conn.scalar(member, {"login": rights.role, "group": f.roles["review"]})
+        revoke_operator(conn, f.ns, rights.actor, reason="Original synthetic revocation")
+        for kind in ("review", "acquisition", "release"):
+            assert not conn.scalar(member, {"login": rights.role, "group": f.roles[kind]})

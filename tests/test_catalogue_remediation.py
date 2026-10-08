@@ -132,3 +132,24 @@ def test_two_same_day_releases_and_legacy_links_keep_bytes_and_current_withdrawa
 def test_release_revision_rejects_bad_dates_and_paths(catalogue, tmp_path, value):
     with pytest.raises(ValueError):
         write_release(catalogue, tmp_path, value, "ng", True)
+
+
+def test_release_listing_orders_revisions_numerically_and_skips_unpublished_staging(
+    catalogue, store, tmp_path
+):
+    import shutil
+
+    store.save(catalogue)
+    for release in ["2026-10-07.9", "2026-10-07.10", "2026-10-07", "2026-10-06.2"]:
+        write_release(catalogue, tmp_path, release, "ng", True)
+    staged = tmp_path / "2026-10-07.11" / "ng" / "tmpabc123"
+    shutil.copytree(tmp_path / "2026-10-07.10" / "ng" / "metadata", staged)
+    shutil.copytree(tmp_path / "2026-10-07.10", tmp_path / "not-a-release")
+    client = TestClient(create_app(store, tmp_path))
+    bases = [m["download_base"] for m in client.get("/releases").json()]
+    assert bases == [
+        "/releases/2026-10-07.10/ng/metadata",
+        "/releases/2026-10-07.9/ng/metadata",
+        "/releases/2026-10-07/ng/metadata",
+        "/releases/2026-10-06.2/ng/metadata",
+    ]

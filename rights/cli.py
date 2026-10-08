@@ -7,7 +7,6 @@ import sys
 from pydantic import ValidationError
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.pool import NullPool
 
 from rights.approval import SyntheticApproval, parse_approval_command
@@ -88,7 +87,8 @@ def main(argv=None) -> int:
                 if args.reconcile_staging
                 else OperatorCommands(connection, namespace).apply(command)
             )
-    except (SQLAlchemyError, ValueError):
+    except Exception:
+        # Any unexpected failure rolls back and stays opaque; never print a traceback or input.
         result = result_type(command_id=command.command_id, status="unavailable")
     finally:
         if engine is not None:

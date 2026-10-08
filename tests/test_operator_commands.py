@@ -120,3 +120,42 @@ def test_lifecycle_cli_safe_failures(mode):
         "validation_failed" if mode in {"invalid_json", "oversize"} else "unavailable"
     )
     assert "do-not-echo" not in result.stdout
+
+
+def test_cli_unexpected_adapter_failure_is_opaque(capsys, monkeypatch):
+    import io
+
+    from rights import cli
+
+    def broken(*args, **kwargs):
+        raise TypeError("private://do-not-echo")
+
+    monkeypatch.setenv("ALVARY_OPERATOR_DATABASE_URL", "postgresql+psycopg://synthetic@localhost/none")
+    monkeypatch.setattr(cli, "create_engine", broken)
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(json.dumps(original_command()).encode())))
+    assert cli.main([]) == 2
+    output = capsys.readouterr()
+    assert json.loads(output.out)["status"] == "unavailable"
+    assert "do-not-echo" not in output.out + output.err
+
+
+@pytest.mark.parametrize(
+    "code,status",
+    [
+        ("42501", "forbidden"),
+        ("40001", "conflict"),
+        ("40P01", "conflict"),
+        ("23505", "conflict"),
+        ("54000", "capacity_exceeded"),
+        ("22023", "validation_failed"),
+        ("23514", "validation_failed"),
+        ("08006", "unavailable"),
+        (None, "unavailable"),
+    ],
+)
+def test_database_failures_map_to_one_safe_status_table(code, status):
+    from types import SimpleNamespace
+
+    from rights.acquisition import sqlstate_status
+
+    assert sqlstate_status(SimpleNamespace(orig=SimpleNamespace(sqlstate=code))) == status
