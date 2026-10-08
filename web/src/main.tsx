@@ -101,6 +101,11 @@ const links = [
   ["/releases", "Releases"],
   ["/developers", "Developers"],
 ];
+// Resolves to nothing in production: Vite replaces import.meta.env.DEV with false.
+const DevReader = import.meta.env.DEV
+  ? React.lazy(() => import("./dev/DevReader"))
+  : () => null;
+
 function decodeSegment(value: string): string | null {
   try {
     return decodeURIComponent(value);
@@ -242,6 +247,10 @@ function App() {
             <Privacy />
           ) : pathname === "/developers" ? (
             <Developers />
+          ) : import.meta.env.DEV && pathname === "/dev/reader" ? (
+            <React.Suspense fallback={<p>Loading…</p>}>
+              <DevReader />
+            </React.Suspense>
           ) : (
             <NotFound />
           )}

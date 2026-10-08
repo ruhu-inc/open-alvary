@@ -1,0 +1,302 @@
+{
+ "schema_version": "reader-1",
+ "version_id": "ver_9994721a-d6ad-4d5b-8646-a28a2aa2dda3",
+ "content_hash": "ecff81a0266534c910970680037d8ac7b661c48758e84773be0e63f5d833cc1f",
+ "representation_id": "rep_1d89cf99-ad9a-4e27-a765-a4d5e1b942ac",
+ "representation_revision": 2,
+ "serialization_profile_id": "OA-text-1",
+ "modes": {
+  "reading": "available",
+  "page_layout": "unavailable",
+  "original": "unavailable"
+ },
+ "limitations": [
+  "geometry_unavailable",
+  "original_not_eligible",
+  "synthetic_fixture"
+ ],
+ "nodes": [
+  {
+   "node_id": "nod_9ae231c5-0fed-42b6-884b-d4b81fd456d7",
+   "anchor_id": "anc_a92123bd-b31d-4d37-ad63-2243879053ff",
+   "parent_id": null,
+   "kind": "notice",
+   "start": 0,
+   "end": 93,
+   "text": null,
+   "state": "present",
+   "references": [],
+   "rows": null,
+   "columns": null,
+   "cells": []
+  },
+  {
+   "node_id": "nod_ae8a8345-ef12-4508-b1eb-72708c116285",
+   "anchor_id": "anc_3d4e918c-952b-4717-a85b-5ce0d9831e02",
+   "parent_id": "nod_9ae231c5-0fed-42b6-884b-d4b81fd456d7",
+   "kind": "paragraph",
+   "start": 0,
+   "end": 32,
+   "text": "  Café لا⁧RTL⁩ 😀 [n].\n",
+   "state": "present",
+   "references": [
+    {
+     "start": 27,
+     "end": 30,
+     "footnote_node_id": "nod_693b9cb3-fb75-4233-92d4-25d958af0e64"
+    }
+   ],
+   "rows": null,
+   "columns": null,
+   "cells": []
+  },
+  {
+   "node_id": "nod_8f6516ed-3f19-4165-a88c-3e827ef1418d",
+   "anchor_id": "anc_72712b9a-4ba9-47ad-8bf6-be7c5c7ed627",
+   "parent_id": "nod_9ae231c5-0fed-42b6-884b-d4b81fd456d7",
+   "kind": "table",
+   "start": 34,
+   "end": 66,
+   "text": null,
+   "state": "present",
+   "references": [],
+   "rows": 2,
+   "columns": 3,
+   "cells": [
+    {
+     "row": 0,
+     "column": 0,
+     "row_span": 1,
+     "column_span": 2,
+     "node_id": "nod_5bc1a413-1708-4c64-8a44-9bf1780580c4",
+     "header": true,
+     "state": "present"
+    },
+    {
+     "row": 0,
+     "column": 2,
+     "row_span": 1,
+     "column_span": 1,
+     "node_id": "nod_cb0c4f3e-ddff-432f-84e0-ede9e50c0d93",
+     "header": false,
+     "state": "empty"
+    },
+    {
+     "row": 1,
+     "column": 0,
+     "row_span": 1,
+     "column_span": 1,
+     "node_id": "nod_6640f0db-37eb-4370-93c3-05536964251d",
+     "header": false,
+     "state": "present"
+    },
+    {
+     "row": 1,
+     "column": 1,
+     "row_span": 1,
+     "column_span": 1,
+     "node_id": "nod_fe26bab0-d796-4419-9a0f-b28439d04833",
+     "header": true,
+     "state": "present"
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "row_span": 1,
+     "column_span": 1,
+     "node_id": "nod_eac704c6-75d9-4b48-b35c-5139da38853a",
+     "header": false,
+     "state": "empty"
+    }
+   ]
+  },
+  {
+   "node_id": "nod_5bc1a413-1708-4c64-8a44-9bf1780580c4",
+   "anchor_id": "anc_41eb5d69-0fd3-4bcd-ad5a-14eb9801f222",
+   "parent_id": "nod_8f6516ed-3f19-4165-a88c-3e827ef1418d",
+   "kind": "table_cell",
+   "start": 34,
+   "end": 40,
+   "text": "Amount",
+   "state": "present",
+   "references": [],
+   "rows": null,
+   "columns": null,
+   "cells": []
+  },
+  {
+   "node_id": "nod_cb0c4f3e-ddff-432f-84e0-ede9e50c0d93",
+   "anchor_id": null,
+   "parent_id": "nod_8f6516ed-3f19-4165-a88c-3e827ef1418d",
+   "kind": "table_cell",
+   "start": null,
+   "end": null,
+   "text": null,
+   "state": "empty",
+   "references": [],
+   "rows": null,
+   "columns": null,
+   "cells": []
+  },
+  {
+   "node_id": "nod_6640f0db-37eb-4370-93c3-05536964251d",
+   "anchor_id": "anc_596af6c3-b8d4-4176-bc35-a635e0bdb94d",
+   "parent_id": "nod_8f6516ed-3f19-4165-a88c-3e827ef1418d",
+   "kind": "table_cell",
+   "start": 43,
+   "end": 62,
+   "text": "1,000.00 not waived",
+   "state": "present",
+   "references": [],
+   "rows": null,
+   "columns": null,
+   "cells": []
+  },
+  {
+   "node_id": "nod_fe26bab0-d796-4419-9a0f-b28439d04833",
+   "anchor_id": "anc_fe00faef-7961-426f-a9ca-8a72b4887eed",
+   "parent_id": "nod_8f6516ed-3f19-4165-a88c-3e827ef1418d",
+   "kind": "table_cell",
+   "start": 63,
+   "end": 65,
+   "text": "No",
+   "state": "present",
+   "references": [],
+   "rows": null,
+   "columns": null,
+   "cells": []
+  },
+  {
+   "node_id": "nod_eac704c6-75d9-4b48-b35c-5139da38853a",
+   "anchor_id": null,
+   "parent_id": "nod_8f6516ed-3f19-4165-a88c-3e827ef1418d",
+   "kind": "table_cell",
+   "start": null,
+   "end": null,
+   "text": null,
+   "state": "empty",
+   "references": [],
+   "rows": null,
+   "columns": null,
+   "cells": []
+  },
+  {
+   "node_id": "nod_693b9cb3-fb75-4233-92d4-25d958af0e64",
+   "anchor_id": "anc_23927b81-18cb-479e-b787-309aba8088f1",
+   "parent_id": "nod_9ae231c5-0fed-42b6-884b-d4b81fd456d7",
+   "kind": "footnote_group",
+   "start": 68,
+   "end": 93,
+   "text": null,
+   "state": "present",
+   "references": [],
+   "rows": null,
+   "columns": null,
+   "cells": []
+  },
+  {
+   "node_id": "nod_df416237-fc59-45b0-8e42-9f5d54b46e98",
+   "anchor_id": "anc_23927b81-18cb-479e-b787-309aba8088f1",
+   "parent_id": "nod_693b9cb3-fb75-4233-92d4-25d958af0e64",
+   "kind": "footnote",
+   "start": 68,
+   "end": 93,
+   "text": "First footnote — café.",
+   "state": "present",
+   "references": [],
+   "rows": null,
+   "columns": null,
+   "cells": []
+  },
+  {
+   "node_id": "nod_75402ced-20b9-436f-b8c3-80a5a96aeea9",
+   "anchor_id": "anc_78280c6c-ef30-4389-9f6b-3d75fc1110e2",
+   "parent_id": null,
+   "kind": "notice",
+   "start": 95,
+   "end": 168,
+   "text": null,
+   "state": "present",
+   "references": [],
+   "rows": null,
+   "columns": null,
+   "cells": []
+  },
+  {
+   "node_id": "nod_c4aa6ec4-9811-4544-89d4-2b407c3d28d2",
+   "anchor_id": "anc_78bda102-2f93-43e0-b481-4e99ff51e411",
+   "parent_id": "nod_75402ced-20b9-436f-b8c3-80a5a96aeea9",
+   "kind": "paragraph",
+   "start": 95,
+   "end": 145,
+   "text": "Second notice: 2030-01-02 is not commencement [n].",
+   "state": "present",
+   "references": [
+    {
+     "start": 46,
+     "end": 49,
+     "footnote_node_id": "nod_980a5bb2-38a5-4f02-900c-8846bff9f3ab"
+    }
+   ],
+   "rows": null,
+   "columns": null,
+   "cells": []
+  },
+  {
+   "node_id": "nod_980a5bb2-38a5-4f02-900c-8846bff9f3ab",
+   "anchor_id": "anc_88a0bc20-8af6-4250-a9ea-badb7ef5a2cb",
+   "parent_id": "nod_75402ced-20b9-436f-b8c3-80a5a96aeea9",
+   "kind": "footnote_group",
+   "start": 147,
+   "end": 168,
+   "text": null,
+   "state": "present",
+   "references": [],
+   "rows": null,
+   "columns": null,
+   "cells": []
+  },
+  {
+   "node_id": "nod_e27b256f-5242-41d5-ad60-fa2a748fa6bb",
+   "anchor_id": "anc_88a0bc20-8af6-4250-a9ea-badb7ef5a2cb",
+   "parent_id": "nod_980a5bb2-38a5-4f02-900c-8846bff9f3ab",
+   "kind": "footnote",
+   "start": 147,
+   "end": 168,
+   "text": "Second footnote لا.",
+   "state": "present",
+   "references": [],
+   "rows": null,
+   "columns": null,
+   "cells": []
+  },
+  {
+   "node_id": "nod_9a8c460e-1b63-4114-a30f-8adcf2dd4f78",
+   "anchor_id": "anc_eeeae56b-24d6-4bdd-954d-5d74cdb861b0",
+   "parent_id": null,
+   "kind": "notice",
+   "start": 170,
+   "end": 217,
+   "text": null,
+   "state": "present",
+   "references": [],
+   "rows": null,
+   "columns": null,
+   "cells": []
+  },
+  {
+   "node_id": "nod_732b6e93-bc45-4916-9b89-80a107d843e4",
+   "anchor_id": "anc_eeeae56b-24d6-4bdd-954d-5d74cdb861b0",
+   "parent_id": "nod_9a8c460e-1b63-4114-a30f-8adcf2dd4f78",
+   "kind": "paragraph",
+   "start": 170,
+   "end": 217,
+   "text": "Third notice: § 3 — literal cross-reference.",
+   "state": "present",
+   "references": [],
+   "rows": null,
+   "columns": null,
+   "cells": []
+  }
+ ]
+}
