@@ -67,8 +67,29 @@ migration revision and every table. Record the backup name, timestamp and result
 migrations/seed and public smoke checks against that test deployment. Do not run the seed
 smoke check expecting four sources once the corpus has expanded. Backup metadata records the
 delivered denial-journal checkpoint (sequence, chain hash and pending count) read before the dump.
-A restored database must stay closed to serving until journal replay and reconciliation from that
-checkpoint exist and pass; that recovery workflow is not yet implemented.
+A restored database stays closed to serving until `rights.recovery recover` has run on it (below).
+
+## Serving epochs and restore recovery
+
+Policy-governed public serving (migration `0015`; currently the `eligible_metadata` view, not the
+legacy pilot API, which remains authoritative until cutover) requires an open serving epoch bound
+to the exact database instance. A restore or clone is a new instance and serves nothing until
+recovered. With maintenance `DATABASE_URL` set:
+
+- `python -m rights.recovery recover --journal <dir> --backup-metadata <backup>.json --reason <incident>`
+  verifies the journal chain and backup checkpoint, evaluates continuity (every epoch since the
+  backup cleanly closed, every pending denial journaled), replays denials since the checkpoint,
+  raises the revision allocator floor, abandons copied epochs and rebinds the instance. The
+  predicate inputs and decision are stored in `policy.recovery_record`.
+- `conservative_reset` means continuity could not be proven: every collection stays closed until
+  a rights reviewer records a fresh decision revision. No operator command reopens it.
+- Then deliver pending denials, and `python -m rights.recovery open --journal <dir>` opens a new
+  epoch (journal marker first). Before planned maintenance or shutdown, `close` fences new denials,
+  requires none pending and journals the clean-close checkpoint. A database lost while an epoch is
+  open (no close marker) always recovers through conservative reset.
+
+Re-provision capability roles and revalidate operator identities before reopening operator access;
+restore does not carry those boundaries over.
 
 ## Denial journal delivery
 
