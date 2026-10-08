@@ -1,0 +1,52 @@
+rights/sql/v0015/prior_metadata_allowed.sql
+  s_b82616e2476856::t_6a43e64b5b0a3c 1-6
+rights/sql/v0015/recovery.sql
+  s_b82616e2476856::t_1e58212c2a0e6a 3-10,15,17,21-23,25-26,51-52
+  s_b82616e2476856::t_7921cd4c257a05 1-2,11-14,16,18-20,24,27-50,53-68
+tests/test_postgres_policy.py
+  s_b82616e2476856::t_4fba730d543687 8,51-61,220,686
+migrations/versions/0015_serving_epochs.py
+  s_b82616e2476856::t_4aecc6815c2faa 1-38,41-51,56-90
+  s_b82616e2476856::t_8bcbe2920fe949 39-40,52-55
+rights/sql/v0015/downgrade.sql
+  s_b82616e2476856::t_1e58212c2a0e6a 6
+  s_b82616e2476856::t_7921cd4c257a05 1-5
+rights/sql/v0015/manifest.json
+  s_b82616e2476856::t_683b7ccef0a042 1-29
+tests/test_postgres_representation_identity.py
+  s_b82616e2476856::t_4fba730d543687 184
+README.md
+  s_b82616e2476856::t_fc616ea364b0ff 625-628
+tests/test_postgres_recovery.py
+  s_b82616e2476856::t_f074accc04166f 1-2,5-7,10-38,58-59,67-116,134-184,202-215
+  s_b82616e2476856::t_7e1e4b35c1c3bc 3-4,8-9,39-57,60-66,117-133,185-201
+rights/sql/v0015/metadata_allowed.sql
+  s_b82616e2476856::t_6a43e64b5b0a3c 1-5
+  s_b82616e2476856::t_683b7ccef0a042 6
+deployment/runbook.md
+  s_b82616e2476856::t_fc616ea364b0ff 70-92
+tests/test_postgres_services.py
+  s_b82616e2476856::t_4fba730d543687 58,94
+rights/recovery.py
+  s_b82616e2476856::t_d4a378b9cc276d 1-58,64-164,168-240,249-340
+  s_b82616e2476856::t_df0cc22c487522 59-63,165-167,241-248
+  s_b82616e2476856::t_87954c555b976c 341-398
+tests/test_risk_remediation.py
+  s_b82616e2476856::t_0abd1da80f336a 76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b8e0cd0a8da3ff9e247c6aa3b67fe342b3da3609",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
