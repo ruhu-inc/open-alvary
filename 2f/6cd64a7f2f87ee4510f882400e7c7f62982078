@@ -1,0 +1,21 @@
+tests/test_reader.py
+  s_b82616e2476856::t_1738402fd27ef4 79-105
+rights/reader.py
+  s_b82616e2476856::t_1738402fd27ef4 8,156-195
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2f6cd64a7f2f87ee4510f882400e7c7f62982078",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
