@@ -6,8 +6,8 @@ from time import perf_counter
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -15,10 +15,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from api.admission import AdmissionConfig, AdmissionMiddleware, AdmissionStore
 from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable
 from api.catalogue import normalize_citation as normalize_citation
+from api.emission import CheckedFileResponse, CheckedResponse
 from api.project import project_info
 from api.release_adapter import LegacyReleases, ReleaseMissing, ReleaseWithdrawn
 from api.repositories import LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import ROOT, Store, check_legacy_authority, engine_for
+from rights.bytes import ByteLedger, Scope
 from rights.database import PolicyNamespace
 from schema.public import (
     CitationView,
@@ -83,6 +85,11 @@ def create_app(store: Store | None = None, releases: Path | None = None) -> Fast
             app.state.store.engine, PolicyNamespace(os.getenv("ALVARY_POLICY_SCHEMA", "public"))
         )
         app.add_middleware(AdmissionMiddleware, config=admission, store=store_)
+    app.state.ledger = (
+        ByteLedger(app.state.store.engine, PolicyNamespace(os.getenv("ALVARY_POLICY_SCHEMA", "public")))
+        if admission is not None and admission.byte_limits is not None
+        else None
+    )
     release_root = releases or ROOT / "releases"
 
     @app.get("/healthz", include_in_schema=False)
@@ -140,9 +147,43 @@ def create_app(store: Store | None = None, releases: Path | None = None) -> Fast
     def source(source_id: str, service: LegacyCatalogue = Depends(catalogue)) -> SourceView:
         return service.source(source_id)
 
-    @app.get("/sources/{source_id}/versions")
-    def versions(source_id: str, service: LegacyCatalogue = Depends(catalogue)) -> VersionPage:
-        return service.versions(source_id)
+    def fresh_versions(source_id):
+        # The final check uses its own transaction, independent of the lookup.
+        with app.state.store.engine.begin() as connection:
+            check_legacy_authority(connection, write=False)
+            return LegacyCatalogue(LegacyRepository(connection)).versions(source_id)
+
+    @app.get("/sources/{source_id}/versions", response_model=VersionPage)
+    def versions(source_id: str, request: Request, service: LegacyCatalogue = Depends(catalogue)):
+        page = service.versions(source_id)
+        served = {(v.id, v.content_hash) for v in page.items}
+
+        def recheck():
+            try:
+                fresh = fresh_versions(source_id)
+            except SourceUnavailable:
+                return False
+            return served <= {(v.id, v.content_hash) for v in fresh.items}
+
+        charged = admission is not None and bool(page.items)
+        limits = admission.byte_limits if admission is not None else None
+        identity = getattr(request.state, "admission_identity", None)
+        scopes = (
+            [
+                Scope(identity, limits.capacity, limits.refill_per_minute),
+                Scope("global:bytes", limits.global_capacity, limits.global_refill_per_minute),
+            ]
+            if limits is not None and identity is not None
+            else None
+        )
+        return CheckedResponse(
+            page.model_dump_json().encode(),
+            recheck,
+            ledger=app.state.ledger,
+            scopes=scopes,
+            lease_seconds=limits.emission_lease_seconds if limits is not None else None,
+            charged=charged,
+        )
 
     @app.get("/search")
     def search(
@@ -181,7 +222,15 @@ def create_app(store: Store | None = None, releases: Path | None = None) -> Fast
             raise HTTPException(404) from None
         except ReleaseWithdrawn as exception:
             raise HTTPException(410, str(exception)) from None
-        return FileResponse(path, filename=filename)
+
+        def recheck():
+            try:
+                LegacyReleases(app.state.store, release_root).file(release_id, jurisdiction, mode, filename)
+            except (ReleaseMissing, ReleaseWithdrawn):
+                return False
+            return True
+
+        return CheckedFileResponse(path, recheck, filename=filename)
 
     return app
 
