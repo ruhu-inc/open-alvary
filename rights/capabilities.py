@@ -5,10 +5,15 @@ from importlib.resources import files
 
 from sqlalchemy import text
 
-from rights.sql_resources import render
+from rights.sql_resources import bundle_hash, render
+
+# Reviewed grant bundles; any edit to rights/sql/provision must update this pin deliberately.
+PROVISION_HASH = "ee979bb35c9b3061c27f4439f14dfceca1782095180e6c5f2f1650a0bf9f1b3d"
 
 
 def selected_grants(conn, namespace):
+    if bundle_hash("provision") != PROVISION_HASH:
+        raise ValueError("Capability grant bundles changed; review and update the provision pin")
     names = [namespace.base, *(namespace.schema(k) for k in ("policy", "staging", "corpus"))]
     rows = conn.execute(
         text("""

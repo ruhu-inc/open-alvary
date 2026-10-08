@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 from sqlalchemy.exc import DBAPIError
 
+from rights.acquisition import sqlstate_status
 from rights.database import PolicyNamespace
 from schema.operator import CommandResult, OperatorCommand
 
@@ -51,14 +52,8 @@ class OperatorCommands:
                 )
                 return CommandResult(command_id=command.command_id, status="applied", **dict(row))
         except DBAPIError as error:
-            code = getattr(error.orig, "sqlstate", None)
-            status = (
-                "forbidden"
-                if code == "42501"
-                else "conflict"
-                if code in {"40001", "40P01", "23505"}
-                else "validation_failed"
-                if code and code[:2] in {"22", "23"}
-                else "unavailable"
-            )
+            status = sqlstate_status(error)
+            # operator-command contracts have no capacity status; keep it opaque.
+            if status == "capacity_exceeded":
+                status = "unavailable"
             return CommandResult(command_id=command.command_id, status=status)

@@ -101,6 +101,44 @@ const links = [
   ["/releases", "Releases"],
   ["/developers", "Developers"],
 ];
+function decodeSegment(value: string): string | null {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return null;
+  }
+}
+
+class PageBoundary extends React.Component<
+  { children: React.ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? (
+      <div className="page" role="alert">
+        <h1>Something went wrong</h1>
+        <p>This page could not be displayed.</p>
+        <a href="#/">Return home</a>
+      </div>
+    ) : (
+      this.props.children
+    );
+  }
+}
+
+function NotFound() {
+  return (
+    <div className="page">
+      <h1>Page not found</h1>
+      <a href="#/">Return home</a>
+    </div>
+  );
+}
+
 function App() {
   const project = useData<Project>("/project");
   const [route, setRoute] = useState(location.hash.slice(1) || "/");
@@ -115,6 +153,9 @@ function App() {
     return () => window.removeEventListener("hashchange", change);
   }, []);
   const pathname = route.split("?")[0];
+  const sourceId = pathname.startsWith("/sources/")
+    ? decodeSegment(pathname.slice(9))
+    : null;
   useEffect(() => {
     const title = [
       ...links,
@@ -182,30 +223,29 @@ function App() {
         </a>
       </header>
       <main id="main-content" tabIndex={-1}>
-        {pathname === "/" ? (
-          <Home />
-        ) : pathname === "/browse" ? (
-          <Browse route={route} />
-        ) : pathname.startsWith("/sources/") ? (
-          <Reader id={decodeURIComponent(pathname.slice(9))} />
-        ) : pathname === "/coverage" ? (
-          <CoveragePage />
-        ) : pathname === "/governance" ? (
-          <Governance />
-        ) : pathname === "/releases" ? (
-          <Releases />
-        ) : pathname === "/about" ? (
-          <About />
-        ) : pathname === "/privacy" ? (
-          <Privacy />
-        ) : pathname === "/developers" ? (
-          <Developers />
-        ) : (
-          <div className="page">
-            <h1>Page not found</h1>
-            <a href="#/">Return home</a>
-          </div>
-        )}
+        <PageBoundary key={pathname}>
+          {pathname === "/" ? (
+            <Home />
+          ) : pathname === "/browse" ? (
+            <Browse route={route} />
+          ) : sourceId !== null ? (
+            <Reader id={sourceId} />
+          ) : pathname === "/coverage" ? (
+            <CoveragePage />
+          ) : pathname === "/governance" ? (
+            <Governance />
+          ) : pathname === "/releases" ? (
+            <Releases />
+          ) : pathname === "/about" ? (
+            <About />
+          ) : pathname === "/privacy" ? (
+            <Privacy />
+          ) : pathname === "/developers" ? (
+            <Developers />
+          ) : (
+            <NotFound />
+          )}
+        </PageBoundary>
       </main>
       <footer>
         <a className="footer-brand" href="#/">

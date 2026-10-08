@@ -5,12 +5,22 @@ from hashlib import sha256
 
 import httpx
 
+SECURITY_HEADERS = [
+    "content-security-policy",
+    "x-content-type-options",
+    "referrer-policy",
+    "permissions-policy",
+]
+
 
 def verify(base_url):
     with httpx.Client(base_url=base_url.rstrip("/"), timeout=15, follow_redirects=True) as client:
         home = client.get("/")
         home.raise_for_status()
         assert "Open Alvary" in home.text, "Homepage is missing project identity"
+        for response in [home, client.get("/api/healthz")]:
+            for header in SECURITY_HEADERS:
+                assert header in response.headers, f"{response.url.path} lacks {header}"
         assert client.get("/api/healthz").json() == {"status": "ok"}
         coverage = client.get("/api/coverage")
         coverage.raise_for_status()
@@ -28,7 +38,7 @@ def verify(base_url):
                 response = client.get(base + "/" + name)
                 response.raise_for_status()
                 assert sha256(response.content).hexdigest() == details["sha256"], name
-        print("PASS: homepage, health, pilot counts, search, withheld text and all release hashes")
+        print("PASS: homepage, security headers, health, pilot counts, search, withheld text and all release hashes")
 
 
 if __name__ == "__main__":

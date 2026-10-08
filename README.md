@@ -138,7 +138,8 @@ to their caller. A rollback removes the receipt as well as the decision/evidence
 
 Appointment/credential expiry, revocation, role-name change or unsafe privilege changes
 deny subsequent commands, including retries on an established connection. Revocation
-waits for an active command's transaction and records its own private maintenance event.
+waits for an active command's transaction, records its own private maintenance event and
+removes the login's capability group memberships.
 These shadow commands also hold the legacy authority fence: frozen/rehearsal phases deny
 them. Rights and content use their own sessions/assignments; release preflight still
 requires two distinct reviewers. Holding both roles cannot satisfy independent review.
@@ -587,6 +588,10 @@ edits or unsafe guard/reader grants require boundary review. Keep each applied r
 unchanged and add a new resource/migration revision for future SQL changes. Historical Python SQL
 is retained for reproducible older installs. New grant capabilities belong in the declarative
 `rights/sql/provision` inventory; provisioning validates the installed objects before creating roles.
+Those grant files are hash-pinned by `rights.capabilities.PROVISION_HASH`, so a grant edit needs a
+deliberate, reviewed pin update. `scripts.verify_sql_resources` also requires every policy function
+to belong to the reviewed inventory, share one owner (the guard once provisioned), and grant
+EXECUTE only to that owner or the namespace capability groups, never PUBLIC.
 `schema/vocabularies/v1.json` supplies permission/material vocabulary, with mandatory drift checks
 against contracts and frozen migrations. Independent Python/SQL OA-text-1 algorithms stay separate;
 frozen, hand-calculated UTF-8 vectors test both without changing the canonical profile.

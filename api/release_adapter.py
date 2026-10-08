@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 from api.store import Store
-from exports.identity import validate_release_id
+from exports.identity import RELEASE_ID, validate_release_id
 from exports.verify import release_available
 
 
@@ -21,6 +21,26 @@ class ReleaseWithdrawn(ValueError):
     pass
 
 
+JURISDICTION = re.compile(r"[a-z0-9-]{2,30}")
+MODES = {"corpus", "metadata"}
+
+
+def _published(root: Path):
+    """Completed release directories only, newest revision first; never writer staging names."""
+    found = []
+    for path in root.glob("*/*/*/manifest.json"):
+        release, jurisdiction, mode = path.parent.relative_to(root).parts
+        match = RELEASE_ID.fullmatch(release)
+        if match is None or not JURISDICTION.fullmatch(jurisdiction) or mode not in MODES:
+            continue
+        try:
+            validate_release_id(release)
+        except ValueError:
+            continue
+        found.append(((match["day"], int(match["revision"] or 0), jurisdiction, mode), path))
+    return [path for _, path in sorted(found, reverse=True)]
+
+
 class LegacyReleases:
     def __init__(self, store: Store, root: Path):
         self.store = store
@@ -29,7 +49,7 @@ class LegacyReleases:
     def listing(self):
         current = self.store.load()
         result = []
-        for path in sorted(self.root.glob("*/*/*/manifest.json"), reverse=True):
+        for path in _published(self.root):
             if release_available(path.parent, current):
                 manifest = json.loads(path.read_text())
                 manifest["download_base"] = "/releases/" + path.parent.relative_to(self.root).as_posix()
@@ -41,9 +61,9 @@ class LegacyReleases:
             validate_release_id(release_id)
         except ValueError:
             raise ReleaseMissing() from None
-        if not re.fullmatch(r"[a-z0-9-]{2,30}", jurisdiction):
+        if not JURISDICTION.fullmatch(jurisdiction):
             raise ReleaseMissing()
-        if mode not in {"corpus", "metadata"}:
+        if mode not in MODES:
             raise ReleaseMissing()
         directory = self.root / release_id / jurisdiction / mode
         manifest = directory / "manifest.json"
