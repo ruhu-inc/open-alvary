@@ -179,3 +179,24 @@ def test_rotation_debits_both_current_and_previous_buckets():
 
 def test_each_replica_gets_an_equal_share_of_the_public_pool():
     assert config(public_pool_size=10, api_replicas=3).instance_pool_size == 3
+
+
+def test_published_quota_policy_states_limits_without_secrets():
+    from api.admission import ByteLimits, published_policy
+
+    assert published_policy(None)["enforcement"] == "none"
+    mib = 10 * 1024 * 1024
+    document = published_policy(
+        config(byte_limits=ByteLimits(mib, 60, 4 * mib, 600, 60), previous_hmac_secret=b"p" * 32)
+    )
+    assert document["request_units"] == {"burst": 10, "refill_per_minute": 30, "window_seconds": 20}
+    assert document["response_bytes"]["burst"] == mib
+    text = str(document)
+    assert "sss" not in text and "ppp" not in text and "public_pool" not in text
+
+
+def test_quota_policy_route_reports_unconfigured_pilot(store, tmp_path):
+    from api.main import create_app
+
+    response = TestClient(create_app(store, tmp_path)).get("/quota-policy")
+    assert response.status_code == 200 and response.json()["enforcement"] == "none"
