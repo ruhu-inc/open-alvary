@@ -218,14 +218,6 @@ function App() {
             </a>
           ))}
         </nav>
-        <a
-          className="header-link"
-          href="https://alvary.ai"
-          target="_blank"
-          rel="noreferrer"
-        >
-          Alvary <ArrowUpRight size={15} />
-        </a>
       </header>
       <main id="main-content" tabIndex={-1}>
         <PageBoundary key={pathname}>
@@ -260,11 +252,7 @@ function App() {
         <a className="footer-brand" href="#/">
           open alvary<span>A shared foundation for law.</span>
         </a>
-        <p>
-          Public legal data. Clear provenance. Open possibilities.
-          <br />
-          Open Alvary is separate from Alvary’s commercial products.
-        </p>
+        <p>Public legal data. Clear provenance. Open possibilities.</p>
         <div className="footer-links">
           <a href="#/about">About & contribute</a>
           <a href="#/privacy">Privacy</a>
@@ -909,10 +897,6 @@ function Governance() {
             <h3>API access</h3>
             <p>Read-only interfaces and versioned bulk releases.</p>
           </div>
-          <div className="flow-box commercial">
-            <h3>Alvary commercial product</h3>
-            <p>A separate downstream user of the same public layer.</p>
-          </div>
         </div>
       </div>
       <div className="two-columns">
@@ -1028,7 +1012,7 @@ function Developers() {
         title="Legal data. Without the guesswork."
       >
         A small read-only API, explicit rights states, and portable releases. No
-        LLM, embedding model, or commercial Alvary account required.
+        LLM, embedding model, or account required.
       </PageTitle>
       <div className="two-columns">
         <div>
@@ -1100,9 +1084,8 @@ function About() {
           </p>
           <p>
             The public website, API and ingestion software are MIT-licensed.
-            Alvary’s commercial legal-AI product is separate. Researchers,
-            legal-aid groups and other developers use the same public
-            interfaces.
+            Researchers, legal-aid groups and other developers use the same
+            public interfaces.
           </p>
           <ProjectRepository />
         </section>
@@ -1143,8 +1126,8 @@ function About() {
           Useful contributions include source discovery, parser improvements,
           schema feedback, accessibility fixes and tests. Submit independently
           authored metadata and official links. Do not upload uncleared legal
-          text, publisher compilations, private client documents or commercial
-          Alvary code.
+          text, publisher compilations, private client documents or proprietary
+          code.
         </p>
         {project.repository_url && (
           <a
@@ -1239,9 +1222,9 @@ function Privacy() {
         <section>
           <h2>Links and correspondence</h2>
           <p>
-            Official-source links, GitHub and the commercial Alvary website are
-            separate services with their own terms and privacy practices.
-            Opening an email link uses your chosen email provider.
+            Official-source links and GitHub are separate services with their
+            own terms and privacy practices. Opening an email link uses your
+            chosen email provider.
           </p>
           <p>
             If you contact the project, the maintainer receives the information

@@ -828,12 +828,8 @@ h2 {
 }
 .flow-bottom {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
-}
-.commercial {
-  background: #eeedf3;
-  border-color: #d6cee7;
 }
 .two-columns {
   display: grid;
