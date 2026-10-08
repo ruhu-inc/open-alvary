@@ -8,7 +8,7 @@ GRANT USAGE ON SCHEMA {{policy}},{{corpus}} TO {{role_serving}},{{role_release}}
 GRANT USAGE ON SCHEMA {{policy}},{{staging}} TO {{role_acquisition}};
 GRANT USAGE ON SCHEMA {{policy}} TO {{role_review}};
 GRANT SELECT ON {{corpus}}.eligible_metadata TO {{role_serving}},{{role_release}};
-GRANT SELECT,INSERT,UPDATE ON {{corpus}}.metadata_projection TO {{role_release}};
+GRANT SELECT ON {{corpus}}.metadata_projection TO {{role_release}};
 GRANT SELECT,INSERT,UPDATE ON {{staging}}.staged_artifact TO {{role_acquisition}};
 GRANT SELECT,INSERT ON {{policy}}."controller_record" TO {{role_review}};
 GRANT SELECT,INSERT ON {{policy}}."privacy_review" TO {{role_review}};

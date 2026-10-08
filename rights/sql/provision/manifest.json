@@ -179,5 +179,15 @@
       "policy.release_bytes",
       "policy.settle_bytes"
     ]
+  },
+  {
+    "revision": "0018",
+    "anchor": "policy.release_receipt",
+    "file": "v0018.sql",
+    "requires": [
+      "corpus.metadata_projection",
+      "policy.release_receipt",
+      "policy.apply_release_command"
+    ]
   }
 ]
