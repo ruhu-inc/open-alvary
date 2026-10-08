@@ -666,6 +666,12 @@ release maintainer projects or suspends a work's metadata with evidence, an expe
 reason; each change records an actor-bound idempotent receipt and an audit event, and suspension
 journals a denial. The release role can no longer write `corpus.metadata_projection` directly.
 
+`POST /mcp` (`/api/mcp` on the website) is a read-only, anonymous Model Context Protocol endpoint
+(JSON-RPC 2.0, Streamable HTTP, protocol 2025-06-18) with three tools: `search_catalogue`,
+`get_source` and `get_coverage`. Tools return exactly what the REST API returns for the same
+request, under the same policy checks and admission limits; cross-origin browser calls are refused.
+Accounts, API keys and OAuth are not implemented (S2-access provider decisions).
+
 Full acceptance runs PostgreSQL by default. Supply an isolated `TEST_DATABASE_URL` ending in `_test`
 whose maintenance account can create disposable databases and roles, then run `pytest -q`.
 `pytest --fast -q` explicitly skips PostgreSQL and cannot be treated as acceptance. Most tests clone

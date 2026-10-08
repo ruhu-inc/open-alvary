@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from contextlib import contextmanager
 from pathlib import Path
 from time import perf_counter
 from typing import Literal
@@ -16,6 +17,7 @@ from api.admission import AdmissionConfig, AdmissionMiddleware, AdmissionStore, 
 from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable
 from api.catalogue import normalize_citation as normalize_citation
 from api.emission import CheckedFileResponse, CheckedResponse
+from api.mcp import create_router as create_mcp_router
 from api.project import project_info
 from api.release_adapter import LegacyReleases, ReleaseMissing, ReleaseWithdrawn
 from api.repositories import LegacyRepository, PublicUnavailable, ResultTooLarge
@@ -91,6 +93,16 @@ def create_app(store: Store | None = None, releases: Path | None = None) -> Fast
         else None
     )
     release_root = releases or ROOT / "releases"
+
+    @contextmanager
+    def catalogue_session():
+        with app.state.store.engine.begin() as connection:
+            check_legacy_authority(connection, write=False)
+            yield LegacyCatalogue(LegacyRepository(connection))
+
+    app.include_router(
+        create_mcp_router(catalogue_session, (SQLAlchemyError, ValidationError, PublicUnavailable))
+    )
 
     @app.get("/quota-policy")
     def quota_policy():
