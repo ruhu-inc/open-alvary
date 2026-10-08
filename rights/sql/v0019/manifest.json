@@ -1,0 +1,27 @@
+{
+  "vocabulary": "policy-vocabulary-1",
+  "literals": {},
+  "vocabulary_file": "vocabularies/v1.json",
+  "vocabulary_hash": "cac594e752fdb6c2cb6adfc63930ceea8a8fe8be3afe9570552d5c2f486d8c80",
+  "revision": "0019",
+  "functions": [
+    {
+      "signature": "lock_approval_inputs(text, bigint, bigint)",
+      "file": "lock_approval_inputs.sql",
+      "prior_file": "prior_lock_approval_inputs.sql",
+      "prior_body_hash": "a8488f36195aea3addd71955a34aa8ab858624a98ef5daeef05753b35b4e2e5e",
+      "current_body_hash": "9e822ffb711392f15e944892c93d7ca15a5d2af4cfed37b5a5bf9250b62c687b",
+      "prior_definition_hash": "0b4c4164a4f7452d837380f74906b207247526c13557a7f95ee92b42ac2bfbd9",
+      "current_definition_hash": "9b7800bb685e916f9a408faccb7de2e5c08eb24b3d2c1a7bbf3d325bb299e63a"
+    },
+    {
+      "signature": "approval_policy_current(text, bigint, bigint)",
+      "file": "approval_policy_current.sql",
+      "prior_file": "prior_approval_policy_current.sql",
+      "prior_body_hash": "44eb1f6d853b88ba932e443c857a7e4364ddc604d758cdd121b6a0ca440b6a94",
+      "current_body_hash": "85e91ead1576339dfc03e17a21ffab7fea2361fb329a84246c0bbb9c9a968184",
+      "prior_definition_hash": "014a7cc12a5d7a1d75693cb9d6965d747b89dd85b6149b0d994a705003960e28",
+      "current_definition_hash": "e62d61821d12aaa9621913b72cb2b83cfa70745e595247064cec0958130d4baf"
+    }
+  ]
+}

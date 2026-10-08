@@ -481,7 +481,7 @@ def test_expired_controller_denies_private_acquisition(foundation):
         f.stage(assessment)
 
 
-def test_material_coverage_and_independent_review_preflight(foundation):
+def test_material_coverage_and_review_preflight(foundation):
     f = foundation
     f.decision(redistribute_metadata="allow")
     with pytest.raises(IntegrityError):
@@ -533,9 +533,10 @@ def test_material_coverage_and_independent_review_preflight(foundation):
         escalation_rule="Synthetic all items",
         material_classes=MATERIALS,
     )
-    with pytest.raises(DBAPIError) as denied, f.as_role("release") as conn:
-        assert conn.scalar(text(f"SELECT {function}(:cid,1,2)"), {"cid": f.collection})
-    assert denied.value.orig.sqlstate == "42501"
+    # One person may record both decisions (owner decision); only coverage is still missing.
+    with pytest.raises(DBAPIError) as incomplete, f.as_role("release") as conn:
+        conn.scalar(text(f"SELECT {function}(:cid,1,2)"), {"cid": f.collection})
+    assert incomplete.value.orig.sqlstate == "23514"
 
 
 def test_non_superuser_table_owner_cannot_bypass_forced_rls(foundation):

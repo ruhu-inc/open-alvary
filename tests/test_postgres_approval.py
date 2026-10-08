@@ -729,7 +729,7 @@ def test_erasure_injected_failure_restores_raw_bytes_all_new_payloads_and_audit(
         assert rows(f, table, schema) == records
 
 
-def test_one_native_actor_holding_both_review_roles_cannot_supply_independent_approval(ready, operators):
+def test_one_native_actor_holding_both_review_roles_may_approve(ready, operators):
     f, _, _, _, maintainer, _, _, _, _, _, review, _, _, _ = ready
     _, create, _ = operators
     dual = create(
@@ -752,8 +752,8 @@ def test_one_native_actor_holding_both_review_roles_cannot_supply_independent_ap
     compared = approve(f, dual, review)
     assert compared.status == "applied"
     cmd = approval_command(f, review, compared, rights_revision=2, verification_revision=2)
-    assert approve(f, maintainer, cmd).status == "forbidden"
-    assert not rows(f, "approved_version")
+    assert approve(f, maintainer, cmd).status == "applied"
+    assert rows(f, "approved_version")
 
 
 @pytest.mark.parametrize(

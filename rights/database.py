@@ -158,7 +158,7 @@ class PolicyRepository:
     def lock_approval_inputs(
         self, collection_id: str, *, rights_revision: int, content_revision: int
     ) -> bool:
-        """Lock/recheck independent review inputs, without approving or publishing content."""
+        """Lock/recheck current rights and content reviews, without approving or publishing content."""
         function = self.namespace.qualified(self.connection, "policy", "lock_approval_inputs")
         return bool(
             self.connection.scalar(
