@@ -33,6 +33,26 @@ class AdmissionUnavailable(RuntimeError):
 
 
 @dataclass(frozen=True)
+class ByteLimits:
+    """BUD identity and global byte budgets (D3/D18). Text delivery is refused without them."""
+
+    capacity: int
+    refill_per_minute: float
+    global_capacity: int
+    global_refill_per_minute: float
+    emission_lease_seconds: float
+
+    def __post_init__(self):
+        # MIN: a byte burst of at least one maximum single response (10 MiB).
+        if (
+            min(self.capacity, self.global_capacity) < 10 * 1024 * 1024
+            or min(self.refill_per_minute, self.global_refill_per_minute, self.emission_lease_seconds) <= 0
+            or self.emission_lease_seconds > 3600
+        ):
+            raise ValueError("Invalid byte limits")
+
+
+@dataclass(frozen=True)
 class AdmissionConfig:
     policy_revision: str
     capacity: int
@@ -50,6 +70,7 @@ class AdmissionConfig:
     other_workers: int
     public_pool_size: int
     api_replicas: int
+    byte_limits: "ByteLimits | None" = None
 
     def __post_init__(self):
         positive = (
@@ -83,6 +104,8 @@ class AdmissionConfig:
         data["hmac_secret"] = bytes.fromhex(data["hmac_secret"])
         previous = data.get("previous_hmac_secret")
         data["previous_hmac_secret"] = bytes.fromhex(previous) if previous else None
+        if data.get("byte_limits") is not None:
+            data["byte_limits"] = ByteLimits(**data["byte_limits"])
         return cls(**data)
 
     @classmethod
@@ -222,6 +245,8 @@ class AdmissionMiddleware:
         finally:
             if queued:
                 self.waiting -= 1
+        # Routes charge response bytes to the same pseudonymous identity scope.
+        scope.setdefault("state", {})["admission_identity"] = request["buckets"][0]["key"]
         bucket = result["buckets"][request["buckets"][0]["key"]]
         headers = [
             (

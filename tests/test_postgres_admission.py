@@ -145,3 +145,60 @@ def test_real_app_enforces_admission_from_configuration(pg_engine, tmp_path, mon
     limited = client.get("/sources")
     assert limited.headers["Retry-After"] and limited.headers["Cache-Control"] == "no-store"
     assert "items" not in limited.json()
+
+
+def test_real_app_charges_text_bytes_and_settles_with_the_payload_length(
+    pg_engine, tmp_path, monkeypatch, cleared
+):
+    from fastapi.testclient import TestClient
+
+    from api.main import create_app
+    from api.store import Store
+
+    migrate(pg_engine)
+    Store(pg_engine).save(cleared)
+    mib = 10 * 1024 * 1024
+    settings = dict(
+        policy_revision="synthetic-1",
+        capacity=10,
+        refill_per_minute=60,
+        identity_concurrency=2,
+        global_concurrency=4,
+        lease_seconds=30,
+        queue_size=1,
+        queue_deadline_seconds=0.2,
+        trusted_proxies=1,
+        hmac_secret="ab" * 32,
+        db_connections=10,
+        operator_reserve=2,
+        other_workers=1,
+        public_pool_size=5,
+        api_replicas=1,
+        byte_limits=dict(
+            capacity=mib,
+            refill_per_minute=1,
+            global_capacity=4 * mib,
+            global_refill_per_minute=1,
+            emission_lease_seconds=60,
+        ),
+    )
+    path = tmp_path / "admission.json"
+    path.write_text(json.dumps(settings))
+    monkeypatch.setenv("ALVARY_ADMISSION_CONFIG", str(path))
+    with pg_engine.connect() as conn:
+        schema = conn.scalar(text("SELECT current_schema()"))
+    monkeypatch.setenv("ALVARY_POLICY_SCHEMA", schema)
+    client = TestClient(create_app(Store(pg_engine), tmp_path), headers={"X-Forwarded-For": "203.0.113.9"})
+    response = client.get(f"/sources/{cleared.sources[0].id}/versions")
+    assert response.status_code == 200 and "Test only" in response.text
+    with pg_engine.connect() as conn:
+        ns = PolicyNamespace(schema)
+        rows = conn.execute(
+            text(f"SELECT state,settled_bytes FROM {ns.qualified(conn, 'policy', 'byte_reservation')}")
+        ).all()
+        spent = conn.scalar(
+            text(
+                f"SELECT spent FROM {ns.qualified(conn, 'policy', 'byte_bucket')} WHERE scope_key='global:bytes'"
+            )
+        )
+    assert rows == [("settled", len(response.content))] and int(spent) == len(response.content)

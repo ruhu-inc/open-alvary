@@ -105,6 +105,12 @@ P <= C - R - O; each instance opens at most P / replicas connections with no ove
 policy namespace (default `public`). Without the file, the metadata pilot keeps its existing nginx
 rate limit and no ACS-05 enforcement; that is not acceptable for text launch.
 
+Optional `byte_limits` (`capacity` and `global_capacity` of at least 10 MiB, their
+`refill_per_minute` values and `emission_lease_seconds`) enable text delivery under the BUD byte
+ledger; they are D3/D18 decisions. Run `ByteLedger.reconcile(fence_seconds, conservative_seconds)`
+under maintenance authority at least once per minute with the approved D3 bounds; there are no
+defaults. Ambiguous deliveries are charged in full unless durable transport evidence settles them.
+
 ## Denial journal delivery
 
 Every withdrawal of a previously approved operation, metadata suspension and staged-byte erasure

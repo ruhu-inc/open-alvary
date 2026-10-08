@@ -647,6 +647,15 @@ with D3 fence and conservative bounds and no defaults) releases expired unsent r
 fenced expired emissions ambiguous and settles them at every reserved byte unless durable
 transport evidence settles them first.
 
+Responses that can carry text (`/sources/{id}/versions`) and release downloads are buffered and
+rechecked in a fresh transaction immediately before the first byte is sent (`api.emission`): content
+withdrawn after lookup returns `409` (text) or `410` (release) with no body bytes, and a failed policy
+read returns `503`. Bytes already handed to transport cannot be recalled; a withdrawal committed after
+the check applies from the next request. With admission configured, text responses reserve their
+uncompressed bytes against the identity and global byte budgets before the check, begin emission
+durably, and settle at the payload length; without `byte_limits` such responses are refused (`503`)
+because missing byte limits block text launch. Single responses are capped at 10 MiB.
+
 Full acceptance runs PostgreSQL by default. Supply an isolated `TEST_DATABASE_URL` ending in `_test`
 whose maintenance account can create disposable databases and roles, then run `pytest -q`.
 `pytest --fast -q` explicitly skips PostgreSQL and cannot be treated as acceptance. Most tests clone
