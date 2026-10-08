@@ -140,6 +140,9 @@ class Unavailable:
     def append(self, event):
         raise JournalError("Journal unavailable")
 
+    def read(self, after=0, limit=1000):
+        raise JournalError("Journal unavailable")
+
 
 def test_journal_outage_leaves_denial_pending_and_effective(foundation, tmp_path):
     f = foundation
@@ -218,3 +221,32 @@ def test_staged_erasure_records_one_erasure_event(chain, tmp_path):
     rows = deliveries(f)
     assert [(r.kind, r.affected, r.erasure) for r in rows] == [("erasure", [str(artifact)], True)]
     assert run(f, FileJournal(tmp_path)).pending == 0
+
+
+@pytest.mark.parametrize(
+    "second",
+    [
+        dict(redistribute_metadata="allow", conditions_satisfied=False),
+        dict(redistribute_metadata="allow", basis_type="unknown"),
+        dict(redistribute_metadata="allow", expires_at="earlier"),
+    ],
+    ids=["conditions", "basis", "expiry"],
+)
+def test_every_kind_of_narrowing_revision_is_journaled(foundation, second):
+    f = foundation
+    f.decision(redistribute_metadata="allow")
+    if second.get("expires_at") == "earlier":
+        second["expires_at"] = f.now + timedelta(hours=2)
+    f.decision(revision=2, **second)
+    assert [r.kind for r in deliveries(f)] == ["publication_deny"]
+
+
+def test_deactivating_a_reviewer_journals_their_collections(foundation):
+    f = foundation
+    f.decision(redistribute_metadata="allow")
+    with f.engine.begin() as conn:
+        conn.execute(
+            text(f"UPDATE {f.name(conn, 'policy', 'actor')} SET active=false WHERE id=:a"),
+            {"a": f.actors["review"]},
+        )
+    assert [(r.kind, r.affected) for r in deliveries(f)] == [("publication_deny", [f.collection])]

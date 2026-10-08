@@ -89,6 +89,9 @@ recovered. With maintenance `DATABASE_URL` set:
   backup cleanly closed, every pending denial journaled), replays denials since the checkpoint,
   raises the revision allocator floor, abandons copied epochs and rebinds the instance. The
   predicate inputs and decision are stored in `policy.recovery_record`.
+- Always restore into a new database. An in-place restore keeps the instance identity; journal
+  delivery and epoch opening then detect that the journal is ahead, fence serving and require
+  `recover`.
 - `conservative_reset` means continuity could not be proven: every collection stays closed until
   a rights reviewer records a fresh decision revision. No operator command reopens it.
 - Then deliver pending denials, and `python -m rights.recovery open --journal <dir>` opens a new

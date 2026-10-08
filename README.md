@@ -672,6 +672,15 @@ journals a denial. The release role can no longer write `corpus.metadata_project
 request, under the same policy checks and admission limits; cross-origin browser calls are refused.
 Accounts, API keys and OAuth are not implemented (S2-access provider decisions).
 
+Migration `0020` hardens recovery after review: epochs open and close in two phases with
+deterministic journal markers (a `closing` epoch stops serving before its clean-close marker is
+journaled), every revision that is not provably at least as permissive is journaled as a denial
+(including unmet conditions, unknown basis, earlier expiry, first narrowing overrides, privacy or
+controller narrowing and reviewer deactivation), recovery raises the revision floor before replay,
+and byte reconciliation locks buckets in key order. Journal delivery and epoch opening fence
+serving when the journal holds events the database cannot explain (an in-place restore), and the
+SQL verifier checks exact runtime grants and that no policy trigger is disabled.
+
 Full acceptance runs PostgreSQL by default. Supply an isolated `TEST_DATABASE_URL` ending in `_test`
 whose maintenance account can create disposable databases and roles, then run `pytest -q`.
 `pytest --fast -q` explicitly skips PostgreSQL and cannot be treated as acceptance. Most tests clone

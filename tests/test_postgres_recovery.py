@@ -200,3 +200,98 @@ def test_epoch_identity_cannot_be_forged_by_inserting_a_row(foundation):
             {"id": uuid4()},
         )
     assert not metadata_visible(f)
+
+
+class CrashAfterAppend:
+    """Journal wrapper: the append succeeds, then the process 'crashes' before the DB commit."""
+
+    def __init__(self, journal):
+        self.journal = journal
+
+    def append(self, event):
+        self.journal.append(event)
+        raise RuntimeError("crash after journal append")
+
+    def __getattr__(self, name):
+        return getattr(self.journal, name)
+
+
+def test_open_retry_after_crash_reuses_the_identical_marker(foundation, tmp_path):
+    f = foundation
+    journal = FileJournal(tmp_path)
+    f.decision(redistribute_metadata="allow")
+    recover(f.engine, f.ns, journal, None, "Synthetic binding")
+    with pytest.raises(RuntimeError):
+        open_epoch(f.engine, f.ns, CrashAfterAppend(journal))
+    assert epochs(f) == ["opening"] and not metadata_visible(f)
+    open_epoch(f.engine, f.ns, journal)
+    assert epochs(f) == ["open"] and metadata_visible(f)
+    assert [e.kind for _, e in journal.read()] == ["epoch_open"]
+
+
+def test_close_crash_stops_serving_and_retry_completes_one_clean_close(foundation, tmp_path):
+    f = foundation
+    journal = FileJournal(tmp_path)
+    f.decision(redistribute_metadata="allow")
+    serve(f, journal)
+    with pytest.raises(RuntimeError):
+        close_epoch(f.engine, f.ns, CrashAfterAppend(journal))
+    assert epochs(f) == ["closing"] and not metadata_visible(f)
+    with pytest.raises(EpochRefused):
+        open_epoch(f.engine, f.ns, journal)  # cannot reopen until the close completes
+    close_epoch(f.engine, f.ns, journal)
+    assert epochs(f) == ["closed"]
+    assert [e.kind for _, e in journal.read()] == ["epoch_open", "epoch_close"]
+
+
+def test_in_place_restore_is_detected_from_the_journal_and_fenced(foundation, tmp_path):
+    f = foundation
+    journal = FileJournal(tmp_path)
+    f.decision(redistribute_metadata="allow")
+    with snapshot(f) as restored:
+        serve(f, journal)  # the live database moves on after the backup
+        f.decision(revision=2)
+        deliver(f, journal)
+        # Simulate an in-place restore: the restored copy claims the live instance identity.
+        with f.engine.connect() as live:
+            identity = live.execute(
+                text(
+                    f"SELECT system_identifier,database_oid FROM {f.name(live, 'policy', 'instance_binding')}"
+                )
+            ).one()
+            epoch = (
+                live.execute(text(f"SELECT * FROM {f.name(live, 'policy', 'serving_epoch')}"))
+                .mappings()
+                .one()
+            )
+        with restored.engine.begin() as conn:
+            conn.execute(
+                text(
+                    f"UPDATE {f.name(conn, 'policy', 'instance_binding')} SET system_identifier=:s,database_oid=:o"
+                ),
+                {"s": identity.system_identifier, "o": identity.database_oid},
+            )
+            conn.execute(
+                text(
+                    f"INSERT INTO {f.name(conn, 'policy', 'serving_epoch')}"
+                    "(epoch_id,system_identifier,database_oid,state,open_sequence,open_revision)"
+                    " VALUES (:id,:s,:o,'open',:seq,:rev)"
+                ),
+                {
+                    "id": uuid4(),
+                    "s": epoch["system_identifier"],
+                    "o": epoch["database_oid"],
+                    "seq": epoch["open_sequence"],
+                    "rev": epoch["open_revision"],
+                },
+            )
+        deliver(restored, journal)  # the dispatcher notices the journal is ahead and fences
+        with restored.engine.connect() as conn:
+            states = (
+                conn.execute(text(f"SELECT state FROM {f.name(conn, 'policy', 'serving_epoch')}"))
+                .scalars()
+                .all()
+            )
+        assert states == ["abandoned"]
+        with pytest.raises(RecoveryRequired):
+            open_epoch(restored.engine, f.ns, journal)

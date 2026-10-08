@@ -41,6 +41,14 @@ def dispatch(conn: Connection, ns: PolicyNamespace, journal, limit: int = 100) -
         raise ValueError("Bounded dispatch batch required")
     table = ns.qualified(conn, "policy", "denial_delivery")
     conn.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": DISPATCH_LOCK})
+    # Detect a database that lost history the journal still holds (fences serving; caller commits).
+    from rights.recovery import RecoveryRequired, Tables, fence_if_behind_journal
+
+    try:
+        fence_if_behind_journal(conn, Tables(conn, ns), journal)
+    except (RecoveryRequired, JournalError):
+        # Fenced, or the journal is unreachable: denials stay pending and effective.
+        return DispatchResult(delivered=0, pending=pending_count(conn, ns))
     rows = conn.execute(
         text(f"""
         SELECT event_id,kind,affected,revision,revision_domain,occurred_at,erasure

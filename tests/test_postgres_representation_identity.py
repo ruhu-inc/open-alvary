@@ -181,7 +181,7 @@ def test_current_resource_verifier_tracks_replacement_and_new_trigger(pg_engine,
 
     with pg_engine.connect() as conn:
         verify(conn)
-    assert "129 installed" in capsys.readouterr().out
+    assert "131 installed" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
@@ -337,3 +337,31 @@ def fingerprint_of(conn, ns, signature):
         ),
         {"fn": ns.qualified(conn, "policy", "x").rsplit(".", 1)[0] + "." + signature},
     ).one()
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        "GRANT EXECUTE ON FUNCTION {policy}.reconcile_bytes(numeric, numeric) TO {serving}",
+        "GRANT EXECUTE ON FUNCTION {policy}.apply_release_command(jsonb) TO {serving}",
+        "GRANT INSERT ON {corpus}.metadata_projection TO {release}",
+        "GRANT UPDATE ON {policy}.denial_delivery TO {release}",
+        "ALTER TABLE {policy}.collection_decision DISABLE TRIGGER journal_permission_denial",
+    ],
+)
+def test_verifier_rejects_unreviewed_grants_and_disabled_triggers(foundation, tamper):
+    from scripts.verify_sql_resources import verify
+
+    f = foundation
+    with f.engine.connect() as conn:
+        quote = conn.dialect.identifier_preparer.quote_identifier
+        names = {
+            "policy": quote(f.ns.schema("policy")),
+            "corpus": quote(f.ns.schema("corpus")),
+            "serving": quote(f.roles["serving"]),
+            "release": quote(f.roles["release"]),
+        }
+        conn.execute(text(tamper.format(**names)))
+        with pytest.raises(ValueError):
+            verify(conn)
+        conn.rollback()
