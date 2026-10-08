@@ -111,6 +111,13 @@ export function ReaderView({ descriptor }: { descriptor: ReaderDescriptor }) {
               href={"#" + anchorFor(target)}
               className="reader-noteref"
               aria-label={"Footnote " + piece.text}
+              onClick={(event) => {
+                // The app uses hash routing; move focus to the note instead of changing route.
+                event.preventDefault();
+                const note = document.getElementById(anchorFor(target) ?? "");
+                note?.scrollIntoView({ block: "center" });
+                note?.focus({ preventScroll: true });
+              }}
             >
               {piece.text}
             </a>

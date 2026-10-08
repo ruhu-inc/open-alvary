@@ -111,7 +111,7 @@ def test_cli_failure_reports_stage_only_and_invokes_alert_hook(tmp_path):
     assert completed.returncode == 1
     assert json.loads(completed.stdout) == {"status": "failed", "stage": "encrypt"}
     assert "do-not-echo" not in completed.stdout + completed.stderr
-    assert record.read_text() == "backup-failed encrypt"
+    assert record.read_text() == "create-failed encrypt"
 
 
 # --- PostgreSQL drill -------------------------------------------------------------------
@@ -315,3 +315,29 @@ def test_rclone_destination_rejects_unsafe_remotes(remote):
 
     with pytest.raises(BackupError):
         RcloneDestination(remote)
+
+
+def test_failed_retention_also_alerts(tmp_path):
+    record = tmp_path / "alert"
+    hook = tmp_path / "hook.py"
+    hook.write_text(f"import sys\nopen({str(record)!r}, 'w').write(' '.join(sys.argv[1:]))\n")
+    env = dict(os.environ, ALVARY_BACKUP_ALERT_COMMAND=f"{sys.executable} {hook}")
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "operations.backup",
+            "purge",
+            "--destination",
+            str(tmp_path),
+            "--keep-daily",
+            "0",
+            "--keep-weekly",
+            "0",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=60,
+    )
+    assert completed.returncode == 1 and record.read_text() == "purge-failed configuration"

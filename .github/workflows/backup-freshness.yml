@@ -28,9 +28,13 @@ jobs:
             echo "::notice::Backup freshness not configured (secrets/variable missing)"; echo "state=skip" >> "$GITHUB_OUTPUT"; exit 0
           fi
           bucket=${LOCATION%%/*}; prefix=${LOCATION#*/}
+          # Missing objects, bad credentials or an unreachable endpoint all count as stale.
           newest=$(aws s3api list-objects-v2 --endpoint-url "$R2_ENDPOINT" --bucket "$bucket" --prefix "$prefix/" \
-            --query "sort_by(Contents[?ends_with(Key, '.dump.gpg.json')], &LastModified)[-1].LastModified" --output text)
-          if [ -z "$newest" ] || [ "$newest" = "None" ]; then echo "state=stale" >> "$GITHUB_OUTPUT"; exit 0; fi
+            --query "sort_by((Contents || \`[]\`)[?ends_with(Key, '.dump.gpg.json')], &LastModified)[-1].LastModified" \
+            --output text) || newest=""
+          if [ -z "$newest" ] || [ "$newest" = "None" ] || [ "$newest" = "null" ]; then
+            echo "state=stale" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           age=$(( $(date -u +%s) - $(date -u -d "$newest" +%s) ))
           echo "Newest backup: $newest (${age}s old)"
           if [ "$age" -gt 93600 ]; then echo "state=stale" >> "$GITHUB_OUTPUT"; else echo "state=fresh" >> "$GITHUB_OUTPUT"; fi

@@ -7,8 +7,10 @@ or account data. Responses are single JSON bodies (no server-initiated streams).
 
 import json
 from collections.abc import Callable
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26")
@@ -90,8 +92,9 @@ def create_router(catalogue_factory: Callable, unavailable: tuple[type[Exception
     @router.post("/mcp")
     async def mcp(request: Request):
         origin = request.headers.get("origin")
-        if origin is not None and origin.rstrip("/") != f"{request.url.scheme}://{request.url.netloc}":
-            # Browser cross-origin calls are refused (DNS-rebinding protection).
+        # Refuse cross-origin browser calls: the Origin host must equal the requested Host.
+        # (TLS ends at the edge proxy, so the scheme is not compared.) Non-browser clients send none.
+        if origin is not None and urlsplit(origin).netloc != request.headers.get("host", ""):
             return JSONResponse(status_code=403, content=_error(None, -32600, "Origin not allowed"))
         try:
             message = json.loads(await request.body())
@@ -124,7 +127,8 @@ def create_router(catalogue_factory: Callable, unavailable: tuple[type[Exception
             if not isinstance(params, dict) or not isinstance(params.get("name"), str):
                 return _error(id_, -32602, "Invalid params")
             try:
-                payload = call_tool(params["name"], params.get("arguments", {}))
+                # Database work runs in a worker thread, never on the event loop.
+                payload = await run_in_threadpool(call_tool, params["name"], params.get("arguments", {}))
             except unavailable:
                 return _result(id_, _tool_result("Catalogue authority unavailable", is_error=True))
             except LookupError:
