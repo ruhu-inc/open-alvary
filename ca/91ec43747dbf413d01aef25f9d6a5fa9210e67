@@ -1,0 +1,27 @@
+.github/workflows/backup-freshness.yml
+  s_b82616e2476856::t_d2655d725f1aef 1-43
+.github/workflows/monitor.yml
+  s_b82616e2476856::t_603a819c98b6b7 1-51
+deployment/runbook.md
+  s_b82616e2476856::t_7a523b9d4bce7f 152-167
+scripts/monitor_probe.py
+  s_b82616e2476856::t_94b793b1f6e177 1-35
+tests/test_monitor.py
+  s_b82616e2476856::t_0a79cfc2246ed8 1-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ca91ec43747dbf413d01aef25f9d6a5fa9210e67",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
