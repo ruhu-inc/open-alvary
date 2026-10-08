@@ -1,0 +1,29 @@
+{
+  "vocabulary": "policy-vocabulary-1",
+  "literals": {},
+  "vocabulary_file": "vocabularies/v1.json",
+  "vocabulary_hash": "cac594e752fdb6c2cb6adfc63930ceea8a8fe8be3afe9570552d5c2f486d8c80",
+  "revision": "0015",
+  "functions": [
+    {
+      "signature": "metadata_allowed(text)",
+      "file": "metadata_allowed.sql",
+      "prior_file": "prior_metadata_allowed.sql",
+      "prior_body_hash": "4d4b6a06d8bdb60fa4187cd8184357a89e7f1333a7276c35215e5078dc5abddc",
+      "current_body_hash": "1709196336c897abc3d14d77bf609155bb240ccc65ec0ca9762f704426bf0554",
+      "prior_definition_hash": "efe6334d7cfc38913f51935c08e11a61481af2c58042d79d15475b0312e948ba",
+      "current_definition_hash": "0b403e274966527053f9a1c09da53b0528e3a9ab42b6ecbe49526d5bc7c56a78"
+    }
+  ],
+  "ddl": "recovery.sql",
+  "new_functions": [
+    {
+      "signature": "serving_permitted()",
+      "current_definition_hash": "9e4c8c34890388821360405efddf2951ebe9b3b38f43308912f0e630ef59ae46"
+    },
+    {
+      "signature": "serving_allowed(text)",
+      "current_definition_hash": "e64b62864e045c1f2608c64c8fbd590278e657abfe3bfd5813c841957a37a120"
+    }
+  ]
+}

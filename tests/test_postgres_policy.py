@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import timedelta
 from hashlib import sha256
+from pathlib import Path
 from threading import Barrier
 from uuid import uuid4
 
@@ -46,6 +47,17 @@ class Foundation:
             # always switch again, so it cannot prove a runtime subject cannot escalate.
             conn.execute(text(f"SET LOCAL SESSION AUTHORIZATION {role}"))
             yield conn
+
+    def serve(self):
+        """Cloned test databases are new instances: recover against an empty journal, open an epoch."""
+        import tempfile
+
+        from operations.journal import FileJournal
+        from rights.recovery import open_epoch, recover
+
+        journal = FileJournal(Path(tempfile.mkdtemp(prefix="oa-journal-")))
+        recover(self.engine, self.ns, journal, None, "Synthetic test instance binding")
+        open_epoch(self.engine, self.ns, journal)
 
     def name(self, conn, kind, table):
         return self.ns.qualified(conn, kind, table)
@@ -205,6 +217,7 @@ def test_default_missing_unknown_and_expired_decisions_deny(foundation):
 def test_serving_view_contains_only_eligible_safe_metadata(foundation):
     f = foundation
     f.decision(redistribute_metadata="allow")
+    f.serve()
     with f.as_role("release") as conn:
         conn.execute(
             text(f"""
@@ -670,6 +683,7 @@ def test_version_override_cannot_widen_parent_decision_and_hash_is_pinned(founda
 def test_search_path_cannot_redirect_security_definer_policy_reads(foundation):
     f = foundation
     f.decision(redistribute_metadata="allow")
+    f.serve()
     with f.as_role("serving") as conn:
         conn.execute(text("CREATE TEMP TABLE collection_decision(redistribute_metadata text)"))
         conn.execute(text("INSERT INTO collection_decision VALUES ('deny')"))

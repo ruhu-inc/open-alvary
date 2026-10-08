@@ -55,6 +55,7 @@ def test_pg_gate_checks_precede_approved_body_and_anchor_validation(pg_engine, c
 def test_target_service_reads_only_eligible_view_and_keys_its_page(foundation):
     f = foundation
     f.decision(redistribute_metadata="allow")
+    f.serve()
     with f.engine.begin() as conn:
         works = list(
             conn.scalars(text("SELECT id FROM identity_works WHERE document_class='act' ORDER BY id"))
@@ -90,6 +91,7 @@ def test_target_service_reads_only_eligible_view_and_keys_its_page(foundation):
 def test_services_never_commit_the_callers_transaction(foundation):
     f = foundation
     f.decision(redistribute_metadata="allow")
+    f.serve()
     with f.engine.connect() as conn:
         transaction = conn.begin()
         role = conn.dialect.identifier_preparer.quote_identifier(f.roles["release"])
