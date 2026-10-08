@@ -56,6 +56,50 @@ def test_destination_is_atomic_and_never_overwrites(tmp_path):
     assert destination.names() == ["a"] and not list(root.glob(".*"))
 
 
+def test_concurrent_destination_publication_preserves_the_first_completed_backup(tmp_path, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event, get_ident
+
+    destination = DirectoryDestination(tmp_path)
+    first, second = tmp_path / "first", tmp_path / "second"
+    first.write_bytes(b"first encrypted archive")
+    second.write_bytes(b"second encrypted archive")
+    target = tmp_path / "backup"
+    checked, release = Event(), Event()
+    original, main_thread = Path.exists, get_ident()
+
+    def delayed_exists(path):
+        exists = original(path)
+        if path == target and get_ident() != main_thread:
+            checked.set()
+            assert release.wait(10)
+        return exists
+
+    monkeypatch.setattr(Path, "exists", delayed_exists)
+    with ThreadPoolExecutor(1) as pool:
+        pending = pool.submit(destination.put, "backup", second)
+        try:
+            assert checked.wait(10)
+            destination.put("backup", first)
+        finally:
+            release.set()
+        with pytest.raises(BackupError):
+            pending.result()
+    assert target.read_bytes() == first.read_bytes()
+    assert not list(tmp_path.glob(".*"))
+
+
+def test_failed_destination_writer_does_not_delete_another_writers_partial(tmp_path):
+    partial = tmp_path / ".backup.partial"
+    partial.write_bytes(b"another writer is still uploading")
+    source = tmp_path / "source"
+    source.write_bytes(b"new archive")
+    with pytest.raises(BackupError):
+        DirectoryDestination(tmp_path).put("backup", source)
+    assert partial.read_bytes() == b"another writer is still uploading"
+    assert not (tmp_path / "backup").exists()
+
+
 def test_purge_removes_complete_pairs_and_ignores_unrelated_files(tmp_path):
     destination = DirectoryDestination(tmp_path)
     start = datetime(2026, 10, 7, tzinfo=UTC)

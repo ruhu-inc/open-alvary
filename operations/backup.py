@@ -117,19 +117,25 @@ class DirectoryDestination:
         if target.exists():
             raise BackupError("destination")
         partial = self.root / f".{name}.partial"
+        owns_partial = False
         try:
             with source.open("rb") as reader, partial.open("xb") as writer:
+                owns_partial = True
                 shutil.copyfileobj(reader, writer)
                 writer.flush()
                 os.fsync(writer.fileno())
-            os.replace(partial, target)
+            # Publish exclusively: a stale exists() check must never let a second
+            # writer replace an archive that finished while it was copying.
+            os.link(partial, target)
+            partial.unlink()
             directory = os.open(self.root, os.O_RDONLY)
             try:
                 os.fsync(directory)
             finally:
                 os.close(directory)
         except OSError:
-            partial.unlink(missing_ok=True)
+            if owns_partial:
+                partial.unlink(missing_ok=True)
             raise BackupError("destination") from None
 
     def get(self, name: str, target: Path) -> None:
