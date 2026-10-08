@@ -1,0 +1,62 @@
+migrations/versions/0016_admission.py
+  s_b82616e2476856::t_222c31a5d0af8e 13
+  s_b82616e2476856::t_f3ac75dbd3ee20 1-12,14-44
+tests/test_postgres_admission.py
+  s_b82616e2476856::t_d991af78e1c21b 134
+  s_b82616e2476856::t_14457e200dbbc9 108-127,129-133,135-140,142-147
+  s_b82616e2476856::t_2d259e9246ab07 1-107
+  s_b82616e2476856::t_9f5c1b80c9ee9d 128,141
+tests/test_risk_remediation.py
+  s_b82616e2476856::t_163833ce7d441f 76
+rights/sql_resources.py
+  s_b82616e2476856::t_310f7cbfef9490 138-196
+tests/test_admission.py
+  s_b82616e2476856::t_d991af78e1c21b 1-181
+api/admission.py
+  s_b82616e2476856::t_eceefeb67956e7 119-121,123
+  s_b82616e2476856::t_d991af78e1c21b 52,77-78,92-96
+  s_b82616e2476856::t_65fdca18efc9fe 83-86,227-230
+  s_b82616e2476856::t_901022145a2100 1-51,53-76,79-82,87-91,97-118,122,124-226,231-247
+rights/sql/provision/manifest.json
+  s_b82616e2476856::t_310f7cbfef9490 157-167
+rights/sql/provision/v0016.sql
+  s_b82616e2476856::t_6f9e0e6ce8cf0b 1-4
+rights/capabilities.py
+  s_b82616e2476856::t_310f7cbfef9490 11
+rights/sql/v0016/manifest.json
+  s_b82616e2476856::t_310f7cbfef9490 1-11,13-19
+  s_b82616e2476856::t_222c31a5d0af8e 12
+tests/test_postgres_representation_identity.py
+  s_b82616e2476856::t_163833ce7d441f 184
+api/store.py
+  s_b82616e2476856::t_d991af78e1c21b 51,67-73
+rights/sql/v0016/downgrade.sql
+  s_b82616e2476856::t_6f9e0e6ce8cf0b 1-4
+deployment/runbook.md
+  s_b82616e2476856::t_d991af78e1c21b 103-104
+  s_b82616e2476856::t_163833ce7d441f 94-102,105-107
+rights/sql/v0016/admission.sql
+  s_b82616e2476856::t_222c31a5d0af8e 29,56,65,72
+  s_b82616e2476856::t_6f9e0e6ce8cf0b 1-28,30-55,57-64,66-71,73-94
+README.md
+  s_b82616e2476856::t_163833ce7d441f 630-640
+api/main.py
+  s_b82616e2476856::t_d991af78e1c21b 75-77
+  s_b82616e2476856::t_65fdca18efc9fe 3,15,22,74,78-85
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cc35502ba2c6043f1f6670efa6dc731d260aa8a2",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
