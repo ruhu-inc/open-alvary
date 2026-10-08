@@ -55,6 +55,48 @@ def provision_roles(conn: Connection, namespace: PolicyNamespace) -> dict[str, s
     guard = quote(roles["guard"])
     administrator = quote(conn.scalar(text("SELECT current_user")))
     conn.execute(text(f"GRANT {guard} TO {administrator}"))
+    _apply_grants(conn, namespace, grants, functions)
+    return roles
+
+
+def restore_grants(conn: Connection, namespace: PolicyNamespace) -> None:
+    """Explicit administrator action after a logical restore (pg_restore --no-privileges).
+
+    Revokes PUBLIC access that the restore left open, then reapplies the pinned capability
+    grant bundles and guard ownership to the existing capability roles. Refuses when the roles are missing (use provision_roles) or unsafe.
+    Operator logins and appointments are not restored; revalidate them separately.
+    """
+    from rights.authority import assert_guard_boundary
+    from rights.capabilities import selected_grants
+
+    grants, functions = selected_grants(conn, namespace)
+    roles = [namespace.role(k) for k in ("guard", "serving", "acquisition", "review", "release")]
+    present = conn.scalar(text("SELECT count(*) FROM pg_roles WHERE rolname=ANY(:names)"), {"names": roles})
+    if present != len(roles):
+        raise ValueError("Capability roles are missing; provision them instead")
+    quote = conn.dialect.identifier_preparer.quote_identifier
+    # --no-privileges also drops the migrations' REVOKE ... FROM PUBLIC, leaving every
+    # SECURITY DEFINER function executable by anyone until this point. Close that first.
+    for kind in ("policy", "staging", "corpus"):
+        conn.execute(
+            text(f"REVOKE ALL ON ALL FUNCTIONS IN SCHEMA {quote(namespace.schema(kind))} FROM PUBLIC")
+        )
+    fence = conn.scalar(
+        text("SELECT to_regprocedure(:fn)"), {"fn": quote(namespace.base) + ".identity_legacy_write_fence()"}
+    )
+    if fence is not None:
+        conn.execute(
+            text(f"REVOKE ALL ON FUNCTION {quote(namespace.base)}.identity_legacy_write_fence() FROM PUBLIC")
+        )
+    assert_guard_boundary(conn, namespace)
+    administrator = quote(conn.scalar(text("SELECT current_user")))
+    conn.execute(text(f"GRANT {quote(roles[0])} TO {administrator}"))
+    _apply_grants(conn, namespace, grants, functions)
+
+
+def _apply_grants(conn, namespace, grants, functions):
+    quote = conn.dialect.identifier_preparer.quote_identifier
+    guard = quote(namespace.role("guard"))
     for grant in grants:
         conn.exec_driver_sql(grant, execution_options={"no_parameters": True})
     policy, corpus = (quote(namespace.schema(k)) for k in ("policy", "corpus"))
@@ -64,7 +106,6 @@ def provision_roles(conn: Connection, namespace: PolicyNamespace) -> dict[str, s
         conn.execute(text(f"ALTER FUNCTION {signature} OWNER TO {guard}"))
     conn.execute(text(f"ALTER VIEW {corpus}.eligible_metadata OWNER TO {guard}"))
     conn.execute(text(f"REVOKE CREATE ON SCHEMA {policy},{corpus} FROM {guard}"))
-    return roles
 
 
 class PolicyRepository:

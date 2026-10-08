@@ -76,6 +76,11 @@ legacy pilot API, which remains authoritative until cutover) requires an open se
 to the exact database instance. A restore or clone is a new instance and serves nothing until
 recovered. With maintenance `DATABASE_URL` set:
 
+- First, keep the restored database network-isolated: `pg_restore --no-privileges` drops the
+  migrations' `REVOKE ... FROM PUBLIC`, so privileged policy functions are executable by any role
+  until `python -m rights.recovery restore-grants --journal <dir>` revokes PUBLIC access and
+  re-applies the pinned grant bundles and guard ownership (capability roles must already exist on
+  the cluster; otherwise provision them). Then run `python -m scripts.verify_sql_resources`.
 - `python -m rights.recovery recover --journal <dir> --backup-metadata <backup>.json --reason <incident>`
   verifies the journal chain and backup checkpoint, evaluates continuity (every epoch since the
   backup cleanly closed, every pending denial journaled), replays denials since the checkpoint,
