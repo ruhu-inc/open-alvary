@@ -270,3 +270,28 @@ class AdmissionMiddleware:
                 await to_thread.run_sync(self.store.release, result["lease_id"])
             except AdmissionUnavailable:
                 pass  # The lease expires on its own; the request debit is never refunded.
+
+
+def published_policy(config: "AdmissionConfig | None") -> dict:
+    """The public /quota-policy document; never includes secrets, addresses or pool sizes."""
+    if config is None:
+        return {"enforcement": "none", "note": "Metadata pilot: no ACS quota policy is configured"}
+    policy = {
+        "enforcement": "anonymous",
+        "policy_revision": config.policy_revision,
+        "algorithm": "token_bucket",
+        "grouping": "ipv4_address_or_ipv6_64",
+        "request_units": {
+            "burst": config.capacity,
+            "refill_per_minute": config.refill_per_minute,
+            "window_seconds": config.window_seconds,
+        },
+        "concurrency": {"per_identity": config.identity_concurrency},
+        "max_single_response_bytes": 10 * 1024 * 1024,
+    }
+    if config.byte_limits is not None:
+        policy["response_bytes"] = {
+            "burst": config.byte_limits.capacity,
+            "refill_per_minute": config.byte_limits.refill_per_minute,
+        }
+    return policy

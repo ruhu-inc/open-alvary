@@ -635,7 +635,9 @@ only from the configured trusted-proxy chain and HMAC-pseudonymized; the previou
 also debited during rotation. Requests blocked only by the global ceiling wait in a bounded ingress
 queue, then receive `503 capacity_exhausted`; a quota-store failure is `503` without corpus content.
 Enforcement is enabled only by `ALVARY_ADMISSION_CONFIG` (a JSON file; see `deployment/runbook.md`),
-which must state every allowance and satisfy the connection budget P <= C - R - O. No default
+which must state every allowance and satisfy the connection budget P <= C - R - O.
+`GET /quota-policy` publishes the active policy revision, algorithm, request and byte burst/refill,
+per-identity concurrency and the 10 MiB single-response cap (or `enforcement: none` in the pilot). No default
 allowance exists; D3 must measure and approve the values before text launch.
 
 Migration `0017` and `rights.bytes` add the BUD absolute-byte ledger: per-scope capacity, held and

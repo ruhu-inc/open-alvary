@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from api.admission import AdmissionConfig, AdmissionMiddleware, AdmissionStore
+from api.admission import AdmissionConfig, AdmissionMiddleware, AdmissionStore, published_policy
 from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable
 from api.catalogue import normalize_citation as normalize_citation
 from api.emission import CheckedFileResponse, CheckedResponse
@@ -91,6 +91,10 @@ def create_app(store: Store | None = None, releases: Path | None = None) -> Fast
         else None
     )
     release_root = releases or ROOT / "releases"
+
+    @app.get("/quota-policy")
+    def quota_policy():
+        return published_policy(admission)
 
     @app.get("/healthz", include_in_schema=False)
     def health():
