@@ -38,17 +38,36 @@ API data and downloaded legal content because permissions can be withdrawn.
 
 ## Backup and restore exercise
 
-Schedule `deployment/backup.sh` daily using the host's approved scheduler. It creates
-a PostgreSQL custom-format dump with restrictive permissions and checks its archive
-catalogue. Transfer encrypted copies off-host, retain an agreed window (initial
-proposal: 7 daily and 4 weekly), and document the responsible operator. Scheduling,
-remote storage and retention are not activated by the script itself.
+`deployment/backup.sh` runs `operations.backup` in a dedicated image with PostgreSQL 16
+client tools and GnuPG (`deployment/backup.Dockerfile`, `deployment/backup.yaml`). Each run
+dumps the database, validates the archive catalogue, encrypts it to the configured **public**
+OpenPGP key and writes the archive and then its metadata sidecar (the completion marker)
+atomically to `BACKUP_DESTINATION`. The plaintext dump exists only in the job's private
+temporary directory. Nothing is pushed anywhere else: mount separate, off-host storage at
+`BACKUP_DESTINATION`, writable by the image's `postgres` user (uid 70).
 
-Before public launch, restore a dump into a **separate test database**, never over
-the live database. Use `pg_restore --exit-on-error --no-owner --dbname TEST_DATABASE`
-with an explicit temporary destination, then run migrations/seed checks and public
-smoke checks against that test deployment. Record backup timestamp and restore result.
-Do not run the seed smoke check expecting four sources once the corpus has expanded.
+These are operator decisions with no defaults; record who made each one:
+
+- Off-host storage location and its access controls (`BACKUP_DESTINATION`).
+- Key custody: generate the key pair away from the backup host and keep the private key
+  offline. `BACKUP_RECIPIENT_FILE` must contain only the public key; a secret key is refused.
+- Retention: `BACKUP_KEEP_DAILY` and `BACKUP_KEEP_WEEKLY` (the earlier proposal was 7 and 4).
+  Without both values the job warns and purges nothing.
+- Failure alerting: `BACKUP_ALERT_COMMAND` runs inside the backup container with the
+  arguments `backup-failed <stage>`. Without it, failures are only on the job's exit status.
+- Scheduling with the host's approved scheduler, and the responsible operator.
+
+Restore drill (before public launch, then on the agreed cadence): on a machine that holds the
+private key, create an empty database whose name ends in `_restore` or `_test`, then run
+`python -m operations.backup restore-verify <backup> --destination <dir> --identity-file <key>`
+with `ALVARY_RESTORE_DATABASE_URL` set. Use `ALVARY_PG_TOOL_PREFIX` if the local PostgreSQL
+client is older than the server. The command checks the archive and dump hashes, refuses a
+non-empty or non-isolated target, restores without owners or grants, and verifies the
+migration revision and every table. Record the backup name, timestamp and result; then run
+migrations/seed and public smoke checks against that test deployment. Do not run the seed
+smoke check expecting four sources once the corpus has expanded. Backup metadata records
+`journal_checkpoint: null` until the independent denial journal exists, so a restored database
+cannot prove that recent withdrawals survived and must stay closed to serving.
 
 The policy foundation currently binds synthetic actors to PostgreSQL role OIDs. A
 database dump does not preserve authenticated subjects or recreate their role OIDs

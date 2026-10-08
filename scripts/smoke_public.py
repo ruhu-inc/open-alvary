@@ -38,7 +38,9 @@ def verify(base_url):
                 response = client.get(base + "/" + name)
                 response.raise_for_status()
                 assert sha256(response.content).hexdigest() == details["sha256"], name
-        print("PASS: homepage, security headers, health, pilot counts, search, withheld text and all release hashes")
+        print(
+            "PASS: homepage, security headers, health, pilot counts, search, withheld text and all release hashes"
+        )
 
 
 if __name__ == "__main__":

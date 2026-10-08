@@ -606,6 +606,13 @@ Private canonical rejection results now expose allowlisted structural `reason_co
 exclusion mismatch and independent serializer disagreement; no source words, IDs or SQL diagnostics
 are echoed. The compiler separates grid validation, marker mapping and footnote emission.
 
+Encrypted backups use `python -m operations.backup` (`create`, `restore-verify`, `purge`); see
+`deployment/runbook.md`. Archives are encrypted to a public OpenPGP key, restore verification only
+targets empty `_restore`/`_test` databases, and storage, key custody, retention and alerting are
+explicit operator settings without defaults. The backup tests need PostgreSQL client tools no older
+than the server; set `ALVARY_TEST_PG_TOOL_PREFIX` (and `ALVARY_TEST_PG_TOOL_HOSTPORT`) to run them
+through a version-matched container.
+
 Full acceptance runs PostgreSQL by default. Supply an isolated `TEST_DATABASE_URL` ending in `_test`
 whose maintenance account can create disposable databases and roles, then run `pytest -q`.
 `pytest --fast -q` explicitly skips PostgreSQL and cannot be treated as acceptance. Most tests clone
