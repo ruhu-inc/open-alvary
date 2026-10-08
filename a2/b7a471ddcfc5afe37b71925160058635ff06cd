@@ -1,0 +1,31 @@
+deployment/runbook.md
+  s_b82616e2476856::t_63c213e96f5b71 79-83
+rights/recovery.py
+  s_b82616e2476856::t_63c213e96f5b71 355,371-377
+operations/backup.py
+  s_b82616e2476856::t_0b005a5c1980cf 198-199,203-206,210-221,224,232-233,239,246-247,256,308,347,434-435,443,447
+rights/database.py
+  s_b82616e2476856::t_d271468d6c0008 58-64,67-77,92-99
+  s_b82616e2476856::t_250676c6f68ceb 65-66,78-91
+tests/test_postgres_drills.py
+  s_b82616e2476856::t_018aafb753fffc 149
+  s_b82616e2476856::t_250676c6f68ceb 27-40,98-110
+  s_b82616e2476856::t_0b005a5c1980cf 89,95
+  s_b82616e2476856::t_2e909bf0ba05e2 1-26,41-88,90-94,96-97,111-148,150-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a2b7a471ddcfc5afe37b71925160058635ff06cd",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
