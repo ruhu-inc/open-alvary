@@ -5,6 +5,7 @@ recorded span hash, so a projection can never disagree with the approved text. A
 identity, hash mismatch or dangling reference fails closed rather than guessing.
 """
 
+import re
 from hashlib import sha256
 
 from schema.approval import PrivateVersionView
@@ -152,3 +153,43 @@ def project(view: PrivateVersionView) -> ReaderDescriptor:
         limitations=tuple(limitations),
         nodes=tuple(projected),
     )
+
+
+def find(descriptor: ReaderDescriptor, query: str, *, limit: int, after: int = 0) -> dict:
+    """Version-scoped find over canonical node text (RDR-03).
+
+    Returns bounded anchored spans as UTF-8 byte offsets relative to each node, in document
+    order, with a continuation cursor. Coverage is ``complete`` because every projected text
+    node is searched; matching is exact or simple case-insensitive, never paraphrased.
+    Case folding that changes length (for example ß → ss) is not applied, so offsets stay exact.
+    """
+    query = query.strip()
+    if not 1 <= len(query) <= 200 or not 1 <= limit <= 100 or after < 0:
+        raise ValueError("Bounded find request required")
+    pattern = re.compile(re.escape(query), re.IGNORECASE)
+    matches = []
+    for node in descriptor.nodes:
+        if node.text is None:
+            continue
+        for match in pattern.finditer(node.text):
+            if len(match.group(0)) != len(query) or match.group(0).casefold() != query.casefold():
+                continue
+            start = len(node.text[: match.start()].encode())
+            matches.append(
+                {
+                    "node_id": node.node_id,
+                    "anchor_id": node.anchor_id,
+                    "start": start,
+                    "end": start + len(match.group(0).encode()),
+                }
+            )
+    page = matches[after : after + limit]
+    following = after + len(page)
+    return {
+        "version_id": descriptor.version_id,
+        "representation_revision": descriptor.representation_revision,
+        "coverage": "complete",
+        "total": len(matches),
+        "matches": page,
+        "next_after": following if following < len(matches) else None,
+    }

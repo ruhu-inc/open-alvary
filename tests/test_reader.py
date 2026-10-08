@@ -76,3 +76,30 @@ def test_any_inconsistency_fails_closed(tamper):
         data["record_set"]["markers"][0]["scope"] = "missing"
     with pytest.raises(ReaderError):
         project(view(data))
+
+
+def test_find_returns_exact_anchored_byte_spans_in_document_order():
+    from rights.reader import find
+
+    descriptor = project(view())
+    result = find(descriptor, "CAFÉ", limit=10)
+    assert result["coverage"] == "complete" and result["total"] == 2
+    by_id = {n.node_id: n for n in descriptor.nodes}
+    for match in result["matches"]:
+        text = by_id[match["node_id"]].text.encode()
+        assert text[match["start"] : match["end"]].decode().casefold() == "café"
+    arabic = find(descriptor, "لا", limit=10)
+    assert arabic["total"] == 2
+
+
+def test_find_pages_with_a_cursor_and_rejects_unbounded_requests():
+    from rights.reader import find
+
+    descriptor = project(view())
+    first = find(descriptor, "notice", limit=1)
+    assert first["total"] >= 2 and first["next_after"] == 1
+    rest = find(descriptor, "notice", limit=100, after=first["next_after"])
+    assert rest["next_after"] is None and len(rest["matches"]) == first["total"] - 1
+    for bad in [dict(query="", limit=1), dict(query="x" * 201, limit=1), dict(query="x", limit=0)]:
+        with pytest.raises(ValueError):
+            find(descriptor, bad["query"], limit=bad["limit"])
