@@ -24,7 +24,7 @@ from uuid import UUID
 FORMAT = "open-alvary-journal-1"
 KINDS = {"publication_deny", "erasure", "epoch_open", "epoch_close"}
 DOMAINS = {"publication", "account"}
-OPAQUE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\Z")
+OPAQUE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}\Z")
 GENESIS = "0" * 64
 
 

@@ -1,9 +1,13 @@
 """Prepare a pinned SQL resource revision from an isolated database at the previous head.
 
   init REVISION SIGNATURE...  capture each installed definition as prior_<name>.sql and
-                              <name>.sql (edit the latter), copying literals/vocabulary pins
-  pin REVISION                compile edited files in a rolled-back transaction, require the
-                              normalized form, write manifest.json and print RESOURCE_HASH
+                              <name>.sql to edit (replacements of existing functions)
+  new REVISION FILE SIGNATURE...
+                              record FILE (DDL in the revision folder) and the new functions
+                              it creates; the migration runs it before any replacement
+  pin REVISION                in one rolled-back transaction run the DDL, pin new function
+                              hashes, compile edited replacements (requiring normalized form),
+                              then write manifest.json and print RESOURCE_HASH
 
 Never writes to the database: every replacement is rolled back. Requires DATABASE_URL to name
 an isolated *_test PostgreSQL database migrated to the revision before REVISION.
@@ -52,15 +56,28 @@ def filename(signature):
     return signature.split("(", 1)[0] + ".sql"
 
 
-def init(conn, ns, revision, signatures):
+def load_draft(revision):
     folder = ROOT / revision
     if (folder / "manifest.json").exists():
         raise SystemExit("Revision already pinned; applied resources are immutable")
+    if (folder / "draft.json").exists():
+        return json.loads((folder / "draft.json").read_text())
     base = previous_manifest(revision)
-    tokens = context(conn, ns, base["literals"])
-    folder.mkdir(exist_ok=True)
     draft = {k: base[k] for k in ("vocabulary", "literals", "vocabulary_file", "vocabulary_hash")}
-    draft |= {"revision": revision.removeprefix("v"), "functions": []}
+    return draft | {"revision": revision.removeprefix("v"), "functions": []}
+
+
+def save_draft(revision, draft):
+    folder = ROOT / revision
+    folder.mkdir(exist_ok=True)
+    (folder / "draft.json").write_text(json.dumps(draft, indent=2) + "\n")
+
+
+def init(conn, ns, revision, signatures):
+    folder = ROOT / revision
+    draft = load_draft(revision)
+    tokens = context(conn, ns, draft["literals"])
+    folder.mkdir(exist_ok=True)
     for signature in signatures:
         if not SIGNATURE.fullmatch(signature):
             raise SystemExit(f"Unexpected signature format: {signature}")
@@ -70,19 +87,36 @@ def init(conn, ns, revision, signatures):
                 raise SystemExit(f"Refusing to overwrite {folder.name}/{name}")
             (folder / name).write_text(definition)
         draft["functions"].append({"signature": signature})
-    (folder / "draft.json").write_text(json.dumps(draft, indent=2) + "\n")
+    save_draft(revision, draft)
     print(f"Edit rights/sql/{revision}/<name>.sql, then run: pin {revision}")
+
+
+def new(revision, ddl, signatures):
+    draft = load_draft(revision)
+    if not (ROOT / revision / ddl).is_file():
+        raise SystemExit(f"Missing rights/sql/{revision}/{ddl}")
+    draft |= {"ddl": ddl, "new_signatures": signatures}
+    save_draft(revision, draft)
+    print(f"Recorded {ddl} and {len(signatures)} new functions; run: pin {revision}")
 
 
 def pin(conn, ns, revision):
     folder = ROOT / revision
     draft_path = folder / "draft.json"
     if not draft_path.exists():
-        raise SystemExit("Run init first; pinned revisions are immutable")
+        raise SystemExit("Run init or new first; pinned revisions are immutable")
     manifest = json.loads(draft_path.read_text())
+    new_signatures = manifest.pop("new_signatures", [])
     tokens = context(conn, ns, manifest["literals"])
     try:
         conn.exec_driver_sql("SET LOCAL check_function_bodies=on")
+        if "ddl" in manifest:
+            source = render((folder / manifest["ddl"]).read_text(), tokens)
+            conn.exec_driver_sql(source, execution_options={"no_parameters": True})
+            manifest["new_functions"] = [
+                {"signature": s, "current_definition_hash": digest(installed(conn, tokens, s)[1])}
+                for s in new_signatures
+            ]
         for entry in manifest["functions"]:
             signature = entry["signature"]
             prior_body, prior_definition = installed(conn, tokens, signature)
@@ -114,14 +148,14 @@ def main(argv=None):
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("action", choices=["init", "pin"])
+    parser.add_argument("action", choices=["init", "pin", "new"])
     parser.add_argument("revision", help="Directory name such as v0014")
-    parser.add_argument("signatures", nargs="*", help="Installed policy function signatures (init only)")
+    parser.add_argument("signatures", nargs="*", help="init: installed signatures; new: FILE then signatures")
     args = parser.parse_args(argv)
     if not re.fullmatch(r"v\d{4}", args.revision):
         raise SystemExit("Revision must look like v0014")
-    if (args.action == "init") != bool(args.signatures):
-        raise SystemExit("init needs signatures; pin takes none")
+    if (args.action == "pin") == bool(args.signatures) or (args.action == "new" and len(args.signatures) < 2):
+        raise SystemExit("init needs signatures, new needs FILE and signatures; pin takes none")
     raw = os.environ.get("DATABASE_URL")
     url = make_url(raw) if raw else None
     if url is None or url.drivername != "postgresql+psycopg" or not (url.database or "").endswith("_test"):
@@ -133,6 +167,11 @@ def main(argv=None):
             if args.action == "init":
                 init(conn, ns, args.revision, args.signatures)
                 conn.rollback()
+            elif args.action == "new":
+                ddl, *signatures = args.signatures
+                if not all(SIGNATURE.fullmatch(s) for s in signatures) or Path(ddl).name != ddl:
+                    raise SystemExit("Expected a file name in the revision folder and signatures")
+                new(args.revision, ddl, signatures)
             else:
                 pin(conn, ns, args.revision)
     finally:

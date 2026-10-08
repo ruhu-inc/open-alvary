@@ -144,5 +144,15 @@
       "staging.gazette_item_binding",
       "staging.gazette_item_review"
     ]
+  },
+  {
+    "revision": "0014",
+    "anchor": "policy.denial_delivery",
+    "file": "v0014.sql",
+    "requires": [
+      "policy.denial_delivery",
+      "policy.publication_revision",
+      "policy.record_denial"
+    ]
   }
 ]
