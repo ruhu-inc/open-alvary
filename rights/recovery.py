@@ -349,12 +349,12 @@ def main(argv=None) -> int:
     from sqlalchemy.engine import make_url
     from sqlalchemy.pool import NullPool
 
-    from operations.journal import FileJournal
+    from operations.journal_postgres import open_journal
 
     parser = argparse.ArgumentParser(description="Serving epochs and restore recovery (maintenance)")
     parser.add_argument("action", choices=["restore-grants", "recover", "open", "close"])
     parser.add_argument(
-        "--journal", type=Path, required=True, help="Reference journal directory (D7 decides)"
+        "--journal", type=Path, help="Reference file journal; ALVARY_JOURNAL_DATABASE_URL selects production"
     )
     parser.add_argument("--schema", default="public")
     parser.add_argument("--backup-metadata", type=Path, help="recover: the backup's .json sidecar")
@@ -366,8 +366,9 @@ def main(argv=None) -> int:
         print(json.dumps({"status": "unavailable"}))
         return 2
     engine = create_engine(url, poolclass=NullPool)
-    ns, journal = PolicyNamespace(args.schema), FileJournal(args.journal)
+    ns = PolicyNamespace(args.schema)
     try:
+        journal = open_journal(args.journal)
         if args.action == "restore-grants":
             from rights.database import restore_grants
 

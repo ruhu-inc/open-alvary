@@ -122,20 +122,21 @@ defaults. Ambiguous deliveries are charged in full unless durable transport evid
 ## Denial journal delivery
 
 Every withdrawal of a previously approved operation, metadata suspension and staged-byte erasure
-commits a pending `policy.denial_delivery` record in the same transaction (migration `0014`), and
-takes effect immediately in policy. `python -m rights.journal_delivery --journal <dir>` (maintenance
-`DATABASE_URL`) appends pending records to the independent journal in revision order and marks
-them durable. Exit status 1 means denials remain pending: they still deny, but are not yet
-durable outside the database. Run it after each withdrawal and on a schedule; alert on pending
-records. The file journal is a reference backend: its location must be a separate failure domain,
-and the production journal service, access control and encryption are decision D7.
+commits a pending `policy.denial_delivery` record in the same transaction (migration `0014`) and
+takes effect immediately. `python -m rights.journal_delivery` (maintenance `DATABASE_URL`) appends
+pending records to the independent journal in revision order and marks them durable. Exit status 1
+means denials remain pending: they still deny but are not yet durable outside the database. Run it
+every minute from the host scheduler and after each withdrawal.
 
-The policy foundation currently binds synthetic actors to PostgreSQL role OIDs. A
-database dump does not preserve authenticated subjects or recreate their role OIDs
-on another cluster. Keep capability logins and serving stopped during a foundation
-restore. Identity revalidation, role/grant reprovisioning and current denial-state
-replay need their own implemented and tested workflow before restored policy can
-be activated. A successful seed smoke check does not certify those boundaries.
+Production journal (owner-delegated best practice, 2026-10-07): a **separate PostgreSQL database on
+a different provider or host** from the corpus database, for example a small managed Neon or
+Supabase instance. Set it up once as its administrator:
+
+1. `python -c "from sqlalchemy import create_engine; from operations.journal_postgres import install; install(create_engine('<admin-url>'), writer_role='journal_writer')"`
+   after creating a `journal_writer` LOGIN role with only that access.
+2. Give the deployment `ALVARY_JOURNAL_DATABASE_URL` for `journal_writer`, with TLS (`sslmode=require`)
+   and encryption at rest provided by the host. The table is append-only even for its owner.
+3. The `--journal <dir>` file journal remains a reference backend for drills only.
 
 ## Upgrade and rollback
 

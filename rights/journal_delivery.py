@@ -17,7 +17,8 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection, make_url
 from sqlalchemy.pool import NullPool
 
-from operations.journal import Event, FileJournal, JournalError
+from operations.journal import Event, JournalError
+from operations.journal_postgres import open_journal
 from rights.database import PolicyNamespace
 
 # One dispatcher at a time keeps journal order equal to committed revision order.
@@ -78,7 +79,7 @@ def dispatch(conn: Connection, ns: PolicyNamespace, journal, limit: int = 100) -
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Deliver pending denials to the independent journal")
     parser.add_argument(
-        "--journal", type=Path, required=True, help="Reference journal directory (D7 decides)"
+        "--journal", type=Path, help="Reference file journal; ALVARY_JOURNAL_DATABASE_URL selects production"
     )
     parser.add_argument("--schema", default="public")
     parser.add_argument("--limit", type=int, default=100)
@@ -91,7 +92,7 @@ def main(argv=None) -> int:
     engine = create_engine(url, poolclass=NullPool)
     try:
         with engine.begin() as conn:
-            result = dispatch(conn, PolicyNamespace(args.schema), FileJournal(args.journal), args.limit)
+            result = dispatch(conn, PolicyNamespace(args.schema), open_journal(args.journal), args.limit)
     except Exception:
         print(json.dumps({"status": "unavailable"}))
         return 2

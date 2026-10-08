@@ -623,7 +623,9 @@ append-only except the pending-to-durable receipt. `rights.journal_delivery` del
 revision order to an `operations.journal` backend that assigns gapless global sequences, returns
 the original receipt on retry, rejects reused IDs with different payloads and hash-chains every
 record. `FileJournal` is a reference backend; `tests/journal_conformance.py` holds the drills a
-production journal (D7) must pass. Migration `0015` gates policy-governed metadata serving on an
+production journal (D7) must pass. `operations.journal_postgres.PostgresJournal` is the production
+backend: an owner-proof append-only table in a separate PostgreSQL database, selected with
+`ALVARY_JOURNAL_DATABASE_URL`, which passes the same drills. Migration `0015` gates policy-governed metadata serving on an
 open serving epoch bound to the database instance (system identifier and database OID), so restored
 or cloned databases serve nothing until `rights.recovery` replays the journal and either verifies
 continuity or applies a conservative reset that only fresh reviewer decisions can lift.
