@@ -38,8 +38,19 @@ def verify(base_url):
                 response = client.get(base + "/" + name)
                 response.raise_for_status()
                 assert sha256(response.content).hexdigest() == details["sha256"], name
+        initialize = client.post(
+            "/api/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"protocolVersion": "2025-06-18"},
+            },
+        )
+        assert initialize.json()["result"]["serverInfo"]["name"] == "open-alvary", "MCP endpoint unavailable"
+        assert client.post("/api/sources", json={}).status_code == 405, "Writes must stay refused"
         print(
-            "PASS: homepage, security headers, health, pilot counts, search, withheld text and all release hashes"
+            "PASS: homepage, security headers, MCP, health, pilot counts, search, withheld text and release hashes"
         )
 
 
