@@ -8,7 +8,7 @@ from sqlalchemy import text
 from rights.sql_resources import bundle_hash, render
 
 # Reviewed grant bundles; any edit to rights/sql/provision must update this pin deliberately.
-PROVISION_HASH = "5c6fcf8bbada24a8a3069175524eaf4b014627f1cc503952a27662b612a9a04d"
+PROVISION_HASH = "b6219bd3c2b1e264e964f025af6559a107cc1fe0ffd6a8d79a8294ba505fc060"
 
 
 def selected_grants(conn, namespace):

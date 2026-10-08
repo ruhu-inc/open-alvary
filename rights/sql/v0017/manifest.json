@@ -1,0 +1,39 @@
+{
+  "vocabulary": "policy-vocabulary-1",
+  "literals": {},
+  "vocabulary_file": "vocabularies/v1.json",
+  "vocabulary_hash": "cac594e752fdb6c2cb6adfc63930ceea8a8fe8be3afe9570552d5c2f486d8c80",
+  "revision": "0017",
+  "functions": [],
+  "ddl": "bytes.sql",
+  "new_functions": [
+    {
+      "signature": "reserve_bytes(jsonb)",
+      "current_definition_hash": "c901f9db5a9d6f0a601e522e5cf5c90c01b1dd93b8414f6f9b4aeca89ba1d7dd"
+    },
+    {
+      "signature": "settle_reservation_scopes(uuid, bigint, bigint)",
+      "current_definition_hash": "c9ac488a83a697221c37ffb8e0fe1ffc95bcf1cf3a7cbb2144160753044dc455"
+    },
+    {
+      "signature": "begin_emission(uuid)",
+      "current_definition_hash": "dffc109e8e95a287b603ff51080f1430b67644db05ac837ad52596ecaa2db508"
+    },
+    {
+      "signature": "release_bytes(uuid)",
+      "current_definition_hash": "17200014d8d6ddeb70db59f5100c35b4f8ad02439d7126ebefd132c5438f6fe7"
+    },
+    {
+      "signature": "settle_bytes(uuid, bigint, text)",
+      "current_definition_hash": "ed9b4afe5a6850d3bbeece1a202cd9272a42b6c384e912d96d8e90bb63727333"
+    },
+    {
+      "signature": "reconcile_bytes(numeric, numeric)",
+      "current_definition_hash": "1c985283e3e850982db473db1b7d2cef8a9a2afe421705a515a6712f48f99ad8"
+    },
+    {
+      "signature": "reconcile_reservation(uuid, bigint, text)",
+      "current_definition_hash": "9e7f9342a2f9b455915f3b72c495f10326dd364fef312223d854f385ec8837b0"
+    }
+  ]
+}

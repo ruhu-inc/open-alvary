@@ -165,5 +165,19 @@
       "policy.admit",
       "policy.release_admission"
     ]
+  },
+  {
+    "revision": "0017",
+    "anchor": "policy.byte_bucket",
+    "file": "v0017.sql",
+    "requires": [
+      "policy.byte_bucket",
+      "policy.byte_reservation",
+      "policy.byte_reservation_scope",
+      "policy.reserve_bytes",
+      "policy.begin_emission",
+      "policy.release_bytes",
+      "policy.settle_bytes"
+    ]
   }
 ]

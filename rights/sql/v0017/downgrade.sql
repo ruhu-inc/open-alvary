@@ -1,0 +1,10 @@
+DROP FUNCTION {{policy}}.reconcile_reservation(uuid, bigint, text);
+DROP FUNCTION {{policy}}.reconcile_bytes(numeric, numeric);
+DROP FUNCTION {{policy}}.settle_bytes(uuid, bigint, text);
+DROP FUNCTION {{policy}}.release_bytes(uuid);
+DROP FUNCTION {{policy}}.begin_emission(uuid);
+DROP FUNCTION {{policy}}.settle_reservation_scopes(uuid, bigint, bigint);
+DROP FUNCTION {{policy}}.reserve_bytes(jsonb);
+DROP TABLE {{policy}}.byte_reservation_scope;
+DROP TABLE {{policy}}.byte_reservation;
+DROP TABLE {{policy}}.byte_bucket;
