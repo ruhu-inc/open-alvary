@@ -1,0 +1,43 @@
+deployment/alert_github_issue.sh
+  s_b82616e2476856::t_2c0ecf5839de4b 4-5,7-25
+tests/test_backup.py
+  s_b82616e2476856::t_fe5856fbf3c895 114,318-343
+operations/backup.py
+  s_b82616e2476856::t_fe5856fbf3c895 448,454,507-515
+deployment/.env.example
+  s_b82616e2476856::t_2c0ecf5839de4b 4
+.github/workflows/backup-freshness.yml
+  s_b82616e2476856::t_d6fb825bcbe0b8 31,33-37
+deployment/backup.sh
+  s_b82616e2476856::t_2c0ecf5839de4b 4,7-18
+web/src/reader.tsx
+  s_b82616e2476856::t_954db0f0a78364 114-120
+api/mcp.py
+  s_b82616e2476856::t_1ea88125180433 10,13,95-97,130-131
+deployment/admission.example.json
+  s_b82616e2476856::t_c05d3029868026 16
+deployment/admission.md
+  s_b82616e2476856::t_49c421f6b65452 3-7,20
+deployment/admission.yaml
+  s_b82616e2476856::t_d21a01012465b1 1-11
+deployment/runbook.md
+  s_b82616e2476856::t_a35b69a9d7834b 165-167
+tests/test_mcp.py
+  s_b82616e2476856::t_eb9da1bddf6bb0 76-77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a825cc5e91badbc3e90333ad11be49f4435ef23a",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
