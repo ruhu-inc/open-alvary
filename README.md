@@ -627,6 +627,17 @@ open serving epoch bound to the database instance (system identifier and databas
 or cloned databases serve nothing until `rights.recovery` replays the journal and either verifies
 continuity or applies a conservative reset that only fresh reviewer decisions can lift.
 
+Migration `0016` and `api.admission` implement ACS-05 anonymous admission: PostgreSQL token
+buckets refilled with database time (clock rollback adds and removes nothing), per-identity and
+global concurrency leases locked in a stable order in one short transaction, no debit on rejection,
+and Retry-After from the longest blocking wait. Clients are grouped by IPv4 address or IPv6 /64 taken
+only from the configured trusted-proxy chain and HMAC-pseudonymized; the previous secret's bucket is
+also debited during rotation. Requests blocked only by the global ceiling wait in a bounded ingress
+queue, then receive `503 capacity_exhausted`; a quota-store failure is `503` without corpus content.
+Enforcement is enabled only by `ALVARY_ADMISSION_CONFIG` (a JSON file; see `deployment/runbook.md`),
+which must state every allowance and satisfy the connection budget P <= C - R - O. No default
+allowance exists; D3 must measure and approve the values before text launch.
+
 Full acceptance runs PostgreSQL by default. Supply an isolated `TEST_DATABASE_URL` ending in `_test`
 whose maintenance account can create disposable databases and roles, then run `pytest -q`.
 `pytest --fast -q` explicitly skips PostgreSQL and cannot be treated as acceptance. Most tests clone

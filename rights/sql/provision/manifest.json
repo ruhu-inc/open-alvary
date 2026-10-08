@@ -154,5 +154,16 @@
       "policy.publication_revision",
       "policy.record_denial"
     ]
+  },
+  {
+    "revision": "0016",
+    "anchor": "policy.admission_bucket",
+    "file": "v0016.sql",
+    "requires": [
+      "policy.admission_bucket",
+      "policy.admission_lease",
+      "policy.admit",
+      "policy.release_admission"
+    ]
   }
 ]

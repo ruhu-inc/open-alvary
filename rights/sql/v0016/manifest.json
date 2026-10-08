@@ -1,0 +1,19 @@
+{
+  "vocabulary": "policy-vocabulary-1",
+  "literals": {},
+  "vocabulary_file": "vocabularies/v1.json",
+  "vocabulary_hash": "cac594e752fdb6c2cb6adfc63930ceea8a8fe8be3afe9570552d5c2f486d8c80",
+  "revision": "0016",
+  "functions": [],
+  "ddl": "admission.sql",
+  "new_functions": [
+    {
+      "signature": "admit(jsonb)",
+      "current_definition_hash": "a55c56068feb5c939cb6077a691030e1ea7b19dcb59b9bdb0a588dac9d81043f"
+    },
+    {
+      "signature": "release_admission(uuid)",
+      "current_definition_hash": "1b45ddefba64b53c9af30dfff2eec1e49bf9351d2d595749585aa4e2cf8e2455"
+    }
+  ]
+}

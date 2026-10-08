@@ -48,7 +48,7 @@ tables = {
 }
 
 
-def engine_for(url: str | None = None) -> Engine:
+def engine_for(url: str | None = None, pool_size: int | None = None) -> Engine:
     mode = os.getenv("ALVARY_RUNTIME_MODE", "development")
     if mode not in {"development", "persistent"}:
         raise ValueError("ALVARY_RUNTIME_MODE must be development or persistent")
@@ -64,7 +64,13 @@ def engine_for(url: str | None = None) -> Engine:
         if not valid:
             raise ValueError("Persistent mode requires a postgresql+psycopg database URL") from None
     url = url or f"sqlite:///{ROOT / 'open_alvary.db'}"
-    engine = create_engine(url, connect_args={"check_same_thread": False} if url.startswith("sqlite") else {})
+    if pool_size is not None and not url.startswith("sqlite"):
+        # A fixed, budgeted pool: no overflow beyond the share approved for this replica.
+        engine = create_engine(url, pool_size=pool_size, max_overflow=0, pool_timeout=5)
+    else:
+        engine = create_engine(
+            url, connect_args={"check_same_thread": False} if url.startswith("sqlite") else {}
+        )
     if url.startswith("sqlite"):
 
         @event.listens_for(engine, "connect")

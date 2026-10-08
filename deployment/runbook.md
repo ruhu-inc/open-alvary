@@ -91,6 +91,20 @@ recovered. With maintenance `DATABASE_URL` set:
 Re-provision capability roles and revalidate operator identities before reopening operator access;
 restore does not carry those boundaries over.
 
+## Anonymous admission (ACS-05)
+
+Set `ALVARY_ADMISSION_CONFIG` to a private JSON file to enforce admission. Every key is required and
+is a D3 decision with recorded measurements; none has a default:
+`policy_revision`, `capacity`, `refill_per_minute`, `identity_concurrency`, `global_concurrency` (G),
+`lease_seconds`, `queue_size`, `queue_deadline_seconds`, `trusted_proxies` (hops whose
+`X-Forwarded-For` entries are trusted; the edge must strip client-supplied values),
+`hmac_secret` (64+ hex characters; optional `previous_hmac_secret` during rotation), and the
+connection budget `db_connections` (C), `operator_reserve` (R), `other_workers` (O) and
+`public_pool_size` (P, aggregate across `api_replicas` API instances), which must satisfy
+P <= C - R - O; each instance opens at most P / replicas connections with no overflow. `ALVARY_POLICY_SCHEMA` selects the
+policy namespace (default `public`). Without the file, the metadata pilot keeps its existing nginx
+rate limit and no ACS-05 enforcement; that is not acceptable for text launch.
+
 ## Denial journal delivery
 
 Every withdrawal of a previously approved operation, metadata suspension and staged-byte erasure

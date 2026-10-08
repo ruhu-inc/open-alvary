@@ -135,3 +135,62 @@ def install(conn, namespace, revision, expected_hash, *, downgrade=False):
             or sha256(normalize_body(row.definition, tokens).encode()).hexdigest() != expected
         ):
             raise RuntimeError("SQL resource replacement changed authority or identity")
+
+
+def install_new(conn, namespace, revision, expected_hash, tables, guard_grants=()):
+    """Run a revision's DDL that creates new functions/tables, verify pins, adopt into the guard.
+
+    Refuses if any object already exists. ``guard_grants`` are rendered statements applied only
+    to provisioned namespaces; fresh provisioning gets the same grants from rights/sql/provision.
+    """
+    if bundle_hash(revision) != expected_hash:
+        raise RuntimeError("Applied SQL revision resources changed; use a new revision")
+    root = files("rights").joinpath("sql", revision)
+    manifest = json.loads(root.joinpath("manifest.json").read_text())
+    tokens = context(conn, namespace, manifest["literals"])
+    assert_guard_boundary(conn, namespace)
+    policy = tokens["policy"]
+    entries = manifest["new_functions"]
+    existing = [
+        conn.scalar(text("SELECT to_regprocedure(:fn)"), {"fn": policy + "." + e["signature"]})
+        for e in entries
+    ] + [conn.scalar(text("SELECT to_regclass(:t)"), {"t": policy + "." + t}) for t in tables]
+    if any(existing):
+        raise RuntimeError("Unexpected installed authority requires boundary review")
+    conn.exec_driver_sql("SET LOCAL check_function_bodies=on")
+    conn.exec_driver_sql(
+        render(root.joinpath(manifest["ddl"]).read_text(), tokens), execution_options={"no_parameters": True}
+    )
+    for entry in entries:
+        definition = conn.scalar(
+            text("SELECT pg_get_functiondef(to_regprocedure(:fn))"), {"fn": policy + "." + entry["signature"]}
+        )
+        if (
+            sha256(normalize_body(definition, tokens).encode()).hexdigest()
+            != entry["current_definition_hash"]
+        ):
+            raise RuntimeError("Installed authority differs from reviewed SQL")
+    if conn.scalar(text("SELECT to_regrole(:role)"), {"role": namespace.role("guard")}) is not None:
+        for statement in guard_grants:
+            conn.exec_driver_sql(render(statement, tokens), execution_options={"no_parameters": True})
+        # PostgreSQL requires schema CREATE for the ownership transfer; revoked before commit.
+        conn.exec_driver_sql(f"GRANT CREATE ON SCHEMA {policy} TO {tokens['role_guard']}")
+        for entry in entries:
+            conn.exec_driver_sql(
+                f"ALTER FUNCTION {policy}.{entry['signature']} OWNER TO {tokens['role_guard']}"
+            )
+        conn.exec_driver_sql(f"REVOKE CREATE ON SCHEMA {policy} FROM {tokens['role_guard']}")
+    return tokens
+
+
+def remove_new(conn, namespace, revision, expected_hash):
+    """Run a revision's downgrade.sql after the caller has refused any recorded history."""
+    if bundle_hash(revision) != expected_hash:
+        raise RuntimeError("Applied SQL revision resources changed; use a new revision")
+    root = files("rights").joinpath("sql", revision)
+    manifest = json.loads(root.joinpath("manifest.json").read_text())
+    tokens = context(conn, namespace, manifest["literals"])
+    conn.exec_driver_sql(
+        render(root.joinpath("downgrade.sql").read_text(), tokens), execution_options={"no_parameters": True}
+    )
+    return tokens
