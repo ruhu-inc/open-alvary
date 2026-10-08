@@ -1,0 +1,326 @@
+{
+  "$defs": {
+    "FootnoteReference": {
+      "additionalProperties": false,
+      "description": "A marker inside a node's text, as UTF-8 byte offsets relative to that node.",
+      "properties": {
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        },
+        "end": {
+          "exclusiveMinimum": 0,
+          "title": "End",
+          "type": "integer"
+        },
+        "footnote_node_id": {
+          "title": "Footnote Node Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "footnote_node_id"
+      ],
+      "title": "FootnoteReference",
+      "type": "object"
+    },
+    "ModeAvailability": {
+      "additionalProperties": false,
+      "properties": {
+        "reading": {
+          "const": "available",
+          "default": "available",
+          "title": "Reading",
+          "type": "string"
+        },
+        "page_layout": {
+          "enum": [
+            "available",
+            "unavailable"
+          ],
+          "title": "Page Layout",
+          "type": "string"
+        },
+        "original": {
+          "enum": [
+            "available",
+            "unavailable"
+          ],
+          "title": "Original",
+          "type": "string"
+        }
+      },
+      "required": [
+        "page_layout",
+        "original"
+      ],
+      "title": "ModeAvailability",
+      "type": "object"
+    },
+    "ReaderCell": {
+      "additionalProperties": false,
+      "properties": {
+        "row": {
+          "minimum": 0,
+          "title": "Row",
+          "type": "integer"
+        },
+        "column": {
+          "minimum": 0,
+          "title": "Column",
+          "type": "integer"
+        },
+        "row_span": {
+          "minimum": 1,
+          "title": "Row Span",
+          "type": "integer"
+        },
+        "column_span": {
+          "minimum": 1,
+          "title": "Column Span",
+          "type": "integer"
+        },
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "header": {
+          "title": "Header",
+          "type": "boolean"
+        },
+        "state": {
+          "enum": [
+            "present",
+            "empty",
+            "unavailable"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "row",
+        "column",
+        "row_span",
+        "column_span",
+        "node_id",
+        "header",
+        "state"
+      ],
+      "title": "ReaderCell",
+      "type": "object"
+    },
+    "ReaderNode": {
+      "additionalProperties": false,
+      "properties": {
+        "node_id": {
+          "title": "Node Id",
+          "type": "string"
+        },
+        "anchor_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Anchor Id"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Parent Id"
+        },
+        "kind": {
+          "enum": [
+            "notice",
+            "paragraph",
+            "table",
+            "table_cell",
+            "footnote_group",
+            "footnote"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "start": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text"
+        },
+        "state": {
+          "enum": [
+            "present",
+            "empty",
+            "unavailable"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "references": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/FootnoteReference"
+          },
+          "title": "References",
+          "type": "array"
+        },
+        "rows": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rows"
+        },
+        "columns": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Columns"
+        },
+        "cells": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ReaderCell"
+          },
+          "title": "Cells",
+          "type": "array"
+        }
+      },
+      "required": [
+        "node_id",
+        "anchor_id",
+        "parent_id",
+        "kind",
+        "state"
+      ],
+      "title": "ReaderNode",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "reader-1",
+      "default": "reader-1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "version_id": {
+      "pattern": "^ver_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Version Id",
+      "type": "string"
+    },
+    "content_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Content Hash",
+      "type": "string"
+    },
+    "representation_id": {
+      "pattern": "^(rep|prp)_[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "title": "Representation Id",
+      "type": "string"
+    },
+    "representation_revision": {
+      "minimum": 1,
+      "title": "Representation Revision",
+      "type": "integer"
+    },
+    "serialization_profile_id": {
+      "const": "OA-text-1",
+      "title": "Serialization Profile Id",
+      "type": "string"
+    },
+    "modes": {
+      "$ref": "#/$defs/ModeAvailability"
+    },
+    "limitations": {
+      "items": {
+        "enum": [
+          "geometry_unavailable",
+          "original_not_eligible",
+          "synthetic_fixture",
+          "cell_unavailable"
+        ],
+        "type": "string"
+      },
+      "title": "Limitations",
+      "type": "array"
+    },
+    "nodes": {
+      "items": {
+        "$ref": "#/$defs/ReaderNode"
+      },
+      "maxItems": 200,
+      "title": "Nodes",
+      "type": "array"
+    }
+  },
+  "required": [
+    "version_id",
+    "content_hash",
+    "representation_id",
+    "representation_revision",
+    "serialization_profile_id",
+    "modes",
+    "limitations",
+    "nodes"
+  ],
+  "title": "ReaderDescriptor",
+  "type": "object"
+}

@@ -9,6 +9,7 @@ from schema.models import Corpus
 from schema.operator import OperatorContracts
 from schema.policy import PolicyContracts
 from schema.public import PublicContracts
+from schema.reader import ReaderDescriptor
 
 if __name__ == "__main__":
     Path("schema/gazette.schema.json").write_text(
@@ -32,4 +33,7 @@ if __name__ == "__main__":
     )
     Path("schema/assembly.schema.json").write_text(
         json.dumps(AssemblyContracts.model_json_schema(), indent=2) + "\n"
+    )
+    Path("schema/reader.schema.json").write_text(
+        json.dumps(ReaderDescriptor.model_json_schema(), indent=2) + "\n"
     )
