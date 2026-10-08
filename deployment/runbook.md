@@ -119,6 +119,17 @@ ledger; they are D3/D18 decisions. Run `ByteLedger.reconcile(fence_seconds, cons
 under maintenance authority at least once per minute with the approved D3 bounds; there are no
 defaults. Ambiguous deliveries are charged in full unless durable transport evidence settles them.
 
+## Retention (owner-delegated D20 policy, 2026-10-07)
+
+Run hourly under maintenance authority:
+`python -m rights.retention --idle-bucket-hours 24 --reservation-days 90`. It deletes expired
+admission leases, admission and byte buckets idle and fully refilled for 24 hours (never while a
+lease or reservation references them) and released/settled byte reservations older than 90 days.
+Denial-delivery records, journal events, command/release receipts and audit events are retained
+indefinitely: they are minimal recovery tombstones and governance history with no personal data,
+and must outlive every recoverable backup (35 days with 7 daily + 4 weekly restore points).
+Backups themselves follow 7 daily and 4 weekly. The legacy request log keeps no client identity.
+
 ## Denial journal delivery
 
 Every withdrawal of a previously approved operation, metadata suspension and staged-byte erasure
