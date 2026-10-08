@@ -73,7 +73,7 @@ def test_all_canonical_rejections_are_static_allowlisted_codes():
 
 
 def test_every_sql_revision_is_pinned_and_unknown_tokens_fail_closed():
-    for revision in ("0011", "0012", "0013", "0014", "0015", "0016"):
+    for revision in ("0011", "0012", "0013", "0014", "0015", "0016", "0017"):
         tree = ast.parse(next(Path("migrations/versions").glob(revision + "*.py")).read_text())
         pin = next(
             ast.literal_eval(n.value)

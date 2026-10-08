@@ -638,6 +638,15 @@ Enforcement is enabled only by `ALVARY_ADMISSION_CONFIG` (a JSON file; see `depl
 which must state every allowance and satisfy the connection budget P <= C - R - O. No default
 allowance exists; D3 must measure and approve the values before text launch.
 
+Migration `0017` and `rights.bytes` add the BUD absolute-byte ledger: per-scope capacity, held and
+spent bytes (available = C - H - S; refill only reduces S), reservations charged atomically across
+every scope and idempotent per admission, and a compare-and-swap state machine (reserved →
+emitting → settled, reserved → released, emitting → ambiguous). Only provably unsent bytes are
+released; a stale or expired reservation cannot begin emission; `reconcile_bytes` (maintenance,
+with D3 fence and conservative bounds and no defaults) releases expired unsent reservations, marks
+fenced expired emissions ambiguous and settles them at every reserved byte unless durable
+transport evidence settles them first.
+
 Full acceptance runs PostgreSQL by default. Supply an isolated `TEST_DATABASE_URL` ending in `_test`
 whose maintenance account can create disposable databases and roles, then run `pytest -q`.
 `pytest --fast -q` explicitly skips PostgreSQL and cannot be treated as acceptance. Most tests clone
