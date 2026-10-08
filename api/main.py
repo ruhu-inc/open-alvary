@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from pathlib import Path
 from time import perf_counter
 from typing import Literal
@@ -11,12 +12,14 @@ from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from api.admission import AdmissionConfig, AdmissionMiddleware, AdmissionStore
 from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable
 from api.catalogue import normalize_citation as normalize_citation
 from api.project import project_info
 from api.release_adapter import LegacyReleases, ReleaseMissing, ReleaseWithdrawn
 from api.repositories import LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import ROOT, Store, check_legacy_authority, engine_for
+from rights.database import PolicyNamespace
 from schema.public import (
     CitationView,
     CoverageView,
@@ -68,7 +71,18 @@ def create_app(store: Store | None = None, releases: Path | None = None) -> Fast
                 )
             )
 
-    app.state.store = store or Store(engine_for())
+    admission = AdmissionConfig.from_environment()
+    app.state.store = store or Store(
+        engine_for(pool_size=admission.instance_pool_size if admission else None)
+    )
+    if admission is not None:
+        # Admission state is shared across replicas; only the PostgreSQL authority can hold it.
+        if app.state.store.engine.dialect.name != "postgresql":
+            raise ValueError("Admission enforcement requires PostgreSQL")
+        store_ = AdmissionStore(
+            app.state.store.engine, PolicyNamespace(os.getenv("ALVARY_POLICY_SCHEMA", "public"))
+        )
+        app.add_middleware(AdmissionMiddleware, config=admission, store=store_)
     release_root = releases or ROOT / "releases"
 
     @app.get("/healthz", include_in_schema=False)
