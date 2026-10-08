@@ -1,0 +1,18 @@
+# Backup job overlay; use only with deployment/backup.sh. All values are operator decisions.
+services:
+  backup:
+    build: {context: .., dockerfile: deployment/backup.Dockerfile}
+    profiles: [backup]
+    environment:
+      ALVARY_BACKUP_DATABASE_URL: postgresql://open_alvary:${POSTGRES_PASSWORD:?Set the database password}@db:5432/open_alvary
+      ALVARY_BACKUP_ALERT_COMMAND: ${BACKUP_ALERT_COMMAND:-}
+    volumes:
+      - ${BACKUP_DESTINATION:?Set the mounted off-host backup destination}:/backups
+      - ${BACKUP_RECIPIENT_FILE:?Set the public OpenPGP recipient key file}:/run/keys/recipient.asc:ro
+    depends_on:
+      db: {condition: service_healthy}
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: "no"

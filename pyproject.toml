@@ -16,7 +16,7 @@ dev = ["pytest>=8,<10", "ruff>=0.9,<1"]
 alvary-operator = "rights.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["api*", "schema*", "rights*", "ingestion*", "exports*"]
+include = ["api*", "schema*", "rights*", "ingestion*", "exports*", "operations*"]
 
 [tool.setuptools.package-data]
 schema = ["*.json", "vocabularies/*.json"]
