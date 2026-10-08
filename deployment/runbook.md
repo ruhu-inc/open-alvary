@@ -38,28 +38,31 @@ API data and downloaded legal content because permissions can be withdrawn.
 
 ## Backup and restore exercise
 
-`deployment/backup.sh` runs `operations.backup` in a dedicated image with PostgreSQL 16
-client tools and GnuPG (`deployment/backup.Dockerfile`, `deployment/backup.yaml`). Each run
-dumps the database, validates the archive catalogue, encrypts it to the configured **public**
-OpenPGP key and writes the archive and then its metadata sidecar (the completion marker)
-atomically to `BACKUP_DESTINATION`. The plaintext dump exists only in the job's private
-temporary directory. Nothing is pushed anywhere else: mount separate, off-host storage at
-`BACKUP_DESTINATION`, writable by the image's `postgres` user (uid 70).
+Backups go to a dedicated **Cloudflare R2** bucket (owner decision, 2026-10-07). `deployment/backup.sh`
+runs `operations.backup` in a dedicated image with PostgreSQL 16 client tools, GnuPG and rclone
+(`deployment/backup.Dockerfile`, `deployment/backup.yaml`). Each run dumps the database, validates
+the archive catalogue, encrypts it to the **public** OpenPGP key, uploads the archive and then its
+metadata sidecar (the completion marker) and never overwrites an existing object. rclone reads the
+R2 credentials from environment variables only; no rclone configuration file is written.
 
-These are operator decisions with no defaults; record who made each one:
+One-time setup (owner-delegated best practice):
 
-- Off-host storage location and its access controls (`BACKUP_DESTINATION`).
-- Key custody: generate the key pair away from the backup host and keep the private key
-  offline. `BACKUP_RECIPIENT_FILE` must contain only the public key; a secret key is refused.
-- Retention: `BACKUP_KEEP_DAILY` and `BACKUP_KEEP_WEEKLY` (the earlier proposal was 7 and 4).
-  Without both values the job warns and purges nothing.
-- Failure alerting: `BACKUP_ALERT_COMMAND` runs inside the backup container with the
-  arguments `backup-failed <stage>`. Without it, failures are only on the job's exit status.
-- Scheduling with the host's approved scheduler, and the responsible operator.
+1. In Cloudflare, create a bucket (for example `open-alvary-backups`) in a region/account separate
+   from the database host, and an R2 API token scoped to that bucket only (Object Read & Write).
+   Enable R2 bucket lock or a lifecycle rule as a second guard if desired; the job's own retention
+   is 7 daily and 4 weekly restore points.
+2. On a trusted workstation (not the server) run
+   `scripts/backup_keygen.sh ~/open-alvary-backup-keys "Open Alvary backups <ijidai@ruhu.ai>"` and set a
+   strong passphrase. Copy only `backup-recipient.asc` to the server (`BACKUP_RECIPIENT_FILE`).
+   Store `backup-identity.asc` and its passphrase in your password manager, plus one offline copy.
+3. Fill the backup section of `deployment/.env` (see `.env.example`) and schedule
+   `deployment/backup.sh` daily, for example at 02:30 UTC with cron.
+4. Failures run `deployment/alert_github_issue.sh`, which opens a GitHub issue (GitHub emails the
+   maintainer). It needs a fine-grained token with Issues: write on this repository only.
 
 Restore drill (before public launch, then on the agreed cadence): on a machine that holds the
 private key, create an empty database whose name ends in `_restore` or `_test`, then run
-`python -m operations.backup restore-verify <backup> --destination <dir> --identity-file <key>`
+`python -m operations.backup restore-verify <backup> --remote r2:open-alvary-backups/production --identity-file <key>`
 with `ALVARY_RESTORE_DATABASE_URL` set. Use `ALVARY_PG_TOOL_PREFIX` if the local PostgreSQL
 client is older than the server. The command checks the archive and dump hashes, refuses a
 non-empty or non-isolated target, restores without owners or grants, and verifies the

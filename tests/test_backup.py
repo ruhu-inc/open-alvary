@@ -242,3 +242,76 @@ def test_tampered_backup_and_secret_key_on_backup_host_are_rejected(drill, tmp_p
     stored.write_bytes(stored.read_bytes()[:-1] + b"\0")
     with pytest.raises(BackupError, match="integrity"):
         restore_verify(metadata["backup"], destination, secret, drill["target"], drill["tools"])
+
+
+STUB_RCLONE = """#!{python}
+import shutil, sys
+from pathlib import Path
+root = Path({root!r})
+args = [a for a in sys.argv[1:] if not a.startswith("--")]
+flags = [a for a in sys.argv[1:] if a.startswith("--")]
+def local(remote):
+    assert remote.startswith("r2:bucket"), remote
+    return root / remote.removeprefix("r2:bucket").lstrip("/")
+command = args[0]
+if command == "lsf":
+    base = local(args[1])
+    if not base.exists():
+        sys.exit(3)
+    print("\\n".join(sorted(p.name for p in base.iterdir() if p.is_file())))
+elif command == "copyto":
+    source, target = args[1], args[2]
+    if target.startswith("r2:"):
+        dest = local(target)
+        if "--immutable" in flags and dest.exists():
+            sys.exit(1)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, dest)
+    else:
+        shutil.copyfile(local(source), target)
+elif command == "deletefile":
+    local(args[1]).unlink()
+else:
+    sys.exit(2)
+"""
+
+
+def stub_rclone(tmp_path):
+    store = tmp_path / "bucket"
+    store.mkdir()
+    binary = tmp_path / "rclone"
+    binary.write_text(STUB_RCLONE.format(python=sys.executable, root=str(store)))
+    binary.chmod(0o755)
+    return str(binary), store
+
+
+def test_rclone_destination_stores_lists_fetches_never_overwrites_and_purges(tmp_path):
+    from operations.backup import RcloneDestination
+
+    binary, store = stub_rclone(tmp_path)
+    destination = RcloneDestination("r2:bucket/prod", binary=binary)
+    start = datetime(2026, 10, 7, tzinfo=UTC)
+    names = [stamp(start - timedelta(days=i)) for i in range(4)]
+    payload = tmp_path / "payload"
+    payload.write_bytes(b"ciphertext")
+    for name in names:
+        destination.put(name, payload)
+        destination.put(name + ".json", payload)
+    with pytest.raises(BackupError):
+        destination.put(names[0], payload)
+    assert destination.names() == sorted([*names, *(n + ".json" for n in names)])
+    fetched = tmp_path / "fetched"
+    destination.get(names[0], fetched)
+    assert fetched.read_bytes() == b"ciphertext"
+    assert purge(destination, keep_daily=2, keep_weekly=0)["removed"] == sorted(names[2:])
+    assert sorted(p.name for p in (store / "prod").iterdir()) == sorted(
+        [*names[:2], *(n + ".json" for n in names[:2])]
+    )
+
+
+@pytest.mark.parametrize("remote", ["bucket-without-remote", "r2:../escape", "r2:a b", "/abs/path"])
+def test_rclone_destination_rejects_unsafe_remotes(remote):
+    from operations.backup import RcloneDestination
+
+    with pytest.raises(BackupError):
+        RcloneDestination(remote)
