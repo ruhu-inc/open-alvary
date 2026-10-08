@@ -1344,3 +1344,17 @@ main:focus {
   align-items: center;
   gap: 0.5rem;
 }
+
+/* Reading mode (RDR-02) */
+.reader { max-width: 46rem; line-height: 1.65; }
+.reader p { margin: 0 0 1rem; unicode-bidi: plaintext; white-space: pre-wrap; }
+.reader-notice { border-top: 1px solid var(--line); padding-top: 1.25rem; margin-top: 1.25rem; }
+.reader-footnotes { font-size: 0.9rem; color: var(--muted); border-left: 3px solid var(--line); padding-left: 0.75rem; }
+.reader-noteref { vertical-align: super; font-size: 0.75em; }
+.reader-table { overflow-x: auto; margin: 0 0 1rem; }
+.reader-table:focus-visible { outline: 2px solid var(--green); }
+.reader table { border-collapse: collapse; }
+.reader th, .reader td { border: 1px solid var(--line); padding: 0.4rem 0.6rem; text-align: start; vertical-align: top; white-space: pre-wrap; }
+.reader-uncertain { font-style: italic; color: var(--muted); }
+.reader-limitations { font-size: 0.9rem; color: var(--muted); padding-left: 1.1rem; }
+.reader-version { font-size: 0.8rem; color: var(--muted); }
