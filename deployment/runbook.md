@@ -149,6 +149,22 @@ Supabase instance. Set it up once as its administrator:
    and encryption at rest provided by the host. The table is append-only even for its owner.
 3. The `--journal <dir>` file journal remains a reference backend for drills only.
 
+## Monitoring and alerts (owner decision, 2026-10-07)
+
+Alerts reach the maintainer (ijidai@ruhu.ai) by email through GitHub issues, so no mail server is
+needed. Keep GitHub notifications for this repository enabled.
+
+- `.github/workflows/monitor.yml` probes `https://open.alvary.ai` (homepage identity and
+  `/api/healthz`) every 5 minutes. Two consecutive failures one minute apart open an `outage`
+  issue assigned to the repository owner; recovery closes it with a timestamp.
+- `.github/workflows/backup-freshness.yml` checks daily that a completed backup newer than 26 hours
+  exists in R2. Configure repository secrets `R2_ENDPOINT`, `R2_READONLY_ACCESS_KEY_ID`,
+  `R2_READONLY_SECRET_ACCESS_KEY` (a read-only token for the backup bucket) and the variable
+  `BACKUP_BUCKET_PREFIX` (for example `open-alvary-backups/production`).
+- Host jobs (backup failures) open `operations-alert` issues via `deployment/alert_github_issue.sh`.
+- Both workflows run only once these files are on GitHub; GitHub may delay scheduled runs.
+  Primary operator: the maintainer; name a backup operator before advertising any SLA.
+
 ## Upgrade and rollback
 
 Record the deployed commit and image IDs. Take and validate a backup before migration.

@@ -1,0 +1,43 @@
+name: Backup freshness
+# Daily: alert if the newest encrypted backup in R2 is older than 26 hours (dead-man's switch).
+# Needs repository secrets R2_ENDPOINT, R2_READONLY_ACCESS_KEY_ID, R2_READONLY_SECRET_ACCESS_KEY
+# (a read-only token for the backup bucket) and variable BACKUP_BUCKET_PREFIX (bucket/prefix).
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_READONLY_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_READONLY_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+      LOCATION: ${{ vars.BACKUP_BUCKET_PREFIX }}
+    steps:
+      - name: Check the newest completed backup
+        id: check
+        run: |
+          if [ -z "$R2_ENDPOINT" ] || [ -z "$LOCATION" ]; then
+            echo "::notice::Backup freshness not configured (secrets/variable missing)"; echo "state=skip" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          bucket=${LOCATION%%/*}; prefix=${LOCATION#*/}
+          newest=$(aws s3api list-objects-v2 --endpoint-url "$R2_ENDPOINT" --bucket "$bucket" --prefix "$prefix/" \
+            --query "sort_by(Contents[?ends_with(Key, '.dump.gpg.json')], &LastModified)[-1].LastModified" --output text)
+          if [ -z "$newest" ] || [ "$newest" = "None" ]; then echo "state=stale" >> "$GITHUB_OUTPUT"; exit 0; fi
+          age=$(( $(date -u +%s) - $(date -u -d "$newest" +%s) ))
+          echo "Newest backup: $newest (${age}s old)"
+          if [ "$age" -gt 93600 ]; then echo "state=stale" >> "$GITHUB_OUTPUT"; else echo "state=fresh" >> "$GITHUB_OUTPUT"; fi
+      - name: Alert on a stale or missing backup
+        if: steps.check.outputs.state == 'stale'
+        run: |
+          gh label create operations-alert --color D93F0B 2>/dev/null || true
+          gh issue create --label operations-alert --title "Backup stale: no completed backup in 26 hours" \
+            --body "The daily freshness check found no completed encrypted backup newer than 26 hours. Check deployment/backup.sh on the host and the backup alert issues."
+          exit 1

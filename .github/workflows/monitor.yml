@@ -1,0 +1,51 @@
+name: Uptime monitor
+# Every 5 minutes: alert (GitHub issue → email to watchers) after two consecutive failed probes.
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: uptime-monitor
+  cancel-in-progress: false
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SITE: https://open.alvary.ai
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install 'httpx>=0.28,<1'
+      - name: Probe twice, one minute apart
+        id: probe
+        run: |
+          if python -m scripts.monitor_probe "$SITE"; then echo "state=up" >> "$GITHUB_OUTPUT"; exit 0; fi
+          sleep 60
+          if python -m scripts.monitor_probe "$SITE"; then echo "state=up" >> "$GITHUB_OUTPUT"; else echo "state=down" >> "$GITHUB_OUTPUT"; fi
+      - name: Open or update the outage issue
+        if: steps.probe.outputs.state == 'down'
+        run: |
+          gh label create outage --color B60205 --description "Automated uptime alert" 2>/dev/null || true
+          open=$(gh issue list --label outage --state open --json number --jq '.[0].number')
+          if [ -z "$open" ]; then
+            gh issue create --label outage --assignee "${{ github.repository_owner }}" \
+              --title "Outage: $SITE failed two consecutive checks" \
+              --body "The scheduled probe failed twice, one minute apart. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. See deployment/runbook.md." \
+              || gh issue create --label outage --title "Outage: $SITE failed two consecutive checks" --body "See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+          else
+            gh issue comment "$open" --body "Still failing: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          fi
+          exit 1
+      - name: Close a resolved outage issue
+        if: steps.probe.outputs.state == 'up'
+        run: |
+          for n in $(gh issue list --label outage --state open --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "Recovered: probe passed at $(date -u +%Y-%m-%dT%H:%MZ)."
+          done
