@@ -1,0 +1,31 @@
+ingestion/first_collection.py
+  s_b82616e2476856::t_56a36885e3ffc6 339
+ingestion/layout_parser.py
+  s_b82616e2476856::t_3a2c763a18fd04 284-285,287-289
+  s_b82616e2476856::t_566ebc0ba31aa8 27-29,268,274-282,293-297,299,301-302,304-310
+ingestion/compare.py
+  s_b82616e2476856::t_56a36885e3ffc6 41,61-65,75,102-110,120-124
+  s_b82616e2476856::t_3a2c763a18fd04 22-24,28-29
+tests/test_layout_parser.py
+  s_b82616e2476856::t_566ebc0ba31aa8 252-263
+tests/test_batch_pipeline.py
+  s_b82616e2476856::t_56a36885e3ffc6 277-286
+  s_b82616e2476856::t_3a2c763a18fd04 287-300
+  s_b82616e2476856::t_e81fdaa02f641a 43-44
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4ea3cfdd2986aa1ad75edf5e29ee991f3e9a6b0a",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
