@@ -2,6 +2,7 @@
 
     python -m ingestion.first_collection fetch     # download each manifest PDF once, politely
     python -m ingestion.first_collection extract   # text, gazette details, section outline
+    python -m ingestion.first_collection layout    # Document AI Layout Parser reading (tables kept)
     python -m ingestion.first_collection review    # private HTML review pack
 
 Everything is written under private-staging/first-collection/ (git-ignored). Nothing is
@@ -23,6 +24,7 @@ from urllib.parse import urlsplit
 import httpx
 from pypdf import PdfReader
 
+from ingestion import layout_parser
 from ingestion.pipeline import MAX_BYTES, normalize
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -217,6 +219,27 @@ def extract(manifest: dict, staging: Path = STAGING) -> list[dict]:
     return summaries
 
 
+def layout(manifest: dict, staging: Path = STAGING, only: str | None = None) -> list[dict]:
+    """Second, structure-preserving reading by the Document AI Layout Parser (paid cloud call)."""
+    if only and only not in {act["id"] for act in manifest["acts"]}:
+        raise ValueError(f"{only}: not in the manifest")
+    config = layout_parser.DocAIConfig.from_environment()
+    summaries = []
+    for act in manifest["acts"]:
+        if only and act["id"] != only:
+            continue
+        raw = (staging / f"{act['id']}.pdf").read_bytes()
+        result = layout_parser.parse(raw, config)
+        result.update(
+            source_sha256=hashlib.sha256(raw).hexdigest(),
+            parsed_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        )
+        (staging / f"{act['id']}.layout.json").write_text(json.dumps(result, ensure_ascii=False, indent=1))
+        tables = sum(node["kind"] == "table" for node in result["nodes"])
+        summaries.append({"id": act["id"], "nodes": len(result["nodes"]), "tables": tables})
+    return summaries
+
+
 def render_pages(pdf: Path, out: Path) -> int:
     """Page images for the side-by-side review (local Poppler in the sealed OCR container)."""
     import os
@@ -264,12 +287,19 @@ header{{position:sticky;top:0;background:#fff;border-bottom:1px solid #ccc;paddi
 .text{{background:#fff;border:1px solid #bbb;padding:.8rem;white-space:pre-wrap;font:14px/1.55 ui-monospace,monospace}}
 .ocr .text{{border:2px solid #c77700}} .badge{{font-weight:600}} .ocr .badge{{color:#a35f00}}
 .done{{opacity:.55}} label{{cursor:pointer}}
+.layout{{background:#fff;border:1px solid #bbb;padding:.8rem;font:14px/1.55 ui-monospace,monospace}}
+.layout p{{margin:.2rem 0;white-space:pre-wrap}} .layout .h{{font-weight:700}} .layout .li{{padding-left:1rem}}
+.layout table{{border-collapse:collapse;margin:.5rem 0;width:100%}}
+.layout td,.layout th{{border:1px solid #888;padding:.2rem .4rem;vertical-align:top;white-space:pre-wrap}}
+mark{{background:#ffd666}} details{{margin-top:.6rem}}
 @media (max-width:800px){{.page{{grid-template-columns:1fr}}}}
 </style>
 <header><b>{title}</b> · {pages} pages · <span id="progress"></span> ·
 <a href="review.html">all Acts</a> · <a href="{pdf}">original PDF</a><br>
 <small>Left: the gazette page (authoritative). Right: the text extracted from that page. Orange pages
-came from OCR: check every word. Tick a page when it matches. Ticks are saved only in this browser.</small></header>
+came from OCR: check every word. Where a Layout Parser reading exists it is shown with its tables;
+words highlighted yellow differ from the independent first reading. Tick a page when it matches.
+Ticks are saved only in this browser.</small></header>
 {rows}
 <script>
 const key = (n) => "oa-review:{act}:" + n;
@@ -296,17 +326,27 @@ def side_by_side(act: dict, staging: Path) -> Path:
     pages = json.loads((staging / f"{act['id']}.pages.json").read_text())
     extraction = json.loads((staging / f"{act['id']}.extraction.json").read_text())
     ocr = set(extraction["ocr_pages"])
+    layout_file = staging / f"{act['id']}.layout.json"
+    nodes = json.loads(layout_file.read_text())["nodes"] if layout_file.exists() else None
     images = staging / "pages" / act["id"]
     render_pages(staging / f"{act['id']}.pdf", images)
     rows = []
     for number, text in enumerate(pages, 1):
         source = "OCR — check every word" if number in ocr else "PDF text layer"
+        body = f"<div class='text'>{html.escape(text) or '<em>(no text extracted)</em>'}</div>"
+        if nodes is not None:
+            differing, agreement = layout_parser.disagreements(text, layout_parser.page_text(nodes, number))
+            source = f"Layout Parser · {agreement:.1%} agrees with {source.split(' —')[0]}"
+            body = (
+                f"<div class='layout'>{layout_parser.render_page(nodes, number, differing) or '<em>(no text)</em>'}</div>"
+                f"<details><summary>First reading (PDF text layer or OCR)</summary>{body}</details>"
+            )
         rows.append(
             f"<section class='page{' ocr' if number in ocr else ''}' id='p{number}'>"
             f"<div><img loading='lazy' src='pages/{act['id']}/page-{number}.jpg' alt='Gazette page {number}'></div>"
             f"<div><p><span class='badge'>Page {number} · {source}</span> · "
             f"<label><input type='checkbox' data-page='{number}'> checked against the gazette</label></p>"
-            f"<div class='text'>{html.escape(text) or '<em>(no text extracted)</em>'}</div></div></section>"
+            f"{body}</div></section>"
         )
     page = staging / f"{act['id']}.review.html"
     page.write_text(
@@ -376,7 +416,8 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("action", choices=["fetch", "extract", "review"])
+    parser.add_argument("action", choices=["fetch", "extract", "layout", "review"])
+    parser.add_argument("--act", help="layout: parse only this manifest id (each call is billed)")
     args = parser.parse_args(argv)
     manifest = load_manifest()
     if args.action == "fetch":
@@ -384,6 +425,9 @@ def main(argv=None) -> int:
             print(f"{record['id']}: {record['bytes']} bytes sha256 {record['sha256'][:16]}…")
     elif args.action == "extract":
         for summary in extract(manifest):
+            print(summary)
+    elif args.action == "layout":
+        for summary in layout(manifest, only=args.act):
             print(summary)
     else:
         print(review(manifest))
