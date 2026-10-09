@@ -1,0 +1,31 @@
+ingestion/first_collection.py
+  s_b82616e2476856::t_60783177464efe 5,27,222-242,290-294,300-302,329-330,336-343,349,419-420,429-430
+  s_b82616e2476856::t_faafbabeaeee06 431
+pyproject.toml
+  s_b82616e2476856::t_1b412908c8f1da 14
+tests/test_layout_parser.py
+  s_b82616e2476856::t_a4f4f7f45f0385 46-119
+  s_b82616e2476856::t_00bfdb30b01d7b 1-45,120-134
+ingestion/layout_parser.py
+  s_b82616e2476856::t_6552a6b4f1d9a4 15,95-97,229-264,267-278
+  s_b82616e2476856::t_2c5133db2bc1f1 1-14,16-35,39-41,45-48,54-94,98-123,129-137,139-164,168-177,181-228
+  s_b82616e2476856::t_a4f4f7f45f0385 36-38,42-44,49-53,124-128,138,165-167,178-180,265-266
+.env.example
+  s_b82616e2476856::t_43a199a9d83af4 3-9
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ef0aff456574f89b29b1f868384dc55967d4546a",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
