@@ -1,0 +1,29 @@
+ingestion/benchmark.py
+  s_b82616e2476856::t_b8630a76f8ded9 279-295,298-299,302-313,318,330,410
+  s_b82616e2476856::t_d2d0516c512ec8 17,319-329,331-333,413
+  s_b82616e2476856::t_6930d93b476737 422,426,436,438,446
+  s_b82616e2476856::t_634ee34e56d9f4 20,41,43,449-450,481,488,490
+tests/test_layout_parser.py
+  s_b82616e2476856::t_94bebdccfffadf 213-242
+  s_b82616e2476856::t_b63c3b31055e7a 148-149
+ingestion/settings.py
+  s_b82616e2476856::t_b63c3b31055e7a 15-16
+ingestion/layout_parser.py
+  s_b82616e2476856::t_94bebdccfffadf 170-180,185,190,210,222-224
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "598db2368ed82db44bbed05d9f5401763fe86bb1",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
