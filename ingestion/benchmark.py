@@ -24,10 +24,11 @@ import re
 import subprocess
 import time
 import unicodedata
-from html.parser import HTMLParser
 from pathlib import Path
 
 import httpx
+
+from ingestion.compare import HtmlTables as _Tables
 
 ROOT = Path(__file__).resolve().parents[1]
 BENCH = ROOT / "private-staging" / "bench"
@@ -149,39 +150,6 @@ def score(gold: dict, reading: dict) -> dict:
 
 
 # --- converting reader output to {"text", "tables"} -----------------------------------------
-
-
-class _Tables(HTMLParser):
-    def __init__(self):
-        super().__init__()
-        self.tables, self.row, self.cell, self.depth = [], None, None, 0
-
-    def handle_starttag(self, tag, attrs):
-        if tag == "table":
-            self.depth += 1
-            self.tables.append([])
-        elif tag == "tr" and self.depth:
-            self.row = []
-        elif tag in {"td", "th"} and self.row is not None:
-            self.cell = []
-            span = int(dict(attrs).get("colspan") or 1)
-            self.row.extend([None] * (span - 1))  # placeholders so spanned columns still count
-        elif tag == "br" and self.cell is not None:
-            self.cell.append(" ")
-
-    def handle_endtag(self, tag):
-        if tag in {"td", "th"} and self.cell is not None and self.row is not None:
-            self.row.append("".join(self.cell).strip())
-            self.cell = None
-        elif tag == "tr" and self.row is not None and self.depth:
-            self.tables[-1].append(["" if c is None else c for c in self.row])
-            self.row = None
-        elif tag == "table":
-            self.depth = max(self.depth - 1, 0)
-
-    def handle_data(self, data):
-        if self.cell is not None:
-            self.cell.append(data)
 
 
 PIPE_ROW = re.compile(r"^\s*\|(.+)\|\s*$")

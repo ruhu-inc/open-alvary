@@ -191,8 +191,20 @@ def convert_blocks(blocks: list[dict], offset: int = 1) -> list[dict]:
     return nodes
 
 
-def parse(raw: bytes, config: DocAIConfig, client=None) -> dict:
-    """Run the Layout Parser chunk by chunk (online limit) and merge into one node list."""
+def parse(
+    raw: bytes, config: DocAIConfig, client=None, workers: int = 1, pages_per_request: int = ONLINE_PAGE_LIMIT
+) -> dict:
+    """Run the Layout Parser chunk by chunk (online limit) and merge into one node list.
+
+    Chunks run concurrently when workers > 1; results are merged in page order. Throttling and
+    transient server errors are retried with exponential backoff. A request that runs past its
+    deadline is not retried: the service may already have billed it, so the run fails instead
+    and can be repeated deliberately. Every retry is recorded in the result.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    from google.api_core import exceptions
+    from google.api_core import retry as retries
     from google.api_core.client_options import ClientOptions
     from google.cloud import documentai_v1 as documentai
 
@@ -207,8 +219,19 @@ def parse(raw: bytes, config: DocAIConfig, client=None) -> dict:
         )
     else:
         name = client.processor_path(config.project, config.location, config.processor_id)
-    nodes, layouts = [], []
-    for first_page, chunk in page_chunks(raw):
+    retry = retries.Retry(
+        predicate=retries.if_exception_type(
+            exceptions.TooManyRequests, exceptions.ServiceUnavailable, exceptions.InternalServerError
+        ),
+        initial=2.0,
+        maximum=60.0,
+        timeout=1800.0,
+        on_error=lambda error: retried.append(f"{type(error).__name__}: {error}"[:300]),
+    )
+    retried: list[str] = []
+
+    def read(item):
+        first_page, chunk = item
         request = documentai.ProcessRequest(
             name=name,
             raw_document=documentai.RawDocument(content=chunk, mime_type="application/pdf"),
@@ -216,18 +239,24 @@ def parse(raw: bytes, config: DocAIConfig, client=None) -> dict:
                 layout_config=documentai.ProcessOptions.LayoutConfig(return_bounding_boxes=True)
             ),
         )
-        document = client.process_document(request=request).document
-        layout = documentai.Document.to_dict(document).get("document_layout", {})
+        document = client.process_document(request=request, retry=retry, timeout=900).document
+        return first_page, documentai.Document.to_dict(document).get("document_layout", {})
+
+    with ThreadPoolExecutor(max_workers=max(workers, 1)) as pool:
+        results = list(pool.map(read, page_chunks(raw, max(1, min(pages_per_request, ONLINE_PAGE_LIMIT)))))
+    nodes, layouts = [], []
+    for first_page, layout in results:
         nodes.extend(convert_blocks(layout.get("blocks", []), offset=first_page))
         layouts.append({"first_page": first_page, "blocks": layout.get("blocks", [])})
     # The processor's own layout is kept so a converter fix can be re-applied without a new call.
-    return {"processor": name, "nodes": nodes, "layout": layouts}
+    return {"processor": name, "nodes": nodes, "layout": layouts, "retries": retried}
 
 
 TOKEN = re.compile(r"\S+")
+MARGIN_NOTE_WORDS = 8
 
 
-def restore_markers(nodes: list[dict], page: int, reference: str) -> int:
+def restore_markers(nodes: list[dict], page: int, reference: str, source: str = "first reading") -> int:
     """Copy list markers the parser dropped ("91.", "(a)") from the independent first reading.
 
     The whole page is aligned word by word; a marker is restored only where the alignment shows
@@ -238,16 +267,28 @@ def restore_markers(nodes: list[dict], page: int, reference: str) -> int:
     for node in nodes:
         if node["page"] != page or node["kind"] == "furniture":
             continue
+        size = len(TOKEN.findall(_node_text(node)))
         if node["kind"] == "list_item" and not node.get("marker"):
-            starts[index] = node
-        index += len(TOKEN.findall(_node_text(node)))
-    _, missing, _ = disagreements(reference, page_text(nodes, page))
+            starts[index] = (node, size)
+        index += size
+    left, right = TOKEN.findall(reference), TOKEN.findall(page_text(nodes, page))
+    opcodes = difflib.SequenceMatcher(a=left, b=right, autojunk=False).get_opcodes()
+    unmatched = [(j1, j2) for tag, _, _, j1, j2 in opcodes if tag != "equal" and j2 > j1]
+    gaps = [(j1, left[i1:i2]) for tag, i1, i2, j1, _ in opcodes if tag != "equal" and i2 > i1]
     restored = 0
-    for position, node in starts.items():
-        before = missing.get(position, "").split()
-        if before and MARKER.match(before[-1]):
-            node["marker"], node["marker_source"] = before[-1], "first reading"
-            restored += 1
+    for start, (node, size) in starts.items():
+        # The reference's marker is the last of its unmatched words just before the item's text.
+        # The item may open with a margin note the reference prints elsewhere, so the gap may begin
+        # a few words in, but only when every word skipped is itself unmatched.
+        for j1, words in gaps:
+            if not start <= j1 <= min(start + MARGIN_NOTE_WORDS, start + size):
+                continue
+            if j1 > start and not any(u1 <= start and u2 >= j1 for u1, u2 in unmatched):
+                continue
+            if MARKER.match(words[-1]):
+                node["marker"], node["marker_source"] = words[-1], source
+                restored += 1
+            break
     return restored
 
 
@@ -290,13 +331,15 @@ PIECES = re.compile(r"(\s+)")
 class _Marker:
     """Escapes text and marks tokens whose running index the comparison flagged."""
 
-    def __init__(self, differing: set[int], missing: dict[int, str]):
-        self.differing, self.missing, self.index = differing, missing, 0
+    def __init__(self, differing: set[int] | dict[int, str], missing: dict[int, str]):
+        # A set marks tokens plainly; a dict maps token index to a CSS class (flag severity).
+        self.classes = dict(differing) if isinstance(differing, dict) else dict.fromkeys(differing, "")
+        self.missing, self.index = missing, 0
 
     def gap(self) -> str:
         """Reference words the candidate lacks at the current position, struck through."""
         words = self.missing.pop(self.index, "")
-        return f"<del title='only in the first reading'>{html.escape(words)}</del> " if words else ""
+        return f"<del title='not in this reading'>{html.escape(words)}</del> " if words else ""
 
     def __call__(self, text: str) -> str:
         out = []
@@ -308,16 +351,22 @@ class _Marker:
                 continue
             out.append(self.gap())
             escaped = html.escape(piece)
-            out.append(f"<mark>{escaped}</mark>" if self.index in self.differing else escaped)
+            if self.index in self.classes:
+                css = self.classes[self.index]
+                escaped = f"<mark class='{css}'>{escaped}</mark>" if css else f"<mark>{escaped}</mark>"
+            out.append(escaped)
             self.index += 1
         return "".join(out)
 
 
 def render_page(
-    nodes: list[dict], page: int, differing: set[int] = frozenset(), missing: dict[int, str] | None = None
+    nodes: list[dict],
+    page: int,
+    differing: set[int] | dict[int, str] = frozenset(),
+    missing: dict[int, str] | None = None,
 ) -> str:
     """HTML for one page's structure; token order matches page_text so marks line up."""
-    mark, parts = _Marker(set(differing), dict(missing or {})), []
+    mark, parts = _Marker(differing, dict(missing or {})), []
     for node in nodes:
         if node["page"] != page or node["kind"] == "furniture":
             continue
@@ -338,11 +387,11 @@ def render_page(
         elif node["kind"] == "list_item":
             marker = ""
             if node.get("marker"):
-                marker = f"<span class='restored' title='marker from the first reading'>{mark(node['marker'])}</span> "
+                source = node.get("marker_source") or "the first reading"
+                source = ", ".join(source) if isinstance(source, list) else source
+                marker = f"<span class='restored' title='marker from {html.escape(source)}'>{mark(node['marker'])}</span> "
             parts.append(f"<p class='li'>{marker}{mark(node['text'])}</p>")
         else:
             parts.append(f"<p>{mark(node['text'])}</p>")
-    tail = "".join(
-        f"<del title='only in the first reading'>{html.escape(w)}</del>" for w in mark.missing.values()
-    )
+    tail = "".join(f"<del title='not in this reading'>{html.escape(w)}</del>" for w in mark.missing.values())
     return "".join(parts) + (f"<p>{tail}</p>" if tail else "")
