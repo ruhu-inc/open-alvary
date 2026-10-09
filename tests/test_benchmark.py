@@ -60,3 +60,7 @@ def test_settings_file_is_parsed_without_overriding_the_environment(tmp_path, mo
     assert os.environ["AZURE_DI_ENDPOINT"] == "https://x.example/"
     assert os.environ["AZURE_DI_KEY"] == "from-environment"
     assert "EMPTY" not in os.environ
+
+
+def test_markdown_escapes_and_selection_marks_are_not_reading_errors():
+    assert b.from_markup("☒ 91\\. Establishment :selected:")["text"].split() == ["91.", "Establishment"]
