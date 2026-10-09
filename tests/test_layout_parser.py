@@ -261,3 +261,12 @@ def test_a_section_number_in_place_of_a_margin_note_heading_is_restored_with_its
     reference = "156. (1) The Agency may accept gifts of land (2) The Agency shall not accept any gift"
     lp.restore_markers(nodes, 1, reference)
     assert [n.get("marker") for n in nodes] == [None, "156. (1)", "(2)"]
+
+
+def test_a_number_after_a_misread_last_word_or_before_a_split_first_word_is_restored():
+    nodes = lp.convert_blocks(
+        [ordered_list("Pension and gratuity", "Structure of the Agency", "Feed-in tariffs rates")]
+    )
+    reference = "139. Pension and gratu-ry 140. Structure of the Agency 168. Feed -in tariffs rates"
+    lp.restore_markers(nodes, 1, reference)
+    assert [n.get("marker") for n in nodes] == ["139.", "140.", "168."]

@@ -291,26 +291,37 @@ def restore_markers(nodes: list[dict], page: int, reference: str, source: str = 
         a=[key(t) for t in left], b=[key(t) for t in right], autojunk=False
     ).get_opcodes()
     unmatched = [(j1, j2) for tag, _, _, j1, j2 in opcodes if tag != "equal" and j2 > j1]
-    gaps = [(j1, left[i1:i2]) for tag, i1, i2, j1, _ in opcodes if tag != "equal" and i2 > i1]
+    gaps = [(j1, j2, left[i1:i2]) for tag, i1, i2, j1, j2 in opcodes if tag != "equal" and i2 > i1]
+
+    def run(words: list[str]) -> list[str]:
+        found = []
+        for word in words:
+            if len(found) == 2 or not MARKER.match(word):
+                break
+            found.append(word)
+        return found
+
     restored = 0
     for start, (node, size, lead) in starts.items():
         # The reference's marker is the run of marker-shaped words ending its unmatched words just
         # before the item's text ("155. (1)"). The gap may begin a few words into the item (a
         # leading margin note) or at a margin-note heading just before it, but only when every
-        # word skipped to reach it is itself unmatched.
-        for j1, words in gaps:
-            if not start - lead <= j1 <= min(start + MARGIN_NOTE_WORDS, start + size):
+        # word skipped to reach it is itself unmatched. A gap that begins in the previous item (its
+        # last word misread by the reference) counts when it ends exactly where this item begins.
+        for j1, j2, words in gaps:
+            straddles = j1 < start - lead and j2 == start
+            if not straddles and not start - lead <= j1 <= min(start + MARGIN_NOTE_WORDS, start + size):
                 continue
             base = start if j1 >= start else start - lead
-            if j1 > base and not any(u1 <= base and u2 >= j1 for u1, u2 in unmatched):
+            if not straddles and j1 > base and not any(u1 <= base and u2 >= j1 for u1, u2 in unmatched):
                 continue
-            tail = []
-            for word in reversed(words):
-                if len(tail) == 2 or not MARKER.match(word):
-                    break
-                tail.insert(0, word)
-            if tail:
-                node["marker"], node["marker_source"] = " ".join(tail), source
+            marker = run(list(reversed(words)))[::-1]
+            if not marker and j1 == start and j2 > j1:
+                # The reference reads the item's first word differently ("Feed -in" for "Feed-in"),
+                # so its number opens the gap instead of closing it.
+                marker = run(words)
+            if marker:
+                node["marker"], node["marker_source"] = " ".join(marker), source
                 restored += 1
             break
     return restored
