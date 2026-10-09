@@ -21,7 +21,10 @@ from io import BytesIO
 from pypdf import PdfReader, PdfWriter
 
 ONLINE_PAGE_LIMIT = 15  # synchronous Layout Parser requests accept at most 15 pages
-FURNITURE = {"page_header", "page_footer"}
+# Running heads and folios; newer processor versions call them "header" and "footer".
+FURNITURE = {"page_header", "page_footer", "header", "footer"}
+# Section and paragraph markers the parser strips from ordered lists: 91.  12A.  (a)  (iv)  (2)
+MARKER = re.compile(r"^(?:\d{1,3}[A-Z]?\.|\([a-z]{1,2}\)|\([ivxl]{1,6}\)|\(\d{1,3}[A-Z]?\))$")
 HEADINGS = {f"heading-{n}" for n in range(1, 7)} | {"subheading"}
 
 
@@ -159,11 +162,18 @@ def convert_blocks(blocks: list[dict], offset: int = 1) -> list[dict]:
                 }
             )
         elif "list_block" in block:
+            ordered = _type(block["list_block"]) == "ordered"
             for entry in block["list_block"].get("list_entries", []):
                 text = _text_of(entry.get("blocks", []))
                 if text:
                     nodes.append(
-                        {"kind": "list_item", "level": "list_item", "text": text, "page": page_start}
+                        {
+                            "kind": "list_item",
+                            "level": "list_item",
+                            "text": text,
+                            "page": page_start,
+                            "ordered": ordered,
+                        }
                     )
     return nodes
 
@@ -199,33 +209,64 @@ def parse(raw: bytes, config: DocAIConfig, client=None) -> dict:
     return {"processor": name, "nodes": nodes}
 
 
-def page_text(nodes: list[dict], page: int) -> str:
-    """Comparable plain text for one page (furniture excluded; tables read row by row)."""
-    parts = []
-    for node in nodes:
-        if node["page"] != page or node["kind"] == "furniture":
-            continue
-        if node["kind"] == "table":
-            for row in node["header_rows"] + node["body_rows"]:
-                parts.append(" ".join(cell["text"] for cell in row))
-        else:
-            parts.append(node["text"])
-    return "\n".join(parts)
-
-
 TOKEN = re.compile(r"\S+")
 
 
-def disagreements(reference: str, candidate: str) -> tuple[set[int], float]:
-    """Indices of candidate tokens that differ from the independent reference, and agreement."""
+def restore_markers(nodes: list[dict], page: int, reference: str) -> int:
+    """Copy list markers the parser dropped ("91.", "(a)") from the independent first reading.
+
+    The whole page is aligned word by word; a marker is restored only where the alignment shows
+    a marker-shaped word present in the reference and missing immediately before the entry's
+    first word. Restored markers are labelled so the reviewer can see where they came from.
+    """
+    starts, index = {}, 0
+    for node in nodes:
+        if node["page"] != page or node["kind"] == "furniture":
+            continue
+        if node["kind"] == "list_item" and not node.get("marker"):
+            starts[index] = node
+        index += len(TOKEN.findall(_node_text(node)))
+    _, missing, _ = disagreements(reference, page_text(nodes, page))
+    restored = 0
+    for position, node in starts.items():
+        before = missing.get(position, "").split()
+        if before and MARKER.match(before[-1]):
+            node["marker"], node["marker_source"] = before[-1], "first reading"
+            restored += 1
+    return restored
+
+
+def _node_text(node: dict) -> str:
+    if node["kind"] == "table":
+        rows = node["header_rows"] + node["body_rows"]
+        return "\n".join(
+            [node["caption"]] * bool(node["caption"]) + [" ".join(c["text"] for c in r) for r in rows]
+        )
+    return f"{node['marker']} {node['text']}" if node.get("marker") else node["text"]
+
+
+def page_text(nodes: list[dict], page: int) -> str:
+    """Comparable plain text for one page (furniture excluded; tables read row by row)."""
+    return "\n".join(_node_text(n) for n in nodes if n["page"] == page and n["kind"] != "furniture")
+
+
+def disagreements(reference: str, candidate: str) -> tuple[set[int], dict[int, str], float]:
+    """Compare the candidate with the independent reference, word by word.
+
+    Returns the indices of candidate words that differ, the reference words missing from the
+    candidate keyed by the candidate index they belong before, and the overall agreement.
+    """
     left, right = TOKEN.findall(reference), TOKEN.findall(candidate)
     matcher = difflib.SequenceMatcher(a=left, b=right, autojunk=False)
-    differing = set()
-    for tag, _, _, j1, j2 in matcher.get_opcodes():
-        if tag != "equal":
-            differing.update(range(j1, j2))
+    differing, missing = set(), {}
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            continue
+        differing.update(range(j1, j2))
+        if tag == "delete":
+            missing[j1] = " ".join(left[i1:i2])
     agreement = 1.0 if not right and not left else matcher.ratio()
-    return differing, agreement
+    return differing, missing, agreement
 
 
 PIECES = re.compile(r"(\s+)")
@@ -234,8 +275,13 @@ PIECES = re.compile(r"(\s+)")
 class _Marker:
     """Escapes text and marks tokens whose running index the comparison flagged."""
 
-    def __init__(self, differing: set[int]):
-        self.differing, self.index = differing, 0
+    def __init__(self, differing: set[int], missing: dict[int, str]):
+        self.differing, self.missing, self.index = differing, missing, 0
+
+    def gap(self) -> str:
+        """Reference words the candidate lacks at the current position, struck through."""
+        words = self.missing.pop(self.index, "")
+        return f"<del title='only in the first reading'>{html.escape(words)}</del> " if words else ""
 
     def __call__(self, text: str) -> str:
         out = []
@@ -245,15 +291,18 @@ class _Marker:
             if piece.isspace():
                 out.append(html.escape(piece))
                 continue
+            out.append(self.gap())
             escaped = html.escape(piece)
             out.append(f"<mark>{escaped}</mark>" if self.index in self.differing else escaped)
             self.index += 1
         return "".join(out)
 
 
-def render_page(nodes: list[dict], page: int, differing: set[int] = frozenset()) -> str:
+def render_page(
+    nodes: list[dict], page: int, differing: set[int] = frozenset(), missing: dict[int, str] | None = None
+) -> str:
     """HTML for one page's structure; token order matches page_text so marks line up."""
-    mark, parts = _Marker(set(differing)), []
+    mark, parts = _Marker(set(differing), dict(missing or {})), []
     for node in nodes:
         if node["page"] != page or node["kind"] == "furniture":
             continue
@@ -267,12 +316,18 @@ def render_page(nodes: list[dict], page: int, differing: set[int] = frozenset())
                         for c in row
                     )
                     rows.append(f"<tr>{cells}</tr>")
-            caption = f"<caption>{html.escape(node['caption'])}</caption>" if node["caption"] else ""
+            caption = f"<caption>{mark(node['caption'])}</caption>" if node["caption"] else ""
             parts.append(f"<table>{caption}{''.join(rows)}</table>")
         elif node["kind"] == "heading":
             parts.append(f"<p class='h'>{mark(node['text'])}</p>")
         elif node["kind"] == "list_item":
-            parts.append(f"<p class='li'>{mark(node['text'])}</p>")
+            marker = ""
+            if node.get("marker"):
+                marker = f"<span class='restored' title='marker from the first reading'>{mark(node['marker'])}</span> "
+            parts.append(f"<p class='li'>{marker}{mark(node['text'])}</p>")
         else:
             parts.append(f"<p>{mark(node['text'])}</p>")
-    return "".join(parts)
+    tail = "".join(
+        f"<del title='only in the first reading'>{html.escape(w)}</del>" for w in mark.missing.values()
+    )
+    return "".join(parts) + (f"<p>{tail}</p>" if tail else "")

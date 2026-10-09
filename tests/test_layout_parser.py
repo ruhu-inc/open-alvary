@@ -59,13 +59,71 @@ def test_list_blocks_become_items():
             }
         ]
     )
-    assert nodes == [{"kind": "list_item", "level": "list_item", "text": "(a) first", "page": 3}]
+    assert nodes == [
+        {"kind": "list_item", "level": "list_item", "text": "(a) first", "page": 3, "ordered": False}
+    ]
 
 
 def test_disagreements_mark_only_differing_candidate_words():
-    differing, agreement = lp.disagreements("the Counci! may make rules", "the Council may make rules")
-    assert differing == {1}
+    differing, missing, agreement = lp.disagreements(
+        "the Counci! may make rules", "the Council may make rules"
+    )
+    assert differing == {1} and missing == {}
     assert 0.7 < agreement < 1
+
+
+def test_words_only_in_the_reference_are_shown_struck_out():
+    reference, candidate = "91. Establishment of Fund. 92. Expenditure", "Establishment of Fund. Expenditure"
+    differing, missing, _ = lp.disagreements(reference, candidate)
+    assert differing == set() and missing == {0: "91.", 3: "92."}
+    nodes = lp.convert_blocks([text("paragraph", candidate)])
+    rendered = lp.render_page(nodes, 1, differing, missing)
+    assert rendered.index("<del title='only in the first reading'>91.</del>") < rendered.index(
+        "Establishment"
+    )
+    assert "92.</del> Expenditure" in rendered
+    trailing = lp.render_page(nodes, 1, set(), {5: "Citation."})
+    assert trailing.endswith("<p><del title='only in the first reading'>Citation.</del></p>")
+
+
+def ordered_list(*entries, page=1):
+    return {
+        "list_block": {
+            "type_": "ordered",
+            "list_entries": [{"blocks": [text("paragraph", e)]} for e in entries],
+        },
+        "page_span": {"page_start": page},
+    }
+
+
+def test_dropped_list_markers_are_restored_from_the_first_reading_only_when_present():
+    nodes = lp.convert_blocks(
+        [
+            ordered_list(
+                "Establishment of Fund for the Commission.",
+                "Expenditure of the Commission.",
+                "Annual report.",
+            )
+        ]
+    )
+    reference = "PART XI\n91. Establishment of Fund for the Commission.\nExpenditure of the Commission.\n94. Annual report."
+    assert lp.restore_markers(nodes, 1, reference) == 2
+    assert [n.get("marker") for n in nodes] == ["91.", None, "94."]
+    assert nodes[0]["marker_source"] == "first reading" and nodes[0]["ordered"]
+    assert lp.page_text(nodes, 1).splitlines()[0] == "91. Establishment of Fund for the Commission."
+    assert "<span class='restored'" in lp.render_page(nodes, 1)
+
+
+def test_newer_header_and_footer_types_are_furniture():
+    nodes = lp.convert_blocks(
+        [text("header", "A 182 2023 No. 8 Copyright Act, 2022"), text("footer", "A 183")]
+    )
+    assert [n["kind"] for n in nodes] == ["furniture", "furniture"]
+
+
+def test_table_caption_is_part_of_the_page_text():
+    nodes = lp.convert_blocks([{**TABLE, "table_block": {**TABLE["table_block"], "caption": "SCHEDULE"}}])
+    assert lp.page_text(nodes, 2).startswith("SCHEDULE\n")
 
 
 def test_render_marks_line_up_with_page_text_and_escape():
@@ -132,3 +190,22 @@ def test_parse_offsets_each_chunk_and_never_requests_annotations():
     for request in client.requests:
         config = request.process_options.layout_config
         assert not config.enable_table_annotation and not config.enable_image_annotation
+
+
+def test_an_ocr_error_in_the_reference_never_shifts_a_marker_onto_the_wrong_entry():
+    nodes = lp.convert_blocks(
+        [
+            ordered_list(
+                "Hydroelectric Power Producing Areas Act, No.7, 2010.",
+                "Hydroelectric Power Producing Areas Act, 2010.",
+                "Electric Power Sector Reform Act.",
+            )
+        ]
+    )
+    reference = (
+        "1. Hydroelectric Power Prod.cing Areas Act, No.7, 2010.\n"
+        "2. Hydroelectric Power Producing Areas Act, 2010.\n"
+        "5. Electric Power Sector Reform Act."
+    )
+    lp.restore_markers(nodes, 1, reference)
+    assert [n.get("marker") for n in nodes] == ["1.", "2.", "5."]
