@@ -1,0 +1,30 @@
+.env.example
+  s_b82616e2476856::t_c64a484c704758 10-17
+ingestion/batch.py
+  s_b82616e2476856::t_60078bec4e6fce 126-127
+ingestion/readers.py
+  s_b82616e2476856::t_f541321f12db93 198-217
+deployment/runbook.md
+  s_b82616e2476856::t_295b72a45ed09a 212-247
+ingestion/first_collection.py
+  s_b82616e2476856::t_60078bec4e6fce 428-433
+tests/test_batch_pipeline.py
+  s_b82616e2476856::t_f541321f12db93 243-275
+  s_b82616e2476856::t_60078bec4e6fce 233-235
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ba04803339f0cbf085c2f0f1d84b1ac987bac200",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
