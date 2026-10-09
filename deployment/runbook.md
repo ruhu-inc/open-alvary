@@ -209,6 +209,42 @@ needed. Keep GitHub notifications for this repository enabled.
   tab monthly (or after any quiet period) and re-enable them if GitHub has paused them.
   Primary operator: the maintainer; name a backup operator before advertising any SLA.
 
+## Batch reading of a collection (operator workstation)
+
+Reading gazette PDFs is an offline operator job; the public service never calls Google, Azure or
+the local models. Each Act is read three ways and reconciled into a private review pack:
+
+- **Document AI Layout Parser** (Google project `open-alvary-ingestion`, processor
+  `legal-corpus-layout-parser`, region `eu`): the primary reading. Pin
+  `ALVARY_DOCAI_PROCESSOR_VERSION` (batch runs refuse an unpinned processor). Sign in with
+  `gcloud auth application-default login`; no key file is used.
+- **MinerU** (local, `--tier advanced`, MinerU2.5-Pro weights): an independent check run offline
+  (`HF_HUB_OFFLINE=1`; on macOS `sandbox-exec` denies all network except loopback). Set
+  `ALVARY_MINERU_KIT` to its `mineru-kit`; weight hashes are part of every reading's version.
+- **Azure Document Intelligence** `prebuilt-layout` (resource `open-alvary-docintel-sc`,
+  Sweden Central, S0): a second independent check. `AZURE_DI_ENDPOINT` and `AZURE_DI_KEY` live
+  only in the git-ignored `.env`.
+
+```bash
+python -m ingestion.batch plan  --act <manifest id>   # pages to read and to bill; nothing is called
+python -m ingestion.batch run   --act <manifest id>   # read, reconcile, rebuild the review pack
+python -m ingestion.batch status                      # flags per reconciled Act
+```
+
+- Readings are cached by PDF SHA-256 and exact reader version under
+  `private-staging/<collection>/readings/`; a rerun resumes and never bills a page twice. Changing
+  the processor version, pages per request or MinerU weights re-reads deliberately.
+- Billed pages (Document AI plus Azure) are counted before any call and refused above
+  `ALVARY_BATCH_MAX_BILLED_PAGES` (default 500); raise it per run with `--max-billed-pages`.
+- Document AI requests carry `ALVARY_DOCAI_PAGES_PER_REQUEST` pages (default 2) with
+  `ALVARY_DOCAI_WORKERS` in parallel (default 8). Throttling and server errors are retried;
+  a request past its deadline is not (it may already be billed) and fails the reading instead.
+- A failed reader is isolated: the other readings are kept and the run log under `runs/` records
+  the error. Exit status is non-zero until every Act has every reading.
+- Reconciliation keeps Document AI's words; check readings only restore dropped list markers when
+  they agree, and flag what they do not support. Review high flags (numbers, dates, words no check
+  reading saw, conflicting markers) on every page before recording a content decision.
+
 ## Upgrade and rollback
 
 Record the deployed commit and image IDs. Take and validate a backup before migration.

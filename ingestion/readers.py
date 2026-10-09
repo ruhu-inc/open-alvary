@@ -195,19 +195,26 @@ class MinerUReader:
         if Path("/usr/bin/sandbox-exec").exists():
             command = ["/usr/bin/sandbox-exec", "-p", OFFLINE_PROFILE, *command]
         count = page_count(pdf)
-        with tempfile.TemporaryDirectory() as scratch:
-            out = Path(scratch) / "reading.json"
-            done = subprocess.run(
-                [*command, "-o", str(out)],
-                env=environment,
-                capture_output=True,
-                text=True,
-                timeout=120 + 60 * count,
-            )
-            if done.returncode != 0 or not out.exists():
-                raise RuntimeError(f"MinerU failed ({done.returncode}): {done.stderr[-800:]}")
-            middle = json.loads(out.read_text())
-        by_index = {page["page_idx"]: page["blocks"] for page in middle["pages"]}
+        # MinerU's own output is kept, keyed by PDF and version, before it is converted: a long
+        # local reading is never repeated because a later step failed.
+        key = hashlib.sha256(json.dumps(version, sort_keys=True).encode() + pdf.read_bytes()).hexdigest()
+        kept = self.hashes.parent / ".mineru" / f"{key}.json"
+        if not kept.exists():
+            with tempfile.TemporaryDirectory() as scratch:
+                out = Path(scratch) / "reading.json"
+                done = subprocess.run(
+                    [*command, "-o", str(out)],
+                    env=environment,
+                    capture_output=True,
+                    text=True,
+                    timeout=120 + 60 * count,
+                )
+                if done.returncode != 0 or not out.exists():
+                    raise RuntimeError(f"MinerU failed ({done.returncode}): {done.stderr[-800:]}")
+                kept.parent.mkdir(parents=True, exist_ok=True)
+                out.replace(kept)
+        middle = json.loads(kept.read_text())
+        by_index = {page.get("page_idx"): page.get("blocks") or [] for page in middle.get("pages", [])}
         pages = [{"page": n, **mineru_page(by_index.get(n - 1, []))} for n in range(1, count + 1)]
         return Reading(self.name, version, pages, 0, {"producer": middle.get("metadata", {}).get("producer")})
 

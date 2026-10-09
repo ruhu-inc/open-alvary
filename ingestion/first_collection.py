@@ -425,6 +425,12 @@ def side_by_side(act: dict, staging: Path) -> Path:
 def reconciled_side_by_side(act: dict, staging: Path, reading: dict) -> Path:
     render_pages(staging / f"{act['id']}.pdf", staging / "pages" / act["id"])
     rows = []
+    missing = reading["summary"].get("missing_checks")
+    if missing:
+        rows.append(
+            f"<p class='flags'><b>Incomplete:</b> the {html.escape(', '.join(missing))} reading failed; "
+            "flags below rest on fewer independent checks. Rerun the batch before recording a decision.</p>"
+        )
     for page in reading["pages"]:
         number = page["page"]
         badge, body = reconciled_body(page)

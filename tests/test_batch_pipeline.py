@@ -230,6 +230,9 @@ def test_one_failing_reader_is_isolated_and_recorded(tmp_path):
     )
     assert outcome["readers"]["docai"]["status"] == "read" and not outcome["complete"]
     assert not (tmp_path / "readings" / "ng-act" / "azure.json").exists()
+    assert json.loads((tmp_path / "ng-act.reading.json").read_text())["summary"]["missing_checks"] == [
+        "azure"
+    ]
 
 
 def test_a_changed_pdf_or_reader_version_invalidates_the_cache(tmp_path):
@@ -237,3 +240,36 @@ def test_a_changed_pdf_or_reader_version_invalidates_the_cache(tmp_path):
     runner.run_act({"id": "ng-act"})
     blank_pdf(tmp_path / "ng-act.pdf", 2)
     assert all(not row["cached"] for row in runner.plan([{"id": "ng-act"}]))
+
+
+def test_mineru_output_is_kept_and_a_page_without_blocks_is_empty(tmp_path, monkeypatch):
+    kit = tmp_path / "mineru-kit"
+    kit.write_text("#!/bin/sh\n")
+    kit.chmod(0o755)
+    reader = readers.MinerUReader(
+        kit=kit, models=tmp_path, hashes=tmp_path / "readings" / ".model-hashes.json"
+    )
+    monkeypatch.setattr(reader, "version", lambda: {"tool": "test"})
+    runs = []
+
+    def fake_run(command, **kwargs):
+        runs.append(command)
+        out = Path(command[command.index("-o") + 1])
+        out.write_text(
+            json.dumps(
+                {
+                    "pages": [
+                        {"page_idx": 0, "blocks": [{"type": "text", "content": "Hello"}]},
+                        {"page_idx": 1},
+                    ]
+                }
+            )
+        )
+        return type("Done", (), {"returncode": 0, "stderr": ""})()
+
+    monkeypatch.setattr(readers.subprocess, "run", fake_run)
+    pdf = blank_pdf(tmp_path / "a.pdf", 2)
+    first = reader.read(pdf)
+    assert [p["text"] for p in first.pages] == ["Hello", ""]
+    reader.read(pdf)
+    assert len(runs) == 1  # the kept output is reused, not re-read
