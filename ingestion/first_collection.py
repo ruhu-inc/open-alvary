@@ -194,6 +194,7 @@ def extract_pdf(raw: bytes, ocr=None) -> dict:
         "act_number": act_number[1] if act_number else None,
         "outline": outline,
         "text": text,
+        "page_texts": pages,
     }
 
 
@@ -205,12 +206,119 @@ def extract(manifest: dict, staging: Path = STAGING) -> list[dict]:
             raise FileNotFoundError(f"{act['id']}: fetch first")
         result = extract_pdf(pdf.read_bytes(), ocr=lambda pages, pdf=pdf: ocr_pages(pdf, pages))
         (staging / f"{act['id']}.txt").write_text(result.pop("text"))
+        (staging / f"{act['id']}.pages.json").write_text(
+            json.dumps(result.pop("page_texts"), ensure_ascii=False)
+        )
         (staging / f"{act['id']}.extraction.json").write_text(json.dumps(result, indent=2) + "\n")
         keys = ("pages", "needs_ocr", "characters")
         summaries.append(
             {"id": act["id"], **{k: result[k] for k in keys}, "ocr_pages": len(result["ocr_pages"])}
         )
     return summaries
+
+
+def render_pages(pdf: Path, out: Path) -> int:
+    """Page images for the side-by-side review (local Poppler in the sealed OCR container)."""
+    import os
+    import subprocess
+
+    out.mkdir(parents=True, exist_ok=True)
+    if any(out.glob("page-*.jpg")):
+        return len(list(out.glob("page-*.jpg")))
+    subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--network",
+            "none",
+            "--read-only",
+            "--cap-drop",
+            "ALL",
+            "--user",
+            f"{os.getuid()}:{os.getgid()}",
+            "-v",
+            f"{pdf.resolve()}:/in/doc.pdf:ro",
+            "-v",
+            f"{out.resolve()}:/out",
+            OCR_IMAGE,
+            "pdftoppm -r 90 -jpeg -jpegopt quality=70 /in/doc.pdf /out/page",
+        ],
+        capture_output=True,
+        timeout=3600,
+        check=True,
+    )
+    # Normalize zero-padded names (pdftoppm pads to the page count's width).
+    for image in out.glob("page-*.jpg"):
+        number = int(image.stem.split("-")[1])
+        image.rename(out / f"page-{number}.jpg")
+    return len(list(out.glob("page-*.jpg")))
+
+
+SIDE_BY_SIDE = """<!doctype html><meta charset="utf-8"><title>{title}: page review</title>
+<style>
+body{{font:15px/1.5 system-ui;margin:0;background:#f4f4ef;color:#1d2420}}
+header{{position:sticky;top:0;background:#fff;border-bottom:1px solid #ccc;padding:.6rem 1rem;z-index:1}}
+.page{{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1rem;padding:1rem;border-bottom:1px solid #ddd}}
+.page img{{width:100%;border:1px solid #bbb;background:#fff}}
+.text{{background:#fff;border:1px solid #bbb;padding:.8rem;white-space:pre-wrap;font:14px/1.55 ui-monospace,monospace}}
+.ocr .text{{border:2px solid #c77700}} .badge{{font-weight:600}} .ocr .badge{{color:#a35f00}}
+.done{{opacity:.55}} label{{cursor:pointer}}
+@media (max-width:800px){{.page{{grid-template-columns:1fr}}}}
+</style>
+<header><b>{title}</b> · {pages} pages · <span id="progress"></span> ·
+<a href="review.html">all Acts</a> · <a href="{pdf}">original PDF</a><br>
+<small>Left: the gazette page (authoritative). Right: the text extracted from that page. Orange pages
+came from OCR: check every word. Tick a page when it matches. Ticks are saved only in this browser.</small></header>
+{rows}
+<script>
+const key = (n) => "oa-review:{act}:" + n;
+function update() {{
+  const boxes = [...document.querySelectorAll("input[type=checkbox]")];
+  const done = boxes.filter((b) => b.checked).length;
+  document.getElementById("progress").textContent = done + " of " + boxes.length + " pages checked";
+}}
+for (const box of document.querySelectorAll("input[type=checkbox]")) {{
+  try {{ box.checked = localStorage.getItem(key(box.dataset.page)) === "1"; }} catch (e) {{}}
+  box.closest(".page").classList.toggle("done", box.checked);
+  box.addEventListener("change", () => {{
+    try {{ localStorage.setItem(key(box.dataset.page), box.checked ? "1" : "0"); }} catch (e) {{}}
+    box.closest(".page").classList.toggle("done", box.checked);
+    update();
+  }});
+}}
+update();
+</script>
+"""
+
+
+def side_by_side(act: dict, staging: Path) -> Path:
+    pages = json.loads((staging / f"{act['id']}.pages.json").read_text())
+    extraction = json.loads((staging / f"{act['id']}.extraction.json").read_text())
+    ocr = set(extraction["ocr_pages"])
+    images = staging / "pages" / act["id"]
+    render_pages(staging / f"{act['id']}.pdf", images)
+    rows = []
+    for number, text in enumerate(pages, 1):
+        source = "OCR — check every word" if number in ocr else "PDF text layer"
+        rows.append(
+            f"<section class='page{' ocr' if number in ocr else ''}' id='p{number}'>"
+            f"<div><img loading='lazy' src='pages/{act['id']}/page-{number}.jpg' alt='Gazette page {number}'></div>"
+            f"<div><p><span class='badge'>Page {number} · {source}</span> · "
+            f"<label><input type='checkbox' data-page='{number}'> checked against the gazette</label></p>"
+            f"<div class='text'>{html.escape(text) or '<em>(no text extracted)</em>'}</div></div></section>"
+        )
+    page = staging / f"{act['id']}.review.html"
+    page.write_text(
+        SIDE_BY_SIDE.format(
+            title=html.escape(act["title"]),
+            pages=len(pages),
+            pdf=f"{act['id']}.pdf",
+            act=act["id"],
+            rows="".join(rows),
+        )
+    )
+    return page
 
 
 def review(manifest: dict, staging: Path = STAGING) -> Path:
@@ -229,7 +337,8 @@ def review(manifest: dict, staging: Path = STAGING) -> Path:
         )
         gazette = extraction["gazette"]
         rows.append(
-            f"<tr><td><a href='#{act['id']}'>{html.escape(act['title'])}</a></td><td>{extraction['pages']}</td>"
+            f"<tr><td><a href='{side_by_side(act, staging).name}'>{html.escape(act['title'])}</a>"
+            f" (<a href='#{act['id']}'>summary</a>)</td><td>{extraction['pages']}</td>"
             f"<td>{status}</td><td>{len(extraction['outline'])}</td>"
             f"<td>{html.escape(f'No. {gazette["number"]}, Vol. {gazette["volume"]}' if gazette else 'not found')}</td>"
             f"<td><code>{provenance['sha256'][:16]}…</code></td></tr>"
