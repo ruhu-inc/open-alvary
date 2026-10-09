@@ -78,12 +78,10 @@ def test_words_only_in_the_reference_are_shown_struck_out():
     assert differing == set() and missing == {0: "91.", 3: "92."}
     nodes = lp.convert_blocks([text("paragraph", candidate)])
     rendered = lp.render_page(nodes, 1, differing, missing)
-    assert rendered.index("<del title='only in the first reading'>91.</del>") < rendered.index(
-        "Establishment"
-    )
+    assert rendered.index("<del title='not in this reading'>91.</del>") < rendered.index("Establishment")
     assert "92.</del> Expenditure" in rendered
     trailing = lp.render_page(nodes, 1, set(), {5: "Citation."})
-    assert trailing.endswith("<p><del title='only in the first reading'>Citation.</del></p>")
+    assert trailing.endswith("<p><del title='not in this reading'>Citation.</del></p>")
 
 
 def ordered_list(*entries, page=1):
@@ -163,7 +161,7 @@ class FakeClient:
     def processor_path(self, project, location, processor):
         return f"projects/{project}/locations/{location}/processors/{processor}"
 
-    def process_document(self, request):
+    def process_document(self, request, **options):
         from google.cloud import documentai_v1 as d
 
         self.requests.append(request)
@@ -239,4 +237,15 @@ def test_nested_paragraphs_of_an_amending_section_stay_separate_and_get_their_ma
     ]
     reference = "2. Section 17 is amended — Amendment of section 17\n(a) in subsection (2) by substituting the word\n(b) in subsection (4) by inserting the words"
     lp.restore_markers(nodes, 1, reference)
-    assert [n.get("marker") for n in nodes] == [None, "(a)", "(b)"]
+    assert [n.get("marker") for n in nodes] == ["2.", "(a)", "(b)"]  # "2." sits behind the margin note
+
+
+def test_a_marker_behind_a_leading_margin_note_is_restored_but_not_past_matched_words():
+    nodes = lp.convert_blocks(
+        [ordered_list("Amendment of section 17 Section 17 of the Principal Act is amended —")]
+    )
+    lp.restore_markers(nodes, 1, "2. Section 17 of the Principal Act is amended — Amendment of section 17")
+    assert nodes[0]["marker"] == "2."
+    other = lp.convert_blocks([ordered_list("The Minister may by order amend the Schedule")])
+    lp.restore_markers(other, 1, "The Minister may 4. by order amend the Schedule")
+    assert "marker" not in other[0]

@@ -296,13 +296,15 @@ header{{position:sticky;top:0;background:#fff;border-bottom:1px solid #ccc;paddi
 .layout p{{margin:.2rem 0;white-space:pre-wrap}} .layout .h{{font-weight:700}} .layout .li{{padding-left:1rem}}
 .layout table{{border-collapse:collapse;margin:.5rem 0;width:100%}}
 .layout td,.layout th{{border:1px solid #888;padding:.2rem .4rem;vertical-align:top;white-space:pre-wrap}}
-mark{{background:#ffd666}} del{{background:#ffd0d0;color:#8a1010}} .restored{{color:#1f5fa8;font-weight:600}} details{{margin-top:.6rem}}
+mark{{background:#ffd666}} mark.high{{background:#ff9e9e}} mark.low{{background:#ececec}}
+.flags{{background:#fff;border:1px solid #bbb;padding:.5rem .5rem .5rem 2rem;font-size:13px}}
+.flags li.high b{{color:#a00}} .flags li.medium b{{color:#8a5a00}} .flags q{{font-family:ui-monospace,monospace}} del{{background:#ffd0d0;color:#8a1010}} .restored{{color:#1f5fa8;font-weight:600}} details{{margin-top:.6rem}}
 @media (max-width:800px){{.page{{grid-template-columns:1fr}}}}
 </style>
 <header><b>{title}</b> · {pages} pages · <span id="progress"></span> ·
 <a href="review.html">all Acts</a> · <a href="{pdf}">original PDF</a><br>
 <small>Left: the gazette page (authoritative). Right: the text extracted from that page. Orange pages
-came from OCR: check every word. Where a Layout Parser reading exists it is shown with its tables;
+came from OCR, or (for reconciled Acts) have a high-severity flag: check every word. Where a Layout Parser reading exists it is shown with its tables;
 words highlighted yellow differ from the independent first reading; struck-out red words appear only
 in the first reading; blue list numbers were copied from the first reading because the parser drops them. Tick a page when it matches.
 Ticks are saved only in this browser.</small></header>
@@ -328,7 +330,58 @@ update();
 """
 
 
+SEVERITY = {"high": 0, "medium": 1, "low": 2}
+KIND = {
+    "differs": "reads differently",
+    "only_in_primary": "not seen by the check readings",
+    "missing_from_primary": "only in the check readings",
+    "marker_conflict": "check readings give different numbers",
+}
+
+
+def reconciled_body(reading: dict) -> tuple[str, str]:
+    """Badge and body for one reconciled page: severity-coloured words, flag list, check texts."""
+    classes, missing = {}, {}
+    for flag in reading["flags"]:
+        start, end = flag["tokens"]
+        for index in range(start, end):
+            current = classes.get(index)
+            if current is None or SEVERITY[flag["severity"]] < SEVERITY[current]:
+                classes[index] = flag["severity"]
+        if flag["kind"] == "missing_from_primary":
+            missing[start] = " / ".join(flag["checks"].values())
+    counts = {level: sum(f["severity"] == level for f in reading["flags"]) for level in SEVERITY}
+    badge = (
+        "Document AI · " + " · ".join(f"{n} {level}" for level, n in counts.items() if n)
+        if any(counts.values())
+        else "Document AI · no flags"
+    )
+    items = "".join(
+        f"<li class='{f['severity']}'><b>{f['severity']}</b> {html.escape(KIND[f['kind']])}: "
+        f"<q>{html.escape(f['primary'] or '—')}</q> "
+        + " ".join(
+            f"· {html.escape(name)}: <q>{html.escape(text or '—')}</q>" for name, text in f["checks"].items()
+        )
+        + "</li>"
+        for f in reading["flags"]
+        if f["severity"] != "low"
+    )
+    checks = "".join(
+        f"<details><summary>{html.escape(name)} reading</summary><div class='text'>{html.escape(text)}</div></details>"
+        for name, text in reading["checks"].items()
+    )
+    body = (
+        (f"<ol class='flags'>{items}</ol>" if items else "")
+        + f"<div class='layout'>{layout_parser.render_page(reading['nodes'], reading['page'], classes, missing) or '<em>(no text)</em>'}</div>"
+        + checks
+    )
+    return badge, body
+
+
 def side_by_side(act: dict, staging: Path) -> Path:
+    reading_file = staging / f"{act['id']}.reading.json"
+    if reading_file.exists():
+        return reconciled_side_by_side(act, staging, json.loads(reading_file.read_text()))
     pages = json.loads((staging / f"{act['id']}.pages.json").read_text())
     extraction = json.loads((staging / f"{act['id']}.extraction.json").read_text())
     ocr = set(extraction["ocr_pages"])
@@ -367,6 +420,33 @@ def side_by_side(act: dict, staging: Path) -> Path:
         )
     )
     return page
+
+
+def reconciled_side_by_side(act: dict, staging: Path, reading: dict) -> Path:
+    render_pages(staging / f"{act['id']}.pdf", staging / "pages" / act["id"])
+    rows = []
+    for page in reading["pages"]:
+        number = page["page"]
+        badge, body = reconciled_body(page)
+        worst = min((SEVERITY[f["severity"]] for f in page["flags"]), default=3)
+        rows.append(
+            f"<section class='page{' ocr' if worst == 0 else ''}' id='p{number}'>"
+            f"<div><img loading='lazy' src='pages/{act['id']}/page-{number}.jpg' alt='Gazette page {number}'></div>"
+            f"<div><p><span class='badge'>Page {number} · {html.escape(badge)}</span> · "
+            f"<label><input type='checkbox' data-page='{number}'> checked against the gazette</label></p>"
+            f"{body}</div></section>"
+        )
+    path = staging / f"{act['id']}.review.html"
+    path.write_text(
+        SIDE_BY_SIDE.format(
+            title=html.escape(act["title"]),
+            pages=len(reading["pages"]),
+            pdf=f"{act['id']}.pdf",
+            act=act["id"],
+            rows="".join(rows),
+        )
+    )
+    return path
 
 
 def review(manifest: dict, staging: Path = STAGING) -> Path:
