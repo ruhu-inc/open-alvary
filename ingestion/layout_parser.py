@@ -167,17 +167,27 @@ def convert_blocks(blocks: list[dict], offset: int = 1) -> list[dict]:
         elif "list_block" in block:
             ordered = _type(block["list_block"]) == "ordered"
             for entry in block["list_block"].get("list_entries", []):
-                text = _text_of(entry.get("blocks", []))
-                if text:
+                # The entry's own words become the item; nested lists and tables (an amending
+                # section's paragraphs (a), (b), ...) stay separate items so their markers survive.
+                own, children = [], []
+                for inner in entry.get("blocks", []):
+                    if "text_block" in inner:
+                        if inner["text_block"].get("text"):
+                            own.append(inner["text_block"]["text"])
+                        children.extend(inner["text_block"].get("blocks", []))
+                    else:
+                        children.append(inner)
+                if own:
                     nodes.append(
                         {
                             "kind": "list_item",
                             "level": "list_item",
-                            "text": text,
+                            "text": "\n".join(own),
                             "page": page_start,
                             "ordered": ordered,
                         }
                     )
+                nodes.extend(convert_blocks(children, offset))
     return nodes
 
 
@@ -197,7 +207,7 @@ def parse(raw: bytes, config: DocAIConfig, client=None) -> dict:
         )
     else:
         name = client.processor_path(config.project, config.location, config.processor_id)
-    nodes = []
+    nodes, layouts = [], []
     for first_page, chunk in page_chunks(raw):
         request = documentai.ProcessRequest(
             name=name,
@@ -209,7 +219,9 @@ def parse(raw: bytes, config: DocAIConfig, client=None) -> dict:
         document = client.process_document(request=request).document
         layout = documentai.Document.to_dict(document).get("document_layout", {})
         nodes.extend(convert_blocks(layout.get("blocks", []), offset=first_page))
-    return {"processor": name, "nodes": nodes}
+        layouts.append({"first_page": first_page, "blocks": layout.get("blocks", [])})
+    # The processor's own layout is kept so a converter fix can be re-applied without a new call.
+    return {"processor": name, "nodes": nodes, "layout": layouts}
 
 
 TOKEN = re.compile(r"\S+")

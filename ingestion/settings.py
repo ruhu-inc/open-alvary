@@ -12,7 +12,8 @@ ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 LINE = re.compile(r"^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(.*?)\s*$")
 
 
-def load(path: Path = ENV_FILE) -> None:
+def load(path: Path | None = None) -> None:
+    path = path or ENV_FILE
     if not path.exists():
         return
     for raw in path.read_text().splitlines():

@@ -145,7 +145,8 @@ def test_page_chunks_respect_online_limit():
     assert [len(PdfReader(BytesIO(raw)).pages) for _, raw in chunks] == [15, 15, 1]
 
 
-def test_config_requires_environment_and_validates(monkeypatch):
+def test_config_requires_environment_and_validates(monkeypatch, tmp_path):
+    monkeypatch.setattr("ingestion.settings.ENV_FILE", tmp_path / "absent.env")
     for key in ("ALVARY_DOCAI_PROJECT", "ALVARY_DOCAI_LOCATION", "ALVARY_DOCAI_PROCESSOR_ID"):
         monkeypatch.delenv(key, raising=False)
     with pytest.raises(ValueError, match="Configure"):
@@ -209,3 +210,33 @@ def test_an_ocr_error_in_the_reference_never_shifts_a_marker_onto_the_wrong_entr
     )
     lp.restore_markers(nodes, 1, reference)
     assert [n.get("marker") for n in nodes] == ["1.", "2.", "5."]
+
+
+def test_nested_paragraphs_of_an_amending_section_stay_separate_and_get_their_markers():
+    nested = ordered_list(
+        "in subsection (2) by substituting the word", "in subsection (4) by inserting the words"
+    )
+    section = {
+        "list_block": {
+            "type_": "ordered",
+            "list_entries": [
+                {
+                    "blocks": [
+                        text("paragraph", "Amendment of section 17"),
+                        text("paragraph", "Section 17 is amended —"),
+                        nested,
+                    ]
+                }
+            ],
+        },
+        "page_span": {"page_start": 1},
+    }
+    nodes = lp.convert_blocks([section])
+    assert [n["text"] for n in nodes] == [
+        "Amendment of section 17\nSection 17 is amended —",
+        "in subsection (2) by substituting the word",
+        "in subsection (4) by inserting the words",
+    ]
+    reference = "2. Section 17 is amended — Amendment of section 17\n(a) in subsection (2) by substituting the word\n(b) in subsection (4) by inserting the words"
+    lp.restore_markers(nodes, 1, reference)
+    assert [n.get("marker") for n in nodes] == [None, "(a)", "(b)"]
