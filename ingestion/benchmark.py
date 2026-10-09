@@ -216,6 +216,8 @@ def from_markup(markup: str) -> dict:
     text = html.unescape(re.sub(r"<[^>]+>", " ", "\n".join(lines)))
     text = re.sub(r"^\s*#+\s*|\*\*|__|^\s*[-*]\s+(?=\S)", "", text, flags=re.M)
     text = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", text)
+    text = re.sub(r"\\([\\`*_{}\[\]()#+\-.!|>~])", r"\1", text)  # Markdown escapes such as "1\."
+    text = re.sub(r"[☐☒]|:(?:un)?selected:", " ", text)  # selection marks some readers add
     return {"text": text, "tables": tables}
 
 
