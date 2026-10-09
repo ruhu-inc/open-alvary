@@ -14,8 +14,10 @@ differs from the key are counted separately because a reader that recases text i
 
 import argparse
 import base64
+import copy
 import difflib
 import html
+import io
 import json
 import os
 import re
@@ -36,9 +38,9 @@ IMAGES = BENCH / "images"
 KEY = re.compile(r"^(?P<act>ng-[a-z0-9-]+)-p(?P<page>\d+)\.txt$")
 
 
-def pages() -> list[tuple[str, int]]:
+def pages(act: str | None = None) -> list[tuple[str, int]]:
     found = [KEY.match(p.name) for p in GOLD.glob("*.txt")]
-    return sorted((m["act"], int(m["page"])) for m in found if m)
+    return sorted((m["act"], int(m["page"])) for m in found if m and act in (None, m["act"]))
 
 
 def read_gold(act: str, page: int) -> dict:
@@ -274,17 +276,61 @@ def read_first(act: str, page: int) -> dict:
     return {"text": json.loads((STAGING / f"{act}.pages.json").read_text())[page - 1], "tables": []}
 
 
-def read_docai(version: str):
-    pilot = json.loads((STAGING / "pilot-layout.json").read_text())
+def _nodes(stored: dict, page: int) -> list[dict]:
+    """Nodes for a stored Layout Parser reading, re-converted from the raw layout when kept."""
+    from ingestion import layout_parser
+
+    if "layout" in stored:
+        return [
+            node
+            for chunk in stored["layout"]
+            for node in layout_parser.convert_blocks(chunk["blocks"], offset=page + chunk["first_page"] - 1)
+        ]
+    return copy.deepcopy(stored["nodes"])
+
+
+def read_docai(version: str, live: bool = False):
+    """Pilot readings where they exist (unless live); otherwise one billed Layout Parser call."""
+    pilot_file = STAGING / "pilot-layout.json"
+    pilot = json.loads(pilot_file.read_text()) if pilot_file.exists() and not live else {}
 
     def reader(act: str, page: int) -> dict:
+        from pypdf import PdfReader, PdfWriter
+
         from ingestion import layout_parser
 
-        nodes = pilot[f"{act}:{page}:pretrained-layout-parser-{version}"]
+        stored = {"nodes": pilot.get(f"{act}:{page}:pretrained-layout-parser-{version}")}
+        if stored["nodes"] is None:
+            writer = PdfWriter()
+            writer.add_page(PdfReader(STAGING / f"{act}.pdf").pages[page - 1])
+            buffer = io.BytesIO()
+            writer.write(buffer)
+            config = layout_parser.DocAIConfig.from_environment()
+            config = layout_parser.DocAIConfig(
+                config.project, config.location, config.processor_id, f"pretrained-layout-parser-{version}"
+            )
+            stored = {"layout": layout_parser.parse(buffer.getvalue(), config)["layout"]}
+        nodes = _nodes(stored, page)
         for node in nodes:  # pilot files predate the newer furniture labels
             if node.get("level") in layout_parser.FURNITURE:
                 node["kind"] = "furniture"
         layout_parser.restore_markers(nodes, page, read_first(act, page)["text"])
+        return {**from_layout(nodes, page), **stored}
+
+    return reader
+
+
+def read_combined(main: str, reference: str):
+    """A stored Layout Parser reading with dropped markers restored from another reader's text."""
+
+    def reader(act: str, page: int) -> dict:
+        from ingestion import layout_parser
+
+        key = f"{act}:{page}"
+        nodes = _nodes(json.loads((RESULTS / f"{main}.json").read_text())[key], page)
+        layout_parser.restore_markers(
+            nodes, page, json.loads((RESULTS / f"{reference}.json").read_text())[key]["text"]
+        )
         return from_layout(nodes, page)
 
     return reader
@@ -361,9 +407,10 @@ VENV = BENCH / "{}-venv" / "bin" / "python"
 READERS = {
     "first-reading": read_first,
     "docai-v1.0": read_docai("v1.0-2024-06-03"),
-    "docai-v1.6-pro": read_docai("v1.6-pro-2025-12-01"),
+    "docai-v1.6-pro": read_docai("v1.6-pro-2025-12-01", live=True),
     "docai-v1.6-flash": read_docai("v1.6-2026-01-13"),
     "docai-v3.1-lite": read_docai("v3.1-lite-2026-08-11"),
+    "docai-v1.6-pro+mineru": read_combined("docai-v1.6-pro", "mineru-2.5-pro"),
     "glm-ocr-page": read_glm_ocr,
     "glm-ocr": read_external("glm_ocr_regions.py", Path(str(VENV).format("paddle"))),
     "paddleocr-vl-1.6": read_external("paddleocr_vl.py", Path(str(VENV).format("paddle"))),
@@ -372,11 +419,11 @@ READERS = {
 }
 
 
-def run(name: str) -> None:
+def run(name: str, only: str | None = None) -> None:
     RESULTS.mkdir(parents=True, exist_ok=True)
     path = RESULTS / f"{name}.json"
     stored = json.loads(path.read_text()) if path.exists() else {}
-    for act, page in pages():
+    for act, page in pages(only):
         key = f"{act}:{page}"
         if key in stored:
             continue
@@ -386,20 +433,21 @@ def run(name: str) -> None:
         print(f"{name} {key} {stored[key]['seconds']}s", flush=True)
 
 
-def score_all() -> dict:
+def score_all(only: str | None = None) -> dict:
     report = {}
+    run("first-reading", only)  # free and local; every other reader is run explicitly
     for name in READERS:
         path = RESULTS / f"{name}.json"
-        if name.startswith(("first", "docai")) and not path.exists():
-            run(name)
         if not path.exists():
             continue
         stored = json.loads(path.read_text())
         report[name] = {
             f"{act}:{page}": score(read_gold(act, page), stored[f"{act}:{page}"])
-            for act, page in pages()
+            for act, page in pages(only)
             if f"{act}:{page}" in stored
         }
+        if not report[name]:
+            del report[name]
     return report
 
 
@@ -430,15 +478,16 @@ def main(argv=None) -> int:
     )
     parser.add_argument("action", choices=["images", "run", "score"])
     parser.add_argument("reader", nargs="?", choices=sorted(READERS))
+    parser.add_argument("--act", help="only the answer-key pages of this manifest id")
     args = parser.parse_args(argv)
     if args.action == "images":
         render_images()
     elif args.action == "run":
         if not args.reader:
             parser.error("run needs a reader")
-        run(args.reader)
+        run(args.reader, args.act)
     else:
-        report = score_all()
+        report = score_all(args.act)
         (BENCH / "scores.json").write_text(json.dumps(report, indent=1))
         print(summary(report))
     return 0
