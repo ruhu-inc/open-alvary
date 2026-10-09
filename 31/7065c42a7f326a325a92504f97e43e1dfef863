@@ -1,0 +1,21 @@
+tests/test_layout_parser.py
+  s_b82616e2476856::t_8cc68458232c68 264-272
+ingestion/layout_parser.py
+  s_b82616e2476856::t_8cc68458232c68 294-303,309-313,316,318-324
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "317065c42a7f326a325a92504f97e43e1dfef863",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
