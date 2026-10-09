@@ -249,3 +249,15 @@ def test_a_marker_behind_a_leading_margin_note_is_restored_but_not_past_matched_
     other = lp.convert_blocks([ordered_list("The Minister may by order amend the Schedule")])
     lp.restore_markers(other, 1, "The Minister may 4. by order amend the Schedule")
     assert "marker" not in other[0]
+
+
+def test_a_section_number_in_place_of_a_margin_note_heading_is_restored_with_its_subsection():
+    nodes = lp.convert_blocks(
+        [
+            text("heading-2", "Power to accept gifts"),
+            ordered_list("The Agency may accept gifts of land", "The Agency shall not accept any gift"),
+        ]
+    )
+    reference = "156. (1) The Agency may accept gifts of land (2) The Agency shall not accept any gift"
+    lp.restore_markers(nodes, 1, reference)
+    assert [n.get("marker") for n in nodes] == [None, "156. (1)", "(2)"]

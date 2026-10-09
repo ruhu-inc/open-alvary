@@ -336,6 +336,7 @@ KIND = {
     "only_in_primary": "not seen by the check readings",
     "missing_from_primary": "only in the check readings",
     "marker_conflict": "check readings give different numbers",
+    "moved": "placed differently by the check readings",
 }
 
 

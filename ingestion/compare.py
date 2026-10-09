@@ -19,9 +19,14 @@ NUMBERISH = re.compile(r"\d|^\(?[a-z]{1,2}\)$|^\(?[ivxl]{1,6}\)$")
 LOOSE = re.compile(r"[^0-9a-z]+")
 
 
+DASH = re.compile(r"^-{1,4}$")
+
+
 def key(token: str) -> str:
     """Comparison key for one rendered token: typography folded, case kept."""
     token = unicodedata.normalize("NFKC", token).translate(QUOTES)
+    if DASH.match(token):
+        return "—"  # readers write a printed dash as -, -- or ---
     return LEADERS.sub("", token)
 
 
@@ -33,7 +38,7 @@ def loose(token: str) -> str:
 @dataclass
 class Flag:
     severity: str  # high | medium | low
-    kind: str  # differs | only_in_primary | missing_from_primary | marker_conflict
+    kind: str  # differs | only_in_primary | missing_from_primary | moved | marker_conflict
     primary: str
     checks: dict[str, str]
     tokens: tuple[int, int]  # primary token range [start, end); empty for missing words
@@ -53,6 +58,11 @@ def _severity(primary: list[str], others: list[list[str]], kind: str) -> str:
     return "medium"
 
 
+def _contains(haystack: list[str], needle: list[str]) -> bool:
+    size = len(needle)
+    return size > 0 and any(haystack[i : i + size] == needle for i in range(len(haystack) - size + 1))
+
+
 def compare(primary: str, checks: dict[str, str]) -> list[Flag]:
     """Flag primary tokens that the independent check readings do not support.
 
@@ -62,6 +72,7 @@ def compare(primary: str, checks: dict[str, str]) -> list[Flag]:
     tokens = TOKEN.findall(primary)
     keys = [key(t).lower() for t in tokens]
     disagree: list[set[str]] = [set() for _ in tokens]
+    other_keys = {name: [key(t).lower() for t in TOKEN.findall(text)] for name, text in checks.items()}
     replaced: dict[str, dict[int, str]] = {}
     missing: dict[str, dict[int, str]] = {}
     for name, text in checks.items():
@@ -88,6 +99,15 @@ def compare(primary: str, checks: dict[str, str]) -> list[Flag]:
         span = tokens[start:i]
         seen = {n: replaced[n].get(start, "") for n in names if n in who}
         kind = "differs" if any(seen.values()) else "only_in_primary"
+        if (
+            kind == "only_in_primary"
+            and len(span) >= 2
+            and all(_contains(other_keys[n], keys[start:i]) for n in who)
+        ):
+            # Every disagreeing reading has these words elsewhere on the page (a margin note or
+            # heading placed differently): the words are confirmed, only their position differs.
+            flags.append(Flag("low", "moved", " ".join(span), seen, (start, i), sorted(who)))
+            continue
         severity = _severity(span, [v.split() for v in seen.values() if v], kind)
         if len(who) < len(names):
             severity = {"high": "medium", "medium": "low", "low": "low"}[severity]
@@ -97,6 +117,11 @@ def compare(primary: str, checks: dict[str, str]) -> list[Flag]:
         seen = {n: missing[n][position] for n in names if position in missing[n]}
         if len(seen) < len(names):
             continue  # only one check reading has extra words here: too weak to flag
+        if all(
+            len(v.split()) >= 2 and _contains(keys, [key(t).lower() for t in v.split()])
+            for v in seen.values()
+        ):
+            continue  # the primary has these words elsewhere on the page: moved, already counted
         severity = _severity([], [v.split() for v in seen.values()], "missing_from_primary")
         flags.append(Flag(severity, "missing_from_primary", "", seen, (position, position), sorted(seen)))
     order = {"high": 0, "medium": 1, "low": 2}
