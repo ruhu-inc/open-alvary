@@ -225,9 +225,25 @@ AZURE_FURNITURE = {"pageHeader", "pageFooter", "pageNumber"}
 API_VERSION = "2024-11-30"
 
 
+def _box(region: dict, sizes: dict) -> dict | None:
+    """A bounding region as fractions of the page: left, right, top."""
+    polygon, size = region.get("polygon") or [], sizes.get(region.get("pageNumber"))
+    if len(polygon) < 8 or not size or not size[0] or not size[1]:
+        return None
+    xs, ys = polygon[0::2], polygon[1::2]
+    return {"x0": min(xs) / size[0], "x1": max(xs) / size[0], "y0": min(ys) / size[1]}
+
+
 def azure_pages(result: dict, count: int) -> list[dict]:
-    """Azure analyzeResult in the common shape: paragraphs in reading order, tables as grids."""
-    pages = {n: {"page": n, "lines": [], "tables": [], "furniture": []} for n in range(1, count + 1)}
+    """Azure analyzeResult in the common shape: paragraphs in reading order, tables as grids.
+
+    Each page also lists its paragraphs as blocks with their position, which is how margin
+    notes are told apart from the text they annotate.
+    """
+    sizes = {p["pageNumber"]: (p.get("width"), p.get("height")) for p in result.get("pages", [])}
+    pages = {
+        n: {"page": n, "lines": [], "tables": [], "furniture": [], "blocks": []} for n in range(1, count + 1)
+    }
     for paragraph in result.get("paragraphs", []):
         regions = paragraph.get("boundingRegions") or [{"pageNumber": 1}]
         page = pages.get(regions[0]["pageNumber"])
@@ -235,6 +251,13 @@ def azure_pages(result: dict, count: int) -> list[dict]:
             continue
         target = "furniture" if paragraph.get("role") in AZURE_FURNITURE else "lines"
         page[target].append(paragraph.get("content", ""))
+        page["blocks"].append(
+            {
+                "text": paragraph.get("content", ""),
+                "role": paragraph.get("role"),
+                "box": _box(regions[0], sizes),
+            }
+        )
     for table in result.get("tables", []):
         regions = table.get("boundingRegions") or [{"pageNumber": 1}]
         grid = [[""] * table["columnCount"] for _ in range(table["rowCount"])]
@@ -243,7 +266,13 @@ def azure_pages(result: dict, count: int) -> list[dict]:
         if regions[0]["pageNumber"] in pages:
             pages[regions[0]["pageNumber"]]["tables"].append(grid)
     return [
-        {"page": n, "text": "\n".join(p["lines"]), "tables": p["tables"], "furniture": p["furniture"]}
+        {
+            "page": n,
+            "text": "\n".join(p["lines"]),
+            "tables": p["tables"],
+            "furniture": p["furniture"],
+            "blocks": p["blocks"],
+        }
         for n, p in sorted(pages.items())
     ]
 
@@ -260,7 +289,8 @@ class AzureReader:
         self.sleep = sleep
 
     def version(self) -> dict:
-        return {"model": "prebuilt-layout", "api_version": API_VERSION}
+        # "geometry": readings keep paragraph positions and Azure's own output (since 2026-10-09).
+        return {"model": "prebuilt-layout", "api_version": API_VERSION, "geometry": 1}
 
     def _send(self, method: str, url: str, **kwargs) -> httpx.Response:
         """Retry throttling and server errors, honouring Retry-After."""
@@ -293,8 +323,10 @@ class AzureReader:
             waited += pause
         result, count = body["analyzeResult"], page_count(pdf)
         # Service details are recorded but kept out of the version: it is the cache key.
-        service = {"model_id": result.get("modelId"), "service_api": result.get("apiVersion")}
-        return Reading(self.name, self.version(), azure_pages(result, count), count, service)
+        kept = {key: result.get(key) for key in ("modelId", "apiVersion", "pages", "paragraphs", "tables")}
+        for page in kept.get("pages") or []:
+            page.pop("words", None)  # word-level detail is large and unused; lines and spans remain
+        return Reading(self.name, self.version(), azure_pages(result, count), count, {"analyze": kept})
 
 
 READERS = {"docai": DocAIReader, "mineru": MinerUReader, "azure": AzureReader}

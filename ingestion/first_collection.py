@@ -296,18 +296,25 @@ header{{position:sticky;top:0;background:#fff;border-bottom:1px solid #ccc;paddi
 .layout p{{margin:.2rem 0;white-space:pre-wrap}} .layout .h{{font-weight:700}} .layout .li{{padding-left:1rem}}
 .layout table{{border-collapse:collapse;margin:.5rem 0;width:100%}}
 .layout td,.layout th{{border:1px solid #888;padding:.2rem .4rem;vertical-align:top;white-space:pre-wrap}}
-mark{{background:#ffd666}} mark.high{{background:#ff9e9e}} mark.low{{background:#ececec}}
+mark{{background:#ffd666}} mark.high{{background:#ff9e9e}} mark.low{{background:none}}
+body.showlow mark.low{{background:#ececec}}
+.layout .d0{{margin-top:.7rem}} .layout .d1{{padding-left:1.2rem}} .layout .d2{{padding-left:2.6rem}} .layout .d3{{padding-left:4rem}}
+.layout .unit{{display:grid;grid-template-columns:minmax(0,1fr) 9.5rem;gap:.8rem;align-items:start}}
+.layout .unit>p{{margin:.2rem 0}} .layout .note{{font:12px/1.35 system-ui;color:#4a4a4a;border-left:2px solid #ccc;padding-left:.4rem;margin:.25rem 0}}
 .flags{{background:#fff;border:1px solid #bbb;padding:.5rem .5rem .5rem 2rem;font-size:13px}}
 .flags li.high b{{color:#a00}} .flags li.medium b{{color:#8a5a00}} .flags q{{font-family:ui-monospace,monospace}} del{{background:#ffd0d0;color:#8a1010}} .restored{{color:#1f5fa8;font-weight:600}} details{{margin-top:.6rem}}
 @media (max-width:800px){{.page{{grid-template-columns:1fr}}}}
 </style>
 <header><b>{title}</b> · {pages} pages · <span id="progress"></span> ·
-<a href="review.html">all Acts</a> · <a href="{pdf}">original PDF</a><br>
-<small>Left: the gazette page (authoritative). Right: the text extracted from that page. Orange pages
-came from OCR, or (for reconciled Acts) have a high-severity flag: check every word. Where a Layout Parser reading exists it is shown with its tables;
-words highlighted yellow differ from the independent first reading; struck-out red words appear only
-in the first reading; blue list numbers were copied from the first reading because the parser drops them. Tick a page when it matches.
-Ticks are saved only in this browser.</small></header>
+<a href="review.html">all Acts</a> · <a href="{pdf}">original PDF</a> ·
+<label><input type="checkbox" onchange="document.body.classList.toggle('showlow', this.checked)"> show punctuation-only differences</label><br>
+<small>Left: the gazette page (authoritative). Right: the reading, laid out like the gazette: sections,
+subsections and paragraphs on their own lines, margin notes beside them, tables as tables. Red words: a
+number, date or reference the independent check readings disagree with, or words no check reading saw.
+Yellow: other disagreements. Struck out: words only the check readings have. Blue numbers were missing
+from the main reading and restored where both check readings agree. Orange border: the page has a red
+flag. Compare every flag with the image; what is printed wins. Tick a page when it matches (saved only
+in this browser).</small></header>
 {rows}
 <script>
 const key = (n) => "oa-review:{act}:" + n;
