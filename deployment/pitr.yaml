@@ -1,0 +1,44 @@
+# Point-in-time recovery overlay: add -f deployment/pitr.yaml after compose.yaml.
+# Every WAL segment is archived (at least once a minute) to an encrypted pgBackRest repository in
+# Cloudflare R2. Values come from deployment/.env; see deployment/runbook.md.
+x-pgbackrest: &pgbackrest
+  PGBACKREST_STANZA: main
+  PGBACKREST_PG1_PATH: /var/lib/postgresql/data
+  PGBACKREST_PG1_USER: open_alvary
+  PGBACKREST_REPO1_TYPE: s3
+  PGBACKREST_REPO1_PATH: /pitr
+  PGBACKREST_REPO1_S3_BUCKET: ${PITR_BUCKET:?Set the R2 bucket for WAL archives}
+  PGBACKREST_REPO1_S3_ENDPOINT: ${PITR_ENDPOINT_HOST:?Set <account-id>.r2.cloudflarestorage.com}
+  PGBACKREST_REPO1_S3_REGION: auto
+  PGBACKREST_REPO1_S3_URI_STYLE: path
+  PGBACKREST_REPO1_S3_KEY: ${PITR_ACCESS_KEY_ID:?Set the bucket-scoped R2 access key}
+  PGBACKREST_REPO1_S3_KEY_SECRET: ${PITR_SECRET_ACCESS_KEY:?Set the bucket-scoped R2 secret}
+  PGBACKREST_REPO1_CIPHER_TYPE: aes-256-cbc
+  PGBACKREST_REPO1_CIPHER_PASS: ${PITR_CIPHER_PASS:?Set a random repository passphrase (openssl rand -base64 48)}
+  PGBACKREST_REPO1_RETENTION_FULL: ${PITR_RETENTION_FULL:-4}
+  PGBACKREST_LOCK_PATH: /tmp/pgbackrest
+  PGBACKREST_LOG_LEVEL_FILE: "off"
+  PGBACKREST_LOG_LEVEL_CONSOLE: warn
+  PGBACKREST_COMPRESS_TYPE: zst
+services:
+  db:
+    build: {context: .., dockerfile: deployment/db.Dockerfile}
+    image: open-alvary-db:16
+    command: [postgres, -c, wal_level=replica, -c, archive_mode=on, -c, "archive_command=pgbackrest --stanza=main archive-push %p", -c, archive_timeout=60, -c, max_wal_senders=3]
+    environment: *pgbackrest
+    # Set CORPUS_DB_VOLUME to a restored volume to promote it (deployment/runbook.md).
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+  db-restore:
+    image: open-alvary-db:16
+    profiles: [pitr-restore]
+    environment:
+      <<: *pgbackrest
+      PITR_TARGET: ${PITR_TARGET:-}
+      POSTGRES_USER: open_alvary
+      POSTGRES_DB: open_alvary
+    volumes: ["${PITR_RESTORE_VOLUME:-unset-restore-volume}:/var/lib/postgresql/data", "./pitr_restore_inner.sh:/pitr_restore_inner.sh:ro"]
+    entrypoint: ["sh", "/pitr_restore_inner.sh"]
+volumes:
+  pgdata:
+    external: true
+    name: ${CORPUS_DB_VOLUME:-open-alvary_corpus_db}
