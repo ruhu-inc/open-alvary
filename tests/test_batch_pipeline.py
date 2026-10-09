@@ -448,3 +448,26 @@ def test_a_section_after_a_closing_quotation_mark_is_split():
         ]
     )
     assert [n["text"][:4] for n in out] == ['"(1)', "10. "]
+
+
+def test_a_flattened_arrangement_list_splits_where_the_check_reader_starts_paragraphs():
+    text = "212. Negligently damaging materials 213. Intentionally disrupting supply PART XXI — MISCELLANEOUS 224. Exemption of lines"
+    blocks = [
+        ("212. Negligently damaging materials", 0.1),
+        ("213. Intentionally disrupting supply", 0.12),
+        ("PART XXI — MISCELLANEOUS", 0.14),
+        ("224. Exemption of", 0.16),
+        ("lines", 0.17),
+    ]
+    checks = {
+        "azure": {
+            "blocks": [{"text": t, "role": None, "box": {"x0": 0.1, "x1": 0.6, "y0": y}} for t, y in blocks]
+        }
+    }
+    out = structure.restructure([node(text, "paragraph")], checks)
+    assert [(n["kind"], n["text"]) for n in out] == [
+        ("paragraph", "212. Negligently damaging materials"),
+        ("paragraph", "213. Intentionally disrupting supply"),
+        ("heading", "PART XXI — MISCELLANEOUS"),
+        ("paragraph", "224. Exemption of lines"),
+    ]

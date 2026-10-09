@@ -9,11 +9,15 @@ Two things the primary reading flattens are put back:
   of the body, exactly as the primary read them, and attached to the unit that opens with that
   paragraph's words; where no unit does, to the unit they were cut from.
 - Units run together. Subsections "(2)", paragraphs "(a)" and new sections "81." that the
-  primary merged into one block are split onto their own nodes at those boundaries.
+  primary merged into one block are split onto their own nodes at those boundaries. Where the
+  primary flattened a list with no punctuation to split on (an arrangement of sections, a run
+  of definitions), the block is split wherever the positional check reader starts a paragraph
+  on the same words.
 
 depth() gives each unit's nesting (0 section, 1 subsection, 2 paragraph, 3 sub-paragraph).
 """
 
+import difflib
 import re
 from dataclasses import dataclass
 
@@ -44,6 +48,7 @@ LEVEL = [
     (re.compile(r"^\([a-z]{1,2}\)"), 2),
 ]
 MARKERISH = re.compile(r"^[\"“]?(?:\d{1,3}[A-Z]?\.|\(\w{1,6}\))[\"”]?$")
+PART = re.compile(r"^PART\s+[IVXLC]+\b")
 
 
 @dataclass
@@ -159,6 +164,65 @@ def split_units(nodes: list[dict]) -> list[dict]:
     return out
 
 
+def split_at_boundaries(nodes: list[dict], check_pages: dict[str, dict]) -> list[dict]:
+    """Split a primary unit where the positional reader starts a main-column paragraph inside it.
+
+    The boundary is taken only where both of the paragraph's first two words align with the
+    primary's words, and not where the paragraph opens in lower case (a wrapped line).
+    """
+    blocks = [
+        b
+        for page in check_pages.values()
+        for b in page.get("blocks") or []
+        if b.get("box") and b["box"]["x0"] < MARGIN and not b.get("role")
+    ]
+    reference, starts = [], []
+    for block in blocks:
+        words = TOKEN.findall(block["text"])
+        if not words:
+            continue
+        if not (words[0][0].islower() and not MARKERISH.match(words[0])):
+            starts.append(len(reference))
+        reference.extend(key(w).lower() for w in words)
+    if not starts:
+        return nodes
+    positions = [
+        (index, match)
+        for index, node in enumerate(nodes)
+        if node["kind"] in {"paragraph", "list_item", "heading"} and node.get("text")
+        for match in TOKEN.finditer(node["text"])
+    ]
+    primary = [key(match.group()).lower() for _, match in positions]
+    cuts: dict[int, set[int]] = {}
+    for a, b, size in difflib.SequenceMatcher(a=reference, b=primary, autojunk=False).get_matching_blocks():
+        for start in starts:
+            if a <= start < a + size - 1:
+                index, match = positions[b + start - a]
+                if match.start() > 0:
+                    cuts.setdefault(index, set()).add(match.start())
+    out = []
+    for index, node in enumerate(nodes):
+        if index not in cuts:
+            out.append(node)
+            continue
+        edges = [0, *sorted(cuts[index]), len(node["text"])]
+        for number, (left, right) in enumerate(zip(edges, edges[1:], strict=False)):
+            part = node["text"][left:right].strip()
+            if not part:
+                continue
+            if number == 0:
+                out.append({**node, "text": part})
+                continue
+            unit = {
+                k: v for k, v in node.items() if k not in {"marker", "marker_source", "notes", "_pending"}
+            }
+            unit.update(text=part, split=True)
+            if PART.match(part):
+                unit["kind"] = "heading"
+            out.append(unit)
+    return out
+
+
 def attach_notes(nodes: list[dict]) -> list[dict]:
     """Give each note to the unit opening with the paragraph printed beside it, if one does."""
     openings = [opening(n.get("text", "")) if n["kind"] in {"paragraph", "list_item"} else () for n in nodes]
@@ -185,4 +249,5 @@ def depth(node: dict) -> int | None:
 
 
 def restructure(nodes: list[dict], check_pages: dict[str, dict]) -> list[dict]:
-    return attach_notes(split_units(place_notes(nodes, margin_notes(check_pages))))
+    nodes = split_units(place_notes(nodes, margin_notes(check_pages)))
+    return attach_notes(split_at_boundaries(nodes, check_pages))
