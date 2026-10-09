@@ -423,7 +423,12 @@ def main(argv=None) -> int:
         "--journal", type=Path, help="Reference file journal; ALVARY_JOURNAL_DATABASE_URL selects production"
     )
     parser.add_argument("--schema", default="public")
-    parser.add_argument("--backup-metadata", type=Path, help="recover: the backup's .json sidecar")
+    parser.add_argument("--backup-metadata", type=Path, help="recover: the logical backup's .json sidecar")
+    parser.add_argument(
+        "--point-in-time",
+        action="store_true",
+        help="recover after a pgBackRest point-in-time restore: replay the whole journal (idempotent)",
+    )
     parser.add_argument("--reason", help="recover: incident reference and reason")
     args = parser.parse_args(argv)
     raw = os.environ.get("DATABASE_URL")
@@ -446,9 +451,15 @@ def main(argv=None) -> int:
         elif args.action == "close":
             result = {"epoch_id": str(close_epoch(engine, ns, journal))}
         else:
-            if args.backup_metadata is None or not args.reason:
-                raise ValueError("recover needs --backup-metadata and --reason")
-            checkpoint = json.loads(args.backup_metadata.read_text())["journal_checkpoint"]
+            if (args.backup_metadata is None) == (not args.point_in_time) or not args.reason:
+                raise ValueError(
+                    "recover needs --reason and exactly one of --backup-metadata or --point-in-time"
+                )
+            checkpoint = (
+                None
+                if args.point_in_time
+                else json.loads(args.backup_metadata.read_text())["journal_checkpoint"]
+            )
             outcome = recover(engine, ns, journal, checkpoint, args.reason)
             result = {
                 "recovery_id": str(outcome.recovery_id),

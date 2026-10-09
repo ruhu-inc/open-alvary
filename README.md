@@ -681,6 +681,12 @@ and byte reconciliation locks buckets in key order. Journal delivery and epoch o
 serving when the journal holds events the database cannot explain (an in-place restore), and the
 SQL verifier checks exact runtime grants and that no policy trigger is disabled.
 
+Point-in-time recovery: `deployment/pitr.yaml` adds pgBackRest continuous WAL archiving to an
+encrypted R2 repository (about one minute of potential loss, four weeks of history), with weekly full
+and daily differential backups (`deployment/pitr.sh`). `deployment/pitr_restore.sh` restores to any
+moment into a new volume and fences serving; `rights.recovery recover --point-in-time` then replays
+the denial journal. `scripts/pitr_drill.sh` runs a complete local drill.
+
 Full acceptance runs PostgreSQL by default. Supply an isolated `TEST_DATABASE_URL` ending in `_test`
 whose maintenance account can create disposable databases and roles, then run `pytest -q`.
 `pytest --fast -q` explicitly skips PostgreSQL and cannot be treated as acceptance. Most tests clone

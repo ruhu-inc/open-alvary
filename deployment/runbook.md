@@ -72,6 +72,45 @@ smoke check expecting four sources once the corpus has expanded. Backup metadata
 delivered denial-journal checkpoint (sequence, chain hash and pending count) read before the dump.
 A restored database stays closed to serving until `rights.recovery recover` has run on it (below).
 
+## Point-in-time recovery (best-practice database protection, 2026-10-08)
+
+Two independent protections run together:
+
+| Layer | What it gives | Loss window |
+|---|---|---|
+| pgBackRest WAL archive (`deployment/pitr.yaml`) | Restore to any moment in the last 4 weeks | About 1 minute (`archive_timeout=60`) |
+| Daily logical backups (`deployment/backup.sh`) | Independent, public-key-encrypted copy | Up to 24 hours |
+| Denial journal (separate provider) | Withdrawals re-applied after any restore | None for committed withdrawals |
+
+Setup:
+
+1. Create a second R2 bucket (for example `open-alvary-pitr`) with its own bucket-scoped token.
+   Enable an R2 **bucket lock** rule (for example 35 days) on both backup buckets so a compromised
+   server cannot delete history; pgBackRest retention and the logical-backup purge only remove
+   objects older than the lock.
+2. Generate `PITR_CIPHER_PASS` with `openssl rand -base64 48`, store it in the password manager,
+   and fill the `PITR_*` settings in `deployment/.env`. The server needs this key to archive WAL;
+   anyone who controls the server already controls the live database.
+3. Run the stack with the overlay (`-f deployment/compose.yaml -f deployment/pitr.yaml`), then
+   `deployment/pitr.sh init`.
+4. Schedule `deployment/pitr.sh full` weekly (Sunday 01:30 UTC) and `deployment/pitr.sh diff` daily
+   (01:30 UTC). Failures open an `operations-alert` issue. `deployment/pitr.sh info` shows the window.
+5. Host the denial journal (`ALVARY_JOURNAL_DATABASE_URL`) with a **different provider** from both
+   this server and R2, for example Neon or Supabase, so one provider failure cannot affect both.
+
+Restore drill (quarterly, and before launch): `scripts/pitr_drill.sh` runs a complete local drill.
+
+Restore procedure:
+
+1. `deployment/pitr_restore.sh "2026-10-08 14:30:00+00"` (omit the time for the latest state). It
+   restores into a **new** volume, replays WAL, promotes and fences serving; the live volume is untouched.
+2. Start a verification stack on that volume (`CORPUS_DB_VOLUME=<restored volume>`), then run
+   `python -m rights.recovery restore-grants` if roles changed, and
+   `python -m rights.recovery recover --point-in-time --reason "<incident>"` (replays the whole journal).
+3. When satisfied, set `CORPUS_DB_VOLUME` to the restored volume in `deployment/.env`, restart the
+   stack, deliver pending denials and open a serving epoch. Keep the old volume until the incident
+   is closed.
+
 ## Serving epochs and restore recovery
 
 Policy-governed public serving (migration `0015`; currently the `eligible_metadata` view, not the
