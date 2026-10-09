@@ -1,0 +1,42 @@
+deployment/pitr.sh
+  s_b82616e2476856::t_45fc7721d9cfc8 1-28
+deployment/pitr.yaml
+  s_b82616e2476856::t_45fc7721d9cfc8 1-3,23-26,34
+  s_b82616e2476856::t_5c8f6fa7f91fe8 4-22,27-33,35-44
+scripts/pitr_drill.sh
+  s_b82616e2476856::t_aafc4c4dc7600b 1-12,14-38,40-48
+  s_b82616e2476856::t_0928a284278b2b 39
+  s_b82616e2476856::t_49357d8760ce87 13
+deployment/pitr_restore_inner.sh
+  s_b82616e2476856::t_5c8f6fa7f91fe8 1-15,27-28,30,32
+  s_b82616e2476856::t_0928a284278b2b 16-26,29,31
+rights/recovery.py
+  s_b82616e2476856::t_810f5db98a1ca5 426-431,454-462
+deployment/pitr_restore.sh
+  s_b82616e2476856::t_5c8f6fa7f91fe8 1-12
+deployment/db.Dockerfile
+  s_b82616e2476856::t_45fc7721d9cfc8 7
+  s_b82616e2476856::t_f78805d8c66859 1-6,8-10
+README.md
+  s_b82616e2476856::t_4e87526c9ac247 684-689
+deployment/.env.example
+  s_b82616e2476856::t_e47bec44e83ab0 28-35
+deployment/runbook.md
+  s_b82616e2476856::t_300ccc8759621e 75-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "41de9cb168d89581bf3d72888fd0ccf540489367",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
