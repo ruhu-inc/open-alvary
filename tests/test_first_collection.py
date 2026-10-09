@@ -60,3 +60,20 @@ def test_pages_without_text_use_ocr_and_are_recorded():
 def test_without_ocr_scanned_pages_are_flagged_not_guessed():
     result = extract_pdf(blank_pdf(1))
     assert result["needs_ocr"] and result["pages_without_text"] == [1] and result["characters"] == 0
+
+
+def test_side_by_side_view_escapes_text_and_marks_ocr_pages(tmp_path):
+    from ingestion.first_collection import side_by_side
+
+    act = {"id": "ng-test-act", "title": "Test Act <2023>"}
+    (tmp_path / "ng-test-act.pages.json").write_text(json.dumps(["1. Short title <b>.", ""]))
+    (tmp_path / "ng-test-act.extraction.json").write_text(json.dumps({"ocr_pages": [2]}))
+    (tmp_path / "ng-test-act.pdf").write_bytes(b"%PDF-1.4")
+    images = tmp_path / "pages" / "ng-test-act"
+    images.mkdir(parents=True)
+    for n in (1, 2):
+        (images / f"page-{n}.jpg").write_bytes(b"jpg")
+    page = side_by_side(act, tmp_path).read_text()
+    assert "Test Act &lt;2023&gt;" in page and "1. Short title &lt;b&gt;." in page
+    assert page.count("class='page'") == 1 and page.count("class='page ocr'") == 1
+    assert "(no text extracted)" in page and "pages/ng-test-act/page-2.jpg" in page
