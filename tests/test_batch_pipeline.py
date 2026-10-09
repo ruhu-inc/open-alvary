@@ -40,7 +40,8 @@ def test_split_checks_lower_the_severity_and_name_the_dissenter():
 
 
 def test_typography_only_is_low_and_reconstruction_is_high():
-    low = compare.compare("Nigeria — the", {"mineru": "Nigeria - the", "azure": "Nigeria – the"})
+    assert compare.compare("Nigeria — the", {"mineru": "Nigeria - the", "azure": "Nigeria --- the"}) == []
+    low = compare.compare("of the State); or", {"mineru": "of the State): or", "azure": "of the State): or"})
     assert {f.severity for f in low} == {"low"}
     reconstructed = compare.compare(
         "SCHEDULE TO THE BILL I certify that",
@@ -273,3 +274,27 @@ def test_mineru_output_is_kept_and_a_page_without_blocks_is_empty(tmp_path, monk
     assert [p["text"] for p in first.pages] == ["Hello", ""]
     reader.read(pdf)
     assert len(runs) == 1  # the kept output is reused, not re-read
+
+
+def test_margin_notes_placed_differently_are_moved_not_invented():
+    primary = "Cessation of office 12. A member shall cease to hold office"
+    checks = {
+        "mineru": "12. A member shall cease to hold office Cessation of office",
+        "azure": "12. A member shall cease to hold office Cessation of office",
+    }
+    flags = compare.compare(primary, checks)
+    assert [(f.kind, f.severity) for f in flags] == [("moved", "low")]
+
+
+def test_a_printed_dash_written_as_hyphens_does_not_hide_the_next_marker():
+    primary = {
+        "page": 1,
+        "nodes": [node("Nothing in this Act shall invalidate —"), node("any law passed by a State")],
+    }
+    checks = {
+        "mineru": {"text": "2. Nothing in this Act shall invalidate --- (a) any law passed by a State"},
+        "azure": {"text": "2. Nothing in this Act shall invalidate - (a) any law passed by a State"},
+    }
+    page = reconcile.reconcile_page(primary, checks)
+    assert [n.get("marker") for n in page["nodes"]] == ["2.", "(a)"]
+    assert not [f for f in page["flags"] if f["severity"] != "low"]

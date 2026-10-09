@@ -24,7 +24,9 @@ ONLINE_PAGE_LIMIT = 15  # synchronous Layout Parser requests accept at most 15 p
 # Running heads and folios; newer processor versions call them "header" and "footer".
 FURNITURE = {"page_header", "page_footer", "header", "footer"}
 # Section and paragraph markers the parser strips from ordered lists: 91.  12A.  (a)  (iv)  (2)
-MARKER = re.compile(r"^(?:\d{1,3}[A-Z]?\.|\([a-z]{1,2}\)|\([ivxl]{1,6}\)|\(\d{1,3}[A-Z]?\))$")
+MARKER = re.compile(
+    r"^(?:\d{1,3}[A-Z]?\.|\([a-z]{1,2}\)|\([ivxl]{1,6}\)|\(\d{1,3}[A-Z]?\)|\d{1,3}[A-Z]?\.[—–-]+\(\d{1,3}[A-Z]?\))$"
+)
 HEADINGS = {f"heading-{n}" for n in range(1, 7)} | {"subheading"}
 
 
@@ -263,30 +265,49 @@ def restore_markers(nodes: list[dict], page: int, reference: str, source: str = 
     a marker-shaped word present in the reference and missing immediately before the entry's
     first word. Restored markers are labelled so the reviewer can see where they came from.
     """
-    starts, index = {}, 0
+    starts, index, previous = {}, 0, None
     for node in nodes:
         if node["page"] != page or node["kind"] == "furniture":
             continue
         size = len(TOKEN.findall(_node_text(node)))
         if node["kind"] == "list_item" and not node.get("marker"):
-            starts[index] = (node, size)
+            # A short heading printed just before the item is usually its margin note; the
+            # reference's section number may stand in its place.
+            lead = (
+                previous[1]
+                if previous and previous[0] == "heading" and previous[1] <= MARGIN_NOTE_WORDS
+                else 0
+            )
+            starts[index] = (node, size, lead)
+        previous = (node["kind"], size)
         index += size
+    from ingestion.compare import key
+
     left, right = TOKEN.findall(reference), TOKEN.findall(page_text(nodes, page))
-    opcodes = difflib.SequenceMatcher(a=left, b=right, autojunk=False).get_opcodes()
+    opcodes = difflib.SequenceMatcher(
+        a=[key(t) for t in left], b=[key(t) for t in right], autojunk=False
+    ).get_opcodes()
     unmatched = [(j1, j2) for tag, _, _, j1, j2 in opcodes if tag != "equal" and j2 > j1]
     gaps = [(j1, left[i1:i2]) for tag, i1, i2, j1, _ in opcodes if tag != "equal" and i2 > i1]
     restored = 0
-    for start, (node, size) in starts.items():
-        # The reference's marker is the last of its unmatched words just before the item's text.
-        # The item may open with a margin note the reference prints elsewhere, so the gap may begin
-        # a few words in, but only when every word skipped is itself unmatched.
+    for start, (node, size, lead) in starts.items():
+        # The reference's marker is the run of marker-shaped words ending its unmatched words just
+        # before the item's text ("155. (1)"). The gap may begin a few words into the item (a
+        # leading margin note) or at a margin-note heading just before it, but only when every
+        # word skipped to reach it is itself unmatched.
         for j1, words in gaps:
-            if not start <= j1 <= min(start + MARGIN_NOTE_WORDS, start + size):
+            if not start - lead <= j1 <= min(start + MARGIN_NOTE_WORDS, start + size):
                 continue
-            if j1 > start and not any(u1 <= start and u2 >= j1 for u1, u2 in unmatched):
+            base = start if j1 >= start else start - lead
+            if j1 > base and not any(u1 <= base and u2 >= j1 for u1, u2 in unmatched):
                 continue
-            if MARKER.match(words[-1]):
-                node["marker"], node["marker_source"] = words[-1], source
+            tail = []
+            for word in reversed(words):
+                if len(tail) == 2 or not MARKER.match(word):
+                    break
+                tail.insert(0, word)
+            if tail:
+                node["marker"], node["marker_source"] = " ".join(tail), source
                 restored += 1
             break
     return restored
