@@ -1,0 +1,25 @@
+ingestion/settings.py
+  s_b82616e2476856::t_7132842ca3ee49 1-34
+tests/test_benchmark.py
+  s_b82616e2476856::t_3d2a5e13295b62 45-62
+ingestion/layout_parser.py
+  s_b82616e2476856::t_3d2a5e13295b62 52-54
+ingestion/benchmark.py
+  s_b82616e2476856::t_3d2a5e13295b62 325-329
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "865abb8affe7e94cc0f2a2e5ef2946fb74f124e2",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
