@@ -278,8 +278,11 @@ def restore_markers(nodes: list[dict], page: int, reference: str, source: str = 
                 if previous and previous[0] == "heading" and previous[1] <= MARGIN_NOTE_WORDS
                 else 0
             )
+            # The previous unit's margin notes follow its body, so they sit right before this item.
+            lead = max(lead, previous[2] if previous else 0)
             starts[index] = (node, size, lead)
-        previous = (node["kind"], size)
+        notes = sum(len(TOKEN.findall(note)) for note in node.get("notes", []))
+        previous = (node["kind"], size, notes)
         index += size
     from ingestion.compare import key
 
@@ -319,7 +322,8 @@ def _node_text(node: dict) -> str:
         return "\n".join(
             [node["caption"]] * bool(node["caption"]) + [" ".join(c["text"] for c in r) for r in rows]
         )
-    return f"{node['marker']} {node['text']}" if node.get("marker") else node["text"]
+    body = f"{node['marker']} {node['text']}" if node.get("marker") else node["text"]
+    return "\n".join([body, *node.get("notes", [])])
 
 
 def page_text(nodes: list[dict], page: int) -> str:
@@ -403,16 +407,31 @@ def render_page(
                     rows.append(f"<tr>{cells}</tr>")
             caption = f"<caption>{mark(node['caption'])}</caption>" if node["caption"] else ""
             parts.append(f"<table>{caption}{''.join(rows)}</table>")
-        elif node["kind"] == "heading":
-            parts.append(f"<p class='h'>{mark(node['text'])}</p>")
-        elif node["kind"] == "list_item":
+        else:
+            from ingestion.structure import depth
+
             marker = ""
             if node.get("marker"):
                 source = node.get("marker_source") or "the first reading"
                 source = ", ".join(source) if isinstance(source, list) else source
                 marker = f"<span class='restored' title='marker from {html.escape(source)}'>{mark(node['marker'])}</span> "
-            parts.append(f"<p class='li'>{marker}{mark(node['text'])}</p>")
-        else:
-            parts.append(f"<p>{mark(node['text'])}</p>")
+            body = marker + mark(node["text"])
+            # Margin notes follow the body in reading order and are set beside it, as printed.
+            notes = "".join(f"<span class='note'>{mark(note)}</span>" for note in node.get("notes", []))
+            level = depth(node)
+            css = (
+                "h"
+                if node["kind"] == "heading"
+                else f"d{level}"
+                if level is not None
+                else "li"
+                if node["kind"] == "list_item"
+                else ""
+            )
+            parts.append(
+                f"<p class='{css}'>{notes}{body}</p>"
+                if not notes
+                else f"<div class='unit {css}'><p>{body}</p>{notes}</div>"
+            )
     tail = "".join(f"<del title='not in this reading'>{html.escape(w)}</del>" for w in mark.missing.values())
     return "".join(parts) + (f"<p>{tail}</p>" if tail else "")

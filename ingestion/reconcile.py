@@ -8,12 +8,14 @@ agree on it, and (2) raise flags wherever they do not support the primary's word
 import copy
 from dataclasses import asdict
 
-from ingestion import layout_parser
+from ingestion import layout_parser, structure
 from ingestion.compare import Flag, compare
 
 
 def reconcile_page(primary: dict, checks: dict[str, dict]) -> dict:
-    page, nodes = primary["page"], copy.deepcopy(primary["nodes"])
+    page = primary["page"]
+    # Margin notes out of the body and merged units apart first: section numbers then line up.
+    nodes = structure.restructure(copy.deepcopy(primary["nodes"]), checks)
     proposals = {}
     for name, reading in checks.items():
         proposal = copy.deepcopy(nodes)

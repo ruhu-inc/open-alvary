@@ -110,7 +110,12 @@ def test_azure_pages_group_paragraphs_and_tables_by_page():
         ],
     }
     pages = readers.azure_pages(result, 2)
-    assert pages[0] == {"page": 1, "text": "1. Short title", "tables": [], "furniture": ["A 302"]}
+    assert {k: pages[0][k] for k in ("page", "text", "tables", "furniture")} == {
+        "page": 1,
+        "text": "1. Short title",
+        "tables": [],
+        "furniture": ["A 302"],
+    }
     assert pages[1]["tables"] == [[["X", "Y"]]]
 
 
@@ -152,7 +157,7 @@ def test_azure_reader_retries_throttling_and_polls_until_done(tmp_path, monkeypa
     reader = readers.AzureReader(client=FakeAzure(), sleep=slept.append)
     reading = reader.read(blank_pdf(tmp_path / "a.pdf", 2))
     assert [p["page"] for p in reading.pages] == [1, 2] and reading.billed_pages == 2
-    assert reading.raw["model_id"] == "prebuilt-layout"
+    assert reading.raw["analyze"]["modelId"] == "prebuilt-layout"
     assert reading.version == reader.version()  # the stored version is the cache key
     assert slept == [1.0, 1.0, 2.0]  # Retry-After, Retry-After, then backoff for the 503
 
@@ -298,3 +303,148 @@ def test_a_printed_dash_written_as_hyphens_does_not_hide_the_next_marker():
     page = reconcile.reconcile_page(primary, checks)
     assert [n.get("marker") for n in page["nodes"]] == ["2.", "(a)"]
     assert not [f for f in page["flags"] if f["severity"] != "low"]
+
+
+# --- structure ----------------------------------------------------------------------------------
+
+from ingestion import structure  # noqa: E402
+
+
+def azure_page(*blocks):
+    return {
+        "azure": {
+            "blocks": [
+                {"text": t, "role": None, "box": {"x0": x, "x1": x + 0.2, "y0": 0.1}} for t, x in blocks
+            ]
+        }
+    }
+
+
+def test_a_margin_note_glued_to_a_section_moves_beside_it_word_for_word():
+    nodes = [
+        node(
+            "Promotion of generation from renewable energy 80. (1) Without prejudice to section 65",
+            "paragraph",
+        )
+    ]
+    checks = azure_page(
+        ("80. (1) Without prejudice to section 65", 0.05),
+        ("Promotion of generation from renewable energy", 0.78),
+    )
+    out = structure.restructure(nodes, checks)
+    assert out[0]["text"] == "80. (1) Without prejudice to section 65"
+    assert out[0]["notes"] == ["Promotion of generation from renewable energy"]
+
+
+def test_a_note_emitted_as_a_heading_attaches_to_the_next_unit():
+    nodes = [node("Power to borrow", "heading"), node("The Agency may borrow")]
+    out = structure.restructure(nodes, azure_page(("Power to borrow", 0.8)))
+    assert [(n["kind"], n["text"], n.get("notes")) for n in out] == [
+        ("list_item", "The Agency may borrow", ["Power to borrow"])
+    ]
+
+
+def test_body_text_in_the_main_column_is_never_taken_for_a_note():
+    nodes = [node("Power to borrow money is limited", "paragraph")]
+    out = structure.restructure(nodes, azure_page(("Power to borrow", 0.1)))
+    assert out[0]["text"] == "Power to borrow money is limited" and "notes" not in out[0]
+
+
+def test_merged_subsections_paragraphs_and_sections_are_split_but_references_are_not():
+    text = (
+        "(2) Any State shall be a member. (3) The office of the Chairman shall rotate as provided in "
+        "section 44 (2)(a) of this Act. 81. (1) The Commission may specify — (a) any matter; (b) any other"
+    )
+    out = structure.split_units([node(text, "paragraph")])
+    assert [n["text"] for n in out] == [
+        "(2) Any State shall be a member.",
+        "(3) The office of the Chairman shall rotate as provided in section 44 (2)(a) of this Act.",
+        "81. (1) The Commission may specify —",
+        "(a) any matter;",
+        "(b) any other",
+    ]
+    assert [structure.depth(n) for n in out] == [1, 1, 0, 2, 2]
+
+
+def test_restructured_text_keeps_every_word():
+    from ingestion import layout_parser
+
+    nodes = [node("Promotion of generation 80. (1) Without prejudice. (2) In granting licences", "paragraph")]
+    out = structure.restructure(nodes, azure_page(("Promotion of generation", 0.8)))
+    before = sorted(
+        layout_parser.TOKEN.findall(
+            "Promotion of generation 80. (1) Without prejudice. (2) In granting licences"
+        )
+    )
+    assert sorted(layout_parser.TOKEN.findall(layout_parser.page_text(out, 1))) == before
+
+
+def test_a_note_glued_between_two_merged_sections_goes_to_the_later_one():
+    text = "80. (1) The Commission shall promote renewable energy. Directions to generation companies 81. (1) The Commission may specify"
+    checks = azure_page(("Directions to generation companies", 0.8))
+    out = structure.restructure([node(text, "paragraph")], checks)
+    assert [(n["text"][:7], n.get("notes")) for n in out] == [
+        ("80. (1)", None),
+        ("81. (1)", ["Directions to generation companies"]),
+    ]
+
+
+def test_a_marker_after_the_previous_units_margin_note_is_restored():
+    primary = {
+        "page": 1,
+        "nodes": [
+            node("82. (1) There is established the Commission, which —", "paragraph"),
+            node("shall be a body corporate"),
+        ],
+    }
+    primary["nodes"][0]["notes"] = ["Establishment of the Commission"]
+    checks = {
+        "mineru": {
+            "text": "82. (1) There is established the Commission, which — (a) shall be a body corporate Establishment of the Commission"
+        },
+        "azure": {
+            "text": "Establishment of the Commission 82. (1) There is established the Commission, which — (a) shall be a body corporate"
+        },
+    }
+    page = reconcile.reconcile_page(primary, checks)
+    assert page["nodes"][1]["marker"] == "(a)"
+
+
+def test_a_note_glued_into_the_next_section_returns_to_the_section_printed_beside_it():
+    nodes = [
+        node("6. Section 27 (2) of the Principal Act is amended by substituting the words", "paragraph"),
+        node(
+            "Amendment of section 27 Amendment of section 30 7. Section 30 of the Principal Act is amended —",
+            "paragraph",
+        ),
+    ]
+    blocks = [
+        ("6. Section 27 (2) of the Principal Act is amended by substituting", 0.05, 0.10),
+        ("Amendment of section 27", 0.78, 0.10),
+        ("7. Section 30 of the Principal Act is amended —", 0.05, 0.20),
+        ("Amendment of section 30", 0.78, 0.205),
+    ]
+    checks = {
+        "azure": {
+            "blocks": [
+                {"text": t, "role": None, "box": {"x0": x, "x1": x + 0.2, "y0": y}} for t, x, y in blocks
+            ]
+        }
+    }
+    out = structure.restructure(nodes, checks)
+    assert [(n["text"][:3], n.get("notes")) for n in out] == [
+        ("6. ", ["Amendment of section 27"]),
+        ("7. ", ["Amendment of section 30"]),
+    ]
+
+
+def test_a_section_after_a_closing_quotation_mark_is_split():
+    out = structure.split_units(
+        [
+            node(
+                '"(1) A service provider shall keep data for two years." 10. Section 41 (1) is amended',
+                "paragraph",
+            )
+        ]
+    )
+    assert [n["text"][:4] for n in out] == ['"(1)', "10. "]
