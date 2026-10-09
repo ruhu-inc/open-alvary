@@ -49,6 +49,9 @@ class DocAIConfig:
 
     @classmethod
     def from_environment(cls) -> "DocAIConfig":
+        from ingestion import settings
+
+        settings.load()
         missing = [
             k
             for k in ("ALVARY_DOCAI_PROJECT", "ALVARY_DOCAI_LOCATION", "ALVARY_DOCAI_PROCESSOR_ID")
