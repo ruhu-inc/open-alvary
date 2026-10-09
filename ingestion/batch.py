@@ -123,6 +123,8 @@ class Batch:
         if "docai" in readings:
             checks = {name: reading for name, reading in readings.items() if name != "docai"}
             reconciled = reconcile.reconcile(readings["docai"], checks)
+            # A check that failed is named, so a thinner review is never mistaken for a full one.
+            reconciled["summary"]["missing_checks"] = [n for n in self.names if n not in readings]
             target = self.staging / f"{act['id']}.reading.json"
             target.write_text(json.dumps(reconciled, ensure_ascii=False))
             outcome["summary"] = reconciled["summary"]
