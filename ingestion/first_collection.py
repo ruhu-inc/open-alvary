@@ -230,6 +230,11 @@ def layout(manifest: dict, staging: Path = STAGING, only: str | None = None) -> 
             continue
         raw = (staging / f"{act['id']}.pdf").read_bytes()
         result = layout_parser.parse(raw, config)
+        first_reading = json.loads((staging / f"{act['id']}.pages.json").read_text())
+        result["restored_markers"] = sum(
+            layout_parser.restore_markers(result["nodes"], number, text)
+            for number, text in enumerate(first_reading, 1)
+        )
         result.update(
             source_sha256=hashlib.sha256(raw).hexdigest(),
             parsed_at=datetime.now(UTC).isoformat(timespec="seconds"),
@@ -291,14 +296,15 @@ header{{position:sticky;top:0;background:#fff;border-bottom:1px solid #ccc;paddi
 .layout p{{margin:.2rem 0;white-space:pre-wrap}} .layout .h{{font-weight:700}} .layout .li{{padding-left:1rem}}
 .layout table{{border-collapse:collapse;margin:.5rem 0;width:100%}}
 .layout td,.layout th{{border:1px solid #888;padding:.2rem .4rem;vertical-align:top;white-space:pre-wrap}}
-mark{{background:#ffd666}} details{{margin-top:.6rem}}
+mark{{background:#ffd666}} del{{background:#ffd0d0;color:#8a1010}} .restored{{color:#1f5fa8;font-weight:600}} details{{margin-top:.6rem}}
 @media (max-width:800px){{.page{{grid-template-columns:1fr}}}}
 </style>
 <header><b>{title}</b> · {pages} pages · <span id="progress"></span> ·
 <a href="review.html">all Acts</a> · <a href="{pdf}">original PDF</a><br>
 <small>Left: the gazette page (authoritative). Right: the text extracted from that page. Orange pages
 came from OCR: check every word. Where a Layout Parser reading exists it is shown with its tables;
-words highlighted yellow differ from the independent first reading. Tick a page when it matches.
+words highlighted yellow differ from the independent first reading; struck-out red words appear only
+in the first reading; blue list numbers were copied from the first reading because the parser drops them. Tick a page when it matches.
 Ticks are saved only in this browser.</small></header>
 {rows}
 <script>
@@ -335,10 +341,12 @@ def side_by_side(act: dict, staging: Path) -> Path:
         source = "OCR — check every word" if number in ocr else "PDF text layer"
         body = f"<div class='text'>{html.escape(text) or '<em>(no text extracted)</em>'}</div>"
         if nodes is not None:
-            differing, agreement = layout_parser.disagreements(text, layout_parser.page_text(nodes, number))
+            differing, missing, agreement = layout_parser.disagreements(
+                text, layout_parser.page_text(nodes, number)
+            )
             source = f"Layout Parser · {agreement:.1%} agrees with {source.split(' —')[0]}"
             body = (
-                f"<div class='layout'>{layout_parser.render_page(nodes, number, differing) or '<em>(no text)</em>'}</div>"
+                f"<div class='layout'>{layout_parser.render_page(nodes, number, differing, missing) or '<em>(no text)</em>'}</div>"
                 f"<details><summary>First reading (PDF text layer or OCR)</summary>{body}</details>"
             )
         rows.append(
