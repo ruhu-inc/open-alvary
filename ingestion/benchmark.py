@@ -322,8 +322,11 @@ def read_external(script: str, python: Path):
 
 
 def read_azure(act: str, page: int) -> dict:
-    endpoint = os.environ["AZURE_DI_ENDPOINT"].rstrip("/")
-    headers = {"Ocp-Apim-Subscription-Key": os.environ["AZURE_DI_KEY"]}
+    from ingestion import settings
+
+    config = settings.require("AZURE_DI_ENDPOINT", "AZURE_DI_KEY")
+    endpoint = config["AZURE_DI_ENDPOINT"].rstrip("/")
+    headers = {"Ocp-Apim-Subscription-Key": config["AZURE_DI_KEY"]}
     url = (
         f"{endpoint}/documentintelligence/documentModels/prebuilt-layout:analyze"
         "?api-version=2024-11-30&outputContentFormat=markdown"

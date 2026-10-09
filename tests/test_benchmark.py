@@ -42,3 +42,21 @@ def test_table_score_requires_matching_columns():
     assert good == {"found": True, "columns": 2, "cells": 1.0}
     flattened = b.table_score(gold, [[["SHORT TITLE DATE Electricity Bill, 2023 10th May, 2023"]]])
     assert flattened["cells"] == 0.0
+
+
+def test_settings_file_is_parsed_without_overriding_the_environment(tmp_path, monkeypatch):
+    from ingestion import settings
+
+    env = tmp_path / ".env"
+    env.write_text(
+        '# comment\nexport AZURE_DI_ENDPOINT="https://x.example/"\nAZURE_DI_KEY=from-file\nEMPTY=\n$(rm -rf /)=1\n'
+    )
+    monkeypatch.delenv("AZURE_DI_ENDPOINT", raising=False)
+    monkeypatch.setenv("AZURE_DI_KEY", "from-environment")
+    monkeypatch.delenv("EMPTY", raising=False)
+    settings.load(env)
+    import os
+
+    assert os.environ["AZURE_DI_ENDPOINT"] == "https://x.example/"
+    assert os.environ["AZURE_DI_KEY"] == "from-environment"
+    assert "EMPTY" not in os.environ
