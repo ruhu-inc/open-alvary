@@ -516,3 +516,33 @@ def test_dot_leaders_and_the_naira_sign_read_as_n_are_not_flagged():
         "Day of June .. .. 2024", {"mineru": "Day of July 2024", "azure": "Day of July 2024"}
     )
     assert [(f.primary, f.severity) for f in real] == [("June", "high")]  # a date
+
+
+def test_a_note_goes_to_the_provision_with_the_same_numbers_when_openings_repeat():
+    nodes = [
+        node(
+            "(3) The National Integrated Electricity Policy and Plan adopted under subsections (1) and (2)",
+            "paragraph",
+        ),
+        node(
+            "Periodic review of the National Integrated Electricity Policy 4. (1) The National Integrated Electricity Policy and Plan approved",
+            "paragraph",
+        ),
+    ]
+    blocks = [
+        ("(3) The National Integrated Electricity Policy and Strategic", 0.085, 0.7349),
+        ("4. (1) The National Integrated Electricity Policy and Strate", 0.064, 0.7822),
+        ("Periodic review of the National Integrated Electricity Policy", 0.782, 0.7901),
+    ]
+    checks = {
+        "azure": {
+            "blocks": [
+                {"text": t, "role": None, "box": {"x0": x, "x1": x + 0.2, "y0": y}} for t, x, y in blocks
+            ]
+        }
+    }
+    out = structure.restructure(nodes, checks)
+    owner = next(n for n in out if n.get("notes"))
+    assert owner["text"].startswith("4. (1)") and owner["notes"] == [
+        "Periodic review of the National Integrated Electricity Policy"
+    ]

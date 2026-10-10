@@ -43,7 +43,7 @@ export const schema = new Schema({
       toDOM(node) {
         const level = node.attrs.level ?? derivedDepth(unitLead(node));
         const align = node.attrs.align ? `align-${node.attrs.align}` : "";
-        const cls = ["u", node.attrs.kind, level === null ? "" : `lvl${level}`, node.childCount > 1 ? "has-notes" : "", align];
+        const cls = ["u", node.attrs.kind, level === null ? "" : `lvl${level}`, align];
         return ["div", { class: cls.join(" ").trim() }, 0];
       },
     },
@@ -396,6 +396,28 @@ export const commands = {
     const level = Math.max(0, Math.min(3, current + delta));
     return { ...attrs, level };
   }),
+  // Move the margin note under the cursor to the next (1) or previous (-1) paragraph.
+  moveNote: (direction) => (state, dispatch) => {
+    const { $from } = state.selection;
+    if ($from.parent.type !== N.note) return false;
+    const index = $from.index(0);
+    let target = index + direction;
+    while (target >= 0 && target < state.doc.childCount && state.doc.child(target).type !== N.unit) target += direction;
+    if (target < 0 || target >= state.doc.childCount) return true;
+    if (dispatch) {
+      const note = $from.parent;
+      const noteStart = $from.before($from.depth);
+      const offset = $from.parentOffset;
+      let tr = state.tr.delete(noteStart, noteStart + note.nodeSize);
+      let pos = 0;
+      for (let i = 0; i < target; i++) pos += tr.doc.child(i).nodeSize;
+      const destination = pos + tr.doc.child(target).nodeSize - 1; // end of that unit: after its notes
+      tr = tr.insert(destination, note);
+      tr.setSelection(TextSelection.create(tr.doc, destination + 1 + Math.min(offset, note.content.size)));
+      dispatch(tr.scrollIntoView());
+    }
+    return true;
+  },
   addNote: (state, dispatch) => {
     const unit = unitAt(state.selection.$from);
     if (!unit || unit.node.type !== N.unit) return false;
@@ -463,6 +485,8 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
     "Mod-Alt-2": commands.kind("paragraph"),
     "Mod-Alt-3": commands.kind("list_item"),
     "Mod-Alt-n": commands.addNote,
+    "Alt-Shift-ArrowDown": commands.moveNote(1),
+    "Alt-Shift-ArrowUp": commands.moveNote(-1),
     "Mod-b": toggleMark(schema.marks.strong),
     "Mod-i": toggleMark(schema.marks.em),
     "Mod-u": toggleMark(schema.marks.underline),
@@ -540,6 +564,7 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
       return true;
     },
     highlighted: (id) => Boolean(flagRange(id)),
+    inNote: () => view.state.selection.$from.parent.type === N.note,
     // Formatting at the cursor or across the selection, for the toolbar's pressed state.
     activeMarks() {
       const { from, to, empty, $from } = view.state.selection;
