@@ -348,3 +348,70 @@ def test_oidc_sign_in_rejects_bad_claims_and_strangers(world, claims, status):
     response = browser.get(f"/auth/callback?state={state}&code=abc")
     assert response.status_code == status
     assert "set-cookie" not in response.headers
+
+
+# --- document surface support and Akoma Ntoso --------------------------------------------------------
+
+
+def test_unit_levels_are_kept_and_bounded(world):
+    browser = signed_in(world, "reviewer@example.org")
+    assert save(browser, units=[{"kind": "paragraph", "text": "(a) any law", "level": 2}]).status_code == 200
+    assert browser.get(f"/api/acts/{ACT}/pages/1").json()["latest"]["units"][0]["level"] == 2
+    for bad in (4, -1, "2", True):
+        assert (
+            save(browser, expected=1, units=[{"kind": "paragraph", "text": "x", "level": bad}]).status_code
+            == 422
+        )
+
+
+def test_page_regions_come_from_the_positional_readers_output(world):
+    store, library = world
+    folder = library.staging / "readings" / ACT
+    folder.mkdir(parents=True)
+    analyze = {
+        "pages": [{"pageNumber": 1, "width": 8.5, "height": 11}],
+        "paragraphs": [
+            {
+                "content": "1. Accounts prepared",
+                "boundingRegions": [{"pageNumber": 1, "polygon": [1, 2, 7.5, 2, 7.5, 3.1, 1, 3.1]}],
+            }
+        ],
+    }
+    (folder / "azure.json").write_text(json.dumps({"raw": {"analyze": analyze}}))
+    browser = signed_in(world, "reviewer@example.org")
+    region = browser.get(f"/api/acts/{ACT}/pages/1").json()["regions"][0]
+    assert region["text"] == "1. Accounts prepared"
+    assert [round(v, 3) for v in region["box"]] == [
+        round(1 / 8.5, 3),
+        round(2 / 11, 3),
+        round(7.5 / 8.5, 3),
+        round(3.1 / 11, 3),
+    ]
+
+
+def test_akoma_ntoso_export_is_well_formed_and_structured(world):
+    import xml.etree.ElementTree as ET
+
+    from workbench import akn
+
+    browser = signed_in(world, "reviewer@example.org")
+    units = [
+        {"kind": "heading", "text": "TEST ACT"},
+        {"kind": "paragraph", "text": "ENACTED by the National Assembly —"},
+        {"kind": "heading", "text": "PART I — PRELIMINARY"},
+        {"kind": "paragraph", "text": "80. (1) The Commission —", "notes": ["Promotion of renewables"]},
+        {"kind": "list_item", "marker": "(a)", "text": "shall promote; and"},
+        {"kind": "paragraph", "text": "(2) In granting licences."},
+    ]
+    save(browser, units=units)
+    response = browser.get(f"/api/acts/{ACT}/akn")
+    assert response.headers["content-type"].startswith("application/akn+xml")
+    root = ET.fromstring(response.content)
+    ns = {"a": akn.NS}
+    assert root.find("a:act/a:preamble/a:formula", ns).get("name") == "enactingText"
+    section = root.find("a:act/a:body/a:part/a:section", ns)
+    assert section.get("eId") == "sec_80" and section.find("a:heading", ns).text == "Promotion of renewables"
+    subsections = section.findall("a:subsection", ns)
+    assert [s.get("eId") for s in subsections] == ["sec_80__subsec_1", "sec_80__subsec_2"]
+    assert subsections[0].find("a:paragraph", ns).get("eId") == "sec_80__subsec_1__para_a"
+    assert root.find("a:act/a:meta/a:identification/a:FRBRWork/a:FRBRcountry", ns).get("value") == "ng"

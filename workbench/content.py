@@ -82,6 +82,39 @@ class Library:
         return path
 
 
+def regions(staging: Path, act_id: str, page: int) -> list[dict]:
+    """Paragraph boxes on the page image (fractions of the page), from the positional check reader."""
+    path = staging / "readings" / act_id / "azure.json"
+    if not path.exists():
+        return []
+    analyze = json.loads(path.read_text()).get("raw", {}).get("analyze") or {}
+    size = next(
+        (
+            (p.get("width"), p.get("height"))
+            for p in analyze.get("pages") or []
+            if p.get("pageNumber") == page
+        ),
+        None,
+    )
+    if not size or not size[0] or not size[1]:
+        return []
+    out = []
+    for paragraph in analyze.get("paragraphs") or []:
+        for region in paragraph.get("boundingRegions") or []:
+            polygon = region.get("polygon") or []
+            if region.get("pageNumber") != page or len(polygon) < 8:
+                continue
+            xs, ys = polygon[0::2], polygon[1::2]
+            out.append(
+                {
+                    "text": paragraph.get("content", "")[:300],
+                    "role": paragraph.get("role"),
+                    "box": [min(xs) / size[0], min(ys) / size[1], max(xs) / size[0], max(ys) / size[1]],
+                }
+            )
+    return out
+
+
 def units_from(page: dict) -> list[dict]:
     """Editable units from a reconciled page, in reading order."""
     units = []
@@ -156,6 +189,11 @@ def validate_units(units) -> list[dict]:
         if not isinstance(text, str) or len(text) > 8192:
             raise ValueError("unit text must be at most 8192 characters")
         item = {"kind": unit["kind"], "text": text}
+        level = unit.get("level")
+        if level is not None:
+            if not isinstance(level, int) or isinstance(level, bool) or not 0 <= level <= 3:
+                raise ValueError("level must be 0 (section) to 3 (sub-paragraph)")
+            item["level"] = level
         if unit.get("marker"):
             item["marker"] = str(unit["marker"])[:40]
             if unit.get("marker_source"):

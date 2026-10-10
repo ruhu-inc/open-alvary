@@ -1,0 +1,20 @@
+{
+  "name": "open-alvary-review-editor",
+  "private": true,
+  "description": "Structured document surface for the review workbench, bundled into workbench/static/editor.js",
+  "scripts": {
+    "build": "esbuild src/editor.js --bundle --format=iife --global-name=ReviewEditor --minify --target=es2020 --outfile=../static/editor.js"
+  },
+  "dependencies": {
+    "prosemirror-commands": "1.7.2",
+    "prosemirror-history": "1.5.1",
+    "prosemirror-keymap": "1.2.3",
+    "prosemirror-model": "1.25.12",
+    "prosemirror-state": "1.4.4",
+    "prosemirror-transform": "1.12.2",
+    "prosemirror-view": "^1.41.0"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}

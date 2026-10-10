@@ -11,12 +11,19 @@ import os
 from pathlib import Path
 
 from fastapi import Body, FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    PlainTextResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from ingestion import settings
-from workbench import auth, content
+from workbench import akn, auth, content
 from workbench.store import Conflict, Store, engine_from_environment
 
 STATIC = Path(__file__).with_name("static")
@@ -216,6 +223,7 @@ def create_app(
             "machine_html": content.machine_html(found),
             "flags": content.page_flags(found),
             "checks": found["checks"],
+            "regions": content.regions(library.staging, act_id, page),
             "reading_sha256": content.reading_sha256(found),
             "latest": {
                 "revision": latest["revision"],
@@ -348,6 +356,18 @@ def create_app(
             else None,
             "pages": final,
         }
+
+    @app.get("/api/acts/{act_id}/akn")
+    def akn_export(request: Request, act_id: str):
+        auth.current(request, store)
+        act = act_or_404(act_id)
+        final = content.final_pages(library.reading(act_id), store.latest_pages(act_id))
+        xml = akn.build(act, final, content.content_sha256(final))
+        return Response(
+            xml,
+            media_type="application/akn+xml",
+            headers={"Content-Disposition": f'attachment; filename="{act_id}.akn.xml"'},
+        )
 
     @app.get("/api/acts/{act_id}/text", response_class=PlainTextResponse)
     def text(request: Request, act_id: str):
