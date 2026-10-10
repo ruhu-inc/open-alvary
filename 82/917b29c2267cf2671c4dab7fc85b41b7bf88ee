@@ -1,0 +1,44 @@
+ingestion/catalogue/ng-first-collection.json
+  s_b82616e2476856::t_e778802249deb6 4-5,8
+workbench/static/app.js
+  s_b82616e2476856::t_b6ac49c8606e2b 218
+  s_b82616e2476856::t_f0cdbf8eeff4c8 242,245,252,267-268,279,286,296,303,314,320,351,360,365,370,381,389,392,402,416,426-427,438-440,460-461,496,538,931-932,943,986-988
+  s_b82616e2476856::t_cec39023560647 126-157,159-217,219-239,247,352,480,966
+tests/test_workbench.py
+  s_b82616e2476856::t_f0cdbf8eeff4c8 98,120-124,152,161,164,172,188,197-199,209,239,253,257,265,267,359,382,407,425,433,435,444,449,452,459
+  s_b82616e2476856::t_62507108d622be 427-432,462-493
+  s_b82616e2476856::t_6a83011fe133f5 494-511
+workbench/prepare.py
+  s_b82616e2476856::t_f0cdbf8eeff4c8 23
+workbench/app.py
+  s_b82616e2476856::t_f0cdbf8eeff4c8 137,224,228,250,291,331,344,386,420,441,456,499,533,545
+  s_b82616e2476856::t_6a83011fe133f5 146-218,222-223
+  s_b82616e2476856::t_b83ac8601355c5 219-221
+workbench/content.py
+  s_b82616e2476856::t_62507108d622be 41-45
+  s_b82616e2476856::t_f0cdbf8eeff4c8 38-40,46-48,51
+ingestion/first_collection.py
+  s_b82616e2476856::t_e778802249deb6 40-42,44,46-53
+workbench/static/app.css
+  s_b82616e2476856::t_b6ac49c8606e2b 152-180
+workbench/akn.py
+  s_b82616e2476856::t_62507108d622be 174-180,193-194,198,244-258
+workbench/store.py
+  s_b82616e2476856::t_6a83011fe133f5 195-205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "82917b29c2267cf2671c4dab7fc85b41b7bf88ee",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
