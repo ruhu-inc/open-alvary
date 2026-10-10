@@ -276,6 +276,17 @@ audited policy commands to record.
   collection, mounted read-only) and the OpenID Connect client in `deployment/.env`. Run
   `python -m workbench.prepare` on the operator machine first: the container cannot render page
   images. Add operators with `docker compose ... run --rm workbench python -m workbench.admin add …`.
+- **On Google Cloud** (owner decision, 2026-10-10: GCP, project `open-alvary-ingestion`, EU):
+  `deployment/gcp/workbench.sh plan` shows what is created; then `setup` (APIs, Artifact Registry,
+  an EU bucket read-only to the app, Cloud SQL PostgreSQL 16 with backups and point-in-time
+  recovery, Secret Manager secrets, a service account with only Cloud SQL client, bucket read and
+  its two secrets), `upload` (reconciled readings, the positional reader's output and page images;
+  never PDFs, keys or other readings) and `deploy` (Cloud Build image, Cloud Run scaling to zero,
+  not public, Identity-Aware Proxy in front, then the app's own operator sign-in). Add operators
+  with `deployment/gcp/workbench.sh operator <email> "<name>" reviewer,approver`, which both
+  allow-lists them in the app and grants them through Identity-Aware Proxy. `.gcloudignore` keeps
+  private staging, `.env` and databases out of every build upload. Cloud SQL's own backups cover
+  this database on GCP.
 - Back up the review database (every correction and approval) with the same encrypted R2 job,
   under its own prefix: `python -m operations.backup create --kind review --remote r2:<bucket>/review
   --recipient-file …` with `ALVARY_BACKUP_DATABASE_URL` pointing at `review_db`; verify with
