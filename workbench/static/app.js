@@ -123,44 +123,133 @@ async function showSignIn(info) {
 
 // --- dashboard -------------------------------------------------------------------------------------
 
-async function dashboard() {
-  setCrumbs("Acts");
-  const { data: acts } = await api("/api/acts");
-  const rows = acts.map((act) => {
-    const share = act.pages ? Math.round((100 * act.checked) / act.pages) : 0;
-    const state = act.approval_current ? pill("ok", "approved")
-      : act.approval === "approved" ? pill("warn", "approval out of date")
-      : act.open_high_flags ? pill("high", `${act.open_high_flags} high flags open`) : pill("medium", "in review");
-    return el("tr", {},
-      el("td", {}, el("a", { href: `#/act/${encodeURIComponent(act.id)}`, text: act.title })),
-      el("td", { text: `${act.checked} / ${act.pages}` }),
-      el("td", {}, el("div", { class: "bar-meter", title: `${share}% of pages checked` }, el("span", { style: null }))),
-      el("td", {}, state),
-    );
-  });
-  const table = el("table", { class: "list" },
-    el("thead", {}, el("tr", {}, ...["Act", "Pages checked", "Progress", "State"].map((t) => el("th", { text: t })))),
-    el("tbody", {}, rows));
-  // Width set after creation: CSP forbids inline style attributes in markup, not CSSOM.
-  table.querySelectorAll(".bar-meter > span").forEach((bar, i) => {
-    bar.style.width = `${acts[i].pages ? (100 * acts[i].checked) / acts[i].pages : 0}%`;
-  });
-  main(el("div", { class: "card" },
-    el("h2", { text: "Acts ready for review" }),
-    acts.length ? table : el("p", { class: "muted", text: "No reconciled Acts yet. Run the batch reading pipeline first." })));
+const TYPE_LABEL = { act: "Act", bill: "Bill", regulation: "Regulation", order: "Order", judgment: "Judgment", gazette: "Gazette", treaty: "Treaty", other: "Document" };
+const ACTION_LABEL = { page_saved: "saved", act_approved: "approved", act_revoked: "revoked approval of", signed_in: "signed in", signed_out: "signed out", operator_saved: "updated operator", sign_in_refused: "was refused sign-in" };
+
+function statusOf(doc) {
+  if (doc.approval === "approved") return ["ok", "Approved"];
+  if (doc.approval === "out_of_date") return ["warn", "Approval out of date"];
+  if (doc.ready) return ["ok", "Ready for approval"];
+  if (!doc.checked && !doc.attention && !doc.last) return ["medium", "Not started"];
+  return ["medium", "In review"];
 }
 
-// --- one Act: progress, pages, approval ------------------------------------------------------------
+function ago(iso) {
+  const seconds = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (seconds < 60) return "just now";
+  const steps = [[60, "minute"], [3600, "hour"], [86400, "day"], [604800, "week"]];
+  let unit = ["minute", 60];
+  for (const [size, name] of steps) if (seconds >= size) unit = [name, size];
+  const n = Math.floor(seconds / unit[1]);
+  return `${n} ${unit[0]}${n === 1 ? "" : "s"} ago`;
+}
+
+function remember(key, value) {
+  try { if (value === undefined) return localStorage.getItem(`oa-home:${key}`); localStorage.setItem(`oa-home:${key}`, value); } catch { return null; }
+  return null;
+}
+
+function meter(share) {
+  const bar = el("span");
+  bar.style.width = `${share}%`; // CSSOM, allowed by the strict content policy
+  return el("div", { class: "bar-meter", title: `${share}% checked` }, bar);
+}
+
+async function dashboard() {
+  setCrumbs("Home");
+  const { data } = await api("/api/overview");
+  const t = data.totals;
+  const share = t.pages ? Math.round((100 * t.checked) / t.pages) : 0;
+  const tiles = el("div", { class: "tiles" },
+    el("div", { class: "tile" }, el("span", { class: "big", text: String(t.documents) }), el("span", { text: "documents" })),
+    el("div", { class: "tile" }, el("span", { class: "big", text: `${share}%` }), el("span", { text: `${t.checked.toLocaleString()} of ${t.pages.toLocaleString()} pages checked` }), meter(share)),
+    el("div", { class: `tile ${t.open_high ? "alert" : ""}` }, el("span", { class: "big", text: String(t.open_high) }), el("span", { text: "high flags open" })),
+    el("div", { class: "tile" }, el("span", { class: "big", text: String(t.approved) }), el("span", { text: `approved${t.ready ? ` · ${t.ready} ready for approval` : ""}` })));
+
+  const resume = data.resume
+    ? el("div", { class: "card resume" },
+        el("div", {},
+          el("div", { class: "muted", text: "Continue where you left off" }),
+          el("strong", { text: `${data.resume.title}, page ${data.resume.page}` }),
+          el("div", { class: "muted", text: `You last saved page ${data.resume.last_page} ${ago(data.resume.at)}.` })),
+        el("a", { href: `#/doc/${encodeURIComponent(data.resume.id)}/page/${data.resume.page}` }, el("button", { class: "primary", text: "Continue →" })))
+    : null;
+
+  const reasons = (d) => [
+    d.open_high ? pill("high", `${d.open_high} high flags`) : null,
+    d.attention ? pill("warn", `${d.attention} pages need attention`) : null,
+    d.stale ? pill("warn", `${d.stale} pages to recheck`) : null,
+    d.approval === "out_of_date" ? pill("warn", "approval out of date") : null,
+  ].filter(Boolean);
+  const attention = data.documents.filter((d) => reasons(d).length).sort((a, b) => b.open_high - a.open_high).slice(0, 6);
+  const needs = attention.length
+    ? el("div", { class: "card" }, el("h3", { text: "Needs attention" }),
+        el("ul", { class: "plain" }, attention.map((d) => el("li", {},
+          el("a", { href: `#/doc/${encodeURIComponent(d.id)}`, text: d.title }), " ", ...reasons(d).flatMap((r) => [r, " "])))))
+    : null;
+
+  const search = el("input", { type: "search", placeholder: "Search documents", value: remember("q") || "" });
+  const typeSelect = el("select", {}, el("option", { value: "", text: "All types" }), data.types.map((type) => el("option", { value: type, text: TYPE_LABEL[type] || type })));
+  const statusSelect = el("select", {}, ["All statuses", "Not started", "In review", "Ready for approval", "Approved", "Approval out of date"].map((label, i) => el("option", { value: i ? label : "", text: label })));
+  const sortSelect = el("select", {}, [["recent", "Recently active"], ["title", "Title"], ["flags", "Most high flags"], ["progress", "Least checked"]].map(([value, label]) => el("option", { value, text: label })));
+  typeSelect.value = remember("type") || ""; statusSelect.value = remember("status") || ""; sortSelect.value = remember("sort") || "recent";
+  const cards = el("div", { class: "doc-cards" });
+  const render = () => {
+    remember("q", search.value); remember("type", typeSelect.value); remember("status", statusSelect.value); remember("sort", sortSelect.value);
+    const q = search.value.trim().toLowerCase();
+    let list = data.documents.filter((d) => (!q || d.title.toLowerCase().includes(q) || d.id.includes(q))
+      && (!typeSelect.value || d.type === typeSelect.value) && (!statusSelect.value || statusOf(d)[1] === statusSelect.value));
+    const progress = (d) => (d.pages ? d.checked / d.pages : 0);
+    const sorts = {
+      recent: (a, b) => (b.last ? b.last.at : "").localeCompare(a.last ? a.last.at : "") || a.title.localeCompare(b.title),
+      title: (a, b) => a.title.localeCompare(b.title),
+      flags: (a, b) => b.open_high - a.open_high,
+      progress: (a, b) => progress(a) - progress(b),
+    };
+    list = list.sort(sorts[sortSelect.value]);
+    cards.replaceChildren(...(list.length ? list.map((d) => {
+      const pct = Math.round(100 * progress(d));
+      const [cls, label] = statusOf(d);
+      return el("a", { class: "doc-card", href: `#/doc/${encodeURIComponent(d.id)}` },
+        el("div", { class: "doc-meta" }, el("span", { class: "type", text: TYPE_LABEL[d.type] || d.type }), d.year ? el("span", { text: String(d.year) }) : null, d.jurisdiction ? el("span", { text: d.jurisdiction.toUpperCase() }) : null),
+        el("strong", { class: "doc-title", text: d.title }),
+        meter(pct),
+        el("div", { class: "doc-foot" }, el("span", { class: "muted", text: `${d.checked} / ${d.pages} pages checked` }), pill(cls, label), d.open_high ? pill("high", `${d.open_high} high`) : null),
+        el("div", { class: "muted small", text: d.last ? `Last activity: ${d.last.actor.split("@")[0]}, ${ago(d.last.at)}` : "No review activity yet" }));
+    }) : [el("p", { class: "muted", text: "No documents match." })]));
+  };
+  for (const control of [search, typeSelect, statusSelect, sortSelect]) control.addEventListener("input", render);
+  render();
+
+  const titleOf = (e) => e.title || e.id || "";
+  const activity = el("div", { class: "card activity" }, el("h3", { text: "Recent activity" }),
+    data.activity.length ? el("ul", { class: "plain" }, data.activity.map((e) => el("li", {},
+      el("span", { text: `${e.actor.split("@")[0]} ${ACTION_LABEL[e.action] || e.action.replace(/_/g, " ")}` }),
+      e.page ? " " : "", e.page && e.id ? el("a", { href: `#/doc/${encodeURIComponent(e.id)}/page/${e.page}`, text: `page ${e.page}` }) : "",
+      titleOf(e) ? el("span", { class: "muted", text: ` · ${titleOf(e)}` }) : "",
+      el("div", { class: "muted small", text: ago(e.at) })))) : el("p", { class: "muted", text: "Nothing yet." }));
+
+  main(el("div", { class: "home" },
+    el("div", { class: "home-main" },
+      el("div", { class: "home-head" }, el("h1", { text: "Review workbench" }), el("p", { class: "muted", text: `Signed in as ${app.me.name} (${app.me.roles.join(", ")})` })),
+      tiles, resume, needs,
+      el("div", { class: "card" },
+        el("div", { class: "doc-tools" }, el("h3", { text: "Documents" }), search, typeSelect, statusSelect, sortSelect),
+        cards)),
+    el("aside", { class: "home-side" }, activity)));
+}
+
+// --- one document: progress, pages, approval ------------------------------------------------------------
 
 async function actView(actId) {
-  const { data } = await api(`/api/acts/${encodeURIComponent(actId)}`);
+  const { data } = await api(`/api/documents/${encodeURIComponent(actId)}`);
   const act = data.act;
-  setCrumbs(el("a", { href: "#/", text: "Acts" }), act.title);
+  setCrumbs(el("a", { href: "#/", text: "Home" }), act.title);
   const ready = data.readiness;
   const grid = el("div", { class: "pages" }, data.pages.map((page) => {
     const classes = [page.status || "", page.open_high ? "high" : "", page.stale ? "stale" : ""].join(" ");
     const tip = `${page.status || "not reviewed"}${page.open_high ? `, ${page.open_high} high flags open` : ""}${page.stale ? ", reading changed" : ""}`;
-    return el("a", { class: classes, href: `#/act/${encodeURIComponent(actId)}/page/${page.page}`, title: tip, text: String(page.page) });
+    return el("a", { class: classes, href: `#/doc/${encodeURIComponent(actId)}/page/${page.page}`, title: tip, text: String(page.page) });
   }));
   const nextTodo = data.pages.find((p) => p.status !== "checked" || p.open_high || p.stale);
   const head = data.approvals[0];
@@ -175,8 +264,8 @@ async function actView(actId) {
         ready.stale_pages.length ? pill("warn", `${ready.stale_pages.length} pages to recheck`) : "", " ",
         current ? pill("ok", "approved") : head && head.decision === "approved" ? pill("warn", "approval out of date") : ""),
       el("p", {},
-        nextTodo ? el("a", { href: `#/act/${encodeURIComponent(actId)}/page/${nextTodo.page}` }, el("button", { class: "primary", text: `Continue reviewing at page ${nextTodo.page}` })) : null, " ",
-        el("a", { href: `#/act/${encodeURIComponent(actId)}/read` }, el("button", { text: "Read the whole Act" }))),
+        nextTodo ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${nextTodo.page}` }, el("button", { class: "primary", text: `Continue reviewing at page ${nextTodo.page}` })) : null, " ",
+        el("a", { href: `#/doc/${encodeURIComponent(actId)}/read` }, el("button", { text: "Read the whole document" }))),
       el("h3", { text: "Pages" }),
       el("p", { class: "muted", text: "Green: checked. Yellow: needs attention. Red border: high flags open. Dashed: the machine reading changed since review." }),
       grid,
@@ -187,14 +276,14 @@ async function actView(actId) {
 }
 
 function findReplaceCard(actId) {
-  const find = el("input", { type: "text", placeholder: "Find across the Act" });
+  const find = el("input", { type: "text", placeholder: "Find across the document" });
   const replace = el("input", { type: "text", placeholder: "Replace with (optional)" });
   const caseBox = el("input", { type: "checkbox" });
   const wordBox = el("input", { type: "checkbox", checked: true });
   const results = el("div");
   let last = null;
   const run = async () => {
-    const result = await api(`/api/acts/${encodeURIComponent(actId)}/search?${new URLSearchParams({ q: find.value, case: caseBox.checked, word: wordBox.checked })}`);
+    const result = await api(`/api/documents/${encodeURIComponent(actId)}/search?${new URLSearchParams({ q: find.value, case: caseBox.checked, word: wordBox.checked })}`);
     if (!result.ok) return toast(message(result));
     last = { ...result.data, find: find.value, case: caseBox.checked, word: wordBox.checked };
     const byPage = new Map();
@@ -204,14 +293,14 @@ function findReplaceCard(actId) {
       const box = el("input", { type: "checkbox", checked: true, "data-page": page });
       boxes.push(box);
       return el("div", { class: "hit" },
-        el("label", {}, box, " ", el("a", { href: `#/act/${encodeURIComponent(actId)}/page/${page}`, text: `Page ${page}` }), ` · ${hits.length}`),
+        el("label", {}, box, " ", el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${page}`, text: `Page ${page}` }), ` · ${hits.length}`),
         ...hits.slice(0, 5).map((h) => el("p", { class: "snippet" }, h.before, el("mark", { text: h.match }), h.after)));
     }));
     const apply = el("button", { class: "primary", text: "Replace in ticked pages", disabled: !app.me.roles.includes("reviewer") || !byPage.size, on: { click: async () => {
       const pages = Object.fromEntries(boxes.filter((b) => b.checked).map((b) => [b.dataset.page, last.revisions[b.dataset.page]]));
       if (!Object.keys(pages).length) return toast("Tick at least one page");
       if (!confirm(`Replace “${last.find}” with “${replace.value}” on ${Object.keys(pages).length} page(s)? Each becomes a new revision in your name.`)) return;
-      const done = await api(`/api/acts/${encodeURIComponent(actId)}/replace`, { method: "POST", body: { find: last.find, replace: replace.value, case: last.case, word: last.word, pages } });
+      const done = await api(`/api/documents/${encodeURIComponent(actId)}/replace`, { method: "POST", body: { find: last.find, replace: replace.value, case: last.case, word: last.word, pages } });
       if (!done.ok) return toast(message(done));
       const changed = done.data.changed.reduce((n, c) => n + c.replacements, 0);
       toast(`Replaced ${changed} on ${done.data.changed.length} page(s)${done.data.conflicts.length ? `; pages ${done.data.conflicts.join(", ")} changed meanwhile — search again` : ""}`);
@@ -222,13 +311,13 @@ function findReplaceCard(actId) {
       list, byPage.size ? el("p", {}, apply) : null);
   };
   find.addEventListener("keydown", (e) => { if (e.key === "Enter") run(); });
-  return el("div", { class: "card" }, el("h3", { text: "Find and replace across the Act" }),
+  return el("div", { class: "card" }, el("h3", { text: "Find and replace across the document" }),
     el("div", { class: "findbar" }, find, replace, el("button", { text: "Find", on: { click: run } })),
     el("p", { class: "muted" }, el("label", {}, caseBox, " match case"), " ", el("label", {}, wordBox, " whole words only")),
     results);
 }
 
-// --- reading the whole Act continuously -------------------------------------------------------------
+// --- reading a whole document continuously -------------------------------------------------------------
 
 function renderUnits(units) {
   const box = el("div", { class: "layout" });
@@ -259,8 +348,8 @@ function depthOfText(lead) {
 }
 
 async function readView(actId) {
-  const { data } = await api(`/api/acts/${encodeURIComponent(actId)}`);
-  setCrumbs(el("a", { href: "#/", text: "Acts" }), el("a", { href: `#/act/${encodeURIComponent(actId)}`, text: data.act.title }), "Read");
+  const { data } = await api(`/api/documents/${encodeURIComponent(actId)}`);
+  setCrumbs(el("a", { href: "#/", text: "Home" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: data.act.title }), "Read");
   const list = el("div", { class: "reading" });
   const sentinel = el("p", { class: "muted", text: "Loading…" });
   const canEdit = app.me.roles.includes("reviewer");
@@ -268,17 +357,17 @@ async function readView(actId) {
   const load = async () => {
     if (busy || next > total) return;
     busy = true;
-    const { data: chunk } = await api(`/api/acts/${encodeURIComponent(actId)}/stream?start=${next}&count=6`);
+    const { data: chunk } = await api(`/api/documents/${encodeURIComponent(actId)}/stream?start=${next}&count=6`);
     total = chunk.total;
     for (const page of chunk.pages) list.append(readPage(actId, page, canEdit));
     next += 6;
     busy = false;
-    sentinel.textContent = next > total ? "End of the Act." : "Loading…";
+    sentinel.textContent = next > total ? "End of the document." : "Loading…";
     if (next <= total && sentinel.getBoundingClientRect().top < window.innerHeight + 600) load();
   };
   main(el("div", { class: "card" },
     el("h2", { text: data.act.title }),
-    el("p", { class: "muted", text: "The Act as it now stands, page by page beside the gazette. Mark pages checked as you read; open a page to edit it." })),
+    el("p", { class: "muted", text: "The document as it now stands, page by page beside the original. Mark pages checked as you read; open a page to edit it." })),
     list, sentinel);
   new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) load(); }, { rootMargin: "600px" }).observe(sentinel);
   load();
@@ -289,7 +378,7 @@ function readPage(actId, page, canEdit) {
   const flags = page.open_high ? pill("high", `${page.open_high} high flags open`) : page.open ? pill("medium", `${page.open} flags open`) : null;
   const mark = canEdit && page.status !== "checked" && !page.open_high
     ? el("button", { class: "small", text: "Mark checked", on: { click: async (event) => {
-        const result = await api(`/api/acts/${encodeURIComponent(actId)}/pages/${page.page}`, { method: "POST", body: { expected_revision: page.revision, units: page.units, status: "checked", resolutions: page.resolutions || {}, comment: "Checked while reading the whole Act" } });
+        const result = await api(`/api/documents/${encodeURIComponent(actId)}/pages/${page.page}`, { method: "POST", body: { expected_revision: page.revision, units: page.units, status: "checked", resolutions: page.resolutions || {}, comment: "Checked while reading the whole document" } });
         if (result.status === 409) return toast(`Page ${page.page} changed meanwhile; open it to check`);
         if (!result.ok) return toast(message(result));
         page.revision = result.data.revision; page.status = "checked";
@@ -297,10 +386,10 @@ function readPage(actId, page, canEdit) {
       } } })
     : null;
   return el("section", { class: "readpage", id: `read-${page.page}` },
-    el("div", { class: "viewer" }, el("img", { loading: "lazy", src: `/api/acts/${encodeURIComponent(actId)}/pages/${page.page}/image`, alt: `Gazette page ${page.page}` })),
+    el("div", { class: "viewer" }, el("img", { loading: "lazy", src: `/api/documents/${encodeURIComponent(actId)}/pages/${page.page}/image`, alt: `Original page ${page.page}` })),
     el("div", {},
       el("div", { class: "pagebar" }, el("strong", { text: `Page ${page.page}` }), status, flags,
-        el("a", { href: `#/act/${encodeURIComponent(actId)}/page/${page.page}` }, el("button", { class: "small", text: "Edit page" })), mark),
+        el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${page.page}` }, el("button", { class: "small", text: "Edit page" })), mark),
       el("div", { class: "card" }, renderUnits(page.units))));
 }
 
@@ -310,7 +399,7 @@ function approvalPanel(actId, data, current) {
   const panel = el("div", { class: "card" }, el("h3", { text: "Approval" }));
   const blockers = el("ul", { class: "ready" });
   if (ready.unchecked_pages.length) blockers.append(el("li", { text: `Pages not yet checked: ${summarise(ready.unchecked_pages)}` }));
-  if (ready.open_high_flags.length) blockers.append(el("li", {}, "High flags open on pages ", ...unique(ready.open_high_flags.map((f) => f.page)).flatMap((p, i) => [i ? ", " : "", el("a", { href: `#/act/${encodeURIComponent(actId)}/page/${p}`, text: String(p) })])));
+  if (ready.open_high_flags.length) blockers.append(el("li", {}, "High flags open on pages ", ...unique(ready.open_high_flags.map((f) => f.page)).flatMap((p, i) => [i ? ", " : "", el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${p}`, text: String(p) })])));
   if (ready.stale_pages.length) blockers.append(el("li", { text: `Pages to recheck because the reading changed: ${summarise(ready.stale_pages)}` }));
   if (ready.missing_checks.length) blockers.append(el("li", { text: `Check readings missing: ${ready.missing_checks.join(", ")} — rerun the batch` }));
   panel.append(ready.ready ? el("p", {}, pill("ok", "Ready for approval")) : el("div", {}, el("p", { text: "Before approval:" }), blockers));
@@ -324,7 +413,7 @@ function approvalPanel(actId, data, current) {
     const expected = data.approvals.length ? data.approvals[0].revision : 0;
     const send = async (decision) => {
       const materials = Object.fromEntries(boxes.map(({ key, box }) => [key, box.checked]));
-      const result = await api(`/api/acts/${encodeURIComponent(actId)}/approval`, { method: "POST", body: { expected_revision: expected, decision, rights_basis: basis.value, materials, note: note.value } });
+      const result = await api(`/api/documents/${encodeURIComponent(actId)}/approval`, { method: "POST", body: { expected_revision: expected, decision, rights_basis: basis.value, materials, note: note.value } });
       if (!result.ok) return toast(message(result));
       toast(decision === "approved" ? "Approved and recorded" : "Approval revoked");
       actView(actId);
@@ -334,8 +423,8 @@ function approvalPanel(actId, data, current) {
       el("h4", { text: "Verification (confirm each against the gazette)" }), el("div", { class: "materials" }, boxes.map((b) => b.row)),
       note,
       el("p", {},
-        el("button", { class: "primary", text: "Approve this Act", disabled: !ready.ready, on: { click: () => send("approved") } }), " ",
-        current ? el("button", { text: "Revoke approval", on: { click: () => confirm("Revoke the approval of this Act?") && send("revoked") } }) : null),
+        el("button", { class: "primary", text: "Approve this document", disabled: !ready.ready, on: { click: () => send("approved") } }), " ",
+        current ? el("button", { text: "Revoke approval", on: { click: () => confirm("Revoke the approval of this document?") && send("revoked") } }) : null),
     );
   } else {
     panel.append(el("p", { class: "muted", text: "Approval needs the approver role." }));
@@ -346,9 +435,9 @@ function approvalPanel(actId, data, current) {
       a.content_sha256 === data.content_sha256 ? pill("ok", "matches current content") : pill("warn", "content changed since")))));
   }
   panel.append(el("p", {},
-    el("a", { href: `/api/acts/${encodeURIComponent(actId)}/export`, target: "_blank", rel: "noopener", text: "Reviewed content (JSON)" }), " · ",
-    el("a", { href: `/api/acts/${encodeURIComponent(actId)}/text`, target: "_blank", rel: "noopener", text: "Plain text" }), " · ",
-    el("a", { href: `/api/acts/${encodeURIComponent(actId)}/akn`, text: "Akoma Ntoso XML" }), " · ",
+    el("a", { href: `/api/documents/${encodeURIComponent(actId)}/export`, target: "_blank", rel: "noopener", text: "Reviewed content (JSON)" }), " · ",
+    el("a", { href: `/api/documents/${encodeURIComponent(actId)}/text`, target: "_blank", rel: "noopener", text: "Plain text" }), " · ",
+    el("a", { href: `/api/documents/${encodeURIComponent(actId)}/akn`, text: "Akoma Ntoso XML" }), " · ",
     el("a", { href: `#/audit/${encodeURIComponent(actId)}`, text: "Activity log" })));
   return panel;
 }
@@ -368,8 +457,8 @@ function unitText(unit) {
 
 async function pageView(actId, pageNumber) {
   const [actResult, pageResult] = await Promise.all([
-    api(`/api/acts/${encodeURIComponent(actId)}`),
-    api(`/api/acts/${encodeURIComponent(actId)}/pages/${pageNumber}`),
+    api(`/api/documents/${encodeURIComponent(actId)}`),
+    api(`/api/documents/${encodeURIComponent(actId)}/pages/${pageNumber}`),
   ]);
   if (!pageResult.ok) return main(el("p", { text: message(pageResult) }));
   const detail = actResult.data;
@@ -388,7 +477,7 @@ async function pageView(actId, pageNumber) {
   };
   app.view = view;
   app.dirty = false;
-  setCrumbs(el("a", { href: "#/", text: "Acts" }), el("a", { href: `#/act/${encodeURIComponent(actId)}`, text: detail.act.title }), `Page ${pageNumber}`);
+  setCrumbs(el("a", { href: "#/", text: "Home" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: detail.act.title }), `Page ${pageNumber}`);
   renderPage(view);
 }
 
@@ -404,7 +493,7 @@ function renderPage(view) {
   const { detail, page, actId, pageNumber } = view;
   const numbers = detail.pages.map((p) => p.page);
   const index = numbers.indexOf(pageNumber);
-  const go = (n) => { location.hash = `#/act/${encodeURIComponent(actId)}/page/${n}`; };
+  const go = (n) => { location.hash = `#/doc/${encodeURIComponent(actId)}/page/${n}`; };
   const nextTodo = detail.pages.find((p) => p.page > pageNumber && (p.status !== "checked" || p.open_high || p.stale));
   const picker = el("select", { on: { change: (e) => go(e.target.value) } }, numbers.map((n) => el("option", { value: n, text: `Page ${n}`, selected: n === pageNumber })));
   view.dirtyBadge = el("span", { class: "pill warn", text: "unsaved changes", hidden: !app.dirty });
@@ -446,7 +535,7 @@ function renderPage(view) {
 
 function buildViewer(view) {
   const { actId, pageNumber } = view;
-  view.image = el("img", { src: `/api/acts/${encodeURIComponent(actId)}/pages/${pageNumber}/image`, alt: `Gazette page ${pageNumber}`, draggable: "false" });
+  view.image = el("img", { src: `/api/documents/${encodeURIComponent(actId)}/pages/${pageNumber}/image`, alt: `Original page ${pageNumber}`, draggable: "false" });
   view.overlay = el("div", { class: "region", hidden: true });
   view.lineOverlay = el("div", { class: "region line", hidden: true });
   const frame = el("div", { class: "frame" }, view.image, view.overlay, view.lineOverlay);
@@ -839,8 +928,8 @@ function saveBar(view) {
   const comment = el("textarea", { rows: 1, value: view.comment, placeholder: "Comment for this revision (optional)", on: { input: (e) => { view.comment = e.target.value; changed(view); } } });
   const save = async (status, thenNext = false) => {
     const high = view.page.flags.filter((f) => f.severity === "high" && !view.resolutions[f.id]);
-    if (status === "checked" && high.length && !confirm(`${high.length} high flag(s) are not resolved. Save as checked anyway? (The Act cannot be approved until they are.)`)) return;
-    const result = await api(`/api/acts/${encodeURIComponent(view.actId)}/pages/${view.pageNumber}`, {
+    if (status === "checked" && high.length && !confirm(`${high.length} high flag(s) are not resolved. Save as checked anyway? (The document cannot be approved until they are.)`)) return;
+    const result = await api(`/api/documents/${encodeURIComponent(view.actId)}/pages/${view.pageNumber}`, {
       method: "POST",
       body: { expected_revision: view.expected, units: currentUnits(view), status, resolutions: view.resolutions, comment: view.comment },
     });
@@ -851,7 +940,7 @@ function saveBar(view) {
     toast(`Saved revision ${result.data.revision}`);
     const numbers = view.detail.pages.map((p) => p.page);
     const next = numbers[numbers.indexOf(view.pageNumber) + 1];
-    if (thenNext && next) location.hash = `#/act/${encodeURIComponent(view.actId)}/page/${next}`;
+    if (thenNext && next) location.hash = `#/doc/${encodeURIComponent(view.actId)}/page/${next}`;
     else pageView(view.actId, view.pageNumber);
   };
   const restore = () => {
@@ -874,7 +963,7 @@ function saveBar(view) {
 
 async function auditView(actId) {
   const { data } = await api(`/api/audit?act=${encodeURIComponent(actId)}`);
-  setCrumbs(el("a", { href: "#/", text: "Acts" }), el("a", { href: `#/act/${encodeURIComponent(actId)}`, text: actId }), "Activity");
+  setCrumbs(el("a", { href: "#/", text: "Home" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: actId }), "Activity");
   main(el("div", { class: "card" }, el("h3", { text: "Activity log" }),
     el("table", { class: "list" }, el("tbody", {}, data.map((e) => el("tr", {},
       el("td", { text: e.at.slice(0, 19).replace("T", " ") }), el("td", { text: e.actor }), el("td", { text: e.action }),
@@ -894,9 +983,9 @@ async function route() {
   if (!location.hash.includes("/page/") || !document.querySelector(".review")) main(el("p", { class: "muted", text: "Loading…" }));
   const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
   try {
-    if (parts[0] === "act" && parts[2] === "page") return await pageView(parts[1], Number(parts[3]));
-    if (parts[0] === "act" && parts[2] === "read") return await readView(parts[1]);
-    if (parts[0] === "act" && parts[1]) return await actView(parts[1]);
+    if (parts[0] === "doc" && parts[2] === "page") return await pageView(parts[1], Number(parts[3]));
+    if (parts[0] === "doc" && parts[2] === "read") return await readView(parts[1]);
+    if (parts[0] === "doc" && parts[1]) return await actView(parts[1]);
     if (parts[0] === "audit" && parts[1]) return await auditView(parts[1]);
     return await dashboard();
   } catch (error) {

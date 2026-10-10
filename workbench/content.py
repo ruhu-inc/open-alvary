@@ -35,11 +35,20 @@ class Library:
         self.staging = Path(staging or os.environ.get("ALVARY_REVIEW_STAGING") or first_collection.STAGING)
         self.manifest = first_collection.load_manifest()
 
-    def acts(self) -> list[dict]:
-        return [act for act in self.manifest["acts"] if (self.staging / f"{act['id']}.reading.json").exists()]
+    def documents(self) -> list[dict]:
+        """Documents of any type in the collection that have a reconciled reading."""
+        return [
+            {
+                **document,
+                "jurisdiction": self.manifest.get("jurisdiction"),
+                "collection": self.manifest.get("collection"),
+            }
+            for document in self.manifest["documents"]
+            if (self.staging / f"{document['id']}.reading.json").exists()
+        ]
 
     def act(self, act_id: str) -> dict:
-        found = next((a for a in self.acts() if a["id"] == act_id), None)
+        found = next((a for a in self.documents() if a["id"] == act_id), None)
         if found is None:
             raise KeyError(act_id)
         return found

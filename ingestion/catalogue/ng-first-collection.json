@@ -1,9 +1,11 @@
 {
   "collection": "ng-federal-acts-as-enacted",
   "description": "Federal Acts as enacted, from Federal Official Gazette supplements (Federal Government Printer). Not consolidated.",
+  "jurisdiction": "ng",
+  "document_type": "act",
   "rights_basis": "Copyright Act 2022 s.3(b): official legislative texts are not eligible for copyright (compilations excepted).",
   "retrieval_mirror": "Policy and Legal Advocacy Centre (placng.org) — PDFs of the official gazette; PLAC's own HTML is not used.",
-  "acts": [
+  "documents": [
     {
       "id": "ng-electoral-act-2026",
       "title": "Electoral Act, 2026",

@@ -134,7 +134,7 @@ def create_app(
         try:
             return library.act(act_id)
         except KeyError as error:
-            raise HTTPException(404, "No such Act") from error
+            raise HTTPException(404, "No such document") from error
 
     def reading_page(act_id: str, page: int) -> tuple[dict, dict]:
         reading = library.reading(act_id)
@@ -143,11 +143,89 @@ def create_app(
             raise HTTPException(404, "No such page")
         return reading, found
 
-    @app.get("/api/acts")
+    def document_summary(document: dict) -> dict:
+        reading, latest = library.reading(document["id"]), store.latest_pages(document["id"])
+        ready = content.readiness(reading, latest)
+        approvals = store.approvals(document["id"])
+        head = approvals[0] if approvals else None
+        current_sha = content.content_sha256(content.final_pages(reading, latest))
+        last = store.events(act_id=document["id"], limit=1)
+        approval = None
+        if head and head["decision"] == "approved":
+            approval = "approved" if head["content_sha256"] == current_sha else "out_of_date"
+        return {
+            "id": document["id"],
+            "title": document["title"],
+            "type": document.get("type", "act"),
+            "year": document.get("year"),
+            "jurisdiction": document.get("jurisdiction"),
+            "pages": ready["pages"],
+            "checked": ready["pages"] - len(ready["unchecked_pages"]),
+            "attention": sum(1 for r in latest.values() if r["status"] == "attention"),
+            "open_high": len(ready["open_high_flags"]),
+            "stale": len(ready["stale_pages"]),
+            "ready": ready["ready"],
+            "approval": approval,
+            "last": {"at": last[0]["at"].isoformat(), "actor": last[0]["actor"], "page": last[0]["page"]}
+            if last
+            else None,
+            "_latest": latest,
+            "_reading": reading,
+        }
+
+    @app.get("/api/overview")
+    def overview(request: Request):
+        """Everything the home page shows: totals, each document's state, where to continue."""
+        who = auth.current(request, store)
+        rows = [document_summary(d) for d in library.documents()]
+        resume = None
+        last = store.last_event(who["email"], "page_saved")
+        if last:
+            row = next((r for r in rows if r["id"] == last["act_id"]), None)
+            if row:
+                pages = [p["page"] for p in row["_reading"]["pages"]]
+                todo = [p for p in pages if (row["_latest"].get(p) or {}).get("status") != "checked"]
+                after = [p for p in todo if p > (last["page"] or 0)] or todo
+                resume = {
+                    "id": row["id"],
+                    "title": row["title"],
+                    "page": after[0] if after else last["page"],
+                    "last_page": last["page"],
+                    "at": last["at"].isoformat(),
+                }
+        documents = [{k: v for k, v in r.items() if not k.startswith("_")} for r in rows]
+        titles = {r["id"]: r["title"] for r in rows}
+        return {
+            "totals": {
+                "documents": len(documents),
+                "pages": sum(r["pages"] for r in documents),
+                "checked": sum(r["checked"] for r in documents),
+                "open_high": sum(r["open_high"] for r in documents),
+                "approved": sum(1 for r in documents if r["approval"] == "approved"),
+                "ready": sum(1 for r in documents if r["ready"] and r["approval"] != "approved"),
+            },
+            "documents": documents,
+            "types": sorted({r["type"] for r in documents}),
+            "resume": resume,
+            "activity": [
+                {
+                    "at": e["at"].isoformat(),
+                    "actor": e["actor"],
+                    "action": e["action"],
+                    "id": e["act_id"],
+                    "title": titles.get(e["act_id"]),
+                    "page": e["page"],
+                }
+                for e in store.events(limit=200)
+                if e["action"] in {"page_saved", "act_approved", "act_revoked"}
+            ][:12],
+        }
+
+    @app.get("/api/documents")
     def acts(request: Request):
         auth.current(request, store)
         out = []
-        for act in library.acts():
+        for act in library.documents():
             reading, latest = library.reading(act["id"]), store.latest_pages(act["id"])
             ready = content.readiness(reading, latest)
             approvals = store.approvals(act["id"])
@@ -169,7 +247,7 @@ def create_app(
             )
         return out
 
-    @app.get("/api/acts/{act_id}")
+    @app.get("/api/documents/{act_id}")
     def act_detail(request: Request, act_id: str):
         auth.current(request, store)
         act = act_or_404(act_id)
@@ -210,7 +288,7 @@ def create_app(
             "materials": content.MATERIALS,
         }
 
-    @app.get("/api/acts/{act_id}/pages/{page}")
+    @app.get("/api/documents/{act_id}/pages/{page}")
     def page_detail(request: Request, act_id: str, page: int):
         auth.current(request, store)
         act_or_404(act_id)
@@ -250,7 +328,7 @@ def create_app(
             ],
         }
 
-    @app.get("/api/acts/{act_id}/pages/{page}/image")
+    @app.get("/api/documents/{act_id}/pages/{page}/image")
     def page_image(request: Request, act_id: str, page: int):
         auth.current(request, store)
         act_or_404(act_id)
@@ -263,7 +341,7 @@ def create_app(
             image, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"}
         )
 
-    @app.post("/api/acts/{act_id}/pages/{page}")
+    @app.post("/api/documents/{act_id}/pages/{page}")
     def save_page(request: Request, act_id: str, page: int, body: dict = JSON_BODY):
         who = auth.current(request, store, write=True, role="reviewer")
         act_or_404(act_id)
@@ -305,7 +383,7 @@ def create_app(
             raise HTTPException(409, str(error)) from error
         return {"revision": revision}
 
-    @app.post("/api/acts/{act_id}/approval")
+    @app.post("/api/documents/{act_id}/approval")
     def approve(request: Request, act_id: str, body: dict = JSON_BODY):
         who = auth.current(request, store, write=True, role="approver")
         act_or_404(act_id)
@@ -339,7 +417,7 @@ def create_app(
             raise HTTPException(409, str(error)) from error
         return {"revision": revision}
 
-    @app.get("/api/acts/{act_id}/export")
+    @app.get("/api/documents/{act_id}/export")
     def export(request: Request, act_id: str):
         auth.current(request, store)
         act = act_or_404(act_id)
@@ -360,7 +438,7 @@ def create_app(
             "pages": final,
         }
 
-    @app.get("/api/acts/{act_id}/search")
+    @app.get("/api/documents/{act_id}/search")
     def search(request: Request, act_id: str, q: str = "", case: bool = False, word: bool = False):
         auth.current(request, store)
         act_or_404(act_id)
@@ -375,7 +453,7 @@ def create_app(
             "truncated": len(hits) >= 500,
         }
 
-    @app.post("/api/acts/{act_id}/replace")
+    @app.post("/api/documents/{act_id}/replace")
     def replace(request: Request, act_id: str, body: dict = JSON_BODY):
         """Replace across the pages the reviewer confirmed; each changed page is a new revision."""
         who = auth.current(request, store, write=True, role="reviewer")
@@ -418,7 +496,7 @@ def create_app(
             changed.append({"page": number, "revision": revision, "replacements": count})
         return {"changed": changed, "conflicts": conflicts}
 
-    @app.get("/api/acts/{act_id}/stream")
+    @app.get("/api/documents/{act_id}/stream")
     def stream(request: Request, act_id: str, start: int = 1, count: int = 8):
         """Final content of a run of pages, for reading the Act continuously."""
         auth.current(request, store)
@@ -452,7 +530,7 @@ def create_app(
             )
         return {"pages": out, "total": len(reading["pages"])}
 
-    @app.get("/api/acts/{act_id}/akn")
+    @app.get("/api/documents/{act_id}/akn")
     def akn_export(request: Request, act_id: str):
         auth.current(request, store)
         act = act_or_404(act_id)
@@ -464,7 +542,7 @@ def create_app(
             headers={"Content-Disposition": f'attachment; filename="{act_id}.akn.xml"'},
         )
 
-    @app.get("/api/acts/{act_id}/text", response_class=PlainTextResponse)
+    @app.get("/api/documents/{act_id}/text", response_class=PlainTextResponse)
     def text(request: Request, act_id: str):
         auth.current(request, store)
         act_or_404(act_id)
