@@ -385,3 +385,30 @@ def test_failed_retention_also_alerts(tmp_path):
         timeout=60,
     )
     assert completed.returncode == 1 and record.read_text() == "purge-failed configuration"
+
+
+@pytest.mark.postgres
+def test_review_workbench_database_backs_up_and_restores(drill, tmp_path):
+    from sqlalchemy import create_engine, text
+    from sqlalchemy.pool import NullPool
+
+    from operations.backup import create
+    from workbench.store import Store, metadata
+
+    source = drill["engines"]["source"]
+    metadata.create_all(source)
+    Store(source).add_operator("reviewer@example.org", "Reviewer", {"reviewer"})
+    public, secret = keypair(tmp_path)
+    offhost = tmp_path / "offhost"
+    offhost.mkdir()
+    destination = DirectoryDestination(offhost)
+    made = create(drill["source"], public, destination, drill["tools"], datetime.now(UTC), kind="review")
+    assert (
+        made["kind"] == "review" and made["alembic_revision"] is None and made["journal_checkpoint"] is None
+    )
+    report = restore_verify(made["backup"], destination, secret, drill["target"], drill["tools"])
+    assert report["kind"] == "review" and report["serving"] == "closed"
+    target = create_engine(drill["engines"]["target"].url, poolclass=NullPool)
+    with target.connect() as conn:
+        assert conn.scalar(text("SELECT email FROM operator")) == "reviewer@example.org"
+    target.dispose()

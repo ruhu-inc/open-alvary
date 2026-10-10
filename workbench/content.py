@@ -9,6 +9,7 @@ identified by page, position and text, so a resolution survives reloads.
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -52,6 +53,10 @@ class Library:
         folder = self.staging / "review-images" / act_id
         path = folder / f"page-{page}.jpg"
         if not path.exists():
+            if not shutil.which("docker"):
+                raise FileNotFoundError(
+                    f"page image not prepared: run python -m workbench.prepare --act {act_id}"
+                )
             folder.mkdir(parents=True, exist_ok=True)
             subprocess.run(
                 [

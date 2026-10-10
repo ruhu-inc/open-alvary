@@ -290,15 +290,20 @@ def revision(tools, stage, database, base) -> str:
     return rows[0][0]
 
 
-def create(database, recipient_file: Path, destination, tools, now: datetime, base="public") -> dict:
+def create(
+    database, recipient_file: Path, destination, tools, now: datetime, base="public", kind="policy"
+) -> dict:
+    """kind 'review' backs up the review workbench database: no migration revision or journal."""
+    if kind not in {"policy", "review"}:
+        raise BackupError("configuration")
     stamp = now.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
     name = f"open-alvary-{stamp}.dump.gpg"
     with tempfile.TemporaryDirectory(prefix="oa-backup-") as tmp, gpg_home() as home:
         work = Path(tmp)
         os.chmod(work, 0o700)
         fingerprints = recipient_fingerprints(home, recipient_file)
-        before = revision(tools, "dump", database, base)
-        journal = checkpoint(tools, database, base)
+        before = revision(tools, "dump", database, base) if kind == "policy" else None
+        journal = checkpoint(tools, database, base) if kind == "policy" else None
         plain = work / "database.dump"
         with plain.open("xb") as writer:
             tools.run(
@@ -307,7 +312,7 @@ def create(database, recipient_file: Path, destination, tools, now: datetime, ba
                 database,
                 stdout=writer,
             )
-        if revision(tools, "dump", database, base) != before:
+        if kind == "policy" and revision(tools, "dump", database, base) != before:
             raise BackupError("dump")
         tables = table_inventory(tools, plain)
         dump_hash, dump_bytes = sha256(plain), plain.stat().st_size
@@ -327,6 +332,7 @@ def create(database, recipient_file: Path, destination, tools, now: datetime, ba
         plain.unlink()
         metadata = {
             "format": FORMAT,
+            "kind": kind,
             "backup": name,
             "created_at": now.astimezone(UTC).isoformat(),
             "alembic_revision": before,
@@ -398,7 +404,10 @@ def restore_verify(name, destination, identity_file: Path, target, tools, base="
                 stdin=reader,
             )
         plain.unlink()
-    if revision(tools, "verify", target, base) != metadata["alembic_revision"]:
+    if (
+        metadata.get("kind", "policy") == "policy"
+        and revision(tools, "verify", target, base) != metadata["alembic_revision"]
+    ):
         raise BackupError("verify")
     counts = dict(
         map(tuple, tools.query("verify", target, COUNT_SQL, {"tables": json.dumps(metadata["tables"])}))
@@ -414,6 +423,7 @@ def restore_verify(name, destination, identity_file: Path, target, tools, base="
         # reprovisioned and policy reconciled before any serving epoch opens.
         "serving": "closed",
         "journal_checkpoint": metadata["journal_checkpoint"],
+        "kind": metadata.get("kind", "policy"),
     }
 
 
@@ -493,6 +503,12 @@ def main(argv=None) -> int:
     prune.add_argument("--keep-weekly", type=int, required=True)
     for command in (make, check):
         command.add_argument("--schema", default="public", help="Base schema of the application tables")
+    make.add_argument(
+        "--kind",
+        choices=["policy", "review"],
+        default="policy",
+        help="review: the review workbench database (store it under its own remote prefix)",
+    )
     args = parser.parse_args(argv)
     os.umask(0o077)
     try:
@@ -502,8 +518,12 @@ def main(argv=None) -> int:
         tools = Tools.from_environment()
         if args.command == "create":
             database = Database.from_url(required_env("ALVARY_BACKUP_DATABASE_URL"))
-            result = create(database, args.recipient_file, destination, tools, datetime.now(UTC), args.schema)
-            result = {k: result[k] for k in ("backup", "created_at", "alembic_revision", "encrypted_sha256")}
+            result = create(
+                database, args.recipient_file, destination, tools, datetime.now(UTC), args.schema, args.kind
+            )
+            result = {
+                k: result[k] for k in ("backup", "kind", "created_at", "alembic_revision", "encrypted_sha256")
+            }
         elif args.command == "restore-verify":
             target = Database.from_url(required_env("ALVARY_RESTORE_DATABASE_URL"))
             result = restore_verify(args.backup, destination, args.identity_file, target, tools, args.schema)

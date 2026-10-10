@@ -1,0 +1,59 @@
+# Review workbench (operator-only). Add to the production stack:
+#   docker compose --env-file deployment/.env -f deployment/compose.yaml -f deployment/workbench.yaml up -d
+# Prepare page images first on the operator machine: python -m workbench.prepare
+# Operators: docker compose ... run --rm workbench python -m workbench.admin add <email> --name "<name>" --roles reviewer,approver
+services:
+  review_db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: review
+      POSTGRES_USER: review
+      POSTGRES_PASSWORD: ${REVIEW_DB_PASSWORD:?Set a generated alphanumeric review database password}
+    volumes: ["review_db:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U review -d review"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    mem_limit: 256m
+    logging: &logs
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  workbench:
+    build: {context: ..}
+    restart: unless-stopped
+    environment:
+      ALVARY_REVIEW_DATABASE_URL: postgresql+psycopg://review:${REVIEW_DB_PASSWORD:?Set the review database password}@review_db:5432/review
+      ALVARY_REVIEW_STAGING: /data/collection
+      ALVARY_REVIEW_BASE_URL: https://${REVIEW_DOMAIN:?Set the review hostname}
+      ALVARY_REVIEW_ALLOWED_HOSTS: ${REVIEW_DOMAIN:?Set the review hostname}
+      ALVARY_REVIEW_OIDC_ISSUER: ${ALVARY_REVIEW_OIDC_ISSUER:-https://accounts.google.com}
+      ALVARY_REVIEW_OIDC_CLIENT_ID: ${ALVARY_REVIEW_OIDC_CLIENT_ID:?Create the OpenID Connect client first}
+      ALVARY_REVIEW_OIDC_CLIENT_SECRET: ${ALVARY_REVIEW_OIDC_CLIENT_SECRET:?Set the OpenID Connect client secret}
+    command: ["uvicorn", "workbench.app:app", "--host", "0.0.0.0", "--port", "8090", "--proxy-headers", "--forwarded-allow-ips", "*", "--no-access-log"]
+    volumes:
+      - ${REVIEW_COLLECTION_DIR:?Set the host path of the reconciled collection}:/data/collection:ro
+    depends_on:
+      review_db: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 512m
+    logging: *logs
+  edge:
+    environment:
+      REVIEW_DOMAIN: ${REVIEW_DOMAIN:?Set the review hostname}
+    volumes:
+      - ./Caddyfile.workbench:/etc/caddy/Caddyfile:ro
+    depends_on:
+      workbench: {condition: service_healthy}
+volumes:
+  review_db:
