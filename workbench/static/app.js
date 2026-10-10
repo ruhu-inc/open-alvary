@@ -427,9 +427,11 @@ function flagCard(view, flag, inList) {
   };
   const reads = el("div", { class: "reads" }, el("span", { class: "muted", text: "Main reading" }), el("q", { text: flag.primary || "—" }), el("span"));
   for (const [reader, text] of Object.entries(flag.checks)) {
-    const usable = !resolution && highlighted && !(flag.kind === "missing_from_primary" && !text);
+    const usable = !resolution && highlighted && view.surface.applicable(flag.id)
+      && !(flag.kind === "missing_from_primary" && !text) && !(flag.kind === "marker_conflict" && !/^\S{1,12}$/.test(text || ""));
+    const label = flag.kind === "marker_conflict" ? `Number ${text}` : text ? `Use ${reader}` : "Remove words";
     reads.append(el("span", { class: "muted", text: reader }), el("q", { text: text || "—" }),
-      usable ? el("button", { class: "small", text: text ? `Use ${reader}` : "Remove words", on: { click: () => { view.surface.applyReading(flag.id, text); resolve("use_check", reader); } } }) : el("span"));
+      usable ? el("button", { class: "small", text: label, on: { click: () => { if (view.surface.applyReading(flag.id, text)) resolve("use_check", reader); } } }) : el("span"));
   }
   const actions = resolution
     ? el("div", { class: "actions" }, pill("ok", DECISION_LABEL[resolution.decision] + (resolution.reader ? ` (${resolution.reader})` : "")),
@@ -446,7 +448,7 @@ function flagCard(view, flag, inList) {
 }
 
 function whyNotHighlighted(view, flag) {
-  if (flag.kind === "marker_conflict") return "about a number: double-click the number in the text to set it";
+  if (flag.kind === "marker_conflict") return "the unit it belongs to has been edited: set the number by hand";
   const units = view.surface ? view.surface.units() : view.units;
   const edited = units.length !== view.machineUnits.length || units.some((u, i) => JSON.stringify(u) !== JSON.stringify(view.machineUnits[i]));
   return edited ? "not highlighted: the text around it has been edited" : "not highlighted: it covers a number or crosses into the next unit";
