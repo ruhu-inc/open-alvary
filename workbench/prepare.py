@@ -20,7 +20,7 @@ def main(argv=None) -> int:
     parser.add_argument("--act")
     args = parser.parse_args(argv)
     library = Library()
-    for act in library.acts():
+    for act in library.documents():
         if args.act and act["id"] != args.act:
             continue
         pages = [

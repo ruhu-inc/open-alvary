@@ -95,7 +95,7 @@ def save(browser, page=1, expected=0, units=None, status="checked", resolutions=
         }
     ]
     return browser.post(
-        f"/api/acts/{ACT}/pages/{page}",
+        f"/api/documents/{ACT}/pages/{page}",
         json={
             "expected_revision": expected,
             "units": units,
@@ -117,11 +117,11 @@ def test_everything_needs_a_signed_in_operator_and_sends_strict_headers(world):
     me = browser.get("/api/me")
     assert me.status_code == 401 and me.json() == {"signed_in": False, "oidc": False, "dev_login": False}
     for path in (
-        "/api/acts",
-        f"/api/acts/{ACT}",
-        f"/api/acts/{ACT}/pages/1",
-        f"/api/acts/{ACT}/pages/1/image",
-        f"/api/acts/{ACT}/export",
+        "/api/documents",
+        f"/api/documents/{ACT}",
+        f"/api/documents/{ACT}/pages/1",
+        f"/api/documents/{ACT}/pages/1/image",
+        f"/api/documents/{ACT}/export",
     ):
         assert browser.get(path).status_code == 401
     page = browser.get("/")
@@ -149,7 +149,7 @@ def test_writes_need_the_csrf_token_and_the_right_role(world):
     reviewer = signed_in(world, "reviewer@example.org")
     assert save(reviewer).status_code == 200
     refused = reviewer.post(
-        f"/api/acts/{ACT}/approval", json={"expected_revision": 0, "decision": "approved"}
+        f"/api/documents/{ACT}/approval", json={"expected_revision": 0, "decision": "approved"}
     )
     assert refused.status_code == 403 and "approver" in refused.json()["message"]
 
@@ -158,10 +158,10 @@ def test_a_deactivated_operator_and_a_signed_out_session_lose_access(world):
     store, _ = world
     browser = signed_in(world, "reviewer@example.org")
     store.deactivate("reviewer@example.org")
-    assert browser.get("/api/acts").status_code == 401
+    assert browser.get("/api/documents").status_code == 401
     other = signed_in(world, "approver@example.org")
     assert other.post("/auth/logout").status_code == 200
-    assert other.get("/api/acts").status_code == 401
+    assert other.get("/api/documents").status_code == 401
 
 
 def test_an_idle_session_expires(world):
@@ -169,7 +169,7 @@ def test_an_idle_session_expires(world):
     browser = signed_in(world, "reviewer@example.org")
     with store.engine.begin() as db:
         db.execute(update(session).values(last_seen=store_now_minus(hours=2)))
-    assert browser.get("/api/acts").status_code == 401
+    assert browser.get("/api/documents").status_code == 401
 
 
 def store_now_minus(hours):
@@ -185,7 +185,7 @@ def store_now_minus(hours):
 
 def test_page_detail_offers_units_flags_and_image(world):
     browser = signed_in(world, "reviewer@example.org")
-    page = browser.get(f"/api/acts/{ACT}/pages/1").json()
+    page = browser.get(f"/api/documents/{ACT}/pages/1").json()
     assert page["machine_units"] == [
         {
             "kind": "paragraph",
@@ -194,9 +194,9 @@ def test_page_detail_offers_units_flags_and_image(world):
         }
     ]
     assert page["flags"][0]["id"] == flag_id() and page["latest"] is None
-    assert browser.get(f"/api/acts/{ACT}/pages/1/image").headers["content-type"] == "image/jpeg"
-    assert browser.get(f"/api/acts/{ACT}/pages/9").status_code == 404
-    assert browser.get("/api/acts/ng-unknown/pages/1").status_code == 404
+    assert browser.get(f"/api/documents/{ACT}/pages/1/image").headers["content-type"] == "image/jpeg"
+    assert browser.get(f"/api/documents/{ACT}/pages/9").status_code == 404
+    assert browser.get("/api/documents/ng-unknown/pages/1").status_code == 404
 
 
 def test_saving_is_versioned_and_a_stale_save_conflicts(world):
@@ -206,7 +206,7 @@ def test_saving_is_versioned_and_a_stale_save_conflicts(world):
     conflict = save(second, expected=0)
     assert conflict.status_code == 409
     assert save(second, expected=1, status="attention").json() == {"revision": 2}
-    history = first.get(f"/api/acts/{ACT}/pages/1").json()["history"]
+    history = first.get(f"/api/documents/{ACT}/pages/1").json()["history"]
     assert [(h["revision"], h["author"]) for h in history] == [
         (2, "approver@example.org"),
         (1, "reviewer@example.org"),
@@ -236,7 +236,7 @@ def approve(browser, expected=0, **overrides):
         "materials": MATERIALS,
         **overrides,
     }
-    return browser.post(f"/api/acts/{ACT}/approval", json=body)
+    return browser.post(f"/api/documents/{ACT}/approval", json=body)
 
 
 def test_approval_waits_for_every_page_and_high_flag_and_binds_the_content(world):
@@ -250,11 +250,11 @@ def test_approval_waits_for_every_page_and_high_flag_and_binds_the_content(world
     assert approve(approver, materials={**MATERIALS, "dates": False}).status_code == 422
     assert approve(approver, rights_basis=" ").status_code == 422
     assert approve(approver).json() == {"revision": 1}
-    exported = approver.get(f"/api/acts/{ACT}/export").json()
+    exported = approver.get(f"/api/documents/{ACT}/export").json()
     assert exported["approved"] and exported["pages"][0]["units"][0]["text"].endswith(
         "section 199 of this Act."
     )
-    assert "[Margin note: Accounts]" in approver.get(f"/api/acts/{ACT}/text").text
+    assert "[Margin note: Accounts]" in approver.get(f"/api/documents/{ACT}/text").text
     save(
         approver,
         expected=2,
@@ -262,9 +262,9 @@ def test_approval_waits_for_every_page_and_high_flag_and_binds_the_content(world
         resolutions={flag_id(): {"decision": "edited"}},
     )
     assert (
-        approver.get(f"/api/acts/{ACT}/export").json()["approved"] is False
+        approver.get(f"/api/documents/{ACT}/export").json()["approved"] is False
     )  # an edit after approval voids it
-    listed = approver.get("/api/acts").json()[0]
+    listed = approver.get("/api/documents").json()[0]
     assert listed["approval"] == "approved" and listed["approval_current"] is False
     actions = [e["action"] for e in approver.get(f"/api/audit?act={ACT}").json()]
     assert "act_approved" in actions and actions.count("page_saved") == 4
@@ -356,7 +356,7 @@ def test_oidc_sign_in_rejects_bad_claims_and_strangers(world, claims, status):
 def test_unit_levels_are_kept_and_bounded(world):
     browser = signed_in(world, "reviewer@example.org")
     assert save(browser, units=[{"kind": "paragraph", "text": "(a) any law", "level": 2}]).status_code == 200
-    assert browser.get(f"/api/acts/{ACT}/pages/1").json()["latest"]["units"][0]["level"] == 2
+    assert browser.get(f"/api/documents/{ACT}/pages/1").json()["latest"]["units"][0]["level"] == 2
     for bad in (4, -1, "2", True):
         assert (
             save(browser, expected=1, units=[{"kind": "paragraph", "text": "x", "level": bad}]).status_code
@@ -379,7 +379,7 @@ def test_page_regions_come_from_the_positional_readers_output(world):
     }
     (folder / "azure.json").write_text(json.dumps({"raw": {"analyze": analyze}}))
     browser = signed_in(world, "reviewer@example.org")
-    region = browser.get(f"/api/acts/{ACT}/pages/1").json()["regions"][0]
+    region = browser.get(f"/api/documents/{ACT}/pages/1").json()["regions"][0]
     assert region["text"] == "1. Accounts prepared"
     assert [round(v, 3) for v in region["box"]] == [
         round(1 / 8.5, 3),
@@ -404,7 +404,7 @@ def test_akoma_ntoso_export_is_well_formed_and_structured(world):
         {"kind": "paragraph", "text": "(2) In granting licences."},
     ]
     save(browser, units=units)
-    response = browser.get(f"/api/acts/{ACT}/akn")
+    response = browser.get(f"/api/documents/{ACT}/akn")
     assert response.headers["content-type"].startswith("application/akn+xml")
     root = ET.fromstring(response.content)
     ns = {"a": akn.NS}
@@ -422,13 +422,17 @@ def test_akoma_ntoso_export_is_well_formed_and_structured(world):
 
 def test_search_and_replace_across_pages_writes_attributed_revisions(world):
     browser = signed_in(world, "reviewer@example.org")
-    found = browser.get(f"/api/acts/{ACT}/search", params={"q": "section"}).json()
+    found = browser.get(f"/api/documents/{ACT}/search", params={"q": "section"}).json()
     assert [(h["page"], h["match"]) for h in found["hits"]] == [(1, "section")]
-    assert browser.get(f"/api/acts/{ACT}/search", params={"q": "Sect", "case": True}).json()["hits"] == []
-    assert browser.get(f"/api/acts/{ACT}/search", params={"q": "sect", "word": True}).json()["hits"] == []
-    assert browser.get(f"/api/acts/{ACT}/search", params={"q": ""}).status_code == 422
+    assert (
+        browser.get(f"/api/documents/{ACT}/search", params={"q": "Sect", "case": True}).json()["hits"] == []
+    )
+    assert (
+        browser.get(f"/api/documents/{ACT}/search", params={"q": "sect", "word": True}).json()["hits"] == []
+    )
+    assert browser.get(f"/api/documents/{ACT}/search", params={"q": ""}).status_code == 422
     result = browser.post(
-        f"/api/acts/{ACT}/replace",
+        f"/api/documents/{ACT}/replace",
         json={
             "find": "198",
             "replace": "199",
@@ -437,21 +441,71 @@ def test_search_and_replace_across_pages_writes_attributed_revisions(world):
         },
     ).json()
     assert result == {"changed": [{"page": 1, "revision": 1, "replacements": 1}], "conflicts": []}
-    page = browser.get(f"/api/acts/{ACT}/pages/1").json()["latest"]
+    page = browser.get(f"/api/documents/{ACT}/pages/1").json()["latest"]
     assert page["units"][0]["text"].endswith("section 199 of this Act.") and page["status"] == "edited"
     assert (
         page["author"] == "reviewer@example.org"
         and "Replaced '198' with '199'"
-        in browser.get(f"/api/acts/{ACT}/pages/1").json()["history"][0]["comment"]
+        in browser.get(f"/api/documents/{ACT}/pages/1").json()["history"][0]["comment"]
     )
     stale = browser.post(
-        f"/api/acts/{ACT}/replace", json={"find": "Act", "replace": "ACT", "pages": {"1": 0}}
+        f"/api/documents/{ACT}/replace", json={"find": "Act", "replace": "ACT", "pages": {"1": 0}}
     ).json()
     assert stale["conflicts"] == [1]  # the preview was older than the page
 
 
 def test_the_stream_returns_final_content_for_continuous_reading(world):
     browser = signed_in(world, "reviewer@example.org")
-    stream = browser.get(f"/api/acts/{ACT}/stream", params={"start": 1, "count": 5}).json()
+    stream = browser.get(f"/api/documents/{ACT}/stream", params={"start": 1, "count": 5}).json()
     assert stream["total"] == 2 and [p["page"] for p in stream["pages"]] == [1, 2]
     assert stream["pages"][0]["open_high"] == 1 and stream["pages"][0]["units"][0]["notes"] == ["Accounts"]
+
+
+def test_documents_other_than_legislation_export_as_akn_documents():
+    import xml.etree.ElementTree as ET
+
+    from workbench import akn
+
+    judgment = {
+        "id": "ng-judgment-2024-1",
+        "title": "A v B",
+        "year": 2024,
+        "type": "judgment",
+        "jurisdiction": "ng",
+    }
+    pages = [
+        {
+            "page": 1,
+            "units": [
+                {"kind": "heading", "text": "JUDGMENT"},
+                {"kind": "paragraph", "text": "1. The appeal is allowed."},
+            ],
+        }
+    ]
+    root = ET.fromstring(akn.build(judgment, pages, "0" * 64))
+    ns = {"a": akn.NS}
+    doc = root.find("a:doc", ns)
+    assert doc.get("name") == "judgment"
+    assert (
+        doc.find("a:meta/a:identification/a:FRBRWork/a:FRBRuri", ns).get("value")
+        == "/akn/ng/doc/2024/judgment-2024-1"
+    )
+    assert [p.text for p in doc.findall("a:mainBody/a:p", ns)] == ["1. The appeal is allowed."]
+
+
+def test_overview_summarises_documents_and_where_to_continue(world):
+    browser = signed_in(world, "reviewer@example.org")
+    first = browser.get("/api/overview").json()
+    assert first["totals"] == {
+        "documents": 1,
+        "pages": 2,
+        "checked": 0,
+        "open_high": 1,
+        "approved": 0,
+        "ready": 0,
+    }
+    assert first["documents"][0]["type"] == "act" and first["resume"] is None
+    save(browser)  # page 1 checked
+    after = browser.get("/api/overview").json()
+    assert after["resume"]["page"] == 2 and after["resume"]["id"] == ACT
+    assert after["documents"][0]["checked"] == 1 and after["activity"][0]["action"] == "page_saved"

@@ -171,7 +171,13 @@ class Builder:
         self.current().add_block(paragraph(text))
 
 
-def build(act: dict, pages: list[dict], content_sha256: str, country: str = "ng") -> bytes:
+LEGISLATION = {"act", "bill"}
+
+
+def build(act: dict, pages: list[dict], content_sha256: str, country: str | None = None) -> bytes:
+    """Acts and bills get the legislative hierarchy; other types an AKN document in reading order."""
+    country = country or act.get("jurisdiction") or "ng"
+    kind = act.get("type", "act")
     units = [unit for page in pages for unit in page["units"]]
     start = next((i for i, u in enumerate(units) if u["kind"] != "table" and ENACTING.match(unit_text(u))), 0)
     end = next(
@@ -184,11 +190,12 @@ def build(act: dict, pages: list[dict], content_sha256: str, country: str = "ng"
     )
 
     root = ET.Element(q("akomaNtoso"))
-    document = ET.SubElement(root, q("act"), {"name": "act"})
+    tag = kind if kind in LEGISLATION else "doc"
+    document = ET.SubElement(root, q(tag), {"name": kind})
     meta = ET.SubElement(document, q("meta"))
     year = str(act.get("year", ""))
     number = re.sub(r"[^a-z0-9-]", "", act["id"].removeprefix(f"{country}-"))
-    work = f"/akn/{country}/act/{year}/{number}"
+    work = f"/akn/{country}/{kind if kind in LEGISLATION else 'doc'}/{year}/{number}"
     today = datetime.now(UTC).date().isoformat()
     identification = ET.SubElement(meta, q("identification"), {"source": "#openalvary"})
     for level, this, uri in (
@@ -234,6 +241,21 @@ def build(act: dict, pages: list[dict], content_sha256: str, country: str = "ng"
     proprietary = ET.SubElement(meta, q("proprietary"), {"source": "#openalvary"})
     ET.SubElement(proprietary, f"{{{OA}}}review", {"contentSha256": content_sha256})
 
+    if kind not in LEGISLATION:
+        # A general document: its text in reading order, headings marked, tables kept.
+        main = ET.SubElement(document, q("mainBody"))
+        for unit in units:
+            if unit["kind"] == "table":
+                main.append(table(unit))
+            elif unit["kind"] == "heading":
+                holder = ET.SubElement(main, q("hcontainer"), {"name": "heading"})
+                ET.SubElement(holder, q("heading")).text = unit_text(unit)
+            else:
+                main.append(paragraph(unit_text(unit)))
+                for note in unit.get("notes") or []:
+                    ET.SubElement(main, q("p"), {"class": "marginNote"}).text = note
+        ET.indent(root)
+        return ET.tostring(root, encoding="utf-8", xml_declaration=True)
     preface = ET.SubElement(document, q("preface"))
     for unit in units[:start]:
         preface.append(table(unit) if unit["kind"] == "table" else paragraph(unit_text(unit)))

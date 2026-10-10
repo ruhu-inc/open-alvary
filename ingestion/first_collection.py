@@ -37,9 +37,20 @@ GAZETTE = re.compile(r"No\.\s*(\d+)\s*,?\s*Vol(?:ume)?\.?\s*(\d+)", re.I)
 ACT_NUMBER = re.compile(r"\bAct\s+No\.\s*(\d+)\b", re.I)
 
 
+DOCUMENT_TYPES = {"act", "bill", "regulation", "order", "judgment", "gazette", "treaty", "other"}
+
+
 def load_manifest(path: Path = MANIFEST) -> dict:
+    """A collection of legal documents of any type; older manifests list them under "acts"."""
     manifest = json.loads(path.read_text())
-    for act in manifest["acts"]:
+    documents = manifest.get("documents", manifest.get("acts", []))
+    default = manifest.get("document_type", "act")
+    for document in documents:
+        document.setdefault("type", default)
+        if document["type"] not in DOCUMENT_TYPES:
+            raise ValueError(f"Unknown document type {document['type']!r}: {document['id']}")
+    manifest["documents"] = manifest["acts"] = documents  # one list, two names for older callers
+    for act in manifest["documents"]:
         parsed = urlsplit(act["url"])
         if parsed.scheme != "https" or parsed.hostname not in ALLOWED_HOSTS or parsed.port not in {None, 443}:
             raise ValueError(f"Manifest URL not allowed: {act['id']}")

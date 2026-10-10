@@ -192,6 +192,17 @@ class Store:
         with self.engine.connect() as db:
             return [dict(row._mapping) for row in db.execute(query)]
 
+    def last_event(self, actor: str, action: str) -> dict | None:
+        query = (
+            select(audit)
+            .where(audit.c.actor == actor, audit.c.action == action)
+            .order_by(audit.c.id.desc())
+            .limit(1)
+        )
+        with self.engine.connect() as db:
+            row = db.execute(query).first()
+        return dict(row._mapping) if row else None
+
     # --- sessions and sign-in flows -------------------------------------------------------------
 
     def start_session(self, email: str) -> tuple[str, str]:
