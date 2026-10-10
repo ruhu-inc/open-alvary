@@ -354,13 +354,32 @@ function renderUnits(units) {
       continue;
     }
     const level = unit.level ?? depthOfText(unit.marker || unit.text);
-    const body = el("p", {}, unit.marker ? el("span", { class: "restored", text: `${unit.marker} ` }) : null, ...formattedText(unit.text, unit.marks));
+    const body = readParagraph(unit);
     const css = [unit.kind === "heading" ? "h" : level !== null ? `d${level}` : "", unit.align ? `align-${unit.align}` : ""].join(" ").trim();
     box.append(unit.notes && unit.notes.length
       ? el("div", { class: `unit ${css}` }, body, el("div", {}, unit.notes.map((n) => el("p", { class: "note", text: n }))))
       : el("div", { class: css }, body));
   }
   return box;
+}
+
+// A section number hangs in the margin as in the editor, whether it is a chip or the first words.
+function readParagraph(unit) {
+  const RE = window.ReviewEditor;
+  if (unit.marker) {
+    return el("p", { class: RE.hangClass(unit.kind, unit.marker) },
+      el("span", { class: "restored lead", text: `${unit.marker} ` }), ...formattedText(unit.text, unit.marks));
+  }
+  const match = RE.SECTION_LEAD.exec(unit.text || "");
+  const cls = match ? RE.hangClass(unit.kind, match[0].trim()) : "";
+  if (!cls) return el("p", {}, ...formattedText(unit.text, unit.marks));
+  const cut = match[0].length;
+  const shift = (from, to) => (unit.marks || [])
+    .map((m) => ({ ...m, start: Math.max(m.start, from) - from, end: Math.min(m.end, to) - from }))
+    .filter((m) => m.end > m.start);
+  return el("p", { class: cls },
+    el("span", { class: "lead" }, ...formattedText(unit.text.slice(0, cut), shift(0, cut))),
+    ...formattedText(unit.text.slice(cut), shift(cut, unit.text.length)));
 }
 
 const MARK_TAG = { bold: "strong", italic: "em", underline: "u", superscript: "sup", subscript: "sub" };
@@ -835,7 +854,8 @@ function alignIcon(side) {
   svg.setAttribute("aria-hidden", "true");
   [[16, 2], [10, 6], [14, 10], [8, 13]].forEach(([width, y], i) => {
     const line = document.createElementNS(ns, "rect");
-    const x = side === "left" ? 0 : side === "right" ? 16 - width : (16 - width) / 2;
+    if (side === "justify") width = 16;
+    const x = side === "left" || side === "justify" ? 0 : side === "right" ? 16 - width : (16 - width) / 2;
     line.setAttribute("x", x); line.setAttribute("y", y - (i === 3 ? 0 : 1)); line.setAttribute("width", width); line.setAttribute("height", "1.6");
     line.setAttribute("fill", "currentColor");
     svg.append(line);
@@ -874,6 +894,7 @@ function editTab(view) {
     el("button", { class: "small icon", title: "Align left (Ctrl/Cmd+Alt+L)", "aria-label": "Align left", on: { click: run(C.align("left")) } }, alignIcon("left")),
     el("button", { class: "small icon", title: "Centre (Ctrl/Cmd+Alt+E)", "aria-label": "Centre", on: { click: run(C.align("center")) } }, alignIcon("center")),
     el("button", { class: "small icon", title: "Align right (Ctrl/Cmd+Alt+R)", "aria-label": "Align right", on: { click: run(C.align("right")) } }, alignIcon("right")),
+    el("button", { class: "small icon", title: "Justify (Ctrl/Cmd+Alt+J). Select several paragraphs, or Ctrl/Cmd+A, to change them all.", "aria-label": "Justify", on: { click: run(C.align("justify")) } }, alignIcon("justify")),
     el("span", { class: "sep" }),
     el("button", { class: "small", title: "Outdent (Shift+Tab)", text: "⇤", on: { click: run(C.level(-1)) } }),
     el("button", { class: "small", title: "Indent (Tab)", text: "⇥", on: { click: run(C.level(1)) } }),
@@ -891,7 +912,7 @@ function editTab(view) {
       " mark restored numbers"),
     el("details", { class: "keys" }, el("summary", { text: "Keys" }),
       el("div", { class: "muted" },
-        el("p", { text: "Type to correct words. Enter splits a paragraph; Backspace at its start joins it to the one above. Tab / Shift+Tab change the level. Ctrl/Cmd+Alt+L, E, R align left, centre, right. Double-click a section number to change it." }),
+        el("p", { text: "Type to correct words. Enter splits a paragraph; Backspace at its start joins it to the one above. Tab / Shift+Tab change the level. Ctrl/Cmd+Alt+L, E, R, J align left, centre, right or justify; with several paragraphs selected (or Ctrl/Cmd+A) they all change. Double-click a section number to change it." }),
         el("p", { text: "Margin notes: click into a note, then Note ↑ / Note ↓ (Alt+Shift+↑ / ↓) moves it to the paragraph it belongs beside." }),
         el("p", { text: "Flags: Alt+N next, Alt+P previous; then Alt+1 / Alt+2 use that reading, Alt+K keep as read, Alt+E I corrected it, Alt+D dismiss. Alt+L keeps all punctuation-only differences." }),
         el("p", { text: "Ctrl/Cmd+S save as checked; Ctrl/Cmd+Enter save as checked and go to the next page. Ctrl/Cmd + scroll zooms the page image." }))));

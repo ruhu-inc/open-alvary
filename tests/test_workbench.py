@@ -516,8 +516,13 @@ def test_unit_alignment_is_kept_and_validated(world):
     heading = [{"kind": "heading", "text": "PART I — PRELIMINARY PROVISIONS", "align": "left"}]
     assert save(browser, units=heading).status_code == 200
     assert browser.get(f"/api/documents/{ACT}/pages/1").json()["latest"]["units"][0]["align"] == "left"
+    justified = [
+        {"kind": "paragraph", "marker": "3.", "text": "(1) The Federal Government", "align": "justify"}
+    ]
+    assert save(browser, expected=1, units=justified).status_code == 200
+    assert browser.get(f"/api/documents/{ACT}/pages/1").json()["latest"]["units"][0]["align"] == "justify"
     assert (
-        save(browser, expected=1, units=[{"kind": "heading", "text": "x", "align": "justify"}]).status_code
+        save(browser, expected=2, units=[{"kind": "heading", "text": "x", "align": "middle"}]).status_code
         == 422
     )
 
