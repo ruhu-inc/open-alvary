@@ -39,10 +39,11 @@ export const schema = new Schema({
     unit: {
       group: "block",
       content: "body note*",
-      attrs: { kind: { default: "paragraph" }, level: { default: null } },
+      attrs: { kind: { default: "paragraph" }, level: { default: null }, align: { default: null } },
       toDOM(node) {
         const level = node.attrs.level ?? derivedDepth(unitLead(node));
-        const cls = ["u", node.attrs.kind, level === null ? "" : `lvl${level}`, node.childCount > 1 ? "has-notes" : ""];
+        const align = node.attrs.align ? `align-${node.attrs.align}` : "";
+        const cls = ["u", node.attrs.kind, level === null ? "" : `lvl${level}`, node.childCount > 1 ? "has-notes" : "", align];
         return ["div", { class: cls.join(" ").trim() }, 0];
       },
     },
@@ -89,7 +90,8 @@ export function toDoc(units) {
     if (unit.marker) inline.push(N.marker.create({ value: unit.marker, source: unit.marker_source || null }));
     inline.push(...text(unit.text || ""));
     const notes = (unit.notes || []).map((note) => N.note.create(null, text(note)));
-    return N.unit.create({ kind: unit.kind, level: Number.isInteger(unit.level) ? unit.level : null }, [N.body.create(null, inline), ...notes]);
+    const align = ["left", "center", "right"].includes(unit.align) ? unit.align : null;
+    return N.unit.create({ kind: unit.kind, level: Number.isInteger(unit.level) ? unit.level : null, align }, [N.body.create(null, inline), ...notes]);
   });
   return N.doc.create(null, blocks.length ? blocks : [N.unit.create(null, [N.body.create()])]);
 }
@@ -120,6 +122,7 @@ export function fromDoc(doc) {
     block.forEach((child, _, index) => { if (index > 0 && child.textContent.trim()) notes.push(child.textContent.trim()); });
     if (notes.length) unit.notes = notes;
     if (Number.isInteger(block.attrs.level)) unit.level = block.attrs.level;
+    if (block.attrs.align) unit.align = block.attrs.align;
     units.push(unit);
   });
   return units;
@@ -345,6 +348,8 @@ function setUnitAttrs(change) {
 
 export const commands = {
   kind: (kind) => setUnitAttrs((attrs) => ({ ...attrs, kind })),
+  // Alignment as printed; choosing the kind's usual alignment clears the setting.
+  align: (align) => setUnitAttrs((attrs) => ({ ...attrs, align: align === (attrs.kind === "heading" ? "center" : "left") ? null : align })),
   level: (delta) => setUnitAttrs((attrs, node) => {
     const current = attrs.level ?? derivedDepth(unitLead(node)) ?? 0;
     const level = Math.max(0, Math.min(3, current + delta));
@@ -417,6 +422,9 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
     "Mod-Alt-2": commands.kind("paragraph"),
     "Mod-Alt-3": commands.kind("list_item"),
     "Mod-Alt-n": commands.addNote,
+    "Mod-Alt-l": commands.align("left"),
+    "Mod-Alt-e": commands.align("center"),
+    "Mod-Alt-r": commands.align("right"),
   });
   let lastUnit = -1;
   const state = EditorState.create({

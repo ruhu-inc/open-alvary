@@ -102,23 +102,48 @@ async function signOut() {
 async function showSignIn(info) {
   info = info || (await api("/api/me")).data || {};
   document.getElementById("who").replaceChildren();
-  setCrumbs("Sign in");
-  const card = el("div", { class: "card signin" }, el("h2", { text: "Operators only" }));
-  if (info.oidc) card.append(el("p", {}, el("a", { class: "button", href: "/auth/login" }, el("button", { class: "primary", text: "Sign in with your organisation account" }))));
+  setCrumbs("");
+  const panel = el("div", { class: "signin-panel" },
+    el("div", { class: "signin-brand" }, el("span", { class: "mark", text: "OA" }), el("span", { text: "Open Alvary" })),
+    el("h1", { text: "Review workbench" }),
+    el("p", { class: "muted", text: "Check machine readings of legal documents against the original, correct them, and approve them for publication." }));
+  if (info.oidc) {
+    panel.append(el("a", { class: "signin-button", href: "/auth/login" }, googleMark(), el("span", { text: "Sign in with Google" })));
+  }
   if (info.dev_login) {
-    const email = el("input", { type: "email", placeholder: "operator email", required: true });
-    card.append(
-      el("p", { class: "muted", text: "Local trial sign-in (this computer only):" }),
-      el("form", { on: { submit: async (event) => {
+    const email = el("input", { type: "email", placeholder: "you@organisation.org", required: true, autocomplete: "username", "aria-label": "Operator email" });
+    const error = el("p", { class: "signin-error", role: "alert", hidden: true });
+    panel.append(
+      info.oidc ? el("div", { class: "signin-or", text: "or, on this computer only" }) : el("p", { class: "signin-note", text: "Local trial sign-in — this computer only, no password." }),
+      el("form", { class: "signin-form", on: { submit: async (event) => {
         event.preventDefault();
         const result = await api("/auth/dev", { method: "POST", body: { email: email.value } });
-        if (!result.ok) return toast(message(result));
+        if (!result.ok) { error.textContent = result.status === 403 ? "That email is not on the operator list." : message(result); error.hidden = false; return; }
         await start();
-      } } }, email, el("button", { class: "primary", text: "Sign in" })),
-    );
+      } } }, email, el("button", { class: "primary", text: "Continue" })),
+      error);
   }
-  if (!info.oidc && !info.dev_login) card.append(el("p", { class: "muted", text: "Sign-in is not configured on this server." }));
-  main(card);
+  if (!info.oidc && !info.dev_login) panel.append(el("p", { class: "signin-error", text: "Sign-in is not configured on this server. Ask an administrator." }));
+  panel.append(el("ul", { class: "signin-facts" },
+    el("li", { text: "Operators on the allow-list only" }),
+    el("li", { text: "Every save and approval is recorded with your name" }),
+    el("li", { text: "Sessions end after an hour without activity" })));
+  main(el("div", { class: "signin-page" }, panel));
+  const field = panel.querySelector("input[type=email]");
+  if (field) field.focus();
+}
+
+function googleMark() {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 18 18"); svg.setAttribute("width", "18"); svg.setAttribute("height", "18"); svg.setAttribute("aria-hidden", "true");
+  [["#4285F4", "M17.6 9.2c0-.6-.1-1.2-.2-1.7H9v3.3h4.8a4.1 4.1 0 0 1-1.8 2.7v2.2h2.9c1.7-1.6 2.7-3.9 2.7-6.5z"],
+   ["#34A853", "M9 18c2.4 0 4.5-.8 6-2.2l-2.9-2.2c-.8.5-1.8.9-3.1.9-2.4 0-4.4-1.6-5.1-3.8H.9v2.3A9 9 0 0 0 9 18z"],
+   ["#FBBC05", "M3.9 10.7a5.4 5.4 0 0 1 0-3.4V5H.9a9 9 0 0 0 0 8l3-2.3z"],
+   ["#EA4335", "M9 3.6c1.3 0 2.5.5 3.4 1.3l2.6-2.6A9 9 0 0 0 .9 5l3 2.3C4.6 5.2 6.6 3.6 9 3.6z"]].forEach(([fill, d]) => {
+    const path = document.createElementNS(ns, "path"); path.setAttribute("fill", fill); path.setAttribute("d", d); svg.append(path);
+  });
+  return svg;
 }
 
 // --- dashboard -------------------------------------------------------------------------------------
@@ -330,7 +355,7 @@ function renderUnits(units) {
     }
     const level = unit.level ?? depthOfText(unit.marker || unit.text);
     const body = el("p", {}, unit.marker ? el("span", { class: "restored", text: `${unit.marker} ` }) : null, unit.text);
-    const css = unit.kind === "heading" ? "h" : level !== null ? `d${level}` : "";
+    const css = [unit.kind === "heading" ? "h" : level !== null ? `d${level}` : "", unit.align ? `align-${unit.align}` : ""].join(" ").trim();
     box.append(unit.notes && unit.notes.length
       ? el("div", { class: `unit ${css}` }, body, el("div", {}, unit.notes.map((n) => el("p", { class: "note", text: n }))))
       : el("div", { class: css }, body));
@@ -767,9 +792,27 @@ function imageClicked(view, event) {
 
 // --- the editing tab --------------------------------------------------------------------------------
 
+function alignIcon(side) {
+  // Four lines of text drawn in SVG (inline elements are allowed; inline styles are not).
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 16 14");
+  svg.setAttribute("width", "16");
+  svg.setAttribute("height", "14");
+  svg.setAttribute("aria-hidden", "true");
+  [[16, 2], [10, 6], [14, 10], [8, 13]].forEach(([width, y], i) => {
+    const line = document.createElementNS(ns, "rect");
+    const x = side === "left" ? 0 : side === "right" ? 16 - width : (16 - width) / 2;
+    line.setAttribute("x", x); line.setAttribute("y", y - (i === 3 ? 0 : 1)); line.setAttribute("width", width); line.setAttribute("height", "1.6");
+    line.setAttribute("fill", "currentColor");
+    svg.append(line);
+  });
+  return svg;
+}
+
 function editTab(view) {
   const canEdit = app.me.roles.includes("reviewer");
-  const mount = el("div", { class: "surface layout" });
+  const mount = el("div", { class: `surface layout ${remember("restored") === "1" ? "show-restored" : ""}` });
   const surface = window.ReviewEditor.createEditor(mount, {
     units: view.units,
     machineUnits: view.machineUnits,
@@ -789,6 +832,10 @@ function editTab(view) {
     el("button", { class: "small", title: "Paragraph (Ctrl/Cmd+Alt+2)", text: "Paragraph", on: { click: run(C.kind("paragraph")) } }),
     el("button", { class: "small", title: "List item (Ctrl/Cmd+Alt+3)", text: "List item", on: { click: run(C.kind("list_item")) } }),
     el("span", { class: "sep" }),
+    el("button", { class: "small icon", title: "Align left (Ctrl/Cmd+Alt+L)", "aria-label": "Align left", on: { click: run(C.align("left")) } }, alignIcon("left")),
+    el("button", { class: "small icon", title: "Centre (Ctrl/Cmd+Alt+E)", "aria-label": "Centre", on: { click: run(C.align("center")) } }, alignIcon("center")),
+    el("button", { class: "small icon", title: "Align right (Ctrl/Cmd+Alt+R)", "aria-label": "Align right", on: { click: run(C.align("right")) } }, alignIcon("right")),
+    el("span", { class: "sep" }),
     el("button", { class: "small", title: "Outdent (Shift+Tab)", text: "⇤", on: { click: run(C.level(-1)) } }),
     el("button", { class: "small", title: "Indent (Tab)", text: "⇥", on: { click: run(C.level(1)) } }),
     el("button", { class: "small", title: "Add a margin note (Ctrl/Cmd+Alt+N)", text: "+ Margin note", on: { click: run(C.addNote) } }),
@@ -798,9 +845,12 @@ function editTab(view) {
     el("span", { class: "sep" }),
     el("button", { class: "small", title: "Undo (Ctrl/Cmd+Z)", text: "↶", on: { click: run(C.undo) } }),
     el("button", { class: "small", title: "Redo (Ctrl/Cmd+Shift+Z)", text: "↷", on: { click: run(C.redo) } }),
+    el("label", { class: "muted small", title: "Numbers the main reading missed and the check readings supplied" },
+      el("input", { type: "checkbox", checked: remember("restored") === "1", on: { change: (e) => { remember("restored", e.target.checked ? "1" : "0"); mount.classList.toggle("show-restored", e.target.checked); } } }),
+      " mark restored numbers"),
     el("details", { class: "keys" }, el("summary", { text: "Keys" }),
       el("div", { class: "muted" },
-        el("p", { text: "Type to correct words. Enter splits a paragraph; Backspace at its start joins it to the one above. Tab / Shift+Tab change the level. Double-click a blue number to change it." }),
+        el("p", { text: "Type to correct words. Enter splits a paragraph; Backspace at its start joins it to the one above. Tab / Shift+Tab change the level. Ctrl/Cmd+Alt+L, E, R align left, centre, right. Double-click a section number to change it." }),
         el("p", { text: "Flags: Alt+N next, Alt+P previous; then Alt+1 / Alt+2 use that reading, Alt+K keep as read, Alt+E I corrected it, Alt+D dismiss. Alt+L keeps all punctuation-only differences." }),
         el("p", { text: "Ctrl/Cmd+S save as checked; Ctrl/Cmd+Enter save as checked and go to the next page. Ctrl/Cmd + scroll zooms the page image." }))));
   const list = flagList(view);
