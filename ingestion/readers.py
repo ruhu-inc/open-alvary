@@ -24,6 +24,10 @@ from ingestion.compare import HtmlTables
 ROOT = Path(__file__).resolve().parents[1]
 
 
+class PreflightError(RuntimeError):
+    """A reader cannot work at all (credentials, network): stop the run, do not read."""
+
+
 @dataclass
 class Reading:
     reader: str
@@ -58,6 +62,20 @@ class DocAIReader:
         # side by side keep each one far inside its deadline.
         self.workers = int(os.environ.get("ALVARY_DOCAI_WORKERS") or 8)
         self.pages_per_request = int(os.environ.get("ALVARY_DOCAI_PAGES_PER_REQUEST") or 2)
+
+    def preflight(self) -> None:
+        """Fail in seconds, before any page is sent, if the Google sign-in cannot be refreshed."""
+        import google.auth
+        from google.auth.transport.requests import Request
+
+        try:
+            credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
+            credentials.refresh(Request())
+        except Exception as error:  # noqa: BLE001 - reported, never retried
+            raise PreflightError(
+                "Google sign-in is not usable: run `gcloud auth application-default login` "
+                f"(or use a service account). {type(error).__name__}"
+            ) from error
 
     def version(self) -> dict:
         return {
@@ -174,6 +192,10 @@ class MinerUReader:
         )
         self.hashes = hashes or ROOT / "private-staging" / "readings" / ".model-hashes.json"
 
+    def preflight(self) -> None:
+        if subprocess.run([str(self.kit), "version"], capture_output=True, timeout=120).returncode != 0:
+            raise PreflightError(f"MinerU does not run from {self.kit}")
+
     def version(self) -> dict:
         done = subprocess.run([str(self.kit), "version"], capture_output=True, text=True, timeout=120)
         weights = sorted(self.models.glob("MinerU2.5-Pro-*-GGUF/*.gguf"))
@@ -287,6 +309,20 @@ class AzureReader:
         self.headers = {"Ocp-Apim-Subscription-Key": config["AZURE_DI_KEY"]}
         self.client = client or httpx.Client(timeout=120)
         self.sleep = sleep
+
+    def preflight(self) -> None:
+        """A free call: the resource answers and accepts the key."""
+        url = f"{self.endpoint}/documentintelligence/info?api-version={API_VERSION}"
+        try:
+            response = self.client.get(url, headers=self.headers, timeout=30)
+        except httpx.HTTPError as error:
+            raise PreflightError(
+                f"Azure Document Intelligence is unreachable: {type(error).__name__}"
+            ) from error
+        if response.status_code in {401, 403}:
+            raise PreflightError("Azure Document Intelligence refused the key: check AZURE_DI_KEY")
+        if response.status_code >= 400:
+            raise PreflightError(f"Azure Document Intelligence answered {response.status_code}")
 
     def version(self) -> dict:
         # "geometry": readings keep paragraph positions and Azure's own output (since 2026-10-09).
