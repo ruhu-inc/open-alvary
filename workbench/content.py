@@ -317,6 +317,11 @@ def validate_units(units) -> list[dict]:
             if not isinstance(level, int) or isinstance(level, bool) or not 0 <= level <= 3:
                 raise ValueError("level must be 0 (section) to 3 (sub-paragraph)")
             item["level"] = level
+        align = unit.get("align")
+        if align is not None:
+            if align not in {"left", "center", "right"}:
+                raise ValueError("align must be left, center or right")
+            item["align"] = align
         if unit.get("marker"):
             item["marker"] = str(unit["marker"])[:40]
             if unit.get("marker_source"):

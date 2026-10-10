@@ -509,3 +509,14 @@ def test_overview_summarises_documents_and_where_to_continue(world):
     after = browser.get("/api/overview").json()
     assert after["resume"]["page"] == 2 and after["resume"]["id"] == ACT
     assert after["documents"][0]["checked"] == 1 and after["activity"][0]["action"] == "page_saved"
+
+
+def test_unit_alignment_is_kept_and_validated(world):
+    browser = signed_in(world, "reviewer@example.org")
+    heading = [{"kind": "heading", "text": "PART I — PRELIMINARY PROVISIONS", "align": "left"}]
+    assert save(browser, units=heading).status_code == 200
+    assert browser.get(f"/api/documents/{ACT}/pages/1").json()["latest"]["units"][0]["align"] == "left"
+    assert (
+        save(browser, expected=1, units=[{"kind": "heading", "text": "x", "align": "justify"}]).status_code
+        == 422
+    )
