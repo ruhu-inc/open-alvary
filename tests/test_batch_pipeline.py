@@ -503,3 +503,16 @@ def test_preflight_runs_every_reader_check_before_any_reading(tmp_path):
     runner = batch.Batch(tmp_path, ["docai"], {"docai": lambda: Refusing("docai", True)})
     with pytest.raises(readers.PreflightError):
         runner.preflight(["docai"])
+
+
+def test_dot_leaders_and_the_naira_sign_read_as_n_are_not_flagged():
+    checks = {"mineru": "fine of N50,000.00 on", "azure": "fine of ₦50,000.00 on"}
+    assert compare.compare("fine of ₦50,000.00 on", checks) == []
+    leaders = compare.compare(
+        "Day of .. .. .. .. 2024", {"mineru": "Day of 2024", "azure": "Day of ...... 2024"}
+    )
+    assert leaders == []
+    real = compare.compare(
+        "Day of June .. .. 2024", {"mineru": "Day of July 2024", "azure": "Day of July 2024"}
+    )
+    assert [(f.primary, f.severity) for f in real] == [("June", "high")]  # a date
