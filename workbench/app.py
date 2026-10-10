@@ -224,6 +224,7 @@ def create_app(
             "flags": content.page_flags(found),
             "checks": found["checks"],
             "regions": content.regions(library.staging, act_id, page),
+            "lines": content.lines(library.staging, act_id, page),
             "reading_sha256": content.reading_sha256(found),
             "latest": {
                 "revision": latest["revision"],
@@ -272,8 +273,8 @@ def create_app(
         except (ValueError, TypeError) as error:
             raise HTTPException(422, str(error)) from error
         status = body.get("status")
-        if status not in {"checked", "attention"}:
-            raise HTTPException(422, "status must be checked or attention")
+        if status not in {"checked", "attention", "edited"}:
+            raise HTTPException(422, "status must be checked, attention or edited")
         known = {f["id"] for f in content.page_flags(found)}
         resolutions = body.get("resolutions") or {}
         if not isinstance(resolutions, dict) or not set(resolutions) <= known:
@@ -358,6 +359,98 @@ def create_app(
             else None,
             "pages": final,
         }
+
+    @app.get("/api/acts/{act_id}/search")
+    def search(request: Request, act_id: str, q: str = "", case: bool = False, word: bool = False):
+        auth.current(request, store)
+        act_or_404(act_id)
+        final = content.final_pages(library.reading(act_id), store.latest_pages(act_id))
+        try:
+            hits = content.search(final, q, case, word)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        return {
+            "hits": hits,
+            "revisions": {p["page"]: p["revision"] for p in final},
+            "truncated": len(hits) >= 500,
+        }
+
+    @app.post("/api/acts/{act_id}/replace")
+    def replace(request: Request, act_id: str, body: dict = JSON_BODY):
+        """Replace across the pages the reviewer confirmed; each changed page is a new revision."""
+        who = auth.current(request, store, write=True, role="reviewer")
+        act_or_404(act_id)
+        reading, latest = library.reading(act_id), store.latest_pages(act_id)
+        pages = {p["page"]: p for p in reading["pages"]}
+        final = {p["page"]: p for p in content.final_pages(reading, latest)}
+        targets = body.get("pages") or {}
+        if not isinstance(targets, dict) or not targets or len(targets) > 1000:
+            raise HTTPException(422, "pages must map page numbers to the revisions shown in the preview")
+        find, replacement = str(body.get("find", "")), str(body.get("replace", ""))
+        case, word = bool(body.get("case")), bool(body.get("word"))
+        changed, conflicts = [], []
+        for key, expected in targets.items():
+            number = int(key)
+            if number not in pages:
+                raise HTTPException(422, f"no page {number}")
+            try:
+                units, count = content.replace_in(final[number]["units"], find, replacement, case, word)
+            except ValueError as error:
+                raise HTTPException(422, str(error)) from error
+            if not count:
+                continue
+            previous = latest.get(number)
+            try:
+                revision = store.save_page(
+                    act_id,
+                    number,
+                    int(expected),
+                    who["email"],
+                    reading_sha256=content.reading_sha256(pages[number]),
+                    units=units,
+                    status=previous["status"] if previous else "edited",
+                    resolutions=previous["resolutions"] if previous else {},
+                    comment=f"Replaced {find!r} with {replacement!r} ({count}×) across the Act"[:2000],
+                )
+            except Conflict:
+                conflicts.append(number)
+                continue
+            changed.append({"page": number, "revision": revision, "replacements": count})
+        return {"changed": changed, "conflicts": conflicts}
+
+    @app.get("/api/acts/{act_id}/stream")
+    def stream(request: Request, act_id: str, start: int = 1, count: int = 8):
+        """Final content of a run of pages, for reading the Act continuously."""
+        auth.current(request, store)
+        act_or_404(act_id)
+        reading, latest = library.reading(act_id), store.latest_pages(act_id)
+        final = {p["page"]: p for p in content.final_pages(reading, latest)}
+        out = []
+        for page in reading["pages"]:
+            if not start <= page["page"] < start + max(1, min(count, 20)):
+                continue
+            revision = latest.get(page["page"])
+            resolved = set(revision["resolutions"]) if revision else set()
+            out.append(
+                {
+                    "page": page["page"],
+                    "units": final[page["page"]]["units"],
+                    "revision": final[page["page"]]["revision"],
+                    "status": revision["status"] if revision else None,
+                    "resolutions": revision["resolutions"] if revision else {},
+                    "open_high": sum(
+                        1
+                        for f in content.page_flags(page)
+                        if f["severity"] == "high" and f["id"] not in resolved
+                    ),
+                    "open": sum(
+                        1
+                        for f in content.page_flags(page)
+                        if f["severity"] != "low" and f["id"] not in resolved
+                    ),
+                }
+            )
+        return {"pages": out, "total": len(reading["pages"])}
 
     @app.get("/api/acts/{act_id}/akn")
     def akn_export(request: Request, act_id: str):

@@ -174,13 +174,134 @@ async function actView(actId) {
         pill(ready.open_high_flags.length ? "high" : "ok", `${ready.open_high_flags.length} high flags open`), " ",
         ready.stale_pages.length ? pill("warn", `${ready.stale_pages.length} pages to recheck`) : "", " ",
         current ? pill("ok", "approved") : head && head.decision === "approved" ? pill("warn", "approval out of date") : ""),
-      nextTodo ? el("p", {}, el("a", { href: `#/act/${encodeURIComponent(actId)}/page/${nextTodo.page}` }, el("button", { class: "primary", text: `Continue reviewing at page ${nextTodo.page}` }))) : null,
+      el("p", {},
+        nextTodo ? el("a", { href: `#/act/${encodeURIComponent(actId)}/page/${nextTodo.page}` }, el("button", { class: "primary", text: `Continue reviewing at page ${nextTodo.page}` })) : null, " ",
+        el("a", { href: `#/act/${encodeURIComponent(actId)}/read` }, el("button", { text: "Read the whole Act" }))),
       el("h3", { text: "Pages" }),
       el("p", { class: "muted", text: "Green: checked. Yellow: needs attention. Red border: high flags open. Dashed: the machine reading changed since review." }),
       grid,
     ),
+    findReplaceCard(actId),
     approvalPanel(actId, data, current),
   );
+}
+
+function findReplaceCard(actId) {
+  const find = el("input", { type: "text", placeholder: "Find across the Act" });
+  const replace = el("input", { type: "text", placeholder: "Replace with (optional)" });
+  const caseBox = el("input", { type: "checkbox" });
+  const wordBox = el("input", { type: "checkbox", checked: true });
+  const results = el("div");
+  let last = null;
+  const run = async () => {
+    const result = await api(`/api/acts/${encodeURIComponent(actId)}/search?${new URLSearchParams({ q: find.value, case: caseBox.checked, word: wordBox.checked })}`);
+    if (!result.ok) return toast(message(result));
+    last = { ...result.data, find: find.value, case: caseBox.checked, word: wordBox.checked };
+    const byPage = new Map();
+    for (const hit of result.data.hits) { if (!byPage.has(hit.page)) byPage.set(hit.page, []); byPage.get(hit.page).push(hit); }
+    const boxes = [];
+    const list = el("div", { class: "hits" }, [...byPage.entries()].map(([page, hits]) => {
+      const box = el("input", { type: "checkbox", checked: true, "data-page": page });
+      boxes.push(box);
+      return el("div", { class: "hit" },
+        el("label", {}, box, " ", el("a", { href: `#/act/${encodeURIComponent(actId)}/page/${page}`, text: `Page ${page}` }), ` · ${hits.length}`),
+        ...hits.slice(0, 5).map((h) => el("p", { class: "snippet" }, h.before, el("mark", { text: h.match }), h.after)));
+    }));
+    const apply = el("button", { class: "primary", text: "Replace in ticked pages", disabled: !app.me.roles.includes("reviewer") || !byPage.size, on: { click: async () => {
+      const pages = Object.fromEntries(boxes.filter((b) => b.checked).map((b) => [b.dataset.page, last.revisions[b.dataset.page]]));
+      if (!Object.keys(pages).length) return toast("Tick at least one page");
+      if (!confirm(`Replace “${last.find}” with “${replace.value}” on ${Object.keys(pages).length} page(s)? Each becomes a new revision in your name.`)) return;
+      const done = await api(`/api/acts/${encodeURIComponent(actId)}/replace`, { method: "POST", body: { find: last.find, replace: replace.value, case: last.case, word: last.word, pages } });
+      if (!done.ok) return toast(message(done));
+      const changed = done.data.changed.reduce((n, c) => n + c.replacements, 0);
+      toast(`Replaced ${changed} on ${done.data.changed.length} page(s)${done.data.conflicts.length ? `; pages ${done.data.conflicts.join(", ")} changed meanwhile — search again` : ""}`);
+      run();
+    } } });
+    results.replaceChildren(
+      el("p", { class: "muted", text: result.data.hits.length ? `${result.data.hits.length} match(es) on ${byPage.size} page(s)${result.data.truncated ? " (first 500 shown)" : ""}.` : "No matches." }),
+      list, byPage.size ? el("p", {}, apply) : null);
+  };
+  find.addEventListener("keydown", (e) => { if (e.key === "Enter") run(); });
+  return el("div", { class: "card" }, el("h3", { text: "Find and replace across the Act" }),
+    el("div", { class: "findbar" }, find, replace, el("button", { text: "Find", on: { click: run } })),
+    el("p", { class: "muted" }, el("label", {}, caseBox, " match case"), " ", el("label", {}, wordBox, " whole words only")),
+    results);
+}
+
+// --- reading the whole Act continuously -------------------------------------------------------------
+
+function renderUnits(units) {
+  const box = el("div", { class: "layout" });
+  for (const unit of units) {
+    if (unit.kind === "table") {
+      const table = el("table", {}, unit.caption ? el("caption", { text: unit.caption }) : null,
+        unit.rows.map((row, r) => el("tr", {}, row.map((cell) => el(r < (unit.header_rows || 0) ? "th" : "td", { text: cell })))));
+      box.append(table);
+      continue;
+    }
+    const level = unit.level ?? depthOfText(unit.marker || unit.text);
+    const body = el("p", {}, unit.marker ? el("span", { class: "restored", text: `${unit.marker} ` }) : null, unit.text);
+    const css = unit.kind === "heading" ? "h" : level !== null ? `d${level}` : "";
+    box.append(unit.notes && unit.notes.length
+      ? el("div", { class: `unit ${css}` }, body, el("div", {}, unit.notes.map((n) => el("p", { class: "note", text: n }))))
+      : el("div", { class: css }, body));
+  }
+  return box;
+}
+
+function depthOfText(lead) {
+  const text = (lead || "").trimStart();
+  if (/^\d{1,3}[A-Z]?\./.test(text)) return 0;
+  if (/^\(\d{1,3}[A-Z]?\)/.test(text)) return 1;
+  if (/^\([ivxl]{2,6}\)/.test(text)) return 3;
+  if (/^\([a-z]{1,2}\)/.test(text)) return 2;
+  return null;
+}
+
+async function readView(actId) {
+  const { data } = await api(`/api/acts/${encodeURIComponent(actId)}`);
+  setCrumbs(el("a", { href: "#/", text: "Acts" }), el("a", { href: `#/act/${encodeURIComponent(actId)}`, text: data.act.title }), "Read");
+  const list = el("div", { class: "reading" });
+  const sentinel = el("p", { class: "muted", text: "Loading…" });
+  const canEdit = app.me.roles.includes("reviewer");
+  let next = 1, total = Infinity, busy = false;
+  const load = async () => {
+    if (busy || next > total) return;
+    busy = true;
+    const { data: chunk } = await api(`/api/acts/${encodeURIComponent(actId)}/stream?start=${next}&count=6`);
+    total = chunk.total;
+    for (const page of chunk.pages) list.append(readPage(actId, page, canEdit));
+    next += 6;
+    busy = false;
+    sentinel.textContent = next > total ? "End of the Act." : "Loading…";
+    if (next <= total && sentinel.getBoundingClientRect().top < window.innerHeight + 600) load();
+  };
+  main(el("div", { class: "card" },
+    el("h2", { text: data.act.title }),
+    el("p", { class: "muted", text: "The Act as it now stands, page by page beside the gazette. Mark pages checked as you read; open a page to edit it." })),
+    list, sentinel);
+  new IntersectionObserver((entries) => { if (entries.some((e) => e.isIntersecting)) load(); }, { rootMargin: "600px" }).observe(sentinel);
+  load();
+}
+
+function readPage(actId, page, canEdit) {
+  const status = page.status === "checked" ? pill("ok", "checked") : page.status ? pill("warn", page.status) : pill("medium", "not reviewed");
+  const flags = page.open_high ? pill("high", `${page.open_high} high flags open`) : page.open ? pill("medium", `${page.open} flags open`) : null;
+  const mark = canEdit && page.status !== "checked" && !page.open_high
+    ? el("button", { class: "small", text: "Mark checked", on: { click: async (event) => {
+        const result = await api(`/api/acts/${encodeURIComponent(actId)}/pages/${page.page}`, { method: "POST", body: { expected_revision: page.revision, units: page.units, status: "checked", resolutions: page.resolutions || {}, comment: "Checked while reading the whole Act" } });
+        if (result.status === 409) return toast(`Page ${page.page} changed meanwhile; open it to check`);
+        if (!result.ok) return toast(message(result));
+        page.revision = result.data.revision; page.status = "checked";
+        event.currentTarget.replaceWith(pill("ok", "checked"));
+      } } })
+    : null;
+  return el("section", { class: "readpage", id: `read-${page.page}` },
+    el("div", { class: "viewer" }, el("img", { loading: "lazy", src: `/api/acts/${encodeURIComponent(actId)}/pages/${page.page}/image`, alt: `Gazette page ${page.page}` })),
+    el("div", {},
+      el("div", { class: "pagebar" }, el("strong", { text: `Page ${page.page}` }), status, flags,
+        el("a", { href: `#/act/${encodeURIComponent(actId)}/page/${page.page}` }, el("button", { class: "small", text: "Edit page" })), mark),
+      el("div", { class: "card" }, renderUnits(page.units))));
 }
 
 function approvalPanel(actId, data, current) {
@@ -271,7 +392,7 @@ async function pageView(actId, pageNumber) {
   renderPage(view);
 }
 
-function changed(view) { app.dirty = true; if (view.dirtyBadge) view.dirtyBadge.hidden = false; }
+function changed(view) { app.dirty = true; if (view.dirtyBadge) view.dirtyBadge.hidden = false; saveDraft(view); }
 
 // The working units: from the surface while it is open, otherwise the last snapshot.
 function currentUnits(view) {
@@ -296,16 +417,10 @@ function renderPage(view) {
     latest ? pill(latest.status === "checked" ? "ok" : "warn", `revision ${latest.revision}: ${latest.status} by ${latest.author}`) : pill("medium", "not reviewed"),
     view.dirtyBadge,
   );
-  view.image = el("img", { src: `/api/acts/${encodeURIComponent(actId)}/pages/${pageNumber}/image`, alt: `Gazette page ${pageNumber}` });
-  view.overlay = el("div", { class: "region", hidden: true });
-  const frame = el("div", { class: "frame" }, view.image, view.overlay);
-  frame.addEventListener("click", (event) => imageClicked(view, event));
-  const viewer = el("div", { class: "viewer" },
-    el("div", { class: "viewer-tools" },
-      el("button", { class: "small", text: "Zoom", on: { click: (e) => { e.stopPropagation(); e.currentTarget.closest(".viewer").classList.toggle("zoom"); } } }),
-      el("span", { class: "muted", text: "Click text to find it on the page; click the page to find its text." })),
-    frame);
+  const viewer = buildViewer(view);
   const right = el("div");
+  const draft = loadDraft(view);
+  if (draft && !view.draftHandled) right.append(draftBanner(view, draft));
   if (latest && latest.stale) right.append(el("div", { class: "card", text: "The machine reading of this page changed after it was reviewed (a re-read). Compare the Machine reading tab and save again to confirm." }));
   const tabs = el("div", { class: "tabs" });
   const body = el("div");
@@ -327,6 +442,206 @@ function renderPage(view) {
   show(view.tab);
 }
 
+// --- the page image: zoom, pan, follow -------------------------------------------------------------
+
+function buildViewer(view) {
+  const { actId, pageNumber } = view;
+  view.image = el("img", { src: `/api/acts/${encodeURIComponent(actId)}/pages/${pageNumber}/image`, alt: `Gazette page ${pageNumber}`, draggable: "false" });
+  view.overlay = el("div", { class: "region", hidden: true });
+  view.lineOverlay = el("div", { class: "region line", hidden: true });
+  const frame = el("div", { class: "frame" }, view.image, view.overlay, view.lineOverlay);
+  const label = el("span", { class: "muted zoom-label" });
+  const viewer = el("div", { class: "viewer" });
+  const setZoom = (value, anchor) => {
+    const before = { w: frame.offsetWidth, h: frame.offsetHeight };
+    app.zoom = Math.max(1, Math.min(4, value));
+    frame.style.width = `${app.zoom * 100}%`;
+    label.textContent = `${Math.round(app.zoom * 100)}%`;
+    if (anchor) { // keep the point under the pointer where it was
+      const ratio = frame.offsetWidth / before.w;
+      viewer.scrollLeft = (viewer.scrollLeft + anchor.x) * ratio - anchor.x;
+      viewer.scrollTop = (viewer.scrollTop + anchor.y) * (frame.offsetHeight / before.h) - anchor.y;
+    }
+  };
+  const follow = el("input", { type: "checkbox", checked: app.follow !== false, on: { change: (e) => { app.follow = e.target.checked; } } });
+  viewer.append(
+    el("div", { class: "viewer-tools" },
+      el("button", { class: "small", title: "Zoom out", text: "−", on: { click: () => setZoom(app.zoom / 1.25) } }),
+      label,
+      el("button", { class: "small", title: "Zoom in (or Ctrl/Cmd + scroll)", text: "+", on: { click: () => setZoom(app.zoom * 1.25) } }),
+      el("button", { class: "small", title: "Fit the page width", text: "Fit", on: { click: () => setZoom(1) } }),
+      el("label", { class: "muted", title: "Keep the image on the text you are reading" }, follow, " follow text"),
+      el("span", { class: "muted hint", text: "Drag to move when zoomed. Click the page to find its text." })),
+    frame);
+  viewer.addEventListener("wheel", (event) => {
+    if (!event.ctrlKey && !event.metaKey) return;
+    event.preventDefault();
+    const box = viewer.getBoundingClientRect();
+    setZoom(app.zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12), { x: event.clientX - box.left, y: event.clientY - box.top });
+  }, { passive: false });
+  let drag = null;
+  frame.addEventListener("pointerdown", (event) => { drag = { x: event.clientX, y: event.clientY, left: viewer.scrollLeft, top: viewer.scrollTop, moved: false }; });
+  window.addEventListener("pointermove", (event) => {
+    if (!drag) return;
+    const dx = event.clientX - drag.x, dy = event.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 4) drag.moved = true;
+    if (drag.moved && app.zoom > 1) { viewer.scrollLeft = drag.left - dx; viewer.scrollTop = drag.top - dy; frame.classList.add("dragging"); }
+  });
+  window.addEventListener("pointerup", (event) => {
+    if (drag && !drag.moved && frame.contains(event.target)) imageClicked(view, event);
+    drag = null;
+    frame.classList.remove("dragging");
+  });
+  setZoom(app.zoom || 1);
+  return viewer;
+}
+
+const norm = (value) => words(value).map((w) => w.toLowerCase().replace(/[^0-9a-z]/g, "")).filter(Boolean);
+
+function containsRun(haystack, needle) {
+  if (!needle.length) return false;
+  outer: for (let i = 0; i + needle.length <= haystack.length; i++) {
+    for (let j = 0; j < needle.length; j++) if (haystack[i + j] !== needle[j]) continue outer;
+    return true;
+  }
+  return false;
+}
+
+// The printed line the cursor is on, found from the words either side of it.
+function showLine(view) {
+  if (!view.surface || !view.page.lines || !view.page.lines.length) return;
+  const { before, after } = view.surface.caretContext();
+  // The whole word at the cursor (it may sit mid-word), with its neighbours either side.
+  const leftWords = norm(before), rightWords = norm(after);
+  const midWord = /\S$/.test(before) && /^\S/.test(after);
+  const word = midWord ? (leftWords.pop() || "") + (rightWords.shift() || "") : rightWords.shift() || leftWords.pop() || "";
+  const left = [leftWords[leftWords.length - 1], word].filter(Boolean);
+  const right = [word, rightWords[0]].filter(Boolean);
+  const lines = view.page.lines.map((line) => ({ line, words: norm(line.text) }));
+  const region = view.overlay.hidden ? null : view.currentRegion;
+  const inside = (line) => !region || (line.box[1] >= region.box[1] - 0.01 && line.box[3] <= region.box[3] + 0.01);
+  const probes = [right, left, [word]].filter((p) => p.length && p[0]);
+  for (const probe of probes) {
+    const hit = lines.find((l) => inside(l.line) && containsRun(l.words, probe)) || lines.find((l) => containsRun(l.words, probe));
+    if (hit) return placeBox(view.lineOverlay, hit.line.box);
+  }
+  view.lineOverlay.hidden = true;
+}
+
+function placeBox(box, [x0, y0, x1, y1]) {
+  Object.assign(box.style, { left: `${x0 * 100}%`, top: `${y0 * 100}%`, width: `${(x1 - x0) * 100}%`, height: `${(y1 - y0) * 100}%` });
+  box.hidden = false;
+}
+
+let followTimer = null;
+window.addEventListener("scroll", () => {
+  const view = app.view;
+  if (!view || app.follow === false || view.tab !== "edit" || !view.surface || !location.hash.includes("/page/")) return;
+  clearTimeout(followTimer);
+  followTimer = setTimeout(() => {
+    const blocks = [...document.querySelectorAll(".surface .ProseMirror > *")];
+    const index = blocks.findIndex((b) => b.getBoundingClientRect().bottom > 140);
+    const units = view.surface.units();
+    if (index >= 0 && units[index]) showRegion(view, regionFor(view, units[index]));
+  }, 120);
+}, { passive: true });
+
+// --- drafts: unsaved work survives a crash or an accidental close ----------------------------------
+
+const draftKey = (view) => `oa-draft:${view.actId}:${view.pageNumber}`;
+
+function saveDraft(view) {
+  clearTimeout(view.draftTimer);
+  view.draftTimer = setTimeout(() => {
+    try {
+      localStorage.setItem(draftKey(view), JSON.stringify({ base: view.expected, at: new Date().toISOString(), units: currentUnits(view), resolutions: view.resolutions, comment: view.comment }));
+    } catch { /* storage unavailable: the unload warning still protects the work */ }
+  }, 700);
+}
+
+function loadDraft(view) {
+  try { return JSON.parse(localStorage.getItem(draftKey(view)) || "null"); } catch { return null; }
+}
+
+function clearDraft(view) {
+  clearTimeout(view.draftTimer);
+  try { localStorage.removeItem(draftKey(view)); } catch { /* nothing to clear */ }
+}
+
+function draftBanner(view, draft) {
+  const when = new Date(draft.at).toLocaleString();
+  const current = draft.base === view.expected;
+  const banner = el("div", { class: "card draft" },
+    el("strong", { text: "Unsaved changes found. " }),
+    current ? `You were editing this page (${when}) and did not save.`
+      : `You were editing revision ${draft.base} (${when}); someone has since saved revision ${view.expected}. Restoring puts your version back — check the Changes tab before saving.`,
+    " ",
+    el("button", { class: "small primary", text: "Restore my changes", on: { click: () => {
+      view.units = draft.units; view.resolutions = draft.resolutions || {}; view.comment = draft.comment || "";
+      view.draftHandled = true; app.dirty = true;
+      banner.remove(); view.showTab("edit"); view.dirtyBadge.hidden = false;
+    } } }), " ",
+    el("button", { class: "small", text: "Discard them", on: { click: () => { clearDraft(view); view.draftHandled = true; banner.remove(); } } }));
+  return banner;
+}
+
+// --- keyboard flag review ---------------------------------------------------------------------------
+
+function visibleOpenFlags(view) {
+  if (!view.surface) return [];
+  const known = new Map(view.page.flags.map((f) => [f.id, f]));
+  return view.surface.openFlags().map((d) => known.get(d.id)).filter((f) => f && !view.resolutions[f.id] && (view.showLow || f.severity !== "low"));
+}
+
+function gotoFlag(view, step) {
+  const flags = visibleOpenFlags(view);
+  if (!flags.length) return toast("No open flags highlighted on this page");
+  const at = flags.findIndex((f) => f.id === view.openFlagId);
+  const next = flags[(at + step + flags.length) % flags.length] || flags[0];
+  view.surface.reveal(next.id);
+  setTimeout(() => {
+    const node = view.surface.flagElement(next.id);
+    if (node) { node.scrollIntoView({ block: "center" }); openFlag(view, next.id, node.getBoundingClientRect()); }
+  }, 0);
+}
+
+function actOnFlag(code) {
+  const pop = document.querySelector(".popover");
+  if (!pop) return toast("Open a flag first (Alt+N)");
+  const buttons = [...pop.querySelectorAll("button")];
+  const pick = (test) => buttons.find((b) => test(b.textContent));
+  const choice = {
+    KeyK: () => pick((t) => t.startsWith("Keep as read")),
+    KeyD: () => pick((t) => t === "Dismiss"),
+    KeyE: () => pick((t) => t === "I corrected it"),
+  }[code];
+  const button = choice ? choice() : buttons.filter((b) => /^(Use |Number |Remove words)/.test(b.textContent))[Number(code.slice(-1)) - 1];
+  if (button) { button.click(); if (app.view) setTimeout(() => gotoFlag(app.view, 0), 50); }
+}
+
+function resolveLow(view) {
+  const low = view.page.flags.filter((f) => f.severity === "low" && !view.resolutions[f.id]);
+  for (const flag of low) { view.resolutions[flag.id] = { decision: "keep", reader: "", note: "punctuation only" }; if (view.surface) view.surface.resolve(flag.id); }
+  if (low.length) { changed(view); refreshFlags(view); }
+  toast(low.length ? `Kept ${low.length} punctuation-only differences as read` : "No punctuation-only flags open");
+}
+
+document.addEventListener("keydown", (event) => {
+  const view = app.view;
+  if (!view || view.tab !== "edit" || !view.surface || !location.hash.includes("/page/")) return;
+  if (!event.altKey || event.ctrlKey || event.metaKey) return;
+  const actions = {
+    KeyN: () => gotoFlag(view, 1), KeyP: () => gotoFlag(view, -1), KeyL: () => resolveLow(view),
+    KeyK: () => actOnFlag("KeyK"), KeyD: () => actOnFlag("KeyD"), KeyE: () => actOnFlag("KeyE"),
+    Digit1: () => actOnFlag("Digit1"), Digit2: () => actOnFlag("Digit2"), Digit3: () => actOnFlag("Digit3"),
+  };
+  const action = actions[event.code];
+  if (!action) return;
+  event.preventDefault();
+  event.stopPropagation();
+  action();
+}, true);
+
 // --- linking text and image ---------------------------------------------------------------------------
 
 function regionFor(view, unit) {
@@ -337,13 +652,14 @@ function regionFor(view, unit) {
 }
 
 function showRegion(view, region) {
+  view.currentRegion = region;
   if (!region) { view.overlay.hidden = true; return; }
-  const [x0, y0, x1, y1] = region.box;
-  Object.assign(view.overlay.style, { left: `${x0 * 100}%`, top: `${y0 * 100}%`, width: `${(x1 - x0) * 100}%`, height: `${(y1 - y0) * 100}%` });
-  view.overlay.hidden = false;
+  placeBox(view.overlay, region.box);
   const viewer = view.overlay.closest(".viewer");
-  const top = view.overlay.offsetTop - viewer.clientHeight / 3;
-  if (view.overlay.offsetTop < viewer.scrollTop || view.overlay.offsetTop > viewer.scrollTop + viewer.clientHeight) viewer.scrollTo({ top, behavior: "smooth" });
+  const { offsetTop: top, offsetLeft: left, offsetWidth: width } = view.overlay;
+  const outside = top < viewer.scrollTop + 30 || top > viewer.scrollTop + viewer.clientHeight - 60
+    || left < viewer.scrollLeft || left + Math.min(width, viewer.clientWidth) > viewer.scrollLeft + viewer.clientWidth;
+  if (outside) viewer.scrollTo({ top: top - viewer.clientHeight / 3, left: Math.max(0, left - 20), behavior: "smooth" });
 }
 
 function imageClicked(view, event) {
@@ -373,6 +689,7 @@ function editTab(view) {
     onChange: () => changed(view),
     onFlagClick: (id, rect) => openFlag(view, id, rect),
     onUnitFocus: (index) => { const units = view.surface ? view.surface.units() : view.units; showRegion(view, units[index] ? regionFor(view, units[index]) : null); },
+    onSelect: () => setTimeout(() => showLine(view), 0),
     onMarkerEdit: (value, apply) => { const next = prompt("Section or paragraph number (empty to remove):", value); if (next !== null) apply(next.trim()); },
   });
   view.surface = surface;
@@ -393,7 +710,10 @@ function editTab(view) {
     el("button", { class: "small", title: "Undo (Ctrl/Cmd+Z)", text: "↶", on: { click: run(C.undo) } }),
     el("button", { class: "small", title: "Redo (Ctrl/Cmd+Shift+Z)", text: "↷", on: { click: run(C.redo) } }),
     el("details", { class: "keys" }, el("summary", { text: "Keys" }),
-      el("p", { class: "muted", text: "Type to correct words. Enter splits a paragraph; Backspace at its start joins it to the one above. Tab / Shift+Tab change the level (section, subsection, paragraph, sub-paragraph). Double-click a blue number to change it. Ctrl/Cmd+S saves." })));
+      el("div", { class: "muted" },
+        el("p", { text: "Type to correct words. Enter splits a paragraph; Backspace at its start joins it to the one above. Tab / Shift+Tab change the level. Double-click a blue number to change it." }),
+        el("p", { text: "Flags: Alt+N next, Alt+P previous; then Alt+1 / Alt+2 use that reading, Alt+K keep as read, Alt+E I corrected it, Alt+D dismiss. Alt+L keeps all punctuation-only differences." }),
+        el("p", { text: "Ctrl/Cmd+S save as checked; Ctrl/Cmd+Enter save as checked and go to the next page. Ctrl/Cmd + scroll zooms the page image." }))));
   const list = flagList(view);
   return [list, toolbar, mount, saveBar(view)];
 }
@@ -410,7 +730,12 @@ function flagList(view) {
       `${open.length} open flag${open.length === 1 ? "" : "s"}`,
       ` (${open.filter((f) => f.severity === "high").length} high) — highlighted in the text; click one to resolve it.`),
   );
-  if (lowCount) box.append(el("label", { class: "muted" }, el("input", { type: "checkbox", checked: view.showLow, on: { change: (e) => { view.showLow = e.target.checked; currentUnits(view); view.showTab("edit"); } } }), ` include ${lowCount} punctuation-only`));
+  if (lowCount) {
+    const openLow = all.filter((f) => f.severity === "low" && !view.resolutions[f.id]).length;
+    box.append(el("p", { class: "muted" },
+      el("label", {}, el("input", { type: "checkbox", checked: view.showLow, on: { change: (e) => { view.showLow = e.target.checked; currentUnits(view); view.showTab("edit"); } } }), ` include ${lowCount} punctuation-only`), " ",
+      openLow ? el("button", { class: "small", text: `Keep all ${openLow} punctuation-only as read (Alt+L)`, on: { click: () => resolveLow(view) } }) : null));
+  }
   for (const flag of shown) box.append(flagCard(view, flag, true));
   if (!shown.length) box.append(el("p", { class: "muted", text: "No flags on this page. Compare the text with the image." }));
   return box;
@@ -463,6 +788,7 @@ function openFlag(view, id, rect) {
   document.querySelectorAll(".popover").forEach((p) => p.remove());
   const flag = view.page.flags.find((f) => f.id === id);
   if (!flag) return;
+  view.openFlagId = id;
   const pop = el("div", { class: "popover" }, flagCard(view, flag, false),
     el("button", { class: "small close", text: "Close", on: { click: () => pop.remove() } }));
   document.body.append(pop);
@@ -521,6 +847,7 @@ function saveBar(view) {
     if (result.status === 409) { toast("Someone saved this page first. Reloading their version."); app.dirty = false; return pageView(view.actId, view.pageNumber); }
     if (!result.ok) return toast(message(result));
     app.dirty = false;
+    clearDraft(view);
     toast(`Saved revision ${result.data.revision}`);
     const numbers = view.detail.pages.map((p) => p.page);
     const next = numbers[numbers.indexOf(view.pageNumber) + 1];
@@ -568,6 +895,7 @@ async function route() {
   const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
   try {
     if (parts[0] === "act" && parts[2] === "page") return await pageView(parts[1], Number(parts[3]));
+    if (parts[0] === "act" && parts[2] === "read") return await readView(parts[1]);
     if (parts[0] === "act" && parts[1]) return await actView(parts[1]);
     if (parts[0] === "audit" && parts[1]) return await auditView(parts[1]);
     return await dashboard();
@@ -578,11 +906,10 @@ async function route() {
 
 window.addEventListener("beforeunload", (event) => { if (app.dirty) { event.preventDefault(); event.returnValue = ""; } });
 document.addEventListener("keydown", (event) => {
-  if ((event.metaKey || event.ctrlKey) && event.key === "s" && app.view && location.hash.includes("/page/")) {
-    event.preventDefault();
-    document.querySelector(".savebar .primary")?.click();
-  }
-});
+  if (!(event.metaKey || event.ctrlKey) || !app.view || !location.hash.includes("/page/")) return;
+  if (event.key === "s") { event.preventDefault(); document.querySelector(".savebar .primary")?.click(); }
+  if (event.key === "Enter") { event.preventDefault(); [...document.querySelectorAll(".savebar button")].find((b) => b.textContent.startsWith("Checked →"))?.click(); }
+}, true);
 
 async function start() {
   const signedOut = await loadMe();

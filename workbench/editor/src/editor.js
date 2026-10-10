@@ -403,7 +403,7 @@ export const commands = {
 
 // --- the editor ------------------------------------------------------------------------------------
 
-export function createEditor(mount, { units, machineUnits, flags, onChange, onFlagClick, onUnitFocus, onMarkerEdit, editable = true }) {
+export function createEditor(mount, { units, machineUnits, flags, onChange, onFlagClick, onUnitFocus, onSelect, onMarkerEdit, editable = true }) {
   const keys = keymap({
     Enter: (state, dispatch) => splitNote(state, dispatch) || splitUnit(state, dispatch) || true,
     "Shift-Enter": () => true,
@@ -432,6 +432,7 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
       if (tr.docChanged) onChange && onChange();
       const index = next.selection.$from.depth ? next.selection.$from.index(0) : -1;
       if (index !== lastUnit) { lastUnit = index; onUnitFocus && onUnitFocus(index); }
+      if (tr.selectionSet || tr.docChanged) onSelect && onSelect(index);
     },
     handleDoubleClickOn(view2, pos, node, nodePos) {
       if (node.type === N.marker && onMarkerEdit) {
@@ -485,6 +486,20 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
       return true;
     },
     highlighted: (id) => Boolean(flagRange(id)),
+    // The words around the cursor, to find the printed line it sits on.
+    caretContext() {
+      const { $from } = view.state.selection;
+      const text = $from.parent.textContent;
+      const at = Math.min($from.parentOffset, text.length);
+      return { index: $from.depth ? $from.index(0) : -1, before: text.slice(Math.max(0, at - 40), at), after: text.slice(at, at + 40) };
+    },
+    // Open flags in document order, with the DOM element that shows each one.
+    openFlags() {
+      return flagKey.getState(view.state).set.find().sort((a, b) => a.from - b.from).map((d) => ({ id: d.spec.flag, from: d.from }));
+    },
+    flagElement(id) {
+      return view.dom.querySelector(`[data-flag="${CSS.escape(id)}"]`);
+    },
     // Whether a check reading can be applied to this flag with one click.
     applicable(id) {
       const range = flagRange(id);

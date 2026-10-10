@@ -9,6 +9,7 @@ identified by page, position and text, so a resolution survives reloads.
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -118,6 +119,114 @@ def regions(staging: Path, act_id: str, page: int) -> list[dict]:
                 }
             )
     return out
+
+
+def lines(staging: Path, act_id: str, page: int) -> list[dict]:
+    """Printed lines on the page image (fractions of the page), from the positional check reader."""
+    path = staging / "readings" / act_id / "azure.json"
+    if not path.exists():
+        return []
+    analyze = json.loads(path.read_text()).get("raw", {}).get("analyze") or {}
+    found = next((p for p in analyze.get("pages") or [] if p.get("pageNumber") == page), None)
+    if not found or not found.get("width") or not found.get("height"):
+        return []
+    out = []
+    for line in found.get("lines") or []:
+        polygon = line.get("polygon") or []
+        if len(polygon) < 8:
+            continue
+        xs, ys = polygon[0::2], polygon[1::2]
+        out.append(
+            {
+                "text": line.get("content", "")[:300],
+                "box": [
+                    min(xs) / found["width"],
+                    min(ys) / found["height"],
+                    max(xs) / found["width"],
+                    max(ys) / found["height"],
+                ],
+            }
+        )
+    return out
+
+
+# --- Act-wide find and replace ------------------------------------------------------------------
+
+
+def _pattern(find: str, match_case: bool, whole_word: bool) -> re.Pattern:
+    if not find or len(find) > 200:
+        raise ValueError("search for 1 to 200 characters")
+    body = re.escape(find)
+    if whole_word:
+        body = rf"(?<!\w){body}(?!\w)"
+    return re.compile(body, 0 if match_case else re.IGNORECASE)
+
+
+def _fields(unit: dict):
+    """(field name, text) pairs a search covers, in reading order."""
+    if unit["kind"] == "table":
+        yield "caption", unit.get("caption", "")
+        for r, row in enumerate(unit["rows"]):
+            for c, cell in enumerate(row):
+                yield f"cell:{r}:{c}", cell
+        return
+    yield "text", unit.get("text", "")
+    for n, note in enumerate(unit.get("notes") or []):
+        yield f"note:{n}", note
+
+
+def search(
+    pages: list[dict], find: str, match_case: bool = False, whole_word: bool = False, limit: int = 500
+) -> list[dict]:
+    pattern, hits = _pattern(find, match_case, whole_word), []
+    for page in pages:
+        for u, unit in enumerate(page["units"]):
+            for field, text in _fields(unit):
+                for match in pattern.finditer(text):
+                    start, end = match.span()
+                    hits.append(
+                        {
+                            "page": page["page"],
+                            "unit": u,
+                            "field": field,
+                            "before": text[max(0, start - 50) : start],
+                            "match": match.group(),
+                            "after": text[end : end + 50],
+                        }
+                    )
+                    if len(hits) >= limit:
+                        return hits
+    return hits
+
+
+def replace_in(
+    units: list[dict], find: str, replacement: str, match_case: bool, whole_word: bool
+) -> tuple[list[dict], int]:
+    """A copy of the units with every match replaced, and how many were replaced."""
+    if len(replacement) > 200:
+        raise ValueError("replace with at most 200 characters")
+    pattern, total, out = _pattern(find, match_case, whole_word), 0, []
+    for unit in units:
+        unit = json.loads(json.dumps(unit))
+        if unit["kind"] == "table":
+            unit["caption"], count = pattern.subn(lambda _: replacement, unit.get("caption", ""))
+            total += count
+            for row in unit["rows"]:
+                for c, cell in enumerate(row):
+                    row[c], count = pattern.subn(lambda _: replacement, cell)
+                    total += count
+        else:
+            unit["text"], count = pattern.subn(lambda _: replacement, unit.get("text", ""))
+            total += count
+            notes = []
+            for note in unit.get("notes") or []:
+                note, count = pattern.subn(lambda _: replacement, note)
+                total += count
+                notes.append(note)
+            if notes:
+                unit["notes"] = notes
+        out.append(unit)
+    return out, total
 
 
 def units_from(page: dict) -> list[dict]:
