@@ -18,6 +18,7 @@ from ingestion import first_collection, layout_parser
 from workbench.store import canonical_json
 
 KINDS = {"heading", "paragraph", "list_item", "table"}
+MARK_TYPES = {"bold", "italic", "underline", "superscript", "subscript"}
 MATERIALS = {
     "operative_tables": "Tables match the gazette cell by cell",
     "amounts": "Amounts and figures match",
@@ -317,6 +318,24 @@ def validate_units(units) -> list[dict]:
             if not isinstance(level, int) or isinstance(level, bool) or not 0 <= level <= 3:
                 raise ValueError("level must be 0 (section) to 3 (sub-paragraph)")
             item["level"] = level
+        marks = unit.get("marks") or []
+        if not isinstance(marks, list) or len(marks) > 200:
+            raise ValueError("marks must be a list of at most 200 ranges")
+        clean_marks = []
+        for mark in marks:
+            if (
+                not isinstance(mark, dict)
+                or mark.get("type") not in MARK_TYPES
+                or not all(
+                    isinstance(mark.get(k), int) and not isinstance(mark.get(k), bool)
+                    for k in ("start", "end")
+                )
+                or not 0 <= mark["start"] < mark["end"] <= len(text)
+            ):
+                raise ValueError("each mark needs a type and a range within the text")
+            clean_marks.append({"type": mark["type"], "start": mark["start"], "end": mark["end"]})
+        if clean_marks:
+            item["marks"] = clean_marks
         align = unit.get("align")
         if align is not None:
             if align not in {"left", "center", "right"}:

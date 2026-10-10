@@ -520,3 +520,37 @@ def test_unit_alignment_is_kept_and_validated(world):
         save(browser, expected=1, units=[{"kind": "heading", "text": "x", "align": "justify"}]).status_code
         == 422
     )
+
+
+def test_character_formatting_is_validated_and_exported_as_akn_inline(world):
+    import xml.etree.ElementTree as ET
+
+    from workbench import akn
+
+    browser = signed_in(world, "reviewer@example.org")
+    unit = {
+        "kind": "paragraph",
+        "marker": "(a)",
+        "text": "the 1st Schedule applies",
+        "marks": [{"type": "superscript", "start": 5, "end": 7}, {"type": "italic", "start": 8, "end": 16}],
+    }
+    assert save(browser, units=[unit]).status_code == 200
+    stored = browser.get(f"/api/documents/{ACT}/pages/1").json()["latest"]["units"][0]
+    assert stored["marks"] == unit["marks"]
+    assert (
+        save(
+            browser, expected=1, units=[{**unit, "marks": [{"type": "bold", "start": 0, "end": 99}]}]
+        ).status_code
+        == 422
+    )
+    assert (
+        save(
+            browser, expected=1, units=[{**unit, "marks": [{"type": "font-size", "start": 0, "end": 2}]}]
+        ).status_code
+        == 422
+    )
+    p = akn.unit_paragraph(unit)
+    ns = {"a": akn.NS}
+    assert "".join(p.itertext()) == "(a) the 1st Schedule applies"
+    assert p.find("a:sup", ns).text == "st" and p.find("a:i", ns).text == "Schedule"
+    ET.tostring(p)  # well formed

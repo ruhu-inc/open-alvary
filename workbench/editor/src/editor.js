@@ -10,7 +10,7 @@ import { Schema, Fragment } from "prosemirror-model";
 import { EditorState, Plugin, PluginKey, TextSelection } from "prosemirror-state";
 import { EditorView, Decoration, DecorationSet } from "prosemirror-view";
 import { keymap } from "prosemirror-keymap";
-import { baseKeymap } from "prosemirror-commands";
+import { baseKeymap, toggleMark } from "prosemirror-commands";
 import { history, undo, redo } from "prosemirror-history";
 
 const DEPTH = [
@@ -71,8 +71,34 @@ export const schema = new Schema({
     table_cell: { content: "text*", marks: "", toDOM: () => ["div", { class: "td" }, 0] },
     text: { group: "inline" },
   },
-  marks: {},
+  // Character formatting that can carry meaning in legal text; no fonts, sizes or colours.
+  marks: {
+    strong: { toDOM: () => ["strong", 0] },
+    em: { toDOM: () => ["em", 0] },
+    underline: { toDOM: () => ["u", 0] },
+    sup: { excludes: "sup sub", toDOM: () => ["sup", 0] },
+    sub: { excludes: "sup sub", toDOM: () => ["sub", 0] },
+  },
 });
+
+// Stored names of the formatting marks, as the server and the exports know them.
+const MARK_NAMES = { strong: "bold", em: "italic", underline: "underline", sup: "superscript", sub: "subscript" };
+const MARK_TYPES = Object.fromEntries(Object.entries(MARK_NAMES).map(([type, name]) => [name, type]));
+
+// Unit text with formatting ranges -> text nodes carrying marks.
+function formatted(value, ranges) {
+  const textValue = value || "";
+  if (!textValue) return [];
+  const valid = (ranges || []).filter((r) => MARK_TYPES[r.type] && r.start < r.end && r.end <= textValue.length);
+  const cuts = [...new Set([0, textValue.length, ...valid.flatMap((r) => [r.start, r.end])])].sort((a, b) => a - b);
+  const nodes = [];
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    const [from, to] = [cuts[i], cuts[i + 1]];
+    const marks = valid.filter((r) => r.start <= from && r.end >= to).map((r) => schema.marks[MARK_TYPES[r.type]].create());
+    nodes.push(schema.text(textValue.slice(from, to), marks));
+  }
+  return nodes;
+}
 
 const N = schema.nodes;
 const text = (value) => (value ? [schema.text(value)] : []);
@@ -88,7 +114,7 @@ export function toDoc(units) {
     }
     const inline = [];
     if (unit.marker) inline.push(N.marker.create({ value: unit.marker, source: unit.marker_source || null }));
-    inline.push(...text(unit.text || ""));
+    inline.push(...formatted(unit.text || "", unit.marks));
     const notes = (unit.notes || []).map((note) => N.note.create(null, text(note)));
     const align = ["left", "center", "right"].includes(unit.align) ? unit.align : null;
     return N.unit.create({ kind: unit.kind, level: Number.isInteger(unit.level) ? unit.level : null, align }, [N.body.create(null, inline), ...notes]);
@@ -112,11 +138,25 @@ export function fromDoc(doc) {
     const body = block.firstChild;
     let marker = null;
     let words = "";
+    const ranges = [];
     body.forEach((child) => {
-      if (child.type === N.marker) { if (!marker) marker = child.attrs; }
-      else words += child.text || "";
+      if (child.type === N.marker) { if (!marker) marker = child.attrs; return; }
+      const start = words.length;
+      words += child.text || "";
+      for (const mark of child.marks) {
+        const name = MARK_NAMES[mark.type.name];
+        const last = ranges.findLast((r) => r.type === name && r.end === start);
+        if (last) last.end = words.length;
+        else ranges.push({ type: name, start, end: words.length });
+      }
     });
-    const unit = { kind: block.attrs.kind, text: words.trim() };
+    const lead = words.length - words.trimStart().length;
+    const trimmed = words.trim();
+    const unit = { kind: block.attrs.kind, text: trimmed };
+    const marks = ranges
+      .map((r) => ({ type: r.type, start: Math.max(0, r.start - lead), end: Math.min(trimmed.length, r.end - lead) }))
+      .filter((r) => r.start < r.end);
+    if (marks.length) unit.marks = marks;
     if (marker && marker.value) { unit.marker = marker.value; if (marker.source) unit.marker_source = marker.source; }
     const notes = [];
     block.forEach((child, _, index) => { if (index > 0 && child.textContent.trim()) notes.push(child.textContent.trim()); });
@@ -347,6 +387,7 @@ function setUnitAttrs(change) {
 }
 
 export const commands = {
+  mark: (type) => toggleMark(schema.marks[type]),
   kind: (kind) => setUnitAttrs((attrs) => ({ ...attrs, kind })),
   // Alignment as printed; choosing the kind's usual alignment clears the setting.
   align: (align) => setUnitAttrs((attrs) => ({ ...attrs, align: align === (attrs.kind === "heading" ? "center" : "left") ? null : align })),
@@ -422,6 +463,11 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
     "Mod-Alt-2": commands.kind("paragraph"),
     "Mod-Alt-3": commands.kind("list_item"),
     "Mod-Alt-n": commands.addNote,
+    "Mod-b": toggleMark(schema.marks.strong),
+    "Mod-i": toggleMark(schema.marks.em),
+    "Mod-u": toggleMark(schema.marks.underline),
+    "Mod-.": toggleMark(schema.marks.sup),
+    "Mod-,": toggleMark(schema.marks.sub),
     "Mod-Alt-l": commands.align("left"),
     "Mod-Alt-e": commands.align("center"),
     "Mod-Alt-r": commands.align("right"),
@@ -494,6 +540,14 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
       return true;
     },
     highlighted: (id) => Boolean(flagRange(id)),
+    // Formatting at the cursor or across the selection, for the toolbar's pressed state.
+    activeMarks() {
+      const { from, to, empty, $from } = view.state.selection;
+      const marks = empty ? view.state.storedMarks || $from.marks() : [];
+      const active = new Set(marks.map((m) => m.type.name));
+      if (!empty) for (const type of Object.values(schema.marks)) if (view.state.doc.rangeHasMark(from, to, type)) active.add(type.name);
+      return active;
+    },
     // The words around the cursor, to find the printed line it sits on.
     caretContext() {
       const { $from } = view.state.selection;
