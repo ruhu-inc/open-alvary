@@ -170,33 +170,58 @@ function fieldStart(doc, u, field) {
   return inner + 1;
 }
 
+function unitStart(doc, u) {
+  let pos = 0;
+  for (let i = 0; i < u; i++) pos += doc.child(i).nodeSize;
+  return pos;
+}
+
+function caret(flag, title, symbol) {
+  return () => {
+    const mark = document.createElement("span");
+    mark.className = `gap ${flag.severity}`;
+    mark.title = title;
+    mark.dataset.flag = flag.id;
+    mark.textContent = symbol;
+    return mark;
+  };
+}
+
 function initialDecorations(doc, flags, machineUnits, units) {
   const map = tokenMap(machineUnits);
   const decorations = [];
   for (const flag of flags) {
+    const spec = { flag: flag.id, severity: flag.severity, kind: flag.kind };
+    if (flag.kind === "marker_conflict") {
+      // The check readings disagree on a number the main reading dropped: mark where it belongs.
+      const u = units.findIndex((unit) => unit.kind !== "table" && unit.text && unit.text.startsWith(flag.primary));
+      if (u >= 0 && u < doc.childCount && doc.child(u).type === N.unit) {
+        decorations.push(Decoration.widget(unitStart(doc, u) + 2, caret(flag, "The check readings give different numbers here", "#?"), { ...spec, side: -1 }));
+      }
+      continue;
+    }
     const [from, to] = flag.tokens;
     const anchor = from < map.length ? map[from] : map[map.length - 1];
-    if (!anchor || anchor.field === "marker" || anchor.field.startsWith("cell") || anchor.field === "caption") continue;
+    if (!anchor || anchor.field.startsWith("cell") || anchor.field === "caption") continue;
     if (!sameUnit(machineUnits[anchor.u], units[anchor.u])) continue; // edited since: listed, not highlighted
-    let span = true;
-    for (let i = from; i < to; i++) if (!map[i] || map[i].u !== anchor.u || map[i].field !== anchor.field) span = false;
-    if (!span) continue;
+    if (anchor.field === "marker") {
+      // A flag on a restored number: highlight the number chip itself.
+      const at = unitStart(doc, anchor.u) + 2;
+      const chip = doc.nodeAt(at);
+      if (chip && chip.type === N.marker) decorations.push(Decoration.node(at, at + 1, { class: `flag ${flag.severity}`, "data-flag": flag.id }, spec));
+      continue;
+    }
     const start = fieldStart(doc, anchor.u, anchor.field);
     if (start === null) continue;
-    const spec = { flag: flag.id, severity: flag.severity };
     if (from === to || flag.kind === "missing_from_primary") {
       const at = from < map.length ? start + anchor.start : start + (machineUnits[anchor.u].text || "").length;
-      decorations.push(Decoration.widget(at, () => {
-        const caret = document.createElement("span");
-        caret.className = `gap ${flag.severity}`;
-        caret.title = "Words only the check readings have here";
-        caret.dataset.flag = flag.id;
-        caret.textContent = "⁁";
-        return caret;
-      }, { ...spec, side: -1 }));
-    } else {
-      decorations.push(Decoration.inline(start + map[from].start, start + map[to - 1].end, { class: `flag ${flag.severity}`, "data-flag": flag.id }, spec));
+      decorations.push(Decoration.widget(at, caret(flag, "Words only the check readings have here", "⁁"), { ...spec, side: -1 }));
+      continue;
     }
+    // A flag that runs into the next unit is highlighted where it starts; the pop-up shows it all.
+    let last = from;
+    while (last + 1 < to && map[last + 1] && map[last + 1].u === anchor.u && map[last + 1].field === anchor.field) last++;
+    decorations.push(Decoration.inline(start + map[from].start, start + map[last].end, { class: `flag ${flag.severity}`, "data-flag": flag.id }, { ...spec, partial: last + 1 < to }));
   }
   return DecorationSet.create(doc, decorations);
 }
@@ -434,7 +459,17 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
       const range = flagRange(id);
       if (!range) return false;
       const tr = view.state.tr;
-      if (range.from === range.to) tr.insertText(`${words} `, range.from);
+      if (range.spec.kind === "marker_conflict") {
+        // Set the chosen number as the unit's number chip.
+        const $at = view.state.doc.resolve(range.from);
+        const bodyStart = $at.start($at.depth);
+        const first = view.state.doc.nodeAt(bodyStart);
+        const chip = N.marker.create({ value: words, source: null });
+        if (first && first.type === N.marker) tr.replaceWith(bodyStart, bodyStart + 1, chip);
+        else tr.insert(bodyStart, chip);
+      } else if (range.spec.partial) {
+        return false; // spans units: correct by hand
+      } else if (range.from === range.to) tr.insertText(`${words} `, range.from);
       else if (words) tr.insertText(words, range.from, range.to);
       else tr.delete(range.from, range.to);
       tr.setMeta(flagKey, { resolved: id });
@@ -450,6 +485,11 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
       return true;
     },
     highlighted: (id) => Boolean(flagRange(id)),
+    // Whether a check reading can be applied to this flag with one click.
+    applicable(id) {
+      const range = flagRange(id);
+      return Boolean(range && !range.spec.partial);
+    },
     focusUnit(index) {
       if (index < 0 || index >= view.state.doc.childCount) return;
       let pos = 0;
