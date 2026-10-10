@@ -101,8 +101,8 @@ pre.check { white-space: pre-wrap; font: 13px/1.5 ui-monospace, Menlo, monospace
 .surface .ProseMirror { outline: none; white-space: pre-wrap; word-wrap: break-word; font: 15px/1.6 Georgia, "Times New Roman", serif; }
 .surface .ProseMirror:focus-visible { outline: none; }
 .surface .u { display: grid; grid-template-columns: minmax(0, 1fr); gap: .1rem 1rem; margin: .25rem 0; padding: .1rem .35rem; border-radius: 4px; }
-.surface .u.has-notes { grid-template-columns: minmax(0, 1fr) 10rem; }
-.surface .u.has-notes > .body { grid-row: 1 / span 9; }
+.surface .u:has(> .note) { grid-template-columns: minmax(0, 1fr) 10rem; }
+.surface .u:has(> .note) > .body { grid-row: 1 / span 9; }
 .surface .u:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .surface .u.heading .body { font-weight: 700; text-align: center; letter-spacing: .01em; }
 .surface .u.lvl0 { margin-top: .8rem; } .surface .u.lvl1 { margin-left: 1.4rem; } .surface .u.lvl2 { margin-left: 2.8rem; } .surface .u.lvl3 { margin-left: 4.2rem; }

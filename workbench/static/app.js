@@ -815,6 +815,8 @@ function markButton(surface, type, label, title) {
 
 function updateMarkButtons(view) {
   if (!view.surface) return;
+  const inNote = view.surface.inNote();
+  document.querySelectorAll(".toolbar .note-move").forEach((b) => { b.disabled = !inNote; });
   const active = view.surface.activeMarks();
   document.querySelectorAll(".toolbar [data-mark]").forEach((b) => {
     const on = active.has(b.dataset.mark);
@@ -876,6 +878,8 @@ function editTab(view) {
     el("button", { class: "small", title: "Outdent (Shift+Tab)", text: "⇤", on: { click: run(C.level(-1)) } }),
     el("button", { class: "small", title: "Indent (Tab)", text: "⇥", on: { click: run(C.level(1)) } }),
     el("button", { class: "small", title: "Add a margin note (Ctrl/Cmd+Alt+N)", text: "+ Margin note", on: { click: run(C.addNote) } }),
+    el("button", { class: "small note-move", title: "Move this margin note to the previous paragraph (Alt+Shift+↑)", text: "Note ↑", disabled: true, on: { click: run(C.moveNote(-1)) } }),
+    el("button", { class: "small note-move", title: "Move this margin note to the next paragraph (Alt+Shift+↓)", text: "Note ↓", disabled: true, on: { click: run(C.moveNote(1)) } }),
     el("button", { class: "small", title: "Insert a table after this unit", text: "+ Table", on: { click: run(C.insertTable) } }),
     el("button", { class: "small", title: "Add a row below (in a table)", text: "+ Row", on: { click: run(C.addRow) } }),
     el("button", { class: "small", title: "Add a column (in a table)", text: "+ Column", on: { click: run(C.addColumn) } }),
@@ -888,6 +892,7 @@ function editTab(view) {
     el("details", { class: "keys" }, el("summary", { text: "Keys" }),
       el("div", { class: "muted" },
         el("p", { text: "Type to correct words. Enter splits a paragraph; Backspace at its start joins it to the one above. Tab / Shift+Tab change the level. Ctrl/Cmd+Alt+L, E, R align left, centre, right. Double-click a section number to change it." }),
+        el("p", { text: "Margin notes: click into a note, then Note ↑ / Note ↓ (Alt+Shift+↑ / ↓) moves it to the paragraph it belongs beside." }),
         el("p", { text: "Flags: Alt+N next, Alt+P previous; then Alt+1 / Alt+2 use that reading, Alt+K keep as read, Alt+E I corrected it, Alt+D dismiss. Alt+L keeps all punctuation-only differences." }),
         el("p", { text: "Ctrl/Cmd+S save as checked; Ctrl/Cmd+Enter save as checked and go to the next page. Ctrl/Cmd + scroll zooms the page image." }))));
   const list = flagList(view);

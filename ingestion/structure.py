@@ -55,14 +55,15 @@ PART = re.compile(r"^PART\s+[IVXLC]+\b")
 class Note:
     text: str
     anchor: tuple[str, ...] | None  # opening words of the body paragraph printed beside it
+    numbered: tuple[str, ...] | None = None  # the same opening with its numbers ("4. (1) the …")
 
 
-def opening(text: str) -> tuple[str, ...]:
-    """A unit's first words for matching, ignoring leading numbers and markers."""
+def opening(text: str, numbers: bool = False) -> tuple[str, ...]:
+    """A unit's first words for matching; leading numbers and markers kept only when asked."""
     words = [key(w).lower() for w in TOKEN.findall(text)]
-    while words and MARKERISH.match(words[0]):
+    while not numbers and words and MARKERISH.match(words[0]):
         words.pop(0)
-    return tuple(words[:ANCHOR_WORDS])
+    return tuple(w for w in words if w)[:ANCHOR_WORDS]
 
 
 def margin_notes(check_pages: dict[str, dict]) -> list[Note]:
@@ -76,8 +77,15 @@ def margin_notes(check_pages: dict[str, dict]) -> list[Note]:
             if block["box"]["x0"] < MARGIN or not 0 < len(words) <= NOTE_WORDS:
                 continue
             beside = [b for b in body if b["box"]["y0"] <= block["box"]["y0"] + ALIGN]
-            anchor = opening(max(beside, key=lambda b: b["box"]["y0"])["text"]) if beside else ()
-            notes.append(Note(block["text"], anchor if len(anchor) >= 3 else None))
+            paragraph = max(beside, key=lambda b: b["box"]["y0"])["text"] if beside else ""
+            anchor, numbered = opening(paragraph), opening(paragraph, numbers=True)
+            notes.append(
+                Note(
+                    block["text"],
+                    anchor if len(anchor) >= 3 else None,
+                    numbered if numbered != anchor else None,
+                )
+            )
     return notes
 
 
@@ -224,19 +232,34 @@ def split_at_boundaries(nodes: list[dict], check_pages: dict[str, dict]) -> list
 
 
 def attach_notes(nodes: list[dict]) -> list[dict]:
-    """Give each note to the unit opening with the paragraph printed beside it, if one does."""
-    openings = [opening(n.get("text", "")) if n["kind"] in {"paragraph", "list_item"} else () for n in nodes]
-    for node in nodes:
+    """Give each note to the unit opening with the paragraph printed beside it, if one does.
+
+    The opening is matched with its numbers first ("4. (1) The National …"), since provisions
+    often open with the same words; without numbers only when the main reading dropped them, and
+    then, if several units match, the one nearest to where the note was found.
+    """
+    texts = [
+        (f"{n['marker']} {n.get('text', '')}" if n.get("marker") else n.get("text", ""))
+        if n["kind"] in {"paragraph", "list_item"}
+        else ""
+        for n in nodes
+    ]
+    plain = [opening(t) for t in texts]
+    numbered = [opening(t, numbers=True) for t in texts]
+
+    def starts(openings, anchor):
+        width = len(anchor)
+        return [i for i, o in enumerate(openings) if len(o) >= width and o[:width] == anchor]
+
+    for index, node in enumerate(nodes):
         for note in node.pop("_pending", []):
-            owner = node
-            if note.anchor:
-                width = len(note.anchor)
-                match = next(
-                    (i for i, o in enumerate(openings) if len(o) >= width and o[:width] == note.anchor), None
-                )
-                if match is not None:
-                    owner = nodes[match]
-            owner.setdefault("notes", []).append(note.text)
+            owner = index
+            matches = starts(numbered, note.numbered) if note.numbered else []
+            if not matches and note.anchor:
+                matches = starts(plain, note.anchor)
+            if matches:
+                owner = min(matches, key=lambda i: (abs(i - index), i))
+            nodes[owner].setdefault("notes", []).append(note.text)
     return nodes
 
 
