@@ -338,8 +338,8 @@ def validate_units(units) -> list[dict]:
             item["marks"] = clean_marks
         align = unit.get("align")
         if align is not None:
-            if align not in {"left", "center", "right"}:
-                raise ValueError("align must be left, center or right")
+            if align not in {"left", "center", "right", "justify"}:
+                raise ValueError("align must be left, center, right or justify")
             item["align"] = align
         if unit.get("marker"):
             item["marker"] = str(unit["marker"])[:40]

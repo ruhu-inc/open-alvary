@@ -101,6 +101,41 @@ function formatted(value, ranges) {
 }
 
 const N = schema.nodes;
+const ALIGNMENTS = ["left", "center", "right", "justify"];
+
+// A section number hangs in the margin, so its words (and their next lines) form one column
+// starting at "(1)": the class says how wide the number is. The number may be a chip or words.
+export const SECTION_LEAD = /^\d{1,3}[A-Z]?\.\s+/;
+
+export function hangClass(kind, marker) {
+  if (kind === "heading" || !marker || derivedDepth(marker) !== 0) return "";
+  return `hang hang-${Math.min(Math.max(marker.trim().length, 2), 5)}`;
+}
+
+function hangDecorations(doc) {
+  const decorations = [];
+  doc.forEach((node, pos) => {
+    if (node.type !== N.unit) return;
+    const body = node.firstChild;
+    const first = body.firstChild;
+    const start = pos + 2;
+    let lead = null;
+    let end = start;
+    if (first && first.type === N.marker) {
+      [lead, end] = [first.attrs.value, start + 1];
+    } else if (first && first.isText) {
+      const match = SECTION_LEAD.exec(first.text);
+      if (match) [lead, end] = [match[0].trim(), start + match[0].length];
+    }
+    const cls = hangClass(node.attrs.kind, lead);
+    if (!cls) return;
+    decorations.push(Decoration.node(pos + 1, pos + 1 + body.nodeSize, { class: cls }));
+    decorations.push(first.type === N.marker ? Decoration.node(start, end, { class: "lead" }) : Decoration.inline(start, end, { class: "lead" }));
+  });
+  return DecorationSet.create(doc, decorations);
+}
+
+const hangPlugin = new Plugin({ props: { decorations: (state) => hangDecorations(state.doc) } });
 const text = (value) => (value ? [schema.text(value)] : []);
 
 // --- units <-> document ---------------------------------------------------------------------------
@@ -116,7 +151,7 @@ export function toDoc(units) {
     if (unit.marker) inline.push(N.marker.create({ value: unit.marker, source: unit.marker_source || null }));
     inline.push(...formatted(unit.text || "", unit.marks));
     const notes = (unit.notes || []).map((note) => N.note.create(null, text(note)));
-    const align = ["left", "center", "right"].includes(unit.align) ? unit.align : null;
+    const align = ALIGNMENTS.includes(unit.align) ? unit.align : null;
     return N.unit.create({ kind: unit.kind, level: Number.isInteger(unit.level) ? unit.level : null, align }, [N.body.create(null, inline), ...notes]);
   });
   return N.doc.create(null, blocks.length ? blocks : [N.unit.create(null, [N.body.create()])]);
@@ -375,13 +410,20 @@ function joinBackward(state, dispatch) {
   return true;
 }
 
+// Applies to every paragraph the selection touches (Ctrl/Cmd+A then a button changes the page).
 function setUnitAttrs(change) {
   return (state, dispatch) => {
-    const unit = unitAt(state.selection.$from);
-    if (!unit || unit.node.type !== N.unit) return false;
-    const attrs = change(unit.node.attrs, unit.node);
-    if (!attrs) return false;
-    if (dispatch) dispatch(state.tr.setNodeMarkup(unit.pos, null, attrs));
+    const { from, to } = state.selection;
+    const tr = state.tr;
+    state.doc.nodesBetween(from, to, (node, pos) => {
+      if (node.type === N.unit) {
+        const attrs = change(node.attrs, node);
+        if (attrs) tr.setNodeMarkup(pos, null, attrs);
+      }
+      return false;
+    });
+    if (!tr.docChanged) return false;
+    if (dispatch) dispatch(tr);
     return true;
   };
 }
@@ -495,11 +537,12 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
     "Mod-Alt-l": commands.align("left"),
     "Mod-Alt-e": commands.align("center"),
     "Mod-Alt-r": commands.align("right"),
+    "Mod-Alt-j": commands.align("justify"),
   });
   let lastUnit = -1;
   const state = EditorState.create({
     doc: toDoc(units),
-    plugins: [history(), keys, keymap(baseKeymap), flagPlugin(flags, machineUnits, units, onFlagClick)],
+    plugins: [history(), keys, keymap(baseKeymap), hangPlugin, flagPlugin(flags, machineUnits, units, onFlagClick)],
   });
   const view = new EditorView(mount, {
     state,
