@@ -4,7 +4,6 @@
 // inserted is the server-escaped machine reading. No inline handlers (strict CSP).
 
 const app = { me: null, csrf: "", dirty: false, view: null };
-const KINDS = [["paragraph", "Paragraph"], ["list_item", "List item"], ["heading", "Heading"]];
 const KIND_LABEL = {
   differs: "reads differently",
   only_in_primary: "not seen by the check readings",
@@ -228,6 +227,7 @@ function approvalPanel(actId, data, current) {
   panel.append(el("p", {},
     el("a", { href: `/api/acts/${encodeURIComponent(actId)}/export`, target: "_blank", rel: "noopener", text: "Reviewed content (JSON)" }), " · ",
     el("a", { href: `/api/acts/${encodeURIComponent(actId)}/text`, target: "_blank", rel: "noopener", text: "Plain text" }), " · ",
+    el("a", { href: `/api/acts/${encodeURIComponent(actId)}/akn`, text: "Akoma Ntoso XML" }), " · ",
     el("a", { href: `#/audit/${encodeURIComponent(actId)}`, text: "Activity log" })));
   return panel;
 }
@@ -235,58 +235,14 @@ function approvalPanel(actId, data, current) {
 function unique(values) { return [...new Set(values)]; }
 function summarise(pages) { return pages.length > 20 ? `${pages.slice(0, 20).join(", ")} and ${pages.length - 20} more` : pages.join(", "); }
 
-// --- one page: image, flags, editor -------------------------------------------------------------------
+// --- one page: image, flags, document surface ------------------------------------------------------
 
-function tokenSpans(text) { return [...String(text || "").matchAll(/\S+/g)].map((m) => ({ start: m.index, end: m.index + m[0].length })); }
+const words = (value) => (String(value || "").match(/\S+/g) || []);
+const fold = (value) => words(value).slice(0, 6).map((w) => w.toLowerCase().replace(/[^0-9a-z]/g, "")).filter(Boolean).join(" ");
 
-function machineTokenMap(units) {
-  // Mirrors the server's page text order: marker and text, then notes; tables: caption then cells.
-  const map = [];
-  units.forEach((unit, u) => {
-    if (unit.kind === "table") {
-      if (unit.caption) tokenSpans(unit.caption).forEach((_, i) => map.push({ u, field: "caption", i }));
-      unit.rows.forEach((row, r) => row.forEach((cell, c) => tokenSpans(cell).forEach((_, i) => map.push({ u, field: `cell:${r}:${c}`, i }))));
-      return;
-    }
-    if (unit.marker) tokenSpans(unit.marker).forEach((_, i) => map.push({ u, field: "marker", i }));
-    tokenSpans(unit.text).forEach((_, i) => map.push({ u, field: "text", i }));
-    (unit.notes || []).forEach((note, n) => tokenSpans(note).forEach((_, i) => map.push({ u, field: `note:${n}`, i })));
-  });
-  return map;
-}
-
-function replaceTokens(text, from, to, replacement) {
-  const spans = tokenSpans(text);
-  if (from === to) {
-    const at = from < spans.length ? spans[from].start : text.length;
-    const pad = from < spans.length ? `${replacement} ` : ` ${replacement}`;
-    return (text.slice(0, at) + pad + text.slice(at)).replace(/ {2,}/g, " ").trim();
-  }
-  const out = text.slice(0, spans[from].start) + replacement + text.slice(spans[to - 1].end);
-  return out.replace(/ {2,}/g, " ").trim();
-}
-
-function quickFix(view, flag, reader) {
-  // A check reading can be applied in one click only when the flagged words sit in one unit's
-  // text and that unit is still exactly as the machine read it.
-  const words = flag.checks[reader] || "";
-  if (flag.kind === "marker_conflict") {
-    const target = view.units.findIndex((u) => u.kind !== "table" && u.text.startsWith(flag.primary));
-    if (target < 0 || !/^\S{1,12}$/.test(words)) return null;
-    return () => { view.units[target].marker = words; view.units[target].marker_source = [reader]; };
-  }
-  const [from, to] = flag.tokens;
-  const map = view.tokenMap;
-  const anchor = from < map.length ? map[from] : map[map.length - 1];
-  if (!anchor || anchor.field !== "text") return null;
-  for (let i = from; i < to; i++) if (!map[i] || map[i].u !== anchor.u || map[i].field !== "text") return null;
-  const machine = view.machineUnits[anchor.u];
-  const working = view.units[anchor.u];
-  if (!working || working.kind === "table" || working.text !== machine.text) return null;
-  const localFrom = from < map.length ? anchor.i : tokenSpans(machine.text).length;
-  const localTo = localFrom + (to - from);
-  if (flag.kind === "missing_from_primary" && !words) return null;
-  return () => { working.text = replaceTokens(working.text, localFrom, localTo, words); };
+function unitText(unit) {
+  if (unit.kind === "table") return [unit.caption || "", ...unit.rows.map((r) => r.join(" "))].join(" ");
+  return [unit.marker || "", unit.text || ""].join(" ").trim();
 }
 
 async function pageView(actId, pageNumber) {
@@ -301,13 +257,13 @@ async function pageView(actId, pageNumber) {
   const view = {
     actId, pageNumber, detail, page,
     machineUnits: page.machine_units,
-    tokenMap: machineTokenMap(page.machine_units),
     units: structuredClone(latest ? latest.units : page.machine_units),
     resolutions: structuredClone(latest ? latest.resolutions : {}),
     comment: latest ? latest.comment : "",
     expected: latest ? latest.revision : 0,
     tab: "edit",
     showLow: false,
+    surface: null,
   };
   app.view = view;
   app.dirty = false;
@@ -315,7 +271,13 @@ async function pageView(actId, pageNumber) {
   renderPage(view);
 }
 
-function changed(view) { app.dirty = true; view.dirtyBadge.hidden = false; }
+function changed(view) { app.dirty = true; if (view.dirtyBadge) view.dirtyBadge.hidden = false; }
+
+// The working units: from the surface while it is open, otherwise the last snapshot.
+function currentUnits(view) {
+  if (view.surface) view.units = view.surface.units();
+  return view.units;
+}
 
 function renderPage(view) {
   const { detail, page, actId, pageNumber } = view;
@@ -324,7 +286,7 @@ function renderPage(view) {
   const go = (n) => { location.hash = `#/act/${encodeURIComponent(actId)}/page/${n}`; };
   const nextTodo = detail.pages.find((p) => p.page > pageNumber && (p.status !== "checked" || p.open_high || p.stale));
   const picker = el("select", { on: { change: (e) => go(e.target.value) } }, numbers.map((n) => el("option", { value: n, text: `Page ${n}`, selected: n === pageNumber })));
-  view.dirtyBadge = el("span", { class: "pill warn", text: "unsaved changes", hidden: true });
+  view.dirtyBadge = el("span", { class: "pill warn", text: "unsaved changes", hidden: !app.dirty });
   const latest = page.latest;
   const pagebar = el("div", { class: "pagebar" },
     el("button", { text: "← Previous", disabled: index <= 0, on: { click: () => go(numbers[index - 1]) } }),
@@ -334,139 +296,216 @@ function renderPage(view) {
     latest ? pill(latest.status === "checked" ? "ok" : "warn", `revision ${latest.revision}: ${latest.status} by ${latest.author}`) : pill("medium", "not reviewed"),
     view.dirtyBadge,
   );
+  view.image = el("img", { src: `/api/acts/${encodeURIComponent(actId)}/pages/${pageNumber}/image`, alt: `Gazette page ${pageNumber}` });
+  view.overlay = el("div", { class: "region", hidden: true });
+  const frame = el("div", { class: "frame" }, view.image, view.overlay);
+  frame.addEventListener("click", (event) => imageClicked(view, event));
   const viewer = el("div", { class: "viewer" },
-    el("img", { src: `/api/acts/${encodeURIComponent(actId)}/pages/${pageNumber}/image`, alt: `Gazette page ${pageNumber}`, on: { click: (e) => e.currentTarget.parentElement.classList.toggle("zoom") } }));
+    el("div", { class: "viewer-tools" },
+      el("button", { class: "small", text: "Zoom", on: { click: (e) => { e.stopPropagation(); e.currentTarget.closest(".viewer").classList.toggle("zoom"); } } }),
+      el("span", { class: "muted", text: "Click text to find it on the page; click the page to find its text." })),
+    frame);
   const right = el("div");
   if (latest && latest.stale) right.append(el("div", { class: "card", text: "The machine reading of this page changed after it was reviewed (a re-read). Compare the Machine reading tab and save again to confirm." }));
   const tabs = el("div", { class: "tabs" });
   const body = el("div");
-  const tabNames = [["edit", "Review and edit"], ["machine", "Machine reading"], ["checks", "Check readings"], ["history", `History (${page.history.length})`]];
+  const tabNames = [["edit", "Review and edit"], ["changes", "Changes"], ["machine", "Machine reading"], ["checks", "Check readings"], ["history", `History (${page.history.length})`]];
   const show = (name) => {
+    if (view.tab === "edit" && name !== "edit") currentUnits(view);
+    if (view.surface && name !== "edit") { view.surface.destroy(); view.surface = null; }
     view.tab = name;
     tabs.replaceChildren(...tabNames.map(([key, label]) => el("button", { class: key === name ? "on" : "", text: label, on: { click: () => show(key) } })));
-    if (name === "edit") body.replaceChildren(flagsPanel(view), editor(view), saveBar(view));
+    if (name === "edit") body.replaceChildren(...editTab(view));
+    if (name === "changes") body.replaceChildren(changesView(view));
     if (name === "machine") { const box = el("div", { class: "card layout" }); box.innerHTML = page.machine_html; body.replaceChildren(box); }
-    if (name === "checks") body.replaceChildren(...Object.entries(page.checks).map(([name2, text]) => el("div", {}, el("h4", { text: name2 }), el("pre", { class: "check", text }))));
+    if (name === "checks") body.replaceChildren(...Object.entries(page.checks).map(([reader, text]) => el("div", {}, el("h4", { text: reader }), el("pre", { class: "check", text }))));
     if (name === "history") body.replaceChildren(page.history.length ? el("ul", {}, page.history.map((h) => el("li", { text: `Revision ${h.revision} · ${h.status} · ${h.author} · ${h.created_at.slice(0, 16).replace("T", " ")}${h.comment ? ` — ${h.comment}` : ""}` }))) : el("p", { class: "muted", text: "Not reviewed yet." }));
   };
-  right.append(pagebar, tabs, body);
   view.showTab = show;
+  right.append(pagebar, tabs, body);
   main(el("div", { class: "review" }, viewer, right));
   show(view.tab);
 }
 
-function flagsPanel(view) {
-  const flags = view.page.flags.filter((f) => view.showLow || f.severity !== "low");
-  const lowCount = view.page.flags.filter((f) => f.severity === "low").length;
-  const box = el("div", { class: "flags-panel" });
-  const header = el("p", { class: "muted" },
-    `${view.page.flags.filter((f) => f.severity === "high").length} high, ${view.page.flags.filter((f) => f.severity === "medium").length} medium flags. `,
-    lowCount ? el("label", {}, el("input", { type: "checkbox", checked: view.showLow, on: { change: (e) => { view.showLow = e.target.checked; rerenderEdit(view); } } }), ` show ${lowCount} punctuation-only`) : null);
-  box.append(header);
-  for (const flag of flags) {
-    const resolution = view.resolutions[flag.id];
-    const resolve = (decision, reader = "") => { view.resolutions[flag.id] = { decision, reader, note: "" }; changed(view); rerenderEdit(view); };
-    const reads = el("div", { class: "reads" }, el("span", { class: "muted", text: "Main reading" }), el("q", { text: flag.primary || "—" }), el("span"));
-    for (const [reader, words] of Object.entries(flag.checks)) {
-      const fix = resolution ? null : quickFix(view, flag, reader);
-      reads.append(
-        el("span", { class: "muted", text: reader }),
-        el("q", { text: words || "—" }),
-        fix ? el("button", { class: "small", text: words ? `Use ${reader}` : "Remove words", on: { click: () => { fix(); resolve("use_check", reader); } } }) : el("span"),
-      );
-    }
-    const actions = resolution
-      ? el("div", { class: "actions" }, pill("ok", DECISION_LABEL[resolution.decision] + (resolution.reader ? ` (${resolution.reader})` : "")), el("button", { class: "small", text: "Undo", on: { click: () => { delete view.resolutions[flag.id]; changed(view); rerenderEdit(view); } } }))
-      : el("div", { class: "actions" },
-          el("button", { class: "small", text: "Keep as read (printed so)", on: { click: () => resolve("keep") } }),
-          el("button", { class: "small", text: "I edited it below", on: { click: () => resolve("edited") } }),
-          el("button", { class: "small", text: "Dismiss (not a problem)", on: { click: () => resolve("dismissed") } }));
-    box.append(el("div", { class: `flag ${flag.severity} ${resolution ? "resolved" : ""}` },
-      el("div", {}, pill(flag.severity, flag.severity), " ", KIND_LABEL[flag.kind] || flag.kind),
-      reads, actions));
-  }
-  if (!flags.length) box.append(el("p", { class: "muted", text: "No flags on this page. Compare the text below with the image." }));
+// --- linking text and image ---------------------------------------------------------------------------
+
+function regionFor(view, unit) {
+  const target = fold(unitText(unit));
+  if (!target) return null;
+  return view.page.regions.find((r) => r.role !== "pageHeader" && r.role !== "pageFooter" && fold(r.text) && (fold(r.text).startsWith(target) || target.startsWith(fold(r.text))))
+    || view.page.regions.find((r) => fold(r.text).split(" ").slice(0, 3).join(" ") === target.split(" ").slice(0, 3).join(" "));
+}
+
+function showRegion(view, region) {
+  if (!region) { view.overlay.hidden = true; return; }
+  const [x0, y0, x1, y1] = region.box;
+  Object.assign(view.overlay.style, { left: `${x0 * 100}%`, top: `${y0 * 100}%`, width: `${(x1 - x0) * 100}%`, height: `${(y1 - y0) * 100}%` });
+  view.overlay.hidden = false;
+  const viewer = view.overlay.closest(".viewer");
+  const top = view.overlay.offsetTop - viewer.clientHeight / 3;
+  if (view.overlay.offsetTop < viewer.scrollTop || view.overlay.offsetTop > viewer.scrollTop + viewer.clientHeight) viewer.scrollTo({ top, behavior: "smooth" });
+}
+
+function imageClicked(view, event) {
+  const rect = view.image.getBoundingClientRect();
+  const x = (event.clientX - rect.left) / rect.width;
+  const y = (event.clientY - rect.top) / rect.height;
+  const region = view.page.regions.find((r) => x >= r.box[0] && x <= r.box[2] && y >= r.box[1] && y <= r.box[3]);
+  if (!region) return;
+  showRegion(view, region);
+  if (view.tab !== "edit" || !view.surface) return;
+  const target = fold(region.text);
+  const units = view.surface.units();
+  const index = units.findIndex((u) => { const t = fold(unitText(u)); return t && (t.startsWith(target) || target.startsWith(t)); });
+  if (index >= 0) view.surface.focusUnit(index);
+}
+
+// --- the editing tab --------------------------------------------------------------------------------
+
+function editTab(view) {
+  const canEdit = app.me.roles.includes("reviewer");
+  const mount = el("div", { class: "surface layout" });
+  const surface = window.ReviewEditor.createEditor(mount, {
+    units: view.units,
+    machineUnits: view.machineUnits,
+    flags: view.page.flags.filter((f) => !view.resolutions[f.id] && (view.showLow || f.severity !== "low")),
+    editable: canEdit,
+    onChange: () => changed(view),
+    onFlagClick: (id, rect) => openFlag(view, id, rect),
+    onUnitFocus: (index) => { const units = view.surface ? view.surface.units() : view.units; showRegion(view, units[index] ? regionFor(view, units[index]) : null); },
+    onMarkerEdit: (value, apply) => { const next = prompt("Section or paragraph number (empty to remove):", value); if (next !== null) apply(next.trim()); },
+  });
+  view.surface = surface;
+  const C = window.ReviewEditor.commands;
+  const run = (command) => () => surface.run(command);
+  const toolbar = el("div", { class: "toolbar" },
+    el("button", { class: "small", title: "Heading (Ctrl/Cmd+Alt+1)", text: "Heading", on: { click: run(C.kind("heading")) } }),
+    el("button", { class: "small", title: "Paragraph (Ctrl/Cmd+Alt+2)", text: "Paragraph", on: { click: run(C.kind("paragraph")) } }),
+    el("button", { class: "small", title: "List item (Ctrl/Cmd+Alt+3)", text: "List item", on: { click: run(C.kind("list_item")) } }),
+    el("span", { class: "sep" }),
+    el("button", { class: "small", title: "Outdent (Shift+Tab)", text: "⇤", on: { click: run(C.level(-1)) } }),
+    el("button", { class: "small", title: "Indent (Tab)", text: "⇥", on: { click: run(C.level(1)) } }),
+    el("button", { class: "small", title: "Add a margin note (Ctrl/Cmd+Alt+N)", text: "+ Margin note", on: { click: run(C.addNote) } }),
+    el("button", { class: "small", title: "Insert a table after this unit", text: "+ Table", on: { click: run(C.insertTable) } }),
+    el("button", { class: "small", title: "Add a row below (in a table)", text: "+ Row", on: { click: run(C.addRow) } }),
+    el("button", { class: "small", title: "Add a column (in a table)", text: "+ Column", on: { click: run(C.addColumn) } }),
+    el("span", { class: "sep" }),
+    el("button", { class: "small", title: "Undo (Ctrl/Cmd+Z)", text: "↶", on: { click: run(C.undo) } }),
+    el("button", { class: "small", title: "Redo (Ctrl/Cmd+Shift+Z)", text: "↷", on: { click: run(C.redo) } }),
+    el("details", { class: "keys" }, el("summary", { text: "Keys" }),
+      el("p", { class: "muted", text: "Type to correct words. Enter splits a paragraph; Backspace at its start joins it to the one above. Tab / Shift+Tab change the level (section, subsection, paragraph, sub-paragraph). Double-click a blue number to change it. Ctrl/Cmd+S saves." })));
+  const list = flagList(view);
+  return [list, toolbar, mount, saveBar(view)];
+}
+
+function flagList(view) {
+  const all = view.page.flags;
+  const shown = all.filter((f) => view.showLow || f.severity !== "low");
+  const open = shown.filter((f) => !view.resolutions[f.id]);
+  const lowCount = all.filter((f) => f.severity === "low").length;
+  // Highlighted flags are worked in the text; the list opens itself only for high flags that cannot be.
+  const hidden = open.some((f) => f.severity === "high" && !(view.surface && view.surface.highlighted(f.id)));
+  const box = el("details", { class: "flag-list", open: hidden || null },
+    el("summary", {},
+      `${open.length} open flag${open.length === 1 ? "" : "s"}`,
+      ` (${open.filter((f) => f.severity === "high").length} high) — highlighted in the text; click one to resolve it.`),
+  );
+  if (lowCount) box.append(el("label", { class: "muted" }, el("input", { type: "checkbox", checked: view.showLow, on: { change: (e) => { view.showLow = e.target.checked; currentUnits(view); view.showTab("edit"); } } }), ` include ${lowCount} punctuation-only`));
+  for (const flag of shown) box.append(flagCard(view, flag, true));
+  if (!shown.length) box.append(el("p", { class: "muted", text: "No flags on this page. Compare the text with the image." }));
   return box;
 }
 
-function rerenderEdit(view) {
-  // Redraw only the editing tab: the page image stays put and keeps its zoom.
-  if (view.tab !== "edit" || !view.showTab) return;
-  const scroll = window.scrollY;
-  view.showTab("edit");
-  window.scrollTo(0, scroll);
-}
-
-function depthOf(unit) {
-  const lead = (unit.marker || unit.text || "").trimStart();
-  if (/^\d{1,3}[A-Z]?\./.test(lead)) return 0;
-  if (/^\(\d{1,3}[A-Z]?\)/.test(lead)) return 1;
-  if (/^\([ivxl]{2,6}\)/.test(lead)) return 3;
-  if (/^\([a-z]{1,2}\)/.test(lead)) return 2;
-  return null;
-}
-
-function editor(view) {
-  const list = el("div", { class: "editor" });
-  view.units.forEach((unit, u) => list.append(unitCard(view, unit, u)));
-  list.append(el("p", {}, el("button", { class: "small", text: "+ Add paragraph at end", on: { click: () => { view.units.push({ kind: "paragraph", text: "" }); changed(view); rerenderEdit(view); } } })));
-  return list;
-}
-
-function autosize(area) { area.style.height = "auto"; area.style.height = `${area.scrollHeight + 2}px`; }
-
-function unitCard(view, unit, u) {
-  const move = (delta) => { const target = u + delta; if (target < 0 || target >= view.units.length) return; [view.units[u], view.units[target]] = [view.units[target], view.units[u]]; changed(view); rerenderEdit(view); };
-  const remove = () => { if (confirm("Delete this unit?")) { view.units.splice(u, 1); changed(view); rerenderEdit(view); } };
-  const insert = () => { view.units.splice(u + 1, 0, { kind: unit.kind === "table" ? "paragraph" : unit.kind, text: "" }); changed(view); rerenderEdit(view); };
-  const tools = [
-    el("button", { class: "small", title: "Move up", text: "↑", on: { click: () => move(-1) } }),
-    el("button", { class: "small", title: "Move down", text: "↓", on: { click: () => move(1) } }),
-    el("button", { class: "small", title: "Insert a unit after this one", text: "+", on: { click: insert } }),
-    el("button", { class: "small", title: "Delete this unit", text: "✕", on: { click: remove } }),
-  ];
-  if (unit.kind === "table") {
-    const caption = el("input", { type: "text", class: "grow", value: unit.caption || "", placeholder: "Table caption", on: { input: (e) => { unit.caption = e.target.value; changed(view); } } });
-    const headers = el("input", { type: "number", min: 0, max: unit.rows.length, value: unit.header_rows || 0, title: "Header rows", on: { input: (e) => { unit.header_rows = Number(e.target.value) || 0; changed(view); } } });
-    const grid = el("textarea", { class: "text", value: unit.rows.map((r) => r.join("\t")).join("\n"), title: "One row per line, cells separated by tabs", on: { input: (e) => { unit.rows = e.target.value.split("\n").map((line) => line.split("\t")); changed(view); autosize(e.target); } } });
-    grid.addEventListener("keydown", (e) => { if (e.key === "Tab") { e.preventDefault(); const at = grid.selectionStart; grid.setRangeText("\t", at, grid.selectionEnd, "end"); grid.dispatchEvent(new Event("input")); } });
-    requestAnimationFrame(() => autosize(grid));
-    return el("div", { class: "unit" }, el("div", { class: "row" }, el("strong", { text: "Table" }), caption, el("label", { class: "muted" }, "header rows ", headers), ...tools), grid,
-      el("p", { class: "muted", text: "One row per line; Tab separates cells." }));
+function flagCard(view, flag, inList) {
+  const resolution = view.resolutions[flag.id];
+  const highlighted = view.surface && view.surface.highlighted(flag.id);
+  const close = () => { document.querySelectorAll(".popover").forEach((p) => p.remove()); };
+  const resolve = (decision, reader = "") => {
+    view.resolutions[flag.id] = { decision, reader, note: "" };
+    if (view.surface && decision !== "use_check") view.surface.resolve(flag.id);
+    changed(view); close(); refreshFlags(view);
+  };
+  const reads = el("div", { class: "reads" }, el("span", { class: "muted", text: "Main reading" }), el("q", { text: flag.primary || "—" }), el("span"));
+  for (const [reader, text] of Object.entries(flag.checks)) {
+    const usable = !resolution && highlighted && !(flag.kind === "missing_from_primary" && !text);
+    reads.append(el("span", { class: "muted", text: reader }), el("q", { text: text || "—" }),
+      usable ? el("button", { class: "small", text: text ? `Use ${reader}` : "Remove words", on: { click: () => { view.surface.applyReading(flag.id, text); resolve("use_check", reader); } } }) : el("span"));
   }
-  const kind = el("select", { on: { change: (e) => { unit.kind = e.target.value; changed(view); } } }, KINDS.map(([value, label]) => el("option", { value, text: label, selected: unit.kind === value })));
-  const marker = el("input", { type: "text", class: "marker", value: unit.marker || "", placeholder: "number", title: "Section or paragraph number, when not part of the text", on: { input: (e) => { unit.marker = e.target.value.trim() || undefined; delete unit.marker_source; changed(view); } } });
-  const text = el("textarea", { class: "text", value: unit.text, rows: 2, on: { input: (e) => { unit.text = e.target.value; changed(view); autosize(e.target); } } });
-  const notes = el("textarea", { class: "notes", value: (unit.notes || []).join("\n"), rows: 1, placeholder: "Margin notes, one per line", on: { input: (e) => { const lines = e.target.value.split("\n").map((s) => s.trim()).filter(Boolean); if (lines.length) unit.notes = lines; else delete unit.notes; changed(view); autosize(e.target); } } });
-  const split = () => {
-    // The text box keeps its cursor position after the button takes focus.
-    const at = text.selectionStart;
-    if (at <= 0 || at >= unit.text.length) return toast("Place the cursor in this unit's text where it should split");
-    const rest = unit.text.slice(at).trim();
-    unit.text = unit.text.slice(0, at).trim();
-    view.units.splice(u + 1, 0, { kind: unit.kind, text: rest });
-    changed(view); rerenderEdit(view);
-  };
-  const merge = () => {
-    const next = view.units[u + 1];
-    if (!next || next.kind === "table") return toast("There is no text unit after this one to merge");
-    unit.text = `${unit.text} ${next.marker ? `${next.marker} ` : ""}${next.text}`.replace(/ {2,}/g, " ").trim();
-    if (next.notes) unit.notes = [...(unit.notes || []), ...next.notes];
-    view.units.splice(u + 1, 1);
-    changed(view); rerenderEdit(view);
-  };
-  requestAnimationFrame(() => { autosize(text); autosize(notes); });
-  const level = depthOf(unit);
-  const source = Array.isArray(unit.marker_source) ? unit.marker_source.join(", ") : unit.marker_source;
-  return el("div", { class: `unit ${level !== null ? `d${level}` : ""}` },
-    el("div", { class: "row" }, kind, marker,
-      source ? el("span", { class: "muted", text: `number restored from ${source}` }) : null,
-      el("span", { class: "grow" }),
-      el("button", { class: "small", title: "Split at the cursor", text: "Split", on: { click: split } }),
-      el("button", { class: "small", title: "Merge with the next unit", text: "Merge ↓", on: { click: merge } }),
-      ...tools),
-    text, notes);
+  const actions = resolution
+    ? el("div", { class: "actions" }, pill("ok", DECISION_LABEL[resolution.decision] + (resolution.reader ? ` (${resolution.reader})` : "")),
+        el("button", { class: "small", text: "Reopen", on: { click: () => { delete view.resolutions[flag.id]; changed(view); currentUnits(view); view.showTab("edit"); } } }))
+    : el("div", { class: "actions" },
+        inList && highlighted ? el("button", { class: "small", text: "Show in text", on: { click: () => view.surface.reveal(flag.id) } }) : null,
+        el("button", { class: "small", text: "Keep as read (printed so)", on: { click: () => resolve("keep") } }),
+        el("button", { class: "small", text: "I corrected it", on: { click: () => resolve("edited") } }),
+        el("button", { class: "small", text: "Dismiss", on: { click: () => resolve("dismissed") } }));
+  return el("div", { class: `flag ${flag.severity} ${resolution ? "resolved" : ""}`, "data-card": flag.id },
+    el("div", {}, pill(flag.severity, flag.severity), " ", KIND_LABEL[flag.kind] || flag.kind,
+      !highlighted && !resolution ? el("span", { class: "muted", text: ` · ${whyNotHighlighted(view, flag)}` }) : null),
+    reads, actions);
 }
+
+function whyNotHighlighted(view, flag) {
+  if (flag.kind === "marker_conflict") return "about a number: double-click the number in the text to set it";
+  const units = view.surface ? view.surface.units() : view.units;
+  const edited = units.length !== view.machineUnits.length || units.some((u, i) => JSON.stringify(u) !== JSON.stringify(view.machineUnits[i]));
+  return edited ? "not highlighted: the text around it has been edited" : "not highlighted: it covers a number or crosses into the next unit";
+}
+
+function refreshFlags(view) {
+  const list = document.querySelector(".flag-list");
+  if (list) list.replaceWith(flagList(view));
+}
+
+function openFlag(view, id, rect) {
+  document.querySelectorAll(".popover").forEach((p) => p.remove());
+  const flag = view.page.flags.find((f) => f.id === id);
+  if (!flag) return;
+  const pop = el("div", { class: "popover" }, flagCard(view, flag, false),
+    el("button", { class: "small close", text: "Close", on: { click: () => pop.remove() } }));
+  document.body.append(pop);
+  const top = window.scrollY + rect.bottom + 6;
+  const left = Math.min(window.scrollX + rect.left, window.scrollX + document.documentElement.clientWidth - pop.offsetWidth - 12);
+  Object.assign(pop.style, { top: `${top}px`, left: `${Math.max(8, left)}px` });
+}
+
+document.addEventListener("keydown", (event) => { if (event.key === "Escape") document.querySelectorAll(".popover").forEach((p) => p.remove()); });
+
+// --- changes against the machine reading --------------------------------------------------------------
+
+function diffWords(before, after) {
+  const a = words(before), b = words(after);
+  const n = a.length, m = b.length;
+  const table = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) table[i][j] = a[i] === b[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+  const out = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push(["same", a[i]]); i++; j++; }
+    else if (table[i + 1][j] >= table[i][j + 1]) out.push(["del", a[i++]]);
+    else out.push(["ins", b[j++]]);
+  }
+  while (i < n) out.push(["del", a[i++]]);
+  while (j < m) out.push(["ins", b[j++]]);
+  return out;
+}
+
+function changesView(view) {
+  const machine = view.machineUnits.map(unitText).join("\n");
+  const current = currentUnits(view).map(unitText).join("\n");
+  const parts = diffWords(machine, current);
+  const changes = parts.filter(([kind]) => kind !== "same").length;
+  const box = el("div", { class: "card changes" },
+    el("p", { class: "muted", text: changes ? `${changes} word changes from the machine reading (struck out: removed; underlined: added). Structure changes are not shown here.` : "No word changes from the machine reading." }));
+  const text = el("p", { class: "diff" });
+  for (const [kind, word] of parts) {
+    text.append(kind === "same" ? document.createTextNode(`${word} `) : el(kind === "ins" ? "ins" : "del", { text: word }), kind === "same" ? "" : " ");
+  }
+  box.append(text);
+  return box;
+}
+
+// --- saving -------------------------------------------------------------------------------------------
 
 function saveBar(view) {
   const comment = el("textarea", { rows: 1, value: view.comment, placeholder: "Comment for this revision (optional)", on: { input: (e) => { view.comment = e.target.value; changed(view); } } });
@@ -475,7 +514,7 @@ function saveBar(view) {
     if (status === "checked" && high.length && !confirm(`${high.length} high flag(s) are not resolved. Save as checked anyway? (The Act cannot be approved until they are.)`)) return;
     const result = await api(`/api/acts/${encodeURIComponent(view.actId)}/pages/${view.pageNumber}`, {
       method: "POST",
-      body: { expected_revision: view.expected, units: view.units, status, resolutions: view.resolutions, comment: view.comment },
+      body: { expected_revision: view.expected, units: currentUnits(view), status, resolutions: view.resolutions, comment: view.comment },
     });
     if (result.status === 409) { toast("Someone saved this page first. Reloading their version."); app.dirty = false; return pageView(view.actId, view.pageNumber); }
     if (!result.ok) return toast(message(result));
@@ -487,9 +526,10 @@ function saveBar(view) {
     else pageView(view.actId, view.pageNumber);
   };
   const restore = () => {
-    if (!confirm("Replace the text below with the machine reading? (Nothing is saved until you save.)")) return;
+    if (!confirm("Replace the text with the machine reading? (Nothing is saved until you save.)")) return;
     view.units = structuredClone(view.machineUnits);
-    changed(view); rerenderEdit(view);
+    view.resolutions = {};
+    changed(view); view.showTab("edit");
   };
   const canEdit = app.me.roles.includes("reviewer");
   return el("div", { class: "savebar" },
