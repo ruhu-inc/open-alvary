@@ -86,9 +86,37 @@ class Container:
         return node
 
 
-def paragraph(text: str) -> ET.Element:
+INLINE = {"bold": "b", "italic": "i", "underline": "u", "superscript": "sup", "subscript": "sub"}
+
+
+def paragraph(text: str, marks: list | None = None, offset: int = 0) -> ET.Element:
+    """A <p> whose formatted runs become AKN inline elements (<b>, <i>, <u>, <sup>, <sub>)."""
     element = ET.Element(q("p"))
-    element.text = text
+    ranges = [m for m in marks or [] if m.get("type") in INLINE]
+    if not ranges:
+        element.text = text
+        return element
+    cuts = sorted(
+        {0, len(text), *[max(0, min(len(text), v - offset)) for m in ranges for v in (m["start"], m["end"])]}
+    )
+    last = None
+    for start, end in zip(cuts, cuts[1:], strict=False):
+        piece = text[start:end]
+        active = [
+            INLINE[m["type"]] for m in ranges if m["start"] - offset <= start and m["end"] - offset >= end
+        ]
+        if not active:
+            if last is None:
+                element.text = (element.text or "") + piece
+            else:
+                last.tail = (last.tail or "") + piece
+            continue
+        outer = inner = ET.Element(q(active[0]))
+        for tag in active[1:]:
+            inner = ET.SubElement(inner, q(tag))
+        inner.text = piece
+        element.append(outer)
+        last = outer
     return element
 
 
@@ -105,6 +133,12 @@ def table(unit: dict) -> ET.Element:
 
 def unit_text(unit: dict) -> str:
     return f"{unit['marker']} {unit['text']}".strip() if unit.get("marker") else unit.get("text", "")
+
+
+def unit_paragraph(unit: dict) -> ET.Element:
+    """The unit as a <p>, keeping its formatting (marks are relative to the text after any marker)."""
+    offset = -(len(unit["marker"]) + 1) if unit.get("marker") else 0
+    return paragraph(unit_text(unit), unit.get("marks"), offset)
 
 
 class Builder:
@@ -168,7 +202,7 @@ class Builder:
             if match:
                 self.open(level, f"({match.group(1)})").add_block(paragraph(match.group(2).strip()))
                 return
-        self.current().add_block(paragraph(text))
+        self.current().add_block(unit_paragraph(unit))
 
 
 LEGISLATION = {"act", "bill"}
@@ -251,14 +285,14 @@ def build(act: dict, pages: list[dict], content_sha256: str, country: str | None
                 holder = ET.SubElement(main, q("hcontainer"), {"name": "heading"})
                 ET.SubElement(holder, q("heading")).text = unit_text(unit)
             else:
-                main.append(paragraph(unit_text(unit)))
+                main.append(unit_paragraph(unit))
                 for note in unit.get("notes") or []:
                     ET.SubElement(main, q("p"), {"class": "marginNote"}).text = note
         ET.indent(root)
         return ET.tostring(root, encoding="utf-8", xml_declaration=True)
     preface = ET.SubElement(document, q("preface"))
     for unit in units[:start]:
-        preface.append(table(unit) if unit["kind"] == "table" else paragraph(unit_text(unit)))
+        preface.append(table(unit) if unit["kind"] == "table" else unit_paragraph(unit))
     if start < len(units) and ENACTING.match(unit_text(units[start])):
         formula = ET.SubElement(
             ET.SubElement(document, q("preamble")), q("formula"), {"name": "enactingText"}
@@ -273,7 +307,7 @@ def build(act: dict, pages: list[dict], content_sha256: str, country: str | None
             Container("hcontainer", eid="schedules", attrs={"name": "schedules"})
         )
         for unit in units[end:]:
-            schedules.add_block(table(unit) if unit["kind"] == "table" else paragraph(unit_text(unit)))
+            schedules.add_block(table(unit) if unit["kind"] == "table" else unit_paragraph(unit))
     document.append(builder.body.element())
     ET.indent(root)
     return ET.tostring(root, encoding="utf-8", xml_declaration=True)

@@ -354,13 +354,27 @@ function renderUnits(units) {
       continue;
     }
     const level = unit.level ?? depthOfText(unit.marker || unit.text);
-    const body = el("p", {}, unit.marker ? el("span", { class: "restored", text: `${unit.marker} ` }) : null, unit.text);
+    const body = el("p", {}, unit.marker ? el("span", { class: "restored", text: `${unit.marker} ` }) : null, ...formattedText(unit.text, unit.marks));
     const css = [unit.kind === "heading" ? "h" : level !== null ? `d${level}` : "", unit.align ? `align-${unit.align}` : ""].join(" ").trim();
     box.append(unit.notes && unit.notes.length
       ? el("div", { class: `unit ${css}` }, body, el("div", {}, unit.notes.map((n) => el("p", { class: "note", text: n }))))
       : el("div", { class: css }, body));
   }
   return box;
+}
+
+const MARK_TAG = { bold: "strong", italic: "em", underline: "u", superscript: "sup", subscript: "sub" };
+
+function formattedText(text, marks) {
+  if (!marks || !marks.length) return [text];
+  const cuts = [...new Set([0, text.length, ...marks.flatMap((m) => [m.start, m.end])])].sort((a, b) => a - b);
+  const out = [];
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    let node = document.createTextNode(text.slice(cuts[i], cuts[i + 1]));
+    for (const mark of marks.filter((m) => m.start <= cuts[i] && m.end >= cuts[i + 1])) node = el(MARK_TAG[mark.type] || "span", {}, node);
+    out.push(node);
+  }
+  return out;
 }
 
 function depthOfText(lead) {
@@ -792,6 +806,23 @@ function imageClicked(view, event) {
 
 // --- the editing tab --------------------------------------------------------------------------------
 
+function markButton(surface, type, label, title) {
+  const button = el("button", { class: `small mark-${type}`, title, "aria-label": title, "aria-pressed": "false", "data-mark": type, text: label });
+  button.addEventListener("mousedown", (event) => event.preventDefault()); // keep the text selection
+  button.addEventListener("click", () => surface.run(window.ReviewEditor.commands.mark(type)));
+  return button;
+}
+
+function updateMarkButtons(view) {
+  if (!view.surface) return;
+  const active = view.surface.activeMarks();
+  document.querySelectorAll(".toolbar [data-mark]").forEach((b) => {
+    const on = active.has(b.dataset.mark);
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+}
+
 function alignIcon(side) {
   // Four lines of text drawn in SVG (inline elements are allowed; inline styles are not).
   const ns = "http://www.w3.org/2000/svg";
@@ -821,7 +852,7 @@ function editTab(view) {
     onChange: () => changed(view),
     onFlagClick: (id, rect) => openFlag(view, id, rect),
     onUnitFocus: (index) => { const units = view.surface ? view.surface.units() : view.units; showRegion(view, units[index] ? regionFor(view, units[index]) : null); },
-    onSelect: () => setTimeout(() => showLine(view), 0),
+    onSelect: () => setTimeout(() => { showLine(view); updateMarkButtons(view); }, 0),
     onMarkerEdit: (value, apply) => { const next = prompt("Section or paragraph number (empty to remove):", value); if (next !== null) apply(next.trim()); },
   });
   view.surface = surface;
@@ -831,6 +862,12 @@ function editTab(view) {
     el("button", { class: "small", title: "Heading (Ctrl/Cmd+Alt+1)", text: "Heading", on: { click: run(C.kind("heading")) } }),
     el("button", { class: "small", title: "Paragraph (Ctrl/Cmd+Alt+2)", text: "Paragraph", on: { click: run(C.kind("paragraph")) } }),
     el("button", { class: "small", title: "List item (Ctrl/Cmd+Alt+3)", text: "List item", on: { click: run(C.kind("list_item")) } }),
+    el("span", { class: "sep" }),
+    markButton(surface, "strong", "B", "Bold (Ctrl/Cmd+B)"),
+    markButton(surface, "em", "I", "Italic (Ctrl/Cmd+I)"),
+    markButton(surface, "underline", "U", "Underline (Ctrl/Cmd+U)"),
+    markButton(surface, "sup", "x²", "Superscript (Ctrl/Cmd+.)"),
+    markButton(surface, "sub", "x₂", "Subscript (Ctrl/Cmd+,)"),
     el("span", { class: "sep" }),
     el("button", { class: "small icon", title: "Align left (Ctrl/Cmd+Alt+L)", "aria-label": "Align left", on: { click: run(C.align("left")) } }, alignIcon("left")),
     el("button", { class: "small icon", title: "Centre (Ctrl/Cmd+Alt+E)", "aria-label": "Centre", on: { click: run(C.align("center")) } }, alignIcon("center")),

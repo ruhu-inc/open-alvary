@@ -213,3 +213,8 @@ ul.plain li:first-child { border-top: 0; }
 .signin-error { color: var(--high); font-size: 14px; margin: .6rem 0 0; }
 .signin-facts { list-style: none; padding: 1rem 0 0; margin: 1.4rem 0 0; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); display: grid; gap: .35rem; }
 .signin-facts li::before { content: "✓"; color: var(--ok); margin-right: .45rem; font-weight: 700; }
+
+/* --- character formatting buttons ------------------------------------------------------------- */
+.toolbar .mark-strong { font-weight: 800; } .toolbar .mark-em { font-style: italic; font-family: Georgia, serif; }
+.toolbar .mark-underline { text-decoration: underline; }
+.toolbar button.on { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); border-color: var(--accent); }
