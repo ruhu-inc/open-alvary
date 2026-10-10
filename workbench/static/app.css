@@ -125,9 +125,27 @@ pre.check { white-space: pre-wrap; font: 13px/1.5 ui-monospace, Menlo, monospace
 .popover .close { float: right; }
 .frame { position: relative; }
 .frame img { display: block; width: 100%; background: #fff; cursor: crosshair; }
-.viewer.zoom .frame { width: 180%; }
 .viewer-tools { position: sticky; top: 0; z-index: 2; display: flex; gap: .6rem; align-items: center; padding: .3rem .5rem; background: var(--panel); border-bottom: 1px solid var(--line); font-size: 13px; }
 .region { position: absolute; border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border-radius: 3px; pointer-events: none; transition: all .15s; }
 .changes .diff { font: 14px/1.7 Georgia, serif; white-space: pre-wrap; }
 .changes ins { background: var(--ok-bg); color: var(--ok); text-decoration: underline; }
 .changes del { background: var(--high-bg); color: var(--high); }
+
+/* --- image viewer, drafts, find/replace, continuous reading ------------------------------------ */
+.frame { position: relative; width: 100%; }
+.frame.dragging, .frame.dragging img { cursor: grabbing; }
+.region.line { border: 2px solid var(--high); background: color-mix(in srgb, var(--high) 10%, transparent); }
+.viewer-tools .zoom-label { min-width: 3rem; text-align: center; }
+.viewer-tools .hint { margin-left: auto; }
+.card.draft { border-color: var(--medium); background: var(--warn-bg); }
+.findbar { display: flex; gap: .5rem; flex-wrap: wrap; }
+.findbar input { flex: 1 1 14rem; }
+.hits .hit { border-top: 1px solid var(--line); padding: .4rem 0; }
+.hits .snippet { margin: .15rem 0 .15rem 1.6rem; font: 13px/1.5 Georgia, serif; color: var(--muted); }
+.hits mark { background: var(--medium-bg); color: var(--ink); }
+.readpage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1rem; margin-bottom: 1.5rem; align-items: start; }
+.readpage .viewer { position: static; max-height: none; }
+.readpage .viewer img { display: block; width: 100%; background: #fff; }
+.readpage .layout { font: 15px/1.6 Georgia, "Times New Roman", serif; }
+.readpage .layout .unit { display: grid; grid-template-columns: minmax(0, 1fr) 9rem; gap: .8rem; }
+@media (max-width: 900px) { .readpage { grid-template-columns: 1fr; } }

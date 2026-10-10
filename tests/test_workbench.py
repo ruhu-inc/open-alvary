@@ -415,3 +415,43 @@ def test_akoma_ntoso_export_is_well_formed_and_structured(world):
     assert [s.get("eId") for s in subsections] == ["sec_80__subsec_1", "sec_80__subsec_2"]
     assert subsections[0].find("a:paragraph", ns).get("eId") == "sec_80__subsec_1__para_a"
     assert root.find("a:act/a:meta/a:identification/a:FRBRWork/a:FRBRcountry", ns).get("value") == "ng"
+
+
+# --- Act-wide tools ------------------------------------------------------------------------------
+
+
+def test_search_and_replace_across_pages_writes_attributed_revisions(world):
+    browser = signed_in(world, "reviewer@example.org")
+    found = browser.get(f"/api/acts/{ACT}/search", params={"q": "section"}).json()
+    assert [(h["page"], h["match"]) for h in found["hits"]] == [(1, "section")]
+    assert browser.get(f"/api/acts/{ACT}/search", params={"q": "Sect", "case": True}).json()["hits"] == []
+    assert browser.get(f"/api/acts/{ACT}/search", params={"q": "sect", "word": True}).json()["hits"] == []
+    assert browser.get(f"/api/acts/{ACT}/search", params={"q": ""}).status_code == 422
+    result = browser.post(
+        f"/api/acts/{ACT}/replace",
+        json={
+            "find": "198",
+            "replace": "199",
+            "word": True,
+            "pages": {str(p): r for p, r in found["revisions"].items()},
+        },
+    ).json()
+    assert result == {"changed": [{"page": 1, "revision": 1, "replacements": 1}], "conflicts": []}
+    page = browser.get(f"/api/acts/{ACT}/pages/1").json()["latest"]
+    assert page["units"][0]["text"].endswith("section 199 of this Act.") and page["status"] == "edited"
+    assert (
+        page["author"] == "reviewer@example.org"
+        and "Replaced '198' with '199'"
+        in browser.get(f"/api/acts/{ACT}/pages/1").json()["history"][0]["comment"]
+    )
+    stale = browser.post(
+        f"/api/acts/{ACT}/replace", json={"find": "Act", "replace": "ACT", "pages": {"1": 0}}
+    ).json()
+    assert stale["conflicts"] == [1]  # the preview was older than the page
+
+
+def test_the_stream_returns_final_content_for_continuous_reading(world):
+    browser = signed_in(world, "reviewer@example.org")
+    stream = browser.get(f"/api/acts/{ACT}/stream", params={"start": 1, "count": 5}).json()
+    assert stream["total"] == 2 and [p["page"] for p in stream["pages"]] == [1, 2]
+    assert stream["pages"][0]["open_high"] == 1 and stream["pages"][0]["units"][0]["notes"] == ["Accounts"]
