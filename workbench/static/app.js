@@ -807,27 +807,35 @@ function editTab(view) {
   return [list, toolbar, mount, saveBar(view)];
 }
 
+// A slim bar above the text: flags are worked where they are highlighted, details in a pop-up.
 function flagList(view) {
   const all = view.page.flags;
   const shown = all.filter((f) => view.showLow || f.severity !== "low");
   const open = shown.filter((f) => !view.resolutions[f.id]);
-  const lowCount = all.filter((f) => f.severity === "low").length;
-  // Highlighted flags are worked in the text; the list opens itself only for high flags that cannot be.
-  const hidden = open.some((f) => f.severity === "high" && !(view.surface && view.surface.highlighted(f.id)));
-  const box = el("details", { class: "flag-list", open: hidden || null },
-    el("summary", {},
-      `${open.length} open flag${open.length === 1 ? "" : "s"}`,
-      ` (${open.filter((f) => f.severity === "high").length} high) — highlighted in the text; click one to resolve it.`),
-  );
-  if (lowCount) {
-    const openLow = all.filter((f) => f.severity === "low" && !view.resolutions[f.id]).length;
-    box.append(el("p", { class: "muted" },
-      el("label", {}, el("input", { type: "checkbox", checked: view.showLow, on: { change: (e) => { view.showLow = e.target.checked; currentUnits(view); view.showTab("edit"); } } }), ` include ${lowCount} punctuation-only`), " ",
-      openLow ? el("button", { class: "small", text: `Keep all ${openLow} punctuation-only as read (Alt+L)`, on: { click: () => resolveLow(view) } }) : null));
+  const high = open.filter((f) => f.severity === "high").length;
+  const openLow = all.filter((f) => f.severity === "low" && !view.resolutions[f.id]).length;
+  const offText = open.filter((f) => !(view.surface && view.surface.highlighted(f.id)));
+  const bar = el("div", { class: "flag-bar" });
+  if (!open.length) {
+    bar.append(el("span", { class: "muted", text: all.length ? "All flags on this page are resolved." : "No flags on this page — compare the text with the image." }));
+  } else {
+    bar.append(
+      el("strong", { text: `${open.length} open flag${open.length === 1 ? "" : "s"}` }),
+      high ? pill("high", `${high} high`) : null,
+      el("button", { class: "small", title: "Previous flag (Alt+P)", text: "◀", on: { click: () => gotoFlag(view, -1) } }),
+      el("button", { class: "small primary", title: "Next flag (Alt+N)", text: "Next flag ▶", on: { click: () => gotoFlag(view, 1) } }));
   }
-  for (const flag of shown) box.append(flagCard(view, flag, true));
-  if (!shown.length) box.append(el("p", { class: "muted", text: "No flags on this page. Compare the text with the image." }));
-  return box;
+  for (const flag of offText) {
+    bar.append(el("button", { class: `small chip ${flag.severity}`, title: "Not highlighted in the text: open it here",
+      text: `${flag.severity}: ${(flag.primary || Object.values(flag.checks).find(Boolean) || "missing words").slice(0, 24)}`,
+      on: { click: (event) => openFlag(view, flag.id, event.currentTarget.getBoundingClientRect()) } }));
+  }
+  bar.append(el("span", { class: "spacer" }));
+  if (openLow) bar.append(el("button", { class: "small", text: `Keep ${openLow} punctuation-only (Alt+L)`, on: { click: () => resolveLow(view) } }));
+  if (all.some((f) => f.severity === "low")) {
+    bar.append(el("label", { class: "muted small" }, el("input", { type: "checkbox", checked: view.showLow, on: { change: (e) => { view.showLow = e.target.checked; currentUnits(view); view.showTab("edit"); } } }), " show punctuation-only"));
+  }
+  return bar;
 }
 
 function flagCard(view, flag, inList) {
@@ -851,7 +859,6 @@ function flagCard(view, flag, inList) {
     ? el("div", { class: "actions" }, pill("ok", DECISION_LABEL[resolution.decision] + (resolution.reader ? ` (${resolution.reader})` : "")),
         el("button", { class: "small", text: "Reopen", on: { click: () => { delete view.resolutions[flag.id]; changed(view); currentUnits(view); view.showTab("edit"); } } }))
     : el("div", { class: "actions" },
-        inList && highlighted ? el("button", { class: "small", text: "Show in text", on: { click: () => view.surface.reveal(flag.id) } }) : null,
         el("button", { class: "small", text: "Keep as read (printed so)", on: { click: () => resolve("keep") } }),
         el("button", { class: "small", text: "I corrected it", on: { click: () => resolve("edited") } }),
         el("button", { class: "small", text: "Dismiss", on: { click: () => resolve("dismissed") } }));
@@ -869,8 +876,8 @@ function whyNotHighlighted(view, flag) {
 }
 
 function refreshFlags(view) {
-  const list = document.querySelector(".flag-list");
-  if (list) list.replaceWith(flagList(view));
+  const bar = document.querySelector(".flag-bar");
+  if (bar) bar.replaceWith(flagList(view));
 }
 
 function openFlag(view, id, rect) {

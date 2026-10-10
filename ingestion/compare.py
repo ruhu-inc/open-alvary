@@ -22,11 +22,16 @@ LOOSE = re.compile(r"[^0-9a-z]+")
 DASH = re.compile(r"^-{1,4}$")
 
 
+FILLER = re.compile(r"^[.…_·•]+$")  # dot leaders and blank fill-in lines: printed, never words
+
+
 def key(token: str) -> str:
-    """Comparison key for one rendered token: typography folded, case kept."""
-    token = unicodedata.normalize("NFKC", token).translate(QUOTES)
+    """Comparison key for one rendered token: typography folded, case kept; "" means ignore it."""
+    token = unicodedata.normalize("NFKC", token).translate(QUOTES).replace("₦", "N")  # Naira sign read as N
     if DASH.match(token):
         return "—"  # readers write a printed dash as -, -- or ---
+    if FILLER.match(token):
+        return ""
     return LEADERS.sub("", token)
 
 
@@ -45,10 +50,26 @@ class Flag:
     readers_disagreeing: list[str] = field(default_factory=list)
 
 
+MONTHS = {
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+}
+
+
 def _severity(primary: list[str], others: list[list[str]], kind: str) -> str:
     words = primary + [w for other in others for w in other]
-    if any(NUMBERISH.search(key(w).lower()) for w in words):
-        return "high"  # numbers, dates, section and paragraph references
+    if any(NUMBERISH.search(key(w).lower()) or loose(w) in MONTHS for w in words):
+        return "high"  # numbers, dates (months included), section and paragraph references
     if kind == "only_in_primary" and len(primary) >= 2:
         return "high"  # several words no independent reading saw: possible reconstruction
     if others and all(
@@ -71,23 +92,28 @@ def compare(primary: str, checks: dict[str, str]) -> list[Flag]:
     """
     tokens = TOKEN.findall(primary)
     keys = [key(t).lower() for t in tokens]
+    # Fillers (dot leaders, blank lines) take part in nothing: compare only real words.
+    real = [i for i, k in enumerate(keys) if k]
     disagree: list[set[str]] = [set() for _ in tokens]
-    other_keys = {name: [key(t).lower() for t in TOKEN.findall(text)] for name, text in checks.items()}
+    other_keys = {
+        name: [k for k in (key(t).lower() for t in TOKEN.findall(text)) if k] for name, text in checks.items()
+    }
     replaced: dict[str, dict[int, str]] = {}
     missing: dict[str, dict[int, str]] = {}
     for name, text in checks.items():
-        other = TOKEN.findall(text)
-        matcher = difflib.SequenceMatcher(a=keys, b=[key(t).lower() for t in other], autojunk=False)
+        other = [t for t in TOKEN.findall(text) if key(t)]
+        matcher = difflib.SequenceMatcher(a=[keys[i] for i in real], b=other_keys[name], autojunk=False)
         replaced[name], missing[name] = {}, {}
+        at = lambda position: real[position] if position < len(real) else len(tokens)  # noqa: E731
         for tag, i1, i2, j1, j2 in matcher.get_opcodes():
             if tag == "equal":
                 continue
             for i in range(i1, i2):
-                disagree[i].add(name)
+                disagree[real[i]].add(name)
             if tag == "replace":
-                replaced[name][i1] = " ".join(other[j1:j2])
+                replaced[name][at(i1)] = " ".join(other[j1:j2])
             elif tag == "insert":
-                missing[name][i1] = " ".join(other[j1:j2])
+                missing[name][at(i1)] = " ".join(other[j1:j2])
     flags, i, names = [], 0, list(checks)
     while i < len(tokens):
         if not disagree[i]:
