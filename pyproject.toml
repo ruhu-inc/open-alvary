@@ -17,12 +17,13 @@ ingestion = ["google-cloud-documentai>=3.16,<4"]
 alvary-operator = "rights.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["api*", "schema*", "rights*", "ingestion*", "exports*", "operations*"]
+include = ["api*", "schema*", "rights*", "ingestion*", "exports*", "operations*", "workbench*"]
 
 [tool.setuptools.package-data]
 schema = ["*.json", "vocabularies/*.json"]
 rights = ["sql/*/*.sql", "sql/*/*.json"]
 ingestion = ["catalogue/*.json"]
+workbench = ["static/*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

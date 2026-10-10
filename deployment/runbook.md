@@ -245,6 +245,36 @@ python -m ingestion.batch status                      # flags per reconciled Act
   they agree, and flag what they do not support. Review high flags (numbers, dates, words no check
   reading saw, conflicting markers) on every page before recording a content decision.
 
+## Review workbench (operator-only web app)
+
+Reviewers check each reconciled Act page by page against the gazette image, correct it, resolve
+flags and, with the approver role, approve the Act. It is separate from the public site and
+never writes to the public corpus: an approved Act is exported (`/api/acts/<id>/export`) for the
+audited policy commands to record.
+
+- Database: `ALVARY_REVIEW_DATABASE_URL`, PostgreSQL in production (its own database; SQLite is
+  for a local trial only). Every page save is a new immutable revision (author, time, comment,
+  flag decisions); approvals and an activity log are append-only.
+- Operators are added on the server only:
+  `python -m workbench.admin add <email> --name "<name>" --roles reviewer,approver` (and
+  `deactivate`, `list`). Roles: reviewer edits and checks pages; approver approves Acts; one
+  person may hold both.
+- Sign-in on the web is OpenID Connect (Google by default): create an OAuth client of type *Web
+  application* in project `open-alvary-ingestion`, consent screen *Internal* if the operators are
+  in one Workspace, redirect URI `https://<host>/auth/callback`. Set `ALVARY_REVIEW_BASE_URL`
+  (the public https address), `ALVARY_REVIEW_ALLOWED_HOSTS`, `ALVARY_REVIEW_OIDC_CLIENT_ID` and
+  `ALVARY_REVIEW_OIDC_CLIENT_SECRET` (in `.env` only). Only active operators on the allow-list are
+  admitted; email must be verified by the provider.
+- Run behind TLS: `uvicorn workbench.app:app --host 127.0.0.1 --port 8090 --proxy-headers` with a
+  reverse proxy or tunnel in front. Never set `ALVARY_REVIEW_DEV_LOGIN` on a reachable server (it
+  answers only on loopback regardless).
+- Sessions: HttpOnly, SameSite=Strict, Secure cookies; 1 hour idle, 12 hours maximum; every
+  write needs the session CSRF token. Pages carry a strict Content-Security-Policy.
+- Approval requires every page saved as checked, every high flag resolved, no page whose machine
+  reading changed since it was checked, all check readings present, the six verification checks
+  confirmed and a rights basis. Any later edit makes the approval out of date (shown in the app
+  and in the export).
+
 ## Upgrade and rollback
 
 Record the deployed commit and image IDs. Take and validate a backup before migration.
