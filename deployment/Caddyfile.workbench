@@ -1,0 +1,14 @@
+{
+	email {$ACME_EMAIL}
+}
+{$PUBLIC_DOMAIN} {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy web:80
+}
+# Operator-only review workbench: its own hostname, its own sign-in.
+{$REVIEW_DOMAIN} {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy workbench:8090
+}

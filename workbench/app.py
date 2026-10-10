@@ -254,10 +254,12 @@ def create_app(
         auth.current(request, store)
         act_or_404(act_id)
         reading_page(act_id, page)
+        try:
+            image = library.image(act_id, page)
+        except FileNotFoundError as error:
+            raise HTTPException(404, str(error)) from error
         return FileResponse(
-            library.image(act_id, page),
-            media_type="image/jpeg",
-            headers={"Cache-Control": "private, max-age=3600"},
+            image, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"}
         )
 
     @app.post("/api/acts/{act_id}/pages/{page}")

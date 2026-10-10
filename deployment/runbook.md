@@ -270,6 +270,16 @@ audited policy commands to record.
   answers only on loopback regardless).
 - Sessions: HttpOnly, SameSite=Strict, Secure cookies; 1 hour idle, 12 hours maximum; every
   write needs the session CSRF token. Pages carry a strict Content-Security-Policy.
+- Deploy with the overlay, on its own hostname behind the same Caddy edge:
+  `docker compose --env-file deployment/.env -f deployment/compose.yaml -f deployment/workbench.yaml up -d`.
+  Set `REVIEW_DOMAIN`, `REVIEW_DB_PASSWORD`, `REVIEW_COLLECTION_DIR` (host path of the reconciled
+  collection, mounted read-only) and the OpenID Connect client in `deployment/.env`. Run
+  `python -m workbench.prepare` on the operator machine first: the container cannot render page
+  images. Add operators with `docker compose ... run --rm workbench python -m workbench.admin add …`.
+- Back up the review database (every correction and approval) with the same encrypted R2 job,
+  under its own prefix: `python -m operations.backup create --kind review --remote r2:<bucket>/review
+  --recipient-file …` with `ALVARY_BACKUP_DATABASE_URL` pointing at `review_db`; verify with
+  `restore-verify` into an isolated `*_restore` database as for the policy database.
 - Approval requires every page saved as checked, every high flag resolved, no page whose machine
   reading changed since it was checked, all check readings present, the six verification checks
   confirmed and a rights basis. Any later edit makes the approval out of date (shown in the app
