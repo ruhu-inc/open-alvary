@@ -2,6 +2,7 @@ import json
 from io import BytesIO
 from pathlib import Path
 
+import pytest
 from pypdf import PdfWriter
 
 from ingestion import batch, compare, readers, reconcile
@@ -471,3 +472,34 @@ def test_a_flattened_arrangement_list_splits_where_the_check_reader_starts_parag
         ("heading", "PART XXI — MISCELLANEOUS"),
         ("paragraph", "224. Exemption of lines"),
     ]
+
+
+def test_auth_failures_are_recognised_and_never_retried():
+    from ingestion.layout_parser import is_auth_failure
+
+    assert is_auth_failure(
+        RuntimeError("503 Getting metadata from plugin failed with error: Reauthentication is needed.")
+    )
+    assert not is_auth_failure(RuntimeError("503 Service Unavailable"))
+
+
+class Unauthorised(FakeReader):
+    def read(self, pdf):
+        raise RuntimeError("503 Getting metadata from plugin failed with error: Reauthentication is needed.")
+
+
+def test_a_sign_in_failure_stops_the_run_instead_of_moving_on(tmp_path):
+    blank_pdf(tmp_path / "ng-act.pdf", 1)
+    factories = {"docai": lambda: Unauthorised("docai", True), "mineru": lambda: FakeReader("mineru", False)}
+    outcome = batch.Batch(tmp_path, ["docai", "mineru"], factories).run_act({"id": "ng-act"})
+    assert "sign in again" in outcome["stop"] and outcome["readers"]["mineru"]["status"] == "read"
+
+
+def test_preflight_runs_every_reader_check_before_any_reading(tmp_path):
+    class Refusing(FakeReader):
+        def preflight(self):
+            raise readers.PreflightError("refused")
+
+    runner = batch.Batch(tmp_path, ["docai"], {"docai": lambda: Refusing("docai", True)})
+    with pytest.raises(readers.PreflightError):
+        runner.preflight(["docai"])

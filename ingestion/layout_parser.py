@@ -193,6 +193,21 @@ def convert_blocks(blocks: list[dict], offset: int = 1) -> list[dict]:
     return nodes
 
 
+AUTH_FAILURE = (
+    "Reauthentication is needed",
+    "Getting metadata from plugin failed",
+    "invalid_grant",
+    "RefreshError",
+)
+
+
+def is_auth_failure(error: BaseException) -> bool:
+    """A credential problem a person must fix (sign in again), not a service hiccup."""
+    return type(error).__name__ in {"RefreshError", "DefaultCredentialsError"} or any(
+        marker in str(error) for marker in AUTH_FAILURE
+    )
+
+
 def parse(
     raw: bytes, config: DocAIConfig, client=None, workers: int = 1, pages_per_request: int = ONLINE_PAGE_LIMIT
 ) -> dict:
@@ -221,10 +236,16 @@ def parse(
         )
     else:
         name = client.processor_path(config.project, config.location, config.processor_id)
+    transient = retries.if_exception_type(
+        exceptions.TooManyRequests, exceptions.ServiceUnavailable, exceptions.InternalServerError
+    )
+
+    def retryable(error: Exception) -> bool:
+        # Credential failures surface as 503s from the auth plugin; retrying them only burns time.
+        return transient(error) and not is_auth_failure(error)
+
     retry = retries.Retry(
-        predicate=retries.if_exception_type(
-            exceptions.TooManyRequests, exceptions.ServiceUnavailable, exceptions.InternalServerError
-        ),
+        predicate=retryable,
         initial=2.0,
         maximum=60.0,
         timeout=1800.0,

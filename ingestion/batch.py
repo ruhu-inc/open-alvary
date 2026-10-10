@@ -24,8 +24,8 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
-from ingestion import first_collection, reconcile, settings
-from ingestion.readers import READERS, page_count
+from ingestion import first_collection, layout_parser, reconcile, settings
+from ingestion.readers import READERS, PreflightError, page_count
 
 DEFAULT_READERS = ("docai", "mineru", "azure")
 DEFAULT_BUDGET = 500  # billed pages per run unless --max-billed-pages or ALVARY_BATCH_MAX_BILLED_PAGES
@@ -92,6 +92,13 @@ class Batch:
         temporary.replace(path)  # a reading is either complete or absent
         return stored
 
+    def preflight(self, names: list[str]) -> None:
+        """Every reader that will be called must be able to work before any Act starts."""
+        for name in names:
+            check = getattr(self.reader(name), "preflight", None)
+            if check:
+                check()
+
     def run_act(self, act: dict) -> dict:
         pdf = self.staging / f"{act['id']}.pdf"
         digest = sha256(pdf)
@@ -115,6 +122,8 @@ class Batch:
                         "billed_pages": readings[name]["billed_pages"],
                     }
                 except Exception as error:  # isolate one reader's failure; the run log keeps it
+                    if layout_parser.is_auth_failure(error):
+                        outcome["stop"] = f"{name}: sign-in failed; sign in again and rerun"
                     outcome["readers"][name] = {
                         "status": "failed",
                         "error": f"{type(error).__name__}: {error}"[:2000],
@@ -180,12 +189,22 @@ def main(argv=None) -> int:
     if billed > limit:
         print("Refused: over budget. Narrow with --act or raise --max-billed-pages.")
         return 2
+    needed = sorted({row["reader"] for row in rows if not row["cached"]})
+    try:
+        batch.preflight(needed)
+    except PreflightError as error:
+        print(f"Stopped before reading: {error}")
+        return 3
     run = {"started_at": now(), "readers": names, "billed_pages_planned": billed, "acts": []}
     for act in acts:
         outcome = batch.run_act(act)
         run["acts"].append(outcome)
         states = ", ".join(f"{n} {r['status']}" for n, r in outcome["readers"].items())
         print(f"{act['id']}: {states}; {json.dumps(outcome.get('summary'))}", flush=True)
+        if outcome.get("stop"):
+            run["stopped"] = outcome["stop"]
+            print(f"Stopped: {outcome['stop']}", flush=True)
+            break
     run["finished_at"] = now()
     logs = staging / "runs"
     logs.mkdir(exist_ok=True)
