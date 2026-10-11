@@ -15,7 +15,6 @@ import subprocess
 from pathlib import Path
 
 from ingestion import first_collection, layout_parser
-from workbench import details
 from workbench.store import canonical_json
 
 KINDS = {"heading", "paragraph", "list_item", "table"}
@@ -478,11 +477,11 @@ def details_sha256(record: dict | None) -> str | None:
     ).hexdigest()
 
 
-def details_state(record: dict | None, document_type: str) -> dict:
-    """Whether the document's details are confirmed and complete under the standard."""
+def details_state(record: dict | None, gaps: list[str]) -> dict:
+    """Whether the document's details are confirmed and complete (gaps: what is neither given nor
+    accounted for, from workbench/record_view.py)."""
     if not record:
         return {"revision": 0, "status": None, "missing": None, "confirmed": False}
-    gaps = details.missing(record["details"], record["absent"], document_type)
     return {
         "revision": record["revision"],
         "status": record["status"],
@@ -491,9 +490,7 @@ def details_state(record: dict | None, document_type: str) -> dict:
     }
 
 
-def readiness(
-    reading: dict, latest: dict[int, dict], record: dict | None = None, document_type: str = "act"
-) -> dict:
+def readiness(reading: dict, latest: dict[int, dict], described: dict | None = None) -> dict:
     """What still stands between this document and approval: its pages and its details."""
     unchecked, open_high, stale = [], [], []
     for page in reading["pages"]:
@@ -507,7 +504,7 @@ def readiness(
             if flag["severity"] == "high" and flag["id"] not in resolved:
                 open_high.append({"page": page["page"], "id": flag["id"]})
     missing = reading["summary"].get("missing_checks") or []
-    described = details_state(record, document_type)
+    described = described or details_state(None, [])
     return {
         "pages": len(reading["pages"]),
         "unchecked_pages": unchecked,

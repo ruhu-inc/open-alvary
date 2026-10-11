@@ -24,7 +24,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from ingestion import settings
-from workbench import akn, auth, content, details
+from schema import record as R
+from schema.jurisdictions import registry as jurisdiction_registry
+from workbench import akn, auth, content, details, record_view
 from workbench.store import Conflict, Store, engine_from_environment
 
 STATIC = Path(__file__).with_name("static")
@@ -144,12 +146,54 @@ def create_app(
             raise HTTPException(404, "No such page")
         return reading, found
 
+    profiles = jurisdiction_registry()
+
+    def described(act: dict, record: dict | None, reading: dict) -> dict:
+        """The document's details in the record view: values, what is accounted for, its fields."""
+        place, profile = record_view.place_for(act, library.manifest, profiles)
+        if record:
+            values, absent = record["details"], record["absent"]
+            if not record_view.is_view(values):  # saved under the Nigerian DETAILS-1: read it in this view
+                values, absent = record_view.from_legacy(values, absent)
+        elif place.code == "ng":
+            values, absent = record_view.from_legacy(
+                *details.initial(details.suggest(reading, act, library.manifest))
+            )
+        else:
+            values, absent = record_view.base_values(act, library.manifest), {}
+        family, kind = values["identity.family"], values["identity.type"]
+        specs = record_view.fields(family, kind, profile)
+        return {
+            "values": values,
+            "absent": absent,
+            "specs": specs,
+            "place": place,
+            "profile": profile,
+            "family": family,
+            "kind": kind,
+            "missing": record_view.missing(values, absent, specs),
+        }
+
+    def built(act: dict, view: dict):
+        """The validated record (document-record-1), or None while details are incomplete."""
+        try:
+            return record_view.to_record(
+                view["values"],
+                view["absent"],
+                view["place"],
+                view["profile"],
+                record_view.slugify(act["id"][3:]),
+            )
+        except (ValueError, KeyError):
+            return None
+
     def state(document: dict) -> dict:
         """Everything that decides a document's review status, read once: its pages, its details,
         and whether the latest approval still covers both exactly."""
         reading, latest = library.reading(document["id"]), store.latest_pages(document["id"])
         final = content.final_pages(reading, latest)
         record = store.latest_details(document["id"])
+        view = described(document, record, reading)
         sha, details_sha = content.content_sha256(final), content.details_sha256(record)
         approvals = store.approvals(document["id"])
         head = approvals[0] if approvals else None
@@ -171,7 +215,8 @@ def create_app(
             "approvals": approvals,
             "head": head,
             "approved": approved,
-            "readiness": content.readiness(reading, latest, record, document.get("type", "act")),
+            "view": view,
+            "readiness": content.readiness(reading, latest, content.details_state(record, view["missing"])),
         }
 
     def document_summary(document: dict) -> dict:
@@ -561,34 +606,48 @@ def create_app(
         """The public site's page for a document, built from web/ (data comes from the API below)."""
         return FileResponse(STATIC / "public-preview" / "preview.html")
 
-    def current_details(act: dict, record: dict | None, reading: dict) -> dict:
+    def current_details(record: dict | None, view: dict) -> dict:
         """The saved details record, or a first draft from the document when none is saved yet."""
+        out = {"details": view["values"], "absent": view["absent"]}
         if record:
             return {
+                **out,
                 "revision": record["revision"],
                 "status": record["status"],
-                "details": record["details"],
-                "absent": record["absent"],
                 "comment": record["comment"],
                 "author": record["author"],
                 "at": record["created_at"].isoformat(),
             }
-        given, absent = details.initial(details.suggest(reading, act, library.manifest))
-        return {"revision": 0, "status": "suggested", "details": given, "absent": absent}
+        return {**out, "revision": 0, "status": "suggested"}
+
+    def view_schema(view: dict) -> dict:
+        return {
+            "standard": R.SCHEMA_VERSION,
+            "groups": record_view.groups(view["family"]),
+            "fields": [spec.as_dict() for spec in view["specs"]],
+            "absent": R.ABSENT,
+            "relations": [{"value": r, "label": record_view.label_of(r)} for r in R.RELATIONS],
+            "kinds": {family: list(kinds) for family, (_, kinds) in R.FAMILIES.items()},
+        }
 
     @app.get("/api/documents/{act_id}/details")
     def document_details(request: Request, act_id: str):
         auth.current(request, store)
         act = act_or_404(act_id)
         reading, record = library.reading(act_id), store.latest_details(act_id)
-        current = current_details(act, record, reading)
-        kind = act.get("type", "act")
+        view = described(act, record, reading)
+        suggestions = (
+            record_view.suggestions_view(details.suggest(reading, act, library.manifest))
+            if view["place"].code == "ng"
+            else {}
+        )
         return {
-            "standard": details.schema(),
-            "document_type": kind,
-            "record": current,
-            "suggestions": details.suggest(reading, act, library.manifest),
-            "missing": details.missing(current["details"], current["absent"], kind),
+            "standard": view_schema(view),
+            "document_type": view["kind"],
+            "place": view["place"].model_dump(),
+            "record": current_details(record, view),
+            "suggestions": suggestions,
+            "missing": view["missing"],
             "history": [
                 {
                     "revision": r["revision"],
@@ -603,23 +662,35 @@ def create_app(
 
     @app.post("/api/documents/{act_id}/details")
     def save_document_details(request: Request, act_id: str, body: dict = JSON_BODY):
-        """A new revision of the details; confirming needs every detail given or accounted for."""
+        """A new revision of the details; confirming needs every detail given or accounted for,
+        and a record that validates against document-record-1."""
         who = auth.current(request, store, write=True, role="reviewer")
         act = act_or_404(act_id)
         status = body.get("status")
         if status not in {"draft", "confirmed"}:
             raise HTTPException(422, "status must be draft or confirmed")
+        submitted = body.get("details") or {}
+        family = submitted.get("identity.family")
+        kind = submitted.get("identity.type")
+        if family not in R.FAMILIES or kind not in R.FAMILIES[family][1]:
+            raise HTTPException(422, "Choose the document's family and a kind within it")
+        place, profile = record_view.place_for(act, library.manifest, profiles)
+        specs = record_view.fields(family, kind, profile)
         try:
-            given, absent = details.validate(body.get("details") or {}, body.get("absent") or {})
+            given, absent = record_view.validate(submitted, body.get("absent") or {}, specs)
         except ValueError as error:
             raise HTTPException(422, str(error)) from error
         if status == "confirmed":
-            gaps = details.missing(given, absent, act.get("type", "act"))
+            gaps = record_view.missing(given, absent, specs)
             if gaps:
-                labels = [details.BY_KEY[key].label for key in gaps]
+                labels = [next(s.label for s in specs if s.key == key) for key in gaps]
                 raise HTTPException(
                     422, {"message": f"Give or account for: {', '.join(labels)}", "missing": gaps}
                 )
+            try:
+                record_view.to_record(given, absent, place, profile, record_view.slugify(act_id[3:]))
+            except ValueError as error:
+                raise HTTPException(422, {"message": f"The record does not validate: {error}"}) from error
         try:
             revision = store.save_details(
                 act_id,
@@ -655,9 +726,28 @@ def create_app(
         checked_by = {r["author"] for r in latest.values() if r["status"] == "checked"}
         named = store.names(checked_by | ({head["author"]} if head else set()))
         quoted = f"/api/documents/{quote(act_id)}"
+        view = now["view"]
+        document = built(act, view)
         return {
             "source": content.public_source(act, library.manifest),
-            "details": current_details(act, now["record"], reading),
+            "details": current_details(now["record"], view),
+            "record": document.model_dump(mode="json") if document else None,
+            "making": [
+                {"step": step.id, "label": step.label, "event": step.event, "signed_by": step.signed_by}
+                for step in record_view.steps_for(view["profile"], view["kind"])
+            ],
+            "view": {
+                "family": view["family"],
+                "kind": view["kind"],
+                "place": view["place"].model_dump(),
+                "groups": record_view.groups(view["family"]),
+                "fields": [
+                    {k: spec[k] for k in ("key", "label", "group", "kind", "choices", "columns")}
+                    for spec in (s.as_dict() for s in view["specs"])
+                ],
+                "values": view["values"],
+                "absent": view["absent"],
+            },
             "provenance": {
                 "retrieved_from": provenance.get("url") or act.get("url"),
                 "retrieved_at": provenance.get("retrieved_at"),
@@ -709,11 +799,14 @@ def create_app(
         auth.current(request, store)
         act = act_or_404(act_id)
         now = state(act)
+        view = now["view"]
         xml = akn.build(
             act,
             now["final"],
             now["content_sha256"],
-            record=now["record"],
+            doc_record=built(act, view),
+            status=(now["record"] or {}).get("status", "suggested"),
+            steps={step.id: step.label for step in record_view.steps_for(view["profile"], view["kind"])},
             details_sha256=now["details_sha256"],
         )
         return Response(

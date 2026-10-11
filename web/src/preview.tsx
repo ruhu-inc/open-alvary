@@ -21,15 +21,19 @@ import {
 import { DocumentPage, type DocumentPageContent } from "./document";
 import {
   legislationJsonLd,
-  type DetailsRecord,
+  type DetailsStatus,
   type Provenance,
   type ReviewRecord,
+  type Step,
+  type View,
 } from "./details";
 import type { DownloadLink } from "./tools";
 
 type Preview = {
   source: Source;
-  details: DetailsRecord;
+  details: DetailsStatus & { details: Record<string, unknown> };
+  view: View;
+  making: Step[];
   provenance: Provenance;
   review: ReviewRecord;
   pages: DocumentPageContent[];
@@ -230,7 +234,8 @@ function Preview() {
   // What the public page will put in its head for search engines and link previews.
   const jsonLd = preview
     ? legislationJsonLd(
-        preview.details,
+        preview.view,
+        preview.making,
         preview.source,
         linkTo(),
         preview.downloads,
@@ -247,7 +252,8 @@ function Preview() {
       document.head.append(meta);
     }
     meta.content =
-      preview.details.details.summary || preview.source.catalogue_note;
+      String(preview.view.values["text.summary.text"] ?? "") ||
+      preview.source.catalogue_note;
   }, [preview]);
   useEffect(() => {
     if (preview)
@@ -270,7 +276,9 @@ function Preview() {
         pages={preview.pages}
         contentHash={preview.content_sha256}
         detailsHash={preview.details_sha256}
-        record={preview.details}
+        view={preview.view}
+        making={preview.making}
+        details={preview.details}
         provenance={preview.provenance}
         review={preview.review}
         downloads={preview.downloads}

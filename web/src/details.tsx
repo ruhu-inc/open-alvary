@@ -1,71 +1,44 @@
-// A document's details as the public reads them beside the text (standard DETAILS-1): identity,
-// passage and assent, publication, status and related laws, how the text was checked, and where
-// it came from. A detail that is not given says why ("Not stated in this copy"), never blank.
+// A document's details as the public reads them beside the text (document-record-1). The panels
+// follow the document's family and its jurisdiction: an Act shows how it was made step by step, a
+// judgment shows its court, parties and bench, a treaty its parties and ratifications. A detail that
+// is not given says why ("Not stated in this copy"), never blank.
 
 import type { ReactNode } from "react";
 import type { Source } from "./site";
 
-export type Absence = "not_in_source" | "not_applicable" | "unknown";
+export type Absence =
+  "not_in_source" | "not_applicable" | "unknown" | "withheld";
+type Choice = { value: string; label: string };
 
-export type Relation = {
-  kind:
-    | "repeals"
-    | "amends"
-    | "amended_by"
-    | "repealed_by"
-    | "supersedes"
-    | "superseded_by"
-    | "cross_reference";
-  target: string;
-  target_id?: string;
-  note?: string;
+export type FieldInfo = {
+  key: string;
+  label: string;
+  group: string;
+  kind: string;
+  choices: Choice[];
+  columns: { key: string; label: string; kind: string; choices: Choice[] }[];
 };
 
-export type Details = {
-  short_title?: string;
-  long_title?: string;
-  document_type?: string;
-  jurisdiction?: string;
-  number?: string;
-  year?: string;
-  citation?: string;
-  enacting_body?: string;
-  bill_title?: string;
-  passed_senate?: string;
-  passed_house?: string;
-  authenticated_on?: string;
-  authenticated_by?: string;
-  assent_date?: string;
-  assented_by?: string;
-  commencement_date?: string;
-  gazette_name?: string;
-  gazette_number?: string;
-  gazette_volume?: string;
-  gazette_date?: string;
-  gazette_place?: string;
-  gazette_issue?: string;
-  gazette_notice?: string;
-  gazette_pages?: string;
-  official_publisher?: string;
-  text_form?: string;
-  version_label?: string;
-  consolidation?: string;
-  summary?: string;
-  subjects?: string[];
-  legal_status?: string;
-  status_checked_on?: string;
-  status_note?: string;
-  relations?: Relation[];
-  language?: string;
-  language_status?: string;
-  official_source_url?: string;
+export type View = {
+  family: string;
+  kind: string;
+  place: { code: string; name: string; level: string };
+  groups: { key: string; label: string }[];
+  fields: FieldInfo[];
+  values: Record<string, unknown>;
+  absent: Record<string, Absence>;
 };
 
-export type DetailsRecord = {
+export type Step = {
+  step: string;
+  label: string;
+  event: string;
+  signed_by?: string | null;
+};
+
+export type DetailsStatus = {
   status: "suggested" | "draft" | "confirmed";
   revision: number;
-  details: Details;
-  absent: Partial<Record<keyof Details, Absence>>;
 };
 
 export type Provenance = {
@@ -97,55 +70,25 @@ export const ABSENT: Record<Absence, string> = {
   not_in_source: "Not stated in this copy",
   not_applicable: "Not applicable",
   unknown: "Not yet known",
-};
-
-const LABELS: Record<string, string> = {
-  act: "Act",
-  bill: "Bill",
-  regulation: "Regulation",
-  order: "Order",
-  judgment: "Judgment",
-  gazette: "Gazette",
-  treaty: "Treaty",
-  other: "Document",
-  gazette_supplement: "The Act as published in the gazette",
-  authenticated_bill:
-    "The Bill as passed and certified by the Clerk to the National Assembly, before gazetting",
-  official_reprint: "Official reprint",
-  not_consolidated:
-    "Not consolidated: the text as enacted, without later amendments",
-  consolidated: "Consolidated: later amendments incorporated",
-  unknown: "Currentness not yet checked",
-  current: "In force",
-  historical: "Historical",
-  repealed: "Repealed",
-  superseded: "Superseded",
-  original: "Original language",
-  official_translation: "Official translation",
-  unofficial_translation: "Unofficial translation",
-  ordinary: "Ordinary issue",
-  extraordinary: "Extraordinary issue",
-  repeals: "Repeals",
-  amends: "Amends",
-  amended_by: "Amended by",
-  repealed_by: "Repealed by",
-  supersedes: "Supersedes",
-  superseded_by: "Superseded by",
-  cross_reference: "Refers to",
+  withheld: "Withheld",
 };
 
 const LANGUAGES: Record<string, string> = {
   en: "English",
   fr: "French",
+  rw: "Kinyarwanda",
+  sw: "Swahili",
   pt: "Portuguese",
   ar: "Arabic",
-  sw: "Swahili",
+  am: "Amharic",
   ha: "Hausa",
   yo: "Yoruba",
   ig: "Igbo",
+  so: "Somali",
+  zu: "Zulu",
+  xh: "Xhosa",
+  af: "Afrikaans",
 };
-
-const COUNTRIES: Record<string, string> = { ng: "Nigeria" };
 
 const MONTHS = [
   "January",
@@ -169,34 +112,62 @@ export function longDate(iso?: string): string {
   return `${Number(match[3])} ${MONTHS[Number(match[2]) - 1]} ${match[1]}`;
 }
 
-export const label = (value?: string) =>
-  value ? (LABELS[value] ?? value) : "";
 export const languageName = (tag?: string) =>
   tag ? (LANGUAGES[tag.split("-")[0]] ?? tag) : "";
-export const countryName = (code?: string) =>
-  code ? (COUNTRIES[code] ?? code.toUpperCase()) : "";
+export const humanise = (value?: string) =>
+  value ? value.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase()) : "";
 
-function Missing({ why }: { why?: Absence }) {
-  return <span className="doc-absent">{why ? ABSENT[why] : "Not given"}</span>;
+const text = (view: View, key: string) => {
+  const value = view.values[key];
+  return typeof value === "string" ? value : value == null ? "" : String(value);
+};
+const list = <T,>(view: View, key: string) =>
+  (Array.isArray(view.values[key]) ? view.values[key] : []) as T[];
+const given = (view: View, key: string) => {
+  const value = view.values[key];
+  return (
+    value != null && value !== "" && !(Array.isArray(value) && !value.length)
+  );
+};
+
+function choiceLabel(field: FieldInfo | undefined, value: string) {
+  return (
+    field?.choices.find((c) => c.value === value)?.label ?? humanise(value)
+  );
 }
 
-// One detail: its value, or why it is not given.
-function Row({
-  term,
-  value,
-  why,
-}: {
-  term: string;
-  value: ReactNode;
-  why?: Absence;
-}) {
-  if (why === "not_applicable") return null;
-  return (
-    <>
-      <dt>{term}</dt>
-      <dd>{value ? value : <Missing why={why} />}</dd>
-    </>
-  );
+function Missing({ why }: { why: Absence }) {
+  return <span className="doc-absent">{ABSENT[why]}</span>;
+}
+
+// A value as a reader should see it, by the kind of field it is.
+function Value({ field, value }: { field: FieldInfo; value: unknown }) {
+  if (field.kind === "date") return <>{longDate(String(value))}</>;
+  if (field.kind === "choice") return <>{choiceLabel(field, String(value))}</>;
+  if (field.kind === "list") return <>{(value as string[]).join(" · ")}</>;
+  if (field.kind === "rows") {
+    const rows = value as Record<string, string>[];
+    return (
+      <ul className="doc-rows">
+        {rows.map((row, i) => (
+          <li key={i}>
+            {field.columns
+              .filter((c) => row[c.key])
+              .map((c) =>
+                c.choices.length
+                  ? (c.choices.find((x) => x.value === row[c.key])?.label ??
+                    row[c.key])
+                  : c.kind === "date"
+                    ? longDate(row[c.key])
+                    : row[c.key],
+              )
+              .join(" · ")}
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return <>{String(value)}</>;
 }
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
@@ -208,165 +179,146 @@ function Panel({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-export function AboutPanel({
-  record,
-  source,
-}: {
-  record: DetailsRecord;
-  source: Source;
-}) {
-  const d = record.details;
-  const a = record.absent;
+// The given or accounted-for details among these fields, as term and value.
+function Details({ view, fields }: { view: View; fields: FieldInfo[] }) {
+  const shown = fields.filter(
+    (f) =>
+      (given(view, f.key) || view.absent[f.key]) &&
+      view.absent[f.key] !== "not_applicable",
+  );
+  if (!shown.length) return null;
   return (
-    <Panel title="About this document">
-      <dl>
-        <Row term="Short title" value={d.short_title} why={a.short_title} />
-        <Row term="Citation" value={d.citation} why={a.citation} />
-        <Row
-          term="Type"
-          value={label(d.document_type ?? source.document_type)}
-        />
-        <Row term="Number" value={d.number} why={a.number} />
-        <Row term="Year" value={d.year} why={a.year} />
-        <Row
-          term="Jurisdiction"
-          value={countryName(d.jurisdiction ?? source.jurisdiction_id)}
-        />
-        <Row term="Enacted by" value={d.enacting_body} why={a.enacting_body} />
-        <Row
-          term="Language"
-          value={
-            d.language
-              ? `${languageName(d.language)}${d.language_status ? ` · ${label(d.language_status).toLowerCase()}` : ""}`
-              : ""
-          }
-          why={a.language}
-        />
-        <Row term="Long title" value={d.long_title} why={a.long_title} />
-        {d.subjects?.length ? (
-          <Row term="Subjects" value={d.subjects.join(" · ")} />
-        ) : null}
-      </dl>
-    </Panel>
+    <dl>
+      {shown.map((f) => (
+        <div className="doc-term" key={f.key}>
+          <dt>{f.label}</dt>
+          <dd>
+            {view.absent[f.key] ? (
+              <Missing why={view.absent[f.key]} />
+            ) : (
+              <Value field={f} value={view.values[f.key]} />
+            )}
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
-// The steps by which the Bill became law, in order, each dated or accounted for.
-export function PassagePanel({ record }: { record: DetailsRecord }) {
-  const d = record.details;
-  const a = record.absent;
-  const steps: [string, string | undefined, Absence | undefined, string?][] = [
-    ["Passed by the Senate", d.passed_senate, a.passed_senate],
-    ["Passed by the House of Representatives", d.passed_house, a.passed_house],
-    [
-      "Certified by the Clerk",
-      d.authenticated_on,
-      a.authenticated_on,
-      d.authenticated_by,
-    ],
-    ["Assented to", d.assent_date, a.assent_date, d.assented_by],
-    ["Commencement", d.commencement_date, a.commencement_date],
-  ];
-  if (steps.every(([, , why]) => why === "not_applicable")) return null;
+// Fields internal to the record, or shown elsewhere on the page.
+const HIDDEN = new Set([
+  "identity.family",
+  "identity.local_subtype",
+  "text.summary.text",
+  "text.summary.kind",
+  "text.summary.official",
+  "publication.kind",
+  "publication.url",
+  "expressions",
+  "relations",
+]);
+
+// How the document was made: the jurisdiction's steps in order, each dated or accounted for.
+function Making({ view, making }: { view: View; making: Step[] }) {
+  const events = view.fields.filter(
+    (f) => f.group === "making" && f.key.startsWith("event:"),
+  );
+  const bill = text(view, "profile.bill");
+  if (!making.length && !events.length) return null;
+  const rows = [
+    ...making.map((step) => ({
+      key: step.step,
+      label: step.label,
+      when: text(view, `step:${step.step}.date`),
+      why: view.absent[`step:${step.step}.date`],
+      by: text(view, `step:${step.step}.person`),
+    })),
+    ...events.map((field) => ({
+      key: field.key,
+      label: field.label,
+      when: text(view, field.key),
+      why: view.absent[field.key],
+      by: "",
+    })),
+  ].filter((row) => row.why !== "not_applicable");
   return (
-    <Panel title="Passage and assent">
-      {d.bill_title ? <p className="doc-panel-lead">{d.bill_title}</p> : null}
+    <Panel
+      title={view.family === "judgment" ? "Proceedings" : "How it was made"}
+    >
+      {bill ? <p className="doc-panel-lead">{bill}</p> : null}
       <ol className="doc-steps">
-        {steps
-          .filter(([, , why]) => why !== "not_applicable")
-          .map(([name, when, why, by]) => (
-            <li key={name} className={when ? "" : "doc-step-missing"}>
-              <span className="doc-step-name">{name}</span>
-              <span className="doc-step-date">
-                {when ? longDate(when) : <Missing why={why} />}
-              </span>
-              {by ? <span className="doc-step-by">{by}</span> : null}
-            </li>
-          ))}
+        {rows.map((row) => (
+          <li key={row.key} className={row.when ? "" : "doc-step-missing"}>
+            <span className="doc-step-name">{row.label}</span>
+            <span className="doc-step-date">
+              {row.when ? (
+                longDate(row.when)
+              ) : (
+                <Missing why={row.why ?? "unknown"} />
+              )}
+            </span>
+            {row.by ? <span className="doc-step-by">{row.by}</span> : null}
+          </li>
+        ))}
       </ol>
     </Panel>
   );
 }
 
-export function PublicationPanel({ record }: { record: DetailsRecord }) {
-  const d = record.details;
-  const a = record.absent;
-  if (!d.gazette_name && d.text_form === "authenticated_bill")
-    return (
-      <Panel title="Publication">
-        <p className="doc-panel-note">
-          This copy is the Bill as passed and certified, without the gazette
-          front page: the gazette that published the Act, and the Act number it
-          gave, are not stated in it.
-        </p>
-      </Panel>
-    );
-  const issue = [
-    d.gazette_number ? `No. ${d.gazette_number}` : "",
-    d.gazette_volume ? `Vol. ${d.gazette_volume}` : "",
-  ]
-    .filter(Boolean)
-    .join(", ");
+const AUTHORITY: Record<string, string> = {
+  authoritative: "authoritative",
+  equally_authentic: "equally authentic",
+  official_translation: "official translation",
+  unofficial_translation: "unofficial translation",
+  machine_translation: "machine translation",
+};
+
+function Languages({ view }: { view: View }) {
+  const versions = list<Record<string, string>>(view, "expressions");
+  if (!versions.length) return null;
   return (
-    <Panel title="Publication">
-      <dl>
-        <Row term="Gazette" value={d.gazette_name} why={a.gazette_name} />
-        <Row term="Issue" value={issue} why={a.gazette_number} />
-        <Row
-          term="Date"
-          value={longDate(d.gazette_date)}
-          why={a.gazette_date}
-        />
-        <Row term="Place" value={d.gazette_place} why={a.gazette_place} />
-        <Row
-          term="Kind of issue"
-          value={label(d.gazette_issue)}
-          why={a.gazette_issue}
-        />
-        {d.gazette_notice ? (
-          <Row term="Notice" value={d.gazette_notice} />
-        ) : null}
-        <Row term="Pages" value={d.gazette_pages} why={a.gazette_pages} />
-        <Row
-          term="Publisher"
-          value={d.official_publisher}
-          why={a.official_publisher}
-        />
-      </dl>
+    <Panel title="Language versions">
+      <ul className="doc-relations">
+        {versions.map((v, i) => (
+          <li key={i}>
+            <span className="doc-relation-kind">
+              {languageName(v.language)}
+            </span>{" "}
+            {AUTHORITY[v.authority] ?? v.authority}
+            {v.this_text === "yes" ? (
+              <span className="doc-relation-note">
+                {" "}
+                · the text on this page
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
     </Panel>
   );
 }
 
-export function StatusPanel({ record }: { record: DetailsRecord }) {
-  const d = record.details;
-  const a = record.absent;
+function Status({ view }: { view: View }) {
+  const fields = view.fields.filter(
+    (f) =>
+      (f.group === "status" && !HIDDEN.has(f.key)) ||
+      f.key === "text.version.label" ||
+      f.key === "text.version.consolidated",
+  );
+  const links = list<{
+    kind: string;
+    target: string;
+    target_id?: string;
+    note?: string;
+  }>(view, "relations");
   return (
-    <Panel title="Status and related laws">
-      <dl>
-        <Row
-          term="Legal status"
-          value={label(d.legal_status ?? "unknown")}
-          why={a.legal_status}
-        />
-        <Row
-          term="Status checked"
-          value={longDate(d.status_checked_on)}
-          why={a.status_checked_on}
-        />
-        {d.status_note ? <Row term="Note" value={d.status_note} /> : null}
-        <Row
-          term="Version"
-          value={[d.version_label, label(d.consolidation)]
-            .filter(Boolean)
-            .join(". ")}
-          why={a.version_label}
-        />
-      </dl>
-      {d.relations?.length ? (
+    <Panel title="Status and related documents">
+      <Details view={view} fields={fields} />
+      {links.length ? (
         <ul className="doc-relations">
-          {d.relations.map((link, i) => (
+          {links.map((link, i) => (
             <li key={i}>
-              <span className="doc-relation-kind">{label(link.kind)}</span>{" "}
+              <span className="doc-relation-kind">{humanise(link.kind)}</span>{" "}
               {link.target_id ? (
                 <a href={"#/sources/" + link.target_id}>{link.target}</a>
               ) : (
@@ -379,9 +331,70 @@ export function StatusPanel({ record }: { record: DetailsRecord }) {
           ))}
         </ul>
       ) : (
-        <p className="doc-panel-note">No related laws are recorded.</p>
+        <p className="doc-panel-note">No related documents are recorded.</p>
       )}
     </Panel>
+  );
+}
+
+// Every detail panel for this document, in the order its family calls for.
+export function DetailsPanels({
+  view,
+  making,
+}: {
+  view: View;
+  making: Step[];
+}) {
+  const inGroup = (group: string) =>
+    view.fields.filter((f) => f.group === group && !HIDDEN.has(f.key));
+  const groupLabel = (group: string) =>
+    view.groups.find((g) => g.key === group)?.label || humanise(group);
+  const certified =
+    text(view, "text.form") === "certified_copy" &&
+    !text(view, "publication.name");
+  const profile = inGroup("profile").filter((f) => f.key !== "profile.bill");
+  return (
+    <>
+      <Panel title="About this document">
+        <Details
+          view={view}
+          fields={[
+            ...inGroup("identity"),
+            ...view.fields.filter((f) => f.key === "text.form"),
+          ]}
+        />
+      </Panel>
+      <Making view={view} making={making} />
+      {view.family !== "judgment" ? (
+        <Panel title="Publication">
+          {certified ? (
+            <p className="doc-panel-note">
+              This copy is the text as passed and certified, without the
+              gazette's front page: the gazette that published it, and the
+              number it gave, are not stated in it.
+            </p>
+          ) : (
+            <Details view={view} fields={inGroup("publication")} />
+          )}
+        </Panel>
+      ) : null}
+      <Status view={view} />
+      {profile.some(
+        (f) =>
+          given(view, f.key) ||
+          (view.absent[f.key] && view.absent[f.key] !== "not_applicable"),
+      ) ? (
+        <Panel title={groupLabel("profile")}>
+          <Details view={view} fields={profile} />
+        </Panel>
+      ) : null}
+      <Languages view={view} />
+      {inGroup("classification").some((f) => given(view, f.key)) ? (
+        <Panel title="Classification">
+          <Details view={view} fields={inGroup("classification")} />
+        </Panel>
+      ) : null}
+    </>
   );
 }
 
@@ -395,15 +408,24 @@ function host(url: string): string {
   }
 }
 
+function Term({ term, children }: { term: string; children: ReactNode }) {
+  return (
+    <div className="doc-term">
+      <dt>{term}</dt>
+      <dd>{children}</dd>
+    </div>
+  );
+}
+
 // How the text the reader sees was produced and checked.
 export function ReviewPanel({
   review,
-  record,
+  details,
   contentHash,
   detailsHash,
 }: {
   review: ReviewRecord;
-  record: DetailsRecord;
+  details: DetailsStatus;
   contentHash?: string;
   detailsHash?: string | null;
 }) {
@@ -429,7 +451,7 @@ export function ReviewPanel({
             : "."}
         </li>
         <li>
-          {record.status === "confirmed"
+          {details.status === "confirmed"
             ? "The details on this page were confirmed against the document."
             : "The details on this page are not yet confirmed."}
         </li>
@@ -441,16 +463,14 @@ export function ReviewPanel({
       </ol>
       <dl>
         {contentHash ? (
-          <Row
-            term="Text fingerprint (SHA-256)"
-            value={<code title={contentHash}>{short(contentHash)}</code>}
-          />
+          <Term term="Text fingerprint (SHA-256)">
+            <code title={contentHash}>{short(contentHash)}</code>
+          </Term>
         ) : null}
         {detailsHash ? (
-          <Row
-            term="Details fingerprint (SHA-256)"
-            value={<code title={detailsHash}>{short(detailsHash)}</code>}
-          />
+          <Term term="Details fingerprint (SHA-256)">
+            <code title={detailsHash}>{short(detailsHash)}</code>
+          </Term>
         ) : null}
       </dl>
     </Panel>
@@ -458,71 +478,52 @@ export function ReviewPanel({
 }
 
 export function SourcePanel({
-  record,
+  view,
   provenance,
 }: {
-  record: DetailsRecord;
+  view: View;
   provenance: Provenance;
 }) {
-  const d = record.details;
-  const a = record.absent;
+  const official = text(view, "publication.url");
   return (
     <Panel title="Source of this text">
       <dl>
-        <Row
-          term="Form of this text"
-          value={label(d.text_form)}
-          why={a.text_form}
-        />
-        <Row
-          term="Official source online"
-          value={
-            d.official_source_url ? (
-              <a href={d.official_source_url} target="_blank" rel="noreferrer">
-                {host(d.official_source_url)}
-              </a>
-            ) : (
-              ""
-            )
-          }
-          why={a.official_source_url}
-        />
-        <Row
-          term="Retrieved from"
-          value={
-            provenance.retrieved_from ? (
-              <a
-                href={provenance.retrieved_from}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {host(provenance.retrieved_from)}
-              </a>
-            ) : (
-              ""
-            )
-          }
-        />
-        <Row term="Retrieved on" value={longDate(provenance.retrieved_at)} />
-        <Row
-          term="Original file"
-          value={[
+        {official ? (
+          <Term term="Official copy online">
+            <a href={official} target="_blank" rel="noreferrer">
+              {host(official)}
+            </a>
+          </Term>
+        ) : null}
+        {provenance.retrieved_from ? (
+          <Term term="Retrieved from">
+            <a
+              href={provenance.retrieved_from}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {host(provenance.retrieved_from)}
+            </a>
+          </Term>
+        ) : null}
+        {provenance.retrieved_at ? (
+          <Term term="Retrieved on">{longDate(provenance.retrieved_at)}</Term>
+        ) : null}
+        <Term term="Original file">
+          {[
             provenance.media_type === "application/pdf" ? "PDF" : "",
             `${provenance.pages} pages`,
             provenance.bytes ? `${Math.round(provenance.bytes / 1024)} KB` : "",
           ]
             .filter(Boolean)
             .join(", ")}
-        />
+        </Term>
         {provenance.original_sha256 ? (
-          <Row
-            term="Original file fingerprint (SHA-256)"
-            value={
-              <code title={provenance.original_sha256}>
-                {short(provenance.original_sha256)}
-              </code>
-            }
-          />
+          <Term term="Original file fingerprint (SHA-256)">
+            <code title={provenance.original_sha256}>
+              {short(provenance.original_sha256)}
+            </code>
+          </Term>
         ) : null}
       </dl>
       {provenance.retrieval_note ? (
@@ -535,26 +536,54 @@ export function SourcePanel({
   );
 }
 
+// When the document was made (assent, promulgation, signature), commenced or decided.
+function milestones(view: View, making: Step[]) {
+  const date = (step?: Step) =>
+    step ? text(view, `step:${step.step}.date`) : "";
+  const made = making.find(
+    (s) =>
+      ["assented", "promulgated", "signed", "made"].includes(s.event) &&
+      date(s),
+  );
+  const commenced = making.find((s) => s.event === "commenced" && date(s));
+  return {
+    made: made ? { label: made.label, date: date(made) } : null,
+    commenced: date(commenced) || text(view, "event:commenced.date"),
+    decided:
+      text(view, "event:decided.date") || text(view, "event:delivered.date"),
+  };
+}
+
 // The facts a reader needs first, under the title.
 export function KeyFacts({
-  record,
+  view,
+  making,
   approved,
 }: {
-  record: DetailsRecord;
+  view: View;
+  making: Step[];
   approved: boolean;
 }) {
-  const d = record.details;
+  const { made, commenced, decided } = milestones(view, making);
+  const status = text(view, "status.legal");
+  const consolidated = text(view, "text.version.consolidated");
+  const language = list<Record<string, string>>(view, "expressions").find(
+    (e) => e.this_text === "yes",
+  );
   const facts = [
-    d.version_label,
-    d.consolidation === "not_consolidated" ? "Not consolidated" : "",
-    d.legal_status && d.legal_status !== "unknown"
-      ? label(d.legal_status)
+    text(view, "text.version.label"),
+    consolidated === "no"
+      ? "Not consolidated"
+      : consolidated === "yes"
+        ? "Consolidated"
+        : "",
+    status && status !== "unknown"
+      ? humanise(status)
       : "Currentness not yet checked",
-    d.assent_date ? `Assented to ${longDate(d.assent_date)}` : "",
-    d.commencement_date
-      ? `In effect from ${longDate(d.commencement_date)}`
-      : "",
-    d.language ? languageName(d.language) : "",
+    made ? `${made.label.replace(/ by .*$/, "")} ${longDate(made.date)}` : "",
+    decided ? `Decided ${longDate(decided)}` : "",
+    commenced ? `In effect from ${longDate(commenced)}` : "",
+    language ? languageName(language.language) : "",
     approved ? "Checked page by page and approved" : "",
   ].filter(Boolean);
   return (
@@ -566,64 +595,74 @@ export function KeyFacts({
   );
 }
 
+export const titleOf = (view: View, source: Source) =>
+  text(view, "identity.title") || source.title;
+export const summaryOf = (view: View) => text(view, "text.summary.text");
+export const kindOf = (view: View) => humanise(view.kind);
+
 // The citation a reader copies, for the whole document or one section.
-export function citationFor(
-  record: DetailsRecord,
-  source: Source,
-  section?: string,
-) {
-  const base =
-    record.details.citation || record.details.short_title || source.title;
+export function citationFor(view: View, source: Source, section?: string) {
+  const base = text(view, "identity.citation") || titleOf(view, source);
   return section ? `${base}, s. ${section}` : base;
 }
 
-// schema.org Legislation, for search engines: what the public page will carry in its head.
+// schema.org for search engines: what the public page will carry in its head.
 export function legislationJsonLd(
-  record: DetailsRecord,
+  view: View,
+  making: Step[],
   source: Source,
   url: string,
   downloads: { format: string; href: string }[],
 ) {
-  const d = record.details;
+  const { made, commenced } = milestones(view, making);
+  const status = text(view, "status.legal");
   const force =
-    d.legal_status === "current"
+    status === "in_force"
       ? "InForce"
-      : d.legal_status === "repealed" || d.legal_status === "superseded"
-        ? "NotInForce"
-        : undefined;
-  const changes = (d.relations ?? []).filter((r) =>
-    ["amends", "repeals"].includes(r.kind),
+      : status === "partly_in_force"
+        ? "PartiallyInForce"
+        : ["repealed", "superseded", "expired", "struck_down"].includes(status)
+          ? "NotInForce"
+          : undefined;
+  const changes = list<{ kind: string; target: string }>(
+    view,
+    "relations",
+  ).filter((r) => ["amends", "repeals"].includes(r.kind));
+  const language = list<Record<string, string>>(view, "expressions").find(
+    (e) => e.this_text === "yes",
   );
+  const judgment = view.family === "judgment";
   const data: Record<string, unknown> = {
     "@context": "https://schema.org",
-    "@type": "Legislation",
-    name: d.short_title || source.title,
-    alternateName: d.citation,
-    legislationIdentifier: d.citation,
-    legislationType: label(d.document_type ?? source.document_type),
-    legislationJurisdiction: {
-      "@type": "Country",
-      name: countryName(d.jurisdiction ?? source.jurisdiction_id),
-    },
-    legislationDate: d.assent_date,
-    legislationDateVersion: d.commencement_date ?? d.assent_date,
+    "@type": judgment ? "CreativeWork" : "Legislation",
+    additionalType: judgment ? "Judgment" : undefined,
+    name: titleOf(view, source),
+    alternateName: text(view, "identity.citation") || undefined,
+    legislationIdentifier: judgment
+      ? undefined
+      : text(view, "identity.citation") || undefined,
+    legislationType: judgment ? undefined : kindOf(view),
+    legislationJurisdiction: judgment
+      ? undefined
+      : { "@type": "Country", name: view.place.name },
+    legislationDate: made?.date,
+    legislationDateVersion: commenced || made?.date,
     legislationLegalForce: force && `https://schema.org/${force}`,
-    legislationPassedBy: d.enacting_body && {
-      "@type": "Organization",
-      name: d.enacting_body,
-    },
+    legislationPassedBy: text(view, "issued_by")
+      ? { "@type": "Organization", name: text(view, "issued_by") }
+      : undefined,
     legislationChanges: changes.length
       ? changes.map((r) => ({ "@type": "Legislation", name: r.target }))
       : undefined,
-    inLanguage: d.language,
-    abstract: d.summary,
-    description: d.long_title,
-    datePublished: d.gazette_date,
-    publisher: d.official_publisher && {
-      "@type": "Organization",
-      name: d.official_publisher,
-    },
-    keywords: d.subjects?.length ? d.subjects.join(", ") : undefined,
+    inLanguage: language?.language,
+    abstract: summaryOf(view) || undefined,
+    description: text(view, "identity.full_title") || undefined,
+    datePublished: text(view, "publication.date") || undefined,
+    publisher: text(view, "publication.publisher")
+      ? { "@type": "Organization", name: text(view, "publication.publisher") }
+      : undefined,
+    keywords:
+      list<string>(view, "classification.subjects").join(", ") || undefined,
     url,
     encoding: downloads.map((download) => ({
       "@type": "MediaObject",
