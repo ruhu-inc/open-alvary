@@ -185,6 +185,32 @@ def test_gazette_file_names_give_the_issue_number_date_and_kind():
     assert rwanda.parse_gazette("Special_of_14.12.2017.pdf")["special"] is True
     later = rwanda.parse_gazette("Igazeti ya Leta n° 52 yo ku wa 29.12.2025_ Amazina + Cooperative.pdf")
     assert later["number"] == 52 and later["date"] == "2025-12-29"
+    # The names the archive has used over the years, typing slips included.
+    cases = {
+        "Official_Gazette_no_42_of_19.10.09.pdf": (42, "2009-10-19"),
+        "Official_Gazette_no_13_ter_of_01.07.2006.pdf": (13, "2006-07-01"),
+        "24bis_of_11.06.2018.pdf": (24, "2018-06-11"),
+        "Official Gazette nº 29 of 21/09/2020": (29, "2020-09-21"),
+        "OG_N0_31_of_30-07-2018_co__1_.pdf": (31, "2018-07-30"),
+        "29_OG_No_29_bis_of_29-_07-_2019_MINES.pdf": (29, "2019-07-29"),
+        "Official_Gazette_N___42_of_28_12_2020_Amazina.pdf": (42, "2020-12-28"),
+        "Official_Gazette_no_02_11.01.2021_MINECOFIN___RDB.pdf": (2, "2021-01-11"),
+    }
+    for name, (number, date) in cases.items():
+        parsed = rwanda.parse_gazette(name)
+        assert (parsed.get("number"), parsed.get("date"), parsed["parsed"]) == (number, date, True), name
+    assert rwanda.parse_gazette("Official_Gazette_no_13_ter_of_01.07.2006.pdf")["ter"] is True
+    special = rwanda.parse_gazette("Igazeti ya Leta n° Idasanzwe yo ku wa 18/10/2024_Imbabazi")
+    assert special == {"date": "2024-10-18", "special": True, "parsed": True}
+    assert rwanda.parse_gazette("Official_Gazette_No_Spcial_of_04.11.2020.pdf")["special"] is True
+    # A slip in the date leaves the issue for the reviewer, rather than guessing.
+    assert rwanda.parse_gazette("Official_Gazette_N___Special_of_18.022021_Uburezi.pdf")["parsed"] is False
+
+
+def test_a_listed_file_may_be_a_little_larger_than_shown_but_not_much_more():
+    assert rwanda.size_limit({"size": "71 MB"}) == int(71 * 1024**2 * 1.25)
+    assert rwanda.size_limit({"size": "436 KB"}) == rwanda.MAX_BYTES
+    assert rwanda.size_limit({"size": "900 MB"}) == rwanda.LARGEST_GAZETTE
 
 
 def test_the_crawler_says_who_it_is_and_adds_a_contact_only_when_set(monkeypatch):

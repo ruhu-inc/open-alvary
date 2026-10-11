@@ -18,6 +18,7 @@ import sys
 import time
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import unquote
 
 from ingestion import filelist, gazette_layout
 from ingestion.pipeline import MAX_BYTES
@@ -111,21 +112,47 @@ def parse_rlrc(name: str, folder: str) -> dict:
 
 
 def parse_gazette(name: str) -> dict:
-    """Issue number, special or bis, and date from a gazette file name."""
+    """Issue number, its edition (special, bis, ter) and date from a gazette file name. Names vary
+    by era: "Official_Gazette_no_38_bis_of_22.09.2014", "24bis_of_11.06.2018", "Official Gazette
+    nº 29 of 21/09/2020", "Igazeti ya Leta n° Idasanzwe yo ku wa 18/10/2024"."""
     text = _plain(name)
     out: dict = {}
-    date = re.search(r"\b(\d{1,2})[.\s](\d{1,2})[.\s]((?:19|20)\d\d)\b", text)
-    if date:
-        out["date"] = f"{date.group(3)}-{int(date.group(2)):02d}-{int(date.group(1)):02d}"
-    if re.search(r"\b(special|idasanzwe|sp)\b", text, re.I):
+    # One separator throughout ("14.11.2016", "21/09/2020", "29- 07- 2019", "16 05 2022" once the
+    # underscores are spaces), so that an issue number followed by a date ("no 02 11.01.2021") is
+    # not read as a date.
+    date = re.search(
+        r"(?<!\d)(\d{1,2})\s?([./-])\s?(\d{1,2})\s?\2\s?((?:19|20)?\d\d)(?!\d)", text
+    ) or re.search(r"(?<!\d)(\d{1,2})( )(\d{1,2}) ((?:19|20)\d\d)(?!\d)", text)
+    if date and 1 <= int(date.group(3)) <= 12 and 1 <= int(date.group(1)) <= 31:
+        year = date.group(4) if len(date.group(4)) == 4 else f"20{date.group(4)}"
+        out["date"] = f"{year}-{int(date.group(3)):02d}-{int(date.group(1)):02d}"
+    if re.search(r"\b(sp[ée]?cial|idasanzwe|sp)\b", text, re.I):
         out["special"] = True
-    if re.search(r"\bbis\b", text, re.I):
-        out["bis"] = True
-    number = re.search(r"(?:^|n[°º]?\.?\s*)(\d{1,3})\b(?!\.\d)", text, re.I)
-    if number and not (date and number.start(1) == date.start(1)):
+    edition = re.search(r"(?<=\d)\s*(bis|ter|quater)\b|\b(bis|ter|quater)\b", text, re.I)
+    if edition:
+        out[(edition.group(1) or edition.group(2)).lower()] = True
+    number = re.search(
+        r"(?:^|\bn(?:o|0|°|º|r)?\.?\s*|\bOG\s+)(\d{1,3})(?=\s*(?:bis|ter|quater)\b|\b)(?![./]\d)",
+        text,
+        re.I,
+    )
+    if number and int(number.group(1)) and not (date and number.start(1) == date.start(1)):
         out["number"] = int(number.group(1))
     out["parsed"] = bool(out.get("date") and (out.get("number") or out.get("special")))
     return out
+
+
+def parse_item(source_id: str, item: dict) -> dict:
+    """What a listed file's name says; a gazette whose shown name says too little is read again
+    from the file name in its address, which the archive often writes more fully."""
+    if source_id != "minijust-gazette":
+        return parse_rlrc(item["name"], item["folder"])
+    parsed = parse_gazette(item["name"])
+    if not parsed["parsed"]:
+        from_url = parse_gazette(unquote(item["url"].rsplit("/", 1)[-1]))
+        if from_url["parsed"]:
+            return from_url | {"from": "address"}
+    return parsed
 
 
 # --- the catalogue -----------------------------------------------------------------------------------
@@ -146,11 +173,7 @@ def catalogue(source_id: str, delay: float, max_pages: int, log=print) -> dict:
     for item in result["files"]:
         item["size_bytes"] = filelist.size_bytes(item["size"])
         item["listed_date"] = filelist.listed_date(item["modified"])
-        item["parsed"] = (
-            parse_gazette(item["name"])
-            if source_id == "minijust-gazette"
-            else parse_rlrc(item["name"], item["folder"])
-        )
+        item["parsed"] = parse_item(source_id, item)
     ledger = Ledger(STAGING / "sync-ledger.json")
     newest = max((f["listed_date"] or "" for f in result["files"]), default="")
     changes = ledger.observe_listing(
@@ -193,9 +216,31 @@ def catalogue(source_id: str, delay: float, max_pages: int, log=print) -> dict:
     return summary
 
 
+def reparse(source_id: str) -> dict:
+    """Read the stored catalogue's names again with the current rules, without visiting the site."""
+    path = STAGING / "catalogue" / f"{source_id}.json"
+    data = json.loads(path.read_text())
+    for item in data["files"]:
+        item["parsed"] = parse_item(source_id, item)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n")
+    return {
+        "source": source_id,
+        "files": len(data["files"]),
+        "unparsed": sum(1 for f in data["files"] if not f["parsed"]["parsed"]),
+    }
+
+
 # --- fetching an approved selection ---------------------------------------------------------------
 
 ALLOWED_HOSTS = {"www.rlrc.gov.rw", "www.minijust.gov.rw"}
+LARGEST_GAZETTE = 128 * 1024**2  # the archive lists issues up to about 71 MB (scanned 2010s issues)
+
+
+def size_limit(listed: dict) -> int:
+    """The most a file may be: the usual ingestion limit, or a little over the size its listing
+    shows (listings round), never more than the largest gazette allowed."""
+    shown = filelist.size_bytes(listed.get("size", "")) or 0
+    return max(MAX_BYTES, min(LARGEST_GAZETTE, int(shown * 1.25)))
 
 
 def load_selection(path: Path) -> dict:
@@ -234,11 +279,11 @@ def fetch_selection(selection: dict, delay: float = 4.0, log=print) -> list[dict
             with client.stream("GET", url, follow_redirects=False) as response:
                 if response.status_code != 200:
                     raise ValueError(f"{item_id}: HTTP {response.status_code}")
-                raw = bytearray()
+                raw, limit = bytearray(), size_limit(record["listed"])
                 for chunk in response.iter_bytes():
                     raw.extend(chunk)
-                    if len(raw) > MAX_BYTES:
-                        raise ValueError(f"{item_id}: exceeds the ingestion size limit")
+                    if len(raw) > limit:
+                        raise ValueError(f"{item_id}: larger than its listing shows ({limit} bytes)")
                 headers = {k: response.headers.get(k) for k in ("content-type", "last-modified", "etag")}
             if not raw.startswith(b"%PDF-"):
                 raise ValueError(f"{item_id}: not a PDF")
@@ -319,6 +364,8 @@ def main(argv=None) -> int:
     cat.add_argument("--max-pages", type=int, default=3000)
     cat.add_argument("--force", action="store_true", help="check even if not due")
     sub.add_parser("status", help="last check, last change and what is due, per source")
+    again = sub.add_parser("reparse", help="read the stored catalogue's file names again (no network)")
+    again.add_argument("--source", choices=[*SOURCES, "all"], default="all")
     fetch = sub.add_parser("fetch", help="fetch the files of an operator-approved selection")
     fetch.add_argument("--selection", required=True, type=Path)
     probe = sub.add_parser(
@@ -331,6 +378,11 @@ def main(argv=None) -> int:
         return 0
     if args.command == "probe":
         probe_selection(load_selection(args.selection))
+        return 0
+    if args.command == "reparse":
+        for source_id in list(SOURCES) if args.source == "all" else [args.source]:
+            if (STAGING / "catalogue" / f"{source_id}.json").exists():
+                print(json.dumps(reparse(source_id)))
         return 0
     if args.command == "status":
         for row in status():
