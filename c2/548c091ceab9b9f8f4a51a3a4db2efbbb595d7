@@ -1,0 +1,36 @@
+workbench/static/app.css
+  s_b82616e2476856::t_6870633ca3c8ae 251-261
+workbench/timing.py
+  s_b82616e2476856::t_65dfa681bf186e 1-12,14-79
+  s_b82616e2476856::t_e2b8da0a685933 13
+tests/test_rw_gazette.py
+  s_b82616e2476856::t_ff03b3d507971c 302-318
+workbench/app.py
+  s_b82616e2476856::t_4f8343e7fa8f06 647-674
+ingestion/rw_gazette.py
+  s_b82616e2476856::t_ff03b3d507971c 313-317,383-393
+workbench/content.py
+  s_b82616e2476856::t_4f8343e7fa8f06 581-629
+tests/test_workbench.py
+  s_b82616e2476856::t_e2b8da0a685933 863-887
+  s_b82616e2476856::t_0825c3c6140210 859-862
+workbench/static/app.js
+  s_b82616e2476856::t_9ccd3152fcc91d 1115-1116
+  s_b82616e2476856::t_6870633ca3c8ae 288-290,299,416-456,1359
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c2548c091ceab9b9f8f4a51a3a4db2efbbb595d7",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
