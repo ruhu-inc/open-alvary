@@ -355,6 +355,9 @@ KIND = {
     "missing_from_primary": "only in the check readings",
     "marker_conflict": "check readings give different numbers",
     "moved": "placed differently by the check readings",
+    "not_aligned": "articles differ between the language versions",
+    "heading_form": "article heading printed in an unusual form",
+    "heading_long": "check where this heading ends",
 }
 
 
@@ -376,7 +379,7 @@ def reconciled_body(reading: dict) -> tuple[str, str]:
         else "Document AI · no flags"
     )
     items = "".join(
-        f"<li class='{f['severity']}'><b>{f['severity']}</b> {html.escape(KIND[f['kind']])}: "
+        f"<li class='{f['severity']}'><b>{f['severity']}</b> {html.escape(KIND.get(f['kind'], f['kind']))}: "
         f"<q>{html.escape(f['primary'] or '—')}</q> "
         + " ".join(
             f"· {html.escape(name)}: <q>{html.escape(text or '—')}</q>" for name, text in f["checks"].items()

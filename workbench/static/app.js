@@ -10,6 +10,9 @@ const KIND_LABEL = {
   missing_from_primary: "only in the check readings",
   marker_conflict: "check readings give different numbers",
   moved: "placed differently",
+  not_aligned: "articles differ between the language versions",
+  heading_form: "article heading printed in an unusual form",
+  heading_long: "check where this heading ends",
 };
 const DECISION_LABEL = { keep: "kept as read", use_check: "used check reading", edited: "edited by hand", dismissed: "dismissed" };
 
@@ -1160,9 +1163,11 @@ function flagCard(view, flag, inList) {
     if (view.surface && decision !== "use_check") view.surface.resolve(flag.id);
     changed(view); close(); refreshFlags(view);
   };
-  const reads = el("div", { class: "reads" }, el("span", { class: "muted", text: "Main reading" }), el("q", { text: flag.primary || "—" }), el("span"));
+  const reads = el("div", { class: "reads" }, el("span", { class: "muted", text: flag.compare ? "This version" : "Main reading" }),
+    el("q", { text: flag.primary || (flag.missing ? `no article ${flag.missing} found` : "—") }), el("span"));
   for (const [reader, text] of Object.entries(flag.checks)) {
-    const usable = !resolution && highlighted && view.surface.applicable(flag.id)
+    // Another language's text is shown for comparison only, never offered as a replacement.
+    const usable = !flag.compare && !resolution && highlighted && view.surface.applicable(flag.id)
       && !(flag.kind === "missing_from_primary" && !text) && !(flag.kind === "marker_conflict" && !/^\S{1,12}$/.test(text || ""));
     const label = flag.kind === "marker_conflict" ? `Number ${text}` : text ? `Use ${reader}` : "Remove words";
     reads.append(el("span", { class: "muted", text: reader }), el("q", { text: text || "—" }),

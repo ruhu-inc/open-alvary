@@ -761,3 +761,75 @@ def test_the_public_preview_shows_the_latest_saved_pages_as_readers_would(world)
     page = browser.get(f"/preview/{ACT}")
     assert page.status_code == 200 and "/static/public-preview/preview.js" in page.text
     assert "default-src 'self'" in page.headers["content-security-policy"]
+
+
+def rwanda_collection(folder, monkeypatch):
+    """A second collection beside the first: one Rwandan law in two of its language versions, each
+    a reading taken from the gazette's text layer, with its boxes and a flag for comparison."""
+    from ingestion import rw_gazette as RG
+
+    folder.mkdir()
+    lines = {
+        "en": [{"text": "Article One: Purpose", "x0": 300, "y0": 70, "x1": 420, "y1": 80, "page": 3}],
+        "fr": [{"text": "Article premier : Objet", "x0": 530, "y0": 70, "x1": 660, "y1": 80, "page": 3}],
+    }
+    documents = []
+    for language, printed in lines.items():
+        nodes = RG.structure([{**line, "text": "We, EXAMPLE Name,"} for line in printed] + printed, language)
+        nodes[-1].setdefault("flags", []).append({"severity": "low", "kind": "heading_form", "primary": "x"})
+        reading = RG.reading(
+            nodes, {3: ["Official Gazette n° 11 of 16/03/2026"]}, "0" * 64, {}, {3: (842.0, 595.0)}
+        )
+        doc_id = f"rw-law-009-2026-{language}"
+        (folder / f"{doc_id}.reading.json").write_text(json.dumps(reading))
+        documents.append(
+            {
+                "id": doc_id,
+                "type": "law",
+                "title": "Law n° 009/2026 of 12/03/2026 governing examples",
+                "year": 2026,
+                "jurisdiction": "rw",
+                "language": language,
+                "work": "rw-law-009-2026",
+                "suggested": {
+                    "identity.family": "legislation",
+                    "identity.type": "law",
+                    "identity.number.value": "009/2026",
+                    "step:promulgated.person": "EXAMPLE Name, President of the Republic",
+                    "expressions": [{"language": "rw"}, {"language": "en"}, {"language": "fr"}],
+                },
+            }
+        )
+    (folder / "manifest.json").write_text(
+        json.dumps({"collection": "rw-test", "jurisdiction": "rw", "documents": documents})
+    )
+    monkeypatch.setenv("ALVARY_REVIEW_COLLECTIONS", str(folder))
+
+
+def test_a_second_collection_reviews_each_language_version_and_shares_the_laws_details(tmp_path, monkeypatch):
+    rwanda_collection(tmp_path / "rw", monkeypatch)
+    (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(reading()))
+    store = Store(connect(f"sqlite:///{tmp_path / 'workbench.db'}"))
+    store.add_operator("reviewer@example.org", "Rev", {"reviewer"})
+    world = (store, content.Library(tmp_path))
+    reviewer = signed_in(world, "reviewer@example.org")
+    ids = [d["id"] for d in reviewer.get("/api/documents").json()]
+    assert ACT in ids and {"rw-law-009-2026-en", "rw-law-009-2026-fr"} <= set(ids)
+    page = reviewer.get("/api/documents/rw-law-009-2026-fr/pages/3").json()
+    assert page["regions"][0]["box"][0] > 0.6  # the French column, on the right of the page
+    assert "Article premier : Objet" in [line["text"] for line in page["lines"]]
+    assert page["flags"][0]["compare"] is True
+    details = reviewer.get("/api/documents/rw-law-009-2026-en/details").json()
+    fields = {f["key"] for f in details["standard"]["fields"]}
+    assert "step:sealed.person" in fields  # Rwanda's procedure, not Nigeria's
+    values = details["record"]["details"]
+    assert values["step:promulgated.person"] == "EXAMPLE Name, President of the Republic"
+    assert [row["this_text"] for row in values["expressions"]] == ["no", "yes", "no"]
+    saved = reviewer.post(
+        "/api/documents/rw-law-009-2026-en/details",
+        json={"expected_revision": 0, "status": "draft", "details": {**values, "identity.year": "2026"}},
+    )
+    assert saved.json() == {"revision": 1}
+    french = reviewer.get("/api/documents/rw-law-009-2026-fr/details").json()
+    assert french["history"][0]["revision"] == 1  # one record for the law, whichever version is open
+    assert [row["this_text"] for row in french["record"]["details"]["expressions"]] == ["no", "no", "yes"]

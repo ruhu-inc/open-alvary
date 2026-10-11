@@ -209,8 +209,9 @@ def analyse(pages: list[dict]) -> list[dict]:
     return out
 
 
-def probe(pdf: Path) -> list[dict]:
-    """Per-page layout of a PDF, measured from its text layer inside the sealed container."""
+def text_layer(pdf: Path) -> list[dict]:
+    """Every page's words with their positions, from the PDF's text layer, read inside the sealed
+    container (no network, read-only input)."""
     completed = subprocess.run(
         [
             "docker",
@@ -233,7 +234,12 @@ def probe(pdf: Path) -> list[dict]:
         timeout=600,
         check=True,
     )
-    return analyse(words(completed.stdout))
+    return words(completed.stdout)
+
+
+def probe(pdf: Path) -> list[dict]:
+    """Per-page layout of a PDF, measured from its text layer inside the sealed container."""
+    return analyse(text_layer(pdf))
 
 
 def summary(pages: list[dict]) -> dict:

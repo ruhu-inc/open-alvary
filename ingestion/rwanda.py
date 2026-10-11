@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import unquote
 
-from ingestion import filelist, gazette_layout
+from ingestion import filelist, gazette_layout, rw_gazette
 from ingestion.pipeline import MAX_BYTES
 from ingestion.sync import Ledger, now, stamp
 
@@ -337,6 +337,128 @@ def probe_selection(selection: dict, log=print) -> list[dict]:
     return out
 
 
+COLLECTION = STAGING / "collection"
+RIGHTS_BASIS = (
+    "Pilot sample, private review only: acquired under the operator's POL-01 acceptance of "
+    "2026-10-11 (MINIJUST and RLRC publish without terms; robots allow). Publication of text waits "
+    "for the copyright check of official texts under Law n° 055/2024."
+)
+
+
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def _sentence(title: str) -> str:
+    sentence = title[0] + title[1:].lower() if title else title
+    sentence = re.sub(r"\bn\s?[°º]\s*", "n° ", sentence)
+    return re.sub(r"\b(rwanda|republic|république|repubulika)\b", lambda m: m.group(1).capitalize(), sentence)
+
+
+def prepare_selection(selection: dict, log=print) -> dict:
+    """Each fetched gazette issue of a selection split into its instruments, and each instrument's
+    language versions written as readings the workbench reviews, with the issue's PDF beside them,
+    the details read from the text, and the check of its articles across the three languages."""
+    import os
+    import shutil
+
+    ledger = Ledger(STAGING / "sync-ledger.json")
+    COLLECTION.mkdir(parents=True, exist_ok=True)
+    path = COLLECTION / "manifest.json"
+    manifest = (
+        json.loads(path.read_text())
+        if path.exists()
+        else {
+            "collection": "rw-pilot",
+            "jurisdiction": "rw",
+            "description": "Rwanda pilot: laws from a sample of Official Gazette issues, 2004 to 2026",
+            "rights_basis": RIGHTS_BASIS,
+            "documents": [],
+        }
+    )
+    documents = {d["id"]: d for d in manifest["documents"]}
+    summary = []
+    for item_id in selection["items"]:
+        record = ledger.data["items"][item_id]
+        if record["source"] != "minijust-gazette" or not record.get("sha256"):
+            continue
+        sha = record["sha256"]
+        pdf = STAGING / "sources" / record["source"] / f"{sha}.pdf"
+        sidecar = json.loads(pdf.with_suffix(".json").read_text())
+        issue = parse_item("minijust-gazette", {"name": record["listed"]["name"], "url": record["url"]})
+        split = rw_gazette.split_issue(gazette_layout.text_layer(pdf))
+        streams = rw_gazette.streams(split)
+        furniture = {page["page"]: [line["text"] for line in page["furniture"]] for page in split}
+        sizes = {page["page"]: (page["width"], page["height"]) for page in split}
+        found = rw_gazette.instruments(streams)
+        for entry in found:
+            lines = {lang: streams[lang][v["start"] : v["end"]] for lang, v in entry["versions"].items()}
+            versions = {lang: rw_gazette.structure(lines[lang], lang) for lang in lines}
+            check = rw_gazette.alignment(versions)
+            rw_gazette.flag_differences(versions)
+            values = rw_gazette.suggest(lines, entry, issue)
+            number = issue.get("date", "") if entry["number"] == "constitution" else entry["number"]
+            work = f"rw-{entry['kind'].replace('_', '-')}-{_slug(number)}"
+            for language, nodes in versions.items():
+                doc_id = f"{work}-{language}"
+                reading = rw_gazette.reading(nodes, furniture, sha, {"alignment": check}, sizes)
+                (COLLECTION / f"{doc_id}.reading.json").write_text(
+                    json.dumps(reading, ensure_ascii=False, indent=1) + "\n"
+                )
+                target = COLLECTION / f"{doc_id}.pdf"
+                if not target.exists():
+                    try:
+                        os.link(pdf, target)
+                    except OSError:
+                        shutil.copyfile(pdf, target)
+                (COLLECTION / f"{doc_id}.provenance.json").write_text(
+                    json.dumps(
+                        {
+                            "url": record["url"],
+                            "retrieved_at": sidecar["retrieved_at"],
+                            "sha256": sha,
+                            "bytes": sidecar["bytes"],
+                            "issue": record["listed"]["name"],
+                            "pages": entry["versions"][language]["pages"],
+                        },
+                        ensure_ascii=False,
+                        indent=1,
+                    )
+                    + "\n"
+                )
+                documents[doc_id] = {
+                    "id": doc_id,
+                    "type": entry["kind"],
+                    "title": _sentence(entry["versions"][language]["title"]),
+                    "year": int(values["identity.year"]) if values.get("identity.year") else None,
+                    "jurisdiction": "rw",
+                    "language": language,
+                    "work": work,
+                    "versions": {lang: f"{work}-{lang}" for lang in versions},
+                    "url": record["url"],
+                    "issue": {"name": record["listed"]["name"], **issue},
+                    "pages": entry["versions"][language]["pages"],
+                    "suggested": {
+                        **values,
+                        "publication.pages": "{}–{}".format(*entry["versions"][language]["pages"]),
+                        "publication.url": record["url"],
+                    },
+                    "alignment": check,
+                }
+            summary.append(
+                {
+                    "work": work,
+                    "languages": list(versions),
+                    "articles": check["articles"],
+                    "aligned": check["aligned"],
+                }
+            )
+        log(f"{record['listed']['name']}: {len(found)} instruments")
+    manifest["documents"] = sorted(documents.values(), key=lambda d: d["id"])
+    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
+    return {"documents": len(manifest["documents"]), "instruments": summary}
+
+
 def status() -> list[dict]:
     ledger = Ledger(STAGING / "sync-ledger.json")
     rows = []
@@ -375,12 +497,19 @@ def main(argv=None) -> int:
         "probe", help="measure the layout of a fetched selection (text layer, columns, languages)"
     )
     probe.add_argument("--selection", required=True, type=Path)
+    prepare = sub.add_parser(
+        "prepare", help="split fetched gazette issues into instruments and write readings for review"
+    )
+    prepare.add_argument("--selection", required=True, type=Path)
     args = parser.parse_args(argv)
     if args.command == "fetch":
         fetch_selection(load_selection(args.selection))
         return 0
     if args.command == "probe":
         probe_selection(load_selection(args.selection))
+        return 0
+    if args.command == "prepare":
+        print(json.dumps(prepare_selection(load_selection(args.selection)), indent=1))
         return 0
     if args.command == "reparse":
         for source_id in list(SOURCES) if args.source == "all" else [args.source]:

@@ -25,7 +25,9 @@ def main(argv=None) -> int:
             continue
         pages = [
             page["page"]
-            for page in json.loads((library.staging / f"{act['id']}.reading.json").read_text())["pages"]
+            for page in json.loads(
+                (library.staging_for(act["id"]) / f"{act['id']}.reading.json").read_text()
+            )["pages"]
         ]
         for page in pages:
             library.image(act["id"], page)
