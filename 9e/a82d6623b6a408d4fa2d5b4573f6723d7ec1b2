@@ -1,0 +1,40 @@
+schema/jurisdictions.json
+  s_b82616e2476856::t_59ef31243c44b6 1-749
+tests/test_record.py
+  s_b82616e2476856::t_3f3e29e9c3a55e 1-42,44-226
+  s_b82616e2476856::t_e1bd7186efc09e 43
+scripts/generate_schema.py
+  s_b82616e2476856::t_4fef40f3332a25 8
+  s_b82616e2476856::t_a4b7d91083001a 14,42-47
+schema/jurisdictions.py
+  s_b82616e2476856::t_6669c4e3809dbf 1-131
+workbench/details.py
+  s_b82616e2476856::t_24d9d395e93af2 575-583,585-589,591-600,602-612,614-630,633,635-636,638-771
+  s_b82616e2476856::t_c52fa8303168be 631-632
+  s_b82616e2476856::t_20ded92b87415c 584,590,601,613,634,637
+schema/record.py
+  s_b82616e2476856::t_c52fa8303168be 765,787-791,806-810
+  s_b82616e2476856::t_90f5f9b52e4269 1-75,77-90,92-102,109-111,113-150,152-188,190-210,212-232,234-339,343-578,580-584,588-721,723-764,766-786,792-805,812-819,822-823,825-857,859-872
+  s_b82616e2476856::t_8bd5c11fcf59b0 151,722,811,820-821,824
+  s_b82616e2476856::t_387717ce66b181 76,91,103-108,112,189,211,233,340-342,579,585-587,858
+schema/jurisdiction.schema.json
+  s_b82616e2476856::t_3111871baa736f 1-535
+schema/record.schema.json
+  s_b82616e2476856::t_93ff486c718d73 1-2279
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9ea82d6623b6a408d4fa2d5b4573f6723d7ec1b2",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
