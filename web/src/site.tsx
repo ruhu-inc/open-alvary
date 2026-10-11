@@ -23,6 +23,20 @@ export type Source = {
   rights_status: string;
   catalogue_note: string;
   has_full_text: boolean;
+  language?: string; // the language of this text, when the law is printed in several
+};
+
+// One of a law's language versions, each its own page.
+export type LanguageVersion = { language: string; id: string; title: string };
+
+// Each language by its own name, as a reader of it would look for it.
+export const LANGUAGE_NAMES: Record<string, string> = {
+  rw: "Ikinyarwanda",
+  en: "English",
+  fr: "Français",
+  sw: "Kiswahili",
+  ar: "العربية",
+  pt: "Português",
 };
 
 export type RightsRecord = {
@@ -121,16 +135,18 @@ export function SiteFooter() {
 export function PageTitle({
   label,
   title,
+  lang,
   children,
 }: {
   label: string;
   title: string;
+  lang?: string; // the title's language, when it is not the page's
   children: React.ReactNode;
 }) {
   return (
     <div className="page-title">
       <div className="eyebrow">{label}</div>
-      <h1>{title}</h1>
+      <h1 lang={lang}>{title}</h1>
       <p>{children}</p>
     </div>
   );

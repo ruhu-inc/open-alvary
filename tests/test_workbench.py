@@ -833,3 +833,26 @@ def test_a_second_collection_reviews_each_language_version_and_shares_the_laws_d
     french = reviewer.get("/api/documents/rw-law-009-2026-fr/details").json()
     assert french["history"][0]["revision"] == 1  # one record for the law, whichever version is open
     assert [row["this_text"] for row in french["record"]["details"]["expressions"]] == ["no", "no", "yes"]
+
+
+def test_the_public_preview_of_a_language_version_lists_the_others(tmp_path, monkeypatch):
+    rwanda_collection(tmp_path / "rw", monkeypatch)
+    manifest = json.loads((tmp_path / "rw" / "manifest.json").read_text())
+    for document in manifest["documents"]:
+        document["versions"] = {
+            "en": "rw-law-009-2026-en",
+            "fr": "rw-law-009-2026-fr",
+            "rw": "rw-law-009-2026-rw",
+        }
+    (tmp_path / "rw" / "manifest.json").write_text(json.dumps(manifest))
+    (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(reading()))
+    store = Store(connect(f"sqlite:///{tmp_path / 'workbench.db'}"))
+    store.add_operator("reviewer@example.org", "Rev", {"reviewer"})
+    reviewer = signed_in((store, content.Library(tmp_path)), "reviewer@example.org")
+    preview = reviewer.get("/api/documents/rw-law-009-2026-fr/public-preview").json()
+    assert preview["source"]["language"] == "fr"
+    # The Kinyarwanda version is not in this collection: only versions that exist are offered.
+    assert [(v["language"], v["id"]) for v in preview["versions"]] == [
+        ("en", "rw-law-009-2026-en"),
+        ("fr", "rw-law-009-2026-fr"),
+    ]

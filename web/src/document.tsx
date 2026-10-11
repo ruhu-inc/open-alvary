@@ -25,6 +25,8 @@ import {
   SourceRecord,
   type RightsRecord,
   type Source,
+  LANGUAGE_NAMES,
+  type LanguageVersion,
 } from "./site";
 
 export type Mark = {
@@ -197,18 +199,62 @@ function scrollTo(id: string) {
   target?.focus({ preventScroll: true });
 }
 
+// A law's language versions, the one prevailing in a conflict marked as such.
+export function LanguageSwitch({
+  versions,
+  current,
+  href,
+  view,
+}: {
+  versions: LanguageVersion[];
+  current: string;
+  href: (id: string) => string;
+  view: View;
+}) {
+  const rows =
+    (view.values["expressions"] as {
+      language?: string;
+      authority?: string;
+    }[]) || [];
+  const prevails = rows.find(
+    (row) => row.authority === "authoritative",
+  )?.language;
+  return (
+    <nav className="doc-languages" aria-label="Language versions">
+      {versions.map((version) => (
+        <a
+          key={version.id}
+          href={href(version.id)}
+          lang={version.language}
+          hrefLang={version.language}
+          title={version.title}
+          aria-current={version.id === current ? "page" : undefined}
+          className={version.id === current ? "current" : undefined}
+        >
+          {LANGUAGE_NAMES[version.language] || version.language}
+          {version.language === prevails ? (
+            <span className="doc-languages-note">prevails</span>
+          ) : null}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
 export function DocumentText({
   pages,
+  lang,
   markUnchecked = false,
   onSectionLink,
 }: {
   pages: DocumentPageContent[];
+  lang?: string;
   markUnchecked?: boolean;
   onSectionLink?: (section: string, anchor: string) => void;
 }) {
   const { laid } = layout(pages);
   return (
-    <div className="doc-text">
+    <div className="doc-text" lang={lang}>
       {laid.map((page) => (
         <div
           key={page.page}
@@ -375,6 +421,8 @@ export function DocumentPage({
   approved = false,
   linkTo,
   markUnchecked = false,
+  versions = [],
+  versionHref,
 }: {
   source: Source;
   rights?: RightsRecord;
@@ -390,6 +438,8 @@ export function DocumentPage({
   approved?: boolean;
   linkTo: (query?: string) => string; // this page's address, optionally at a section
   markUnchecked?: boolean;
+  versions?: LanguageVersion[]; // the law's other language versions, each its own page
+  versionHref?: (id: string) => string;
 }) {
   const s = source;
   const [notice, setNotice] = useState("");
@@ -400,6 +450,8 @@ export function DocumentPage({
   }, [notice]);
   const textRoot = useCallback(() => document.querySelector(".doc-text"), []);
   const citation = citationFor(view, s);
+  // A law printed in several languages shares one record; each version shows its own title.
+  const title = versions.length > 1 ? s.title : titleOf(view, s);
   return (
     <div className="page doc-page-view">
       <a className="breadcrumb" href="#/browse">
@@ -407,7 +459,8 @@ export function DocumentPage({
       </a>
       <PageTitle
         label={kindOf(view).toUpperCase() + " · " + citation}
-        title={titleOf(view, s)}
+        title={title}
+        lang={s.language}
       >
         {summaryOf(view) || s.catalogue_note}
       </PageTitle>
@@ -421,6 +474,14 @@ export function DocumentPage({
             <FileText size={18} /> Source text{" "}
             <span className="badge green">Open full text</span>
           </div>
+          {versions.length > 1 && versionHref ? (
+            <LanguageSwitch
+              versions={versions}
+              current={s.id}
+              href={versionHref}
+              view={view}
+            />
+          ) : null}
           <DocumentTools
             citation={citation}
             pageUrl={linkTo()}
@@ -429,6 +490,7 @@ export function DocumentPage({
           />
           <DocumentText
             pages={pages}
+            lang={s.language}
             markUnchecked={markUnchecked}
             onSectionLink={async (section, anchor) => {
               const url = linkTo("section=" + encodeURIComponent(section));
