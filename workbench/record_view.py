@@ -95,6 +95,11 @@ LABELS = {
     "fixed_date": "On a fixed date",
     "by_notice": "By notice",
     "staggered": "Part by part",
+    "organic_law": "Organic law",
+    "decree_law": "Decree-law",
+    "presidential_order": "Presidential Order",
+    "prime_ministers_order": "Prime Minister's Order",
+    "ministerial_order": "Ministerial Order",
 }
 
 
@@ -1060,7 +1065,9 @@ def suggestions_view(suggestions: dict) -> dict:
 
 def base_values(document: dict, manifest: dict) -> dict:
     """A starting point for a document from a jurisdiction we have no extractor for yet."""
-    family = FAMILY_OF_TYPE.get(document.get("type", "act"), "official_document")
+    kind = document.get("type", "act")
+    listed_in = [f for f, (_, kinds) in R.FAMILIES.items() if kind in kinds]
+    family = FAMILY_OF_TYPE.get(kind) or (listed_in[0] if len(listed_in) == 1 else "official_document")
     kinds = R.FAMILIES[family][1]
     values = {
         "identity.family": family,

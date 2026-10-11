@@ -297,3 +297,10 @@ def test_fetching_needs_an_approved_selection_of_catalogued_files_on_allowed_hos
         rwanda.fetch_selection(selection)
     with pytest.raises(ValueError, match="not in the catalogue"):
         rwanda.fetch_selection({**selection, "items": ["rlrc-laws:https://www.rlrc.gov.rw/unknown.pdf"]})
+
+
+def test_every_kind_read_from_an_rlrc_name_is_a_kind_of_the_common_record():
+    from schema.record import FAMILIES
+
+    kinds = {kind for _, listed in FAMILIES.values() for kind in listed}
+    assert set(rwanda.KINDS.values()) <= kinds, set(rwanda.KINDS.values()) - kinds

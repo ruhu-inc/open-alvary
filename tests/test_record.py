@@ -224,3 +224,55 @@ def test_the_published_json_schemas_match_the_contracts():
     for name, model in (("record", R.DocumentRecord), ("jurisdiction", JurisdictionProfile)):
         published = json.loads(Path(f"schema/{name}.schema.json").read_text())
         assert published == model.model_json_schema(), f"run scripts/generate_schema.py ({name})"
+
+
+def test_a_rwandan_organic_law_follows_rwandas_procedure_into_a_complete_record():
+    """Both Chambers adopt an organic law (the Senate may sit first); the President promulgates, the
+    Prime Minister countersigns and the Minister of Justice seals; three languages, Kinyarwanda first."""
+    from workbench import record_view as V
+
+    rwanda = registry()["rw"]
+    assert rwanda.researched and rwanda.official_languages == ("rw", "en", "fr", "sw")
+    assert expected_steps(rwanda, "law")[:2] == ("adopted:deputies", "adopted:senate")
+    assert expected_steps(rwanda, "presidential_order")[0] == "approved:cabinet"
+    document = {"type": "organic_law", "title": "Organic Law governing examples", "year": 2026}
+    values = V.base_values(document, {})
+    assert (values["identity.family"], values["identity.type"]) == ("legislation", "organic_law")
+    assert V.base_values({"type": "presidential_order"}, {})["identity.family"] == "executive_instrument"
+    specs = V.fields("legislation", "organic_law", rwanda)
+    keys = {s.key for s in specs}
+    assert {"step:adopted:senate.date", "step:countersigned.person", "step:sealed.person"} <= keys
+    assert "step:passed:senate.date" not in keys  # Nigeria's steps stay Nigeria's
+    values |= {
+        "identity.full_title": "Organic Law n° 009/2026.OL of 12/03/2026 governing examples",
+        "identity.number.value": "009/2026.OL",
+        "identity.citation": "Organic Law n° 009/2026.OL of 12/03/2026 governing examples",
+        "issued_by": "Parliament of the Republic of Rwanda",
+        "step:adopted:deputies.date": "2026-02-20",
+        "step:adopted:senate.date": "2026-02-17",
+        "step:promulgated.date": "2026-03-12",
+        "step:promulgated.person": "EXAMPLE Name, President of the Republic",
+        "step:countersigned.date": "2026-03-12",
+        "step:countersigned.person": "SAMPLE Name, Prime Minister",
+        "step:sealed.date": "2026-03-12",
+        "step:sealed.person": "OTHER Name, Minister of Justice and Attorney General",
+        "step:published.date": "2026-03-12",
+        "step:commenced.date": "2026-03-12",
+        "publication.name": "Official Gazette of the Republic of Rwanda",
+        "publication.number": "11 Bis",
+        "text.form": "gazette_publication",
+        "text.summary.text": "Governs examples.",
+        "expressions": [
+            {"language": "rw", "authority": "authoritative", "this_text": "yes"},
+            {"language": "en", "authority": "official_translation", "this_text": "no"},
+            {"language": "fr", "authority": "official_translation", "this_text": "no"},
+        ],
+    }
+    absent = {"profile.bill": "not_in_source", "profile.revised_edition": "not_applicable"}
+    assert V.missing(values, absent, specs) == []
+    place, _ = V.place_for({"jurisdiction": "rw"}, {}, registry())
+    record = V.to_record(values, absent, place, rwanda, "rw-example")
+    assert R.missing(record, expected_steps(rwanda, "organic_law")) == []
+    sealed = next(e for e in record.events if e.step == "sealed")
+    assert sealed.kind == "certified" and sealed.person.name.startswith("OTHER Name")
+    assert [e.language for e in record.expressions] == ["rw", "en", "fr"]
