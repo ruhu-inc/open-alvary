@@ -248,3 +248,14 @@ ul.plain li:first-child { border-top: 0; }
 }
 .rows-editor .row-line { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .35rem; }
 .rows-editor .row-line input, .rows-editor .row-line select { flex: 1 1 8rem; min-width: 0; }
+
+/* A law's language versions side by side. */
+.languages table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+.languages th, .languages td { border-bottom: 1px solid var(--line, #ddd); padding: 8px; vertical-align: top; text-align: left; }
+.languages .side-by-side td { width: 32%; font-size: 14px; }
+.languages .side-by-side td.num { width: 4%; color: var(--muted, #666); }
+.languages .side-by-side td p { margin: 4px 0 0; color: var(--muted, #555); }
+.languages .side-by-side tr.differs td { background: rgba(200, 60, 40, 0.06); }
+.languages .side-by-side td.absent { color: #a33; font-style: italic; }
+.languages .art-head { color: inherit; text-decoration: none; }
+.languages .art-head:hover strong { text-decoration: underline; }

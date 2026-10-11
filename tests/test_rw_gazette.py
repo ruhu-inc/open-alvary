@@ -299,3 +299,20 @@ def test_a_law_suggests_its_record_details_from_the_text_and_the_issue():
         ("en", "official_translation"),
         ("fr", "official_translation"),
     ]
+
+
+def test_numbered_items_within_an_article_keep_their_numbers():
+    lines = [
+        {"text": "We, EXAMPLE Name,", "page": 1, "x0": 0, "y0": 10, "x1": 100, "y1": 20},
+        {"text": "Ingingo ya 2: Ibisobanuro", "page": 1, "x0": 0, "y0": 40, "x1": 100, "y1": 50},
+        {"text": "1º “Ishuri” ni urwego;", "page": 1, "x0": 0, "y0": 70, "x1": 100, "y1": 80},
+        {"text": "rutanga inyigisho;", "page": 1, "x0": 0, "y0": 82, "x1": 100, "y1": 92},
+        {"text": "2° “Ikigo” ni urwego.", "page": 1, "x0": 0, "y0": 110, "x1": 100, "y1": 120},
+        {"text": "(a) is an orphan;", "page": 1, "x0": 0, "y0": 140, "x1": 100, "y1": 150},
+    ]
+    items = [n for n in RG.structure(lines, "rw") if n["kind"] == "list_item"]
+    assert [(n["marker"], n["text"]) for n in items] == [
+        ("1º", "“Ishuri” ni urwego; rutanga inyigisho;"),
+        ("2°", "“Ikigo” ni urwego."),
+        ("(a)", "is an orphan;"),
+    ]

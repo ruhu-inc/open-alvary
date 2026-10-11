@@ -285,7 +285,9 @@ async function actView(actId) {
   main(
     el("div", { class: "card" },
       el("h2", { text: act.title }),
-      el("p", { class: "muted", text: `Primary reading: Document AI ${data.readers.primary.version.version}. Checks: ${Object.keys(data.readers.checks).join(", ")}.` }),
+      el("p", { class: "muted", text: data.readers.primary.reader === "text-layer"
+        ? "Read from the PDF's own text layer, checked against the other language versions."
+        : `Primary reading: Document AI ${data.readers.primary.version.version}. Checks: ${Object.keys(data.readers.checks).join(", ")}.` }),
       el("p", {},
         pill(ready.unchecked_pages.length ? "medium" : "ok", `${ready.pages - ready.unchecked_pages.length} of ${ready.pages} pages checked`), " ",
         pill(ready.open_high_flags.length ? "high" : "ok", `${ready.open_high_flags.length} high flags open`), " ",
@@ -294,6 +296,7 @@ async function actView(actId) {
       el("p", {},
         nextTodo ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${nextTodo.page}` }, el("button", { class: "primary", text: `Continue reviewing at page ${nextTodo.page}` })) : null, " ",
         el("a", { href: `#/doc/${encodeURIComponent(actId)}/read` }, el("button", { text: "Read the whole document" })), " ",
+        act.versions ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/languages` }, el("button", { text: "Compare the language versions" })) : null, " ",
         previewLink(actId)),
       el("h3", { text: "Pages" }),
       el("p", { class: "muted", text: "Green: checked. Yellow: needs attention. Red border: high flags open. Dashed: the machine reading changed since review." }),
@@ -408,6 +411,47 @@ function depthOfText(lead) {
   if (/^\([ivxl]{2,6}\)/.test(text)) return 3;
   if (/^\([a-z]{1,2}\)/.test(text)) return 2;
   return null;
+}
+
+// --- a law's language versions side by side ------------------------------------------------------
+
+const LANGUAGE_NAMES = { rw: "Ikinyarwanda", en: "English", fr: "Français", sw: "Kiswahili" };
+
+async function languagesView(actId) {
+  const { ok, data } = await api(`/api/documents/${encodeURIComponent(actId)}/languages`);
+  if (!ok) return main(el("p", { text: message({ ok, data }) }));
+  const own = data.instrument[Object.keys(data.instrument).find((l) => data.instrument[l].id === actId)] || {};
+  setCrumbs(el("a", { href: "#/", text: "Home" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: own.title || actId }), "Language versions");
+  const versionLink = (language, page) => `#/doc/${encodeURIComponent(data.instrument[language].id)}/page/${page}`;
+  const instrument = el("table", { class: "instrument" },
+    el("thead", {}, el("tr", {}, el("th", { text: "Version" }), el("th", { text: "Title as printed" }), el("th", { text: "Pages" }))),
+    el("tbody", {}, data.languages.map((language) => {
+      const v = data.instrument[language];
+      return el("tr", {}, el("td", { text: LANGUAGE_NAMES[language] || language }),
+        el("td", { lang: language }, el("a", { href: `#/doc/${encodeURIComponent(v.id)}`, text: v.title })),
+        el("td", { text: v.pages ? `${v.pages[0]}–${v.pages[1]}` : "" }));
+    })));
+  const table = el("table", { class: "side-by-side" },
+    el("thead", {}, el("tr", {}, el("th", { text: "Article" }), data.languages.map((language) => el("th", { lang: language, text: LANGUAGE_NAMES[language] || language })))),
+    el("tbody", {}, data.rows.map((row) => el("tr", { class: row.complete ? "" : "differs", id: `article-${row.article}` },
+      el("td", { class: "num", text: row.article }),
+      data.languages.map((language) => {
+        const article = row.versions[language];
+        if (!article) return el("td", { class: "absent", text: "No such article found in this version" });
+        return el("td", { lang: language },
+          el("a", { href: versionLink(language, article.page), class: "art-head", title: `Edit page ${article.page}` },
+            el("strong", { text: `${article.marker} ${article.title}`.trim() })),
+          el("p", { text: article.text }));
+      })))));
+  const summary = data.differences.length
+    ? `${data.rows.length} articles. Not in every version: ${data.differences.join(", ")}. Open the version that lacks one and correct it, or record that it is printed so.`
+    : `${data.rows.length} articles, the same in every version.`;
+  main(el("div", { class: "card languages" },
+    el("h2", { text: "The language versions, article by article" }),
+    el("p", { class: "muted", text: "Each version is reviewed on its own pages; this view sets them side by side as they now read, so a missing, extra or misnumbered article shows at once." }),
+    instrument,
+    el("p", {}, data.differences.length ? pill("high", summary) : pill("ok", summary)),
+    table));
 }
 
 async function readView(actId) {
@@ -1068,7 +1112,8 @@ function alignIcon(side) {
 
 function editTab(view) {
   const canEdit = app.me.roles.includes("reviewer");
-  const mount = el("div", { class: `surface layout ${remember("restored") === "1" ? "show-restored" : ""}` });
+  // The version's language, so the browser checks spelling and hyphenates in Kinyarwanda or French.
+  const mount = el("div", { class: `surface layout ${remember("restored") === "1" ? "show-restored" : ""}`, lang: view.detail.act.language || undefined });
   const surface = window.ReviewEditor.createEditor(mount, {
     units: view.units,
     machineUnits: view.machineUnits,
@@ -1311,6 +1356,7 @@ async function route() {
     if (parts[0] === "doc" && parts[2] === "page") return await pageView(parts[1], Number(parts[3]));
     if (parts[0] === "doc" && parts[2] === "read") return await readView(parts[1]);
     if (parts[0] === "doc" && parts[2] === "details") return await detailsView(parts[1]);
+    if (parts[0] === "doc" && parts[2] === "languages") return await languagesView(parts[1]);
     if (parts[0] === "doc" && parts[1]) return await actView(parts[1]);
     if (parts[0] === "audit" && parts[1]) return await auditView(parts[1]);
     return await dashboard();
