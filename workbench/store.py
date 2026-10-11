@@ -25,7 +25,9 @@ from sqlalchemy import (
     create_engine,
     func,
     insert,
+    inspect,
     select,
+    text,
     update,
 )
 from sqlalchemy.engine import Engine
@@ -84,6 +86,21 @@ page_revision = Table(
     UniqueConstraint("act_id", "page", "revision"),
 )
 
+detail_revision = Table(
+    "detail_revision",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("act_id", String(140), nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column("details", JSON, nullable=False),  # field -> value (workbench/details.py, DETAILS-1)
+    Column("absent", JSON, nullable=False),  # field -> why it is not given
+    Column("status", String(20), nullable=False),  # draft | confirmed
+    Column("comment", Text, nullable=False, default=""),
+    Column("author", String(320), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("act_id", "revision"),
+)
+
 approval = Table(
     "approval",
     metadata,
@@ -92,6 +109,7 @@ approval = Table(
     Column("revision", Integer, nullable=False),
     Column("decision", String(20), nullable=False),  # approved | revoked
     Column("content_sha256", String(64), nullable=False),
+    Column("details_sha256", String(64)),  # the confirmed details approved with the text
     Column("rights_basis", Text, nullable=False),
     Column("materials", JSON, nullable=False),
     Column("note", Text, nullable=False, default=""),
@@ -139,7 +157,16 @@ def engine_from_environment() -> Engine:
 def connect(url: str) -> Engine:
     engine = create_engine(url, future=True, pool_pre_ping=True)
     metadata.create_all(engine)
+    _upgrade(engine)
     return engine
+
+
+def _upgrade(engine: Engine) -> None:
+    """Columns added after a database was first created (create_all adds only missing tables)."""
+    columns = {column["name"] for column in inspect(engine).get_columns("approval")}
+    if "details_sha256" not in columns:
+        with engine.begin() as db:
+            db.execute(text("ALTER TABLE approval ADD COLUMN details_sha256 VARCHAR(64)"))
 
 
 class Store:
@@ -166,6 +193,15 @@ class Store:
             db.execute(update(operator).where(operator.c.email == email.lower()).values(active=False))
             db.execute(update(session).where(session.c.email == email.lower()).values(ended_at=now()))
             self._audit(db, actor, "operator_deactivated", detail={"email": email.lower()})
+
+    def names(self, emails) -> dict[str, str]:
+        """Display names of operators, active or not, for crediting work already done."""
+        wanted = {email.lower() for email in emails if email}
+        if not wanted:
+            return {}
+        with self.engine.connect() as db:
+            rows = db.execute(select(operator.c.email, operator.c.name).where(operator.c.email.in_(wanted)))
+            return {row.email: row.name for row in rows}
 
     def operator(self, email: str) -> dict | None:
         with self.engine.connect() as db:
@@ -328,6 +364,50 @@ class Store:
                     "status": values["status"],
                     "resolved": len(values["resolutions"]),
                 },
+            )
+        return expected + 1
+
+    # --- document details ----------------------------------------------------------------------
+
+    def detail_history(self, act_id: str) -> list[dict]:
+        query = (
+            select(detail_revision)
+            .where(detail_revision.c.act_id == act_id)
+            .order_by(detail_revision.c.revision.desc())
+        )
+        with self.engine.connect() as db:
+            return [dict(row._mapping) for row in db.execute(query)]
+
+    def latest_details(self, act_id: str) -> dict | None:
+        history = self.detail_history(act_id)
+        return history[0] if history else None
+
+    def save_details(self, act_id: str, expected: int, author: str, **values) -> int:
+        """Write details revision expected+1; Conflict if someone else saved since the client loaded."""
+        with self.engine.begin() as db:
+            current = (
+                db.execute(
+                    select(func.max(detail_revision.c.revision)).where(detail_revision.c.act_id == act_id)
+                ).scalar()
+                or 0
+            )
+            if current != expected:
+                raise Conflict(f"details are at revision {current}, not {expected}")
+            try:
+                db.execute(
+                    insert(detail_revision).values(
+                        act_id=act_id, revision=expected + 1, author=author, created_at=now(), **values
+                    )
+                )
+            except IntegrityError as error:
+                raise Conflict(str(error)) from error
+            self._audit(
+                db,
+                author,
+                "details_saved",
+                act_id,
+                None,
+                {"revision": expected + 1, "status": values["status"], "given": len(values["details"])},
             )
         return expected + 1
 

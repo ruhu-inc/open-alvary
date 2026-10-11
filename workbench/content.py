@@ -15,6 +15,7 @@ import subprocess
 from pathlib import Path
 
 from ingestion import first_collection, layout_parser
+from workbench import details
 from workbench.store import canonical_json
 
 KINDS = {"heading", "paragraph", "list_item", "table"}
@@ -53,6 +54,18 @@ class Library:
         if found is None:
             raise KeyError(act_id)
         return found
+
+    def provenance(self, act_id: str) -> dict:
+        """How and when the original file was retrieved (written by the fetch step)."""
+        path = self.staging / f"{act_id}.provenance.json"
+        return json.loads(path.read_text()) if path.exists() else {}
+
+    def original(self, act_id: str) -> Path:
+        self.act(act_id)
+        path = self.staging / f"{act_id}.pdf"
+        if not path.exists():
+            raise FileNotFoundError(act_id)
+        return path
 
     def reading(self, act_id: str) -> dict:
         self.act(act_id)
@@ -417,6 +430,23 @@ def public_source(document: dict, manifest: dict) -> dict:
     }
 
 
+READERS = {
+    "docai": "Google Document AI Layout Parser",
+    "mineru": "MinerU, an open-source reader run offline",
+    "azure": "Azure AI Document Intelligence (layout)",
+}
+
+
+def reader_names(reading: dict) -> dict:
+    """The machine readers behind a reading, named for the public."""
+    primary = reading["primary"]["reader"]
+    return {
+        "primary": READERS.get(primary, primary),
+        "primary_version": (reading["primary"].get("version") or {}).get("version"),
+        "checks": [READERS.get(name, name) for name in reading.get("checks", {})],
+    }
+
+
 def public_pages(final: list[dict], latest: dict[int, dict]) -> list[dict]:
     """Each page's blocks as the public site renders them, and whether a reviewer checked it."""
     pages = []
@@ -439,8 +469,32 @@ def public_pages(final: list[dict], latest: dict[int, dict]) -> list[dict]:
     return pages
 
 
-def readiness(reading: dict, latest: dict[int, dict]) -> dict:
-    """What still stands between this Act and approval."""
+def details_sha256(record: dict | None) -> str | None:
+    """The fingerprint of a details record: what an approval of the details binds to."""
+    if not record:
+        return None
+    return hashlib.sha256(
+        canonical_json({"details": record["details"], "absent": record["absent"]}).encode()
+    ).hexdigest()
+
+
+def details_state(record: dict | None, document_type: str) -> dict:
+    """Whether the document's details are confirmed and complete under the standard."""
+    if not record:
+        return {"revision": 0, "status": None, "missing": None, "confirmed": False}
+    gaps = details.missing(record["details"], record["absent"], document_type)
+    return {
+        "revision": record["revision"],
+        "status": record["status"],
+        "missing": gaps,
+        "confirmed": record["status"] == "confirmed" and not gaps,
+    }
+
+
+def readiness(
+    reading: dict, latest: dict[int, dict], record: dict | None = None, document_type: str = "act"
+) -> dict:
+    """What still stands between this document and approval: its pages and its details."""
     unchecked, open_high, stale = [], [], []
     for page in reading["pages"]:
         revision = latest.get(page["page"])
@@ -453,13 +507,15 @@ def readiness(reading: dict, latest: dict[int, dict]) -> dict:
             if flag["severity"] == "high" and flag["id"] not in resolved:
                 open_high.append({"page": page["page"], "id": flag["id"]})
     missing = reading["summary"].get("missing_checks") or []
+    described = details_state(record, document_type)
     return {
         "pages": len(reading["pages"]),
         "unchecked_pages": unchecked,
         "open_high_flags": open_high,
         "stale_pages": stale,
         "missing_checks": missing,
-        "ready": not unchecked and not open_high and not stale and not missing,
+        "details": described,
+        "ready": not unchecked and not open_high and not stale and not missing and described["confirmed"],
     }
 
 

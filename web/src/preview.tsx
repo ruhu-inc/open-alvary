@@ -19,17 +19,44 @@ import {
   type Source,
 } from "./site";
 import { DocumentPage, type DocumentPageContent } from "./document";
+import {
+  legislationJsonLd,
+  type DetailsRecord,
+  type Provenance,
+  type ReviewRecord,
+} from "./details";
+import type { DownloadLink } from "./tools";
 
 type Preview = {
   source: Source;
+  details: DetailsRecord;
+  provenance: Provenance;
+  review: ReviewRecord;
   pages: DocumentPageContent[];
   content_sha256: string;
+  details_sha256: string | null;
+  downloads: DownloadLink[];
   status: {
     approved: boolean;
     pages: number;
     checked_pages: number;
+    details: {
+      confirmed: boolean;
+      status: string | null;
+      missing: string[] | null;
+    };
   };
 };
+
+const DETAIL_STATUS: Record<string, string> = {
+  suggested: "details suggested from the document, not yet saved",
+  draft: "details in draft",
+  confirmed: "details confirmed",
+};
+
+// This page's address in the preview, optionally at a section: "?section=4".
+const linkTo = (query?: string) =>
+  `${location.origin}${location.pathname}#/sources/${encodeURIComponent(documentId)}${query ? "?" + query : ""}`;
 
 const documentId = decodeURIComponent(
   location.pathname.replace(/^\/preview\//, "").replace(/\/$/, ""),
@@ -111,10 +138,12 @@ function PreviewBar({
   preview,
   markUnchecked,
   onMark,
+  onSearchRecord,
 }: {
   preview: Preview | null;
   markUnchecked: boolean;
   onMark: (on: boolean) => void;
+  onSearchRecord: () => void;
 }) {
   const status = preview?.status;
   return (
@@ -126,6 +155,7 @@ function PreviewBar({
       {status ? (
         <span className="preview-status">
           {status.checked_pages} of {status.pages} pages checked ·{" "}
+          {DETAIL_STATUS[preview!.details.status] ?? "details"} ·{" "}
           {status.approved ? "approved" : "not approved"}
         </span>
       ) : null}
@@ -139,6 +169,11 @@ function PreviewBar({
           mark pages not yet checked
         </label>
       ) : null}
+      {preview ? (
+        <button type="button" className="preview-link" onClick={onSearchRecord}>
+          Search engine record
+        </button>
+      ) : null}
       <a href={"/#/doc/" + encodeURIComponent(documentId)}>Back to review</a>
     </div>
   );
@@ -150,6 +185,7 @@ function Preview() {
   const [route, setRoute] = useState(location.hash.slice(1));
   const [menu, setMenu] = useState(false);
   const [markUnchecked, setMarkUnchecked] = useState(false);
+  const [searchRecord, setSearchRecord] = useState(false);
   useEffect(() => {
     fetch(
       "/api/documents/" + encodeURIComponent(documentId) + "/public-preview",
@@ -184,13 +220,35 @@ function Preview() {
   const params = new URLSearchParams(search);
   const onDocument = preview && pathname === "/sources/" + preview.source.id;
   const page = params.get("page");
-  // Opened from a page in the workbench: go to that page of the document.
+  const section = params.get("section");
+  // Opened at a page (from the workbench) or a section (from a copied link): go there.
   useEffect(() => {
-    if (onDocument && page)
-      document
-        .getElementById("page-" + page)
-        ?.scrollIntoView({ block: "start" });
-  }, [onDocument, page]);
+    const target = page ? "page-" + page : section ? "section-" + section : "";
+    if (onDocument && target)
+      document.getElementById(target)?.scrollIntoView({ block: "start" });
+  }, [onDocument, page, section]);
+  // What the public page will put in its head for search engines and link previews.
+  const jsonLd = preview
+    ? legislationJsonLd(
+        preview.details,
+        preview.source,
+        linkTo(),
+        preview.downloads,
+      )
+    : null;
+  useEffect(() => {
+    if (!preview) return;
+    let meta = document.querySelector<HTMLMetaElement>(
+      'meta[name="description"]',
+    );
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "description";
+      document.head.append(meta);
+    }
+    meta.content =
+      preview.details.details.summary || preview.source.catalogue_note;
+  }, [preview]);
   useEffect(() => {
     if (preview)
       document.title = `Preview: ${preview.source.title} · Open Alvary`;
@@ -211,6 +269,13 @@ function Preview() {
         source={preview.source}
         pages={preview.pages}
         contentHash={preview.content_sha256}
+        detailsHash={preview.details_sha256}
+        record={preview.details}
+        provenance={preview.provenance}
+        review={preview.review}
+        downloads={preview.downloads}
+        approved={preview.status.approved}
+        linkTo={linkTo}
         markUnchecked={markUnchecked}
       />
     );
@@ -235,7 +300,17 @@ function Preview() {
         preview={preview}
         markUnchecked={markUnchecked}
         onMark={setMarkUnchecked}
+        onSearchRecord={() => setSearchRecord(!searchRecord)}
       />
+      {searchRecord && jsonLd ? (
+        <section className="preview-record" aria-label="Search engine record">
+          <p>
+            What the public page will carry for search engines (schema.org
+            Legislation) and link previews. Readers do not see it.
+          </p>
+          <pre>{JSON.stringify(jsonLd, null, 2)}</pre>
+        </section>
+      ) : null}
       <SiteHeader
         pathname={pathname || "/browse"}
         menu={menu}
