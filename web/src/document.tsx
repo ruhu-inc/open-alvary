@@ -5,18 +5,19 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ChevronRight, FileText, Link2 } from "lucide-react";
 import {
-  AboutPanel,
+  DetailsPanels,
   KeyFacts,
-  PassagePanel,
-  PublicationPanel,
   ReviewPanel,
   SourcePanel,
-  StatusPanel,
   citationFor,
-  label,
-  type DetailsRecord,
+  kindOf,
+  summaryOf,
+  titleOf,
+  type DetailsStatus,
   type Provenance,
   type ReviewRecord,
+  type Step,
+  type View,
 } from "./details";
 import { DocumentTools, copyText, type DownloadLink } from "./tools";
 import {
@@ -365,7 +366,9 @@ export function DocumentPage({
   pages,
   contentHash,
   detailsHash,
-  record,
+  view,
+  making,
+  details,
   provenance,
   review,
   downloads = [],
@@ -378,7 +381,9 @@ export function DocumentPage({
   pages: DocumentPageContent[];
   contentHash?: string;
   detailsHash?: string | null;
-  record: DetailsRecord;
+  view: View;
+  making: Step[];
+  details: DetailsStatus;
   provenance: Provenance;
   review: ReviewRecord;
   downloads?: DownloadLink[];
@@ -387,7 +392,6 @@ export function DocumentPage({
   markUnchecked?: boolean;
 }) {
   const s = source;
-  const d = record.details;
   const [notice, setNotice] = useState("");
   useEffect(() => {
     if (!notice) return;
@@ -395,28 +399,21 @@ export function DocumentPage({
     return () => clearTimeout(timer);
   }, [notice]);
   const textRoot = useCallback(() => document.querySelector(".doc-text"), []);
-  const citation = citationFor(record, s);
+  const citation = citationFor(view, s);
   return (
     <div className="page doc-page-view">
       <a className="breadcrumb" href="#/browse">
         Catalogue <ChevronRight size={14} /> {s.jurisdiction_id.toUpperCase()}
       </a>
       <PageTitle
-        label={
-          label(d.document_type ?? s.document_type).toUpperCase() +
-          " · " +
-          citation
-        }
-        title={d.short_title || s.title}
+        label={kindOf(view).toUpperCase() + " · " + citation}
+        title={titleOf(view, s)}
       >
-        {d.summary || s.catalogue_note}
+        {summaryOf(view) || s.catalogue_note}
       </PageTitle>
-      <KeyFacts record={record} approved={approved} />
+      <KeyFacts view={view} making={making} approved={approved} />
       <div className="doc-overview">
-        <AboutPanel record={record} source={s} />
-        <PassagePanel record={record} />
-        <PublicationPanel record={record} />
-        <StatusPanel record={record} />
+        <DetailsPanels view={view} making={making} />
       </div>
       <div className="reader-grid">
         <article className="reader doc-reader">
@@ -438,7 +435,7 @@ export function DocumentPage({
               const copied = await copyText(url);
               setNotice(
                 copied
-                  ? `Copied a link to section ${section} (${citationFor(record, s, section)})`
+                  ? `Copied a link to section ${section} (${citationFor(view, s, section)})`
                   : `Link to section ${section}: ${url}`,
               );
               document.getElementById(anchor)?.focus({ preventScroll: true });
@@ -450,11 +447,11 @@ export function DocumentPage({
           <DocumentContents pages={pages} />
           <ReviewPanel
             review={review}
-            record={record}
+            details={details}
             contentHash={contentHash}
             detailsHash={detailsHash}
           />
-          <SourcePanel record={record} provenance={provenance} />
+          <SourcePanel view={view} provenance={provenance} />
           <SourceRecord source={s} rights={rights} />
           {provenance.rights_basis ? (
             <p className="doc-panel-note doc-rights-basis">

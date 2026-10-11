@@ -243,7 +243,7 @@ def approve(browser, expected=0, **overrides):
 def confirm_details(browser, expected=0, **changes):
     """Confirm the suggested details, accounting for every one the test document does not state."""
     current = browser.get(f"/api/documents/{ACT}/details").json()
-    given = {**current["record"]["details"], **changes}
+    given = {"text.form": "certified_copy", **current["record"]["details"], **changes}
     absent = {key: "unknown" for key in current["missing"] if key not in given}
     absent.update({k: v for k, v in current["record"]["absent"].items() if k not in given})
     body = {"expected_revision": expected, "status": "confirmed", "details": given, "absent": absent}
@@ -293,33 +293,68 @@ def test_approval_covers_the_details_and_changing_them_voids_it(world):
     detail = approver.get(f"/api/documents/{ACT}").json()
     assert detail["approved"] and detail["approvals"][0]["details_sha256"] == detail["details_sha256"]
     xml = approver.get(f"/api/documents/{ACT}/akn").text
-    assert f'detailsSha256="{detail["details_sha256"]}"' in xml and '<oa:detail name="short_title">' in xml
-    assert confirm_details(approver, expected=1, status_note="Checked against the gazette").status_code == 200
+    assert f'detailsSha256="{detail["details_sha256"]}"' in xml and 'standard="document-record-1"' in xml
+    assert '<FRBRthis value="/akn/ng/act/' in xml
+    assert (
+        confirm_details(approver, expected=1, **{"status.note": "Checked against the gazette"}).status_code
+        == 200
+    )
     assert approver.get(f"/api/documents/{ACT}/export").json()["approved"] is False
 
 
 def test_details_are_validated_and_confirming_needs_every_detail_accounted_for(world):
     reviewer = signed_in(world, "reviewer@example.org")
     current = reviewer.get(f"/api/documents/{ACT}/details").json()
-    assert current["record"]["status"] == "suggested" and current["standard"]["standard"] == "details-1"
     assert (
-        current["record"]["details"]["document_type"] == "act"
-        and "short_title" in current["record"]["details"]
+        current["record"]["status"] == "suggested" and current["standard"]["standard"] == "document-record-1"
     )
+    given = current["record"]["details"]
+    assert given["identity.family"] == "legislation" and given["identity.type"] == "act"
+    keys = {f["key"] for f in current["standard"]["fields"]}
+    # Nigeria's procedure gives the steps: passed by each House, certified, assented, published, commenced.
+    assert {
+        "step:passed:senate.date",
+        "step:passed:house.date",
+        "step:assented.date",
+        "step:assented.person",
+    } <= keys
+    assert current["standard"]["kinds"]["judgment"][0] == "judgment"
+    act = {"identity.family": "legislation", "identity.type": "act"}
 
     def post(**body):
         return reviewer.post(f"/api/documents/{ACT}/details", json={"expected_revision": 0, **body})
 
-    assert post(status="confirmed", details={"short_title": "x"}).json()["missing"]
-    assert post(status="draft", details={"assent_date": "2023-02-30"}).status_code == 422
-    assert post(status="draft", details={"language": "English"}).status_code == 422
-    assert post(status="draft", details={"nonsense": "x"}).status_code == 422
-    assert post(status="draft", details={"year": "2023"}, absent={"year": "unknown"}).status_code == 422
-    bad_link = {"relations": [{"kind": "inspires", "target": "Another Act"}]}
+    assert post(status="confirmed", details={**act, "identity.title": "x"}).json()["missing"]
+    assert post(status="draft", details={**act, "step:assented.date": "2023-02-30"}).status_code == 422
+    assert post(status="draft", details={**act, "status.legal": "maybe"}).status_code == 422
+    assert post(status="draft", details={**act, "nonsense": "x"}).status_code == 422
+    assert (
+        post(
+            status="draft", details={**act, "identity.family": "legislation", "identity.type": "judgment"}
+        ).status_code
+        == 422
+    )
+    gap = post(status="draft", details={**act, "identity.year": "2023"}, absent={"identity.year": "unknown"})
+    assert gap.status_code == 422
+    bad_link = {**act, "relations": [{"kind": "inspires", "target": "Another Act"}]}
     assert post(status="draft", details=bad_link).status_code == 422
-    assert post(status="draft", details={"short_title": "Act, 2015"}).json() == {"revision": 1}
-    assert post(status="draft", details={"short_title": "Act, 2015"}).status_code == 409  # stale revision
+    rows = {**act, "expressions": [{"language": "en", "authority": "sometimes"}]}
+    assert post(status="draft", details=rows).status_code == 422
+    assert post(status="draft", details={**act, "identity.title": "Act, 2015"}).json() == {"revision": 1}
+    assert post(status="draft", details={**act, "identity.title": "Act, 2015"}).status_code == 409  # stale
     assert reviewer.get(f"/api/documents/{ACT}/details").json()["record"]["status"] == "draft"
+
+
+def test_a_judgment_gets_the_case_fields_and_a_record_that_validates(world):
+    reviewer = signed_in(world, "reviewer@example.org")
+    judgment = {"identity.family": "judgment", "identity.type": "judgment"}
+    saved = reviewer.post(
+        f"/api/documents/{ACT}/details", json={"expected_revision": 0, "status": "draft", "details": judgment}
+    )
+    assert saved.json() == {"revision": 1}
+    fields = {f["key"] for f in reviewer.get(f"/api/documents/{ACT}/details").json()["standard"]["fields"]}
+    assert {"profile.court.name", "profile.parties", "profile.bench", "event:decided.date"} <= fields
+    assert "step:passed:senate.date" not in fields  # Nigeria's law-making steps are for Acts
 
 
 def test_details_are_suggested_from_the_gazette_the_certificate_and_the_assent():
@@ -718,7 +753,7 @@ def test_the_public_preview_shows_the_latest_saved_pages_as_readers_would(world)
     }
     assert (
         preview["details"]["status"] == "suggested"
-        and preview["details"]["details"]["document_type"] == "act"
+        and preview["details"]["details"]["identity.family"] == "legislation"
     )
     assert preview["review"]["reviewers"] == ["Rev"] and preview["review"]["approval"] is None
     assert preview["review"]["readers"]["primary"] == "Google Document AI Layout Parser"

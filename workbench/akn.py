@@ -219,14 +219,6 @@ LANGUAGES = {
     "yo": "yor",
     "ig": "ibo",
 }
-# The steps by which a Bill became law, in order, with the detail that dates each.
-STEPS = (
-    ("passed_senate", "passedSenate", "Passed by the Senate"),
-    ("passed_house", "passedHouse", "Passed by the House of Representatives"),
-    ("authenticated_on", "authenticated", "Certified by the Clerk to the National Assembly"),
-    ("assent_date", "assent", "Assented to"),
-    ("commencement_date", "commencement", "Commencement"),
-)
 
 
 def build(
@@ -234,13 +226,16 @@ def build(
     pages: list[dict],
     content_sha256: str,
     country: str | None = None,
-    record: dict | None = None,
+    doc_record=None,
+    status: str = "suggested",
+    steps: dict | None = None,
     details_sha256: str | None = None,
 ) -> bytes:
     """Acts and bills get the legislative hierarchy; other types an AKN document in reading order.
-    With a details record, the metadata carries the Act's number, dates, gazette and every detail."""
-    given = (record or {}).get("details", {})
-    country = country or given.get("jurisdiction") or act.get("jurisdiction") or "ng"
+    With the document's record (document-record-1), the metadata carries its number, dates,
+    publication, the steps by which it was made, and the whole record."""
+    identity = doc_record.identity if doc_record else None
+    country = country or (doc_record.place.code if doc_record else None) or act.get("jurisdiction") or "ng"
     kind = act.get("type", "act")
     units = [unit for page in pages for unit in page["units"]]
     start = next((i for i, u in enumerate(units) if u["kind"] != "table" and ENACTING.match(unit_text(u))), 0)
@@ -257,12 +252,27 @@ def build(
     tag = kind if kind in LEGISLATION else "doc"
     document = ET.SubElement(root, q(tag), {"name": kind})
     meta = ET.SubElement(document, q("meta"))
-    year = str(given.get("year") or act.get("year", ""))
-    number = given.get("number") or re.sub(r"[^a-z0-9-]", "", act["id"].removeprefix(f"{country}-"))
+    year = str((identity.year if identity and identity.year else None) or act.get("year", ""))
+    number = (
+        re.sub(r"[^a-z0-9.-]+", "-", identity.numbers[0].value.lower()).strip("-")
+        if identity and identity.numbers
+        else (re.sub(r"[^a-z0-9-]", "", act["id"].removeprefix(f"{country}-")))
+    )
     work = f"/akn/{country}/{kind if kind in LEGISLATION else 'doc'}/{year}/{number}"
     today = datetime.now(UTC).date().isoformat()
-    language = LANGUAGES.get(str(given.get("language", "en")).split("-")[0], "eng")
-    made = given.get("assent_date")
+    this = next((e for e in doc_record.expressions if e.this_text), None) if doc_record else None
+    language = LANGUAGES.get((this.language if this else "en").split("-")[0], "eng")
+    events = list(doc_record.events) if doc_record else []
+    made = next(
+        (
+            e.when.value.isoformat()
+            for e in events
+            if e.kind in ("assented", "promulgated", "signed") and e.when.value
+        ),
+        None,
+    )
+    name = identity.title if identity else act["title"]
+    publication = doc_record.publications[0] if doc_record and doc_record.publications else None
     identification = ET.SubElement(meta, q("identification"), {"source": "#openalvary"})
     for level, this, uri in (
         ("FRBRWork", f"{work}/!main", work),
@@ -286,21 +296,26 @@ def build(
         if level == "FRBRWork":
             ET.SubElement(frbr, q("FRBRcountry"), {"value": country})
             ET.SubElement(frbr, q("FRBRnumber"), {"value": number})
-            ET.SubElement(frbr, q("FRBRname"), {"value": given.get("short_title") or act["title"]})
+            ET.SubElement(frbr, q("FRBRname"), {"value": name})
         if level == "FRBRExpression":
             ET.SubElement(frbr, q("FRBRlanguage"), {"language": language})
-    if given.get("gazette_date"):
+    if publication and publication.when and publication.when.value:
         ET.SubElement(
             meta,
             q("publication"),
             {
-                "date": given["gazette_date"],
+                "date": publication.when.value.isoformat(),
                 "name": "gazette",
-                "showAs": given.get("gazette_name", "Gazette"),
-                **({"number": given["gazette_number"]} if given.get("gazette_number") else {}),
+                "showAs": publication.name,
+                **({"number": publication.number} if publication.number else {}),
             },
         )
-    steps = [(key, eid, label) for key, eid, label in STEPS if given.get(key)]
+    labels = steps or {}
+    stepped = [
+        (re.sub(r"[^A-Za-z0-9_-]", "_", e.step), e.when.value.isoformat(), labels.get(e.step, e.step))
+        for e in events
+        if e.step and e.when.value
+    ]
     if made:
         lifecycle = ET.SubElement(meta, q("lifecycle"), {"source": "#openalvary"})
         ET.SubElement(
@@ -308,12 +323,10 @@ def build(
             q("eventRef"),
             {"eId": "evt_1", "date": made, "source": "#original", "type": "generation"},
         )
-    if steps:
+    if stepped:
         workflow = ET.SubElement(meta, q("workflow"), {"source": "#openalvary"})
-        for index, (key, eid, _) in enumerate(steps, 1):
-            ET.SubElement(
-                workflow, q("step"), {"eId": f"step_{index}", "date": given[key], "refersTo": f"#{eid}"}
-            )
+        for index, (eid, when, _) in enumerate(stepped, 1):
+            ET.SubElement(workflow, q("step"), {"eId": f"step_{index}", "date": when, "refersTo": f"#{eid}"})
     references = ET.SubElement(meta, q("references"), {"source": "#openalvary"})
     ET.SubElement(
         references,
@@ -326,7 +339,7 @@ def build(
         {
             "eId": "legislature",
             "href": f"/ontology/organization/{country}/legislature",
-            "showAs": given.get("enacting_body") or "Legislature",
+            "showAs": doc_record.issued_by[0].name if doc_record and doc_record.issued_by else "Legislature",
         },
     )
     if made:
@@ -336,10 +349,10 @@ def build(
             {
                 "eId": "original",
                 "href": f"{work}/{language}@",
-                "showAs": given.get("short_title") or act["title"],
+                "showAs": name,
             },
         )
-    for _, eid, label in steps:
+    for eid, _, label in stepped:
         ET.SubElement(
             references,
             q("TLCProcess"),
@@ -351,19 +364,11 @@ def build(
         f"{{{OA}}}review",
         {"contentSha256": content_sha256, **({"detailsSha256": details_sha256} if details_sha256 else {})},
     )
-    if record:
+    if doc_record:
         holder = ET.SubElement(
-            proprietary, f"{{{OA}}}details", {"standard": "details-1", "status": record["status"]}
+            proprietary, f"{{{OA}}}record", {"standard": doc_record.schema_version, "status": status}
         )
-        for key, value in sorted(record["details"].items()):
-            if key == "relations":
-                for link in value:
-                    ET.SubElement(holder, f"{{{OA}}}relation", {k: str(v) for k, v in link.items()})
-            else:
-                text = "; ".join(value) if isinstance(value, list) else str(value)
-                ET.SubElement(holder, f"{{{OA}}}detail", {"name": key}).text = text
-        for key, reason in sorted(record["absent"].items()):
-            ET.SubElement(holder, f"{{{OA}}}absent", {"name": key, "reason": reason})
+        holder.text = doc_record.model_dump_json(exclude_none=True)
 
     if kind not in LEGISLATION:
         # A general document: its text in reading order, headings marked, tables kept.

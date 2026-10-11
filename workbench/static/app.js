@@ -560,7 +560,18 @@ async function detailsView(actId) {
     const value = values[field.key];
     let input;
     if (field.kind === "choice") {
-      input = el("select", { on: { change: () => set(input.value) } }, el("option", { value: "", text: "—" }),
+      input = el("select", { on: { change: () => {
+        set(input.value);
+        if (field.key === "identity.family") {  // the kinds follow the family; the fields follow on save
+          const kind = rows.get("identity.type")?.querySelector("select");
+          if (kind) {
+            kind.replaceChildren(el("option", { value: "", text: "—" }), (standard.kinds[input.value] || []).map((k) => el("option", { value: k, text: k.replace(/_/g, " ") })));
+            values["identity.type"] = (standard.kinds[input.value] || [])[0] || "";
+            kind.value = values["identity.type"];
+          }
+          toast("Save the draft to see this family's fields");
+        }
+      } } }, el("option", { value: "", text: "—" }),
         field.choices.map((c) => el("option", { value: c.value, text: c.label })));
       input.value = value || "";
     } else if (field.kind === "long") {
@@ -571,6 +582,8 @@ async function detailsView(actId) {
       input.value = (value || []).join(", ");
     } else if (field.kind === "relations") {
       input = relationsEditor(standard, value || [], (links) => set(links));
+    } else if (field.kind === "rows") {
+      input = rowsEditor(field.columns, structuredClone(value || []), (rows) => set(rows));
     } else {
       const type = field.kind === "date" ? "date" : field.kind === "url" ? "url" : "text";
       input = el("input", { type, inputmode: field.kind === "year" ? "numeric" : undefined, on: { input: () => set(input.value) } });
@@ -584,7 +597,9 @@ async function detailsView(actId) {
     const hint = suggestions[field.key];
     let note = null;
     if (hint) {
-      const shown = hint.absent ? standard.absent[hint.absent] : Array.isArray(hint.value) ? hint.value.map((l) => `${l.kind.replace("_", " ")} ${l.target}`).join("; ") : String(hint.value);
+      const shown = hint.absent ? standard.absent[hint.absent]
+        : Array.isArray(hint.value) ? hint.value.map((l) => (typeof l === "object" ? Object.values(l).join(" ") : l)).join("; ")
+        : String(hint.value);
       const differs = hint.absent ? absent[field.key] !== hint.absent : JSON.stringify(hint.value) !== JSON.stringify(values[field.key]);
       note = el("div", { class: "hint" },
         hint.page ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${hint.page}`, text: `p. ${hint.page}` }) : el("span", { text: "From the collection" }), " · ",
@@ -602,7 +617,7 @@ async function detailsView(actId) {
     const line = el("div", { class: "detail-row", "data-key": field.key },
       el("label", {}, field.label, field.required ? null : el("span", { class: "muted", text: " (optional)" })),
       el("div", { class: "detail-input" }, input, field.help ? el("div", { class: "muted small", text: field.help }) : null, note),
-      field.required ? why : el("span"));
+      field.required && !field.essential ? why : el("span", { class: "muted small", text: field.essential ? "must be given" : "" }));
     rows.set(field.key, line);
     return line;
   };
@@ -654,6 +669,31 @@ function relationsEditor(standard, links, onChange) {
           el("button", { class: "small", text: "Remove", on: { click: () => { links.splice(i, 1); onChange(links); draw(); } } }));
       }),
       el("button", { class: "small", text: "+ Add a related law", on: { click: () => { links.push({ kind: "amends", target: "" }); onChange(links); draw(); } } }));
+  };
+  draw();
+  return box;
+}
+
+// A small table of rows (language versions, parties, bench): one input per column.
+function rowsEditor(columns, rows, onChange) {
+  const box = el("div", { class: "rows-editor" });
+  const draw = () => {
+    box.replaceChildren(
+      ...rows.map((row, i) => el("div", { class: "row-line" },
+        ...columns.map((column) => {
+          let cell;
+          if (column.choices && column.choices.length) {
+            cell = el("select", { title: column.label, on: { change: () => { row[column.key] = cell.value; onChange(rows); } } },
+              el("option", { value: "", text: column.label }), column.choices.map((c) => el("option", { value: c.value, text: c.label })));
+          } else {
+            cell = el("input", { type: column.kind === "date" ? "date" : "text", placeholder: column.label, title: column.label,
+              on: { input: () => { row[column.key] = cell.value; onChange(rows); } } });
+          }
+          cell.value = row[column.key] || "";
+          return cell;
+        }),
+        el("button", { class: "small", text: "Remove", on: { click: () => { rows.splice(i, 1); onChange(rows); draw(); } } }))),
+      el("button", { class: "small", text: "+ Add", on: { click: () => { rows.push({}); onChange(rows); draw(); } } }));
   };
   draw();
   return box;
