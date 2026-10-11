@@ -1,0 +1,30 @@
+schema/jurisdictions.json
+  s_b82616e2476856::t_a3a884054aa3f4 228-620
+schema/record.py
+  s_b82616e2476856::t_5953171ed23564 76-85
+workbench/record_view.py
+  s_b82616e2476856::t_5953171ed23564 98-102
+  s_b82616e2476856::t_6bb8bcf967017a 1068-1070
+tests/test_rwanda_catalogue.py
+  s_b82616e2476856::t_081db565e311ba 300-306
+tests/test_record.py
+  s_b82616e2476856::t_0692abf4920786 227-278
+ingestion/rwanda.py
+  s_b82616e2476856::t_5953171ed23564 54-56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bdc942951e9bb21442bc2be7475083c6493b77b5",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
