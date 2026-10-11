@@ -1,0 +1,2279 @@
+{
+  "$defs": {
+    "Absent": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "enum": [
+            "not_in_source",
+            "not_applicable",
+            "unknown",
+            "withheld"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "title": "Absent",
+      "type": "object"
+    },
+    "BillProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "const": "bill",
+          "title": "Family",
+          "type": "string"
+        },
+        "stage": {
+          "enum": [
+            "introduced",
+            "first_reading",
+            "second_reading",
+            "committee",
+            "report",
+            "third_reading",
+            "passed",
+            "assented",
+            "published",
+            "withdrawn",
+            "lapsed",
+            "negatived"
+          ],
+          "title": "Stage",
+          "type": "string"
+        },
+        "originating_chamber": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Body"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sponsor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Person"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sponsor_kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "government",
+                "private_member",
+                "committee",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sponsor Kind"
+        },
+        "committee": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Body"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "enacted_as": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Reference"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "family",
+        "stage"
+      ],
+      "title": "BillProfile",
+      "type": "object"
+    },
+    "Body": {
+      "additionalProperties": false,
+      "description": "An institution: a legislature, a chamber, a ministry, a court, a regional organ.",
+      "properties": {
+        "name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "legislature",
+            "chamber",
+            "head_of_state",
+            "executive",
+            "minister",
+            "court",
+            "tribunal",
+            "regulator",
+            "municipality",
+            "regional_body",
+            "international_organisation",
+            "constituent_assembly",
+            "electorate",
+            "other"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9._-]{0,80}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        }
+      },
+      "required": [
+        "name",
+        "kind"
+      ],
+      "title": "Body",
+      "type": "object"
+    },
+    "Citation": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "official",
+            "neutral",
+            "law_report",
+            "revised_edition",
+            "popular",
+            "other"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "scheme": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scheme"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "title": "Citation",
+      "type": "object"
+    },
+    "Classification": {
+      "additionalProperties": false,
+      "properties": {
+        "hierarchy": {
+          "enum": [
+            "constitutional",
+            "primary",
+            "subsidiary",
+            "executive",
+            "judicial",
+            "regional",
+            "international",
+            "soft_law",
+            "parliamentary",
+            "administrative"
+          ],
+          "title": "Hierarchy",
+          "type": "string"
+        },
+        "subjects": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Subject"
+          },
+          "title": "Subjects",
+          "type": "array"
+        },
+        "keywords": {
+          "default": [],
+          "items": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Keywords",
+          "type": "array"
+        }
+      },
+      "required": [
+        "hierarchy"
+      ],
+      "title": "Classification",
+      "type": "object"
+    },
+    "Court": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "code": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9]{2,16}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        },
+        "level": {
+          "enum": [
+            "apex",
+            "appellate",
+            "superior",
+            "subordinate",
+            "specialised",
+            "customary",
+            "regional",
+            "continental"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "division": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Division"
+        },
+        "seat": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Seat"
+        }
+      },
+      "required": [
+        "name",
+        "level"
+      ],
+      "title": "Court",
+      "type": "object"
+    },
+    "Dated": {
+      "additionalProperties": false,
+      "description": "A date as normalised (ISO 8601) and as printed, in the calendar it was printed in.",
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "printed": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Printed"
+        },
+        "calendar": {
+          "default": "gregorian",
+          "enum": [
+            "gregorian",
+            "ethiopian",
+            "islamic",
+            "other"
+          ],
+          "title": "Calendar",
+          "type": "string"
+        },
+        "precision": {
+          "default": "day",
+          "enum": [
+            "day",
+            "month",
+            "year"
+          ],
+          "title": "Precision",
+          "type": "string"
+        }
+      },
+      "title": "Dated",
+      "type": "object"
+    },
+    "Event": {
+      "additionalProperties": false,
+      "description": "One step in the document's life, dated, with who acted and on which part.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "introduced",
+            "first_reading",
+            "second_reading",
+            "committee_stage",
+            "third_reading",
+            "passed",
+            "concurred",
+            "certified",
+            "presented_for_assent",
+            "assented",
+            "withheld_assent",
+            "promulgated",
+            "signed",
+            "made",
+            "laid",
+            "approved",
+            "adopted",
+            "published",
+            "commenced",
+            "amended",
+            "repealed",
+            "expired",
+            "suspended",
+            "annulled",
+            "struck_down",
+            "lapsed",
+            "withdrawn",
+            "referendum",
+            "filed",
+            "heard",
+            "reserved",
+            "decided",
+            "delivered",
+            "corrected",
+            "reported",
+            "opened_for_signature",
+            "ratified",
+            "acceded",
+            "entered_into_force",
+            "denounced",
+            "domesticated",
+            "issued"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "when": {
+          "$ref": "#/$defs/Dated"
+        },
+        "step": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9_:-]{1,60}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step"
+        },
+        "by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Body"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "person": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Person"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Evidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "kind",
+        "when"
+      ],
+      "title": "Event",
+      "type": "object"
+    },
+    "Evidence": {
+      "additionalProperties": false,
+      "description": "Where a detail was read or who supplied it.",
+      "properties": {
+        "source": {
+          "enum": [
+            "document",
+            "reviewer",
+            "registry",
+            "manifest",
+            "external"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "maxLength": 400,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "Evidence",
+      "type": "object"
+    },
+    "ExecutiveProfile": {
+      "additionalProperties": false,
+      "description": "Decrees, executive and ministerial orders made under the constitution or a law.",
+      "properties": {
+        "family": {
+          "const": "executive_instrument",
+          "title": "Family",
+          "type": "string"
+        },
+        "authority": {
+          "$ref": "#/$defs/Body"
+        },
+        "basis": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Reference"
+          },
+          "title": "Basis",
+          "type": "array"
+        },
+        "signed_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Person"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "countersigned_by": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Person"
+          },
+          "title": "Countersigned By",
+          "type": "array"
+        }
+      },
+      "required": [
+        "family",
+        "authority"
+      ],
+      "title": "ExecutiveProfile",
+      "type": "object"
+    },
+    "Expression": {
+      "additionalProperties": false,
+      "description": "A language version of the document.",
+      "properties": {
+        "language": {
+          "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+          "title": "Language",
+          "type": "string"
+        },
+        "script": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z][a-z]{3}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Script"
+        },
+        "direction": {
+          "default": "ltr",
+          "enum": [
+            "ltr",
+            "rtl"
+          ],
+          "title": "Direction",
+          "type": "string"
+        },
+        "authority": {
+          "enum": [
+            "authoritative",
+            "equally_authentic",
+            "official_translation",
+            "unofficial_translation",
+            "machine_translation"
+          ],
+          "title": "Authority",
+          "type": "string"
+        },
+        "this_text": {
+          "default": false,
+          "title": "This Text",
+          "type": "boolean"
+        },
+        "translator": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Translator"
+        },
+        "expression_uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expression Uri"
+        }
+      },
+      "required": [
+        "language",
+        "authority"
+      ],
+      "title": "Expression",
+      "type": "object"
+    },
+    "GazetteProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "enum": [
+            "gazette",
+            "gazette_notice"
+          ],
+          "title": "Family",
+          "type": "string"
+        },
+        "gazette": {
+          "$ref": "#/$defs/Publication"
+        },
+        "contents": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Reference"
+          },
+          "title": "Contents",
+          "type": "array"
+        },
+        "issuing_authority": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Body"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "family",
+        "gazette"
+      ],
+      "title": "GazetteProfile",
+      "type": "object"
+    },
+    "Identity": {
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "enum": [
+            "constitution",
+            "legislation",
+            "bill",
+            "subsidiary_legislation",
+            "executive_instrument",
+            "judgment",
+            "gazette",
+            "gazette_notice",
+            "treaty",
+            "regional_instrument",
+            "soft_law",
+            "parliamentary_record",
+            "official_document"
+          ],
+          "title": "Family",
+          "type": "string"
+        },
+        "type": {
+          "pattern": "^[a-z_]+$",
+          "title": "Type",
+          "type": "string"
+        },
+        "local_subtype": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9-]{1,20}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Local Subtype"
+        },
+        "work_uri": {
+          "pattern": "^/akn/[a-z]{2}(?:-[a-z0-9]{1,12})?/[a-zA-Z]+(?:/[a-z0-9._-]+)+$",
+          "title": "Work Uri",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "full_title": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Full Title"
+        },
+        "alternative_titles": {
+          "default": [],
+          "items": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Alternative Titles",
+          "type": "array"
+        },
+        "numbers": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Number"
+          },
+          "title": "Numbers",
+          "type": "array"
+        },
+        "year": {
+          "anyOf": [
+            {
+              "maximum": 2200,
+              "minimum": 1800,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Year"
+        },
+        "citations": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Citation"
+          },
+          "title": "Citations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "family",
+        "type",
+        "work_uri",
+        "title"
+      ],
+      "title": "Identity",
+      "type": "object"
+    },
+    "Judge": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "presiding",
+            "member",
+            "author",
+            "concurring",
+            "dissenting",
+            "sole"
+          ],
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "role"
+      ],
+      "title": "Judge",
+      "type": "object"
+    },
+    "JudgmentProfile": {
+      "additionalProperties": false,
+      "description": "Judgments, rulings, orders and opinions of courts and tribunals, national and regional.",
+      "properties": {
+        "family": {
+          "const": "judgment",
+          "title": "Family",
+          "type": "string"
+        },
+        "court": {
+          "$ref": "#/$defs/Court"
+        },
+        "case_numbers": {
+          "default": [],
+          "items": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Case Numbers",
+          "type": "array"
+        },
+        "parties": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Party"
+          },
+          "title": "Parties",
+          "type": "array"
+        },
+        "bench": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Judge"
+          },
+          "title": "Bench",
+          "type": "array"
+        },
+        "opinions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/Judge"
+          },
+          "title": "Opinions",
+          "type": "array"
+        },
+        "outcome": {
+          "default": [],
+          "items": {
+            "enum": [
+              "allowed",
+              "partly_allowed",
+              "dismissed",
+              "struck_out",
+              "upheld",
+              "set_aside",
+              "varied",
+              "remitted",
+              "granted",
+              "refused",
+              "declared",
+              "settled",
+              "withdrawn",
+              "other"
+            ],
+            "type": "string"
+          },
+          "title": "Outcome",
+          "type": "array"
+        },
+        "orders": {
+          "default": [],
+          "items": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Orders",
+          "type": "array"
+        },
+        "issues": {
+          "default": [],
+          "items": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Issues",
+          "type": "array"
+        },
+        "reportable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reportable"
+        },
+        "anonymisation": {
+          "default": "none",
+          "enum": [
+            "none",
+            "partial",
+            "full"
+          ],
+          "title": "Anonymisation",
+          "type": "string"
+        },
+        "anonymisation_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "child",
+                "sexual_offence",
+                "family",
+                "security",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Anonymisation Reason"
+        },
+        "precedent": {
+          "default": "unknown",
+          "enum": [
+            "binding",
+            "persuasive",
+            "not_binding",
+            "unknown"
+          ],
+          "title": "Precedent",
+          "type": "string"
+        },
+        "treatment": {
+          "default": "unknown",
+          "enum": [
+            "good_law",
+            "overruled",
+            "reversed",
+            "doubted",
+            "unknown"
+          ],
+          "title": "Treatment",
+          "type": "string"
+        }
+      },
+      "required": [
+        "family",
+        "court"
+      ],
+      "title": "JudgmentProfile",
+      "type": "object"
+    },
+    "LegislationProfile": {
+      "additionalProperties": false,
+      "description": "Constitutions and their amendments, and primary legislation.",
+      "properties": {
+        "family": {
+          "enum": [
+            "constitution",
+            "legislation"
+          ],
+          "title": "Family",
+          "type": "string"
+        },
+        "bill": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Reference"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "commencement": {
+          "anyOf": [
+            {
+              "enum": [
+                "on_assent",
+                "on_publication",
+                "fixed_date",
+                "by_notice",
+                "staggered"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Commencement"
+        },
+        "revised_edition": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Citation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "family"
+      ],
+      "title": "LegislationProfile",
+      "type": "object"
+    },
+    "Number": {
+      "additionalProperties": false,
+      "properties": {
+        "scheme": {
+          "enum": [
+            "act",
+            "bill",
+            "law",
+            "decree",
+            "notice",
+            "instrument",
+            "case",
+            "gazette",
+            "treaty",
+            "chapter",
+            "other"
+          ],
+          "title": "Scheme",
+          "type": "string"
+        },
+        "value": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        },
+        "printed": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Printed"
+        }
+      },
+      "required": [
+        "scheme",
+        "value"
+      ],
+      "title": "Number",
+      "type": "object"
+    },
+    "OtherProfile": {
+      "additionalProperties": false,
+      "description": "Soft law, parliamentary records and other official documents.",
+      "properties": {
+        "family": {
+          "enum": [
+            "soft_law",
+            "parliamentary_record",
+            "official_document"
+          ],
+          "title": "Family",
+          "type": "string"
+        },
+        "issuing_body": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Body"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sitting": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sitting"
+        }
+      },
+      "required": [
+        "family"
+      ],
+      "title": "OtherProfile",
+      "type": "object"
+    },
+    "Party": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "appellant",
+            "respondent",
+            "applicant",
+            "petitioner",
+            "plaintiff",
+            "claimant",
+            "defendant",
+            "accused",
+            "prosecutor",
+            "complainant",
+            "interested_party",
+            "intervener",
+            "amicus_curiae",
+            "state",
+            "other"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "anonymised": {
+          "default": false,
+          "title": "Anonymised",
+          "type": "boolean"
+        },
+        "represented_by": {
+          "default": [],
+          "items": {
+            "maxLength": 300,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Represented By",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "role"
+      ],
+      "title": "Party",
+      "type": "object"
+    },
+    "Person": {
+      "additionalProperties": false,
+      "description": "Someone acting in a document as printed: a signatory, a judge, a sponsor.",
+      "properties": {
+        "name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "office": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Office"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "Person",
+      "type": "object"
+    },
+    "Place": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?$",
+          "title": "Code",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "continental",
+            "regional",
+            "national",
+            "subnational",
+            "local"
+          ],
+          "title": "Level",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "name",
+        "level"
+      ],
+      "title": "Place",
+      "type": "object"
+    },
+    "Publication": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "gazette",
+            "gazette_supplement",
+            "journal_officiel",
+            "law_report",
+            "court_record",
+            "official_website",
+            "revised_edition",
+            "other"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "number": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Number"
+        },
+        "volume": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Volume"
+        },
+        "part": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Part"
+        },
+        "issue": {
+          "anyOf": [
+            {
+              "enum": [
+                "ordinary",
+                "extraordinary",
+                "special",
+                "supplement"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Issue"
+        },
+        "when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Dated"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "place": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Place"
+        },
+        "pages": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pages"
+        },
+        "notice": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notice"
+        },
+        "publisher": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publisher"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "kind",
+        "name"
+      ],
+      "title": "Publication",
+      "type": "object"
+    },
+    "Reference": {
+      "additionalProperties": false,
+      "description": "Another document: its work URI when known, and how it is cited.",
+      "properties": {
+        "citation": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Citation",
+          "type": "string"
+        },
+        "work_uri": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Work Uri"
+        },
+        "place": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Place"
+        }
+      },
+      "required": [
+        "citation"
+      ],
+      "title": "Reference",
+      "type": "object"
+    },
+    "RegionalProfile": {
+      "additionalProperties": false,
+      "description": "Instruments of regional communities: ECOWAS, EAC, SADC, OHADA, UEMOA, CEMAC and others.",
+      "properties": {
+        "family": {
+          "const": "regional_instrument",
+          "title": "Family",
+          "type": "string"
+        },
+        "organ": {
+          "$ref": "#/$defs/Body"
+        },
+        "legal_effect": {
+          "enum": [
+            "directly_applicable",
+            "requires_transposition",
+            "binding_on_addressees",
+            "non_binding"
+          ],
+          "title": "Legal Effect",
+          "type": "string"
+        },
+        "member_states": {
+          "default": [],
+          "items": {
+            "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?$",
+            "type": "string"
+          },
+          "title": "Member States",
+          "type": "array"
+        },
+        "transposition_deadline": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transposition Deadline"
+        }
+      },
+      "required": [
+        "family",
+        "organ",
+        "legal_effect"
+      ],
+      "title": "RegionalProfile",
+      "type": "object"
+    },
+    "Relation": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "repeals",
+            "repealed_by",
+            "amends",
+            "amended_by",
+            "consolidates",
+            "consolidated_in",
+            "commences",
+            "commenced_by",
+            "made_under",
+            "enables",
+            "implements",
+            "implemented_by",
+            "transposes",
+            "transposed_by",
+            "domesticates",
+            "domesticated_by",
+            "ratifies",
+            "supersedes",
+            "superseded_by",
+            "enacted_as",
+            "bill_for",
+            "published_in",
+            "contains",
+            "cites",
+            "appeal_from",
+            "appealed_to",
+            "affirms",
+            "reverses",
+            "overrules",
+            "overruled_by",
+            "follows",
+            "distinguishes",
+            "related"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/Reference"
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scope"
+        },
+        "when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Dated"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Evidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "kind",
+        "target"
+      ],
+      "title": "Relation",
+      "type": "object"
+    },
+    "Status": {
+      "additionalProperties": false,
+      "properties": {
+        "legal": {
+          "enum": [
+            "in_force",
+            "partly_in_force",
+            "not_yet_in_force",
+            "repealed",
+            "expired",
+            "superseded",
+            "suspended",
+            "struck_down",
+            "lapsed",
+            "withdrawn",
+            "pending",
+            "historical",
+            "decided",
+            "unknown"
+          ],
+          "title": "Legal",
+          "type": "string"
+        },
+        "as_of": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "As Of"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Evidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "legal"
+      ],
+      "title": "Status",
+      "type": "object"
+    },
+    "Subject": {
+      "additionalProperties": false,
+      "properties": {
+        "scheme": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Scheme",
+          "type": "string"
+        },
+        "code": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "scheme",
+        "code",
+        "label"
+      ],
+      "title": "Subject",
+      "type": "object"
+    },
+    "SubsidiaryProfile": {
+      "additionalProperties": false,
+      "description": "Instruments made under the authority of another law.",
+      "properties": {
+        "family": {
+          "const": "subsidiary_legislation",
+          "title": "Family",
+          "type": "string"
+        },
+        "made_under": {
+          "items": {
+            "$ref": "#/$defs/Reference"
+          },
+          "minItems": 1,
+          "title": "Made Under",
+          "type": "array"
+        },
+        "maker": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Body"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "signed_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Person"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "parliamentary_control": {
+          "anyOf": [
+            {
+              "enum": [
+                "laid",
+                "affirmative",
+                "negative",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parliamentary Control"
+        }
+      },
+      "required": [
+        "family",
+        "made_under"
+      ],
+      "title": "SubsidiaryProfile",
+      "type": "object"
+    },
+    "Summary": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "explanatory_memorandum",
+            "headnote",
+            "abstract",
+            "editorial"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "official": {
+          "title": "Official",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "official"
+      ],
+      "title": "Summary",
+      "type": "object"
+    },
+    "TextInfo": {
+      "additionalProperties": false,
+      "properties": {
+        "form": {
+          "enum": [
+            "gazette_publication",
+            "certified_copy",
+            "official_reprint",
+            "revised_edition",
+            "law_report",
+            "court_copy",
+            "official_website",
+            "unofficial"
+          ],
+          "title": "Form",
+          "type": "string"
+        },
+        "version": {
+          "$ref": "#/$defs/Version"
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Summary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "form",
+        "version"
+      ],
+      "title": "TextInfo",
+      "type": "object"
+    },
+    "TreatyParty": {
+      "additionalProperties": false,
+      "properties": {
+        "party": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Party",
+          "type": "string"
+        },
+        "place": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Place"
+        },
+        "signed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Dated"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ratified": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Dated"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "acceded": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Dated"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reservations": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reservations"
+        }
+      },
+      "required": [
+        "party"
+      ],
+      "title": "TreatyParty",
+      "type": "object"
+    },
+    "TreatyProfile": {
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "const": "treaty",
+          "title": "Family",
+          "type": "string"
+        },
+        "adopted_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Body"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "adopted_at": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adopted At"
+        },
+        "parties": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/TreatyParty"
+          },
+          "title": "Parties",
+          "type": "array"
+        },
+        "depositary": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Depositary"
+        },
+        "entry_into_force_rule": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Entry Into Force Rule"
+        },
+        "authentic_languages": {
+          "default": [],
+          "items": {
+            "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+            "type": "string"
+          },
+          "title": "Authentic Languages",
+          "type": "array"
+        }
+      },
+      "required": [
+        "family"
+      ],
+      "title": "TreatyProfile",
+      "type": "object"
+    },
+    "Version": {
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "point_in_time": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Point In Time"
+        },
+        "consolidated": {
+          "default": false,
+          "title": "Consolidated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "label"
+      ],
+      "title": "Version",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "document-record-1",
+      "default": "document-record-1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "identity": {
+      "$ref": "#/$defs/Identity"
+    },
+    "place": {
+      "$ref": "#/$defs/Place"
+    },
+    "issued_by": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Body"
+      },
+      "title": "Issued By",
+      "type": "array"
+    },
+    "expressions": {
+      "items": {
+        "$ref": "#/$defs/Expression"
+      },
+      "minItems": 1,
+      "title": "Expressions",
+      "type": "array"
+    },
+    "events": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Event"
+      },
+      "title": "Events",
+      "type": "array"
+    },
+    "publications": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Publication"
+      },
+      "title": "Publications",
+      "type": "array"
+    },
+    "status": {
+      "$ref": "#/$defs/Status"
+    },
+    "relations": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Relation"
+      },
+      "title": "Relations",
+      "type": "array"
+    },
+    "text": {
+      "$ref": "#/$defs/TextInfo"
+    },
+    "classification": {
+      "$ref": "#/$defs/Classification"
+    },
+    "profile": {
+      "discriminator": {
+        "mapping": {
+          "bill": "#/$defs/BillProfile",
+          "constitution": "#/$defs/LegislationProfile",
+          "executive_instrument": "#/$defs/ExecutiveProfile",
+          "gazette": "#/$defs/GazetteProfile",
+          "gazette_notice": "#/$defs/GazetteProfile",
+          "judgment": "#/$defs/JudgmentProfile",
+          "legislation": "#/$defs/LegislationProfile",
+          "official_document": "#/$defs/OtherProfile",
+          "parliamentary_record": "#/$defs/OtherProfile",
+          "regional_instrument": "#/$defs/RegionalProfile",
+          "soft_law": "#/$defs/OtherProfile",
+          "subsidiary_legislation": "#/$defs/SubsidiaryProfile",
+          "treaty": "#/$defs/TreatyProfile"
+        },
+        "propertyName": "family"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/LegislationProfile"
+        },
+        {
+          "$ref": "#/$defs/BillProfile"
+        },
+        {
+          "$ref": "#/$defs/SubsidiaryProfile"
+        },
+        {
+          "$ref": "#/$defs/ExecutiveProfile"
+        },
+        {
+          "$ref": "#/$defs/JudgmentProfile"
+        },
+        {
+          "$ref": "#/$defs/GazetteProfile"
+        },
+        {
+          "$ref": "#/$defs/TreatyProfile"
+        },
+        {
+          "$ref": "#/$defs/RegionalProfile"
+        },
+        {
+          "$ref": "#/$defs/OtherProfile"
+        }
+      ],
+      "title": "Profile"
+    },
+    "absent": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Absent"
+      },
+      "default": {},
+      "title": "Absent",
+      "type": "object"
+    }
+  },
+  "required": [
+    "identity",
+    "place",
+    "expressions",
+    "status",
+    "text",
+    "classification",
+    "profile"
+  ],
+  "title": "DocumentRecord",
+  "type": "object"
+}
