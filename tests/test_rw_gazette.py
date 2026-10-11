@@ -316,3 +316,29 @@ def test_numbered_items_within_an_article_keep_their_numbers():
         ("2°", "“Ikigo” ni urwego."),
         ("(a)", "is an orphan;"),
     ]
+
+
+def test_a_wrapped_number_in_a_sentence_is_not_an_item_and_a_raised_o_is_an_ordinal():
+    lines = [
+        {"text": "We, EXAMPLE Name,", "page": 1, "x0": 0, "y0": 10, "x1": 100, "y1": 20},
+        {"text": "Article 2: Option", "page": 1, "x0": 0, "y0": 40, "x1": 100, "y1": 50},
+        {
+            "text": "The decision is irrevocable for a period of three",
+            "page": 1,
+            "x0": 0,
+            "y0": 70,
+            "x1": 100,
+            "y1": 80,
+        },
+        {"text": "(3) years from the date of notice.", "page": 1, "x0": 0, "y0": 82, "x1": 100, "y1": 92},
+    ]
+    nodes = RG.structure(lines, "en")
+    assert [n["kind"] for n in nodes][-1] == "paragraph"
+    assert nodes[-1]["text"].endswith("three (3) years from the date of notice.")
+    words = [
+        {"xmin": 0, "ymin": 10, "xmax": 20, "ymax": 20, "text": "Loi"},
+        {"xmin": 24, "ymin": 10, "xmax": 30, "ymax": 20, "text": "n"},
+        {"xmin": 31, "ymin": 9, "xmax": 34, "ymax": 15, "text": "o"},
+        {"xmin": 37, "ymin": 10, "xmax": 70, "ymax": 20, "text": "71/2024"},
+    ]
+    assert RG.lines_of(words)[0]["text"] == "Loi nº 71/2024"
