@@ -119,6 +119,10 @@ DIVISIONS = {
 # --- lines and columns ------------------------------------------------------------------------------
 
 
+# A raised "º" set as its own small word: "Loi n o 71/2024" is "Loi nº 71/2024".
+RAISED_O = re.compile(r"\b([Nn]) o (?=\d)")
+
+
 def lines_of(words: list[dict]) -> list[dict]:
     """Words grouped into printed lines by their vertical centre, each line read left to right.
     (Underlined or bold labels sit a little off the baseline; grouping by top edge splits them.)"""
@@ -141,7 +145,7 @@ def lines_of(words: list[dict]) -> list[dict]:
         line.sort(key=lambda w: w["xmin"])
         out.append(
             {
-                "text": " ".join(w["text"] for w in line),
+                "text": RAISED_O.sub(r"\1º ", " ".join(w["text"] for w in line)),
                 "x0": round(min(w["xmin"] for w in line), 1),
                 "y0": round(min(w["ymin"] for w in line), 1),
                 "x1": round(max(w["xmax"] for w in line), 1),
@@ -380,7 +384,15 @@ def structure(lines: list[dict], language: str) -> list[dict]:
                         break
         # Lines of one paragraph sit 0 to 3 pt apart, paragraphs 14 pt or more: a gap under
         # seven tenths of the line's own height continues the paragraph.
-        if node is None and part == "body":
+        close = (
+            previous is not None
+            and previous["page"] == line["page"]
+            and line["y0"] - previous["y1"] < 0.7 * (line["y1"] - line["y0"])
+        )
+        # A number opens an item only where a new paragraph could start: after a gap, or after a line
+        # ending ":" or ";". "… for a period of three" then "(3) years …" is one sentence wrapped.
+        opens = not close or previous is None or previous["text"].rstrip().endswith((":", ";", "."))
+        if node is None and part == "body" and opens:
             item = ITEM.match(text)
             if item:
                 node = {
@@ -391,11 +403,6 @@ def structure(lines: list[dict], language: str) -> list[dict]:
                     "ordered": True,
                     "page": line["page"],
                 }
-        close = (
-            previous is not None
-            and previous["page"] == line["page"]
-            and line["y0"] - previous["y1"] < 0.7 * (line["y1"] - line["y0"])
-        )
         if node is None:
             last = nodes[-1] if nodes else None
             # A heading's title, a division's name or a contents entry that wraps onto the next line.
