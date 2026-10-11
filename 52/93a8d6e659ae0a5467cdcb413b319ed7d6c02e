@@ -1,0 +1,80 @@
+web/package.json
+  s_b82616e2476856::t_e78bcffae0eb07 9-10
+workbench/static/public-preview/preview.js
+  s_b82616e2476856::t_2f023d8eefe09d 17,25,41,48-49,114
+  s_b82616e2476856::t_5e42e912b8abad 1,9,33,43,46,54,59,64,69,74,79,84,89,94,99,104,109
+  s_b82616e2476856::t_3338952d5d9b52 2-8,10-16,18-24,26-32,34-40,42,44-45,47,50-53,55-58,60-63,65-68,70-73,75-78,80-83,85-88,90-93,95-98,100-103,105-108,110-113
+workbench/static/public-preview/licenses/open-alvary.txt
+  s_b82616e2476856::t_3338952d5d9b52 1-24
+workbench/app.py
+  s_b82616e2476856::t_b9e4bfc5ed163e 533-558
+web/preview.html
+  s_b82616e2476856::t_5dda266c98f64a 1-13
+workbench/static/public-preview/font-licenses/dm-sans.txt
+  s_b82616e2476856::t_3338952d5d9b52 1-93
+workbench/static/public-preview/preview.css
+  s_b82616e2476856::t_2f023d8eefe09d 1
+workbench/static/public-preview/preview.html
+  s_b82616e2476856::t_3338952d5d9b52 1-14
+workbench/static/public-preview/licenses/react.txt
+  s_b82616e2476856::t_3338952d5d9b52 1-21
+workbench/static/app.js
+  s_b82616e2476856::t_6ae03efe3699c6 293-294,455-462,575
+web/src/site.tsx
+  s_b82616e2476856::t_c0d807d931b92e 94
+  s_b82616e2476856::t_04c182a7e90939 1-93,95-227
+web/src/main.tsx
+  s_b82616e2476856::t_c0d807d931b92e 25
+  s_b82616e2476856::t_f8e1c6f2b167df 1,22-24,26-34,165-169,199,473-478,582,643
+web/src/preview.tsx
+  s_b82616e2476856::t_2f023d8eefe09d 98-99,123,159-161,190-192,224-225
+  s_b82616e2476856::t_5dda266c98f64a 178-181,186,193
+  s_b82616e2476856::t_0a71cd3a6789f7 1-97,100-122,124-158,162-177,182-185,187-189,194-223,226-256
+workbench/static/public-preview/licenses/lucide.txt
+  s_b82616e2476856::t_3338952d5d9b52 1-15
+web/src/document.tsx
+  s_b82616e2476856::t_bb0232c7e96420 1-4,6,13-77,79-91,93,97-98,104,106-111,120,129-141,151-152,155-156,158,163-167,169-247,249-251,257-260,262,266-270,272-306,311-370
+  s_b82616e2476856::t_5e42e912b8abad 112-119,121-128,157,159-162
+  s_b82616e2476856::t_6e68dfece0e512 168,253-256,261,263-265,271
+  s_b82616e2476856::t_797dd0ce0d7210 5,78,142,154
+  s_b82616e2476856::t_9aa7a3ce8e4fe9 7-12,92,94-96,99-103,105,143-150,153,248,252,307-310
+web/src/style.css
+  s_b82616e2476856::t_6e68dfece0e512 1457-1462
+  s_b82616e2476856::t_796ae7e0788386 1360-1363,1369
+  s_b82616e2476856::t_63635ad798b6ee 1364-1366
+  s_b82616e2476856::t_26a3e434736a20 1379-1381
+  s_b82616e2476856::t_8aa6080d6470f4 1357-1359,1367-1368,1370-1378,1382-1456,1463-1522
+workbench/static/public-preview/font-licenses/libre-caslon-display.txt
+  s_b82616e2476856::t_3338952d5d9b52 1-93
+workbench/static/public-preview/licenses/react-dom.txt
+  s_b82616e2476856::t_3338952d5d9b52 1-21
+tests/test_workbench.py
+  s_b82616e2476856::t_f2f6745a08e8b3 125,563-589
+web/vite.preview.config.ts
+  s_b82616e2476856::t_5dda266c98f64a 1-21
+web/src/preview.css
+  s_b82616e2476856::t_5dda266c98f64a 1-36
+  s_b82616e2476856::t_2f023d8eefe09d 40-44
+  s_b82616e2476856::t_26a3e434736a20 37-39
+workbench/content.py
+  s_b82616e2476856::t_b9e4bfc5ed163e 398-427,432-441
+  s_b82616e2476856::t_55ef8f2b795017 428-431
+workbench/static/public-preview/favicon.svg
+  s_b82616e2476856::t_3338952d5d9b52 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5293a8d6e659ae0a5467cdcb413b319ed7d6c02e",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
