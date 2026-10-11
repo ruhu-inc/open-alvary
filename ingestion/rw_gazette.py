@@ -310,6 +310,11 @@ def instruments(issue_streams: dict[str, list[dict]]) -> list[dict]:
 # --- structure ----------------------------------------------------------------------------------------
 
 
+# Numbered items within an article: "1º", "2°", "(1)", "(a)", "a)"; a text layer sometimes gives the
+# ordinal sign as a plain "o" set close to the number ("1o").
+ITEM = re.compile(r"^(\d{1,2}\s?[º°]|\d{1,2}o(?=\s)|\(\d{1,2}\)|\([a-z]\)|[a-z]\))\s*(\S.*)$")
+
+
 def _capitals(text: str) -> bool:
     letters = [c for c in text if c.isalpha()]
     return bool(letters) and sum(c.isupper() for c in letters) >= 0.8 * len(letters)
@@ -375,6 +380,17 @@ def structure(lines: list[dict], language: str) -> list[dict]:
                         break
         # Lines of one paragraph sit 0 to 3 pt apart, paragraphs 14 pt or more: a gap under
         # seven tenths of the line's own height continues the paragraph.
+        if node is None and part == "body":
+            item = ITEM.match(text)
+            if item:
+                node = {
+                    "kind": "list_item",
+                    "level": "list_item",
+                    "text": item.group(2),
+                    "marker": item.group(1),
+                    "ordered": True,
+                    "page": line["page"],
+                }
         close = (
             previous is not None
             and previous["page"] == line["page"]

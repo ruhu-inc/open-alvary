@@ -856,3 +856,32 @@ def test_the_public_preview_of_a_language_version_lists_the_others(tmp_path, mon
         ("en", "rw-law-009-2026-en"),
         ("fr", "rw-law-009-2026-fr"),
     ]
+    languages = reviewer.get("/api/documents/rw-law-009-2026-fr/languages").json()
+    assert languages["languages"] == ["en", "fr"] and languages["differences"] == []
+    row = languages["rows"][0]
+    assert row["article"] == "1" and row["versions"]["fr"]["marker"] == "Article premier :"
+
+
+def test_review_time_is_measured_per_page_leaving_breaks_out():
+    from datetime import UTC, datetime, timedelta
+
+    from workbench.timing import timings
+
+    start = datetime(2026, 10, 12, 9, 0, tzinfo=UTC)
+    saves = [(0, 1), (4, 2), (10, 3), (70, 4), (73, 5)]  # minutes after nine, page; a break before page 4
+    rows = [
+        {
+            "act_id": "rw-law-009-2026-en",
+            "page": page,
+            "status": "checked",
+            "author": "a@example.org",
+            "created_at": start + timedelta(minutes=minutes),
+        }
+        for minutes, page in saves
+    ]
+    measured = timings(rows, gap_minutes=20)
+    assert (
+        measured["pages_timed"] == 3
+    )  # pages 2, 3 and 5; the first page and the one after the break are not timed
+    assert measured["minutes_per_page"]["median"] == 4.0
+    assert measured["documents"]["rw-law-009-2026-en"] == {"pages_timed": 3, "minutes": 13.0}

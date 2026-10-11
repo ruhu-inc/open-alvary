@@ -578,3 +578,52 @@ def machine_html(page: dict) -> str:
 
 
 __all__ = ["Library", "MATERIALS", "layout_parser"]
+
+
+# --- a law's language versions side by side -------------------------------------------------------------
+
+
+def articles_of(final: list[dict], language: str) -> list[dict]:
+    """The articles of one language version as reviewed: each heading's number, marker and title,
+    the start of its text and the page it begins on (the contents list is not the body)."""
+    from ingestion import rw_gazette
+
+    pattern = rw_gazette.ARTICLE.get(language)
+    out: list[dict] = []
+    for page in final:
+        for unit in page["units"]:
+            if unit.get("kind") == "table":
+                continue
+            line = " ".join(filter(None, [unit.get("marker"), unit.get("text")])).strip()
+            match = pattern.match(line) if pattern and unit.get("kind") == "heading" else None
+            if match:
+                out.append(
+                    {
+                        "article": rw_gazette._number(match.group(1)),
+                        "marker": unit.get("marker") or "",
+                        "title": unit.get("text") or "",
+                        "text": "",
+                        "page": page["page"],
+                    }
+                )
+            elif out and unit.get("kind") in ("paragraph", "list_item") and len(out[-1]["text"]) < 600:
+                out[-1]["text"] = (out[-1]["text"] + " " + line).strip()[:600]
+    return out
+
+
+def side_by_side(versions: dict[str, list[dict]]) -> list[dict]:
+    """Rows of articles, one per number in the order first met, each with every version's article."""
+    order: list[str] = []
+    for found in versions.values():
+        for article in found:
+            if article["article"] not in order:
+                order.append(article["article"])
+    by_number = {language: {a["article"]: a for a in found} for language, found in versions.items()}
+    return [
+        {
+            "article": number,
+            "versions": {language: by_number[language].get(number) for language in versions},
+            "complete": all(number in by_number[language] for language in versions),
+        }
+        for number in order
+    ]

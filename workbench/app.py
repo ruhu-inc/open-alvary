@@ -644,6 +644,34 @@ def create_app(
             "kinds": {family: list(kinds) for family, (_, kinds) in R.FAMILIES.items()},
         }
 
+    @app.get("/api/documents/{act_id}/languages")
+    def document_languages(request: Request, act_id: str):
+        """The law's language versions side by side, article by article, as reviewed so far."""
+        auth.current(request, store)
+        act = act_or_404(act_id)
+        present = {d["id"] for d in library.documents()}
+        ids = {
+            lang: other
+            for lang, other in (act.get("versions") or {act.get("language", "en"): act_id}).items()
+        }
+        versions, instrument = {}, {}
+        for language, other in ids.items():
+            if other not in present:
+                continue
+            final = content.final_pages(library.reading(other), store.latest_pages(other))
+            versions[language] = content.articles_of(final, language)
+            document = library.act(other)
+            instrument[language] = {"id": other, "title": document["title"], "pages": document.get("pages")}
+        rows = content.side_by_side(versions)
+        return {
+            "work": act.get("work") or act_id,
+            "languages": list(versions),
+            "instrument": instrument,
+            "issue": act.get("issue"),
+            "rows": rows,
+            "differences": [row["article"] for row in rows if not row["complete"]],
+        }
+
     @app.get("/api/documents/{act_id}/details")
     def document_details(request: Request, act_id: str):
         auth.current(request, store)
