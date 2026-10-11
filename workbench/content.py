@@ -395,6 +395,50 @@ def plain_text(pages: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
+# What a page's units become on the public site: the reviewer's structure and formatting, without
+# where a restored number came from.
+PUBLIC_KEYS = ("kind", "text", "marker", "level", "align", "marks", "notes")
+TABLE_KEYS = ("kind", "caption", "header_rows", "rows")
+
+
+def public_source(document: dict, manifest: dict) -> dict:
+    """The catalogue record a reader sees; nothing is asserted that has not been reviewed."""
+    return {
+        "id": document["id"],
+        "jurisdiction_id": document.get("jurisdiction") or manifest.get("jurisdiction") or "",
+        "title": document["title"],
+        "citation": document.get("citation") or document["title"],
+        "document_type": document.get("type") or manifest.get("document_type") or "other",
+        "canonical_url": document.get("url", ""),
+        "legal_status": "unknown",
+        "rights_status": "RIGHTS_UNDER_REVIEW",
+        "catalogue_note": manifest.get("description", ""),
+        "has_full_text": True,
+    }
+
+
+def public_pages(final: list[dict], latest: dict[int, dict]) -> list[dict]:
+    """Each page's blocks as the public site renders them, and whether a reviewer checked it."""
+    pages = []
+    for page in final:
+        revision = latest.get(page["page"])
+        blocks = []
+        for unit in page["units"]:
+            keys = TABLE_KEYS if unit["kind"] == "table" else PUBLIC_KEYS
+            block = {key: unit[key] for key in keys if unit.get(key) not in (None, "", [])}
+            if unit["kind"] != "table":
+                block.setdefault("text", "")  # an emptied paragraph still has words: none
+            blocks.append(block)
+        pages.append(
+            {
+                "page": page["page"],
+                "checked": bool(revision and revision["status"] == "checked"),
+                "blocks": blocks,
+            }
+        )
+    return pages
+
+
 def readiness(reading: dict, latest: dict[int, dict]) -> dict:
     """What still stands between this Act and approval."""
     unchecked, open_high, stale = [], [], []

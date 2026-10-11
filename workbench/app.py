@@ -530,6 +530,32 @@ def create_app(
             )
         return {"pages": out, "total": len(reading["pages"])}
 
+    @app.get("/preview/{act_id}")
+    def public_preview_page(act_id: str):
+        """The public site's page for a document, built from web/ (data comes from the API below)."""
+        return FileResponse(STATIC / "public-preview" / "preview.html")
+
+    @app.get("/api/documents/{act_id}/public-preview")
+    def public_preview(request: Request, act_id: str):
+        auth.current(request, store)
+        act = act_or_404(act_id)
+        reading, latest = library.reading(act_id), store.latest_pages(act_id)
+        final = content.final_pages(reading, latest)
+        sha = content.content_sha256(final)
+        approvals = store.approvals(act_id)
+        head = approvals[0] if approvals else None
+        pages = content.public_pages(final, latest)
+        return {
+            "source": content.public_source(act, library.manifest),
+            "pages": pages,
+            "content_sha256": sha,
+            "status": {
+                "approved": bool(head and head["decision"] == "approved" and head["content_sha256"] == sha),
+                "pages": len(pages),
+                "checked_pages": sum(page["checked"] for page in pages),
+            },
+        }
+
     @app.get("/api/documents/{act_id}/akn")
     def akn_export(request: Request, act_id: str):
         auth.current(request, store)

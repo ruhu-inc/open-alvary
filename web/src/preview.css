@@ -1,0 +1,44 @@
+/* The workbench preview's own bar; the rest of the page is the public site's styling. */
+.preview-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  align-items: center;
+  padding: 8px 16px;
+  background: #fff4d6;
+  border-bottom: 1px solid #e8d49a;
+  color: #4a3b10;
+  font-size: 13px;
+}
+.preview-bar strong {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+  background: #4a3b10;
+  color: #fff4d6;
+  padding: 2px 7px;
+  border-radius: 3px;
+}
+.preview-status {
+  color: #6b5a24;
+}
+.preview-bar label {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+}
+.preview-bar a {
+  margin-left: auto;
+  text-decoration: underline;
+}
+.doc-text [id] {
+  scroll-margin-top: 72px; /* clear the preview bar when jumping to a page or section */
+}
+@media (max-width: 600px) {
+  .preview-explain {
+    display: none;
+  }
+}

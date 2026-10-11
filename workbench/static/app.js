@@ -290,7 +290,8 @@ async function actView(actId) {
         current ? pill("ok", "approved") : head && head.decision === "approved" ? pill("warn", "approval out of date") : ""),
       el("p", {},
         nextTodo ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${nextTodo.page}` }, el("button", { class: "primary", text: `Continue reviewing at page ${nextTodo.page}` })) : null, " ",
-        el("a", { href: `#/doc/${encodeURIComponent(actId)}/read` }, el("button", { text: "Read the whole document" }))),
+        el("a", { href: `#/doc/${encodeURIComponent(actId)}/read` }, el("button", { text: "Read the whole document" })), " ",
+        previewLink(actId)),
       el("h3", { text: "Pages" }),
       el("p", { class: "muted", text: "Green: checked. Yellow: needs attention. Red border: high flags open. Dashed: the machine reading changed since review." }),
       grid,
@@ -451,6 +452,14 @@ function readPage(actId, page, canEdit) {
       el("div", { class: "card" }, renderUnits(page.units))));
 }
 
+// The document as the public site will show it, in a new tab, from the latest saved pages.
+function previewLink(actId, page, cls) {
+  const id = encodeURIComponent(actId);
+  const at = page ? `#/sources/${id}?page=${page}` : "";
+  return el("a", { href: `/preview/${id}${at}`, target: "_blank", rel: "noopener", title: "How this document will look on the public site, from the latest saved pages" },
+    el("button", { class: cls, text: "Preview on the web" }));
+}
+
 function approvalPanel(actId, data, current) {
   const ready = data.readiness;
   const canApprove = app.me.roles.includes("approver");
@@ -563,6 +572,7 @@ function renderPage(view) {
     nextTodo ? el("button", { text: `Next to review (${nextTodo.page})`, on: { click: () => go(nextTodo.page) } }) : null,
     latest ? pill(latest.status === "checked" ? "ok" : "warn", `revision ${latest.revision}: ${latest.status} by ${latest.author}`) : pill("medium", "not reviewed"),
     view.dirtyBadge,
+    previewLink(actId, view.pageNumber, "small"),
   );
   const viewer = buildViewer(view);
   const right = el("div");
