@@ -149,7 +149,7 @@ function googleMark() {
 // --- dashboard -------------------------------------------------------------------------------------
 
 const TYPE_LABEL = { act: "Act", bill: "Bill", regulation: "Regulation", order: "Order", judgment: "Judgment", gazette: "Gazette", treaty: "Treaty", other: "Document" };
-const ACTION_LABEL = { page_saved: "saved", act_approved: "approved", act_revoked: "revoked approval of", signed_in: "signed in", signed_out: "signed out", operator_saved: "updated operator", sign_in_refused: "was refused sign-in" };
+const ACTION_LABEL = { page_saved: "saved", details_saved: "saved the details of", act_approved: "approved", act_revoked: "revoked approval of", signed_in: "signed in", signed_out: "signed out", operator_saved: "updated operator", sign_in_refused: "was refused sign-in" };
 
 function statusOf(doc) {
   if (doc.approval === "approved") return ["ok", "Approved"];
@@ -278,7 +278,7 @@ async function actView(actId) {
   }));
   const nextTodo = data.pages.find((p) => p.status !== "checked" || p.open_high || p.stale);
   const head = data.approvals[0];
-  const current = head && head.decision === "approved" && head.content_sha256 === data.content_sha256;
+  const current = data.approved; // the approval covers exactly the current text and confirmed details
   main(
     el("div", { class: "card" },
       el("h2", { text: act.title }),
@@ -296,6 +296,7 @@ async function actView(actId) {
       el("p", { class: "muted", text: "Green: checked. Yellow: needs attention. Red border: high flags open. Dashed: the machine reading changed since review." }),
       grid,
     ),
+    detailsSummary(actId, ready),
     findReplaceCard(actId),
     approvalPanel(actId, data, current),
   );
@@ -469,6 +470,7 @@ function approvalPanel(actId, data, current) {
   if (ready.open_high_flags.length) blockers.append(el("li", {}, "High flags open on pages ", ...unique(ready.open_high_flags.map((f) => f.page)).flatMap((p, i) => [i ? ", " : "", el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${p}`, text: String(p) })])));
   if (ready.stale_pages.length) blockers.append(el("li", { text: `Pages to recheck because the reading changed: ${summarise(ready.stale_pages)}` }));
   if (ready.missing_checks.length) blockers.append(el("li", { text: `Check readings missing: ${ready.missing_checks.join(", ")} — rerun the batch` }));
+  if (!ready.details.confirmed) blockers.append(el("li", {}, "Document details ", el("a", { href: `#/doc/${encodeURIComponent(actId)}/details`, text: ready.details.status ? "not yet confirmed" : "not yet reviewed" })));
   panel.append(ready.ready ? el("p", {}, pill("ok", "Ready for approval")) : el("div", {}, el("p", { text: "Before approval:" }), blockers));
   if (canApprove) {
     const basis = el("textarea", { rows: 3, value: (data.approvals[0] && data.approvals[0].rights_basis) || data.act.rights_basis || "" });
@@ -499,7 +501,9 @@ function approvalPanel(actId, data, current) {
   if (data.approvals.length) {
     panel.append(el("h4", { text: "Approval record" }), el("ul", {}, data.approvals.map((a) => el("li", {},
       `${a.created_at.slice(0, 16).replace("T", " ")} · ${a.decision} by ${a.author} · content ${a.content_sha256.slice(0, 12)}… `,
-      a.content_sha256 === data.content_sha256 ? pill("ok", "matches current content") : pill("warn", "content changed since")))));
+      a.content_sha256 !== data.content_sha256 ? pill("warn", "text changed since")
+        : a.details_sha256 !== data.details_sha256 ? pill("warn", a.details_sha256 ? "details changed since" : "details not part of this approval")
+        : pill("ok", "matches current text and details")))));
   }
   panel.append(el("p", {},
     el("a", { href: `/api/documents/${encodeURIComponent(actId)}/export`, target: "_blank", rel: "noopener", text: "Reviewed content (JSON)" }), " · ",
@@ -507,6 +511,152 @@ function approvalPanel(actId, data, current) {
     el("a", { href: `/api/documents/${encodeURIComponent(actId)}/akn`, text: "Akoma Ntoso XML" }), " · ",
     el("a", { href: `#/audit/${encodeURIComponent(actId)}`, text: "Activity log" })));
   return panel;
+}
+
+// --- document details: the comprehensive record beside the text (standard DETAILS-1) -------------
+
+const DETAIL_STATUS = { suggested: "Suggested from the document — not yet saved", draft: "Draft", confirmed: "Confirmed" };
+
+function detailsSummary(actId, ready) {
+  const d = ready.details;
+  const state = !d.status ? pill("medium", "details not started")
+    : d.confirmed ? pill("ok", "details confirmed")
+    : pill("warn", d.missing && d.missing.length ? `details: ${d.missing.length} to give or account for` : "details in draft");
+  return el("div", { class: "card" },
+    el("h3", { text: "Document details" }),
+    el("p", { class: "muted", text: "Title, number, the dates it passed, was assented to and commenced, its gazette, the form of this text, its status and related laws, its language. Confirmed details are approved with the text and shown to the public beside it." }),
+    el("p", {}, state, " ",
+      el("a", { href: `#/doc/${encodeURIComponent(actId)}/details` }, el("button", { class: d.confirmed ? "" : "primary", text: d.confirmed ? "Review the details" : "Review and confirm the details" }))));
+}
+
+async function detailsView(actId) {
+  const { data } = await api(`/api/documents/${encodeURIComponent(actId)}/details`);
+  const doc = await api(`/api/documents/${encodeURIComponent(actId)}`);
+  const title = doc.data.act.title;
+  setCrumbs(el("a", { href: "#/", text: "Home" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: title }), "Details");
+  const { standard, record, suggestions } = data;
+  const canEdit = app.me.roles.includes("reviewer");
+  const values = structuredClone(record.details);
+  const absent = { ...record.absent };
+  const rows = new Map();
+  const applicable = standard.fields.filter((f) => !f.types || f.types.includes(data.document_type));
+
+  const isEmpty = (v) => v === undefined || v === null || v === "" || (Array.isArray(v) && !v.length);
+  const refresh = () => {
+    let gaps = 0;
+    for (const field of applicable) {
+      const gap = field.required && isEmpty(values[field.key]) && !absent[field.key];
+      rows.get(field.key).classList.toggle("missing", gap);
+      gaps += gap ? 1 : 0;
+    }
+    counter.textContent = gaps ? `${gaps} detail${gaps === 1 ? "" : "s"} still to give or account for` : "Every detail is given or accounted for";
+    counter.className = gaps ? "pill warn" : "pill ok";
+    confirmButton.disabled = !canEdit || gaps > 0;
+  };
+  const touched = () => { app.dirty = true; refresh(); };
+
+  const control = (field) => {
+    const set = (value) => { values[field.key] = value; if (!isEmpty(value)) { delete absent[field.key]; why.value = ""; } touched(); };
+    const value = values[field.key];
+    let input;
+    if (field.kind === "choice") {
+      input = el("select", { on: { change: () => set(input.value) } }, el("option", { value: "", text: "—" }),
+        field.choices.map((c) => el("option", { value: c.value, text: c.label })));
+      input.value = value || "";
+    } else if (field.kind === "long") {
+      input = el("textarea", { rows: field.key === "summary" ? 4 : 2, on: { input: () => set(input.value) } });
+      input.value = value || "";
+    } else if (field.kind === "list") {
+      input = el("input", { type: "text", placeholder: "Separate with commas", on: { input: () => set(input.value.split(",").map((x) => x.trim()).filter(Boolean)) } });
+      input.value = (value || []).join(", ");
+    } else if (field.kind === "relations") {
+      input = relationsEditor(standard, value || [], (links) => set(links));
+    } else {
+      const type = field.kind === "date" ? "date" : field.kind === "url" ? "url" : "text";
+      input = el("input", { type, inputmode: field.kind === "year" ? "numeric" : undefined, on: { input: () => set(input.value) } });
+      input.value = value || "";
+    }
+    if (!canEdit) input.setAttribute("disabled", "");
+    const why = el("select", { class: "absent", title: "Why this detail is not given", disabled: !canEdit,
+      on: { change: () => { if (why.value) { absent[field.key] = why.value; delete values[field.key]; if (input.tagName !== "DIV") input.value = ""; } else delete absent[field.key]; touched(); } } },
+      el("option", { value: "", text: "given" }), Object.entries(standard.absent).map(([k, label]) => el("option", { value: k, text: label })));
+    why.value = absent[field.key] || "";
+    const hint = suggestions[field.key];
+    let note = null;
+    if (hint) {
+      const shown = hint.absent ? standard.absent[hint.absent] : Array.isArray(hint.value) ? hint.value.map((l) => `${l.kind.replace("_", " ")} ${l.target}`).join("; ") : String(hint.value);
+      const differs = hint.absent ? absent[field.key] !== hint.absent : JSON.stringify(hint.value) !== JSON.stringify(values[field.key]);
+      note = el("div", { class: "hint" },
+        hint.page ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${hint.page}`, text: `p. ${hint.page}` }) : el("span", { text: "From the collection" }), " · ",
+        el("span", { class: "evidence", text: `“${hint.evidence}”` }),
+        differs && canEdit ? el("button", { class: "small", text: `Use: ${shown.length > 60 ? shown.slice(0, 60) + "…" : shown}`, on: { click: () => {
+          if (hint.absent) { absent[field.key] = hint.absent; delete values[field.key]; why.value = hint.absent; }
+          else { values[field.key] = structuredClone(hint.value); delete absent[field.key]; why.value = ""; }
+          rows.get(field.key).replaceWith(row(field)); touched();
+        } } }) : null);
+    }
+    return { input, why, note };
+  };
+  const row = (field) => {
+    const { input, why, note } = control(field);
+    const line = el("div", { class: "detail-row", "data-key": field.key },
+      el("label", {}, field.label, field.required ? null : el("span", { class: "muted", text: " (optional)" })),
+      el("div", { class: "detail-input" }, input, field.help ? el("div", { class: "muted small", text: field.help }) : null, note),
+      field.required ? why : el("span"));
+    rows.set(field.key, line);
+    return line;
+  };
+
+  const counter = el("span");
+  const comment = el("textarea", { rows: 2, placeholder: "Note for the record (optional)" });
+  const save = async (status) => {
+    const result = await api(`/api/documents/${encodeURIComponent(actId)}/details`, { method: "POST",
+      body: { expected_revision: record.revision, status, details: values, absent, comment: comment.value } });
+    if (!result.ok) {
+      if (result.data && result.data.missing) result.data.missing.forEach((key) => rows.get(key)?.classList.add("missing"));
+      return toast(message(result));
+    }
+    app.dirty = false;
+    toast(status === "confirmed" ? "Details confirmed and recorded" : "Draft saved");
+    detailsView(actId);
+  };
+  const confirmButton = el("button", { class: "primary", text: "Confirm details", on: { click: () => save("confirmed") } });
+  const groups = standard.groups.map((group) => {
+    const fields = applicable.filter((f) => f.group === group.key);
+    return fields.length ? el("div", { class: "card details-group" }, el("h3", { text: group.label }), fields.map(row)) : null;
+  });
+  const history = data.history.length ? el("div", { class: "card" }, el("h3", { text: "Details record" }),
+    el("ul", {}, data.history.map((h) => el("li", { text: `${h.at.slice(0, 16).replace("T", " ")} · revision ${h.revision} · ${h.status} by ${h.author}${h.comment ? ` — ${h.comment}` : ""}` })))) : null;
+  main(
+    el("div", { class: "card details-head" },
+      el("h2", { text: `${title}: details` }),
+      el("p", { class: "muted", text: "Each detail was read from the document where it is printed; the page and words are shown beside it. Check each against the page image, correct it, or say why it is not given. Confirmed details are approved with the text and shown to the public." }),
+      el("p", {}, pill(record.status === "confirmed" ? "ok" : record.status === "draft" ? "warn" : "medium", DETAIL_STATUS[record.status] + (record.revision ? ` · revision ${record.revision} by ${record.author}` : "")), " ", counter),
+      canEdit ? el("p", {}, el("button", { text: "Save draft", on: { click: () => save("draft") } }), " ", confirmButton, " ", previewLink(actId)) : el("p", { class: "muted", text: "Editing needs the reviewer role." }),
+      canEdit ? comment : null),
+    ...groups,
+    history,
+  );
+  refresh();
+}
+
+function relationsEditor(standard, links, onChange) {
+  const box = el("div", { class: "relations" });
+  const draw = () => {
+    box.replaceChildren(
+      ...links.map((link, i) => {
+        const kind = el("select", { on: { change: () => { link.kind = kind.value; onChange(links); } } }, standard.relations.map((r) => el("option", { value: r.value, text: r.label })));
+        kind.value = link.kind;
+        const target = el("input", { type: "text", placeholder: "Title or citation of the other law", value: link.target || "", on: { input: () => { link.target = target.value; onChange(links); } } });
+        const id = el("input", { type: "text", class: "narrow", placeholder: "catalogue id (if any)", value: link.target_id || "", on: { input: () => { if (id.value) link.target_id = id.value; else delete link.target_id; onChange(links); } } });
+        const note = el("input", { type: "text", class: "narrow", placeholder: "note", value: link.note || "", on: { input: () => { if (note.value) link.note = note.value; else delete link.note; onChange(links); } } });
+        return el("div", { class: "relation" }, kind, target, id, note,
+          el("button", { class: "small", text: "Remove", on: { click: () => { links.splice(i, 1); onChange(links); draw(); } } }));
+      }),
+      el("button", { class: "small", text: "+ Add a related law", on: { click: () => { links.push({ kind: "amends", target: "" }); onChange(links); draw(); } } }));
+  };
+  draw();
+  return box;
 }
 
 function unique(values) { return [...new Set(values)]; }
@@ -1115,6 +1265,7 @@ async function route() {
   try {
     if (parts[0] === "doc" && parts[2] === "page") return await pageView(parts[1], Number(parts[3]));
     if (parts[0] === "doc" && parts[2] === "read") return await readView(parts[1]);
+    if (parts[0] === "doc" && parts[2] === "details") return await detailsView(parts[1]);
     if (parts[0] === "doc" && parts[1]) return await actView(parts[1]);
     if (parts[0] === "audit" && parts[1]) return await auditView(parts[1]);
     return await dashboard();

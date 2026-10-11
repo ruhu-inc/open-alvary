@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import update
 
-from workbench import auth, content
+from workbench import auth, content, details
 from workbench.app import create_app
 from workbench.store import Store, connect, session
 
@@ -240,14 +240,27 @@ def approve(browser, expected=0, **overrides):
     return browser.post(f"/api/documents/{ACT}/approval", json=body)
 
 
+def confirm_details(browser, expected=0, **changes):
+    """Confirm the suggested details, accounting for every one the test document does not state."""
+    current = browser.get(f"/api/documents/{ACT}/details").json()
+    given = {**current["record"]["details"], **changes}
+    absent = {key: "unknown" for key in current["missing"] if key not in given}
+    absent.update({k: v for k, v in current["record"]["absent"].items() if k not in given})
+    body = {"expected_revision": expected, "status": "confirmed", "details": given, "absent": absent}
+    return browser.post(f"/api/documents/{ACT}/details", json=body)
+
+
 def test_approval_waits_for_every_page_and_high_flag_and_binds_the_content(world):
     approver = signed_in(world, "approver@example.org")
     refused = approve(approver)
     assert refused.status_code == 409 and refused.json()["readiness"]["unchecked_pages"] == [1, 2]
+    assert refused.json()["readiness"]["details"]["confirmed"] is False
     save(approver)  # page 1 checked, but its high flag is not resolved
     save(approver, page=2, units=[{"kind": "paragraph", "text": "2. Citation."}])
     assert approve(approver).json()["readiness"]["open_high_flags"] == [{"page": 1, "id": flag_id()}]
     save(approver, expected=1, resolutions={flag_id(): {"decision": "use_check", "reader": "mineru"}})
+    assert approve(approver).status_code == 409  # the pages are done; the details are not confirmed
+    assert confirm_details(approver).json() == {"revision": 1}
     assert approve(approver, materials={**MATERIALS, "dates": False}).status_code == 422
     assert approve(approver, rights_basis=" ").status_code == 422
     assert approve(approver).json() == {"revision": 1}
@@ -268,7 +281,122 @@ def test_approval_waits_for_every_page_and_high_flag_and_binds_the_content(world
     listed = approver.get("/api/documents").json()[0]
     assert listed["approval"] == "approved" and listed["approval_current"] is False
     actions = [e["action"] for e in approver.get(f"/api/audit?act={ACT}").json()]
-    assert "act_approved" in actions and actions.count("page_saved") == 4
+    assert "act_approved" in actions and actions.count("page_saved") == 4 and "details_saved" in actions
+
+
+def test_approval_covers_the_details_and_changing_them_voids_it(world):
+    approver = signed_in(world, "approver@example.org")
+    save(approver, resolutions={flag_id(): {"decision": "use_check", "reader": "mineru"}})
+    save(approver, page=2, units=[{"kind": "paragraph", "text": "2. Citation."}])
+    confirm_details(approver)
+    assert approve(approver).json() == {"revision": 1}
+    detail = approver.get(f"/api/documents/{ACT}").json()
+    assert detail["approved"] and detail["approvals"][0]["details_sha256"] == detail["details_sha256"]
+    xml = approver.get(f"/api/documents/{ACT}/akn").text
+    assert f'detailsSha256="{detail["details_sha256"]}"' in xml and '<oa:detail name="short_title">' in xml
+    assert confirm_details(approver, expected=1, status_note="Checked against the gazette").status_code == 200
+    assert approver.get(f"/api/documents/{ACT}/export").json()["approved"] is False
+
+
+def test_details_are_validated_and_confirming_needs_every_detail_accounted_for(world):
+    reviewer = signed_in(world, "reviewer@example.org")
+    current = reviewer.get(f"/api/documents/{ACT}/details").json()
+    assert current["record"]["status"] == "suggested" and current["standard"]["standard"] == "details-1"
+    assert (
+        current["record"]["details"]["document_type"] == "act"
+        and "short_title" in current["record"]["details"]
+    )
+
+    def post(**body):
+        return reviewer.post(f"/api/documents/{ACT}/details", json={"expected_revision": 0, **body})
+
+    assert post(status="confirmed", details={"short_title": "x"}).json()["missing"]
+    assert post(status="draft", details={"assent_date": "2023-02-30"}).status_code == 422
+    assert post(status="draft", details={"language": "English"}).status_code == 422
+    assert post(status="draft", details={"nonsense": "x"}).status_code == 422
+    assert post(status="draft", details={"year": "2023"}, absent={"year": "unknown"}).status_code == 422
+    bad_link = {"relations": [{"kind": "inspires", "target": "Another Act"}]}
+    assert post(status="draft", details=bad_link).status_code == 422
+    assert post(status="draft", details={"short_title": "Act, 2015"}).json() == {"revision": 1}
+    assert post(status="draft", details={"short_title": "Act, 2015"}).status_code == 409  # stale revision
+    assert reviewer.get(f"/api/documents/{ACT}/details").json()["record"]["status"] == "draft"
+
+
+def test_details_are_suggested_from_the_gazette_the_certificate_and_the_assent():
+    page = {
+        "page": 1,
+        "text": "Extraordinary Federal Republic of Nigeria Official Gazette No. 56 Lagos - 27th March, 2023 "
+        "Vol. 110 Government Notice No. 24",
+        "tables": [[["Act No.", "Short Title", "Page"], ["8", "Copyright Act, 2022 .. ..", "A179-243"]]],
+        "furniture": ["Printed and Published by The Federal Government Printer, Lagos, Nigeria"],
+        "nodes": [
+            {"kind": "heading", "text": "EXPLANATORY MEMORANDUM"},
+            {"kind": "paragraph", "text": "This Act."},
+        ],
+    }
+    body = {
+        "page": 2,
+        "text": "An Act to repeal the Copyright Act, Cap C28, Laws of the Federation of Nigeria, 2004 and enact "
+        "the Copyright Act 2022; and for related matters. [17th Day of March, 2023] Commencement "
+        "ENACTED by the National Assembly of the Federal Republic of Nigeria — "
+        "This Act may be cited as the Copyright Act, 2022.",
+        "tables": [],
+        "nodes": [],
+    }
+    end = {
+        "page": 3,
+        "text": "Date Passed by the Senate Date Passed by the House of Representatives 6th April, 2022. "
+        "27th July, 2022. I certify that this Bill ... Acts Authentication Act Cap. A2, 2004. I ASSENT LS "
+        "OJO O. A., fnia, fcia Clerk to the National Assembly 13th Day of February, 2023. "
+        "MUHAMMADU BUHARI, GCFR President of the Federal Republic of Nigeria 17th Day of March, 2023.",
+        "tables": [],
+        "nodes": [],
+    }
+    found = details.suggest({"pages": [page, body, end]}, {"id": "x", "type": "act"}, {"jurisdiction": "ng"})
+    value = {key: s.get("value") for key, s in found.items()}
+    assert value["gazette_number"] == "56" and value["gazette_date"] == "2023-03-27"
+    assert value["gazette_volume"] == "110" and value["gazette_issue"] == "extraordinary"
+    assert value["number"] == "8" and value["gazette_pages"] == "A179-243"
+    assert value["official_publisher"] == "Federal Government Printer, Lagos"
+    assert value["citation"] == "Copyright Act, No. 8, 2022" and value["text_form"] == "gazette_supplement"
+    assert value["commencement_date"] == "2023-03-17" and value["summary"] == "This Act."
+    assert value["passed_senate"] == "2022-04-06" and value["passed_house"] == "2022-07-27"
+    assert value["authenticated_on"] == "2023-02-13"
+    assert value["authenticated_by"] == "Ojo O. A., fnia, fcia, Clerk to the National Assembly"
+    assert value["assent_date"] == "2023-03-17"
+    assert value["assented_by"] == "Muhammadu Buhari, GCFR, President of the Federal Republic of Nigeria"
+    assert value["relations"] == [
+        {"kind": "repeals", "target": "Copyright Act, Cap C28, Laws of the Federation of Nigeria, 2004"}
+    ]
+    assert found["gazette_number"]["page"] == 1 and found["assent_date"]["page"] == 3
+
+
+def test_a_certified_bill_marks_the_gazette_details_as_not_in_this_copy():
+    body = {
+        "page": 1,
+        "text": "An Act to amend the X Act, No. 1, 2015; and for related matters. "
+        "[ ] Commencement ENACTED by the National Assembly of the Federal Republic of Nigeria —",
+        "tables": [],
+        "nodes": [],
+    }
+    end = {
+        "page": 2,
+        "text": "I certify that this Bill ... Acts Authentication Act Cap. A2, 2004. "
+        "SANI MAGAJI TAMBAWAL, fcna Clerk to the National Assembly 27th Day of February, 2024",
+        "tables": [],
+        "nodes": [],
+    }
+    found = details.suggest(
+        {"pages": [body, end]}, {"id": "x", "type": "act", "title": "X (Amendment) Act, 2024"}, {}
+    )
+    assert found["text_form"]["value"] == "authenticated_bill"
+    assert (
+        found["gazette_number"]["absent"] == "not_in_source" and found["number"]["absent"] == "not_in_source"
+    )
+    assert found["commencement_date"]["absent"] == "not_in_source"
+    assert found["assent_date"]["absent"] == "not_in_source"
+    assert found["authenticated_by"]["value"] == "Sani Magaji Tambawal, fcna, Clerk to the National Assembly"
+    assert found["relations"]["value"] == [{"kind": "amends", "target": "X Act, No. 1, 2015"}]
 
 
 # --- OpenID Connect ----------------------------------------------------------------------------------
@@ -583,7 +711,18 @@ def test_the_public_preview_shows_the_latest_saved_pages_as_readers_would(world)
     assert first["checked"] and not second["checked"]
     assert first["blocks"] == [{key: value for key, value in unit.items() if key != "marker_source"}]
     assert second["blocks"] == [{"kind": "paragraph", "text": "2. Citation."}]
-    assert preview["status"] == {"approved": False, "pages": 2, "checked_pages": 1}
+    assert {k: preview["status"][k] for k in ("approved", "pages", "checked_pages")} == {
+        "approved": False,
+        "pages": 2,
+        "checked_pages": 1,
+    }
+    assert (
+        preview["details"]["status"] == "suggested"
+        and preview["details"]["details"]["document_type"] == "act"
+    )
+    assert preview["review"]["reviewers"] == ["Rev"] and preview["review"]["approval"] is None
+    assert preview["review"]["readers"]["primary"] == "Google Document AI Layout Parser"
+    assert [d["format"] for d in preview["downloads"]] == ["TXT", "XML", "PDF"]
     page = browser.get(f"/preview/{ACT}")
     assert page.status_code == 200 and "/static/public-preview/preview.js" in page.text
     assert "default-src 'self'" in page.headers["content-security-policy"]

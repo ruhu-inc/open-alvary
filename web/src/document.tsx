@@ -2,8 +2,23 @@
 // as provision titles, character formatting and tables, page by page. Text is rendered as React
 // text, never as HTML.
 
-import type { ReactNode } from "react";
-import { ChevronRight, FileText } from "lucide-react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { ChevronRight, FileText, Link2 } from "lucide-react";
+import {
+  AboutPanel,
+  KeyFacts,
+  PassagePanel,
+  PublicationPanel,
+  ReviewPanel,
+  SourcePanel,
+  StatusPanel,
+  citationFor,
+  label,
+  type DetailsRecord,
+  type Provenance,
+  type ReviewRecord,
+} from "./details";
+import { DocumentTools, copyText, type DownloadLink } from "./tools";
 import {
   PageTitle,
   SourceRecord,
@@ -184,9 +199,11 @@ function scrollTo(id: string) {
 export function DocumentText({
   pages,
   markUnchecked = false,
+  onSectionLink,
 }: {
   pages: DocumentPageContent[];
   markUnchecked?: boolean;
+  onSectionLink?: (section: string, anchor: string) => void;
 }) {
   const { laid } = layout(pages);
   return (
@@ -259,6 +276,22 @@ export function DocumentText({
                   <h3 id={item.id ?? undefined} tabIndex={-1}>
                     <span className="doc-num">{item.section}</span>
                     {title}
+                    {onSectionLink && item.id ? (
+                      <button
+                        type="button"
+                        className="doc-permalink"
+                        aria-label={`Copy a link to section ${item.section}`}
+                        title="Copy a link to this section"
+                        onClick={() =>
+                          onSectionLink(
+                            item.section!.replace(/\.$/, ""),
+                            item.id!,
+                          )
+                        }
+                      >
+                        <Link2 size={15} />
+                      </button>
+                    ) : null}
                   </h3>
                   {more.length ? (
                     <p className="doc-note-more">{more.join(" · ")}</p>
@@ -331,40 +364,109 @@ export function DocumentPage({
   rights,
   pages,
   contentHash,
+  detailsHash,
+  record,
+  provenance,
+  review,
+  downloads = [],
+  approved = false,
+  linkTo,
   markUnchecked = false,
 }: {
   source: Source;
   rights?: RightsRecord;
   pages: DocumentPageContent[];
   contentHash?: string;
+  detailsHash?: string | null;
+  record: DetailsRecord;
+  provenance: Provenance;
+  review: ReviewRecord;
+  downloads?: DownloadLink[];
+  approved?: boolean;
+  linkTo: (query?: string) => string; // this page's address, optionally at a section
   markUnchecked?: boolean;
 }) {
   const s = source;
+  const d = record.details;
+  const [notice, setNotice] = useState("");
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 6000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+  const textRoot = useCallback(() => document.querySelector(".doc-text"), []);
+  const citation = citationFor(record, s);
   return (
-    <div className="page">
+    <div className="page doc-page-view">
       <a className="breadcrumb" href="#/browse">
         Catalogue <ChevronRight size={14} /> {s.jurisdiction_id.toUpperCase()}
       </a>
       <PageTitle
-        label={s.document_type.toUpperCase() + " · " + s.citation}
-        title={s.title}
+        label={
+          label(d.document_type ?? s.document_type).toUpperCase() +
+          " · " +
+          citation
+        }
+        title={d.short_title || s.title}
       >
-        {s.catalogue_note}
+        {d.summary || s.catalogue_note}
       </PageTitle>
+      <KeyFacts record={record} approved={approved} />
+      <div className="doc-overview">
+        <AboutPanel record={record} source={s} />
+        <PassagePanel record={record} />
+        <PublicationPanel record={record} />
+        <StatusPanel record={record} />
+      </div>
       <div className="reader-grid">
         <article className="reader doc-reader">
           <div className="reader-bar">
             <FileText size={18} /> Source text{" "}
             <span className="badge green">Open full text</span>
           </div>
-          <DocumentText pages={pages} markUnchecked={markUnchecked} />
+          <DocumentTools
+            citation={citation}
+            pageUrl={linkTo()}
+            downloads={downloads}
+            textRoot={textRoot}
+          />
+          <DocumentText
+            pages={pages}
+            markUnchecked={markUnchecked}
+            onSectionLink={async (section, anchor) => {
+              const url = linkTo("section=" + encodeURIComponent(section));
+              const copied = await copyText(url);
+              setNotice(
+                copied
+                  ? `Copied a link to section ${section} (${citationFor(record, s, section)})`
+                  : `Link to section ${section}: ${url}`,
+              );
+              document.getElementById(anchor)?.focus({ preventScroll: true });
+            }}
+          />
           {contentHash ? <p className="hash">SHA-256 {contentHash}</p> : null}
         </article>
         <aside className="doc-aside">
           <DocumentContents pages={pages} />
+          <ReviewPanel
+            review={review}
+            record={record}
+            contentHash={contentHash}
+            detailsHash={detailsHash}
+          />
+          <SourcePanel record={record} provenance={provenance} />
           <SourceRecord source={s} rights={rights} />
+          {provenance.rights_basis ? (
+            <p className="doc-panel-note doc-rights-basis">
+              Proposed rights basis, pending rights review:{" "}
+              {provenance.rights_basis}
+            </p>
+          ) : null}
         </aside>
       </div>
+      <p className="doc-notice" role="status" hidden={!notice}>
+        {notice}
+      </p>
     </div>
   );
 }

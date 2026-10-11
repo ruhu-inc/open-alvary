@@ -226,3 +226,23 @@ ul.plain li:first-child { border-top: 0; }
 .toolbar .mark-strong { font-weight: 800; } .toolbar .mark-em { font-style: italic; font-family: Georgia, serif; }
 .toolbar .mark-underline { text-decoration: underline; }
 .toolbar button.on { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); border-color: var(--accent); }
+
+/* --- document details ------------------------------------------------------------------------------ */
+.details-group .detail-row { display: grid; grid-template-columns: 13rem minmax(0, 1fr) 11rem; gap: .4rem 1rem; align-items: start; padding: .55rem .4rem; border-top: 1px solid var(--line); }
+.details-group .detail-row:first-of-type { border-top: 0; }
+.detail-row > label { font-weight: 600; padding-top: .35rem; }
+.detail-input input[type=text], .detail-input input[type=url], .detail-input input[type=date], .detail-input select, .detail-input textarea { width: 100%; box-sizing: border-box; }
+.detail-input input[type=url], .detail-input input[type=date] { background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: .35rem .5rem; }
+.detail-row select.absent { width: 100%; font-size: 13px; color: var(--muted); }
+.detail-row.missing { background: var(--warn-bg); border-radius: 6px; }
+.detail-row.missing > label::after { content: "to give or account for"; display: block; font-weight: 400; color: var(--medium); font-size: 12px; }
+.hint { font-size: 12px; color: var(--muted); margin-top: .3rem; display: flex; gap: .35rem; align-items: baseline; flex-wrap: wrap; }
+.hint .evidence { font-style: italic; overflow-wrap: anywhere; }
+.small { font-size: 12px; }
+.relations .relation { display: grid; grid-template-columns: 9rem minmax(0, 1fr) 9rem 9rem auto; gap: .35rem; margin-bottom: .35rem; }
+.relations .relation input { width: 100%; box-sizing: border-box; }
+.details-head textarea { width: 100%; box-sizing: border-box; }
+@media (max-width: 900px) {
+  .details-group .detail-row { grid-template-columns: 1fr; }
+  .relations .relation { grid-template-columns: 1fr; }
+}

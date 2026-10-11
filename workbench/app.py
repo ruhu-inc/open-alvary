@@ -9,6 +9,7 @@ https address and an OpenID Connect client configured; see the runbook.
 import html
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import (
@@ -23,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from ingestion import settings
-from workbench import akn, auth, content
+from workbench import akn, auth, content, details
 from workbench.store import Conflict, Store, engine_from_environment
 
 STATIC = Path(__file__).with_name("static")
@@ -143,16 +144,43 @@ def create_app(
             raise HTTPException(404, "No such page")
         return reading, found
 
-    def document_summary(document: dict) -> dict:
+    def state(document: dict) -> dict:
+        """Everything that decides a document's review status, read once: its pages, its details,
+        and whether the latest approval still covers both exactly."""
         reading, latest = library.reading(document["id"]), store.latest_pages(document["id"])
-        ready = content.readiness(reading, latest)
+        final = content.final_pages(reading, latest)
+        record = store.latest_details(document["id"])
+        sha, details_sha = content.content_sha256(final), content.details_sha256(record)
         approvals = store.approvals(document["id"])
         head = approvals[0] if approvals else None
-        current_sha = content.content_sha256(content.final_pages(reading, latest))
+        approved = bool(
+            head
+            and head["decision"] == "approved"
+            and head["content_sha256"] == sha
+            and head.get("details_sha256") == details_sha
+            and record
+            and record["status"] == "confirmed"
+        )
+        return {
+            "reading": reading,
+            "latest": latest,
+            "final": final,
+            "record": record,
+            "content_sha256": sha,
+            "details_sha256": details_sha,
+            "approvals": approvals,
+            "head": head,
+            "approved": approved,
+            "readiness": content.readiness(reading, latest, record, document.get("type", "act")),
+        }
+
+    def document_summary(document: dict) -> dict:
+        now = state(document)
+        reading, latest, ready, head = now["reading"], now["latest"], now["readiness"], now["head"]
         last = store.events(act_id=document["id"], limit=1)
         approval = None
         if head and head["decision"] == "approved":
-            approval = "approved" if head["content_sha256"] == current_sha else "out_of_date"
+            approval = "approved" if now["approved"] else "out_of_date"
         return {
             "id": document["id"],
             "title": document["title"],
@@ -217,7 +245,7 @@ def create_app(
                     "page": e["page"],
                 }
                 for e in store.events(limit=200)
-                if e["action"] in {"page_saved", "act_approved", "act_revoked"}
+                if e["action"] in {"page_saved", "details_saved", "act_approved", "act_revoked"}
             ][:12],
         }
 
@@ -226,11 +254,8 @@ def create_app(
         auth.current(request, store)
         out = []
         for act in library.documents():
-            reading, latest = library.reading(act["id"]), store.latest_pages(act["id"])
-            ready = content.readiness(reading, latest)
-            approvals = store.approvals(act["id"])
-            current_sha = content.content_sha256(content.final_pages(reading, latest))
-            head = approvals[0] if approvals else None
+            now = state(act)
+            reading, ready, head = now["reading"], now["readiness"], now["head"]
             out.append(
                 {
                     "id": act["id"],
@@ -240,9 +265,7 @@ def create_app(
                     "open_high_flags": len(ready["open_high_flags"]),
                     "flags": reading["summary"]["flags"],
                     "approval": head["decision"] if head else None,
-                    "approval_current": bool(
-                        head and head["decision"] == "approved" and head["content_sha256"] == current_sha
-                    ),
+                    "approval_current": now["approved"],
                 }
             )
         return out
@@ -251,7 +274,8 @@ def create_app(
     def act_detail(request: Request, act_id: str):
         auth.current(request, store)
         act = act_or_404(act_id)
-        reading, latest = library.reading(act_id), store.latest_pages(act_id)
+        now = state(act)
+        reading, latest = now["reading"], now["latest"]
         pages = []
         for page in reading["pages"]:
             revision = latest.get(page["page"])
@@ -274,16 +298,17 @@ def create_app(
                     "stale": bool(revision and revision["reading_sha256"] != content.reading_sha256(page)),
                 }
             )
-        final = content.final_pages(reading, latest)
         return {
             "act": {**act, "rights_basis": library.manifest.get("rights_basis", "")},
             "readers": {"primary": reading["primary"], "checks": reading["checks"]},
             "pages": pages,
-            "readiness": content.readiness(reading, latest),
-            "content_sha256": content.content_sha256(final),
+            "readiness": now["readiness"],
+            "content_sha256": now["content_sha256"],
+            "details_sha256": now["details_sha256"],
+            "approved": now["approved"],
             "approvals": [
                 {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in a.items()}
-                for a in store.approvals(act_id)
+                for a in now["approvals"]
             ],
             "materials": content.MATERIALS,
         }
@@ -386,15 +411,14 @@ def create_app(
     @app.post("/api/documents/{act_id}/approval")
     def approve(request: Request, act_id: str, body: dict = JSON_BODY):
         who = auth.current(request, store, write=True, role="approver")
-        act_or_404(act_id)
-        reading, latest = library.reading(act_id), store.latest_pages(act_id)
+        now = state(act_or_404(act_id))
         decision = body.get("decision")
         if decision not in {"approved", "revoked"}:
             raise HTTPException(422, "decision must be approved or revoked")
         materials = body.get("materials") or {}
         basis = str(body.get("rights_basis", "")).strip()[:2000]
         if decision == "approved":
-            ready = content.readiness(reading, latest)
+            ready = now["readiness"]
             if not ready["ready"]:
                 raise HTTPException(409, {"message": "Not ready for approval", "readiness": ready})
             if set(materials) != set(content.MATERIALS) or not all(materials.values()):
@@ -408,7 +432,8 @@ def create_app(
                 int(body.get("expected_revision", -1)),
                 who["email"],
                 decision=decision,
-                content_sha256=content.content_sha256(content.final_pages(reading, latest)),
+                content_sha256=now["content_sha256"],
+                details_sha256=now["details_sha256"],
                 rights_basis=basis,
                 materials={k: bool(v) for k, v in materials.items() if k in content.MATERIALS},
                 note=note,
@@ -421,21 +446,22 @@ def create_app(
     def export(request: Request, act_id: str):
         auth.current(request, store)
         act = act_or_404(act_id)
-        reading, latest = library.reading(act_id), store.latest_pages(act_id)
-        final = content.final_pages(reading, latest)
-        approvals = store.approvals(act_id)
-        head = approvals[0] if approvals else None
-        sha = content.content_sha256(final)
+        now = state(act)
+        head, record = now["head"], now["record"]
         return {
             "act": act,
-            "input_sha256": reading["input_sha256"],
-            "readers": {"primary": reading["primary"], "checks": reading["checks"]},
-            "content_sha256": sha,
-            "approved": bool(head and head["decision"] == "approved" and head["content_sha256"] == sha),
+            "input_sha256": now["reading"]["input_sha256"],
+            "readers": {"primary": now["reading"]["primary"], "checks": now["reading"]["checks"]},
+            "content_sha256": now["content_sha256"],
+            "details_sha256": now["details_sha256"],
+            "approved": now["approved"],
             "approval": {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in head.items()}
             if head
             else None,
-            "pages": final,
+            "details": {"details": record["details"], "absent": record["absent"], "status": record["status"]}
+            if record
+            else None,
+            "pages": now["final"],
         }
 
     @app.get("/api/documents/{act_id}/search")
@@ -535,24 +561,146 @@ def create_app(
         """The public site's page for a document, built from web/ (data comes from the API below)."""
         return FileResponse(STATIC / "public-preview" / "preview.html")
 
+    def current_details(act: dict, record: dict | None, reading: dict) -> dict:
+        """The saved details record, or a first draft from the document when none is saved yet."""
+        if record:
+            return {
+                "revision": record["revision"],
+                "status": record["status"],
+                "details": record["details"],
+                "absent": record["absent"],
+                "comment": record["comment"],
+                "author": record["author"],
+                "at": record["created_at"].isoformat(),
+            }
+        given, absent = details.initial(details.suggest(reading, act, library.manifest))
+        return {"revision": 0, "status": "suggested", "details": given, "absent": absent}
+
+    @app.get("/api/documents/{act_id}/details")
+    def document_details(request: Request, act_id: str):
+        auth.current(request, store)
+        act = act_or_404(act_id)
+        reading, record = library.reading(act_id), store.latest_details(act_id)
+        current = current_details(act, record, reading)
+        kind = act.get("type", "act")
+        return {
+            "standard": details.schema(),
+            "document_type": kind,
+            "record": current,
+            "suggestions": details.suggest(reading, act, library.manifest),
+            "missing": details.missing(current["details"], current["absent"], kind),
+            "history": [
+                {
+                    "revision": r["revision"],
+                    "status": r["status"],
+                    "author": r["author"],
+                    "at": r["created_at"].isoformat(),
+                    "comment": r["comment"],
+                }
+                for r in store.detail_history(act_id)
+            ],
+        }
+
+    @app.post("/api/documents/{act_id}/details")
+    def save_document_details(request: Request, act_id: str, body: dict = JSON_BODY):
+        """A new revision of the details; confirming needs every detail given or accounted for."""
+        who = auth.current(request, store, write=True, role="reviewer")
+        act = act_or_404(act_id)
+        status = body.get("status")
+        if status not in {"draft", "confirmed"}:
+            raise HTTPException(422, "status must be draft or confirmed")
+        try:
+            given, absent = details.validate(body.get("details") or {}, body.get("absent") or {})
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        if status == "confirmed":
+            gaps = details.missing(given, absent, act.get("type", "act"))
+            if gaps:
+                labels = [details.BY_KEY[key].label for key in gaps]
+                raise HTTPException(
+                    422, {"message": f"Give or account for: {', '.join(labels)}", "missing": gaps}
+                )
+        try:
+            revision = store.save_details(
+                act_id,
+                int(body.get("expected_revision", -1)),
+                who["email"],
+                details=given,
+                absent=absent,
+                status=status,
+                comment=str(body.get("comment", ""))[:2000],
+            )
+        except Conflict as error:
+            raise HTTPException(409, str(error)) from error
+        return {"revision": revision}
+
+    @app.get("/api/documents/{act_id}/original.pdf")
+    def original(request: Request, act_id: str):
+        auth.current(request, store)
+        act_or_404(act_id)
+        try:
+            path = library.original(act_id)
+        except FileNotFoundError as error:
+            raise HTTPException(404, "The original file is not in staging") from error
+        return FileResponse(path, media_type="application/pdf", filename=f"{act_id}.pdf")
+
     @app.get("/api/documents/{act_id}/public-preview")
     def public_preview(request: Request, act_id: str):
         auth.current(request, store)
         act = act_or_404(act_id)
-        reading, latest = library.reading(act_id), store.latest_pages(act_id)
-        final = content.final_pages(reading, latest)
-        sha = content.content_sha256(final)
-        approvals = store.approvals(act_id)
-        head = approvals[0] if approvals else None
-        pages = content.public_pages(final, latest)
+        now = state(act)
+        reading, latest, head = now["reading"], now["latest"], now["head"]
+        pages = content.public_pages(now["final"], latest)
+        provenance = library.provenance(act_id)
+        checked_by = {r["author"] for r in latest.values() if r["status"] == "checked"}
+        named = store.names(checked_by | ({head["author"]} if head else set()))
+        quoted = f"/api/documents/{quote(act_id)}"
         return {
             "source": content.public_source(act, library.manifest),
-            "pages": pages,
-            "content_sha256": sha,
-            "status": {
-                "approved": bool(head and head["decision"] == "approved" and head["content_sha256"] == sha),
+            "details": current_details(act, now["record"], reading),
+            "provenance": {
+                "retrieved_from": provenance.get("url") or act.get("url"),
+                "retrieved_at": provenance.get("retrieved_at"),
+                "original_sha256": provenance.get("sha256") or reading.get("input_sha256"),
+                "bytes": provenance.get("bytes"),
+                "media_type": act.get("media_type", "application/pdf"),
+                "pages": len(pages),
+                "collection": library.manifest.get("description", ""),
+                "retrieval_note": library.manifest.get("retrieval_mirror", ""),
+                "rights_basis": library.manifest.get("rights_basis", ""),
+            },
+            "review": {
+                "readers": content.reader_names(reading),
                 "pages": len(pages),
                 "checked_pages": sum(page["checked"] for page in pages),
+                "reviewers": sorted({named.get(email, "a reviewer") for email in checked_by}),
+                "approval": {
+                    "decision": head["decision"],
+                    "by": named.get(head["author"], "an approver"),
+                    "at": head["created_at"].isoformat(),
+                    "current": now["approved"],
+                }
+                if head
+                else None,
+            },
+            "pages": pages,
+            "content_sha256": now["content_sha256"],
+            "details_sha256": now["details_sha256"],
+            "downloads": [
+                {"label": "Text", "format": "TXT", "href": f"{quoted}/text"},
+                {"label": "Akoma Ntoso", "format": "XML", "href": f"{quoted}/akn"},
+                {
+                    "label": "Original",
+                    "format": "PDF",
+                    "href": f"{quoted}/original.pdf",
+                    "note": "On the public site only if the rights review allows",
+                },
+            ],
+            "status": {
+                "approved": now["approved"],
+                "pages": len(pages),
+                "checked_pages": sum(page["checked"] for page in pages),
+                "details": now["readiness"]["details"],
             },
         }
 
@@ -560,8 +708,14 @@ def create_app(
     def akn_export(request: Request, act_id: str):
         auth.current(request, store)
         act = act_or_404(act_id)
-        final = content.final_pages(library.reading(act_id), store.latest_pages(act_id))
-        xml = akn.build(act, final, content.content_sha256(final))
+        now = state(act)
+        xml = akn.build(
+            act,
+            now["final"],
+            now["content_sha256"],
+            record=now["record"],
+            details_sha256=now["details_sha256"],
+        )
         return Response(
             xml,
             media_type="application/akn+xml",
