@@ -16,6 +16,7 @@ import os
 import re
 import sys
 import time
+import unicodedata
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import unquote
@@ -47,25 +48,59 @@ SOURCES = {
 
 KINDS = {
     "ol": "organic_law",
+    "orl": "organic_law",
     "law": "law",
+    "loi": "law",
+    "loiorganique": "organic_law",
+    "organiclaw": "organic_law",
     "po": "presidential_order",
+    "ap": "presidential_order",  # arrêté présidentiel
+    "arretepresidentiel": "presidential_order",
+    "presidentialorder": "presidential_order",
     "pmo": "prime_ministers_order",
+    "primeministersorder": "prime_ministers_order",
     "mo": "ministerial_order",
+    "am": "ministerial_order",  # arrêté ministériel
+    "arreteministeriel": "ministerial_order",
+    "ministerialorder": "ministerial_order",
     "reg": "regulations",
     "regul": "regulations",
     "regulation": "regulations",
+    "regulations": "regulations",
     "re": "practice_direction",
     "dl": "decree_law",
+    "decretloi": "decree_law",
     "decree": "decree",
+    "decret": "decree",
     "ordonnance": "ordinance",
+    "ordonnanceloi": "ordinance",
+    "ordonnancelegislative": "ordinance",
     "instructions": "instructions",
     "instruction": "instructions",
 }
+_KIND_WORDS = (
+    r"Organic\s+Law|Loi\s+organique|Presidential\s+Order|Prime\s+Minister'?\s?s?\s+Order|Ministerial\s+Order"
+    r"|Arr[êe]t[ée]\s+pr[ée]sidentiel|Arr[êe]t[ée]\s+minist[ée]riel|D[ée]cret[- ]loi"
+    r"|Ordonnance(?:[- ]loi|\s+l[ée]gislative)?|ORL|OL|O\.\s?L|Law|Loi|P\.?\s?O|PMO|M\.?\s?O|A\.?\s?P|A\.?\s?M|REG|Regul"
+    r"|Regulations?|RE|D\.?\s?L|Decree|D[ée]cret|Instructions?"
+)
 INSTRUMENT = re.compile(
-    r"\b(OL|Law|PO|PMO|MO|REG|Regul|Regulation|RE|D\s?L|Decree|Ordonnance|Instructions?)\b\.?\s*"
-    r"(?:n0|no|nº|n°|n)\.?\s*([0-9][0-9A-Za-z./-]*)",
+    rf"\b({_KIND_WORDS})\b\.?\s*(?:n0|no|nº|n°|n)\.?\s*([0-9][0-9A-Za-z./-]*)",
     re.I,
 )
+INSTRUMENT_WITHOUT_NUMBER = re.compile(rf"\b({_KIND_WORDS})\b", re.I)
+TREATY = re.compile(
+    r"\b(convention|protocol|protocole|treaty|trait[ée]|charter|charte|agreement|accord|memorandum|amendment)",
+    re.I,
+)
+TREATY_KINDS = {"protocole": "protocol", "traité": "treaty", "traite": "treaty", "charte": "charter"}
+
+
+def _kind_key(word: str) -> str:
+    plain = unicodedata.normalize("NFKD", word).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z]", "", plain)
+
+
 OF_DATE = re.compile(r"\bof\s*(?:(\d{1,2})\s+(\d{1,2})\s+)?((?:19|20)\d\d)\b", re.I)
 
 
@@ -92,11 +127,26 @@ def parse_rlrc(name: str, folder: str) -> dict:
     if re.search(r"\bconstitution\b", text, re.I) and not INSTRUMENT.search(text):
         out["kind"] = "constitution"
     instrument = INSTRUMENT.search(text)
+    if out.get("status") == "international":
+        treaty = TREATY.search(text)
+        word = treaty.group(1).lower() if treaty else "agreement"
+        out["kind"] = TREATY_KINDS.get(
+            word, {"accord": "agreement", "memorandum": "agreement", "amendment": "protocol"}.get(word, word)
+        )
+        instrument = None
+    elif not instrument and "kind" not in out:
+        bare = INSTRUMENT_WITHOUT_NUMBER.search(text)
+        if bare and _kind_key(bare.group(1)) in KINDS:
+            out["kind"] = KINDS[_kind_key(bare.group(1))]
     if instrument:
-        out["kind"] = KINDS.get(instrument.group(1).lower().replace(" ", ""), instrument.group(1).lower())
+        out["kind"] = KINDS.get(_kind_key(instrument.group(1)), instrument.group(1).lower())
         out["number"] = instrument.group(2).strip(".-")
         if re.search(r"[./-]OL$", out["number"], re.I):  # "01-2012-OL", "001/2026.OL": an organic law
             out["kind"] = "organic_law"
+        if out["kind"] == "organic_law" and re.search(r"B\.?O\.?R\.?U|\b19[1-5]\d\b", text):
+            out["kind"] = (
+                "ordinance"  # "O.L." in the Bulletin Officiel du Ruanda-Urundi: ordonnance législative
+            )
         rest = text[instrument.end() :]
         dated = OF_DATE.match(rest.strip()) or OF_DATE.search(rest[:40])
         if dated:

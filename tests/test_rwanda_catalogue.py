@@ -305,3 +305,25 @@ def test_every_kind_read_from_an_rlrc_name_is_a_kind_of_the_common_record():
 
     kinds = {kind for _, listed in FAMILIES.values() for kind in listed}
     assert set(rwanda.KINDS.values()) <= kinds, set(rwanda.KINDS.values()) - kinds
+
+
+def test_rlrc_names_of_every_era_and_kind_give_their_kind():
+    folder = "/user_upload/RLRC/Laws_of_Rwanda_v2/Domestic_laws/Repealed_laws/10._Business/10.4._Insurance/"
+    cases = {
+        "10.4.1.1._DECRET-LOI_NO_20-75-1975__RELATIF_AUX_ASSURANCES-J.O._NO_13-1.7.1975.pdf": "decree_law",
+        "4.1.2._D.L._N0_22-81-1981MODIFIANT_L_ARTICLE_135.pdf": "decree_law",
+        "10.16.2.12._O.L._N0_69_173___Regime_postal-BORU_N0_14_31.7.1960.pdf": "ordinance",
+        "9.7.12_ORDONNANCE_LEGISLATIVE_N___22383_DU_11_DECEMBRE_1956.pdf": "ordinance",
+        "10.4.2.8._Financement_du_fond_de_garantie__AM_no_11-05_de_1975.pdf": "ministerial_order",
+        "7.12.1.20._RDF__special_statute_P.O_no_044.01_of_2020.pdf": "presidential_order",
+        "10.17.3._Prime_Minister_s_Order_determining_the_Regulatory_authority__n___028-03_of_2024": "prime_ministers_order",
+        "7.11.4.1.9._Governing_Public_Inst__AMEND_ORL_No_092012OL_of_2012.pdf": "organic_law",
+    }
+    for name, kind in cases.items():
+        assert rwanda.parse_rlrc(name, folder)["kind"] == kind, name
+    treaties = "/user_upload/RLRC/Laws_of_Rwanda_v2/International_Legal_Instruments__ILI_/Multilateral/x/"
+    assert rwanda.parse_rlrc("10.12.2._Berne_Convention_for_protection.pdf", treaties)["kind"] == "convention"
+    assert (
+        rwanda.parse_rlrc("Accord_commercial_entre_la_Republique_Rwandaise.pdf", treaties)["kind"]
+        == "agreement"
+    )
