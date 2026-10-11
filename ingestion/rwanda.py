@@ -22,7 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import unquote
 
-from ingestion import filelist, gazette_layout, rw_gazette
+from ingestion import filelist, gazette_layout, ruled_tables, rw_gazette
 from ingestion.pipeline import MAX_BYTES
 from ingestion.sync import Ledger, now, stamp
 
@@ -430,7 +430,9 @@ def prepare_selection(selection: dict, log=print) -> dict:
         sha = record["sha256"]
         pdf = STAGING / "sources" / record["source"] / f"{sha}.pdf"
         sidecar = json.loads(pdf.with_suffix(".json").read_text())
-        split = rw_gazette.split_issue(gazette_layout.text_layer(pdf))
+        words = gazette_layout.text_layer(pdf)
+        layouts = [len(gazette_layout.columns(page)) for page in words]
+        split = rw_gazette.split_issue(words, ruled_tables.document_tables(pdf, words, layouts))
         streams = rw_gazette.streams(split)
         furniture = {page["page"]: [line["text"] for line in page["furniture"]] for page in split}
         if record["source"] == "minijust-gazette":

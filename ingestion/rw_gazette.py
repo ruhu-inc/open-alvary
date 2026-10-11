@@ -155,7 +155,7 @@ def lines_of(words: list[dict]) -> list[dict]:
     return out
 
 
-def split_page(page: dict, number: int, carried: str | None = None) -> dict:
+def split_page(page: dict, number: int, carried: str | None = None, tables: list[dict] | None = None) -> dict:
     """A page's columns, each with its language and lines; running headers set apart as furniture."""
     spans = gazette_layout.columns(page)
     furniture, columns = [], []
@@ -163,12 +163,25 @@ def split_page(page: dict, number: int, carried: str | None = None) -> dict:
     # Each word to the column it lies in, or the nearest: a word alone at a column's edge (an
     # "Article" set a little apart) can fall in what the measure took for the gutter.
     by_column: list[list[dict]] = [[] for _ in spans]
+    in_tables = {id(w) for table in tables or [] for w in table["words"]}
     for word in page["words"]:
+        if id(word) in in_tables:
+            continue
         centre = (word["xmin"] + word["xmax"]) / 2
         if spans:
             distance = [0 if a <= centre < b else min(abs(centre - a), abs(centre - b)) for a, b in spans]
             by_column[distance.index(min(distance))].append(word)
-    for (x0, x1), inside in zip(spans, by_column, strict=True):
+
+    def nearest(centre: float) -> int:
+        distance = [0 if a <= centre < b else min(abs(centre - a), abs(centre - b)) for a, b in spans]
+        return distance.index(min(distance))
+
+    home = (
+        {id(table): nearest((table["box"][0] + table["box"][2]) / 2) for table in tables or []}
+        if spans
+        else {}
+    )
+    for index, ((x0, x1), inside) in enumerate(zip(spans, by_column, strict=True)):
         kept = []
         for line in lines_of(inside):
             # Running headers sit in the top tenth; page numbers lower than one might think (about 0.9).
@@ -177,6 +190,20 @@ def split_page(page: dict, number: int, carried: str | None = None) -> dict:
                 furniture.append(line)
             else:
                 kept.append(line)
+        for table in tables or []:
+            tx0, ty0, tx1, ty1 = table["box"]
+            if home.get(id(table)) == index:
+                kept.append(
+                    {
+                        "text": "",
+                        "table": {k: table[k] for k in ("header_rows", "body_rows")},
+                        "x0": round(tx0, 1),
+                        "y0": round(ty0, 1),
+                        "x1": round(tx1, 1),
+                        "y1": round(ty1, 1),
+                    }
+                )
+        kept.sort(key=lambda line: line["y0"])
         language, _ = gazette_layout.language([line["text"] for line in kept])
         columns.append(
             {"language": language or carried, "x0": round(x0, 1), "x1": round(x1, 1), "lines": kept}
@@ -199,10 +226,12 @@ def split_page(page: dict, number: int, carried: str | None = None) -> dict:
     }
 
 
-def split_issue(pages: list[dict]) -> list[dict]:
+def split_issue(pages: list[dict], tables: dict[int, list[dict]] | None = None) -> list[dict]:
+    """Every page split; `tables` are the ruled tables found on each page (ruled_tables), whose
+    words then come out as tables and not as lines of text."""
     out, carried = [], None
     for number, page in enumerate(pages, 1):
-        split = split_page(page, number, carried)
+        split = split_page(page, number, carried, (tables or {}).get(number))
         languages = [c["language"] for c in split["columns"] if c["language"]]
         carried = languages[-1] if languages else carried
         out.append(split)
@@ -336,6 +365,12 @@ def structure(lines: list[dict], language: str) -> list[dict]:
     part = "heading"
     previous = None
     for line in lines:
+        if line.get("table"):
+            nodes.append(
+                {"kind": "table", "caption": "", **line["table"], "page": line["page"], "lines": [line]}
+            )
+            previous = line
+            continue
         text = line["text"].strip()
         if not text:
             continue
@@ -436,8 +471,13 @@ def structure(lines: list[dict], language: str) -> list[dict]:
             nodes.append(node)
         previous = line
     for node in nodes:
-        node["text"] = re.sub(r"\s+", " ", node["text"]).strip()
+        if node["kind"] != "table":
+            node["text"] = re.sub(r"\s+", " ", node["text"]).strip()
     return nodes
+
+
+def table_cells(node: dict) -> list[str]:
+    return [cell["text"] for row in node.get("header_rows", []) + node.get("body_rows", []) for cell in row]
 
 
 def article_numbers(nodes: list[dict]) -> list[str]:
@@ -557,7 +597,12 @@ def reading(
     for number in sorted(pages):
         flags, position, page_nodes = [], 0, []
         for node in pages[number]:
-            marker, words = _tokens(node.get("marker")), _tokens(node["text"])
+            marker = _tokens(node.get("marker"))
+            words = (
+                sum(_tokens(cell) for cell in table_cells(node)) + _tokens(node.get("caption"))
+                if node["kind"] == "table"
+                else _tokens(node["text"])
+            )
             for flag in node.get("flags", []):
                 if flag["kind"] == "not_aligned" and flag.get("missing"):
                     span = [position, position]
@@ -589,7 +634,11 @@ def reading(
             {
                 "page": number,
                 "nodes": page_nodes,
-                "text": "\n".join(n["text"] for n in page_nodes if n["kind"] != "furniture"),
+                "text": "\n".join(
+                    " ".join(table_cells(n)) if n["kind"] == "table" else n["text"]
+                    for n in page_nodes
+                    if n["kind"] != "furniture"
+                ),
                 "tables": [],
                 "furniture": furniture_by_page.get(number, []),
                 "flags": flags,
@@ -600,7 +649,12 @@ def reading(
                     {
                         "regions": [
                             {
-                                "text": " ".join(filter(None, [node.get("marker"), node["text"]])),
+                                "text": " ".join(
+                                    filter(
+                                        None,
+                                        [node.get("marker"), node.get("text") or " ".join(table_cells(node))],
+                                    )
+                                ),
                                 "role": None,
                                 "box": _box(
                                     [ln for ln in node["lines"] if ln["page"] == number], sizes[number]
@@ -613,7 +667,7 @@ def reading(
                             {"text": ln["text"], "box": _box([ln], sizes[number])}
                             for node in pages[number]
                             for ln in node.get("lines", [])
-                            if ln["page"] == number
+                            if ln["page"] == number and not ln.get("table")
                         ],
                     }
                     if sizes and number in sizes
