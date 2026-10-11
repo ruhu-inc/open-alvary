@@ -744,6 +744,12 @@ def create_app(
         document = built(act, view)
         return {
             "source": content.public_source(act, library.manifest_for(act_id)),
+            # The other language versions of the same law (Rwanda prints three), for the switcher.
+            "versions": [
+                {"language": language, "id": other, "title": library.act(other)["title"]}
+                for language, other in (act.get("versions") or {}).items()
+                if any(d["id"] == other for d in library.documents())
+            ],
             "details": current_details(now["record"], view),
             "record": document.model_dump(mode="json") if document else None,
             "making": [

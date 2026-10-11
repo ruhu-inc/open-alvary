@@ -481,6 +481,7 @@ def public_source(document: dict, manifest: dict) -> dict:
         "rights_status": "RIGHTS_UNDER_REVIEW",
         "catalogue_note": manifest.get("description", ""),
         "has_full_text": True,
+        **({"language": document["language"]} if document.get("language") else {}),
     }
 
 

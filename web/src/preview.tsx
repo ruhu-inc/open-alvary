@@ -16,6 +16,7 @@ import {
   SiteFooter,
   SiteHeader,
   SourceRow,
+  type LanguageVersion,
   type Source,
 } from "./site";
 import { DocumentPage, type DocumentPageContent } from "./document";
@@ -40,6 +41,7 @@ type Preview = {
   content_sha256: string;
   details_sha256: string | null;
   downloads: DownloadLink[];
+  versions: LanguageVersion[];
   status: {
     approved: boolean;
     pages: number;
@@ -285,6 +287,10 @@ function Preview() {
         approved={preview.status.approved}
         linkTo={linkTo}
         markUnchecked={markUnchecked}
+        versions={preview.versions}
+        versionHref={(id) =>
+          `/preview/${encodeURIComponent(id)}#/sources/${encodeURIComponent(id)}`
+        }
       />
     );
   else if (pathname === "/browse" || pathname === "/" || !pathname)
