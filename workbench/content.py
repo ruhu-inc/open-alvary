@@ -29,24 +29,64 @@ MATERIALS = {
 }
 
 
+COLLECTION_ID = re.compile(r"[a-z]{2}-[a-z0-9-]{3,120}")
+
+
+def extra_collections() -> list[tuple[dict, Path]]:
+    """Further collections to review beside the first, each a folder holding its manifest.json and
+    its documents' readings and PDFs, named in ALVARY_REVIEW_COLLECTIONS (separated by the path
+    separator). A document id must be a plain slug, so no file outside its folder is reached."""
+    out = []
+    for folder in filter(None, os.environ.get("ALVARY_REVIEW_COLLECTIONS", "").split(os.pathsep)):
+        staging = Path(folder)
+        manifest = json.loads((staging / "manifest.json").read_text())
+        for document in manifest["documents"]:
+            if not COLLECTION_ID.fullmatch(document["id"]):
+                raise ValueError(f"Invalid document id in {staging}: {document['id']!r}")
+        out.append((manifest, staging))
+    return out
+
+
+def render_fonts() -> list[str]:
+    """Fonts lent to the renderer, read-only: PDFs that do not embed their fonts (Times New Roman,
+    Arial) render almost blank without them. ALVARY_RENDER_FONTS names a folder of font files;
+    by default private-staging/fonts is used when present."""
+    folder = os.environ.get("ALVARY_RENDER_FONTS") or str(first_collection.ROOT / "private-staging" / "fonts")
+    return ["-v", f"{folder}:/usr/share/fonts/lent:ro"] if Path(folder).is_dir() else []
+
+
 class Library:
-    """The collection's Acts and their reconciled readings in private staging."""
+    """The collections' documents and their reconciled readings in private staging."""
 
     def __init__(self, staging: Path | None = None):
         self.staging = Path(staging or os.environ.get("ALVARY_REVIEW_STAGING") or first_collection.STAGING)
         self.manifest = first_collection.load_manifest()
+        self.collections = [(self.manifest, self.staging), *extra_collections()]
 
     def documents(self) -> list[dict]:
-        """Documents of any type in the collection that have a reconciled reading."""
+        """Documents of any type in the collections that have a reconciled reading."""
         return [
             {
                 **document,
-                "jurisdiction": self.manifest.get("jurisdiction"),
-                "collection": self.manifest.get("collection"),
+                "jurisdiction": document.get("jurisdiction") or manifest.get("jurisdiction"),
+                "collection": manifest.get("collection"),
             }
-            for document in self.manifest["documents"]
-            if (self.staging / f"{document['id']}.reading.json").exists()
+            for manifest, staging in self.collections
+            for document in manifest["documents"]
+            if (staging / f"{document['id']}.reading.json").exists()
         ]
+
+    def _where(self, act_id: str) -> tuple[dict, Path]:
+        for manifest, staging in self.collections:
+            if any(document["id"] == act_id for document in manifest["documents"]):
+                return manifest, staging
+        raise KeyError(act_id)
+
+    def manifest_for(self, act_id: str) -> dict:
+        return self._where(act_id)[0]
+
+    def staging_for(self, act_id: str) -> Path:
+        return self._where(act_id)[1]
 
     def act(self, act_id: str) -> dict:
         found = next((a for a in self.documents() if a["id"] == act_id), None)
@@ -56,24 +96,25 @@ class Library:
 
     def provenance(self, act_id: str) -> dict:
         """How and when the original file was retrieved (written by the fetch step)."""
-        path = self.staging / f"{act_id}.provenance.json"
+        path = self.staging_for(act_id) / f"{act_id}.provenance.json"
         return json.loads(path.read_text()) if path.exists() else {}
 
     def original(self, act_id: str) -> Path:
         self.act(act_id)
-        path = self.staging / f"{act_id}.pdf"
+        path = self.staging_for(act_id) / f"{act_id}.pdf"
         if not path.exists():
             raise FileNotFoundError(act_id)
         return path
 
     def reading(self, act_id: str) -> dict:
         self.act(act_id)
-        return json.loads((self.staging / f"{act_id}.reading.json").read_text())
+        return json.loads((self.staging_for(act_id) / f"{act_id}.reading.json").read_text())
 
     def image(self, act_id: str, page: int) -> Path:
         """A legible page image (150 dpi), rendered once in the sealed tools container."""
         self.act(act_id)
-        folder = self.staging / "review-images" / act_id
+        staging = self.staging_for(act_id)
+        folder = staging / "review-images" / act_id
         path = folder / f"page-{page}.jpg"
         if not path.exists():
             if not shutil.which("docker"):
@@ -95,8 +136,11 @@ class Library:
                     "ALL",
                     "--user",
                     f"{os.getuid()}:{os.getgid()}",
+                    "-e",
+                    "HOME=/tmp",
+                    *render_fonts(),
                     "-v",
-                    f"{self.staging}:/in:ro",
+                    f"{staging}:/in:ro",
                     "-v",
                     f"{folder}:/out",
                     first_collection.OCR_IMAGE,
@@ -110,11 +154,21 @@ class Library:
         return path
 
 
-def regions(staging: Path, act_id: str, page: int) -> list[dict]:
-    """Paragraph boxes on the page image (fractions of the page), from the positional check reader."""
-    path = staging / "readings" / act_id / "azure.json"
+def _from_reading(staging: Path, act_id: str, page: int, key: str) -> list[dict]:
+    """Boxes a reading carries itself (a text-layer reading knows where every unit and line is)."""
+    path = staging / f"{act_id}.reading.json"
     if not path.exists():
         return []
+    found = next((p for p in json.loads(path.read_text())["pages"] if p["page"] == page), None)
+    return list(found.get(key) or []) if found else []
+
+
+def regions(staging: Path, act_id: str, page: int) -> list[dict]:
+    """Paragraph boxes on the page image (fractions of the page), from the positional check reader,
+    or from the reading itself when it was taken from the text layer."""
+    path = staging / "readings" / act_id / "azure.json"
+    if not path.exists():
+        return _from_reading(staging, act_id, page, "regions")
     analyze = json.loads(path.read_text()).get("raw", {}).get("analyze") or {}
     size = next(
         (
@@ -144,10 +198,11 @@ def regions(staging: Path, act_id: str, page: int) -> list[dict]:
 
 
 def lines(staging: Path, act_id: str, page: int) -> list[dict]:
-    """Printed lines on the page image (fractions of the page), from the positional check reader."""
+    """Printed lines on the page image (fractions of the page), from the positional check reader,
+    or from the reading itself when it was taken from the text layer."""
     path = staging / "readings" / act_id / "azure.json"
     if not path.exists():
-        return []
+        return _from_reading(staging, act_id, page, "lines")
     analyze = json.loads(path.read_text()).get("raw", {}).get("analyze") or {}
     found = next((p for p in analyze.get("pages") or [] if p.get("pageNumber") == page), None)
     if not found or not found.get("width") or not found.get("height"):

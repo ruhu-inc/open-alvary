@@ -148,19 +148,33 @@ def create_app(
 
     profiles = jurisdiction_registry()
 
+    def details_key(document: dict) -> str:
+        """Whose details these are: the work, shared by its language versions (Rwanda's three
+        texts of one law), or the document itself."""
+        return document.get("work") or document["id"]
+
     def described(act: dict, record: dict | None, reading: dict) -> dict:
         """The document's details in the record view: values, what is accounted for, its fields."""
-        place, profile = record_view.place_for(act, library.manifest, profiles)
+        place, profile = record_view.place_for(act, library.manifest_for(act["id"]), profiles)
         if record:
             values, absent = record["details"], record["absent"]
             if not record_view.is_view(values):  # saved under the Nigerian DETAILS-1: read it in this view
                 values, absent = record_view.from_legacy(values, absent)
         elif place.code == "ng":
             values, absent = record_view.from_legacy(
-                *details.initial(details.suggest(reading, act, library.manifest))
+                *details.initial(details.suggest(reading, act, library.manifest_for(act["id"])))
             )
         else:
-            values, absent = record_view.base_values(act, library.manifest), {}
+            values, absent = record_view.base_values(act, library.manifest_for(act["id"])), {}
+        if act.get("language") and isinstance(values.get("expressions"), list):
+            # One record for the work; each language version is "this text" on its own page.
+            values = {
+                **values,
+                "expressions": [
+                    {**row, "this_text": "yes" if row.get("language") == act["language"] else "no"}
+                    for row in values["expressions"]
+                ],
+            }
         family, kind = values["identity.family"], values["identity.type"]
         specs = record_view.fields(family, kind, profile)
         return {
@@ -192,7 +206,7 @@ def create_app(
         and whether the latest approval still covers both exactly."""
         reading, latest = library.reading(document["id"]), store.latest_pages(document["id"])
         final = content.final_pages(reading, latest)
-        record = store.latest_details(document["id"])
+        record = store.latest_details(details_key(document))
         view = described(document, record, reading)
         sha, details_sha = content.content_sha256(final), content.details_sha256(record)
         approvals = store.approvals(document["id"])
@@ -344,7 +358,7 @@ def create_app(
                 }
             )
         return {
-            "act": {**act, "rights_basis": library.manifest.get("rights_basis", "")},
+            "act": {**act, "rights_basis": library.manifest_for(act_id).get("rights_basis", "")},
             "readers": {"primary": reading["primary"], "checks": reading["checks"]},
             "pages": pages,
             "readiness": now["readiness"],
@@ -371,8 +385,8 @@ def create_app(
             "machine_html": content.machine_html(found),
             "flags": content.page_flags(found),
             "checks": found["checks"],
-            "regions": content.regions(library.staging, act_id, page),
-            "lines": content.lines(library.staging, act_id, page),
+            "regions": content.regions(library.staging_for(act_id), act_id, page),
+            "lines": content.lines(library.staging_for(act_id), act_id, page),
             "reading_sha256": content.reading_sha256(found),
             "latest": {
                 "revision": latest["revision"],
@@ -634,10 +648,10 @@ def create_app(
     def document_details(request: Request, act_id: str):
         auth.current(request, store)
         act = act_or_404(act_id)
-        reading, record = library.reading(act_id), store.latest_details(act_id)
+        reading, record = library.reading(act_id), store.latest_details(details_key(act))
         view = described(act, record, reading)
         suggestions = (
-            record_view.suggestions_view(details.suggest(reading, act, library.manifest))
+            record_view.suggestions_view(details.suggest(reading, act, library.manifest_for(act_id)))
             if view["place"].code == "ng"
             else {}
         )
@@ -656,7 +670,7 @@ def create_app(
                     "at": r["created_at"].isoformat(),
                     "comment": r["comment"],
                 }
-                for r in store.detail_history(act_id)
+                for r in store.detail_history(details_key(act))
             ],
         }
 
@@ -674,7 +688,7 @@ def create_app(
         kind = submitted.get("identity.type")
         if family not in R.FAMILIES or kind not in R.FAMILIES[family][1]:
             raise HTTPException(422, "Choose the document's family and a kind within it")
-        place, profile = record_view.place_for(act, library.manifest, profiles)
+        place, profile = record_view.place_for(act, library.manifest_for(act_id), profiles)
         specs = record_view.fields(family, kind, profile)
         try:
             given, absent = record_view.validate(submitted, body.get("absent") or {}, specs)
@@ -693,7 +707,7 @@ def create_app(
                 raise HTTPException(422, {"message": f"The record does not validate: {error}"}) from error
         try:
             revision = store.save_details(
-                act_id,
+                details_key(act),
                 int(body.get("expected_revision", -1)),
                 who["email"],
                 details=given,
@@ -729,7 +743,7 @@ def create_app(
         view = now["view"]
         document = built(act, view)
         return {
-            "source": content.public_source(act, library.manifest),
+            "source": content.public_source(act, library.manifest_for(act_id)),
             "details": current_details(now["record"], view),
             "record": document.model_dump(mode="json") if document else None,
             "making": [
@@ -755,9 +769,9 @@ def create_app(
                 "bytes": provenance.get("bytes"),
                 "media_type": act.get("media_type", "application/pdf"),
                 "pages": len(pages),
-                "collection": library.manifest.get("description", ""),
-                "retrieval_note": library.manifest.get("retrieval_mirror", ""),
-                "rights_basis": library.manifest.get("rights_basis", ""),
+                "collection": library.manifest_for(act_id).get("description", ""),
+                "retrieval_note": library.manifest_for(act_id).get("retrieval_mirror", ""),
+                "rights_basis": library.manifest_for(act_id).get("rights_basis", ""),
             },
             "review": {
                 "readers": content.reader_names(reading),

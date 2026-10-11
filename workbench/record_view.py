@@ -1079,6 +1079,18 @@ def base_values(document: dict, manifest: dict) -> dict:
     }
     if document.get("year"):
         values["identity.year"] = str(document["year"])
+    # Details read from the document itself by its collection's extractor (Rwanda's gazette reader).
+    suggested = {k: v for k, v in (document.get("suggested") or {}).items() if v not in (None, "", [])}
+    if (
+        suggested.get("identity.family") in R.FAMILIES
+        and suggested.get("identity.type") in R.FAMILIES[suggested["identity.family"]][1]
+    ):
+        values.update(suggested)
+    if document.get("language") and isinstance(values.get("expressions"), list):
+        values["expressions"] = [
+            {**row, "this_text": "yes" if row.get("language") == document["language"] else "no"}
+            for row in values["expressions"]
+        ]
     return {k: v for k, v in values.items() if v}
 
 

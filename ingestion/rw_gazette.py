@@ -31,15 +31,15 @@ FURNITURE = re.compile(
 OPENING = {
     "rw": re.compile(
         r"^(ITEGEKO NGENGA|ITEGEKO|ITEKA RYA PEREZIDA|ITEKA RYA MINISITIRI W[’']INTEBE|ITEKA RYA MINISITIRI"
-        r"|AMABWIRIZA)\s+N[°ºO0]\.?\s*(\S+)"
+        r"|AMABWIRIZA)\s+N\s?[°ºO0]\.?\s*(\S+)"
     ),
     "en": re.compile(
         r"^(ORGANIC LAW|LAW|PRESIDENTIAL ORDER|PRIME MINISTER[’']S ORDER|MINISTERIAL ORDER|REGULATIONS?"
-        r"|INSTRUCTIONS?)\s+N[°ºO0]\.?\s*(\S+)"
+        r"|INSTRUCTIONS?)\s+N\s?[°ºO0]\.?\s*(\S+)"
     ),
     "fr": re.compile(
         r"^(LOI ORGANIQUE|LOI|ARR[ÊE]T[ÉE] PR[ÉE]SIDENTIEL|ARR[ÊE]T[ÉE] DU PREMIER MINISTRE"
-        r"|ARR[ÊE]T[ÉE] MINIST[ÉE]RIEL|R[ÈE]GLEMENTS?|INSTRUCTIONS?)\s+N[°ºO0]\.?\s*(\S+)"
+        r"|ARR[ÊE]T[ÉE] MINIST[ÉE]RIEL|R[ÈE]GLEMENTS?|INSTRUCTIONS?)\s+N\s?[°ºO0]\.?\s*(\S+)"
     ),
 }
 # A constitution is printed without a number.
@@ -312,8 +312,6 @@ def structure(lines: list[dict], language: str) -> list[dict]:
     and their paragraphs (a paragraph ends where the line spacing opens up)."""
     nodes: list[dict] = []
     part = "heading"
-    gaps = [b["y0"] - a["y1"] for a, b in zip(lines, lines[1:], strict=False) if a["page"] == b["page"]]
-    usual = statistics.median([g for g in gaps if g > 0] or [2.0])
     previous = None
     for line in lines:
         text = line["text"].strip()
@@ -321,13 +319,17 @@ def structure(lines: list[dict], language: str) -> list[dict]:
             continue
         if part == "heading" and CONTENTS.match(text):
             part = "contents"
-            nodes.append({"kind": "heading", "level": "heading-1", "text": text, "page": line["page"]})
+            nodes.append(
+                {"kind": "heading", "level": "heading-1", "text": text, "page": line["page"], "lines": [line]}
+            )
             previous = line
             continue
         if part in ("heading", "contents") and PREAMBLE.match(text):
             part = "body"
         if part == "contents" and (OPENING[language].match(text) or CONSTITUTION[language].match(text)):
-            nodes.append({"kind": "heading", "level": "heading-1", "text": text, "page": line["page"]})
+            nodes.append(
+                {"kind": "heading", "level": "heading-1", "text": text, "page": line["page"], "lines": [line]}
+            )
             previous = line
             continue
         node = None
@@ -357,23 +359,41 @@ def structure(lines: list[dict], language: str) -> list[dict]:
                             "page": line["page"],
                         }
                         break
+        # Lines of one paragraph sit 0 to 3 pt apart, paragraphs 14 pt or more: a gap under
+        # seven tenths of the line's own height continues the paragraph.
+        close = (
+            previous is not None
+            and previous["page"] == line["page"]
+            and line["y0"] - previous["y1"] < 0.7 * (line["y1"] - line["y0"])
+        )
         if node is None:
-            joins = (
-                nodes
-                and previous is not None
-                and nodes[-1]["kind"] == "paragraph"
-                and previous["page"] == line["page"]
-                and line["y0"] - previous["y1"] <= usual * 1.8
+            last = nodes[-1] if nodes else None
+            # A heading's title, a division's name or a contents entry that wraps onto the next line.
+            wraps = (
+                last is not None
+                and close
+                and last["kind"] in ("heading", "list_item")
+                and last["lines"][-1] is previous
+                and (
+                    last.get("division")
+                    or (last.get("article") and last["text"])
+                    or last["kind"] == "list_item"
+                )
             )
-            if part == "heading" and nodes and nodes[-1]["kind"] == "heading":
-                nodes[-1]["text"] += " " + text
-            elif joins:
-                nodes[-1]["text"] += " " + text
+            if part == "heading" and last is not None and last["kind"] == "heading":
+                last["text"] += " " + text
+                last["lines"].append(line)
+            elif wraps or (last is not None and last["kind"] == "paragraph" and close):
+                last["text"] += " " + text
+                last["lines"].append(line)
             else:
                 kind = "heading" if part == "heading" else "paragraph"
                 level = "heading-1" if part == "heading" else "paragraph"
-                nodes.append({"kind": kind, "level": level, "text": text, "page": line["page"]})
+                nodes.append(
+                    {"kind": kind, "level": level, "text": text, "page": line["page"], "lines": [line]}
+                )
         else:
+            node["lines"] = [line]
             nodes.append(node)
         previous = line
     for node in nodes:
@@ -436,6 +456,12 @@ def flag_differences(versions: dict[str, list[dict]]) -> None:
                 node.setdefault("flags", []).append(
                     {"severity": "low", "kind": "heading_form", "primary": node["marker"]}
                 )
+            # A title that runs on may have taken in the first line of the article where the
+            # Gazette left no space after the heading.
+            if len(node["text"]) > 150 or re.search(r"[.;:]\s+[A-ZÀ-Ý]|[.;]$", node["text"]):
+                node.setdefault("flags", []).append(
+                    {"severity": "low", "kind": "heading_long", "primary": node["text"][:80]}
+                )
         for k, number in enumerate(every):
             if number in numbers[language]:
                 continue
@@ -465,8 +491,22 @@ def _tokens(text: str | None) -> int:
     return len((text or "").split())
 
 
+def _box(lines: list[dict], size: tuple[float, float]) -> list[float]:
+    width, height = size
+    return [
+        round(min(line["x0"] for line in lines) / width, 4),
+        round(min(line["y0"] for line in lines) / height, 4),
+        round(max(line["x1"] for line in lines) / width, 4),
+        round(max(line["y1"] for line in lines) / height, 4),
+    ]
+
+
 def reading(
-    nodes: list[dict], furniture_by_page: dict[int, list[str]], source_sha256: str, checks: dict
+    nodes: list[dict],
+    furniture_by_page: dict[int, list[str]],
+    source_sha256: str,
+    checks: dict,
+    sizes: dict[int, tuple[float, float]] | None = None,
 ) -> dict:
     """A reading in the shape the workbench reviews: the gazette's own page numbers, each page's
     nodes in order, its running header kept as furniture, and the flags placed by word position
@@ -497,7 +537,11 @@ def reading(
                 )
             position += marker + words
             page_nodes.append(
-                {k: v for k, v in node.items() if k not in ("article", "division", "unusual", "flags")}
+                {
+                    k: v
+                    for k, v in node.items()
+                    if k not in ("article", "division", "unusual", "flags", "lines")
+                }
             )
         page_nodes = [
             {"kind": "furniture", "text": text, "page": number} for text in furniture_by_page.get(number, [])
@@ -511,6 +555,31 @@ def reading(
                 "furniture": furniture_by_page.get(number, []),
                 "flags": flags,
                 "checks": {},
+                # Where each unit and each printed line sits on the page image (fractions of the
+                # page), so the reviewer sees this language's column, from the text layer itself.
+                **(
+                    {
+                        "regions": [
+                            {
+                                "text": " ".join(filter(None, [node.get("marker"), node["text"]])),
+                                "role": None,
+                                "box": _box(
+                                    [ln for ln in node["lines"] if ln["page"] == number], sizes[number]
+                                ),
+                            }
+                            for node in pages[number]
+                            if node.get("lines")
+                        ],
+                        "lines": [
+                            {"text": ln["text"], "box": _box([ln], sizes[number])}
+                            for node in pages[number]
+                            for ln in node.get("lines", [])
+                            if ln["page"] == number
+                        ],
+                    }
+                    if sizes and number in sizes
+                    else {}
+                ),
             }
         )
     counts = Counter(f["severity"] for page in out for f in page["flags"])
@@ -530,3 +599,224 @@ def reading(
 
 def kinds_count(found: list[dict]) -> dict:
     return dict(Counter(item["kind"] for item in found))
+
+
+# --- details read from the text ------------------------------------------------------------------------
+
+MONTHS = {
+    name: number
+    for number, names in enumerate(
+        [
+            ("january", "janvier", "mutarama"),
+            ("february", "février", "gashyantare"),
+            ("march", "mars", "werurwe"),
+            ("april", "avril", "mata"),
+            ("may", "mai", "gicurasi"),
+            ("june", "juin", "kamena"),
+            ("july", "juillet", "nyakanga"),
+            ("august", "août", "kanama"),
+            ("september", "septembre", "nzeri"),
+            ("october", "octobre", "ukwakira"),
+            ("november", "novembre", "ugushyingo"),
+            ("december", "décembre", "ukuboza"),
+        ],
+        1,
+    )
+    for name in names
+}
+_MONTH = "|".join(sorted(MONTHS, key=len, reverse=True))
+SPOKEN_DATE = re.compile(
+    rf"(?:(\d{{1,2}})\s*(?:st|nd|rd|th)?\s+({_MONTH})\s*,?\s*((?:19|20)\d\d)"
+    rf"|({_MONTH})\s+(\d{{1,2}})\s*(?:st|nd|rd|th)?\s*,?\s*((?:19|20)\d\d))",
+    re.I,
+)
+SITTING = {
+    "deputies": re.compile(
+        r"Chamber of Deputies,?\s+in its (?:plenary )?(?:session|sitting) of\s+(.{6,40}?\d{4})", re.I
+    ),
+    "senate": re.compile(r"\bSenate,?\s+in its (?:plenary )?(?:session|sitting) of\s+(.{6,40}?\d{4})", re.I),
+}
+KIGALI = re.compile(r"Kigali\s*,\s*(?:on\s+)?(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*((?:19|20)\d\d)", re.I)
+IN_FORCE_ON_PUBLICATION = re.compile(
+    r"(?:comes|shall come|enters) into force on the date of its publication", re.I
+)
+# "Law n° 31/2009 of 26/10/2009 on the protection of intellectual property as amended to date is
+# repealed": the law it repeals, by its citation as printed.
+REPEALS = re.compile(
+    r"((?:Organic\s+)?Law\s+n\s?[°ºo]\s*[\w/.]+\s+of\s+\d{1,2}/\d{1,2}/\d{4}[^.;]{0,200}?)"
+    r"\s+(?:as\s+amended\s+to\s+date\s+)?(?:is|are)\s+(?:hereby\s+)?repealed",
+    re.I,
+)
+ADOPTED_IN = re.compile(r"adopted in (Ikinyarwanda|Kinyarwanda|English|French)", re.I)
+ROLES = (
+    ("promulgated", re.compile(r"^(?:The\s+)?President of the Republic$", re.I)),
+    ("countersigned", re.compile(r"^(?:The\s+)?Prime Minister$", re.I)),
+    ("sealed", re.compile(r"^(?:The\s+)?Minister of Justice\b.*$", re.I)),
+)
+ANY_ROLE = re.compile(r"^(?:The\s+)?(President of the Republic|Prime Minister|Minister\b.*)$", re.I)
+SIGNED = re.compile(r"^\(s[ée]\)$", re.I)
+NAME = re.compile(r"\b[A-ZÀ-Ý][A-ZÀ-Ý’'-]{2,}\b(?!\s+(?:OF|DE|YA)\b)")  # a surname in capitals
+
+
+def spoken_date(text: str) -> str | None:
+    """'04 December 2023', '5 June 2012', 'March 4 th , 2005' -> ISO date."""
+    match = SPOKEN_DATE.search(text)
+    if not match:
+        return None
+    if match.group(1):
+        day, month, year = match.group(1), match.group(2), match.group(3)
+    else:
+        day, month, year = match.group(5), match.group(4), match.group(6)
+    return f"{year}-{MONTHS[month.lower()]:02d}-{int(day):02d}"
+
+
+def signatories(lines: list[str]) -> dict[str, str]:
+    """Who signed, from the block after "Kigali, on …": the President, the Prime Minister and the
+    Minister of Justice who seals. Older laws print the office before the name, newer ones after."""
+    start = next((i for i, text in enumerate(lines) if KIGALI.search(text)), None)
+    if start is None:
+        return {}
+    block = [
+        t.strip()
+        for t in lines[start + 1 :]
+        if t.strip()
+        and not SIGNED.match(t.strip())
+        and not FURNITURE.match(t.strip())
+        and not re.match(r"^(Seen and sealed|Bibonywe kandi|Vu et scell)|^Republic:$", t.strip(), re.I)
+    ]
+    first_role = next((i for i, t in enumerate(block) if ANY_ROLE.match(t)), None)
+    if first_role is None:
+        return {}
+    name_first = any(NAME.search(t) for t in block[:first_role])
+    found: dict[str, str] = {}
+    for i, text in enumerate(block):
+        if not ANY_ROLE.match(text):
+            continue
+        # The nearest name, passing over the office printed in the other two languages.
+        step_by = -1 if name_first else 1
+        j = i + step_by
+        while 0 <= j < len(block) and not NAME.search(block[j]) and abs(j - i) <= 3:
+            j += step_by
+        if not 0 <= j < len(block) or not NAME.search(block[j]) or ANY_ROLE.match(block[j]):
+            continue
+        role = re.sub(r"^The\s+", "", text, flags=re.I)
+        for step, pattern in ROLES:
+            if pattern.match(text) and step not in found:
+                found[step] = f"{block[j]}, {role}"
+    return found
+
+
+def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> dict:
+    """Details of the record read from the instrument as printed: its title, number and dates, the
+    sittings that adopted it, who promulgated, countersigned and sealed it and when, where it was
+    published, when it came into force and the language it was adopted in. Values only; the
+    reviewer confirms each against the page."""
+    english = [line["text"] for line in versions.get("en", [])]
+    text = " ".join(english)
+    every = [line["text"] for lines in versions.values() for line in lines]
+    values: dict = {"identity.type": entry["kind"]}
+    if entry["kind"] == "constitution":
+        values["identity.family"] = "constitution"
+    elif entry["kind"] in ("law", "organic_law", "decree_law"):
+        values["identity.family"] = "legislation"
+    else:
+        values["identity.family"] = "executive_instrument"
+    title = entry["versions"].get("en", next(iter(entry["versions"].values())))["title"]
+    if title:
+        sentence = title[0] + title[1:].lower()
+        sentence = re.sub(r"\bn\s?[°º]\s*", "n° ", sentence)
+        sentence = re.sub(r"\brwanda\b", "Rwanda", sentence)
+        sentence = re.sub(r"\brepublic\b", "Republic", sentence)
+        values["identity.full_title"] = values["identity.title"] = sentence
+        values["identity.citation"] = sentence
+    if entry["number"] != "constitution":
+        values["identity.number.value"] = entry["number"]
+        printed = {
+            "law": "Law",
+            "organic_law": "Organic Law",
+            "presidential_order": "Presidential Order",
+            "prime_ministers_order": "Prime Minister's Order",
+            "ministerial_order": "Ministerial Order",
+        }
+        if entry["kind"] in printed:
+            values["identity.number.printed"] = f"{printed[entry['kind']]} n° {entry['number']}"
+    if entry.get("date"):
+        values["identity.year"] = entry["date"][:4]
+    if entry["kind"] in ("law", "organic_law", "constitution"):
+        values["issued_by"] = "Parliament of the Republic of Rwanda"
+    for step, pattern in SITTING.items():
+        match = pattern.search(text)
+        if match and spoken_date(match.group(1)):
+            values[f"step:adopted:{step}.date"] = spoken_date(match.group(1))
+    kigali = next((KIGALI.search(t) for t in every if KIGALI.search(t)), None)
+    if kigali:
+        when = f"{kigali.group(3)}-{int(kigali.group(2)):02d}-{int(kigali.group(1)):02d}"
+        for step in ("promulgated", "countersigned", "sealed"):
+            values[f"step:{step}.date"] = when
+    for language in ("en", *[k for k in versions if k != "en"]):
+        people = signatories([line["text"] for line in versions.get(language, [])])
+        for step, person in people.items():
+            values.setdefault(f"step:{step}.person", person)
+    if issue.get("date"):
+        values["step:published.date"] = issue["date"]
+        values["publication.date"] = issue["date"]
+        if IN_FORCE_ON_PUBLICATION.search(text):
+            values["step:commenced.date"] = issue["date"]
+            if values["identity.family"] in ("legislation", "constitution"):
+                values["profile.commencement"] = "on_publication"
+    repealed = [
+        {"kind": "repeals", "target": re.sub(r"\s+", " ", match.group(1)).strip()}
+        for match in REPEALS.finditer(text)
+    ]
+    if repealed:
+        values["relations"] = repealed
+    values["publication.kind"] = "gazette"
+    values["publication.name"] = "Official Gazette of the Republic of Rwanda"
+    edition = "Special" if issue.get("special") else str(issue.get("number") or "")
+    edition += " Bis" if issue.get("bis") else (" Ter" if issue.get("ter") else "")
+    if edition.strip():
+        values["publication.number"] = edition.strip()
+    values["publication.publisher"] = "Ministry of Justice"
+    values["text.form"] = "gazette_publication"
+    adopted = ADOPTED_IN.search(text)
+    authority = "rw" if adopted and adopted.group(1).lower() in ("ikinyarwanda", "kinyarwanda") else None
+    if adopted and adopted.group(1).lower() == "english":
+        authority = "en"
+    values["expressions"] = [
+        {
+            "language": language,
+            "script": "Latn",
+            "direction": "ltr",
+            **(
+                {"authority": "authoritative" if language == authority else "official_translation"}
+                if authority
+                else {}
+            ),
+        }
+        for language in LANGUAGES
+        if language in entry["versions"]
+    ]
+    purpose = next(
+        (
+            n
+            for n in versions_nodes(versions.get("en", []))
+            if n["kind"] == "paragraph" and n.get("after_article") == "1" and n.get("purpose")
+        ),
+        None,
+    )
+    if purpose:
+        values["text.summary.text"] = purpose["text"]
+    return values
+
+
+def versions_nodes(lines: list[dict]) -> list[dict]:
+    """The English body's paragraphs, each with the article it follows."""
+    nodes = structure(lines, "en") if lines else []
+    current, purpose = None, False
+    for node in nodes:
+        if node.get("article") and node["kind"] == "heading":
+            current = node["article"]
+            purpose = bool(re.search(r"purpose|object|scope|aim", node["text"], re.I))
+        elif node["kind"] == "paragraph":
+            node["after_article"], node["purpose"] = current, purpose
+    return nodes

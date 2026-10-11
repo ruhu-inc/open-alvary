@@ -65,18 +65,31 @@ def law(rw_articles: list[str], en_articles: list[str], fr_articles: list[str]) 
 RW = [
     "",
     "Ingingo ya mbere: Icyo iri tegeko",
+    "",
     "Iri tegeko rigena ingero.",
     "",
     "Ingingo ya 2: Igihe",
+    "",
     "Ritangira.",
 ]
-EN = ["", "Article One: Purpose", "This Law governs examples.", "", "Article 2: Commencement", "It begins."]
+EN = [
+    "",
+    "Article One: Purpose",
+    "",
+    "This Law governs examples.",
+    "",
+    "Article 2: Commencement",
+    "",
+    "It begins.",
+]
 FR = [
     "",
     "Article premier : Objet",
+    "",
     "La présente loi régit.",
     "",
     "Article 2 : Entrée en vigueur",
+    "",
     "Elle entre.",
 ]
 
@@ -151,13 +164,15 @@ def test_an_article_missing_from_one_language_and_a_slip_in_a_heading_are_flagge
     rw = [
         "",
         "Ingingoya mbere: Icyo iri tegeko",
+        "",
         "Iri tegeko rigena ingero.",
         "",
         "Ingingo ya 3: Ivanwaho",
+        "",
         "Ni",
     ]
-    en = [*EN, "", "Article 3: Repeal", "Repealed."]
-    fr = [*FR, "", "Article 3 : Abrogation", "Abrogé."]
+    en = [*EN, "", "Article 3: Repeal", "", "Repealed."]
+    fr = [*FR, "", "Article 3 : Abrogation", "", "Abrogé."]
     issue = RG.streams(RG.split_issue(law(rw, en, fr)))
     entry = RG.instruments(issue)[0]
     versions = {
@@ -185,3 +200,102 @@ def test_an_article_missing_from_one_language_and_a_slip_in_a_heading_are_flagge
     words = [w for u in units for w in (u.get("marker", "").split() + u["text"].split())]
     assert words[slip["tokens"][0]] == "Ingingoya" and words[missing["tokens"][0]] == "Ingingo"
     assert reading["summary"]["flags"] == {"high": 1, "medium": 0, "low": 1}
+
+
+def test_spoken_dates_in_every_form_the_gazette_prints():
+    assert RG.spoken_date("in its sitting of 04 December 2023;") == "2023-12-04"
+    assert RG.spoken_date("in its session of March 4 th , 2005;") == "2005-03-04"
+    assert RG.spoken_date("mu nama yawo yo ku wa 08 Gicurasi 2026") == "2026-05-08"
+
+
+def test_signatories_are_read_whether_the_office_is_printed_before_or_after_the_name():
+    newer = [
+        "Kigali, 12/03/2026",
+        "(Sé)",
+        "EXAMPLE Name",
+        "Perezida wa Repubulika",
+        "President of the Republic",
+        "Président de la République",
+        "(Sé)",
+        "Dr SAMPLE Name",
+        "Minisitiri w’Intebe",
+        "Prime Minister",
+        "Premier Ministre",
+        "Seen and sealed with the Seal of the Republic:",
+        "(Sé)",
+        "OTHER Name",
+        "Minister of Justice and Attorney General",
+    ]
+    assert RG.signatories(newer) == {
+        "promulgated": "EXAMPLE Name, President of the Republic",
+        "countersigned": "Dr SAMPLE Name, Prime Minister",
+        "sealed": "OTHER Name, Minister of Justice and Attorney General",
+    }
+    older = [
+        "Kigali, on 20/10/2005",
+        "The President of the Republic",
+        "EXAMPLE Name",
+        "(sé)",
+        "The Prime Minister",
+        "SAMPLE Name",
+        "(sé)",
+        "The Minister of Education",
+        "Prof. THIRD Name",
+        "(sé)",
+        "Seen and sealed with the Seal of the Republic:",
+        "The Minister of Justice",
+        "OTHER Name",
+        "(sé)",
+    ]
+    assert RG.signatories(older) == {
+        "promulgated": "EXAMPLE Name, President of the Republic",
+        "countersigned": "SAMPLE Name, Prime Minister",
+        "sealed": "OTHER Name, Minister of Justice",
+    }
+
+
+def test_a_law_suggests_its_record_details_from_the_text_and_the_issue():
+    en = [
+        "",
+        "Article One: Purpose of this Law",
+        "",
+        "This Law governs examples.",
+        "",
+        "Article 2: Language provision",
+        "",
+        "This Law was drafted in English,",
+        "considered and adopted in",
+        "Ikinyarwanda.",
+        "",
+        "Article 3: Commencement",
+        "",
+        "This Law comes into force on",
+        "the date of its publication.",
+        "Kigali, 12/03/2026",
+        "(Sé)",
+        "EXAMPLE Name",
+        "President of the Republic",
+    ]
+    pages = law(RW, en, FR)
+    pages[1]["words"] += page(
+        [], ["The Chamber of Deputies, in", "its sitting of 20 February", "2026;"], [], top=40
+    )["words"]  # the sitting, printed above the preamble
+    issue_streams = RG.streams(RG.split_issue(pages))
+    entry = RG.instruments(issue_streams)[0]
+    lines = {
+        language: issue_streams[language][v["start"] : v["end"]] for language, v in entry["versions"].items()
+    }
+    values = RG.suggest(lines, entry, {"date": "2026-03-16", "number": 11, "bis": True})
+    assert values["identity.full_title"] == "Law n° 009/2026 of 12/03/2026 governing examples"
+    assert values["identity.number.printed"] == "Law n° 009/2026" and values["identity.year"] == "2026"
+    assert values["step:adopted:deputies.date"] == "2026-02-20"
+    assert values["step:promulgated.date"] == values["step:sealed.date"] == "2026-03-12"
+    assert values["step:promulgated.person"] == "EXAMPLE Name, President of the Republic"
+    assert values["step:commenced.date"] == values["publication.date"] == "2026-03-16"
+    assert values["publication.number"] == "11 Bis"
+    assert values["text.summary.text"] == "This Law governs examples."
+    assert [(e["language"], e["authority"]) for e in values["expressions"]] == [
+        ("rw", "authoritative"),
+        ("en", "official_translation"),
+        ("fr", "official_translation"),
+    ]
