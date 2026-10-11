@@ -1,0 +1,749 @@
+{
+  "standard": "jurisdictions-1",
+  "description": "Jurisdiction profiles for Africa: the African Union, regional communities and member states. Only researched entries record how law is made, published and cited there.",
+  "jurisdictions": [
+    {
+      "code": "aa-au",
+      "name": "African Union",
+      "level": "continental",
+      "note": "Code from the AKN4Africa recommendation."
+    },
+    {
+      "code": "aa-eac",
+      "name": "East African Community",
+      "level": "regional",
+      "note": "Code from the AKN4Africa recommendation."
+    },
+    {
+      "code": "aa-ecowas",
+      "name": "Economic Community of West African States",
+      "level": "regional",
+      "note": "Code from the AKN4Africa recommendation."
+    },
+    {
+      "code": "aa-sadc",
+      "name": "Southern African Development Community",
+      "level": "regional",
+      "note": "Code from the AKN4Africa recommendation."
+    },
+    {
+      "code": "aa-comesa",
+      "name": "Common Market for Eastern and Southern Africa",
+      "level": "regional",
+      "note": "Code follows the AKN4Africa pattern for regional bodies (aa-<abbreviation>); not listed in the recommendation itself."
+    },
+    {
+      "code": "aa-eccas",
+      "name": "Economic Community of Central African States",
+      "level": "regional",
+      "note": "Code follows the AKN4Africa pattern for regional bodies (aa-<abbreviation>); not listed in the recommendation itself."
+    },
+    {
+      "code": "aa-igad",
+      "name": "Intergovernmental Authority on Development",
+      "level": "regional",
+      "note": "Code follows the AKN4Africa pattern for regional bodies (aa-<abbreviation>); not listed in the recommendation itself."
+    },
+    {
+      "code": "aa-amu",
+      "name": "Arab Maghreb Union",
+      "level": "regional",
+      "note": "Code follows the AKN4Africa pattern for regional bodies (aa-<abbreviation>); not listed in the recommendation itself."
+    },
+    {
+      "code": "aa-censad",
+      "name": "Community of Sahel-Saharan States",
+      "level": "regional",
+      "note": "Code follows the AKN4Africa pattern for regional bodies (aa-<abbreviation>); not listed in the recommendation itself."
+    },
+    {
+      "code": "aa-ohada",
+      "name": "Organisation for the Harmonisation of Business Law in Africa",
+      "level": "regional",
+      "note": "Code follows the AKN4Africa pattern for regional bodies (aa-<abbreviation>); not listed in the recommendation itself."
+    },
+    {
+      "code": "aa-uemoa",
+      "name": "West African Economic and Monetary Union",
+      "level": "regional",
+      "note": "Code follows the AKN4Africa pattern for regional bodies (aa-<abbreviation>); not listed in the recommendation itself."
+    },
+    {
+      "code": "aa-cemac",
+      "name": "Economic and Monetary Community of Central Africa",
+      "level": "regional",
+      "note": "Code follows the AKN4Africa pattern for regional bodies (aa-<abbreviation>); not listed in the recommendation itself."
+    },
+    {
+      "code": "bi",
+      "name": "Burundi",
+      "level": "national",
+      "au_region": "central",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "cm",
+      "name": "Cameroon",
+      "level": "national",
+      "au_region": "central",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "cf",
+      "name": "Central African Republic",
+      "level": "national",
+      "au_region": "central",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "td",
+      "name": "Chad",
+      "level": "national",
+      "au_region": "central",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "cg",
+      "name": "Republic of the Congo",
+      "level": "national",
+      "au_region": "central",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "cd",
+      "name": "Democratic Republic of the Congo",
+      "level": "national",
+      "au_region": "central",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "gq",
+      "name": "Equatorial Guinea",
+      "level": "national",
+      "au_region": "central",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "ga",
+      "name": "Gabon",
+      "level": "national",
+      "au_region": "central",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "st",
+      "name": "São Tomé and Príncipe",
+      "level": "national",
+      "au_region": "central",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "km",
+      "name": "Comoros",
+      "level": "national",
+      "au_region": "eastern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "dj",
+      "name": "Djibouti",
+      "level": "national",
+      "au_region": "eastern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "er",
+      "name": "Eritrea",
+      "level": "national",
+      "au_region": "eastern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "et",
+      "name": "Ethiopia",
+      "level": "national",
+      "au_region": "eastern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "ke",
+      "name": "Kenya",
+      "level": "national",
+      "au_region": "eastern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "mg",
+      "name": "Madagascar",
+      "level": "national",
+      "au_region": "eastern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "mu",
+      "name": "Mauritius",
+      "level": "national",
+      "au_region": "eastern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "rw",
+      "name": "Rwanda",
+      "level": "national",
+      "au_region": "eastern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "sc",
+      "name": "Seychelles",
+      "level": "national",
+      "au_region": "eastern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "so",
+      "name": "Somalia",
+      "level": "national",
+      "au_region": "eastern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "ss",
+      "name": "South Sudan",
+      "level": "national",
+      "au_region": "eastern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "sd",
+      "name": "Sudan",
+      "level": "national",
+      "au_region": "eastern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "tz",
+      "name": "Tanzania",
+      "level": "national",
+      "au_region": "eastern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "ug",
+      "name": "Uganda",
+      "level": "national",
+      "au_region": "eastern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "dz",
+      "name": "Algeria",
+      "level": "national",
+      "au_region": "northern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "eg",
+      "name": "Egypt",
+      "level": "national",
+      "au_region": "northern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "ly",
+      "name": "Libya",
+      "level": "national",
+      "au_region": "northern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "mr",
+      "name": "Mauritania",
+      "level": "national",
+      "au_region": "northern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "ma",
+      "name": "Morocco",
+      "level": "national",
+      "au_region": "northern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "eh",
+      "name": "Sahrawi Arab Democratic Republic",
+      "level": "national",
+      "au_region": "northern",
+      "member_of": [
+        "aa-au"
+      ],
+      "note": "African Union member; ISO 3166-1 assigns EH to Western Sahara."
+    },
+    {
+      "code": "tn",
+      "name": "Tunisia",
+      "level": "national",
+      "au_region": "northern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "ao",
+      "name": "Angola",
+      "level": "national",
+      "au_region": "southern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "bw",
+      "name": "Botswana",
+      "level": "national",
+      "au_region": "southern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "sz",
+      "name": "Eswatini",
+      "level": "national",
+      "au_region": "southern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "ls",
+      "name": "Lesotho",
+      "level": "national",
+      "au_region": "southern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "mw",
+      "name": "Malawi",
+      "level": "national",
+      "au_region": "southern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "mz",
+      "name": "Mozambique",
+      "level": "national",
+      "au_region": "southern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "na",
+      "name": "Namibia",
+      "level": "national",
+      "au_region": "southern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "za",
+      "name": "South Africa",
+      "level": "national",
+      "au_region": "southern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "zm",
+      "name": "Zambia",
+      "level": "national",
+      "au_region": "southern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "zw",
+      "name": "Zimbabwe",
+      "level": "national",
+      "au_region": "southern",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "bj",
+      "name": "Benin",
+      "level": "national",
+      "au_region": "western",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "bf",
+      "name": "Burkina Faso",
+      "level": "national",
+      "au_region": "western",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "cv",
+      "name": "Cabo Verde",
+      "level": "national",
+      "au_region": "western",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "ci",
+      "name": "Côte d'Ivoire",
+      "level": "national",
+      "au_region": "western",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "gm",
+      "name": "Gambia",
+      "level": "national",
+      "au_region": "western",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "gh",
+      "name": "Ghana",
+      "level": "national",
+      "au_region": "western",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "gn",
+      "name": "Guinea",
+      "level": "national",
+      "au_region": "western",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "gw",
+      "name": "Guinea-Bissau",
+      "level": "national",
+      "au_region": "western",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "lr",
+      "name": "Liberia",
+      "level": "national",
+      "au_region": "western",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "ml",
+      "name": "Mali",
+      "level": "national",
+      "au_region": "western",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "ne",
+      "name": "Niger",
+      "level": "national",
+      "au_region": "western",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "ng",
+      "name": "Nigeria",
+      "level": "national",
+      "au_region": "western",
+      "member_of": [
+        "aa-au"
+      ],
+      "names": {
+        "en": "Federal Republic of Nigeria"
+      },
+      "researched": true,
+      "sources": [
+        "https://placng.org/i/wp-content/uploads/2023/06/Electricity-Act-2023.pdf",
+        "https://placng.org/i/wp-content/uploads/2023/04/Copyright-Act-2022.pdf"
+      ],
+      "legal_systems": [
+        "common_law",
+        "customary_law",
+        "islamic_law"
+      ],
+      "official_languages": [
+        "en"
+      ],
+      "legislature": {
+        "name": "National Assembly",
+        "chambers": [
+          {
+            "id": "senate",
+            "name": "Senate"
+          },
+          {
+            "id": "house",
+            "name": "House of Representatives"
+          }
+        ]
+      },
+      "procedures": [
+        {
+          "applies_to": [
+            "act"
+          ],
+          "authority": "Constitution of the Federal Republic of Nigeria 1999, ss. 58 and 59; Acts Authentication Act, Cap. A2, LFN 2004",
+          "steps": [
+            {
+              "id": "passed:senate",
+              "label": "Passed by the Senate",
+              "event": "passed",
+              "chamber": "senate"
+            },
+            {
+              "id": "passed:house",
+              "label": "Passed by the House of Representatives",
+              "event": "passed",
+              "chamber": "house"
+            },
+            {
+              "id": "certified",
+              "label": "Certified by the Clerk to the National Assembly",
+              "event": "certified",
+              "signed_by": "Clerk to the National Assembly"
+            },
+            {
+              "id": "assented",
+              "label": "Assented to by the President",
+              "event": "assented",
+              "signed_by": "President of the Federal Republic of Nigeria"
+            },
+            {
+              "id": "published",
+              "label": "Published in the Official Gazette",
+              "event": "published"
+            },
+            {
+              "id": "commenced",
+              "label": "Commencement",
+              "event": "commenced"
+            }
+          ]
+        },
+        {
+          "applies_to": [
+            "constitutional_amendment"
+          ],
+          "authority": "Constitution of the Federal Republic of Nigeria 1999, s. 9; Acts Authentication Act, Cap. A2, LFN 2004",
+          "steps": [
+            {
+              "id": "passed:senate",
+              "label": "Passed by the Senate",
+              "event": "passed",
+              "chamber": "senate"
+            },
+            {
+              "id": "passed:house",
+              "label": "Passed by the House of Representatives",
+              "event": "passed",
+              "chamber": "house"
+            },
+            {
+              "id": "approved:states",
+              "label": "Approved by the Houses of Assembly of at least two-thirds of the States",
+              "event": "approved"
+            },
+            {
+              "id": "certified",
+              "label": "Certified by the Clerk to the National Assembly",
+              "event": "certified",
+              "signed_by": "Clerk to the National Assembly"
+            },
+            {
+              "id": "assented",
+              "label": "Assented to by the President",
+              "event": "assented",
+              "signed_by": "President of the Federal Republic of Nigeria"
+            },
+            {
+              "id": "published",
+              "label": "Published in the Official Gazette",
+              "event": "published"
+            },
+            {
+              "id": "commenced",
+              "label": "Commencement",
+              "event": "commenced"
+            }
+          ]
+        }
+      ],
+      "gazettes": [
+        {
+          "name": "Federal Republic of Nigeria Official Gazette",
+          "kind": "gazette",
+          "publisher": "Federal Government Printer, Lagos"
+        }
+      ],
+      "revised_editions": [
+        "Laws of the Federation of Nigeria 2004"
+      ],
+      "numbering": [
+        {
+          "applies_to": [
+            "act",
+            "constitutional_amendment"
+          ],
+          "printed": "Act No. {number}",
+          "citation": "{title}, No. {number}, {year}"
+        }
+      ],
+      "courts": [
+        {
+          "name": "Supreme Court of Nigeria",
+          "level": "apex"
+        },
+        {
+          "name": "Court of Appeal",
+          "level": "appellate"
+        },
+        {
+          "name": "Federal High Court",
+          "level": "superior"
+        },
+        {
+          "name": "National Industrial Court of Nigeria",
+          "level": "specialised"
+        },
+        {
+          "name": "High Court of the Federal Capital Territory, Abuja",
+          "level": "superior"
+        },
+        {
+          "name": "High Court of a State",
+          "level": "superior"
+        },
+        {
+          "name": "Sharia Court of Appeal",
+          "level": "superior"
+        },
+        {
+          "name": "Customary Court of Appeal",
+          "level": "superior"
+        }
+      ],
+      "note": "Federal profile. The 36 states and the Federal Capital Territory get their own profiles (ng-<ISO 3166-2 code>) when their laws are collected."
+    },
+    {
+      "code": "sn",
+      "name": "Senegal",
+      "level": "national",
+      "au_region": "western",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "sl",
+      "name": "Sierra Leone",
+      "level": "national",
+      "au_region": "western",
+      "member_of": [
+        "aa-au"
+      ]
+    },
+    {
+      "code": "tg",
+      "name": "Togo",
+      "level": "national",
+      "au_region": "western",
+      "member_of": [
+        "aa-au"
+      ]
+    }
+  ]
+}

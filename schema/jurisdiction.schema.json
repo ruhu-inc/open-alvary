@@ -1,0 +1,535 @@
+{
+  "$defs": {
+    "Chamber": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9_:-]{1,60}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "Chamber",
+      "type": "object"
+    },
+    "CourtEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "apex",
+            "appellate",
+            "superior",
+            "subordinate",
+            "specialised",
+            "customary",
+            "regional",
+            "continental"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "code": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9]{2,16}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Code"
+        }
+      },
+      "required": [
+        "name",
+        "level"
+      ],
+      "title": "CourtEntry",
+      "type": "object"
+    },
+    "Gazette": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "gazette",
+            "gazette_supplement",
+            "journal_officiel",
+            "law_report",
+            "court_record",
+            "official_website",
+            "revised_edition",
+            "other"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "publisher": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publisher"
+        }
+      },
+      "required": [
+        "name",
+        "kind"
+      ],
+      "title": "Gazette",
+      "type": "object"
+    },
+    "Legislature": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "chambers": {
+          "items": {
+            "$ref": "#/$defs/Chamber"
+          },
+          "minItems": 1,
+          "title": "Chambers",
+          "type": "array"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "name",
+        "chambers"
+      ],
+      "title": "Legislature",
+      "type": "object"
+    },
+    "Numbering": {
+      "additionalProperties": false,
+      "properties": {
+        "applies_to": {
+          "items": {
+            "pattern": "^[a-z0-9_:-]{1,60}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Applies To",
+          "type": "array"
+        },
+        "printed": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Printed",
+          "type": "string"
+        },
+        "citation": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Citation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "applies_to",
+        "printed",
+        "citation"
+      ],
+      "title": "Numbering",
+      "type": "object"
+    },
+    "Procedure": {
+      "additionalProperties": false,
+      "properties": {
+        "applies_to": {
+          "items": {
+            "pattern": "^[a-z0-9_:-]{1,60}$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Applies To",
+          "type": "array"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/Step"
+          },
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        },
+        "authority": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Authority"
+        }
+      },
+      "required": [
+        "applies_to",
+        "steps"
+      ],
+      "title": "Procedure",
+      "type": "object"
+    },
+    "Step": {
+      "additionalProperties": false,
+      "description": "One step a document is expected to go through, fulfilled by an event with this step id.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9_:-]{1,60}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "event": {
+          "enum": [
+            "introduced",
+            "first_reading",
+            "second_reading",
+            "committee_stage",
+            "third_reading",
+            "passed",
+            "concurred",
+            "certified",
+            "presented_for_assent",
+            "assented",
+            "withheld_assent",
+            "promulgated",
+            "signed",
+            "made",
+            "laid",
+            "approved",
+            "adopted",
+            "published",
+            "commenced",
+            "amended",
+            "repealed",
+            "expired",
+            "suspended",
+            "annulled",
+            "struck_down",
+            "lapsed",
+            "withdrawn",
+            "referendum",
+            "filed",
+            "heard",
+            "reserved",
+            "decided",
+            "delivered",
+            "corrected",
+            "reported",
+            "opened_for_signature",
+            "ratified",
+            "acceded",
+            "entered_into_force",
+            "denounced",
+            "domesticated",
+            "issued"
+          ],
+          "title": "Event",
+          "type": "string"
+        },
+        "chamber": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9_:-]{1,60}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Chamber"
+        },
+        "signed_by": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Signed By"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "event"
+      ],
+      "title": "Step",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?$",
+      "title": "Code",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 300,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "names": {
+      "default": {},
+      "patternProperties": {
+        "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$": {
+          "maxLength": 300,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "title": "Names",
+      "type": "object"
+    },
+    "level": {
+      "enum": [
+        "continental",
+        "regional",
+        "national",
+        "subnational",
+        "local"
+      ],
+      "title": "Level",
+      "type": "string"
+    },
+    "parent": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Parent"
+    },
+    "au_region": {
+      "anyOf": [
+        {
+          "enum": [
+            "central",
+            "eastern",
+            "northern",
+            "southern",
+            "western"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Au Region"
+    },
+    "member_of": {
+      "default": [],
+      "items": {
+        "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?$",
+        "type": "string"
+      },
+      "title": "Member Of",
+      "type": "array"
+    },
+    "researched": {
+      "default": false,
+      "title": "Researched",
+      "type": "boolean"
+    },
+    "sources": {
+      "default": [],
+      "items": {
+        "format": "uri",
+        "maxLength": 2083,
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Sources",
+      "type": "array"
+    },
+    "legal_systems": {
+      "default": [],
+      "items": {
+        "enum": [
+          "common_law",
+          "civil_law",
+          "islamic_law",
+          "customary_law",
+          "roman_dutch_law"
+        ],
+        "type": "string"
+      },
+      "title": "Legal Systems",
+      "type": "array"
+    },
+    "official_languages": {
+      "default": [],
+      "items": {
+        "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+        "type": "string"
+      },
+      "title": "Official Languages",
+      "type": "array"
+    },
+    "calendars": {
+      "default": [
+        "gregorian"
+      ],
+      "items": {
+        "enum": [
+          "gregorian",
+          "ethiopian",
+          "islamic"
+        ],
+        "type": "string"
+      },
+      "title": "Calendars",
+      "type": "array"
+    },
+    "legislature": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Legislature"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "procedures": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Procedure"
+      },
+      "title": "Procedures",
+      "type": "array"
+    },
+    "gazettes": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Gazette"
+      },
+      "title": "Gazettes",
+      "type": "array"
+    },
+    "revised_editions": {
+      "default": [],
+      "items": {
+        "maxLength": 300,
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Revised Editions",
+      "type": "array"
+    },
+    "numbering": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Numbering"
+      },
+      "title": "Numbering",
+      "type": "array"
+    },
+    "courts": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/CourtEntry"
+      },
+      "title": "Courts",
+      "type": "array"
+    },
+    "note": {
+      "anyOf": [
+        {
+          "maxLength": 300,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Note"
+    }
+  },
+  "required": [
+    "code",
+    "name",
+    "level"
+  ],
+  "title": "JurisdictionProfile",
+  "type": "object"
+}

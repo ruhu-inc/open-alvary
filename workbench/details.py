@@ -572,3 +572,200 @@ def schema() -> dict:
         "absent": ABSENT,
         "relations": [{"value": r, "label": CHOICE_LABELS[r]} for r in RELATIONS],
     }
+
+
+# --- the common record for every African jurisdiction (schema/record.py) ------------------------
+
+STATUS_TO_RECORD = {
+    "unknown": "unknown",
+    "current": "in_force",
+    "historical": "historical",
+    "repealed": "repealed",
+    "superseded": "superseded",
+}
+FORM_TO_RECORD = {
+    "gazette_supplement": "gazette_publication",
+    "authenticated_bill": "certified_copy",
+    "official_reprint": "official_reprint",
+    "other": "unofficial",
+}
+RELATION_TO_RECORD = {"cross_reference": "related"}
+FAMILY_OF_TYPE = {
+    "act": "legislation",
+    "bill": "bill",
+    "regulation": "subsidiary_legislation",
+    "order": "subsidiary_legislation",
+    "judgment": "judgment",
+    "gazette": "gazette",
+    "treaty": "treaty",
+    "other": "official_document",
+}
+STEPS = (  # DETAILS-1 detail, the record event it becomes, and the Nigerian step it fulfils
+    ("passed_senate", "passed", "passed:senate", None),
+    ("passed_house", "passed", "passed:house", None),
+    ("authenticated_on", "certified", "certified", "authenticated_by"),
+    ("assent_date", "assented", "assented", "assented_by"),
+    ("commencement_date", "commenced", "commenced", None),
+)
+
+
+def _person(text: str | None):
+    """ "Bola Ahmed Tinubu, GCFR, President of the Federal Republic of Nigeria" -> name and office."""
+    from schema.record import Person
+
+    if not text:
+        return None
+    for office in ("President of", "Clerk to"):
+        at = text.find(", " + office)
+        if at > 0:
+            return Person(name=text[:at], office=text[at + 2 :])
+    return Person(name=text)
+
+
+def to_record(details: dict, absent: dict, document: dict, manifest: dict, profile=None):
+    """The DETAILS-1 record of a Nigerian federal Act expressed in the common record for Africa."""
+    from schema import record as R
+
+    place_code = details.get("jurisdiction") or manifest.get("jurisdiction") or "ng"
+    constitutional = any(
+        link["kind"] == "amends" and "constitution" in link["target"].lower()
+        for link in details.get("relations", [])
+    )
+    family = (
+        "constitution"
+        if constitutional
+        else FAMILY_OF_TYPE.get(details.get("document_type", "act"), "official_document")
+    )
+    kind = "constitutional_amendment" if constitutional else details.get("document_type", "act")
+    year = details.get("year") or str(document.get("year", ""))
+    number = details.get("number")
+    title = details.get("short_title") or document["title"]
+    chambers = {c.id: c.name for c in profile.legislature.chambers} if profile and profile.legislature else {}
+    events = []
+    for key, event, step, signer in STEPS:
+        if details.get(key):
+            chamber = step.split(":")[1] if step.startswith("passed:") else None
+            events.append(
+                R.Event(
+                    kind=event,
+                    when=R.Dated(value=details[key]),
+                    step=step,
+                    by=R.Body(name=chambers[chamber], kind="chamber", id=chamber)
+                    if chamber in chambers
+                    else None,
+                    person=_person(details.get(signer)) if signer else None,
+                )
+            )
+    if details.get("gazette_date"):
+        events.append(
+            R.Event(kind="published", when=R.Dated(value=details["gazette_date"]), step="published")
+        )
+    publications = ()
+    if details.get("gazette_name"):
+        publications = (
+            R.Publication(
+                kind="gazette_supplement",
+                name=details["gazette_name"],
+                number=details.get("gazette_number"),
+                volume=details.get("gazette_volume"),
+                issue=details.get("gazette_issue"),
+                when=R.Dated(value=details["gazette_date"]) if details.get("gazette_date") else None,
+                place=details.get("gazette_place"),
+                pages=details.get("gazette_pages"),
+                notice=details.get("gazette_notice"),
+                publisher=details.get("official_publisher"),
+            ),
+        )
+    record_absent = {}
+    for key, reason in absent.items():
+        target = {
+            "long_title": "identity.full_title",
+            "number": "identity.numbers",
+            "summary": "text.summary",
+            "status_checked_on": "status.as_of",
+            "gazette_name": "publications",
+            "enacting_body": "issued_by",
+        }.get(key)
+        step = next((s for k, _, s, _ in STEPS if k == key), None)
+        if target:
+            record_absent[target] = R.Absent(reason=reason)
+        elif step:
+            record_absent[f"step:{step}"] = R.Absent(reason=reason)
+    if "gazette_name" in absent:  # no gazette front page: its publication step is not in this copy either
+        record_absent.setdefault("step:published", R.Absent(reason=absent["gazette_name"]))
+        record_absent.setdefault("event:published", R.Absent(reason=absent["gazette_name"]))
+    if "commencement_date" in absent:
+        record_absent["event:commenced"] = R.Absent(reason=absent["commencement_date"])
+    record_absent.setdefault(
+        "profile.revised_edition", R.Absent(reason="not_applicable", note="Not yet in a revised edition")
+    )
+    if details.get("bill_title") is None:
+        record_absent.setdefault("profile.bill", R.Absent(reason="not_in_source"))
+    language = details.get("language", "en")
+    return R.DocumentRecord(
+        identity=R.Identity(
+            family=family,
+            type=kind,
+            work_uri=R.work_uri(
+                place_code, family, number or R.slug(document["id"].removeprefix(place_code + "-")), year
+            ),
+            title=title,
+            full_title=details.get("long_title"),
+            numbers=(R.Number(scheme="act", value=number, printed=f"Act No. {number}"),) if number else (),
+            year=int(year) if year else None,
+            citations=(R.Citation(kind="official", text=details["citation"]),)
+            if details.get("citation")
+            else (),
+        ),
+        place=R.Place(
+            code=place_code, name=profile.name if profile else place_code.upper(), level="national"
+        ),
+        issued_by=(R.Body(name=details["enacting_body"], kind="legislature"),)
+        if details.get("enacting_body")
+        else (),
+        expressions=(
+            R.Expression(
+                language=language,
+                authority="authoritative"
+                if details.get("language_status", "original") == "original"
+                else "official_translation",
+                this_text=True,
+            ),
+        ),
+        events=tuple(events),
+        publications=publications,
+        status=R.Status(
+            legal=STATUS_TO_RECORD.get(details.get("legal_status", "unknown"), "unknown"),
+            as_of=details.get("status_checked_on"),
+            note=details.get("status_note"),
+        ),
+        relations=tuple(
+            R.Relation(
+                kind=RELATION_TO_RECORD.get(link["kind"], link["kind"]),
+                target=R.Reference(citation=link["target"], work_uri=None),
+                note=link.get("note"),
+            )
+            for link in details.get("relations", [])
+        ),
+        text=R.TextInfo(
+            form=FORM_TO_RECORD.get(details.get("text_form", "other"), "unofficial"),
+            version=R.Version(
+                label=details.get("version_label", "As enacted"),
+                consolidated=details.get("consolidation") == "consolidated",
+            ),
+            summary=R.Summary(kind="explanatory_memorandum", text=details["summary"], official=True)
+            if details.get("summary")
+            else None,
+        ),
+        classification=R.Classification(
+            hierarchy="constitutional" if constitutional else "primary",
+            subjects=tuple(
+                R.Subject(scheme="free", code=R.slug(s), label=s) for s in details.get("subjects", [])
+            ),
+        ),
+        profile=R.LegislationProfile(
+            family=family,
+            bill=R.Reference(citation=details["bill_title"]) if details.get("bill_title") else None,
+        ),
+        absent=record_absent,
+    )

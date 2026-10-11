@@ -5,11 +5,13 @@ from schema.approval import ApprovalContracts
 from schema.assembly import AssemblyContracts
 from schema.gazette import GazetteContracts
 from schema.identity import IdentityContracts
+from schema.jurisdictions import JurisdictionProfile
 from schema.models import Corpus
 from schema.operator import OperatorContracts
 from schema.policy import PolicyContracts
 from schema.public import PublicContracts
 from schema.reader import ReaderDescriptor
+from schema.record import DocumentRecord
 
 if __name__ == "__main__":
     Path("schema/gazette.schema.json").write_text(
@@ -36,4 +38,10 @@ if __name__ == "__main__":
     )
     Path("schema/reader.schema.json").write_text(
         json.dumps(ReaderDescriptor.model_json_schema(), indent=2) + "\n"
+    )
+    Path("schema/record.schema.json").write_text(
+        json.dumps(DocumentRecord.model_json_schema(), indent=2) + "\n"
+    )
+    Path("schema/jurisdiction.schema.json").write_text(
+        json.dumps(JurisdictionProfile.model_json_schema(), indent=2) + "\n"
     )
