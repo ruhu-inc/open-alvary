@@ -1,10 +1,4 @@
-import React, {
-  createContext,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   ArrowUpRight,
@@ -18,8 +12,6 @@ import {
   Globe2,
   ChevronRight,
   ExternalLink,
-  Menu,
-  X,
   FileText,
 } from "lucide-react";
 import "@fontsource/dm-sans/latin-400.css";
@@ -27,27 +19,20 @@ import "@fontsource/dm-sans/latin-500.css";
 import "@fontsource/dm-sans/latin-600.css";
 import "@fontsource/libre-caslon-display/latin-400.css";
 import "./style.css";
+import {
+  PageTitle,
+  ProjectContext,
+  ProjectRepository,
+  SiteFooter,
+  SiteHeader,
+  SourceRecord,
+  SourceRow,
+  links,
+  type Project,
+  type RightsRecord,
+  type Source,
+} from "./site";
 
-type Project = {
-  repository_url?: string;
-  maintainer?: string;
-  contact_email?: string;
-  metadata_licence?: string;
-};
-const ProjectContext = createContext<Project>({});
-
-type Source = {
-  id: string;
-  jurisdiction_id: string;
-  title: string;
-  citation: string;
-  document_type: string;
-  canonical_url: string;
-  legal_status: string;
-  rights_status: string;
-  catalogue_note: string;
-  has_full_text: boolean;
-};
 type Coverage = {
   catalogued_sources: number;
   open_full_text_sources: number;
@@ -94,13 +79,6 @@ function Feedback({ error }: { error?: string }) {
     </div>
   );
 }
-const links = [
-  ["/browse", "Explore the corpus"],
-  ["/coverage", "Coverage"],
-  ["/governance", "Rights & governance"],
-  ["/releases", "Releases"],
-  ["/developers", "Developers"],
-];
 // Resolves to nothing in production: Vite replaces import.meta.env.DEV with false.
 const DevReader = import.meta.env.DEV
   ? React.lazy(() => import("./dev/DevReader"))
@@ -184,41 +162,11 @@ function App() {
       >
         Skip to main content
       </a>
-      <header>
-        <a className="brand" href="#/" aria-label="Open Alvary home">
-          <span className="brand-icon">
-            a<span>↗</span>
-          </span>
-          <span>
-            open<span className="brand-light">alvary</span>
-            <small>PUBLIC LEGAL INFRASTRUCTURE</small>
-          </span>
-        </a>
-        <button
-          className="mobile-toggle"
-          aria-label="Toggle navigation"
-          aria-expanded={menu}
-          aria-controls="primary-navigation"
-          onClick={() => setMenu(!menu)}
-        >
-          {menu ? <X /> : <Menu />}
-        </button>
-        <nav
-          id="primary-navigation"
-          aria-label="Main navigation"
-          className={menu ? "expanded" : ""}
-        >
-          {links.map(([url, label]) => (
-            <a
-              key={url}
-              href={"#" + url}
-              aria-current={pathname === url ? "page" : undefined}
-            >
-              {label}
-            </a>
-          ))}
-        </nav>
-      </header>
+      <SiteHeader
+        pathname={pathname}
+        menu={menu}
+        onToggle={() => setMenu(!menu)}
+      />
       <main id="main-content" tabIndex={-1}>
         <PageBoundary key={pathname}>
           {pathname === "/" ? (
@@ -248,17 +196,7 @@ function App() {
           )}
         </PageBoundary>
       </main>
-      <footer>
-        <a className="footer-brand" href="#/">
-          open alvary<span>A shared foundation for law.</span>
-        </a>
-        <p>Public legal data. Clear provenance. Open possibilities.</p>
-        <div className="footer-links">
-          <a href="#/about">About & contribute</a>
-          <a href="#/privacy">Privacy</a>
-          <ProjectRepository />
-        </div>
-      </footer>
+      <SiteFooter />
     </ProjectContext.Provider>
   );
 }
@@ -532,28 +470,12 @@ function SourcePageList({
         className={"source-list " + (compact ? "compact" : "")}
       >
         {data.items.map((s, i) => (
-          <a className="source-row" key={s.id} href={"#/sources/" + s.id}>
-            <span className="source-number">
-              {String(offset + i + 1).padStart(2, "0")}
-            </span>
-            <span className="source-info">
-              <span className="source-kicker">
-                {s.jurisdiction_id.toUpperCase()} <span>·</span>{" "}
-                {s.document_type.toUpperCase()}
-                {s.legal_status === "repealed" ? " · HISTORICAL" : ""}
-              </span>
-              <h3>{s.title}</h3>
-              {!compact && (
-                <p>
-                  {s.citation} · {s.catalogue_note}
-                </p>
-              )}
-            </span>
-            <span className={"badge " + (s.has_full_text ? "green" : "")}>
-              {s.has_full_text ? "Open full text" : "Metadata only"}
-            </span>
-            <ArrowUpRight size={20} />
-          </a>
+          <SourceRow
+            key={s.id}
+            source={s}
+            number={offset + i + 1}
+            compact={compact}
+          />
         ))}
       </div>
       {!data.items.length && (
@@ -597,23 +519,6 @@ function SourcePageList({
         </div>
       )}
     </>
-  );
-}
-function PageTitle({
-  label,
-  title,
-  children,
-}: {
-  label: string;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="page-title">
-      <div className="eyebrow">{label}</div>
-      <h1>{title}</h1>
-      <p>{children}</p>
-    </div>
   );
 }
 function Browse({ route }: { route: string }) {
@@ -674,15 +579,7 @@ function Reader({ id }: { id: string }) {
     notice: string;
   }>("/sources/" + encodeURIComponent(id) + "/versions");
   const rights = useData<{
-    record: {
-      status: string;
-      licence: string | null;
-      legal_note: string;
-      reviewer: string | null;
-      reviewed_at: string | null;
-      attribution_text: string | null;
-      conditions: string[];
-    };
+    record: RightsRecord;
     decision: { reasons: string[] };
   }>("/rights/" + encodeURIComponent(id));
   if (!source.data)
@@ -743,52 +640,7 @@ function Reader({ id }: { id: string }) {
           )}
         </article>
         <aside>
-          <div className="info-panel">
-            <h3>Source record</h3>
-            <dl>
-              <dt>Jurisdiction</dt>
-              <dd>
-                {s.jurisdiction_id === "ng"
-                  ? "Nigeria"
-                  : s.jurisdiction_id.toUpperCase()}
-              </dd>
-              <dt>Access</dt>
-              <dd>
-                {s.has_full_text
-                  ? "Open full text"
-                  : "Metadata / official link"}
-              </dd>
-              <dt>Legal status</dt>
-              <dd>
-                {s.legal_status === "unknown"
-                  ? "Currentness unverified"
-                  : s.legal_status}
-              </dd>
-              <dt>Rights status</dt>
-              <dd>{s.rights_status.replaceAll("_", " ").toLowerCase()}</dd>
-              <dt>Licence</dt>
-              <dd>{rights.data?.record.licence || "Not verified"}</dd>
-              <dt>Attribution</dt>
-              <dd>
-                {rights.data?.record.attribution_text || "Not yet determined"}
-              </dd>
-              {rights.data?.record.conditions.length ? (
-                <>
-                  <dt>Reuse conditions</dt>
-                  <dd>{rights.data.record.conditions.join("; ")}</dd>
-                </>
-              ) : null}
-              <dt>Rights reviewer</dt>
-              <dd>{rights.data?.record.reviewer || "Not yet assigned"}</dd>
-            </dl>
-          </div>
-          <div className="notice">
-            {rights.data?.record.legal_note ||
-              "No redistribution permission has been verified."}
-            <a href="#/governance">
-              Read the rights policy <ArrowRight size={15} />
-            </a>
-          </div>
+          <SourceRecord source={s} rights={rights.data?.record} />
         </aside>
       </div>
     </div>
@@ -1051,16 +903,6 @@ function Developers() {
   );
 }
 
-function ProjectRepository() {
-  const project = useContext(ProjectContext);
-  return project.repository_url ? (
-    <a href={project.repository_url} target="_blank" rel="noreferrer">
-      GitHub <ArrowUpRight size={14} />
-    </a>
-  ) : (
-    <span>Repository publication pending</span>
-  );
-}
 function About() {
   const project = useContext(ProjectContext);
   return (

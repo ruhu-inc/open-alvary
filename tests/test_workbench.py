@@ -122,6 +122,7 @@ def test_everything_needs_a_signed_in_operator_and_sends_strict_headers(world):
         f"/api/documents/{ACT}/pages/1",
         f"/api/documents/{ACT}/pages/1/image",
         f"/api/documents/{ACT}/export",
+        f"/api/documents/{ACT}/public-preview",
     ):
         assert browser.get(path).status_code == 401
     page = browser.get("/")
@@ -559,3 +560,30 @@ def test_character_formatting_is_validated_and_exported_as_akn_inline(world):
     assert "".join(p.itertext()) == "(a) the 1st Schedule applies"
     assert p.find("a:sup", ns).text == "st" and p.find("a:i", ns).text == "Schedule"
     ET.tostring(p)  # well formed
+
+
+def test_the_public_preview_shows_the_latest_saved_pages_as_readers_would(world):
+    browser = signed_in(world, "reviewer@example.org")
+    unit = {
+        "kind": "paragraph",
+        "marker": "1.",
+        "marker_source": ["azure"],
+        "text": "Accounts prepared under section 199 of this Act.",
+        "marks": [{"type": "bold", "start": 0, "end": 8}],
+        "notes": ["Accounts"],
+        "align": "justify",
+    }
+    assert save(browser, units=[unit]).status_code == 200
+    preview = browser.get(f"/api/documents/{ACT}/public-preview").json()
+    source = preview["source"]
+    assert source["id"] == ACT and source["document_type"] == "act" and source["jurisdiction_id"] == "ng"
+    # Rights and currentness are not asserted by the preview: the public defaults show.
+    assert source["rights_status"] == "RIGHTS_UNDER_REVIEW" and source["legal_status"] == "unknown"
+    first, second = preview["pages"]
+    assert first["checked"] and not second["checked"]
+    assert first["blocks"] == [{key: value for key, value in unit.items() if key != "marker_source"}]
+    assert second["blocks"] == [{"kind": "paragraph", "text": "2. Citation."}]
+    assert preview["status"] == {"approved": False, "pages": 2, "checked_pages": 1}
+    page = browser.get(f"/preview/{ACT}")
+    assert page.status_code == 200 and "/static/public-preview/preview.js" in page.text
+    assert "default-src 'self'" in page.headers["content-security-policy"]

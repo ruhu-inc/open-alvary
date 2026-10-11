@@ -1354,3 +1354,169 @@ main:focus {
 .reader-uncertain { font-style: italic; color: var(--muted); }
 .reader-limitations { font-size: 0.9rem; color: var(--muted); padding-left: 1.1rem; }
 .reader-version { font-size: 0.8rem; color: var(--muted); }
+
+/* Reviewed documents: Parts, numbered provisions titled by their margin notes, page breaks.
+   Section numbers hang left of one text column; subsections share it, paragraphs indent. */
+.doc-reader,
+.doc-aside {
+  min-width: 0; /* wide tables scroll inside the text instead of widening the page */
+}
+.doc-reader {
+  max-width: none;
+}
+.doc-text {
+  --num: 2.4em;
+  overflow-wrap: break-word;
+  padding: 4px 28px 28px;
+  font:
+    17px/1.7 Georgia,
+    serif;
+  color: #1f2d27;
+}
+.doc-text [tabindex="-1"]:focus {
+  outline: none;
+}
+.doc-text [id] {
+  scroll-margin-top: 16px;
+}
+.doc-page {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 22px 0 10px;
+  font: 11px "DM Sans", sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.doc-page::after {
+  content: "";
+  flex: 1;
+  border-top: 1px dashed var(--line);
+}
+.doc-page-flag {
+  text-transform: none;
+  letter-spacing: 0;
+  color: #7a5200;
+  background: #fff4d6;
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+.doc-unchecked {
+  box-shadow: inset 3px 0 0 #e8c35a;
+  margin-left: -16px;
+  padding-left: 13px;
+}
+.doc-heading {
+  font: 600 14px/1.45 "DM Sans", sans-serif;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--green);
+  margin: 30px 0 14px;
+}
+.doc-section h3 {
+  font: 600 17px/1.45 "DM Sans", sans-serif;
+  margin: 26px 0 8px;
+  padding-left: var(--num);
+  text-indent: calc(-1 * var(--num));
+}
+.doc-num {
+  font-weight: 600;
+}
+.doc-section h3 .doc-num,
+.doc-hang > .doc-num {
+  display: inline-block;
+  min-width: var(--num);
+  text-indent: 0;
+}
+.doc-p {
+  margin: 0 0 12px;
+  white-space: pre-wrap;
+  unicode-bidi: plaintext;
+}
+.doc-lvl0,
+.doc-lvl1 {
+  padding-left: var(--num);
+}
+.doc-lvl2 {
+  padding-left: calc(2 * var(--num));
+}
+.doc-lvl3 {
+  padding-left: calc(3 * var(--num));
+}
+.doc-hang {
+  text-indent: calc(-1 * var(--num));
+}
+.doc-note {
+  font: 600 14px/1.45 "DM Sans", sans-serif;
+  color: var(--green);
+  margin: 16px 0 4px;
+  padding-left: var(--num);
+}
+.doc-note-more {
+  margin: -4px 0 8px;
+  padding-left: var(--num);
+  font: 12px/1.4 "DM Sans", sans-serif;
+  color: var(--muted);
+}
+.doc-align-left {
+  text-align: left;
+}
+.doc-align-center {
+  text-align: center;
+}
+.doc-align-right {
+  text-align: right;
+}
+.doc-align-justify {
+  text-align: justify;
+}
+.doc-text caption {
+  font-weight: 600;
+  padding: 6px;
+}
+.doc-aside {
+  position: sticky;
+  top: 16px;
+  align-self: start;
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+.doc-contents {
+  margin-bottom: 20px;
+}
+.doc-contents ol {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+.doc-contents li {
+  margin: 0 0 7px;
+}
+.doc-contents .doc-contents-part {
+  margin-top: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+.doc-contents a:hover {
+  text-decoration: underline;
+}
+@media (max-width: 1100px) {
+  .doc-aside {
+    position: static;
+    max-height: none;
+  }
+}
+@media (max-width: 480px) {
+  .doc-text {
+    --num: 2.1em;
+    padding: 4px 16px 20px;
+    font-size: 16px;
+  }
+}
