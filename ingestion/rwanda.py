@@ -217,15 +217,18 @@ def catalogue(source_id: str, delay: float, max_pages: int, log=print) -> dict:
 
 
 def reparse(source_id: str) -> dict:
-    """Read the stored catalogue's names again with the current rules, without visiting the site."""
+    """Read the stored catalogue's names and sizes again with the current rules, without visiting
+    the site."""
     path = STAGING / "catalogue" / f"{source_id}.json"
     data = json.loads(path.read_text())
     for item in data["files"]:
+        item["size_bytes"] = filelist.size_bytes(item["size"])
         item["parsed"] = parse_item(source_id, item)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n")
     return {
         "source": source_id,
         "files": len(data["files"]),
+        "bytes_listed": sum(f["size_bytes"] or 0 for f in data["files"]),
         "unparsed": sum(1 for f in data["files"] if not f["parsed"]["parsed"]),
     }
 
