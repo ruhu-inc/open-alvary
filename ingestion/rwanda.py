@@ -17,6 +17,7 @@ import re
 import sys
 import time
 import unicodedata
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import unquote
@@ -399,12 +400,6 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
-def _sentence(title: str) -> str:
-    sentence = title[0] + title[1:].lower() if title else title
-    sentence = re.sub(r"\bn\s?[°º]\s*", "n° ", sentence)
-    return re.sub(r"\b(rwanda|republic|république|repubulika)\b", lambda m: m.group(1).capitalize(), sentence)
-
-
 def prepare_selection(selection: dict, log=print) -> dict:
     """Each fetched gazette issue of a selection split into its instruments, and each instrument's
     language versions written as readings the workbench reviews, with the issue's PDF beside them,
@@ -430,15 +425,25 @@ def prepare_selection(selection: dict, log=print) -> dict:
     summary = []
     for item_id in selection["items"]:
         record = ledger.data["items"][item_id]
-        if record["source"] != "minijust-gazette" or not record.get("sha256"):
+        if record["source"] not in ("minijust-gazette", "rlrc-laws") or not record.get("sha256"):
             continue
         sha = record["sha256"]
         pdf = STAGING / "sources" / record["source"] / f"{sha}.pdf"
         sidecar = json.loads(pdf.with_suffix(".json").read_text())
-        issue = parse_item("minijust-gazette", {"name": record["listed"]["name"], "url": record["url"]})
         split = rw_gazette.split_issue(gazette_layout.text_layer(pdf))
         streams = rw_gazette.streams(split)
         furniture = {page["page"]: [line["text"] for line in page["furniture"]] for page in split}
+        if record["source"] == "minijust-gazette":
+            issue = parse_item("minijust-gazette", {"name": record["listed"]["name"], "url": record["url"]})
+        else:
+            # An RLRC file is an extract of the Gazette: its issue is in the running header.
+            headers = Counter(
+                text
+                for texts in furniture.values()
+                for text in texts
+                if re.match(r"(?i)official gazette", text)
+            )
+            issue = parse_gazette(headers.most_common(1)[0][0]) if headers else {"parsed": False}
         sizes = {page["page"]: (page["width"], page["height"]) for page in split}
         found = rw_gazette.instruments(streams)
         for entry in found:
@@ -479,7 +484,7 @@ def prepare_selection(selection: dict, log=print) -> dict:
                 documents[doc_id] = {
                     "id": doc_id,
                     "type": entry["kind"],
-                    "title": _sentence(entry["versions"][language]["title"]),
+                    "title": rw_gazette.sentence_case(entry["versions"][language]["title"]),
                     "year": int(values["identity.year"]) if values.get("identity.year") else None,
                     "jurisdiction": "rw",
                     "language": language,

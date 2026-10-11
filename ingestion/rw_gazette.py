@@ -156,8 +156,15 @@ def split_page(page: dict, number: int, carried: str | None = None) -> dict:
     spans = gazette_layout.columns(page)
     furniture, columns = [], []
     three = len(spans) == 3
-    for x0, x1 in spans:
-        inside = [w for w in page["words"] if x0 <= (w["xmin"] + w["xmax"]) / 2 < x1]
+    # Each word to the column it lies in, or the nearest: a word alone at a column's edge (an
+    # "Article" set a little apart) can fall in what the measure took for the gutter.
+    by_column: list[list[dict]] = [[] for _ in spans]
+    for word in page["words"]:
+        centre = (word["xmin"] + word["xmax"]) / 2
+        if spans:
+            distance = [0 if a <= centre < b else min(abs(centre - a), abs(centre - b)) for a, b in spans]
+            by_column[distance.index(min(distance))].append(word)
+    for (x0, x1), inside in zip(spans, by_column, strict=True):
         kept = []
         for line in lines_of(inside):
             edge = line["y0"] < 0.09 * page["height"] or line["y1"] > 0.93 * page["height"]
@@ -303,6 +310,11 @@ def instruments(issue_streams: dict[str, list[dict]]) -> list[dict]:
 # --- structure ----------------------------------------------------------------------------------------
 
 
+def _capitals(text: str) -> bool:
+    letters = [c for c in text if c.isalpha()]
+    return bool(letters) and sum(c.isupper() for c in letters) >= 0.8 * len(letters)
+
+
 def _number(word: str) -> str:
     return "1" if re.fullmatch(ONE, word, re.I) else word
 
@@ -327,9 +339,11 @@ def structure(lines: list[dict], language: str) -> list[dict]:
         if part in ("heading", "contents") and PREAMBLE.match(text):
             part = "body"
         if part == "contents" and (OPENING[language].match(text) or CONSTITUTION[language].match(text)):
+            # The title printed again after the contents opens the body (orders have no "We, …").
             nodes.append(
                 {"kind": "heading", "level": "heading-1", "text": text, "page": line["page"], "lines": [line]}
             )
+            part = "body"
             previous = line
             continue
         node = None
@@ -378,6 +392,7 @@ def structure(lines: list[dict], language: str) -> list[dict]:
                     last.get("division")
                     or (last.get("article") and last["text"])
                     or last["kind"] == "list_item"
+                    or (last["level"] == "heading-1" and _capitals(text))
                 )
             )
             if part == "heading" and last is not None and last["kind"] == "heading":
@@ -601,6 +616,46 @@ def kinds_count(found: list[dict]) -> dict:
     return dict(Counter(item["kind"] for item in found))
 
 
+# How each kind of instrument is named in a citation, in each language.
+CITED_AS = (
+    "Organic Law",
+    "Law",
+    "Presidential Order",
+    "Prime Minister's Order",
+    "Ministerial Order",
+    "Itegeko Ngenga",
+    "Itegeko",
+    "Iteka rya Perezida",
+    "Iteka rya Minisitiri w’Intebe",
+    "Iteka rya Minisitiri",
+    "Loi organique",
+    "Loi",
+    "Arrêté présidentiel",
+    "Arrêté du Premier Ministre",
+    "Arrêté ministériel",
+)
+
+
+def sentence_case(title: str) -> str:
+    """A capitalised printed title as a citation is written: "Organic Law n° 002/2018.OL of
+    04/04/2018 establishing the Court of Appeal"; the number keeps its printed capitals."""
+    if not title:
+        return title
+    number = re.search(r"\bN\s?[°ºO]\.?\s*(\S+)", title)
+    sentence = title[0] + title[1:].lower()
+    for name in CITED_AS:
+        if sentence.lower().startswith(name.lower() + " "):
+            sentence = name + sentence[len(name) :]
+            break
+    sentence = re.sub(
+        r"\bn\s?[°ºo]\.?\s*(\S+)",
+        lambda m: "n° " + (number.group(1) if number else m.group(1)),
+        sentence,
+        count=1,
+    )
+    return re.sub(r"\b(rwanda|republic|république|repubulika)\b", lambda m: m.group(1).capitalize(), sentence)
+
+
 # --- details read from the text ------------------------------------------------------------------------
 
 MONTHS = {
@@ -723,12 +778,8 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> dict:
         values["identity.family"] = "executive_instrument"
     title = entry["versions"].get("en", next(iter(entry["versions"].values())))["title"]
     if title:
-        sentence = title[0] + title[1:].lower()
-        sentence = re.sub(r"\bn\s?[°º]\s*", "n° ", sentence)
-        sentence = re.sub(r"\brwanda\b", "Rwanda", sentence)
-        sentence = re.sub(r"\brepublic\b", "Republic", sentence)
-        values["identity.full_title"] = values["identity.title"] = sentence
-        values["identity.citation"] = sentence
+        values["identity.full_title"] = values["identity.title"] = sentence_case(title)
+        values["identity.citation"] = values["identity.full_title"]
     if entry["number"] != "constitution":
         values["identity.number.value"] = entry["number"]
         printed = {
