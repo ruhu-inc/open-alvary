@@ -229,7 +229,8 @@ def bbox(*columns, width=600.0, lines=12):
         for line in range(lines):
             y = 60 + line * 14
             x = x0
-            for word in text.split():
+            words = text.split()
+            for word in words[line % 3 :] + words[: line % 3]:  # lines differ, as printed text does
                 w = 6 * len(word)
                 if x + w > x1:
                     break

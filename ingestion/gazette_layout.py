@@ -139,8 +139,9 @@ def language(texts: list[str]) -> tuple[str | None, dict]:
     return (best if score >= 3 and score / total >= 0.5 else None), dict(counts)
 
 
-def columns(page: dict, min_gap: float = 0.012, bins: int = 400) -> list[tuple[float, float]]:
-    """Column spans from the vertical gaps that (almost) no line crosses."""
+def columns(page: dict, min_gap: float = 0.004, bins: int = 400) -> list[tuple[float, float]]:
+    """Column spans from the vertical gaps that (almost) no line crosses; the Gazette's gutters
+    between its language columns are about 6 pt."""
     width = page["width"]
     if not page["words"]:
         return []
