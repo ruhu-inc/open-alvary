@@ -171,7 +171,8 @@ def split_page(page: dict, number: int, carried: str | None = None) -> dict:
     for (x0, x1), inside in zip(spans, by_column, strict=True):
         kept = []
         for line in lines_of(inside):
-            edge = line["y0"] < 0.09 * page["height"] or line["y1"] > 0.93 * page["height"]
+            # Running headers sit in the top tenth; page numbers lower than one might think (about 0.9).
+            edge = line["y0"] < 0.09 * page["height"] or line["y1"] > 0.85 * page["height"]
             if edge and FURNITURE.match(line["text"].strip()):
                 furniture.append(line)
             else:
