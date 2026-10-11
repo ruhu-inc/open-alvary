@@ -219,6 +219,7 @@ def test_the_crawler_says_who_it_is_and_adds_a_contact_only_when_set(monkeypatch
     monkeypatch.setenv("ALVARY_CRAWLER_CONTACT", "https://example.org/contact")
     assert filelist.user_agent().endswith("; https://example.org/contact)")
     assert filelist.size_bytes("555 KB") == 568320 and filelist.listed_date("Sep 29, 2026") == "2026-09-29"
+    assert filelist.size_bytes("1,004 KB") == 1004 * 1024 and filelist.size_bytes("1,5 MB") == 1572864
 
 
 def bbox(*columns, width=600.0, lines=12):

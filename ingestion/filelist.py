@@ -216,11 +216,13 @@ UNITS = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3}
 
 
 def size_bytes(text: str) -> int | None:
-    """'2 MB' -> 2097152 (as shown: an approximation, the listing rounds)."""
+    """'2 MB' -> 2097152, '1,004 KB' -> 1028096 (as shown: an approximation, the listing rounds).
+    A comma before three digits groups thousands; otherwise it is a decimal comma."""
     match = re.fullmatch(r"\s*([\d.,]+)\s*([KMG]?B)\s*", text or "", re.I)
     if not match:
         return None
-    return int(float(match.group(1).replace(",", ".")) * UNITS[match.group(2).upper()])
+    number = re.sub(r",(?=\d{3}\b)", "", match.group(1)).replace(",", ".")
+    return int(float(number) * UNITS[match.group(2).upper()])
 
 
 def listed_date(text: str) -> str | None:
