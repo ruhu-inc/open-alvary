@@ -73,7 +73,16 @@ FAMILIES: dict[str, tuple[str, tuple[str, ...]]] = {
     ),
     "executive_instrument": (
         "act",
-        ("decree", "royal_decree", "executive_order", "ministerial_order", "circular"),
+        (
+            "decree",
+            "royal_decree",
+            "executive_order",
+            "presidential_order",  # Rwanda's Iteka rya Perezida, the DRC's ordonnance
+            "prime_ministers_order",
+            "ministerial_order",
+            "instructions",
+            "circular",
+        ),
     ),
     "judgment": ("judgment", ("judgment", "ruling", "order", "advisory_opinion", "decision", "award")),
     "gazette": ("officialGazette", ("gazette", "supplement")),

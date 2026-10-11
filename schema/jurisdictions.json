@@ -225,7 +225,399 @@
       "au_region": "eastern",
       "member_of": [
         "aa-au"
-      ]
+      ],
+      "names": {
+        "rw": "Repubulika y'u Rwanda",
+        "en": "Republic of Rwanda",
+        "fr": "République du Rwanda"
+      },
+      "researched": true,
+      "sources": [
+        "https://faolex.fao.org/docs/pdf/rwa128551.pdf",
+        "https://constituteproject.org/constitution/Rwanda_2015.pdf?lang=EN",
+        "https://www.minijust.gov.rw/fileadmin/user_upload/Minijust/Official_gazettes_2/____2026_Igazeti_ya_Leta/______GICURASI-May-Mai/OG_n___21_Bis_of_25.05.2026__LO__Amatora.pdf",
+        "https://www.minijust.gov.rw/fileadmin/user_upload/Minijust/Official_gazettes_2/____2026_Igazeti_ya_Leta/______GICURASI-May-Mai/OG_n___Special_of_28.05.2026__Ubucuruzi_bw_Umutungno_koranabuhanga.pdf",
+        "https://www.migration.gov.rw/fileadmin/user_upload/pdf_files/og_n___special_bis_of_19.04.2024_ububasha_bw_inkiko___impunzi_abasaba_sitati_ubuhunzi___inama_ubujurire__1_.pdf",
+        "https://www.minijust.gov.rw/fileadmin/user_upload/Minijust/Official_gazettes_2/_____________2017_Official_Gazettes/18_of_01.05.2017.pdf",
+        "https://www.minijust.gov.rw/fileadmin/user_upload/Minijust/Official_gazettes_2/____2026_Igazeti_ya_Leta/__NZERI-September-Septembre/OG_n___Special_Bis_of_10.09.2026__PMO__Abayobozi.pdf",
+        "https://www.minijust.gov.rw/fileadmin/user_upload/Minijust/Official_gazettes_2/____2026_Igazeti_ya_Leta/__NZERI-September-Septembre/OG_n___Special_of_25.09.2026__MO__IMISORO.pdf",
+        "https://www.minijust.gov.rw/fileadmin/user_upload/Minijust/Official_gazettes_2/____2026_Igazeti_ya_Leta/_UKWAKIRA-October-Octobre/OG_n___Special_Bis_of_01.10.2026__Imiburanishirize_y_imanza_zirimo_abana.pdf",
+        "https://www.minijust.gov.rw/official-gazette",
+        "https://minijust.gov.rw/quality-assurance-and-official-gazette",
+        "https://www.judiciary.gov.rw/courts-structure",
+        "https://minijust.gov.rw/news-detail/organic-law-establishing-the-court-of-appeal",
+        "https://judiciariesworldwide.fjc.gov/country-profile/rwanda",
+        "https://www.nyulawglobal.org/globalex/Rwanda1.html",
+        "https://www.wipo.int/wipolex/en/legislation/details/22672"
+      ],
+      "legal_systems": [
+        "civil_law",
+        "common_law",
+        "customary_law"
+      ],
+      "official_languages": [
+        "rw",
+        "en",
+        "fr",
+        "sw"
+      ],
+      "legislature": {
+        "name": "Parliament",
+        "chambers": [
+          {
+            "id": "deputies",
+            "name": "Chamber of Deputies"
+          },
+          {
+            "id": "senate",
+            "name": "Senate"
+          }
+        ]
+      },
+      "procedures": [
+        {
+          "applies_to": [
+            "organic_law"
+          ],
+          "authority": "Constitution of the Republic of Rwanda of 2003 revised in 2015 and 2023, arts 64, 85, 91(2), 106, 120 and 174",
+          "steps": [
+            {
+              "id": "adopted:deputies",
+              "label": "Adopted by the Chamber of Deputies",
+              "event": "adopted",
+              "chamber": "deputies"
+            },
+            {
+              "id": "adopted:senate",
+              "label": "Adopted by the Senate",
+              "event": "adopted",
+              "chamber": "senate"
+            },
+            {
+              "id": "promulgated",
+              "label": "Promulgated by the President of the Republic",
+              "event": "promulgated",
+              "signed_by": "President of the Republic"
+            },
+            {
+              "id": "countersigned",
+              "label": "Countersigned by the Prime Minister",
+              "event": "signed",
+              "signed_by": "Prime Minister"
+            },
+            {
+              "id": "sealed",
+              "label": "Seen and sealed with the Seal of the Republic",
+              "event": "certified",
+              "signed_by": "Minister of Justice and Attorney General"
+            },
+            {
+              "id": "published",
+              "label": "Published in the Official Gazette",
+              "event": "published"
+            },
+            {
+              "id": "commenced",
+              "label": "Commencement",
+              "event": "commenced"
+            }
+          ]
+        },
+        {
+          "applies_to": [
+            "law"
+          ],
+          "authority": "Constitution of the Republic of Rwanda of 2003 revised in 2015 and 2023, arts 64, 85, 87, 91(1), 94, 106, 120 and 174",
+          "steps": [
+            {
+              "id": "adopted:deputies",
+              "label": "Adopted by the Chamber of Deputies",
+              "event": "adopted",
+              "chamber": "deputies"
+            },
+            {
+              "id": "adopted:senate",
+              "label": "Adopted by the Senate (only the laws of article 85: treaty approvals, defence and national security)",
+              "event": "adopted",
+              "chamber": "senate"
+            },
+            {
+              "id": "promulgated",
+              "label": "Promulgated by the President of the Republic",
+              "event": "promulgated",
+              "signed_by": "President of the Republic"
+            },
+            {
+              "id": "countersigned",
+              "label": "Countersigned by the Prime Minister",
+              "event": "signed",
+              "signed_by": "Prime Minister"
+            },
+            {
+              "id": "sealed",
+              "label": "Seen and sealed with the Seal of the Republic",
+              "event": "certified",
+              "signed_by": "Minister of Justice and Attorney General"
+            },
+            {
+              "id": "published",
+              "label": "Published in the Official Gazette",
+              "event": "published"
+            },
+            {
+              "id": "commenced",
+              "label": "Commencement",
+              "event": "commenced"
+            }
+          ]
+        },
+        {
+          "applies_to": [
+            "constitutional_amendment"
+          ],
+          "authority": "Constitution of the Republic of Rwanda of 2003 revised in 2015 and 2023, arts 106, 120, 174 and 175",
+          "steps": [
+            {
+              "id": "adopted:deputies",
+              "label": "Adopted by the Chamber of Deputies (three quarters of members)",
+              "event": "adopted",
+              "chamber": "deputies"
+            },
+            {
+              "id": "adopted:senate",
+              "label": "Adopted by the Senate (three quarters of members)",
+              "event": "adopted",
+              "chamber": "senate"
+            },
+            {
+              "id": "referendum",
+              "label": "Approved by referendum (only where article 175 requires it)",
+              "event": "referendum"
+            },
+            {
+              "id": "promulgated",
+              "label": "Promulgated by the President of the Republic",
+              "event": "promulgated",
+              "signed_by": "President of the Republic"
+            },
+            {
+              "id": "countersigned",
+              "label": "Countersigned by the Prime Minister",
+              "event": "signed",
+              "signed_by": "Prime Minister"
+            },
+            {
+              "id": "sealed",
+              "label": "Seen and sealed with the Seal of the Republic",
+              "event": "certified",
+              "signed_by": "Minister of Justice and Attorney General"
+            },
+            {
+              "id": "published",
+              "label": "Published in the Official Gazette",
+              "event": "published"
+            },
+            {
+              "id": "commenced",
+              "label": "Commencement",
+              "event": "commenced"
+            }
+          ]
+        },
+        {
+          "applies_to": [
+            "presidential_order"
+          ],
+          "authority": "Constitution of the Republic of Rwanda of 2003 revised in 2015 and 2023, arts 112 and 120",
+          "steps": [
+            {
+              "id": "approved:cabinet",
+              "label": "Approved by the Cabinet",
+              "event": "approved"
+            },
+            {
+              "id": "signed",
+              "label": "Signed by the President of the Republic",
+              "event": "signed",
+              "signed_by": "President of the Republic"
+            },
+            {
+              "id": "countersigned",
+              "label": "Countersigned by the Prime Minister",
+              "event": "signed",
+              "signed_by": "Prime Minister"
+            },
+            {
+              "id": "sealed",
+              "label": "Seen and sealed with the Seal of the Republic",
+              "event": "certified",
+              "signed_by": "Minister of Justice and Attorney General"
+            },
+            {
+              "id": "published",
+              "label": "Published in the Official Gazette",
+              "event": "published"
+            },
+            {
+              "id": "commenced",
+              "label": "Commencement",
+              "event": "commenced"
+            }
+          ]
+        },
+        {
+          "applies_to": [
+            "prime_ministers_order"
+          ],
+          "authority": "Constitution of the Republic of Rwanda of 2003 revised in 2015 and 2023, arts 119 and 120(2)",
+          "steps": [
+            {
+              "id": "signed",
+              "label": "Signed by the Prime Minister",
+              "event": "signed",
+              "signed_by": "Prime Minister"
+            },
+            {
+              "id": "countersigned",
+              "label": "Countersigned by the Minister who proposed it",
+              "event": "signed"
+            },
+            {
+              "id": "sealed",
+              "label": "Seen and sealed with the Seal of the Republic",
+              "event": "certified",
+              "signed_by": "Minister of Justice and Attorney General"
+            },
+            {
+              "id": "published",
+              "label": "Published in the Official Gazette",
+              "event": "published"
+            },
+            {
+              "id": "commenced",
+              "label": "Commencement",
+              "event": "commenced"
+            }
+          ]
+        },
+        {
+          "applies_to": [
+            "ministerial_order"
+          ],
+          "authority": "Constitution of the Republic of Rwanda of 2003 revised in 2015 and 2023, art. 121",
+          "steps": [
+            {
+              "id": "approved:cabinet",
+              "label": "Approved by the Cabinet",
+              "event": "approved"
+            },
+            {
+              "id": "signed",
+              "label": "Signed by the Minister",
+              "event": "signed"
+            },
+            {
+              "id": "sealed",
+              "label": "Seen and sealed with the Seal of the Republic",
+              "event": "certified",
+              "signed_by": "Minister of Justice and Attorney General"
+            },
+            {
+              "id": "published",
+              "label": "Published in the Official Gazette",
+              "event": "published"
+            },
+            {
+              "id": "commenced",
+              "label": "Commencement",
+              "event": "commenced"
+            }
+          ]
+        }
+      ],
+      "gazettes": [
+        {
+          "name": "Official Gazette of the Republic of Rwanda",
+          "kind": "gazette",
+          "publisher": "Ministry of Justice, Quality Assurance and Official Gazette Directorate General"
+        }
+      ],
+      "numbering": [
+        {
+          "applies_to": [
+            "organic_law"
+          ],
+          "printed": "Organic Law n° {number}",
+          "citation": "Organic Law n° {number} of {date} {title}"
+        },
+        {
+          "applies_to": [
+            "law"
+          ],
+          "printed": "Law n° {number}",
+          "citation": "Law n° {number} of {date} {title}"
+        },
+        {
+          "applies_to": [
+            "presidential_order"
+          ],
+          "printed": "Presidential Order n° {number}",
+          "citation": "Presidential Order n° {number} of {date} {title}"
+        },
+        {
+          "applies_to": [
+            "prime_ministers_order"
+          ],
+          "printed": "Prime Minister's Order n° {number}",
+          "citation": "Prime Minister's Order n° {number} of {date} {title}"
+        },
+        {
+          "applies_to": [
+            "ministerial_order"
+          ],
+          "printed": "Ministerial Order n° {number}",
+          "citation": "Ministerial Order n° {number} of {date} {title}"
+        }
+      ],
+      "courts": [
+        {
+          "name": "Supreme Court",
+          "level": "apex"
+        },
+        {
+          "name": "Court of Appeal",
+          "level": "appellate"
+        },
+        {
+          "name": "High Court",
+          "level": "superior"
+        },
+        {
+          "name": "Commercial High Court",
+          "level": "specialised"
+        },
+        {
+          "name": "Intermediate Court",
+          "level": "subordinate"
+        },
+        {
+          "name": "Primary Court",
+          "level": "subordinate"
+        },
+        {
+          "name": "Commercial Court",
+          "level": "specialised"
+        },
+        {
+          "name": "Military High Court",
+          "level": "specialised"
+        },
+        {
+          "name": "Military Court",
+          "level": "specialised"
+        }
+      ],
+      "note": "Laws are adopted in Ikinyarwanda; where published languages conflict, the language of adoption prevails (Constitution art. 96(4)). The Gazette prints Kinyarwanda, English and French, not Kiswahili. Judgments carry registry numbers (RCOMAA 00063/2022/CA), no neutral citation."
     },
     {
       "code": "sc",
