@@ -474,3 +474,46 @@ def test_a_network_outage_is_waited_out_not_skipped_and_a_long_one_stops_the_run
     ledger.save()
     with pytest.raises(rwanda.FetchStopped, match="network"):
         rwanda.fetch_selection(selection, delay=0, keep_going=True, log=lambda m: None, sleep=lambda s: None)
+
+
+def test_the_survey_sums_files_by_source_and_year_and_prices_the_scanned_pages(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.setattr(rwanda, "STAGING", tmp_path)
+    (tmp_path / "survey").mkdir()
+    rows = [
+        {
+            "source": "minijust-gazette",
+            "year": "2017",
+            "pages": 253,
+            "scanned_pages": 182,
+            "text_pages": 253,
+            "tables": 1,
+            "annex_pages": 170,
+            "in_three_languages": 7,
+            "instruments": {"presidential_order": 7},
+        },
+        {
+            "source": "minijust-gazette",
+            "year": "2024",
+            "pages": 394,
+            "scanned_pages": 0,
+            "text_pages": 394,
+            "tables": 0,
+            "annex_pages": 0,
+            "in_three_languages": 1,
+            "instruments": {"law": 1},
+        },
+        {"source": "rlrc-laws", "year": None, "error": "PdfReadError: broken"},
+    ]
+    for k, row in enumerate(rows):
+        (tmp_path / "survey" / f"{k}.json").write_text(json.dumps(row))
+    summary = rwanda.survey_summary(price_per_1000_pages=10.0)
+    every = summary["by"]["all"]
+    assert (summary["files_surveyed"], summary["errors"]) == (3, 1)
+    assert (every["files"], every["pages"], every["scanned_pages"]) == (2, 647, 182)
+    assert every["document_ai_cost_usd"] == 1.82 and every["instruments"] == {
+        "presidential_order": 7,
+        "law": 1,
+    }
+    assert summary["by"]["minijust-gazette 2017"]["scanned_pages"] == 182
