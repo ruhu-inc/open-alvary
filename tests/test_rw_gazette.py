@@ -342,3 +342,93 @@ def test_a_wrapped_number_in_a_sentence_is_not_an_item_and_a_raised_o_is_an_ordi
         {"xmin": 37, "ymin": 10, "xmax": 70, "ymax": 20, "text": "71/2024"},
     ]
     assert RG.lines_of(words)[0]["text"] == "Loi nº 71/2024"
+
+
+def split_page_of(number: int, *columns: list[str]) -> dict:
+    """A split page as the splitter gives it: one column per language list (or one, unlabelled)."""
+    labels = list(RG.LANGUAGES) if len(columns) == 3 else ["en"]
+    return {
+        "page": number,
+        "layout": "parallel" if len(columns) == 3 else "single",
+        "furniture": [],
+        "columns": [
+            {
+                "language": language,
+                "x0": 0,
+                "x1": 1,
+                "lines": [
+                    {"text": text, "x0": 0, "y0": 10 * k, "x1": 1, "y1": 10 * k + 8}
+                    for k, text in enumerate(lines)
+                ],
+            }
+            for language, lines in zip(labels, columns, strict=True)
+        ],
+    }
+
+
+def test_an_annex_runs_from_its_formal_title_to_its_attestation_and_leaves_the_order_alone():
+    split = [
+        split_page_of(
+            1,
+            ["ITEKA RYA PEREZIDA N° 117/01"],
+            ["PRESIDENTIAL ORDER N° 117/01"],
+            ["ARRÊTÉ PRÉSIDENTIEL N° 117/01"],
+        ),
+        split_page_of(
+            2,
+            ["UMUGEREKA W’ITEKA RYA PEREZIDA"],
+            ["ANNEX TO PRESIDENTIAL ORDER"],
+            ["ANNEXE A L’ARRETE PRESIDENTIEL"],
+        ),
+        split_page_of(3, ["AIR SERVICES AGREEMENT"]),
+        split_page_of(4, ["ANNEX I: ROUTE SCHEDULE"]),  # the agreement's own annex: the same annex goes on
+        split_page_of(
+            5,
+            ["Bibonywe kugira ngo bishyirwe ku mugereka"],
+            ["Seen to be annexed to Presidential Order"],
+            ["Vu pour être annexé à l’Arrêté Présidentiel"],
+        ),
+        split_page_of(
+            6,
+            ["ITEKA RYA PEREZIDA N° 118/01"],
+            ["PRESIDENTIAL ORDER N° 118/01"],
+            ["ARRÊTÉ PRÉSIDENTIEL N° 118/01"],
+        ),
+    ]
+    roles = RG.annex_pages(split)
+    assert roles == {2: 1, 3: 1, 4: 1, 5: 1}
+    streams = RG.streams(split, skip=set(roles))
+    assert [line["page"] for line in streams["en"]] == [1, 6]
+    annex = RG.annexes(split, roles)[0]
+    assert annex["pages"] == [2, 3, 4, 5] and "AIR SERVICES AGREEMENT" in [
+        x["text"] for x in annex["versions"]["en"]
+    ]
+
+
+def test_a_number_misprinted_over_the_contents_is_the_same_law_but_two_laws_with_bodies_stay_two():
+    def lines(*texts):
+        return [
+            {"text": t, "page": 1 + k // 5, "x0": 0, "y0": k, "x1": 1, "y1": k + 1}
+            for k, t in enumerate(texts)
+        ]
+
+    misprinted = lines(
+        "LAW N° 066/2024 OF 26/06/2024 DETERMINING THE STATE FINANCES",
+        "TABLE OF CONTENTS",
+        "Article One: Revenue projections",
+        "LAW N° 064/2024 OF 26/06/2024 DETERMINING THE STATE FINANCES",
+        "We, EXAMPLE Name,",
+        "Article One: Revenue projections",
+    )
+    found = RG.instruments({"rw": [], "en": misprinted, "fr": []})
+    assert [(f["number"], f.get("also_printed_as")) for f in found] == [("064/2024", "066/2024")]
+    assert found[0]["versions"]["en"]["start"] == 0
+    two = lines(
+        "LAW N° 043/2026 OF 03/09/2026 APPROVING THE RATIFICATION",
+        "We, EXAMPLE Name,",
+        "Article One: Approval",
+        "LAW N° 044/2026 OF 03/09/2026 APPROVING THE RATIFICATION",
+        "We, EXAMPLE Name,",
+        "Article One: Approval",
+    )
+    assert [f["number"] for f in RG.instruments({"rw": [], "en": two, "fr": []})] == ["043/2026", "044/2026"]
