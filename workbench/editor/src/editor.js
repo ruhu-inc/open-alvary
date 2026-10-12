@@ -68,7 +68,19 @@ export const schema = new Schema({
     },
     table_caption: { content: "text*", marks: "", toDOM: () => ["div", { class: "caption" }, 0] },
     table_row: { content: "table_cell+", toDOM: () => ["div", { class: "tr" }, 0] },
-    table_cell: { content: "text*", marks: "", toDOM: () => ["div", { class: "td" }, 0] },
+    // A merged cell, as printed, keeps its extent (rows x columns); the positions it covers stay in
+    // the grid, shaded, so every column lines up.
+    table_cell: {
+      content: "text*",
+      marks: "",
+      attrs: { rows: { default: 1 }, columns: { default: 1 }, covered: { default: false } },
+      toDOM(node) {
+        const { rows, columns, covered } = node.attrs;
+        if (covered) return ["div", { class: "td covered", title: "Part of the merged cell before it" }, 0];
+        const merged = rows > 1 || columns > 1;
+        return ["div", merged ? { class: "td merged", "data-span": `${rows > 1 ? `${rows} rows` : ""}${rows > 1 && columns > 1 ? ", " : ""}${columns > 1 ? `${columns} columns` : ""}`, title: "Merged cell as printed" } : { class: "td" }, 0];
+      },
+    },
     text: { group: "inline" },
   },
   // Character formatting that can carry meaning in legal text; no fonts, sizes or colours.
@@ -143,8 +155,16 @@ const text = (value) => (value ? [schema.text(value)] : []);
 export function toDoc(units) {
   const blocks = units.map((unit) => {
     if (unit.kind === "table") {
-      const rows = (unit.rows && unit.rows.length ? unit.rows : [[""]]).map((row) =>
-        N.table_row.create(null, (row.length ? row : [""]).map((cell) => N.table_cell.create(null, text(cell)))));
+      const extent = new Map(), covered = new Set();
+      for (const [r, c, rs, cs] of unit.spans || []) {
+        extent.set(`${r},${c}`, [rs, cs]);
+        for (let dr = 0; dr < rs; dr++) for (let dc = 0; dc < cs; dc++) if (dr || dc) covered.add(`${r + dr},${c + dc}`);
+      }
+      const rows = (unit.rows && unit.rows.length ? unit.rows : [[""]]).map((row, r) =>
+        N.table_row.create(null, (row.length ? row : [""]).map((cell, c) => {
+          const [rs, cs] = extent.get(`${r},${c}`) || [1, 1];
+          return N.table_cell.create({ rows: rs, columns: cs, covered: covered.has(`${r},${c}`) }, text(cell));
+        })));
       return N.table_unit.create({ header_rows: unit.header_rows || 0 }, [N.table_caption.create(null, text(unit.caption || "")), ...rows]);
     }
     const inline = [];
@@ -161,13 +181,22 @@ export function fromDoc(doc) {
   const units = [];
   doc.forEach((block) => {
     if (block.type === N.table_unit) {
-      const rows = [];
+      const rows = [], spans = [];
       let caption = "";
       block.forEach((child) => {
         if (child.type === N.table_caption) caption = child.textContent;
-        else { const row = []; child.forEach((cell) => row.push(cell.textContent)); rows.push(row); }
+        else {
+          const row = [];
+          child.forEach((cell) => {
+            if (!cell.attrs.covered && (cell.attrs.rows > 1 || cell.attrs.columns > 1)) spans.push([rows.length, row.length, cell.attrs.rows, cell.attrs.columns]);
+            row.push(cell.textContent);
+          });
+          rows.push(row);
+        }
       });
-      units.push({ kind: "table", caption, header_rows: Math.min(block.attrs.header_rows, rows.length), rows });
+      const width = Math.max(...rows.map((r) => r.length));
+      const kept = spans.filter(([r, c, rs, cs]) => r + rs <= rows.length && c + cs <= width);
+      units.push({ kind: "table", caption, header_rows: Math.min(block.attrs.header_rows, rows.length), rows, ...(kept.length ? { spans: kept } : {}) });
       return;
     }
     const body = block.firstChild;

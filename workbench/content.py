@@ -306,6 +306,36 @@ def replace_in(
     return out, total
 
 
+def table_grid(cells_by_row: list[list[dict]]) -> tuple[list[list[str]], list[list[int]]]:
+    """A table's cells as a full grid, every column lined up: a merged cell's text in its first
+    position, the positions it covers left empty, and the merges listed as [row, column, rows,
+    columns] so that they are kept, shown and published as printed."""
+    taken: set[tuple[int, int]] = set()
+    placed: dict[tuple[int, int], str] = {}
+    spans: list[list[int]] = []
+    for r, row in enumerate(cells_by_row):
+        c = 0
+        for cell in row:
+            while (r, c) in taken:
+                c += 1
+            rows_over, columns_over = (
+                max(1, int(cell.get("row_span", 1))),
+                max(1, int(cell.get("col_span", 1))),
+            )
+            placed[(r, c)] = cell["text"]
+            for dr in range(rows_over):
+                for dc in range(columns_over):
+                    taken.add((r + dr, c + dc))
+            if rows_over > 1 or columns_over > 1:
+                spans.append([r, c, rows_over, columns_over])
+            c += columns_over
+    height = len(cells_by_row)
+    width = max((c for _, c in taken), default=-1) + 1
+    grid = [[placed.get((r, c), "") for c in range(width)] for r in range(height)]
+    spans = [[r, c, min(rs, height - r), cs] for r, c, rs, cs in spans]
+    return grid, spans
+
+
 def units_from(page: dict) -> list[dict]:
     """Editable units from a reconciled page, in reading order."""
     units = []
@@ -313,15 +343,16 @@ def units_from(page: dict) -> list[dict]:
         if node["kind"] == "furniture":
             continue
         if node["kind"] == "table":
-            rows = [[cell["text"] for cell in row] for row in node["header_rows"] + node["body_rows"]]
-            units.append(
-                {
-                    "kind": "table",
-                    "caption": node.get("caption", ""),
-                    "header_rows": len(node["header_rows"]),
-                    "rows": rows,
-                }
-            )
+            rows, spans = table_grid(node["header_rows"] + node["body_rows"])
+            unit = {
+                "kind": "table",
+                "caption": node.get("caption", ""),
+                "header_rows": len(node["header_rows"]),
+                "rows": rows,
+            }
+            if spans:
+                unit["spans"] = spans
+            units.append(unit)
             continue
         unit = {"kind": node["kind"] if node["kind"] in KINDS else "paragraph", "text": node.get("text", "")}
         if node.get("marker"):
@@ -367,14 +398,32 @@ def validate_units(units) -> list[dict]:
                 for r in rows
             ):
                 raise ValueError("table rows must be lists of at most 100 text cells")
-            clean.append(
-                {
-                    "kind": "table",
-                    "caption": str(unit.get("caption", ""))[:2000],
-                    "header_rows": max(0, min(int(unit.get("header_rows", 0)), len(rows))),
-                    "rows": rows,
-                }
-            )
+            table = {
+                "kind": "table",
+                "caption": str(unit.get("caption", ""))[:2000],
+                "header_rows": max(0, min(int(unit.get("header_rows", 0)), len(rows))),
+                "rows": rows,
+            }
+            spans = unit.get("spans") or []
+            width = max(len(r) for r in rows)
+            if (
+                not isinstance(spans, list)
+                or len(spans) > 200
+                or not all(
+                    isinstance(span, list)
+                    and len(span) == 4
+                    and all(isinstance(v, int) and not isinstance(v, bool) for v in span)
+                    and 0 <= span[0] < len(rows)
+                    and 0 <= span[1] < width
+                    and 1 <= span[2] <= len(rows) - span[0]
+                    and 1 <= span[3] <= width - span[1]
+                    for span in spans
+                )
+            ):
+                raise ValueError("table spans must be [row, column, rows, columns] within the table")
+            if spans:
+                table["spans"] = spans
+            clean.append(table)
             continue
         text = unit.get("text", "")
         if not isinstance(text, str) or len(text) > 8192:
@@ -465,7 +514,7 @@ def plain_text(pages: list[dict]) -> str:
 # What a page's units become on the public site: the reviewer's structure and formatting, without
 # where a restored number came from.
 PUBLIC_KEYS = ("kind", "text", "marker", "level", "align", "marks", "notes")
-TABLE_KEYS = ("kind", "caption", "header_rows", "rows")
+TABLE_KEYS = ("kind", "caption", "header_rows", "rows", "spans")
 
 
 def public_source(document: dict, manifest: dict) -> dict:

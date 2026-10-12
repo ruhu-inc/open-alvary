@@ -22,7 +22,8 @@ LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
 FURNITURE = re.compile(
-    r"^(Official Gazette|Igazeti ya Leta|Journal Officiel)\b.*(n[°º]|No\b).*\d{2}/\d{2}/\d{4}\s*$"
+    r"^(Official Gazette|Igazeti ya Leta|Journal Officiel)\b.*(n[°ºᵒ]|No\b).*"
+    r"(\d{2}/\d{2}/\d{4}|\d{1,2}(?:st|nd|rd|th|er)?\s+[A-Za-zÀ-ÿ]+\s+\d{4})\s*$"
     r"|^\d{1,4}$",
     re.I,
 )
@@ -189,9 +190,10 @@ def split_page(page: dict, number: int, carried: str | None = None, tables: list
     )
     for index, ((x0, x1), inside) in enumerate(zip(spans, by_column, strict=True)):
         kept = []
-        for line in lines_of(inside):
-            # Running headers sit in the top tenth; page numbers lower than one might think (about 0.9).
-            edge = line["y0"] < 0.09 * page["height"] or line["y1"] > 0.85 * page["height"]
+        for position, line in enumerate(lines_of(inside)):
+            # Running headers sit in the top tenth (or open the column, on pages with a deeper top
+            # margin); page numbers lower than one might think (about 0.9).
+            edge = position < 2 or line["y0"] < 0.09 * page["height"] or line["y1"] > 0.85 * page["height"]
             if edge and FURNITURE.match(line["text"].strip()):
                 furniture.append(line)
             else:
