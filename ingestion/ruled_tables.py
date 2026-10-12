@@ -212,13 +212,39 @@ def page_tables(page, words: list[dict], width: float, language_columns: int = 1
 
 def document_tables(pdf: Path, pages: list[dict], layouts: list[int]) -> dict[int, list[dict]]:
     """Content tables of every page of a PDF, keyed by page number; `pages` are its text-layer words
-    per page and `layouts` the number of language columns measured on each."""
+    per page and `layouts` the number of language columns measured on each. Ruled tables first;
+    then, on pages not set in the three language columns, a table of lined-up amounts drawn
+    without lines (aligned_tables), its code columns learnt from all its pages."""
+    from ingestion import aligned_tables
+
     reader = PdfReader(str(pdf))
-    found = {}
+    found: dict[int, list[dict]] = {}
+    rest: dict[int, list[dict]] = {}
     for number, (page, words) in enumerate(zip(reader.pages, pages, strict=False), 1):
         tables = page_tables(page, words["words"], words["width"], layouts[number - 1])
+        if layouts[number - 1] != 3 and tables:
+            # A small ruled box over the heading of a table drawn without lines is that table's
+            # heading ("Domestically financed / Externally financed"), not a table of its own.
+            lined_up = aligned_tables.page_table(words["words"], words["width"])
+            if lined_up:
+                top, bottom = lined_up["box"][1] - 80, lined_up["box"][3]
+                tables = [
+                    t
+                    for t in tables
+                    if not (len(t["header_rows"]) + len(t["body_rows"]) <= 2 and top <= t["box"][1] <= bottom)
+                ]
         if tables:
             found[number] = tables
+        taken = {id(w) for table in tables for w in table["words"]}
+        rest[number] = [w for w in words["words"] if id(w) not in taken]
+    unlined = [n for n in rest if layouts[n - 1] != 3]
+    columns = aligned_tables.document_code_columns([(rest[n], pages[n - 1]["width"]) for n in unlined])
+    for number in unlined:
+        width = pages[number - 1]["width"]
+        heading = aligned_tables.signature(rest[number], width)
+        table = aligned_tables.page_table(rest[number], width, columns.get(heading[0]) if heading else None)
+        if table:
+            found.setdefault(number, []).append(table)
     return found
 
 
