@@ -903,3 +903,46 @@ def test_a_table_with_merged_cells_lines_up_and_keeps_its_merges():
     assert content.validate_units([unit])[0]["spans"] == spans
     with pytest.raises(ValueError):
         content.validate_units([{**unit, "spans": [[1, 2, 3, 1]]}])  # runs past the last row
+
+
+def test_a_collection_in_the_corpus_bucket_is_read_from_it_and_cached(tmp_path, monkeypatch):
+    from ingestion import rw_gazette as RG
+
+    lines = [
+        {"text": "We, EXAMPLE Name,", "x0": 300, "y0": 60, "x1": 420, "y1": 70, "page": 3},
+        {"text": "Article One: Purpose", "x0": 300, "y0": 90, "x1": 420, "y1": 100, "page": 3},
+    ]
+    reading_json = RG.reading(RG.structure(lines, "en"), {}, "0" * 64, {}, {3: (842.0, 595.0)})
+    document = {
+        "id": "rw-law-009-2026-en",
+        "type": "law",
+        "title": "Law n° 009/2026",
+        "jurisdiction": "rw",
+        "language": "en",
+        "work": "rw-law-009-2026",
+        "source_object": "sources/rw/minijust-gazette/abc.pdf",
+    }
+    objects = {
+        "collections/rw/manifest.json": json.dumps({"collection": "rw", "documents": [document]}).encode(),
+        "collections/rw/rw-law-009-2026-en.reading.json": json.dumps(reading_json).encode(),
+        "collections/rw/rw-law-009-2026-en.provenance.json": b'{"url": "https://www.minijust.gov.rw/x.pdf"}',
+        "sources/rw/minijust-gazette/abc.pdf": b"%PDF-1.4 the issue",
+    }
+    asked = []
+
+    class Bucket:
+        def get(self, name):
+            asked.append(name)
+            return objects[name]
+
+    monkeypatch.setattr(content, "_STORES", {"test-bucket": Bucket()})
+    monkeypatch.setenv("ALVARY_REVIEW_COLLECTIONS", "gs://test-bucket/collections/rw/")
+    monkeypatch.setenv("ALVARY_REVIEW_CACHE", str(tmp_path / "cache"))
+    (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(reading()))
+    library = content.Library(tmp_path)
+    assert "rw-law-009-2026-en" in [d["id"] for d in library.documents()]
+    assert library.reading("rw-law-009-2026-en")["pages"][0]["page"] == 3
+    assert library.original("rw-law-009-2026-en").read_bytes() == b"%PDF-1.4 the issue"
+    assert library.provenance("rw-law-009-2026-en")["url"].endswith("x.pdf")
+    library.reading("rw-law-009-2026-en")
+    assert asked.count("collections/rw/rw-law-009-2026-en.reading.json") == 1  # cached after the first time

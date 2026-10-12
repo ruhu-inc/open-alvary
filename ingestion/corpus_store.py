@@ -72,6 +72,21 @@ class CorpusStore:
         response.raise_for_status()
         return True
 
+    def list(self, prefix: str) -> list[str]:
+        """The names of the objects under a prefix."""
+        names, token = [], None
+        while True:
+            params = {"prefix": prefix, "fields": "items(name),nextPageToken", "maxResults": 1000}
+            if token:
+                params["pageToken"] = token
+            response = self.session.get(f"{API}/storage/v1/b/{self.bucket}/o", params=params, timeout=120)
+            response.raise_for_status()
+            page = response.json()
+            names += [item["name"] for item in page.get("items", [])]
+            token = page.get("nextPageToken")
+            if not token:
+                return names
+
     def get(self, name: str) -> bytes:
         response = self.session.get(
             f"{API}/storage/v1/b/{self.bucket}/o/{quote(name, safe='')}", params={"alt": "media"}, timeout=600

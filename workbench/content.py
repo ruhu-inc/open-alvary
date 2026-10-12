@@ -33,18 +33,41 @@ COLLECTION_ID = re.compile(r"[a-z]{2}-[a-z0-9-]{3,120}")
 
 
 def extra_collections() -> list[tuple[dict, Path]]:
-    """Further collections to review beside the first, each a folder holding its manifest.json and
-    its documents' readings and PDFs, named in ALVARY_REVIEW_COLLECTIONS (separated by the path
-    separator). A document id must be a plain slug, so no file outside its folder is reached."""
+    """Further collections to review beside the first, named in ALVARY_REVIEW_COLLECTIONS (separated by
+    the path separator): a folder holding its manifest.json and its documents' readings and PDFs, or
+    a place in the corpus bucket ("gs://open-alvary-corpus/collections/rw/"), whose documents are
+    fetched into a private cache the first time they are opened. A document id must be a plain
+    slug, so no file outside its folder is reached."""
     out = []
-    for folder in filter(None, os.environ.get("ALVARY_REVIEW_COLLECTIONS", "").split(os.pathsep)):
-        staging = Path(folder)
-        manifest = json.loads((staging / "manifest.json").read_text())
+    listed = os.environ.get("ALVARY_REVIEW_COLLECTIONS", "")
+    # Separated like PATH (":"), except the colon of a "gs://" address.
+    for place in filter(None, re.split(r":(?!//)" if os.pathsep == ":" else re.escape(os.pathsep), listed)):
+        if place.startswith("gs://"):
+            bucket, _, prefix = place[len("gs://") :].partition("/")
+            store = _store(bucket)
+            manifest = json.loads(store.get(f"{prefix}manifest.json"))
+            staging = Path(os.environ.get("ALVARY_REVIEW_CACHE", "private-staging/cache")) / bucket / prefix
+            staging.mkdir(parents=True, exist_ok=True)
+            manifest["_remote"] = {"bucket": bucket, "prefix": prefix}
+        else:
+            staging = Path(place)
+            manifest = json.loads((staging / "manifest.json").read_text())
         for document in manifest["documents"]:
             if not COLLECTION_ID.fullmatch(document["id"]):
-                raise ValueError(f"Invalid document id in {staging}: {document['id']!r}")
+                raise ValueError(f"Invalid document id in {place}: {document['id']!r}")
         out.append((manifest, staging))
     return out
+
+
+_STORES: dict = {}
+
+
+def _store(bucket: str):
+    from ingestion.corpus_store import CorpusStore
+
+    if bucket not in _STORES:
+        _STORES[bucket] = CorpusStore(bucket)
+    return _STORES[bucket]
 
 
 def render_fonts() -> list[str]:
@@ -73,7 +96,7 @@ class Library:
             }
             for manifest, staging in self.collections
             for document in manifest["documents"]
-            if (staging / f"{document['id']}.reading.json").exists()
+            if manifest.get("_remote") or (staging / f"{document['id']}.reading.json").exists()
         ]
 
     def _where(self, act_id: str) -> tuple[dict, Path]:
@@ -88,6 +111,23 @@ class Library:
     def staging_for(self, act_id: str) -> Path:
         return self._where(act_id)[1]
 
+    def _here(self, act_id: str, suffix: str) -> Path:
+        """A document's file in its folder; from the bucket, fetched into the cache the first time."""
+        manifest, staging = self._where(act_id)
+        path = staging / f"{act_id}{suffix}"
+        remote = manifest.get("_remote")
+        if remote and not path.exists():
+            store = _store(remote["bucket"])
+            if suffix == ".pdf":
+                document = next(d for d in manifest["documents"] if d["id"] == act_id)
+                data = store.get(document["source_object"])
+            else:
+                data = store.get(f"{remote['prefix']}{act_id}{suffix}")
+            tmp = path.with_suffix(path.suffix + ".part")
+            tmp.write_bytes(data)
+            tmp.replace(path)
+        return path
+
     def act(self, act_id: str) -> dict:
         found = next((a for a in self.documents() if a["id"] == act_id), None)
         if found is None:
@@ -96,23 +136,26 @@ class Library:
 
     def provenance(self, act_id: str) -> dict:
         """How and when the original file was retrieved (written by the fetch step)."""
-        path = self.staging_for(act_id) / f"{act_id}.provenance.json"
+        try:
+            path = self._here(act_id, ".provenance.json")
+        except Exception:  # noqa: BLE001 - provenance is shown when there is some
+            return {}
         return json.loads(path.read_text()) if path.exists() else {}
 
     def original(self, act_id: str) -> Path:
         self.act(act_id)
-        path = self.staging_for(act_id) / f"{act_id}.pdf"
+        path = self._here(act_id, ".pdf")
         if not path.exists():
             raise FileNotFoundError(act_id)
         return path
 
     def reading(self, act_id: str) -> dict:
         self.act(act_id)
-        return json.loads((self.staging_for(act_id) / f"{act_id}.reading.json").read_text())
+        return json.loads(self._here(act_id, ".reading.json").read_text())
 
     def image(self, act_id: str, page: int) -> Path:
         """A legible page image (150 dpi), rendered once in the sealed tools container."""
-        self.act(act_id)
+        self.original(act_id)  # the PDF, fetched first if its collection is in the bucket
         staging = self.staging_for(act_id)
         folder = staging / "review-images" / act_id
         path = folder / f"page-{page}.jpg"

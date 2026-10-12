@@ -609,27 +609,123 @@ def rlrc_status(index: dict, checked: str | None, kind: str, number: str, year: 
     }
 
 
-def prepare_selection(selection: dict, log=print) -> dict:
+class LocalCollection:
+    """Review documents in a folder here (the samples): readings, provenance, the issue's PDF beside them."""
+
+    def __init__(self, folder: Path | None = None):
+        self.folder = folder or COLLECTION
+        self.folder.mkdir(parents=True, exist_ok=True)
+
+    def manifest(self) -> dict:
+        path = self.folder / "manifest.json"
+        return json.loads(path.read_text()) if path.exists() else new_manifest()
+
+    def done(self, sha: str) -> bool:
+        return False  # the samples are always read afresh
+
+    def remove(self, doc_id: str) -> None:
+        for suffix in (".reading.json", ".pdf", ".provenance.json"):
+            (self.folder / f"{doc_id}{suffix}").unlink(missing_ok=True)
+
+    def write(self, doc_id: str, reading: dict, provenance: dict, pdf: Path) -> None:
+        import os
+        import shutil
+
+        (self.folder / f"{doc_id}.reading.json").write_text(
+            json.dumps(reading, ensure_ascii=False, indent=1) + "\n"
+        )
+        target = self.folder / f"{doc_id}.pdf"
+        if not target.exists():
+            try:
+                os.link(pdf, target)
+            except OSError:
+                shutil.copyfile(pdf, target)
+        (self.folder / f"{doc_id}.provenance.json").write_text(
+            json.dumps(provenance, ensure_ascii=False, indent=1) + "\n"
+        )
+
+    def finish_issue(self, sha: str, documents: list[dict]) -> None:
+        pass
+
+    def save_manifest(self, manifest: dict) -> None:
+        (self.folder / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
+
+
+class BucketCollection:
+    """Review documents in the corpus bucket, under collections/<country>/: each document's reading
+    and provenance, an index of each issue's documents (so a run resumes issue by issue), and the
+    manifest assembled from those indexes. No PDF is copied: a document names its source object."""
+
+    def __init__(self, store, prefix: str = f"collections/{COUNTRY}/"):
+        self.store, self.prefix = store, prefix
+
+    def manifest(self) -> dict:
+        return new_manifest()
+
+    def done(self, sha: str) -> bool:
+        return self.store.exists(f"{self.prefix}issues/{sha}.json")
+
+    def remove(self, doc_id: str) -> None:
+        pass  # a document read again is written over
+
+    def write(self, doc_id: str, reading: dict, provenance: dict, pdf: Path) -> None:
+        self.store.put(
+            f"{self.prefix}{doc_id}.reading.json",
+            json.dumps(reading, ensure_ascii=False).encode(),
+            "application/json",
+            replace=True,
+        )
+        self.store.put(
+            f"{self.prefix}{doc_id}.provenance.json",
+            json.dumps(provenance, ensure_ascii=False).encode(),
+            "application/json",
+            replace=True,
+        )
+
+    def finish_issue(self, sha: str, documents: list[dict]) -> None:
+        self.store.put(
+            f"{self.prefix}issues/{sha}.json",
+            json.dumps(documents, ensure_ascii=False).encode(),
+            "application/json",
+            replace=True,
+        )
+
+    def save_manifest(self, manifest: dict) -> None:
+        documents = []
+        for name in self.store.list(f"{self.prefix}issues/"):
+            documents += json.loads(self.store.get(name))
+        manifest["documents"] = sorted(documents, key=lambda d: d["id"])
+        self.store.put(
+            f"{self.prefix}manifest.json",
+            json.dumps(manifest, ensure_ascii=False).encode(),
+            "application/json",
+            replace=True,
+        )
+
+
+def new_manifest() -> dict:
+    return {
+        "collection": "rw",
+        "jurisdiction": "rw",
+        "description": "Rwanda: laws and orders from the Official Gazette and the RLRC's Laws of Rwanda",
+        "rights_basis": RIGHTS_BASIS,
+        "documents": [],
+    }
+
+
+def prepare_selection(
+    selection: dict, log=print, collection=None, store=None, skip_done: bool = False
+) -> dict:
     """Each fetched gazette issue of a selection split into its instruments, and each instrument's
-    language versions written as readings the workbench reviews, with the issue's PDF beside them,
-    the details read from the text, and the check of its articles across the three languages."""
-    import os
-    import shutil
+    language versions written as readings the workbench reviews, with the details read from the
+    text and the check of its articles across the three languages: here (LocalCollection, the issue's
+    PDF beside them) or in the corpus bucket (BucketCollection, read from and written to it)."""
+    import tempfile
 
     ledger = Ledger(STAGING / "sync-ledger.json")
-    COLLECTION.mkdir(parents=True, exist_ok=True)
-    path = COLLECTION / "manifest.json"
-    manifest = (
-        json.loads(path.read_text())
-        if path.exists()
-        else {
-            "collection": "rw-pilot",
-            "jurisdiction": "rw",
-            "description": "Rwanda pilot: laws from a sample of Official Gazette issues, 2004 to 2026",
-            "rights_basis": RIGHTS_BASIS,
-            "documents": [],
-        }
-    )
+    collection = collection or LocalCollection()
+    manifest = collection.manifest()
+    scratch = tempfile.TemporaryDirectory(dir=STAGING)
     documents = {d["id"]: d for d in manifest["documents"]}
     summary = []
     for item_id in selection["items"]:
@@ -637,13 +733,22 @@ def prepare_selection(selection: dict, log=print) -> dict:
         if record["source"] not in ("minijust-gazette", "rlrc-laws") or not record.get("sha256"):
             continue
         sha = record["sha256"]
+        if skip_done and collection.done(sha):
+            continue
         # This issue is read afresh: what an earlier reading of it produced is replaced.
         for stale in [k for k, d in documents.items() if d.get("url") == record["url"]]:
-            for suffix in (".reading.json", ".pdf", ".provenance.json"):
-                (COLLECTION / f"{stale}{suffix}").unlink(missing_ok=True)
+            collection.remove(stale)
             del documents[stale]
+        source_object = corpus_store.source_name(COUNTRY, record["source"], sha)
         pdf = STAGING / "sources" / record["source"] / f"{sha}.pdf"
-        sidecar = json.loads(pdf.with_suffix(".json").read_text())
+        if pdf.exists():
+            sidecar = json.loads(pdf.with_suffix(".json").read_text())
+        elif store is not None and record.get("stored"):
+            pdf = Path(scratch.name) / "issue.pdf"
+            pdf.write_bytes(store.get(source_object))
+            sidecar = json.loads(store.get(source_object[: -len(".pdf")] + ".json"))
+        else:
+            continue
         words = gazette_layout.text_layer(pdf)
         layouts = [len(gazette_layout.columns(page)) for page in words]
         split = rw_gazette.split_issue(words, ruled_tables.document_tables(pdf, words, layouts))
@@ -651,8 +756,9 @@ def prepare_selection(selection: dict, log=print) -> dict:
         read_pages: set[int] = set()
         # Scanned pages Document AI has read: its words, in the layout of the OCR layer.
         read = STAGING / "docai" / f"{sha}.json"
-        if read.exists():
-            readings = json.loads(read.read_text())["pages"]
+        remote = f"readings/{COUNTRY}/docai/{sha}.json"
+        if read.exists() or (store is not None and store.exists(remote)):
+            readings = json.loads(read.read_text() if read.exists() else store.get(remote))["pages"]
             split = [
                 rw_gazette.correct_page(page, readings[str(page["page"])])
                 if str(page["page"]) in readings
@@ -665,31 +771,30 @@ def prepare_selection(selection: dict, log=print) -> dict:
         streams = rw_gazette.streams(split, skip=set(roles))
         furniture = {page["page"]: [line["text"] for line in page["furniture"]] for page in split}
 
-        def write_document(doc_id, reading, pages, record=record, sidecar=sidecar, pdf=pdf, sha=sha):
-            """A review document: its reading, the issue's PDF beside it and how it was obtained."""
-            (COLLECTION / f"{doc_id}.reading.json").write_text(
-                json.dumps(reading, ensure_ascii=False, indent=1) + "\n"
-            )
-            target = COLLECTION / f"{doc_id}.pdf"
-            if not target.exists():
-                try:
-                    os.link(pdf, target)
-                except OSError:
-                    shutil.copyfile(pdf, target)
-            (COLLECTION / f"{doc_id}.provenance.json").write_text(
-                json.dumps(
-                    {
-                        "url": record["url"],
-                        "retrieved_at": sidecar["retrieved_at"],
-                        "sha256": sha,
-                        "bytes": sidecar["bytes"],
-                        "issue": record["listed"]["name"],
-                        "pages": pages,
-                    },
-                    ensure_ascii=False,
-                    indent=1,
-                )
-                + "\n"
+        def write_document(
+            doc_id,
+            reading,
+            pages,
+            record=record,
+            sidecar=sidecar,
+            pdf=pdf,
+            sha=sha,
+            source_object=source_object,
+        ):
+            """A review document: its reading, and how the issue it comes from was obtained."""
+            collection.write(
+                doc_id,
+                reading,
+                {
+                    "url": record["url"],
+                    "retrieved_at": sidecar["retrieved_at"],
+                    "sha256": sha,
+                    "bytes": sidecar["bytes"],
+                    "issue": record["listed"]["name"],
+                    "pages": pages,
+                    "source_object": source_object,
+                },
+                pdf,
             )
 
         if record["source"] == "minijust-gazette":
@@ -762,6 +867,7 @@ def prepare_selection(selection: dict, log=print) -> dict:
                     "work": work,
                     "versions": {lang: f"{work}-{lang}" for lang in versions},
                     "url": record["url"],
+                    "source_object": source_object,
                     "issue": {"name": record["listed"]["name"], **issue},
                     "pages": entry["versions"][language]["pages"],
                     "scanned_pages": sorted(
@@ -820,6 +926,7 @@ def prepare_selection(selection: dict, log=print) -> dict:
                     "part": part,
                     "versions": {lang: f"{work}-{part}-{lang}" for lang in annex["versions"]},
                     "url": record["url"],
+                    "source_object": source_object,
                     "issue": {"name": record["listed"]["name"], **issue},
                     "pages": [annex["pages"][0], annex["pages"][-1]],
                     "scanned_pages": sorted(set(annex["pages"]) & scanned),
@@ -832,9 +939,13 @@ def prepare_selection(selection: dict, log=print) -> dict:
                     "pages": [annex["pages"][0], annex["pages"][-1]],
                 }
             )
+        collection.finish_issue(sha, [d for d in documents.values() if d.get("url") == record["url"]])
+        if pdf.parent == Path(scratch.name):
+            pdf.unlink(missing_ok=True)
         log(f"{record['listed']['name']}: {len(found)} instruments, {len(set(roles.values()))} annexes")
+    scratch.cleanup()
     manifest["documents"] = sorted(documents.values(), key=lambda d: d["id"])
-    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
+    collection.save_manifest(manifest)
     return {"documents": len(manifest["documents"]), "instruments": summary}
 
 
@@ -1063,7 +1174,10 @@ def main(argv=None) -> int:
     prepare = sub.add_parser(
         "prepare", help="split fetched gazette issues into instruments and write readings for review"
     )
-    prepare.add_argument("--selection", required=True, type=Path)
+    prepare.add_argument("--selection", type=Path, help="these files (samples: written here)")
+    prepare.add_argument("--all", action="store_true", help="every file stored in the corpus bucket")
+    prepare.add_argument("--to-bucket", action="store_true", help="write to collections/rw/ in the bucket")
+    prepare.add_argument("--limit", type=int, help="at most this many issues (a trial)")
     args = parser.parse_args(argv)
     if args.command == "survey":
         summary = survey(
@@ -1114,7 +1228,24 @@ def main(argv=None) -> int:
         probe_selection(load_selection(args.selection))
         return 0
     if args.command == "prepare":
-        print(json.dumps(prepare_selection(load_selection(args.selection)), indent=1))
+        if args.all == bool(args.selection):
+            parser.error("give --selection or --all")
+        store = corpus_store.CorpusStore() if (args.to_bucket or args.all) else None
+        if args.all:
+            ledger = Ledger(STAGING / "sync-ledger.json")
+            items = sorted(i for i, r in ledger.data["items"].items() if r.get("stored"))
+            selection = {"items": items[: args.limit] if args.limit else items}
+        else:
+            selection = load_selection(args.selection)
+        collection = BucketCollection(store) if args.to_bucket else LocalCollection()
+        result = prepare_selection(
+            selection,
+            log=lambda m: print(m, flush=True),
+            collection=collection,
+            store=store,
+            skip_done=args.to_bucket,
+        )
+        print(json.dumps({"documents": result["documents"], "instruments": len(result["instruments"])}))
         return 0
     if args.command == "reparse":
         for source_id in list(SOURCES) if args.source == "all" else [args.source]:
