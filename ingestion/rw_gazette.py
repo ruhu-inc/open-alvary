@@ -162,13 +162,14 @@ def lines_of(words: list[dict]) -> list[dict]:
 
 def split_page(page: dict, number: int, carried: str | None = None, tables: list[dict] | None = None) -> dict:
     """A page's columns, each with its language and lines; running headers set apart as furniture."""
-    spans = gazette_layout.columns(page)
+    # Columns are measured without the tables' words: a table's amount columns are not languages.
+    in_tables = {id(w) for table in tables or [] for w in table["words"]}
+    spans = gazette_layout.columns({**page, "words": [w for w in page["words"] if id(w) not in in_tables]})
     furniture, columns = [], []
     three = len(spans) == 3
     # Each word to the column it lies in, or the nearest: a word alone at a column's edge (an
     # "Article" set a little apart) can fall in what the measure took for the gutter.
     by_column: list[list[dict]] = [[] for _ in spans]
-    in_tables = {id(w) for table in tables or [] for w in table["words"]}
     for word in page["words"]:
         if id(word) in in_tables:
             continue
@@ -209,7 +210,25 @@ def split_page(page: dict, number: int, carried: str | None = None, tables: list
                     }
                 )
         kept.sort(key=lambda line: line["y0"])
-        language, _ = gazette_layout.language([line["text"] for line in kept])
+        # A column's language from all its words, its tables' included: a page of figures with a
+        # line or two of text is still in the language of its headings and item names.
+        language, _ = gazette_layout.language(
+            [line["text"] for line in kept]
+            + [
+                cell["text"]
+                for line in kept
+                if line.get("table")
+                for row in line["table"]["body_rows"]
+                for cell in row
+            ]
+            + [
+                cell["text"]
+                for line in kept
+                if line.get("table")
+                for row in line["table"]["header_rows"]
+                for cell in row
+            ]
+        )
         columns.append(
             {"language": language or carried, "x0": round(x0, 1), "x1": round(x1, 1), "lines": kept}
         )

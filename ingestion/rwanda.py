@@ -429,7 +429,10 @@ def prepare_selection(selection: dict, log=print) -> dict:
             continue
         sha = record["sha256"]
         # This issue is read afresh: what an earlier reading of it produced is replaced.
-        documents = {k: d for k, d in documents.items() if d.get("url") != record["url"]}
+        for stale in [k for k, d in documents.items() if d.get("url") == record["url"]]:
+            for suffix in (".reading.json", ".pdf", ".provenance.json"):
+                (COLLECTION / f"{stale}{suffix}").unlink(missing_ok=True)
+            del documents[stale]
         pdf = STAGING / "sources" / record["source"] / f"{sha}.pdf"
         sidecar = json.loads(pdf.with_suffix(".json").read_text())
         words = gazette_layout.text_layer(pdf)
