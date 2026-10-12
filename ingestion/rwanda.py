@@ -677,7 +677,7 @@ def prepare_selection(selection: dict, log=print) -> dict:
             }
             # A law the Senate did not sit on (its preamble names only the Chamber of Deputies).
             absent = (
-                {"step:adopted:senate": "not_applicable"}
+                {"step:adopted:senate.date": "not_applicable"}
                 if entry["kind"] == "law"
                 and values.get("step:adopted:deputies.date")
                 and not values.get("step:adopted:senate.date")
