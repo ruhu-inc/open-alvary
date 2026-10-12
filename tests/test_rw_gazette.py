@@ -457,5 +457,9 @@ def test_a_scanned_page_keeps_its_layout_and_takes_document_ais_words_with_diffe
     nodes = RG.structure([{**line, "text": "We, EXAMPLE,"} for line in fixed[:1]] + fixed, "en")
     reading = RG.reading(nodes, {}, "0" * 64, {})
     flags = [f for page in reading["pages"] for f in page["flags"]]
-    assert {f["kind"] for f in flags} == {"reading_differs"}
-    assert "aérien" in flags[-1]["primary"] and "adrien" in flags[-1]["checks"]["OCR layer"]
+    assert {f["kind"] for f in flags} == {"reading_differs", "accents_restored"}
+    words = next(f for f in flags if f["kind"] == "reading_differs")
+    assert "aérien" in words["primary"] and "Désireux" not in words["primary"]  # accents listed apart
+    # Numbering only the OCR layer has (Document AI leaves it out) is kept; symbol noise is not.
+    kept = RG.correct_lines([{"text": "a) les aéronefs ■ .:-", "page": 1}], "les aéronefs")
+    assert kept[0]["text"] == "a) les aéronefs"

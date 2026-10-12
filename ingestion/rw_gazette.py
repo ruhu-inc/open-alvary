@@ -768,17 +768,24 @@ def reading(
                 else _tokens(node["text"])
             )
             if node.get("differences"):
-                # A scanned page: Document AI's words, the OCR layer's where it read otherwise.
+                # A scanned page: Document AI's words, the OCR layer's where it read otherwise. Accents
+                # restored are listed apart (low); words read differently are what to check (medium).
                 changed = list(node["differences"])
-                worded = any(_fold(new) != _fold(old) for new, old in changed)
-                node.setdefault("flags", []).append(
-                    {
-                        "severity": "medium" if worded else "low",
-                        "kind": "reading_differs" if worded else "accents_restored",
-                        "primary": "; ".join(new or "∅" for new, _ in changed)[:400],
-                        "others": {"OCR layer": "; ".join(old or "∅" for _, old in changed)[:400]},
-                    }
-                )
+                accents = [(new, old) for new, old in changed if _fold(new) == _fold(old)]
+                worded = [(new, old) for new, old in changed if _fold(new) != _fold(old)]
+                for kind, severity, group in (
+                    ("accents_restored", "low", accents),
+                    ("reading_differs", "medium", worded),
+                ):
+                    if group:
+                        node.setdefault("flags", []).append(
+                            {
+                                "severity": severity,
+                                "kind": kind,
+                                "primary": "; ".join(new or "∅" for new, _ in group)[:400],
+                                "others": {"OCR layer": "; ".join(old or "∅" for _, old in group)[:400]},
+                            }
+                        )
             for flag in node.get("flags", []):
                 if flag["kind"] == "not_aligned" and flag.get("missing"):
                     span = [position, position]
@@ -1157,6 +1164,11 @@ def docai_columns(reading: dict, languages: int) -> list[str]:
     return [" ".join(parts)]
 
 
+# A paragraph's number or letter ("a)", "3.", "(1)", "l.", "1º"): Document AI's layout reading leaves
+# such numbering out of its text, so where only the OCR layer has it, it is kept.
+MARKER_LIKE = re.compile(r"^[(\[]?(?:\d{1,3}|[a-zA-Z]{1,3}|[ivxlc]{1,5})[.)\]º°]?\)?$")
+
+
 def correct_lines(lines: list[dict], better: str) -> list[dict]:
     """The lines of a column with their words replaced by a better reading of the same text: the two
     word sequences are aligned, the better words take the place of the ones they match or replace,
@@ -1198,8 +1210,12 @@ def correct_lines(lines: list[dict], better: str) -> list[dict]:
             new, old = " ".join(good[j1:j2]), " ".join(borrowed[i1:i2])
             if letters(new) != letters(old):
                 notes[home].append((new, old))
-        elif letters(" ".join(borrowed[i1:i2])):  # words only the OCR layer has
-            notes[owner[i1]].append(("", " ".join(borrowed[i1:i2])))
+        else:  # words only the OCR layer has: numbering Document AI leaves out is kept, symbols are not
+            kept = [w for w in borrowed[i1:i2] if MARKER_LIKE.match(w)]
+            words[owner[i1]].extend(kept)
+            dropped = " ".join(w for w in borrowed[i1:i2] if w not in kept)
+            if letters(dropped):
+                notes[owner[i1]].append(("", dropped))
     out = []
     for k, line in enumerate(lines):
         if line.get("table"):
