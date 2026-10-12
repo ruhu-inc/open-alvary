@@ -398,7 +398,7 @@ def fetch_selection(
                     ledger.data["items"].setdefault(item_id, {}).setdefault("history", []).append(
                         {"at": stamp(now()), "change": "fetch failed", "reason": str(error)[:300]}
                     )
-                    ledger.save()
+                    ledger.save_items([item_id])
                     log(f"skipped {item_id}: {error}")
                     results.append({"item": item_id, "fetched": False, "error": str(error)[:300]})
                     break
@@ -468,7 +468,7 @@ def _fetch_one(
         store.put(name, bytes(raw), "application/pdf", {"sha256": sha, "url": url})
         store.put(name[: -len(".pdf")] + ".json", sidecar.encode(), "application/json")
         ledger.data["items"][item_id]["stored"] = store.uri(name)
-    ledger.save()
+    ledger.save_items([item_id])
     log(f"fetched {record['listed']['name']} ({len(raw) // 1024} KB)")
     return {"item": item_id, "sha256": sha, "fetched": True}
 

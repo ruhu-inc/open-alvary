@@ -11,7 +11,9 @@ not reach are not marked as no longer listed. A file disappearing from a listing
 such, never as the repeal of a law.
 """
 
+import fcntl
 import json
+import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -33,9 +35,31 @@ class Ledger:
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
+        tmp = self.path.with_suffix(f".{os.getpid()}.tmp")
         tmp.write_text(json.dumps(self.data, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
         tmp.replace(self.path)
+
+    def save_items(self, item_ids) -> None:
+        """Write back only these items, merged into the ledger as it now stands on disk, under a lock:
+        two fetches (one per site) can then share the ledger without undoing each other's records."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.path.with_suffix(".lock"), "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                current = (
+                    json.loads(self.path.read_text()) if self.path.exists() else {"sources": {}, "items": {}}
+                )
+                for item_id in item_ids:
+                    if item_id in self.data["items"]:
+                        current["items"][item_id] = self.data["items"][item_id]
+                for item_id, record in current["items"].items():  # and see what the other wrote
+                    if item_id not in item_ids:
+                        self.data["items"][item_id] = record
+                tmp = self.path.with_suffix(f".{os.getpid()}.tmp")
+                tmp.write_text(json.dumps(current, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+                tmp.replace(self.path)
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
 
     def source(self, source_id: str) -> dict:
         return self.data["sources"].get(source_id, {})
