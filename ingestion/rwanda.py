@@ -428,13 +428,45 @@ def prepare_selection(selection: dict, log=print) -> dict:
         if record["source"] not in ("minijust-gazette", "rlrc-laws") or not record.get("sha256"):
             continue
         sha = record["sha256"]
+        # This issue is read afresh: what an earlier reading of it produced is replaced.
+        documents = {k: d for k, d in documents.items() if d.get("url") != record["url"]}
         pdf = STAGING / "sources" / record["source"] / f"{sha}.pdf"
         sidecar = json.loads(pdf.with_suffix(".json").read_text())
         words = gazette_layout.text_layer(pdf)
         layouts = [len(gazette_layout.columns(page)) for page in words]
         split = rw_gazette.split_issue(words, ruled_tables.document_tables(pdf, words, layouts))
-        streams = rw_gazette.streams(split)
+        scanned = ruled_tables.image_pages(pdf)
+        roles = rw_gazette.annex_pages(split)
+        streams = rw_gazette.streams(split, skip=set(roles))
         furniture = {page["page"]: [line["text"] for line in page["furniture"]] for page in split}
+
+        def write_document(doc_id, reading, pages, record=record, sidecar=sidecar, pdf=pdf, sha=sha):
+            """A review document: its reading, the issue's PDF beside it and how it was obtained."""
+            (COLLECTION / f"{doc_id}.reading.json").write_text(
+                json.dumps(reading, ensure_ascii=False, indent=1) + "\n"
+            )
+            target = COLLECTION / f"{doc_id}.pdf"
+            if not target.exists():
+                try:
+                    os.link(pdf, target)
+                except OSError:
+                    shutil.copyfile(pdf, target)
+            (COLLECTION / f"{doc_id}.provenance.json").write_text(
+                json.dumps(
+                    {
+                        "url": record["url"],
+                        "retrieved_at": sidecar["retrieved_at"],
+                        "sha256": sha,
+                        "bytes": sidecar["bytes"],
+                        "issue": record["listed"]["name"],
+                        "pages": pages,
+                    },
+                    ensure_ascii=False,
+                    indent=1,
+                )
+                + "\n"
+            )
+
         if record["source"] == "minijust-gazette":
             issue = parse_item("minijust-gazette", {"name": record["listed"]["name"], "url": record["url"]})
         else:
@@ -453,36 +485,25 @@ def prepare_selection(selection: dict, log=print) -> dict:
             versions = {lang: rw_gazette.structure(lines[lang], lang) for lang in lines}
             check = rw_gazette.alignment(versions)
             rw_gazette.flag_differences(versions)
+            if entry.get("also_printed_as"):
+                # The same law printed with two numbers (over its contents and over its body).
+                for nodes in versions.values():
+                    if nodes:
+                        nodes[0].setdefault("flags", []).append(
+                            {
+                                "severity": "high",
+                                "kind": "number_differs",
+                                "primary": entry["number"],
+                                "others": {"Printed over the contents": entry["also_printed_as"]},
+                            }
+                        )
             values = rw_gazette.suggest(lines, entry, issue)
             number = issue.get("date", "") if entry["number"] == "constitution" else entry["number"]
             work = f"rw-{entry['kind'].replace('_', '-')}-{_slug(number)}"
             for language, nodes in versions.items():
                 doc_id = f"{work}-{language}"
-                reading = rw_gazette.reading(nodes, furniture, sha, {"alignment": check}, sizes)
-                (COLLECTION / f"{doc_id}.reading.json").write_text(
-                    json.dumps(reading, ensure_ascii=False, indent=1) + "\n"
-                )
-                target = COLLECTION / f"{doc_id}.pdf"
-                if not target.exists():
-                    try:
-                        os.link(pdf, target)
-                    except OSError:
-                        shutil.copyfile(pdf, target)
-                (COLLECTION / f"{doc_id}.provenance.json").write_text(
-                    json.dumps(
-                        {
-                            "url": record["url"],
-                            "retrieved_at": sidecar["retrieved_at"],
-                            "sha256": sha,
-                            "bytes": sidecar["bytes"],
-                            "issue": record["listed"]["name"],
-                            "pages": entry["versions"][language]["pages"],
-                        },
-                        ensure_ascii=False,
-                        indent=1,
-                    )
-                    + "\n"
-                )
+                reading = rw_gazette.reading(nodes, furniture, sha, {"alignment": check}, sizes, scanned)
+                write_document(doc_id, reading, entry["versions"][language]["pages"])
                 documents[doc_id] = {
                     "id": doc_id,
                     "type": entry["kind"],
@@ -495,6 +516,14 @@ def prepare_selection(selection: dict, log=print) -> dict:
                     "url": record["url"],
                     "issue": {"name": record["listed"]["name"], **issue},
                     "pages": entry["versions"][language]["pages"],
+                    "scanned_pages": sorted(
+                        p
+                        for p in scanned
+                        if entry["versions"][language]["pages"][0]
+                        <= p
+                        <= entry["versions"][language]["pages"][1]
+                    ),
+                    "also_printed_as": entry.get("also_printed_as"),
                     "suggested": {
                         **values,
                         "publication.pages": "{}–{}".format(*entry["versions"][language]["pages"]),
@@ -510,7 +539,51 @@ def prepare_selection(selection: dict, log=print) -> dict:
                     "aligned": check["aligned"],
                 }
             )
-        log(f"{record['listed']['name']}: {len(found)} instruments")
+        for annex in rw_gazette.annexes(split, roles):
+            parent = next(
+                (e for e in found if annex["refers_to"] and e["number"] == annex["refers_to"]), None
+            )
+            parent = parent or next(
+                (
+                    e
+                    for e in reversed(found)
+                    if min(v["pages"][0] for v in e["versions"].values()) < annex["pages"][0]
+                ),
+                None,
+            )
+            if parent is None:
+                continue
+            number = issue.get("date", "") if parent["number"] == "constitution" else parent["number"]
+            work = f"rw-{parent['kind'].replace('_', '-')}-{_slug(number)}"
+            part = f"annex-{annex['annex']}"
+            for language, lines in annex["versions"].items():
+                doc_id = f"{work}-{part}-{language}"
+                nodes = rw_gazette.structure(lines, language, part="body")
+                reading = rw_gazette.reading(nodes, furniture, sha, {"annex_of": work}, sizes, scanned)
+                write_document(doc_id, reading, [annex["pages"][0], annex["pages"][-1]])
+                documents[doc_id] = {
+                    "id": doc_id,
+                    "type": parent["kind"],
+                    "title": f"Annex: {annex['title'][:200]}",
+                    "jurisdiction": "rw",
+                    "language": language,
+                    "work": work,
+                    "part": part,
+                    "versions": {lang: f"{work}-{part}-{lang}" for lang in annex["versions"]},
+                    "url": record["url"],
+                    "issue": {"name": record["listed"]["name"], **issue},
+                    "pages": [annex["pages"][0], annex["pages"][-1]],
+                    "scanned_pages": sorted(set(annex["pages"]) & scanned),
+                }
+            summary.append(
+                {
+                    "work": work,
+                    "annex": part,
+                    "languages": list(annex["versions"]),
+                    "pages": [annex["pages"][0], annex["pages"][-1]],
+                }
+            )
+        log(f"{record['listed']['name']}: {len(found)} instruments, {len(set(roles.values()))} annexes")
     manifest["documents"] = sorted(documents.values(), key=lambda d: d["id"])
     path.write_text(json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
     return {"documents": len(manifest["documents"]), "instruments": summary}

@@ -358,6 +358,8 @@ KIND = {
     "not_aligned": "articles differ between the language versions",
     "heading_form": "article heading printed in an unusual form",
     "heading_long": "check where this heading ends",
+    "borrowed_ocr": "the page is a picture; its text came from someone else's OCR",
+    "number_differs": "the number is printed differently in two places",
 }
 
 

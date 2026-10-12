@@ -220,3 +220,33 @@ def document_tables(pdf: Path, pages: list[dict], layouts: list[int]) -> dict[in
         if tables:
             found[number] = tables
     return found
+
+
+def image_coverage(page) -> float:
+    """How much of a pypdf page its images cover (0 to 1): a page that is one picture is a scan,
+    whatever text layer someone has laid over it."""
+    width, height = float(page.mediabox.width), float(page.mediabox.height)
+    resources = page.get("/Resources") or {}
+    images = resources.get("/XObject") or {}
+    contents = page.get_contents()
+    if contents is None or not width or not height:
+        return 0.0
+    matrix, saved, area = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0], [], 0.0
+    for operands, operator in ContentStream(contents, page.pdf).operations:
+        if operator == b"q":
+            saved.append(matrix)
+        elif operator == b"Q":
+            matrix = saved.pop() if saved else matrix
+        elif operator == b"cm":
+            matrix = _times([float(v) for v in operands], matrix)
+        elif operator == b"Do":
+            found = images.get(operands[0])
+            found = found.get_object() if found is not None else None
+            if found is not None and found.get("/Subtype") == "/Image":
+                area += abs(matrix[0] * matrix[3] - matrix[1] * matrix[2])
+    return min(1.0, area / (width * height))
+
+
+def image_pages(pdf: Path, threshold: float = 0.6) -> set[int]:
+    """Pages of a PDF that are pictures of a page (scans), numbered from 1."""
+    return {n for n, page in enumerate(PdfReader(str(pdf)).pages, 1) if image_coverage(page) > threshold}

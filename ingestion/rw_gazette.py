@@ -74,7 +74,12 @@ KIND = {
 }
 DATE = re.compile(r"\b(\d{1,2})/(\d{1,2})/((?:19|20)\d\d)\b")
 CONTENTS = re.compile(r"^(ISHAKIRO|TABLE OF CONTENTS|TABLE DES MATI[ÈE]RES)\b", re.I)
-PREAMBLE = re.compile(r"^(Twebwe|We|Nous)\s*,\s", re.I)
+# Where the body begins: a law's "We, KAGAME Paul," or an order's own author ("The Minister of …;",
+# "Minisitiri w'…;", "Le Ministre …;"), when an order has no contents list printed again after it.
+PREAMBLE = re.compile(
+    r"^(Twebwe|We|Nous)\s*,\s|^(The\s+(Prime\s+)?Minister|Minisitiri|Le\s+(Premier\s+)?Ministre|La\s+Ministre)\b.{0,120};$",
+    re.I,
+)
 
 # Structure, in each language. "mbere", "One" and "premier" are the first of each.
 ONE = r"(?i:mbere|one|premi(?:er|ère)|first)"
@@ -238,10 +243,78 @@ def split_issue(pages: list[dict], tables: dict[int, list[dict]] | None = None) 
     return out
 
 
-def streams(split: list[dict]) -> dict[str, list[dict]]:
-    """Each language's lines in reading order, each tagged with its page and column."""
+# An annex opens on a page headed "UMUGEREKA W'ITEKA … / ANNEX TO … / ANNEXE À …" and closes where its
+# signatories attest it: "Bibonywe kugira ngo bishyirwe ku mugereka … / Seen to be annexed to … /
+# Vu pour être annexé à …". Between them it is often in one language only (an agreement, a plan,
+# the budget's tables), so its pages are kept out of the instrument's language versions.
+ANNEX_START = re.compile(r"^(UMUGEREKA|ANNEXE?|SCHEDULE|IMIGEREKA)\b")
+# The formal title of an annex names what it is annexed to: "ANNEX II TO LAW N° …", "UMUGEREKA WA II
+# W'ITEGEKO …", "ANNEXE À L'ARRÊTÉ …". A page merely headed "ANNEX II-1: …" inside an annex goes on.
+ANNEX_TITLE = re.compile(
+    r"^(UMUGEREKA\s+(?:WA\s+\S+\s+)?W|IMIGEREKA\s+Y|ANNEXE?S?\s+(?:[IVXLC\d]+(?:-\d+)?\s+)?(?:TO|À|A|AUX?)\b)"
+)
+ANNEXED = re.compile(
+    r"Seen to be annexed|Bibonywe kugira ngo bishyirwe ku mugereka|Vu pour [êe]tre annex", re.I
+)
+
+
+def _opens(page: dict, pattern: re.Pattern, lines: int = 2) -> bool:
+    return any(pattern.match(line["text"].strip()) for c in page["columns"] for line in c["lines"][:lines])
+
+
+def annex_pages(split: list[dict]) -> dict[int, int]:
+    """Which pages belong to an annex: page number -> the annex's position in the issue (1, 2, …)."""
+    roles: dict[int, int] = {}
+    count, inside = 0, False
+    for page in split:
+        if _opens(page, ANNEX_TITLE) or (not inside and _opens(page, ANNEX_START)):
+            count, inside = count + 1, True
+        elif inside and any(
+            OPENING[c["language"]].match(line["text"].strip())
+            for c in page["columns"]
+            if c["language"] in OPENING
+            for line in c["lines"][:2]
+        ):
+            inside = False  # the next instrument begins
+        if inside:
+            roles[page["page"]] = count
+            if any(ANNEXED.search(line["text"]) for c in page["columns"] for line in c["lines"]):
+                inside = False
+    return roles
+
+
+def annexes(split: list[dict], roles: dict[int, int]) -> list[dict]:
+    """Each annex with its pages and its lines in every language it is printed in."""
+    found: dict[int, dict] = {}
+    for page in split:
+        number = roles.get(page["page"])
+        if number is None:
+            continue
+        annex = found.setdefault(number, {"annex": number, "pages": [], "versions": {}})
+        annex["pages"].append(page["page"])
+        for column in page["columns"]:
+            language = column["language"] or "en"
+            annex["versions"].setdefault(language, []).extend(
+                {**line, "page": page["page"], "column": (column["x0"], column["x1"])}
+                for line in column["lines"]
+            )
+    for annex in found.values():
+        first = next(iter(annex["versions"].values()), [])
+        annex["title"] = " ".join(line["text"] for line in first[:6] if line["text"])[:300]
+        annex["refers_to"] = next(
+            (m.group(1) for line in first[:8] if (m := re.search(r"N\s?[°ºO0]\.?\s*(\S+)", line["text"]))),
+            None,
+        )
+    return list(found.values())
+
+
+def streams(split: list[dict], skip: set[int] | frozenset = frozenset()) -> dict[str, list[dict]]:
+    """Each language's lines in reading order, each tagged with its page and column (pages in `skip`,
+    an annex's, are left out)."""
     out: dict[str, list[dict]] = {language: [] for language in LANGUAGES}
     for page in split:
+        if page["page"] in skip:
+            continue
         for column in page["columns"]:
             if column["language"] in out:
                 for line in column["lines"]:
@@ -267,6 +340,8 @@ def openings(lines: list[dict], language: str) -> list[dict]:
     i = 0
     while i < len(lines):
         text = lines[i]["text"].strip()
+        if re.search(r"\bN\s?[°ºO0]\.?$", text) and i + 1 < len(lines):  # the number on the next line
+            text = f"{text} {lines[i + 1]['text'].strip()}"
         match = OPENING[language].match(text)
         constitution = CONSTITUTION[language].match(text)
         if not (match or constitution):
@@ -314,6 +389,11 @@ def instruments(issue_streams: dict[str, list[dict]]) -> list[dict]:
         found = openings(lines, language)
         for k, opening in enumerate(found):
             end = found[k + 1]["start"] if k + 1 < len(found) else len(lines)
+            opening["has_body"] = any(
+                PREAMBLE.match(line["text"].strip()) for line in lines[opening["start"] : end]
+            )
+        for k, opening in enumerate(found):
+            end = found[k + 1]["start"] if k + 1 < len(found) else len(lines)
             key = opening["number"]
             if key not in by_number:
                 by_number[key] = {
@@ -334,11 +414,51 @@ def instruments(issue_streams: dict[str, list[dict]]) -> list[dict]:
                 continue
             entry["versions"][language] = {
                 "title": opening["title"],
+                "has_body": opening["has_body"],
                 "start": opening["start"],
                 "end": end,
                 "pages": [lines[opening["start"]]["page"], lines[end - 1]["page"]],
             }
-    return [by_number[key] for key in order]
+    found = [by_number[key] for key in order]
+    # A title over the contents and the same title over the body printed with another number ("LAW N°
+    # 066/2024" then "LAW N° 064/2024", same date and words) are one instrument: kept as one, both
+    # numbers recorded for the reviewer to settle.
+    merged: list[dict] = []
+    for entry in found:
+        previous = merged[-1] if merged else None
+        if previous and _same_title_other_number(previous, entry):
+            for language, version in entry["versions"].items():
+                if language in previous["versions"]:
+                    version["start"] = previous["versions"][language]["start"]
+                    version["pages"][0] = previous["versions"][language]["pages"][0]
+            entry["also_printed_as"] = previous["number"]
+            merged[-1] = entry
+        else:
+            merged.append(entry)
+    return merged
+
+
+def _same_title_other_number(first: dict, second: dict) -> bool:
+    if (
+        first["kind"] != second["kind"]
+        or first["date"] != second["date"]
+        or first["number"] == second["number"]
+    ):
+        return False
+    shared = set(first["versions"]) & set(second["versions"])
+    if not shared:
+        return False
+
+    def words(entry, language):
+        return re.sub(r"\bN\s?[°ºO0]\.?\s*\S+", "", entry["versions"][language]["title"]).split()
+
+    # Only a title with no body of its own (no "We, …"): a contents list waiting for its law.
+    return all(
+        not first["versions"][language]["has_body"]
+        and first["versions"][language]["end"] == second["versions"][language]["start"]
+        and words(first, language) == words(second, language)
+        for language in shared
+    )
 
 
 # --- structure ----------------------------------------------------------------------------------------
@@ -358,11 +478,11 @@ def _number(word: str) -> str:
     return "1" if re.fullmatch(ONE, word, re.I) else word
 
 
-def structure(lines: list[dict], language: str) -> list[dict]:
+def structure(lines: list[dict], language: str, part: str = "heading") -> list[dict]:
     """Nodes of one language version: the heading, the contents, the preamble, divisions, articles
-    and their paragraphs (a paragraph ends where the line spacing opens up)."""
+    and their paragraphs (a paragraph ends where the line spacing opens up). An annex starts in its
+    body (part="body"): it has no contents list or preamble of its own to wait for."""
     nodes: list[dict] = []
-    part = "heading"
     previous = None
     for line in lines:
         if line.get("table"):
@@ -586,6 +706,7 @@ def reading(
     source_sha256: str,
     checks: dict,
     sizes: dict[int, tuple[float, float]] | None = None,
+    scanned: set[int] | frozenset = frozenset(),
 ) -> dict:
     """A reading in the shape the workbench reviews: the gazette's own page numbers, each page's
     nodes in order, its running header kept as furniture, and the flags placed by word position
@@ -596,6 +717,18 @@ def reading(
     out = []
     for number in sorted(pages):
         flags, position, page_nodes = [], 0, []
+        if number in scanned:
+            # The page is a picture; its text was laid over it by someone else's OCR.
+            flags.append(
+                {
+                    "severity": "medium",
+                    "kind": "borrowed_ocr",
+                    "primary": "",
+                    "checks": {},
+                    "compare": True,
+                    "tokens": [0, 0],
+                }
+            )
         for node in pages[number]:
             marker = _tokens(node.get("marker"))
             words = (

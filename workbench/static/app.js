@@ -13,6 +13,8 @@ const KIND_LABEL = {
   not_aligned: "articles differ between the language versions",
   heading_form: "article heading printed in an unusual form",
   heading_long: "check where this heading ends",
+  borrowed_ocr: "the page is a picture; its text came from someone else's OCR: check it word by word",
+  number_differs: "the number is printed differently in two places",
 };
 const DECISION_LABEL = { keep: "kept as read", use_check: "used check reading", edited: "edited by hand", dismissed: "dismissed" };
 
