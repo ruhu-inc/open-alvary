@@ -885,3 +885,21 @@ def test_review_time_is_measured_per_page_leaving_breaks_out():
     )  # pages 2, 3 and 5; the first page and the one after the break are not timed
     assert measured["minutes_per_page"]["median"] == 4.0
     assert measured["documents"]["rw-law-009-2026-en"] == {"pages_timed": 3, "minutes": 13.0}
+
+
+def test_a_table_with_merged_cells_lines_up_and_keeps_its_merges():
+    cells = [
+        [
+            {"text": "Annual income", "row_span": 1, "col_span": 2},
+            {"text": "Tax rate", "row_span": 2, "col_span": 1},
+        ],
+        [{"text": "From", "row_span": 1, "col_span": 1}, {"text": "To", "row_span": 1, "col_span": 1}],
+        [{"text": "0"}, {"text": "360,000"}, {"text": "0%"}],
+    ]
+    rows, spans = content.table_grid(cells)
+    assert rows == [["Annual income", "", "Tax rate"], ["From", "To", ""], ["0", "360,000", "0%"]]
+    assert spans == [[0, 0, 1, 2], [0, 2, 2, 1]]
+    unit = {"kind": "table", "header_rows": 2, "rows": rows, "spans": spans}
+    assert content.validate_units([unit])[0]["spans"] == spans
+    with pytest.raises(ValueError):
+        content.validate_units([{**unit, "spans": [[1, 2, 3, 1]]}])  # runs past the last row

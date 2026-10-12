@@ -50,6 +50,7 @@ export type DocumentBlock =
       caption?: string;
       header_rows: number;
       rows: string[][];
+      spans?: [number, number, number, number][]; // merged cells: [row, column, rows, columns]
     };
 
 export type DocumentPageContent = {
@@ -133,6 +134,19 @@ function sectionOf(block: DocumentBlock) {
   if (block.kind === "table" || block.kind === "heading") return null;
   const { lead } = split(block);
   return lead !== null && depthOf(lead) === 0 ? lead : null;
+}
+
+// A table's merged cells as printed: each one's extent, and the positions it covers.
+function merges(spans: [number, number, number, number][] = []) {
+  const extent = new Map<string, [number, number]>();
+  const covered = new Set<string>();
+  for (const [r, c, rows, columns] of spans) {
+    extent.set(`${r},${c}`, [rows, columns]);
+    for (let dr = 0; dr < rows; dr++)
+      for (let dc = 0; dc < columns; dc++)
+        if (dr || dc) covered.add(`${r + dr},${c + dc}`);
+  }
+  return { extent, covered };
 }
 
 function layout(pages: DocumentPageContent[]) {
@@ -285,15 +299,27 @@ export function DocumentText({
                     <tbody>
                       {block.rows.map((row, r) => (
                         <tr key={r}>
-                          {row.map((cell, c) =>
-                            r < block.header_rows ? (
-                              <th key={c} scope="col">
+                          {row.map((cell, c) => {
+                            const { covered, extent } = merges(block.spans);
+                            if (covered.has(`${r},${c}`)) return null;
+                            const [rowSpan, colSpan] = extent.get(
+                              `${r},${c}`,
+                            ) ?? [1, 1];
+                            return r < block.header_rows ? (
+                              <th
+                                key={c}
+                                scope="col"
+                                rowSpan={rowSpan}
+                                colSpan={colSpan}
+                              >
                                 {cell}
                               </th>
                             ) : (
-                              <td key={c}>{cell}</td>
-                            ),
-                          )}
+                              <td key={c} rowSpan={rowSpan} colSpan={colSpan}>
+                                {cell}
+                              </td>
+                            );
+                          })}
                         </tr>
                       ))}
                     </tbody>
