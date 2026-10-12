@@ -23,11 +23,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import unquote
 
-from ingestion import filelist, gazette_layout, ruled_tables, rw_gazette
+from ingestion import corpus_store, filelist, gazette_layout, ruled_tables, rw_gazette
 from ingestion.pipeline import MAX_BYTES
 from ingestion.sync import Ledger, now, stamp
 
 STAGING = Path(os.environ.get("ALVARY_RW_STAGING", "private-staging/rw"))
+COUNTRY = "rw"
 
 SOURCES = {
     "minijust-gazette": {
@@ -314,7 +315,14 @@ class FetchStopped(Exception):
     """A long fetch stopped on purpose: the site refused, or the disk is nearly full."""
 
 
-def fetch_selection(selection: dict, delay: float = 4.0, log=print, keep_going: bool = False) -> list[dict]:
+def fetch_selection(
+    selection: dict,
+    delay: float = 4.0,
+    log=print,
+    keep_going: bool = False,
+    store=None,
+    keep_local: bool = True,
+) -> list[dict]:
     """Fetch each selected file once: exact catalogue URLs on the allowed hosts, no redirects, the
     ingestion size limit, PDF only; stored by fingerprint with a provenance sidecar, ledger updated.
 
@@ -328,7 +336,9 @@ def fetch_selection(selection: dict, delay: float = 4.0, log=print, keep_going: 
     with httpx.Client(timeout=120, headers={"User-Agent": filelist.user_agent()}) as client:
         for index, item_id in enumerate(selection["items"]):
             try:
-                results.append(_fetch_one(client, ledger, selection, item_id, index, delay, log))
+                results.append(
+                    _fetch_one(client, ledger, selection, item_id, index, delay, log, store, keep_local)
+                )
             except FetchStopped:
                 raise
             except Exception as error:  # noqa: BLE001 - recorded per file when keeping going
@@ -343,7 +353,7 @@ def fetch_selection(selection: dict, delay: float = 4.0, log=print, keep_going: 
     return results
 
 
-def _fetch_one(client, ledger, selection, item_id, index, delay, log) -> dict:
+def _fetch_one(client, ledger, selection, item_id, index, delay, log, store=None, keep_local=True) -> dict:
     import httpx
 
     record = ledger.data["items"].get(item_id)
@@ -353,9 +363,10 @@ def _fetch_one(client, ledger, selection, item_id, index, delay, log) -> dict:
     parts = httpx.URL(url)
     if parts.scheme != "https" or parts.host not in ALLOWED_HOSTS:
         raise ValueError(f"{item_id}: {url} is not on an allowed host")
-    if record.get("sha256") and (STAGING / "sources" / record["source"] / f"{record['sha256']}.pdf").exists():
+    held_here = (STAGING / "sources" / record["source"] / f"{record.get('sha256')}.pdf").exists()
+    if record.get("sha256") and (held_here or record.get("stored")):
         return {"item": item_id, "sha256": record["sha256"], "fetched": False}
-    if shutil.disk_usage(STAGING).free < RESERVE_BYTES:
+    if keep_local and shutil.disk_usage(STAGING).free < RESERVE_BYTES:
         raise FetchStopped(f"stopped: less than {RESERVE_BYTES // 1024**3} GiB free on the disk")
     if index:
         time.sleep(delay)
@@ -373,10 +384,7 @@ def _fetch_one(client, ledger, selection, item_id, index, delay, log) -> dict:
     if not raw.startswith(b"%PDF-"):
         raise ValueError(f"{item_id}: not a PDF")
     sha = hashlib.sha256(raw).hexdigest()
-    folder = STAGING / "sources" / record["source"]
-    folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"{sha}.pdf").write_bytes(raw)
-    (folder / f"{sha}.json").write_text(
+    sidecar = (
         json.dumps(
             {
                 "item": item_id,
@@ -393,10 +401,54 @@ def _fetch_one(client, ledger, selection, item_id, index, delay, log) -> dict:
         )
         + "\n"
     )
+    if keep_local:
+        folder = STAGING / "sources" / record["source"]
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / f"{sha}.pdf").write_bytes(raw)
+        (folder / f"{sha}.json").write_text(sidecar)
     ledger.fetched(item_id, sha, len(raw))
+    if store is not None:
+        name = corpus_store.source_name(COUNTRY, record["source"], sha)
+        store.put(name, bytes(raw), "application/pdf", {"sha256": sha, "url": url})
+        store.put(name[: -len(".pdf")] + ".json", sidecar.encode(), "application/json")
+        ledger.data["items"][item_id]["stored"] = store.uri(name)
     ledger.save()
     log(f"fetched {record['listed']['name']} ({len(raw) // 1024} KB)")
     return {"item": item_id, "sha256": sha, "fetched": True}
+
+
+def push_held(store, log=print) -> int:
+    """Upload to the corpus bucket every file already held here and not yet stored there."""
+    ledger = Ledger(STAGING / "sync-ledger.json")
+    pushed = 0
+    for record in ledger.data["items"].values():
+        sha = record.get("sha256")
+        local = STAGING / "sources" / str(record.get("source")) / f"{sha}.pdf"
+        if not sha or record.get("stored") or not local.exists():
+            continue
+        name = corpus_store.source_name(COUNTRY, record["source"], sha)
+        store.put(name, local.read_bytes(), "application/pdf", {"sha256": sha, "url": record["url"]})
+        sidecar = local.with_suffix(".json")
+        if sidecar.exists():
+            store.put(name[: -len(".pdf")] + ".json", sidecar.read_bytes(), "application/json")
+        record["stored"] = store.uri(name)
+        pushed += 1
+        log(f"stored {record['listed']['name'][:70]}")
+    ledger.save()
+    return pushed
+
+
+def mirror_state(store) -> None:
+    """The sync ledger, catalogues, selections and access decisions, copied to the bucket."""
+    for path in [
+        STAGING / "sync-ledger.json",
+        *sorted((STAGING / "catalogue").glob("*.json")),
+        *sorted((STAGING / "selections").glob("*.json")),
+        *sorted((STAGING / "access").glob("*.json")),
+    ]:
+        if path.exists():
+            name = f"state/{COUNTRY}/{path.relative_to(STAGING)}"
+            store.put(name, path.read_bytes(), "application/json", replace=True)
 
 
 def bulk_selection(approved_by: str, purpose: str, sources: list[str]) -> dict:
@@ -408,7 +460,7 @@ def bulk_selection(approved_by: str, purpose: str, sources: list[str]) -> dict:
     items = sorted(
         item_id
         for item_id, record in ledger.data["items"].items()
-        if record.get("source") in sources and not record.get("sha256")
+        if record.get("source") in sources and not record.get("sha256") and record.get("url")
     )
     return {
         "purpose": purpose,
@@ -677,6 +729,9 @@ def main(argv=None) -> int:
     fetch = sub.add_parser("fetch", help="fetch the files of an operator-approved selection")
     fetch.add_argument("--selection", required=True, type=Path)
     fetch.add_argument("--keep-going", action="store_true", help="record a file that fails and go on")
+    fetch.add_argument("--to-bucket", action="store_true", help="store each file in the corpus bucket")
+    fetch.add_argument("--no-local", action="store_true", help="keep no copy here (with --to-bucket)")
+    sub.add_parser("push-held", help="upload files held here to the corpus bucket, and mirror the state")
     bulk = sub.add_parser("bulk-selection", help="write a selection of every catalogued file not yet held")
     bulk.add_argument("--approved-by", required=True)
     bulk.add_argument("--purpose", required=True)
@@ -691,12 +746,29 @@ def main(argv=None) -> int:
     )
     prepare.add_argument("--selection", required=True, type=Path)
     args = parser.parse_args(argv)
+    if args.command == "push-held":
+        store = corpus_store.CorpusStore()
+        print(json.dumps({"stored": push_held(store)}))
+        mirror_state(store)
+        return 0
     if args.command == "fetch":
+        if args.no_local and not args.to_bucket:
+            parser.error("--no-local needs --to-bucket")
+        store = corpus_store.CorpusStore() if args.to_bucket else None
         try:
-            results = fetch_selection(load_selection(args.selection), keep_going=args.keep_going)
+            results = fetch_selection(
+                load_selection(args.selection),
+                keep_going=args.keep_going,
+                store=store,
+                keep_local=not args.no_local,
+                log=lambda message: print(message, flush=True),
+            )
         except FetchStopped as stop:
             print(stop)
             return 3
+        finally:
+            if store is not None:
+                mirror_state(store)
         failed = [r for r in results if r.get("error")]
         print(
             json.dumps(
