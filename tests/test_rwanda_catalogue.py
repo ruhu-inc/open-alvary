@@ -425,3 +425,52 @@ def test_rlrc_listing_suggests_legal_status_and_subjects_for_a_gazette_law(tmp_p
     assert "among the repealed laws" in repealed["status.note"]
     assert rwanda.rlrc_status(index, checked, "law", "027/2019", "2019")["status.legal"] == "in_force"
     assert rwanda.rlrc_status(index, checked, "law", "055/2024", "2024") == {}  # not listed: left unknown
+
+
+def test_a_network_outage_is_waited_out_not_skipped_and_a_long_one_stops_the_run(tmp_path, monkeypatch):
+    import shutil
+
+    import httpx
+    import pytest
+
+    monkeypatch.setattr(rwanda, "STAGING", tmp_path)
+    monkeypatch.setattr(rwanda, "RESERVE_BYTES", 0)
+    url = "https://www.minijust.gov.rw/fileadmin/a.pdf"
+    ledger = Ledger(tmp_path / "sync-ledger.json")
+    files = [{"url": url, "name": "a.pdf", "size": "1 KB", "modified": "", "folder": "/"}]
+    ledger.observe_listing(
+        "minijust-gazette",
+        BASE,
+        "daily",
+        {"complete": True, "outcome": "ok", "pages_read": 1, "files": files},
+        "run-1",
+    )
+    ledger.save()
+    outage = {"left": 2}
+
+    def site(request):
+        if outage["left"]:
+            outage["left"] -= 1
+            raise httpx.ConnectError("nodename nor servname provided, or not known")
+        return httpx.Response(200, content=b"%PDF-1.4 a")
+
+    real = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda **kw: real(transport=httpx.MockTransport(site), **kw))
+    selection = {
+        "approved_by": "operator",
+        "approved_at": "2026-10-12",
+        "purpose": "bulk",
+        "items": [f"minijust-gazette:{url}"],
+    }
+    waited = []
+    results = rwanda.fetch_selection(
+        selection, delay=0, keep_going=True, log=lambda m: None, sleep=waited.append
+    )
+    assert results[0]["fetched"] is True and waited == [30, 60]  # the same file, tried again after waits
+    outage["left"] = 100
+    shutil.rmtree(tmp_path / "sources")  # the file is gone again: it must be fetched anew
+    ledger = Ledger(tmp_path / "sync-ledger.json")
+    ledger.data["items"][f"minijust-gazette:{url}"].pop("sha256")
+    ledger.save()
+    with pytest.raises(rwanda.FetchStopped, match="network"):
+        rwanda.fetch_selection(selection, delay=0, keep_going=True, log=lambda m: None, sleep=lambda s: None)

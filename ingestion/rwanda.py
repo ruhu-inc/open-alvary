@@ -315,6 +315,25 @@ class FetchStopped(Exception):
     """A long fetch stopped on purpose: the site refused, or the disk is nearly full."""
 
 
+# Waits, in seconds, before trying a file again when the network itself fails: about an hour in all.
+NETWORK_WAITS = (30, 60, 120, 300, 600, 600, 600, 600, 600)
+
+
+def _network_trouble(error: Exception) -> bool:
+    """A failure of the connection (name lookup, connect, timeout, a server error from the bucket),
+    not of the file: worth waiting out rather than skipping."""
+    import httpx
+    import requests
+
+    if isinstance(
+        error, httpx.TransportError | requests.exceptions.ConnectionError | requests.exceptions.Timeout
+    ):
+        return True
+    if isinstance(error, requests.exceptions.HTTPError) and error.response is not None:
+        return error.response.status_code >= 500
+    return isinstance(error, OSError)
+
+
 def fetch_selection(
     selection: dict,
     delay: float = 4.0,
@@ -322,38 +341,69 @@ def fetch_selection(
     keep_going: bool = False,
     store=None,
     keep_local: bool = True,
+    sleep=time.sleep,
 ) -> list[dict]:
     """Fetch each selected file once: exact catalogue URLs on the allowed hosts, no redirects, the
     ingestion size limit, PDF only; stored by fingerprint with a provenance sidecar, ledger updated.
 
     With keep_going (a bulk run), a file that cannot be had (gone, not a PDF, larger than listed) is
     recorded and the run goes on; a refusal (401, 403, 429) still stops it at once, and so does free
-    disk space falling below RESERVE_BYTES. A run can be repeated: files already held are skipped."""
+    disk space falling below RESERVE_BYTES. When the network itself fails, the same file is tried
+    again after a wait (NETWORK_WAITS, with a fresh connection), and after about an hour without a
+    network the run stops rather than skipping everything. A run can be repeated: files already held
+    are skipped."""
     import httpx
+
+    def connect():
+        return httpx.Client(timeout=120, headers={"User-Agent": filelist.user_agent()})
 
     ledger = Ledger(STAGING / "sync-ledger.json")
     results = []
-    with httpx.Client(timeout=120, headers={"User-Agent": filelist.user_agent()}) as client:
+    client = connect()
+    try:
         for index, item_id in enumerate(selection["items"]):
-            try:
-                results.append(
-                    _fetch_one(client, ledger, selection, item_id, index, delay, log, store, keep_local)
-                )
-            except FetchStopped:
-                raise
-            except Exception as error:  # noqa: BLE001 - recorded per file when keeping going
-                if not keep_going:
+            waits = 0
+            while True:
+                try:
+                    results.append(
+                        _fetch_one(
+                            client, ledger, selection, item_id, index, delay, log, store, keep_local, sleep
+                        )
+                    )
+                    break
+                except FetchStopped:
                     raise
-                ledger.data["items"].setdefault(item_id, {}).setdefault("history", []).append(
-                    {"at": stamp(now()), "change": "fetch failed", "reason": str(error)[:300]}
-                )
-                ledger.save()
-                log(f"skipped {item_id}: {error}")
-                results.append({"item": item_id, "fetched": False, "error": str(error)[:300]})
+                except Exception as error:  # noqa: BLE001 - network waited out, file failures recorded
+                    if _network_trouble(error):
+                        if waits == len(NETWORK_WAITS):
+                            raise FetchStopped(
+                                "stopped: the network has been unavailable for about an hour"
+                            ) from error
+                        log(
+                            f"network trouble ({type(error).__name__}); trying again in {NETWORK_WAITS[waits]} s"
+                        )
+                        sleep(NETWORK_WAITS[waits])
+                        waits += 1
+                        client.close()
+                        client = connect()
+                        continue
+                    if not keep_going:
+                        raise
+                    ledger.data["items"].setdefault(item_id, {}).setdefault("history", []).append(
+                        {"at": stamp(now()), "change": "fetch failed", "reason": str(error)[:300]}
+                    )
+                    ledger.save()
+                    log(f"skipped {item_id}: {error}")
+                    results.append({"item": item_id, "fetched": False, "error": str(error)[:300]})
+                    break
+    finally:
+        client.close()
     return results
 
 
-def _fetch_one(client, ledger, selection, item_id, index, delay, log, store=None, keep_local=True) -> dict:
+def _fetch_one(
+    client, ledger, selection, item_id, index, delay, log, store=None, keep_local=True, sleep=time.sleep
+) -> dict:
     import httpx
 
     record = ledger.data["items"].get(item_id)
@@ -369,7 +419,7 @@ def _fetch_one(client, ledger, selection, item_id, index, delay, log, store=None
     if keep_local and shutil.disk_usage(STAGING).free < RESERVE_BYTES:
         raise FetchStopped(f"stopped: less than {RESERVE_BYTES // 1024**3} GiB free on the disk")
     if index:
-        time.sleep(delay)
+        sleep(delay)
     with client.stream("GET", url, follow_redirects=False) as response:
         if response.status_code in (401, 403, 429):
             raise FetchStopped(f"stopped: the site answered {response.status_code} at {url}")
