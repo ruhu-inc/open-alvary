@@ -541,6 +541,17 @@ def prepare_selection(selection: dict, log=print) -> dict:
         layouts = [len(gazette_layout.columns(page)) for page in words]
         split = rw_gazette.split_issue(words, ruled_tables.document_tables(pdf, words, layouts))
         scanned = ruled_tables.image_pages(pdf)
+        # Scanned pages Document AI has read: its words, in the layout of the OCR layer.
+        read = STAGING / "docai" / f"{sha}.json"
+        if read.exists():
+            readings = json.loads(read.read_text())["pages"]
+            split = [
+                rw_gazette.correct_page(page, readings[str(page["page"])])
+                if str(page["page"]) in readings
+                else page
+                for page in split
+            ]
+            scanned = scanned - {int(n) for n in readings}
         roles = rw_gazette.annex_pages(split)
         streams = rw_gazette.streams(split, skip=set(roles))
         furniture = {page["page"]: [line["text"] for line in page["furniture"]] for page in split}
@@ -694,6 +705,61 @@ def prepare_selection(selection: dict, log=print) -> dict:
     return {"documents": len(manifest["documents"]), "instruments": summary}
 
 
+def read_scans(selection: dict, log=print, store=None) -> dict:
+    """Every scanned page of the selection's issues read by Document AI (billed): the pages are put
+    in one PDF per issue, read, and the reading kept per issue page in docai/<sha256>.json (and in
+    the corpus bucket), for the pipeline to use in place of the OCR layer someone else laid on."""
+    from io import BytesIO
+
+    from pypdf import PdfReader, PdfWriter
+
+    from ingestion import readers
+
+    reader = readers.DocAIReader()
+    reader.preflight()
+    ledger = Ledger(STAGING / "sync-ledger.json")
+    out_dir = STAGING / "docai"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    pages_read = 0
+    for item_id in selection["items"]:
+        record = ledger.data["items"][item_id]
+        sha = record.get("sha256")
+        target = out_dir / f"{sha}.json"
+        pdf = STAGING / "sources" / record["source"] / f"{sha}.pdf"
+        if not sha or target.exists() or not pdf.exists():
+            continue
+        scanned = sorted(ruled_tables.image_pages(pdf))
+        if not scanned:
+            continue
+        source = PdfReader(str(pdf))
+        writer = PdfWriter()
+        for number in scanned:
+            writer.add_page(source.pages[number - 1])
+        buffer = BytesIO()
+        writer.write(buffer)
+        part = out_dir / f"{sha}.scanned.pdf"
+        part.write_bytes(buffer.getvalue())
+        reading = reader.read(part)
+        part.unlink()
+        kept = {
+            "sha256": sha,
+            "version": reader.version(),
+            "read_at": stamp(now()),
+            "pages": {
+                str(number): {"text": page["text"], "tables": page.get("tables"), "nodes": page.get("nodes")}
+                for number, page in zip(scanned, reading.pages, strict=True)
+            },
+        }
+        target.write_text(json.dumps(kept, ensure_ascii=False) + "\n")
+        if store is not None:
+            store.put(
+                f"readings/{COUNTRY}/docai/{sha}.json", target.read_bytes(), "application/json", replace=True
+            )
+        pages_read += len(scanned)
+        log(f"{record['listed']['name'][:60]}: {len(scanned)} scanned pages read")
+    return {"pages_read": pages_read}
+
+
 def status() -> list[dict]:
     ledger = Ledger(STAGING / "sync-ledger.json")
     rows = []
@@ -732,6 +798,10 @@ def main(argv=None) -> int:
     fetch.add_argument("--to-bucket", action="store_true", help="store each file in the corpus bucket")
     fetch.add_argument("--no-local", action="store_true", help="keep no copy here (with --to-bucket)")
     sub.add_parser("push-held", help="upload files held here to the corpus bucket, and mirror the state")
+    scans = sub.add_parser(
+        "read-scans", help="read the scanned pages of fetched issues with Document AI (billed)"
+    )
+    scans.add_argument("--selection", required=True, type=Path)
     bulk = sub.add_parser("bulk-selection", help="write a selection of every catalogued file not yet held")
     bulk.add_argument("--approved-by", required=True)
     bulk.add_argument("--purpose", required=True)
@@ -746,6 +816,9 @@ def main(argv=None) -> int:
     )
     prepare.add_argument("--selection", required=True, type=Path)
     args = parser.parse_args(argv)
+    if args.command == "read-scans":
+        print(json.dumps(read_scans(load_selection(args.selection), store=corpus_store.CorpusStore())))
+        return 0
     if args.command == "push-held":
         store = corpus_store.CorpusStore()
         print(json.dumps({"stored": push_held(store)}))

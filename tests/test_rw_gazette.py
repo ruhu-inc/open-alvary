@@ -432,3 +432,30 @@ def test_a_number_misprinted_over_the_contents_is_the_same_law_but_two_laws_with
         "Article One: Approval",
     )
     assert [f["number"] for f in RG.instruments({"rw": [], "en": two, "fr": []})] == ["043/2026", "044/2026"]
+
+
+def test_a_scanned_page_keeps_its_layout_and_takes_document_ais_words_with_differences_noted():
+    lines = [
+        {"text": "Desireux de promouvoir un systerne de", "page": 1, "x0": 0, "y0": 10, "x1": 1, "y1": 18},
+        {
+            "text": "transport adrien international ; d’une part",
+            "page": 1,
+            "x0": 0,
+            "y0": 20,
+            "x1": 1,
+            "y1": 28,
+        },
+    ]
+    better = "Désireux de promouvoir un système de transport aérien international ; d'une part ;"
+    fixed = RG.correct_lines(lines, better)
+    assert [line["text"] for line in fixed] == [
+        "Désireux de promouvoir un système de",
+        "transport aérien international ; d’une part ;",  # the printed apostrophe kept
+    ]
+    assert fixed[0]["differences"] == [("Désireux", "Desireux"), ("système", "systerne")]
+    assert fixed[1]["differences"] == [("aérien", "adrien")]  # a lone ";" is not a difference
+    nodes = RG.structure([{**line, "text": "We, EXAMPLE,"} for line in fixed[:1]] + fixed, "en")
+    reading = RG.reading(nodes, {}, "0" * 64, {})
+    flags = [f for page in reading["pages"] for f in page["flags"]]
+    assert {f["kind"] for f in flags} == {"reading_differs"}
+    assert "aérien" in flags[-1]["primary"] and "adrien" in flags[-1]["checks"]["OCR layer"]

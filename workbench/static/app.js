@@ -15,6 +15,8 @@ const KIND_LABEL = {
   heading_long: "check where this heading ends",
   borrowed_ocr: "the page is a picture; its text came from someone else's OCR: check it word by word",
   number_differs: "the number is printed differently in two places",
+  reading_differs: "scanned page: Document AI read words differently from the OCR layer; Document AI's are shown",
+  accents_restored: "scanned page: accents restored by Document AI where the OCR layer dropped them",
 };
 const DECISION_LABEL = { keep: "kept as read", use_check: "used check reading", edited: "edited by hand", dismissed: "dismissed" };
 
