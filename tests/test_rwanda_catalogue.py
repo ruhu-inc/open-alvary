@@ -327,3 +327,59 @@ def test_rlrc_names_of_every_era_and_kind_give_their_kind():
         rwanda.parse_rlrc("Accord_commercial_entre_la_Republique_Rwandaise.pdf", treaties)["kind"]
         == "agreement"
     )
+
+
+def test_a_bulk_fetch_records_a_failed_file_goes_on_and_stops_at_a_refusal_or_a_full_disk(
+    tmp_path, monkeypatch
+):
+    import httpx
+    import pytest
+
+    monkeypatch.setattr(rwanda, "STAGING", tmp_path)
+    monkeypatch.setattr(rwanda, "RESERVE_BYTES", 0)  # this machine's own free space is not the test
+    names = ("good", "notpdf", "refused", "later")
+    files = [
+        {
+            "url": f"https://www.rlrc.gov.rw/fileadmin/{n}.pdf",
+            "name": f"{n}.pdf",
+            "size": "1 KB",
+            "modified": "",
+            "folder": "/",
+        }
+        for n in names
+    ]
+    ledger = Ledger(tmp_path / "sync-ledger.json")
+    ledger.observe_listing(
+        "rlrc-laws",
+        BASE,
+        "weekly",
+        {"complete": True, "outcome": "ok", "pages_read": 1, "files": files},
+        "run-1",
+    )
+    ledger.save()
+    answers = {
+        "good": (200, b"%PDF-1.4 a"),
+        "notpdf": (200, b"<html>"),
+        "refused": (429, b""),
+        "later": (200, b"%PDF-1.4 b"),
+    }
+
+    def site(request):
+        code, body = answers[request.url.path.rsplit("/", 1)[-1][:-4]]
+        return httpx.Response(code, content=body)
+
+    real = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda **kw: real(transport=httpx.MockTransport(site), **kw))
+    items = [f"rlrc-laws:{f['url']}" for f in files]
+    selection = {"approved_by": "operator", "approved_at": "2026-10-12", "purpose": "bulk", "items": items}
+    with pytest.raises(rwanda.FetchStopped, match="429"):
+        rwanda.fetch_selection(selection, delay=0, keep_going=True, log=lambda message: None)
+    held = Ledger(tmp_path / "sync-ledger.json").data["items"]
+    assert held[items[0]].get("sha256")
+    assert held[items[1]]["history"][-1]["change"] == "fetch failed"  # not a PDF: recorded, and on
+    assert not held[items[3]].get("sha256")  # never asked for after the refusal
+    answers["refused"] = (200, b"%PDF-1.4 c")
+    monkeypatch.setattr(rwanda, "RESERVE_BYTES", 10**18)
+    with pytest.raises(rwanda.FetchStopped, match="free"):
+        rwanda.fetch_selection(selection, delay=0, keep_going=True, log=lambda message: None)
+    assert set(rwanda.bulk_selection("operator", "bulk", ["rlrc-laws"])["items"]) == set(items[1:])
