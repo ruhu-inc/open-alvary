@@ -54,7 +54,12 @@ export type Provenance = {
 };
 
 export type ReviewRecord = {
-  readers: { primary: string; primary_version?: string; checks: string[] };
+  readers: {
+    primary: string;
+    primary_version?: string | null;
+    checks: string[];
+    notes?: string[];
+  };
   pages: number;
   checked_pages: number;
   reviewers: string[];
@@ -433,15 +438,19 @@ export function ReviewPanel({
   return (
     <Panel title="How this text was checked">
       <ol className="doc-checks">
-        <li>
-          Read by machine with {review.readers.primary}
-          {review.readers.primary_version
-            ? ` (${review.readers.primary_version})`
-            : ""}
-          {review.readers.checks.length
-            ? `, and compared word by word with ${review.readers.checks.join(" and ")}; every difference was flagged.`
-            : "."}
-        </li>
+        {review.readers.notes?.length ? (
+          review.readers.notes.map((note) => <li key={note}>{note}</li>)
+        ) : (
+          <li>
+            Read by machine with {review.readers.primary}
+            {review.readers.primary_version
+              ? ` (${review.readers.primary_version})`
+              : ""}
+            {review.readers.checks.length
+              ? `, and compared word by word with ${review.readers.checks.join(" and ")}; every difference was flagged.`
+              : "."}
+          </li>
+        )}
         <li>
           {review.checked_pages === review.pages
             ? `Every page (${review.pages}) checked against the printed page image`
