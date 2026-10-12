@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sys
 import time
 import unicodedata
@@ -306,67 +307,116 @@ def load_selection(path: Path) -> dict:
     return selection
 
 
-def fetch_selection(selection: dict, delay: float = 4.0, log=print) -> list[dict]:
+RESERVE_BYTES = 30 * 1024**3  # free space left on the disk before a long fetch stops
+
+
+class FetchStopped(Exception):
+    """A long fetch stopped on purpose: the site refused, or the disk is nearly full."""
+
+
+def fetch_selection(selection: dict, delay: float = 4.0, log=print, keep_going: bool = False) -> list[dict]:
     """Fetch each selected file once: exact catalogue URLs on the allowed hosts, no redirects, the
-    ingestion size limit, PDF only; stored by fingerprint with a provenance sidecar, ledger updated."""
+    ingestion size limit, PDF only; stored by fingerprint with a provenance sidecar, ledger updated.
+
+    With keep_going (a bulk run), a file that cannot be had (gone, not a PDF, larger than listed) is
+    recorded and the run goes on; a refusal (401, 403, 429) still stops it at once, and so does free
+    disk space falling below RESERVE_BYTES. A run can be repeated: files already held are skipped."""
     import httpx
 
     ledger = Ledger(STAGING / "sync-ledger.json")
     results = []
     with httpx.Client(timeout=120, headers={"User-Agent": filelist.user_agent()}) as client:
         for index, item_id in enumerate(selection["items"]):
-            record = ledger.data["items"].get(item_id)
-            if record is None:
-                raise ValueError(f"{item_id} is not in the catalogue")
-            url = record["url"]
-            parts = httpx.URL(url)
-            if parts.scheme != "https" or parts.host not in ALLOWED_HOSTS:
-                raise ValueError(f"{item_id}: {url} is not on an allowed host")
-            if (
-                record.get("sha256")
-                and (STAGING / "sources" / record["source"] / f"{record['sha256']}.pdf").exists()
-            ):
-                results.append({"item": item_id, "sha256": record["sha256"], "fetched": False})
-                continue
-            if index:
-                time.sleep(delay)
-            with client.stream("GET", url, follow_redirects=False) as response:
-                if response.status_code != 200:
-                    raise ValueError(f"{item_id}: HTTP {response.status_code}")
-                raw, limit = bytearray(), size_limit(record["listed"])
-                for chunk in response.iter_bytes():
-                    raw.extend(chunk)
-                    if len(raw) > limit:
-                        raise ValueError(f"{item_id}: larger than its listing shows ({limit} bytes)")
-                headers = {k: response.headers.get(k) for k in ("content-type", "last-modified", "etag")}
-            if not raw.startswith(b"%PDF-"):
-                raise ValueError(f"{item_id}: not a PDF")
-            sha = hashlib.sha256(raw).hexdigest()
-            folder = STAGING / "sources" / record["source"]
-            folder.mkdir(parents=True, exist_ok=True)
-            (folder / f"{sha}.pdf").write_bytes(raw)
-            (folder / f"{sha}.json").write_text(
-                json.dumps(
-                    {
-                        "item": item_id,
-                        "url": url,
-                        "listed": record["listed"],
-                        "retrieved_at": stamp(now()),
-                        "sha256": sha,
-                        "bytes": len(raw),
-                        "headers": headers,
-                        "selection": {k: selection[k] for k in ("approved_by", "approved_at", "purpose")},
-                    },
-                    ensure_ascii=False,
-                    indent=1,
+            try:
+                results.append(_fetch_one(client, ledger, selection, item_id, index, delay, log))
+            except FetchStopped:
+                raise
+            except Exception as error:  # noqa: BLE001 - recorded per file when keeping going
+                if not keep_going:
+                    raise
+                ledger.data["items"].setdefault(item_id, {}).setdefault("history", []).append(
+                    {"at": stamp(now()), "change": "fetch failed", "reason": str(error)[:300]}
                 )
-                + "\n"
-            )
-            ledger.fetched(item_id, sha, len(raw))
-            ledger.save()
-            log(f"fetched {record['listed']['name']} ({len(raw) // 1024} KB)")
-            results.append({"item": item_id, "sha256": sha, "fetched": True})
+                ledger.save()
+                log(f"skipped {item_id}: {error}")
+                results.append({"item": item_id, "fetched": False, "error": str(error)[:300]})
     return results
+
+
+def _fetch_one(client, ledger, selection, item_id, index, delay, log) -> dict:
+    import httpx
+
+    record = ledger.data["items"].get(item_id)
+    if record is None:
+        raise ValueError(f"{item_id} is not in the catalogue")
+    url = record["url"]
+    parts = httpx.URL(url)
+    if parts.scheme != "https" or parts.host not in ALLOWED_HOSTS:
+        raise ValueError(f"{item_id}: {url} is not on an allowed host")
+    if record.get("sha256") and (STAGING / "sources" / record["source"] / f"{record['sha256']}.pdf").exists():
+        return {"item": item_id, "sha256": record["sha256"], "fetched": False}
+    if shutil.disk_usage(STAGING).free < RESERVE_BYTES:
+        raise FetchStopped(f"stopped: less than {RESERVE_BYTES // 1024**3} GiB free on the disk")
+    if index:
+        time.sleep(delay)
+    with client.stream("GET", url, follow_redirects=False) as response:
+        if response.status_code in (401, 403, 429):
+            raise FetchStopped(f"stopped: the site answered {response.status_code} at {url}")
+        if response.status_code != 200:
+            raise ValueError(f"{item_id}: HTTP {response.status_code}")
+        raw, limit = bytearray(), size_limit(record["listed"])
+        for chunk in response.iter_bytes():
+            raw.extend(chunk)
+            if len(raw) > limit:
+                raise ValueError(f"{item_id}: larger than its listing shows ({limit} bytes)")
+        headers = {k: response.headers.get(k) for k in ("content-type", "last-modified", "etag")}
+    if not raw.startswith(b"%PDF-"):
+        raise ValueError(f"{item_id}: not a PDF")
+    sha = hashlib.sha256(raw).hexdigest()
+    folder = STAGING / "sources" / record["source"]
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{sha}.pdf").write_bytes(raw)
+    (folder / f"{sha}.json").write_text(
+        json.dumps(
+            {
+                "item": item_id,
+                "url": url,
+                "listed": record["listed"],
+                "retrieved_at": stamp(now()),
+                "sha256": sha,
+                "bytes": len(raw),
+                "headers": headers,
+                "selection": {k: selection[k] for k in ("approved_by", "approved_at", "purpose")},
+            },
+            ensure_ascii=False,
+            indent=1,
+        )
+        + "\n"
+    )
+    ledger.fetched(item_id, sha, len(raw))
+    ledger.save()
+    log(f"fetched {record['listed']['name']} ({len(raw) // 1024} KB)")
+    return {"item": item_id, "sha256": sha, "fetched": True}
+
+
+def bulk_selection(approved_by: str, purpose: str, sources: list[str]) -> dict:
+    """Every catalogued file of the given sources not yet held, as a selection recording who approved
+    it; nothing is assumed: the approver is named on the command line."""
+    if not approved_by.strip():
+        raise ValueError("a bulk fetch needs the approver's name")
+    ledger = Ledger(STAGING / "sync-ledger.json")
+    items = sorted(
+        item_id
+        for item_id, record in ledger.data["items"].items()
+        if record.get("source") in sources and not record.get("sha256")
+    )
+    return {
+        "purpose": purpose,
+        "approved_by": approved_by,
+        "approved_at": stamp(now()),
+        "terms": "private-staging/rw/access/pol-01-2026-10-11.json",
+        "items": items,
+    }
 
 
 def probe_selection(selection: dict, log=print) -> list[dict]:
@@ -626,6 +676,12 @@ def main(argv=None) -> int:
     again.add_argument("--source", choices=[*SOURCES, "all"], default="all")
     fetch = sub.add_parser("fetch", help="fetch the files of an operator-approved selection")
     fetch.add_argument("--selection", required=True, type=Path)
+    fetch.add_argument("--keep-going", action="store_true", help="record a file that fails and go on")
+    bulk = sub.add_parser("bulk-selection", help="write a selection of every catalogued file not yet held")
+    bulk.add_argument("--approved-by", required=True)
+    bulk.add_argument("--purpose", required=True)
+    bulk.add_argument("--source", choices=[*SOURCES, "all"], default="all")
+    bulk.add_argument("--out", required=True, type=Path)
     probe = sub.add_parser(
         "probe", help="measure the layout of a fetched selection (text layer, columns, languages)"
     )
@@ -636,7 +692,23 @@ def main(argv=None) -> int:
     prepare.add_argument("--selection", required=True, type=Path)
     args = parser.parse_args(argv)
     if args.command == "fetch":
-        fetch_selection(load_selection(args.selection))
+        try:
+            results = fetch_selection(load_selection(args.selection), keep_going=args.keep_going)
+        except FetchStopped as stop:
+            print(stop)
+            return 3
+        failed = [r for r in results if r.get("error")]
+        print(
+            json.dumps(
+                {"files": len(results), "fetched": sum(r["fetched"] for r in results), "failed": len(failed)}
+            )
+        )
+        return 0
+    if args.command == "bulk-selection":
+        chosen = list(SOURCES) if args.source == "all" else [args.source]
+        selection = bulk_selection(args.approved_by, args.purpose, chosen)
+        args.out.write_text(json.dumps(selection, ensure_ascii=False, indent=1) + "\n")
+        print(json.dumps({"items": len(selection["items"]), "out": str(args.out)}))
         return 0
     if args.command == "probe":
         probe_selection(load_selection(args.selection))
