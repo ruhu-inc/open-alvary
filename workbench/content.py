@@ -542,12 +542,26 @@ READERS = {
 
 
 def reader_names(reading: dict) -> dict:
-    """The machine readers behind a reading, named for the public."""
+    """The machine readers behind a reading, named for the public; for a text taken from the PDF's
+    own text layer, what was done instead, in plain words."""
     primary = reading["primary"]["reader"]
+    if primary == "text-layer":
+        checks = reading.get("checks") or {}
+        notes = ["Taken from the published PDF's own text, exactly as it was published."]
+        if checks.get("alignment"):
+            notes.append(
+                "Its articles were compared with the other language versions of the law; every difference was flagged."
+            )
+        if checks.get("scans_read_by_docai"):
+            notes.append(
+                "Its scanned pages were read by Google Document AI and compared word by word with the OCR "
+                "layer already in the PDF; every difference was flagged."
+            )
+        return {"primary": "the PDF's own text", "primary_version": None, "checks": [], "notes": notes}
     return {
         "primary": READERS.get(primary, primary),
         "primary_version": (reading["primary"].get("version") or {}).get("version"),
-        "checks": [READERS.get(name, name) for name in reading.get("checks", {})],
+        "checks": [READERS.get(name, name) for name in reading.get("checks", {}) if name in READERS],
     }
 
 

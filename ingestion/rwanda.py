@@ -502,6 +502,57 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
+def rlrc_index() -> tuple[dict, str | None]:
+    """RLRC's listing by (kind, number, year): whether each law is filed among the laws in force or
+    the repealed ones, and under which subject; and when the listing was read."""
+    path = STAGING / "catalogue" / "rlrc-laws.json"
+    if not path.exists():
+        return {}, None
+    catalogue = json.loads(path.read_text())
+    index: dict = {}
+    for item in catalogue["files"]:
+        parsed = item["parsed"]
+        number = re.match(r"0*(\d+)", parsed.get("number") or "")
+        if (
+            parsed.get("kind")
+            and number
+            and parsed.get("year")
+            and parsed.get("status") in ("in_force", "repealed")
+        ):
+            index.setdefault((parsed["kind"], int(number.group(1)), parsed["year"]), []).append(item)
+    return index, (catalogue.get("checked_at") or "")[:10] or None
+
+
+def _subjects(folder: str) -> str:
+    """'…/Laws_in_force/10._Business/10.16._Telecommunication/' -> 'Business › Telecommunication'."""
+    tail = re.split(r"/(?:Laws_in_force|Repealed_laws)/", folder)[-1]
+    names = [re.sub(r"^[\d.]+_*", "", part).replace("_", " ").strip() for part in tail.strip("/").split("/")]
+    return " › ".join(name for name in names if name)
+
+
+def rlrc_status(index: dict, checked: str | None, kind: str, number: str, year: str | None) -> dict:
+    """Legal status and subjects suggested from RLRC's listing, where it files this instrument."""
+    lead = re.match(r"0*(\d+)", number or "")
+    if not (lead and year):
+        return {}
+    found = index.get((kind, int(lead.group(1)), int(year)), [])
+    statuses = {item["parsed"]["status"] for item in found}
+    if len(statuses) != 1:
+        return {}  # not listed, or listed both ways: left for the reviewer
+    status = statuses.pop()
+    item = found[0]
+    subject = _subjects(item["folder"])
+    where = "the laws in force" if status == "in_force" else "the repealed laws"
+    return {
+        "status.legal": status,
+        "status.as_of": checked,
+        "status.note": f"RLRC's Laws of Rwanda files it among {where}"
+        + (f", under {item['parsed'].get('subject_code', '')} {subject}" if subject else "")
+        + f" (listing read {checked}).",
+        "classification.subjects": [subject] if subject else [],
+    }
+
+
 def prepare_selection(selection: dict, log=print) -> dict:
     """Each fetched gazette issue of a selection split into its instruments, and each instrument's
     language versions written as readings the workbench reviews, with the issue's PDF beside them,
@@ -541,6 +592,7 @@ def prepare_selection(selection: dict, log=print) -> dict:
         layouts = [len(gazette_layout.columns(page)) for page in words]
         split = rw_gazette.split_issue(words, ruled_tables.document_tables(pdf, words, layouts))
         scanned = ruled_tables.image_pages(pdf)
+        read_pages: set[int] = set()
         # Scanned pages Document AI has read: its words, in the layout of the OCR layer.
         read = STAGING / "docai" / f"{sha}.json"
         if read.exists():
@@ -551,7 +603,8 @@ def prepare_selection(selection: dict, log=print) -> dict:
                 else page
                 for page in split
             ]
-            scanned = scanned - {int(n) for n in readings}
+            read_pages = {int(n) for n in readings}
+            scanned = scanned - read_pages
         roles = rw_gazette.annex_pages(split)
         streams = rw_gazette.streams(split, skip=set(roles))
         furniture = {page["page"]: [line["text"] for line in page["furniture"]] for page in split}
@@ -596,6 +649,7 @@ def prepare_selection(selection: dict, log=print) -> dict:
             issue = parse_gazette(headers.most_common(1)[0][0]) if headers else {"parsed": False}
         sizes = {page["page"]: (page["width"], page["height"]) for page in split}
         found = rw_gazette.instruments(streams)
+        rlrc, rlrc_checked = rlrc_index()
         for entry in found:
             lines = {lang: streams[lang][v["start"] : v["end"]] for lang, v in entry["versions"].items()}
             versions = {lang: rw_gazette.structure(lines[lang], lang) for lang in lines}
@@ -614,11 +668,33 @@ def prepare_selection(selection: dict, log=print) -> dict:
                             }
                         )
             values = rw_gazette.suggest(lines, entry, issue)
+            values |= {
+                k: v
+                for k, v in rlrc_status(
+                    rlrc, rlrc_checked, entry["kind"], entry["number"], (entry.get("date") or "")[:4] or None
+                ).items()
+                if v
+            }
+            # A law the Senate did not sit on (its preamble names only the Chamber of Deputies).
+            absent = (
+                {"step:adopted:senate": "not_applicable"}
+                if entry["kind"] == "law"
+                and values.get("step:adopted:deputies.date")
+                and not values.get("step:adopted:senate.date")
+                else {}
+            )
             number = issue.get("date", "") if entry["number"] == "constitution" else entry["number"]
             work = f"rw-{entry['kind'].replace('_', '-')}-{_slug(number)}"
             for language, nodes in versions.items():
                 doc_id = f"{work}-{language}"
-                reading = rw_gazette.reading(nodes, furniture, sha, {"alignment": check}, sizes, scanned)
+                reading = rw_gazette.reading(
+                    nodes,
+                    furniture,
+                    sha,
+                    {"alignment": check, "scans_read_by_docai": sorted(read_pages)},
+                    sizes,
+                    scanned,
+                )
                 write_document(doc_id, reading, entry["versions"][language]["pages"])
                 documents[doc_id] = {
                     "id": doc_id,
@@ -640,6 +716,7 @@ def prepare_selection(selection: dict, log=print) -> dict:
                         <= entry["versions"][language]["pages"][1]
                     ),
                     "also_printed_as": entry.get("also_printed_as"),
+                    "suggested_absent": absent,
                     "suggested": {
                         **values,
                         "publication.pages": "{}–{}".format(*entry["versions"][language]["pages"]),

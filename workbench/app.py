@@ -165,7 +165,8 @@ def create_app(
                 *details.initial(details.suggest(reading, act, library.manifest_for(act["id"])))
             )
         else:
-            values, absent = record_view.base_values(act, library.manifest_for(act["id"])), {}
+            values = record_view.base_values(act, library.manifest_for(act["id"]))
+            absent = dict(act.get("suggested_absent") or {})
         if act.get("language") and isinstance(values.get("expressions"), list):
             # One record for the work; each language version is "this text" on its own page.
             values = {

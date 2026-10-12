@@ -383,3 +383,45 @@ def test_a_bulk_fetch_records_a_failed_file_goes_on_and_stops_at_a_refusal_or_a_
     with pytest.raises(rwanda.FetchStopped, match="free"):
         rwanda.fetch_selection(selection, delay=0, keep_going=True, log=lambda message: None)
     assert set(rwanda.bulk_selection("operator", "bulk", ["rlrc-laws"])["items"]) == set(items[1:])
+
+
+def test_rlrc_listing_suggests_legal_status_and_subjects_for_a_gazette_law(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.setattr(rwanda, "STAGING", tmp_path)
+    (tmp_path / "catalogue").mkdir()
+    root = "/user_upload/RLRC/Laws_of_Rwanda_v2/Domestic_laws/"
+    files = [
+        {
+            "name": "8.3.4._LAW_N0_28-2012__DIRECT_TAX_ON_INCOME.pdf",
+            "folder": root + "Repealed_laws/8._Taxation/8.3._Income_tax/",
+            "parsed": {
+                "kind": "law",
+                "number": "28-2012",
+                "year": 2012,
+                "status": "repealed",
+                "subject_code": "8.3.4",
+            },
+        },
+        {
+            "name": "6.6.11._Criminal_Procedure__Law_No_027_of_2019.pdf",
+            "folder": root + "Laws_in_force/6._Judicial/6.6._Criminal_procedure/",
+            "parsed": {
+                "kind": "law",
+                "number": "027",
+                "year": 2019,
+                "status": "in_force",
+                "subject_code": "6.6.11",
+            },
+        },
+    ]
+    (tmp_path / "catalogue" / "rlrc-laws.json").write_text(
+        json.dumps({"checked_at": "2026-10-11T04:49:47Z", "files": files})
+    )
+    index, checked = rwanda.rlrc_index()
+    repealed = rwanda.rlrc_status(index, checked, "law", "28/2012", "2012")
+    assert repealed["status.legal"] == "repealed" and repealed["status.as_of"] == "2026-10-11"
+    assert repealed["classification.subjects"] == ["Taxation › Income tax"]
+    assert "among the repealed laws" in repealed["status.note"]
+    assert rwanda.rlrc_status(index, checked, "law", "027/2019", "2019")["status.legal"] == "in_force"
+    assert rwanda.rlrc_status(index, checked, "law", "055/2024", "2024") == {}  # not listed: left unknown
