@@ -1,0 +1,26 @@
+ingestion/rwanda.py
+  s_b82616e2476856::t_b4125d21754f7c 319-325,339-341,356,366-367,369,387,404-408,410-414,420-448
+  s_b82616e2476856::t_3806e87baf1f01 26,31,318,449-453,463,732-734,749-753,755-757,759-765,769-771
+tests/test_corpus_store.py
+  s_b82616e2476856::t_2e12f9e6745d70 1-53
+ingestion/corpus_store.py
+  s_b82616e2476856::t_c60c7dcc2df8a9 16,50
+  s_b82616e2476856::t_b4125d21754f7c 30-32,46-48,53-59
+  s_b82616e2476856::t_0d049f94b1e12f 1-15,17-29,33-45,49,51-52,60-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "986f04766f09c266eb480e150229acad135f861f",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
