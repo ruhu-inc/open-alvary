@@ -517,3 +517,34 @@ def test_the_survey_sums_files_by_source_and_year_and_prices_the_scanned_pages(t
         "law": 1,
     }
     assert summary["by"]["minijust-gazette 2017"]["scanned_pages"] == 182
+
+
+def test_two_fetches_sharing_the_ledger_keep_each_others_records(tmp_path):
+    files = [
+        {
+            "url": f"https://www.rlrc.gov.rw/fileadmin/{n}.pdf",
+            "name": f"{n}.pdf",
+            "size": "1 KB",
+            "modified": "",
+            "folder": "/",
+        }
+        for n in ("a", "b")
+    ]
+    first = Ledger(tmp_path / "sync-ledger.json")
+    first.observe_listing(
+        "rlrc-laws",
+        BASE,
+        "weekly",
+        {"complete": True, "outcome": "ok", "pages_read": 1, "files": files},
+        "run-1",
+    )
+    first.save()
+    a, b = (f"rlrc-laws:{f['url']}" for f in files)
+    one, two = Ledger(tmp_path / "sync-ledger.json"), Ledger(tmp_path / "sync-ledger.json")
+    one.fetched(a, "1" * 64, 10)
+    two.fetched(b, "2" * 64, 20)
+    one.save_items([a])
+    two.save_items([b])  # written after the other: it must not undo the first's record
+    on_disk = Ledger(tmp_path / "sync-ledger.json").data["items"]
+    assert on_disk[a]["sha256"] == "1" * 64 and on_disk[b]["sha256"] == "2" * 64
+    assert two.data["items"][a]["sha256"] == "1" * 64  # and each sees what the other wrote
