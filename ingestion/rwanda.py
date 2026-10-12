@@ -15,6 +15,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import time
 import unicodedata
@@ -320,13 +321,18 @@ NETWORK_WAITS = (30, 60, 120, 300, 600, 600, 600, 600, 600)
 
 
 def _network_trouble(error: Exception) -> bool:
-    """A failure of the connection (name lookup, connect, timeout, a server error from the bucket),
-    not of the file: worth waiting out rather than skipping."""
+    """A failure of the connection (name lookup, connect, timeout, a server error from the bucket,
+    the Google sign-in unreachable), not of the file: worth waiting out rather than skipping."""
+    import google.auth.exceptions
     import httpx
     import requests
 
     if isinstance(
-        error, httpx.TransportError | requests.exceptions.ConnectionError | requests.exceptions.Timeout
+        error,
+        httpx.TransportError
+        | requests.exceptions.ConnectionError
+        | requests.exceptions.Timeout
+        | google.auth.exceptions.TransportError,
     ):
         return True
     if isinstance(error, requests.exceptions.HTTPError) and error.response is not None:
@@ -910,7 +916,7 @@ def survey_file(pdf: Path) -> dict:
     }
 
 
-def survey(store=None, limit: int | None = None, log=print) -> dict:
+def survey(store=None, limit: int | None = None, log=print, sleep=time.sleep) -> dict:
     """Measure every stored file (read from the corpus bucket into a temporary file), keeping one
     result per file in survey/<sha256>.json, so the survey can be stopped and resumed; then sum."""
     import tempfile
@@ -927,18 +933,33 @@ def survey(store=None, limit: int | None = None, log=print) -> dict:
         if limit is not None and done >= limit:
             break
         local = STAGING / "sources" / record["source"] / f"{sha}.pdf"
-        try:
-            if local.exists():
-                result = survey_file(local)
-            elif record.get("stored") and store is not None:
-                with tempfile.TemporaryDirectory(dir=STAGING) as scratch:
-                    pdf = Path(scratch) / "file.pdf"
-                    pdf.write_bytes(store.get(corpus_store.source_name(COUNTRY, record["source"], sha)))
-                    result = survey_file(pdf)
-            else:
-                continue
-        except Exception as error:  # noqa: BLE001 - a file that cannot be measured is noted, not fatal
-            result = {"error": f"{type(error).__name__}: {str(error)[:200]}"}
+        if not local.exists() and not (record.get("stored") and store is not None):
+            continue
+        waits = 0
+        while True:
+            try:
+                if local.exists():
+                    result = survey_file(local)
+                else:
+                    with tempfile.TemporaryDirectory(dir=STAGING) as scratch:
+                        pdf = Path(scratch) / "file.pdf"
+                        pdf.write_bytes(store.get(corpus_store.source_name(COUNTRY, record["source"], sha)))
+                        result = survey_file(pdf)
+                break
+            except Exception as error:  # noqa: BLE001 - the network waited out; a bad file noted
+                if _network_trouble(error) and not isinstance(
+                    error, FileNotFoundError | subprocess.CalledProcessError
+                ):
+                    if waits == len(NETWORK_WAITS):
+                        raise FetchStopped(
+                            "stopped: the network has been unavailable for about an hour"
+                        ) from error
+                    log(f"network trouble ({type(error).__name__}); trying again in {NETWORK_WAITS[waits]} s")
+                    sleep(NETWORK_WAITS[waits])
+                    waits += 1
+                    continue
+                result = {"error": f"{type(error).__name__}: {str(error)[:200]}"}
+                break
         parsed = parse_item(record["source"], {**record["listed"], "url": record["url"]})
         result |= {
             "item": item_id,
