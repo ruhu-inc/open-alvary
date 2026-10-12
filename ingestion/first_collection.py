@@ -360,6 +360,8 @@ KIND = {
     "heading_long": "check where this heading ends",
     "borrowed_ocr": "the page is a picture; its text came from someone else's OCR",
     "number_differs": "the number is printed differently in two places",
+    "reading_differs": "Document AI read words differently from the OCR layer",
+    "accents_restored": "accents restored where the OCR layer dropped them",
 }
 
 

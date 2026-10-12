@@ -598,17 +598,27 @@ def structure(lines: list[dict], language: str, part: str = "heading") -> list[d
             if part == "heading" and last is not None and last["kind"] == "heading":
                 last["text"] += " " + text
                 last["lines"].append(line)
+                last.setdefault("differences", []).extend(line.get("differences", []))
             elif wraps or (last is not None and last["kind"] == "paragraph" and close):
                 last["text"] += " " + text
                 last["lines"].append(line)
+                last.setdefault("differences", []).extend(line.get("differences", []))
             else:
                 kind = "heading" if part == "heading" else "paragraph"
                 level = "heading-1" if part == "heading" else "paragraph"
                 nodes.append(
-                    {"kind": kind, "level": level, "text": text, "page": line["page"], "lines": [line]}
+                    {
+                        "kind": kind,
+                        "level": level,
+                        "text": text,
+                        "page": line["page"],
+                        "lines": [line],
+                        "differences": list(line.get("differences", [])),
+                    }
                 )
         else:
             node["lines"] = [line]
+            node["differences"] = list(line.get("differences", []))
             nodes.append(node)
         previous = line
     for node in nodes:
@@ -757,6 +767,18 @@ def reading(
                 if node["kind"] == "table"
                 else _tokens(node["text"])
             )
+            if node.get("differences"):
+                # A scanned page: Document AI's words, the OCR layer's where it read otherwise.
+                changed = list(node["differences"])
+                worded = any(_fold(new) != _fold(old) for new, old in changed)
+                node.setdefault("flags", []).append(
+                    {
+                        "severity": "medium" if worded else "low",
+                        "kind": "reading_differs" if worded else "accents_restored",
+                        "primary": "; ".join(new or "∅" for new, _ in changed)[:400],
+                        "others": {"OCR layer": "; ".join(old or "∅" for _, old in changed)[:400]},
+                    }
+                )
             for flag in node.get("flags", []):
                 if flag["kind"] == "not_aligned" and flag.get("missing"):
                     span = [position, position]
@@ -778,7 +800,7 @@ def reading(
                 {
                     k: v
                     for k, v in node.items()
-                    if k not in ("article", "division", "unusual", "flags", "lines")
+                    if k not in ("article", "division", "unusual", "flags", "lines", "differences")
                 }
             )
         page_nodes = [
@@ -1103,3 +1125,104 @@ def versions_nodes(lines: list[dict]) -> list[dict]:
         elif node["kind"] == "paragraph":
             node["after_article"], node["purpose"] = current, purpose
     return nodes
+
+
+# --- scanned pages: the layout of the OCR layer, the words of Document AI --------------------------------
+
+
+def _fold(token: str) -> str:
+    """A word for matching: no accents, case or punctuation ("Désireux," and "Desireux" match)."""
+    import unicodedata
+
+    plain = unicodedata.normalize("NFKD", token).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]", "", plain)
+
+
+def docai_columns(reading: dict, languages: int) -> list[str]:
+    """Document AI's text of a page, as one text per language column: a page it read as a table of
+    three columns gives each column's cells in order; otherwise its nodes in reading order."""
+    nodes = [n for n in reading.get("nodes") or [] if n.get("kind") != "furniture"]
+    tables = [n for n in nodes if n.get("kind") == "table"]
+    if languages == 3 and tables:
+        widest = max(tables, key=lambda t: sum(len(r) for r in t["header_rows"] + t["body_rows"]))
+        rows = widest["header_rows"] + widest["body_rows"]
+        if rows and max(len(r) for r in rows) == 3:
+            return [" ".join(r[k]["text"] for r in rows if len(r) > k) for k in range(3)]
+    parts = []
+    for node in nodes:
+        if node.get("kind") == "table":
+            parts += [cell["text"] for row in node["header_rows"] + node["body_rows"] for cell in row]
+        else:
+            parts.append(" ".join(filter(None, [node.get("marker"), node.get("text")])))
+    return [" ".join(parts)]
+
+
+def correct_lines(lines: list[dict], better: str) -> list[dict]:
+    """The lines of a column with their words replaced by a better reading of the same text: the two
+    word sequences are aligned, the better words take the place of the ones they match or replace,
+    and each line keeps a note of what changed ("système" for "systerne")."""
+    import difflib
+
+    owner, borrowed = [], []
+    for k, line in enumerate(lines):
+        if line.get("table"):
+            continue
+        for word in line["text"].split():
+            owner.append(k)
+            borrowed.append(word)
+    good = better.split()
+    matcher = difflib.SequenceMatcher(
+        None, [_fold(w) for w in borrowed], [_fold(w) for w in good], autojunk=False
+    )
+    words: dict[int, list[str]] = {k: [] for k in range(len(lines))}
+    notes: dict[int, list[tuple[str, str]]] = {k: [] for k in range(len(lines))}
+
+    def letters(text: str) -> str:  # what a reader would call a different word: letters and accents
+        return re.sub(r"[^\w]", "", text.lower())
+
+    def same_glyphs(a: str, b: str) -> bool:  # only the apostrophe or quotation marks differ
+        return re.sub(r"[’‘`´']", "'", a) == re.sub(r"[’‘`´']", "'", b)
+
+    for op, i1, i2, j1, j2 in matcher.get_opcodes():
+        if op == "equal":
+            for i, j in zip(range(i1, i2), range(j1, j2), strict=True):
+                if same_glyphs(good[j], borrowed[i]):
+                    words[owner[i]].append(borrowed[i])  # the apostrophe as printed
+                    continue
+                words[owner[i]].append(good[j])
+                if letters(good[j]) != letters(borrowed[i]):
+                    notes[owner[i]].append((good[j], borrowed[i]))
+        elif op in ("replace", "insert"):
+            home = owner[i1] if i1 < len(owner) else (owner[i1 - 1] if i1 else 0)
+            words[home].extend(good[j1:j2])
+            new, old = " ".join(good[j1:j2]), " ".join(borrowed[i1:i2])
+            if letters(new) != letters(old):
+                notes[home].append((new, old))
+        elif letters(" ".join(borrowed[i1:i2])):  # words only the OCR layer has
+            notes[owner[i1]].append(("", " ".join(borrowed[i1:i2])))
+    out = []
+    for k, line in enumerate(lines):
+        if line.get("table"):
+            out.append(line)
+            continue
+        out.append({**line, "text": " ".join(words[k]), "read_by": "docai", "differences": notes[k]})
+    return out
+
+
+def correct_page(page: dict, reading: dict) -> dict:
+    """A scanned page, split as its OCR layer lays it out, with Document AI's words."""
+    columns = [c for c in page["columns"]]
+    texts = docai_columns(reading, len(columns) if page["layout"] == "parallel" else 1)
+    if len(texts) == len(columns):
+        corrected = [
+            {**c, "lines": correct_lines(c["lines"], t)} for c, t in zip(columns, texts, strict=True)
+        ]
+    else:
+        # One text for the page: align it with the columns' lines taken in reading order.
+        every = [line for c in columns for line in c["lines"]]
+        fixed = correct_lines(every, texts[0])
+        corrected, start = [], 0
+        for c in columns:
+            corrected.append({**c, "lines": fixed[start : start + len(c["lines"])]})
+            start += len(c["lines"])
+    return {**page, "columns": corrected, "read_by": "docai"}
