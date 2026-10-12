@@ -887,6 +887,103 @@ def read_scans(selection: dict, log=print, store=None) -> dict:
     return {"pages_read": pages_read}
 
 
+def survey_file(pdf: Path) -> dict:
+    """What one file holds, measured as the pipeline would read it (free: no OCR service)."""
+    from pypdf import PdfReader
+
+    words = gazette_layout.text_layer(pdf)
+    layouts = [len(gazette_layout.columns(page)) for page in words]
+    tables = ruled_tables.document_tables(pdf, words, layouts)
+    split = rw_gazette.split_issue(words, tables)
+    scanned = ruled_tables.image_pages(pdf)
+    roles = rw_gazette.annex_pages(split)
+    found = rw_gazette.instruments(rw_gazette.streams(split, skip=set(roles)))
+    return {
+        "pages": len(PdfReader(str(pdf)).pages),
+        "scanned_pages": len(scanned),
+        "text_pages": sum(1 for page in words if len(page["words"]) >= 20),
+        "layouts": dict(Counter(page["layout"] for page in split)),
+        "tables": sum(len(t) for t in tables.values()),
+        "annex_pages": len(roles),
+        "instruments": dict(Counter(entry["kind"] for entry in found)),
+        "in_three_languages": sum(1 for entry in found if len(entry["versions"]) == 3),
+    }
+
+
+def survey(store=None, limit: int | None = None, log=print) -> dict:
+    """Measure every stored file (read from the corpus bucket into a temporary file), keeping one
+    result per file in survey/<sha256>.json, so the survey can be stopped and resumed; then sum."""
+    import tempfile
+
+    ledger = Ledger(STAGING / "sync-ledger.json")
+    out_dir = STAGING / "survey"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    done = 0
+    for item_id, record in ledger.data["items"].items():
+        sha = record.get("sha256")
+        target = out_dir / f"{sha}.json"
+        if not sha or target.exists():
+            continue
+        if limit is not None and done >= limit:
+            break
+        local = STAGING / "sources" / record["source"] / f"{sha}.pdf"
+        try:
+            if local.exists():
+                result = survey_file(local)
+            elif record.get("stored") and store is not None:
+                with tempfile.TemporaryDirectory(dir=STAGING) as scratch:
+                    pdf = Path(scratch) / "file.pdf"
+                    pdf.write_bytes(store.get(corpus_store.source_name(COUNTRY, record["source"], sha)))
+                    result = survey_file(pdf)
+            else:
+                continue
+        except Exception as error:  # noqa: BLE001 - a file that cannot be measured is noted, not fatal
+            result = {"error": f"{type(error).__name__}: {str(error)[:200]}"}
+        parsed = parse_item(record["source"], {**record["listed"], "url": record["url"]})
+        result |= {
+            "item": item_id,
+            "source": record["source"],
+            "name": record["listed"]["name"],
+            "year": (parsed.get("date") or "")[:4]
+            or (str(parsed.get("year")) if parsed.get("year") else None),
+            "bytes": record.get("bytes"),
+        }
+        target.write_text(json.dumps(result, ensure_ascii=False) + "\n")
+        done += 1
+        log(
+            f"{done:5d} {record['listed']['name'][:60]}: {result.get('pages')} pages, {result.get('scanned_pages')} scanned"
+        )
+    return survey_summary()
+
+
+def survey_summary(price_per_1000_pages: float = 10.0) -> dict:
+    """The survey summed by source and year, with the Document AI pages it implies (the scanned
+    ones) at the stated price per 1,000 pages (an assumption to confirm in billing)."""
+    rows = [json.loads(p.read_text()) for p in sorted((STAGING / "survey").glob("*.json"))]
+    total: dict = {}
+    fields = ("pages", "scanned_pages", "text_pages", "tables", "annex_pages", "in_three_languages")
+    for row in rows:
+        if "error" in row:
+            continue
+        for key in (row["source"], f"{row['source']} {row.get('year') or 'undated'}", "all"):
+            bucket = total.setdefault(key, {"files": 0, **{f: 0 for f in fields}, "instruments": Counter()})
+            bucket["files"] += 1
+            for field in fields:
+                bucket[field] += row.get(field) or 0
+            bucket["instruments"].update(row.get("instruments") or {})
+    for bucket in total.values():
+        bucket["instruments"] = dict(bucket["instruments"])
+        bucket["document_ai_cost_usd"] = round(bucket["scanned_pages"] * price_per_1000_pages / 1000, 2)
+    summary = {
+        "files_surveyed": len(rows),
+        "errors": sum(1 for row in rows if "error" in row),
+        "price_per_1000_pages": price_per_1000_pages,
+        "by": dict(sorted(total.items())),
+    }
+    (STAGING / "survey-summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=1) + "\n")
+    return summary
+
+
 def status() -> list[dict]:
     ledger = Ledger(STAGING / "sync-ledger.json")
     rows = []
@@ -925,6 +1022,10 @@ def main(argv=None) -> int:
     fetch.add_argument("--to-bucket", action="store_true", help="store each file in the corpus bucket")
     fetch.add_argument("--no-local", action="store_true", help="keep no copy here (with --to-bucket)")
     sub.add_parser("push-held", help="upload files held here to the corpus bucket, and mirror the state")
+    measure = sub.add_parser(
+        "survey", help="measure every stored file (pages, scans, tables, instruments); free"
+    )
+    measure.add_argument("--limit", type=int)
     scans = sub.add_parser(
         "read-scans", help="read the scanned pages of fetched issues with Document AI (billed)"
     )
@@ -943,6 +1044,12 @@ def main(argv=None) -> int:
     )
     prepare.add_argument("--selection", required=True, type=Path)
     args = parser.parse_args(argv)
+    if args.command == "survey":
+        summary = survey(
+            corpus_store.CorpusStore(), args.limit, log=lambda message: print(message, flush=True)
+        )
+        print(json.dumps(summary["by"].get("all", {}), ensure_ascii=False))
+        return 0
     if args.command == "read-scans":
         print(json.dumps(read_scans(load_selection(args.selection), store=corpus_store.CorpusStore())))
         return 0
