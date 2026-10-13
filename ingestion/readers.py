@@ -126,6 +126,36 @@ class DocAIReader:
         )
 
 
+# --- Document AI Enterprise OCR (scanned pages: words with their places) ---------------------
+
+
+class DocOCRReader(DocAIReader):
+    """Google's OCR for pictures of pages: every word with its box, as a PDF's own text layer gives
+    them, so a scanned page is laid out (columns, articles, items, tables) like a born-digital one;
+    the Layout Parser's reading of the same page is then the check on its words."""
+
+    name = "docai-ocr"
+
+    def __init__(self, config: layout_parser.DocAIConfig | None = None):
+        self.config = config or layout_parser.DocAIConfig.from_environment("OCR_PROCESSOR")
+        if not self.config.processor_version:
+            raise SystemExit("Pin ALVARY_DOCAI_OCR_PROCESSOR_VERSION for batch runs")
+        self.workers = int(os.environ.get("ALVARY_DOCAI_OCR_WORKERS") or 4)
+        self.pages_per_request = layout_parser.ONLINE_PAGE_LIMIT
+        self._client = None
+
+    def read(self, pdf: Path) -> Reading:
+        result = layout_parser.ocr(
+            pdf.read_bytes(),
+            self.config,
+            client=self.client(),
+            workers=self.workers,
+            pages_per_request=self.pages_per_request,
+        )
+        pages = result["pages"]
+        return Reading(self.name, self.version(), pages, len(pages), {"retries": result["retries"]})
+
+
 # --- MinerU (local, independent check) --------------------------------------------------------
 
 MINERU_FURNITURE = {"header", "footer", "page_number", "page_header", "page_footer", "page_footnote"}
