@@ -347,6 +347,28 @@ def _network_trouble(error: Exception) -> bool:
     return isinstance(error, OSError)
 
 
+DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def file_kind(data: bytes) -> tuple[str, str] | None:
+    """What a fetched file is, by its bytes: a PDF (its header within the first kilobyte, as readers
+    allow) or a Word document (a zip holding word/document.xml); anything else is not taken. A
+    source's Word file is kept as it is: a better source than a PDF of it."""
+    if b"%PDF-" in data[:1024]:
+        return ".pdf", "application/pdf"
+    if data.startswith(b"PK\x03\x04"):
+        import io
+        import zipfile
+
+        try:
+            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+                if "word/document.xml" in archive.namelist():
+                    return ".docx", DOCX
+        except zipfile.BadZipFile:
+            return None
+    return None
+
+
 def fetch_selection(
     selection: dict,
     delay: float = 4.0,
@@ -448,8 +470,10 @@ def _fetch_one(
             if len(raw) > limit:
                 raise ValueError(f"{item_id}: larger than its listing shows ({limit} bytes)")
         headers = {k: response.headers.get(k) for k in ("content-type", "last-modified", "etag")}
-    if not raw.startswith(b"%PDF-"):
-        raise ValueError(f"{item_id}: not a PDF")
+    kind = file_kind(bytes(raw))
+    if kind is None:
+        raise ValueError(f"{item_id}: not a PDF or a Word document")
+    suffix, media_type = kind
     sha = hashlib.sha256(raw).hexdigest()
     sidecar = (
         json.dumps(
@@ -471,13 +495,15 @@ def _fetch_one(
     if keep_local:
         folder = STAGING / "sources" / record["source"]
         folder.mkdir(parents=True, exist_ok=True)
-        (folder / f"{sha}.pdf").write_bytes(raw)
+        (folder / f"{sha}{suffix}").write_bytes(raw)
         (folder / f"{sha}.json").write_text(sidecar)
     ledger.fetched(item_id, sha, len(raw))
+    if suffix != ".pdf":
+        ledger.data["items"][item_id]["format"] = suffix[1:]
     if store is not None:
-        name = corpus_store.source_name(COUNTRY, record["source"], sha)
-        store.put(name, bytes(raw), "application/pdf", {"sha256": sha, "url": url})
-        store.put(name[: -len(".pdf")] + ".json", sidecar.encode(), "application/json")
+        name = corpus_store.source_name(COUNTRY, record["source"], sha, suffix)
+        store.put(name, bytes(raw), media_type, {"sha256": sha, "url": url})
+        store.put(name[: -len(suffix)] + ".json", sidecar.encode(), "application/json")
         ledger.data["items"][item_id]["stored"] = store.uri(name)
     ledger.save_items([item_id])
     log(f"fetched {record['listed']['name']} ({len(raw) // 1024} KB)")

@@ -548,3 +548,17 @@ def test_two_fetches_sharing_the_ledger_keep_each_others_records(tmp_path):
     on_disk = Ledger(tmp_path / "sync-ledger.json").data["items"]
     assert on_disk[a]["sha256"] == "1" * 64 and on_disk[b]["sha256"] == "2" * 64
     assert two.data["items"][a]["sha256"] == "1" * 64  # and each sees what the other wrote
+
+
+def test_a_word_document_is_taken_as_it_is_and_a_damaged_file_is_not():
+    import io
+    import zipfile
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("word/document.xml", "<w:document/>")
+    assert rwanda.file_kind(buffer.getvalue()) == (".docx", rwanda.DOCX)
+    assert rwanda.file_kind(b"%PDF-1.7 ...") == (".pdf", "application/pdf")
+    assert rwanda.file_kind(b"\x00" * 10 + b"%PDF-1.4") == (".pdf", "application/pdf")  # a little junk before
+    assert rwanda.file_kind(b"\x00" * 4096) is None  # damaged at the source
+    assert rwanda.file_kind(b'o"\n      ]\n ') is None
