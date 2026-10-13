@@ -844,3 +844,23 @@ def test_the_prepare_job_takes_its_share_and_the_state_from_the_bucket(tmp_path)
     prepare_job.fetch_state(Store(), tmp_path)
     assert (tmp_path / "sync-ledger.json").exists() and (tmp_path / "catalogue" / "rlrc-laws.json").exists()
     assert not (tmp_path / "catalogue" / "notes.txt").exists()
+
+
+def test_a_manifest_entry_is_light_and_its_details_go_beside_it():
+    document = {
+        "id": "rw-law-1-2001-en",
+        "title": "Law n° 1/2001",
+        "summary": {"pages": 6, "flags": {"high": 1, "medium": 2, "low": 0}},
+        "suggested": {"identity.number": "1/2001"},
+        "issue": {"name": "OG n° 1"},
+        "alignment": {"aligned": True},
+        "also_printed_as": None,
+    }
+    entry, details = rwanda.split_entry(document)
+    assert entry == {
+        "id": "rw-law-1-2001-en",
+        "title": "Law n° 1/2001",
+        "page_count": 6,
+        "flag_counts": {"high": 1, "medium": 2, "low": 0},
+    }
+    assert set(details) == {"suggested", "issue", "alignment"}

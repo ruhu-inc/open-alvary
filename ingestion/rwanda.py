@@ -646,6 +646,22 @@ def rlrc_status(index: dict, checked: str | None, kind: str, number: str, year: 
     }
 
 
+# What the review list needs of a document stays in the manifest; what only its own page needs (the
+# details suggested from the text, the article check, the issue) goes in <id>.document.json, so the
+# manifest of tens of thousands of documents stays small enough to load at once.
+DETAILS = ("suggested", "suggested_absent", "alignment", "issue", "also_printed_as")
+
+
+def split_entry(document: dict) -> tuple[dict, dict]:
+    """A document's manifest entry (with its page and flag counts) and its details."""
+    entry = {k: v for k, v in document.items() if k not in DETAILS and k != "summary"}
+    summary = document.get("summary")
+    if summary:
+        entry["page_count"] = summary["pages"]
+        entry["flag_counts"] = summary["flags"]
+    return entry, {k: document[k] for k in DETAILS if document.get(k) is not None}
+
+
 class LocalCollection:
     """Review documents in a folder here (the samples): readings, provenance, the issue's PDF beside them."""
 
@@ -661,7 +677,7 @@ class LocalCollection:
         return False  # the samples are always read afresh
 
     def remove(self, doc_id: str) -> None:
-        for suffix in (".reading.json", ".pdf", ".provenance.json"):
+        for suffix in (".reading.json", ".pdf", ".provenance.json", ".document.json"):
             (self.folder / f"{doc_id}{suffix}").unlink(missing_ok=True)
 
     def write(self, doc_id: str, reading: dict, provenance: dict, pdf: Path) -> None:
@@ -685,6 +701,15 @@ class LocalCollection:
         pass
 
     def save_manifest(self, manifest: dict) -> None:
+        light = []
+        for document in manifest["documents"]:
+            entry, details = split_entry(document)
+            if details:
+                (self.folder / f"{document['id']}.document.json").write_text(
+                    json.dumps(details, ensure_ascii=False, indent=1) + "\n"
+                )
+            light.append(entry)
+        manifest = {**manifest, "documents": light}
         (self.folder / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
 
 
@@ -732,7 +757,17 @@ class BucketCollection:
         )
 
     def finish_issue(self, sha: str, documents: list[dict], readings: dict | None = None) -> None:
-        index = {"pipeline": rw_gazette.PIPELINE, "readings": readings or {}, "documents": documents}
+        light = []
+        for document in documents:
+            entry, details = split_entry(document)
+            self.store.put(
+                f"{self.prefix}{document['id']}.document.json",
+                json.dumps(details, ensure_ascii=False).encode(),
+                "application/json",
+                replace=True,
+            )
+            light.append(entry)
+        index = {"pipeline": rw_gazette.PIPELINE, "readings": readings or {}, "documents": light}
         self.store.put(
             f"{self.prefix}issues/{sha}.json",
             json.dumps(index, ensure_ascii=False).encode(),
@@ -948,6 +983,7 @@ def prepare_selection(
                 write_document(doc_id, reading, entry["versions"][language]["pages"])
                 documents[doc_id] = {
                     "id": doc_id,
+                    "summary": reading["summary"],
                     "type": entry["kind"],
                     "title": rw_gazette.sentence_case(entry["versions"][language]["title"]),
                     "year": int(values["identity.year"]) if values.get("identity.year") else None,
@@ -1009,6 +1045,7 @@ def prepare_selection(
                 write_document(doc_id, reading, [annex["pages"][0], annex["pages"][-1]])
                 documents[doc_id] = {
                     "id": doc_id,
+                    "summary": reading["summary"],
                     "type": parent["kind"],
                     "title": f"Annex: {annex['title'][:200]}",
                     "jurisdiction": "rw",
