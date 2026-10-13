@@ -49,16 +49,25 @@ def main() -> int:
         if os.environ.get("PREPARE_LIMIT"):  # a trial: the first few of this task's share
             mine = mine[: int(os.environ["PREPARE_LIMIT"])]
         print(f"task {task + 1} of {tasks}: {len(mine)} of {len(items)} stored files", flush=True)
-        result = rwanda.prepare_selection(
-            {"items": mine},
-            log=lambda message: print(message, flush=True),
-            collection=rwanda.BucketCollection(store),
-            store=store,
-            skip_done=True,
-        )
-    print(
-        json.dumps({"documents": result["documents"], "instruments": len(result["instruments"])}), flush=True
-    )
+        collection = rwanda.BucketCollection(store)
+        failed, instruments = [], 0
+        # File by file: a file that cannot be prepared is noted and the task goes on.
+        for item in mine:
+            try:
+                result = rwanda.prepare_selection(
+                    {"items": [item]},
+                    log=lambda message: print(message, flush=True),
+                    collection=collection,
+                    store=store,
+                    skip_done=True,
+                    save=False,
+                )
+                instruments += len(result["instruments"])
+            except Exception as error:  # noqa: BLE001 - noted and left for a later run
+                failed.append(item)
+                print(f"failed {item}: {type(error).__name__}: {str(error)[:300]}", flush=True)
+        collection.save_manifest(rwanda.new_manifest())
+    print(json.dumps({"files": len(mine), "instruments": instruments, "failed": len(failed)}), flush=True)
     return 0
 
 

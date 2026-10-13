@@ -800,7 +800,7 @@ def new_manifest() -> dict:
 
 
 def prepare_selection(
-    selection: dict, log=print, collection=None, store=None, skip_done: bool = False
+    selection: dict, log=print, collection=None, store=None, skip_done: bool = False, save: bool = True
 ) -> dict:
     """Each fetched gazette issue of a selection split into its instruments, and each instrument's
     language versions written as readings the workbench reviews, with the details read from the
@@ -1077,7 +1077,8 @@ def prepare_selection(
         log(f"{record['listed']['name']}: {len(found)} instruments, {len(set(roles.values()))} annexes")
     scratch.cleanup()
     manifest["documents"] = sorted(documents.values(), key=lambda d: d["id"])
-    collection.save_manifest(manifest)
+    if save:  # a cloud task prepares file by file and assembles the manifest once, at its end
+        collection.save_manifest(manifest)
     return {"documents": len(manifest["documents"]), "instruments": summary}
 
 
