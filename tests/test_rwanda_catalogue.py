@@ -256,6 +256,12 @@ def test_a_three_language_page_is_split_into_its_columns_and_languages():
     assert single[0]["layout"] == "single" and single[0]["languages"] == ["en"]
     empty = gazette_layout.analyse(gazette_layout.words('<doc><page width="600" height="840"></page></doc>'))
     assert empty[0]["layout"] == "no_text" and not empty[0]["text_layer"]
+    damaged = gazette_layout.words(
+        page.replace("</doc>", "")
+        + '<page width="0" height="0"><word xMin="1" yMin="1" xMax="9" yMax="9">x</word></page></doc>'
+    )
+    assert len(damaged) == 2 and damaged[1]["missing"] and not damaged[1]["words"]
+    assert damaged[1]["width"] == damaged[0]["width"] and gazette_layout.columns(damaged[1]) == []
     summary = gazette_layout.summary(analysed + single)
     assert summary["layouts"] == {"three_columns": 1, "single": 1}
     assert summary["three_column_language_orders"] == {"rw | en | fr": 1}
