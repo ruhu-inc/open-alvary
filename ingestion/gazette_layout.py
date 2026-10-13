@@ -8,6 +8,7 @@ finds the columns from the gaps no line crosses, and guesses each column's langu
 It reads nothing aloud to any service; it only measures.
 """
 
+import os
 import re
 import subprocess
 from collections import Counter
@@ -238,7 +239,17 @@ def analyse(pages: list[dict]) -> list[dict]:
 
 def text_layer(pdf: Path) -> list[dict]:
     """Every page's words with their positions, from the PDF's text layer, read inside the sealed
-    container (no network, read-only input)."""
+    container (no network, read-only input). In a cloud job, whose own container is the sandbox
+    (ALVARY_TEXT_LAYER=direct), pdftotext is run there directly."""
+    if os.environ.get("ALVARY_TEXT_LAYER") == "direct":
+        completed = subprocess.run(
+            ["pdftotext", "-bbox-layout", "-enc", "UTF-8", str(pdf), "-"],
+            capture_output=True,
+            text=True,
+            timeout=600,
+            check=True,
+        )
+        return words(completed.stdout)
     completed = subprocess.run(
         [
             "docker",

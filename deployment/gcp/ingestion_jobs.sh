@@ -1,23 +1,28 @@
 #!/usr/bin/env bash
-# Reading the corpus's scanned pages in the cloud (project open-alvary-ingestion, EU), step by step:
+# The corpus's ingestion jobs in the cloud (project open-alvary-ingestion, EU), step by step:
 #
-#   deployment/gcp/scan_reading.sh plan            # print what would be created; creates nothing
-#   deployment/gcp/scan_reading.sh setup           # APIs, registry, the job's service account and its access
-#   deployment/gcp/scan_reading.sh deploy          # build the image from the committed code, deploy the job
-#   deployment/gcp/scan_reading.sh run ocr 2       # read with Google's OCR, in 2 tasks
-#   deployment/gcp/scan_reading.sh run layout 1    # read with the Layout Parser, in 1 task
-#   deployment/gcp/scan_reading.sh status
+#   deployment/gcp/ingestion_jobs.sh plan            # print what would be created; creates nothing
+#   deployment/gcp/ingestion_jobs.sh setup           # APIs, registry, the jobs' service accounts and access
+#   deployment/gcp/ingestion_jobs.sh deploy          # build the image from the committed code, deploy both jobs
+#   deployment/gcp/ingestion_jobs.sh run ocr 2       # read scanned pages with Google's OCR, in 2 tasks
+#   deployment/gcp/ingestion_jobs.sh run layout 1    # read them with the Layout Parser, in 1 task
+#   deployment/gcp/ingestion_jobs.sh prepare 8       # prepare every stored file for review, in 8 tasks
+#   deployment/gcp/ingestion_jobs.sh status
 #
-# The job reads the work list in the corpus bucket, which the operator writes with the approved
+# scan-reader reads the work list in the corpus bucket, which the operator writes with the approved
 # budget (python -m ingestion.rwanda scan-worklist ...); each reading lands in
-# gs://$CORPUS_BUCKET/readings/<country>/<ocr|docai>/. A run that stops is run again: files already
-# read are skipped. Billed per page read (Document AI), plus a few cents of Cloud Run time.
+# gs://$CORPUS_BUCKET/readings/<country>/<ocr|docai>/. corpus-preparer reads the sources, readings and
+# state (python -m ingestion.rwanda push-held mirrors the ledger and catalogues) and writes the review
+# documents to gs://$CORPUS_BUCKET/collections/<country>/. Either run that stops is run again: work
+# already done is skipped. Billed: Document AI per page read, Cloud Run per task-hour (cents).
 set -euo pipefail
 
 PROJECT="${GCP_PROJECT:-open-alvary-ingestion}"
 REGION="${GCP_REGION:-europe-west1}"
 REPOSITORY="open-alvary"
-JOB="scan-reader"
+SCAN_JOB="scan-reader"
+PREPARE_JOB="corpus-preparer"
+# Both jobs run as this account: Document AI use, and objects in the corpus bucket only.
 RUNNER="scan-reader"
 RUNNER_EMAIL="${RUNNER}@${PROJECT}.iam.gserviceaccount.com"
 # Builds run as their own account: the project's default compute account has no rights here.
@@ -25,7 +30,7 @@ BUILDER="image-builder"
 BUILDER_EMAIL="${BUILDER}@${PROJECT}.iam.gserviceaccount.com"
 BUILD_SOURCES="${PROJECT}_cloudbuild"
 CORPUS_BUCKET="${ALVARY_CORPUS_BUCKET:-open-alvary-corpus}"
-IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPOSITORY}/${JOB}:$(git rev-parse --short HEAD)"
+IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPOSITORY}/ingestion-jobs:$(git rev-parse --short HEAD)"
 GC=(gcloud --project "$PROJECT" --quiet)
 
 setting() {  # a value from the environment or the git-ignored .env (never printed)
@@ -52,7 +57,7 @@ Project $PROJECT, region $REGION. Would create (if absent):
     in gs://$CORPUS_BUCKET only
   - Service account $BUILDER_EMAIL for image builds: read the uploaded sources in
     gs://$BUILD_SOURCES, push to the $REPOSITORY registry, write build logs
-  - Cloud Run job $JOB (2 vCPU, 4 GiB per task), run per reader: ocr, then layout
+  - Cloud Run jobs $SCAN_JOB (per reader: ocr, layout) and $PREPARE_JOB, 2 vCPU and 4 GiB per task
 Billed: Document AI per page read (Enterprise OCR \$1.50, Layout Parser \$10 per 1,000 pages);
 Cloud Run a few cents per hour of a task; the registry a few cents a month.
 PLAN
@@ -79,7 +84,7 @@ setup() {
     --member="serviceAccount:$BUILDER_EMAIL" --role=roles/artifactregistry.writer
   grant "${GC[@]}" projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$BUILDER_EMAIL" \
     --role=roles/logging.logWriter --condition=None
-  echo "Set up: $RUNNER_EMAIL (reads scans) and $BUILDER_EMAIL (builds images)."
+  echo "Set up: $RUNNER_EMAIL (runs the jobs) and $BUILDER_EMAIL (builds images)."
 }
 
 deploy() {
@@ -94,7 +99,7 @@ deploy() {
   git archive HEAD | tar -x -C "$context"
   "${GC[@]}" builds submit "$context" --region="$REGION" \
     --service-account="projects/$PROJECT/serviceAccounts/$BUILDER_EMAIL" \
-    --config="$context/deployment/gcp/scan-reader.cloudbuild.yaml" --substitutions="_IMAGE=$IMAGE"
+    --config="$context/deployment/gcp/ingestion-jobs.cloudbuild.yaml" --substitutions="_IMAGE=$IMAGE"
   local env=ALVARY_CORPUS_BUCKET="$CORPUS_BUCKET"
   for name in ALVARY_DOCAI_PROJECT ALVARY_DOCAI_LOCATION ALVARY_DOCAI_PROCESSOR_ID ALVARY_DOCAI_PROCESSOR_VERSION \
     ALVARY_DOCAI_OCR_PROCESSOR_ID ALVARY_DOCAI_OCR_PROCESSOR_VERSION; do
@@ -103,21 +108,31 @@ deploy() {
     [[ -n "$value" ]] || { echo "Set $name in the environment or .env" >&2; exit 1; }
     env+=",$name=$value"
   done
-  "${GC[@]}" run jobs deploy "$JOB" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
-    --tasks=1 --max-retries=1 --task-timeout="${SCAN_TASK_TIMEOUT:-168h}" --cpu=2 --memory=4Gi \
-    --set-env-vars="$env,SCAN_READER=ocr"
+  "${GC[@]}" run jobs deploy "$SCAN_JOB" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
+    --args=ingestion.scan_job --tasks=1 --max-retries=1 --task-timeout="${SCAN_TASK_TIMEOUT:-168h}" \
+    --cpu=2 --memory=4Gi --set-env-vars="$env,SCAN_READER=ocr"
+  "${GC[@]}" run jobs deploy "$PREPARE_JOB" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
+    --args=ingestion.prepare_job --tasks=1 --max-retries=1 --task-timeout=24h --cpu=2 --memory=4Gi \
+    --set-env-vars="$env"
 }
 
 run() {
   local reader="${1:?ocr or layout}" tasks="${2:-1}" files="${3:-}"
   # The Layout Parser's quota is per minute for the whole project: one file at a time is enough.
   [[ -n "$files" ]] || { [[ "$reader" == "layout" ]] && files=1 || files=4; }
-  "${GC[@]}" run jobs execute "$JOB" --region="$REGION" --tasks="$tasks" --async \
+  "${GC[@]}" run jobs execute "$SCAN_JOB" --region="$REGION" --tasks="$tasks" --async \
     --update-env-vars="SCAN_READER=$reader,SCAN_FILES_AT_ONCE=$files"
 }
 
+prepare() {
+  local tasks="${1:-8}"
+  "${GC[@]}" run jobs execute "$PREPARE_JOB" --region="$REGION" --tasks="$tasks" --async
+}
+
 status() {
-  "${GC[@]}" run jobs executions list --job="$JOB" --region="$REGION" --limit=10 || true
+  for job in "$SCAN_JOB" "$PREPARE_JOB"; do
+    "${GC[@]}" run jobs executions list --job="$job" --region="$REGION" --limit=5 2>/dev/null || true
+  done
 }
 
 case "${1:-plan}" in
@@ -125,6 +140,7 @@ case "${1:-plan}" in
   setup) setup ;;
   deploy) deploy ;;
   run) shift; run "$@" ;;
+  prepare) shift; prepare "$@" ;;
   status) status ;;
-  *) echo "usage: $0 plan|setup|deploy|run <ocr|layout> [tasks] [files-at-once]|status" >&2; exit 2 ;;
+  *) echo "usage: $0 plan|setup|deploy|run <ocr|layout> [tasks] [files-at-once]|prepare [tasks]|status" >&2; exit 2 ;;
 esac

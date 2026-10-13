@@ -1,4 +1,4 @@
-# Google Document AI client for the scan-reading job (deployment/scan-reader.Dockerfile), pinned
+# Google Document AI client for the ingestion jobs (deployment/ingestion-jobs.Dockerfile), pinned
 # to the versions the trial ran with; the rest comes from requirements.lock.
 google-cloud-documentai==3.16.0
 google-api-core==2.42.0
