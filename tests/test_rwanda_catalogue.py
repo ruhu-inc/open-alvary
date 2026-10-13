@@ -864,3 +864,37 @@ def test_a_manifest_entry_is_light_and_its_details_go_beside_it():
         "flag_counts": {"high": 1, "medium": 2, "low": 0},
     }
     assert set(details) == {"suggested", "issue", "alignment"}
+
+
+def test_a_prepare_task_notes_a_file_it_cannot_prepare_and_goes_on(monkeypatch, capsys):
+    import json
+
+    from ingestion import prepare_job
+
+    ledger = {"items": {name: {"stored": "gs://b"} for name in ("a", "b", "c")}}
+
+    class Store:
+        def get(self, name):
+            return json.dumps(ledger).encode()
+
+        def list(self, prefix):
+            return []
+
+    prepared, saved = [], []
+    monkeypatch.setattr(rwanda, "STAGING", rwanda.STAGING)  # the job points it at its own folder
+    monkeypatch.setattr(prepare_job.corpus_store, "CorpusStore", Store)
+    monkeypatch.setattr(rwanda.BucketCollection, "save_manifest", lambda self, manifest: saved.append(1))
+
+    def prepare(selection, **kwargs):
+        [item] = selection["items"]
+        assert kwargs["save"] is False
+        if item == "b":
+            raise ZeroDivisionError("float division by zero")
+        prepared.append(item)
+        return {"documents": 0, "instruments": [{"work": item}]}
+
+    monkeypatch.setattr(rwanda, "prepare_selection", prepare)
+    assert prepare_job.main() == 0
+    assert prepared == ["a", "c"] and saved == [1]
+    out = capsys.readouterr().out
+    assert "failed b: ZeroDivisionError" in out and '"failed": 1' in out
