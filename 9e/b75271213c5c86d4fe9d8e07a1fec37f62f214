@@ -1,0 +1,27 @@
+deployment/workbench.Dockerfile
+  s_b82616e2476856::t_9c7baee4cf1d21 1-17
+deployment/gcp/workbench.cloudbuild.yaml
+  s_b82616e2476856::t_9c7baee4cf1d21 1-7
+tests/test_workbench.py
+  s_b82616e2476856::t_3b0c1537334781 1023-1080
+workbench/content.py
+  s_b82616e2476856::t_bb953c8765faf5 49,62-88,152-154,158-163,165-171,217-223,225-237,261,266
+deployment/gcp/workbench.sh
+  s_b82616e2476856::t_9c7baee4cf1d21 27-31,52-55,72,104-115,120,124
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9eb75271213c5c86d4fe9d8e07a1fec37f62f214",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
