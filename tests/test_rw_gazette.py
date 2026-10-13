@@ -549,3 +549,40 @@ def test_running_headers_of_every_era_are_page_furniture_and_text_is_not():
         "Ingingo ya 10",
     ]:
         assert not RG.FURNITURE.match(text), text
+
+
+def test_older_headings_open_their_instrument_numbered_or_known_by_their_date():
+    def opened(text, language):
+        lines = [{"text": text, "page": 1}, {"text": "Le Ministre de l'Agriculture,", "page": 1}]
+        return RG.openings(lines, language)
+
+    decree = opened("DÉCRET-LOI N° 10/75 DU 11 MARS 1975 PORTANT ORGANISATION DE LA PRÉFECTURE", "fr")[0]
+    assert (decree["kind"], decree["number"], decree["date"]) == ("decree_law", "10/75", "1975-03-11")
+    dated = opened("LOI DU 19 FÉVRIER 1964 RELATIVE AUX SOINS MÉDICAUX", "fr")[0]
+    assert (dated["kind"], dated["number"], dated["date"]) == ("law", "1964-02-19", "1964-02-19")
+    assert opened("ORDONNANCE N° 53/351 DU 9 JUILLET 1959", "fr")[0]["kind"] == "ordinance"
+    assert opened("ITEGEKO-TEKA N° 10/75 RYO KUWA 11 WERURWE 1975", "rw")[0]["kind"] == "decree_law"
+    assert (
+        opened("ITEKA RYA MINISTRI N° 1/71/Agri RYO KUWA 30 MARISI 1971", "rw")[0]["kind"]
+        == "ministerial_order"
+    )
+    assert not opened("LOI DU PAYS", "fr")  # no number and no date: not a heading
+    # A date in figures on older pages, and a number that only looks like one.
+    assert RG._plain_date("J.O. N0 5-1.3.1964") == "1964-03-01"
+    assert RG._plain_date("D.L N0 06-81-1981") is None
+
+
+def test_a_file_whose_heading_is_not_known_is_one_instrument_named_as_its_source_lists_it():
+    from ingestion import rwanda
+
+    words = "Il est fixé des taxes rémunératoires de propagande et de diversification sur les cafés exportés"
+    streams = {
+        "fr": [{"text": words, "page": 1}, {"text": words, "page": 2}],
+        "rw": [{"text": "Ingingo", "page": 1}],  # a stray line is not a language printed here
+        "en": [],
+    }
+    title = rwanda.listing_title("8.7.22._TAXES_REMUNERATOIRES__DE_PROPAGANDE-J.O._N0_5-1.3.1971.pdf")
+    assert title == "TAXES REMUNERATOIRES DE PROPAGANDE-J.O. N0 5-1.3.1971"
+    [entry] = RG.whole_file(streams, "ministerial_order", "1-71", None, title)
+    assert entry["title_from_listing"] and list(entry["versions"]) == ["fr"]
+    assert entry["versions"]["fr"]["pages"] == [1, 2] and entry["versions"]["fr"]["end"] == 2

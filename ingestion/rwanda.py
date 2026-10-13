@@ -858,12 +858,34 @@ def prepare_selection(
             issue = parse_gazette(headers.most_common(1)[0][0]) if headers else {"parsed": False}
         sizes = {page["page"]: (page["width"], page["height"]) for page in split}
         found = rw_gazette.instruments(streams)
+        if not found and record["source"] == "rlrc-laws":
+            # An RLRC file is one text; where its heading is not one the openings know (an older
+            # law, a treaty), the whole file is that text, named as RLRC lists it.
+            listed = parse_item(record["source"], {**record["listed"], "url": record["url"]})
+            found = rw_gazette.whole_file(
+                streams,
+                kind=listed.get("kind") or "other",
+                number=listed.get("number") or (str(listed["year"]) if listed.get("year") else sha[:12]),
+                date=listed.get("date"),
+                title=listing_title(record["listed"]["name"]),
+            )
         rlrc, rlrc_checked = rlrc_index()
         for entry in found:
             lines = {lang: streams[lang][v["start"] : v["end"]] for lang, v in entry["versions"].items()}
             versions = {lang: rw_gazette.structure(lines[lang], lang) for lang in lines}
             check = rw_gazette.alignment(versions)
             rw_gazette.flag_differences(versions)
+            if entry.get("title_from_listing"):
+                for nodes in versions.values():
+                    if nodes:
+                        nodes[0].setdefault("flags", []).append(
+                            {
+                                "severity": "medium",
+                                "kind": "title_from_listing",
+                                "primary": entry["versions"][next(iter(entry["versions"]))]["title"],
+                                "others": {},
+                            }
+                        )
             if entry.get("also_printed_as"):
                 # The same law printed with two numbers (over its contents and over its body).
                 for nodes in versions.values():
@@ -1002,6 +1024,14 @@ def prepare_selection(
     manifest["documents"] = sorted(documents.values(), key=lambda d: d["id"])
     collection.save_manifest(manifest)
     return {"documents": len(manifest["documents"]), "instruments": summary}
+
+
+def listing_title(name: str) -> str:
+    """A title from a source's file name: "10.4.3.1.__LOI_DU_19_FEVRIER_1964_RELATIVE_AU_SOINS_MEDICAUX
+    -J.O._N0_5-1.3.1964.pdf" -> "LOI DU 19 FEVRIER 1964 RELATIVE AU SOINS MEDICAUX-J.O. N0 5-1.3.1964"."""
+    title = re.sub(r"\.(pdf|docx?)$", "", name, flags=re.I)
+    title = re.sub(r"^\d+(?:\.\d+)*\.?_*", "", title)  # RLRC's subject code
+    return re.sub(r"\s+", " ", title.replace("_", " ")).strip()
 
 
 def stored_reading(folder: str, sha: str, store=None) -> dict | None:
