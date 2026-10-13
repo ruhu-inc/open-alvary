@@ -590,17 +590,34 @@ def reader_names(reading: dict) -> dict:
     primary = reading["primary"]["reader"]
     if primary == "text-layer":
         checks = reading.get("checks") or {}
-        notes = ["Taken from the published PDF's own text, exactly as it was published."]
+        here = {page["page"] for page in reading.get("pages", [])}
+        ocr = here & set(checks.get("scans_read_by_ocr") or [])
+        layout = here & set(checks.get("scans_read_by_docai") or [])
+        if ocr and ocr == here:
+            notes = ["The published PDF is a scan: its pages were read by Google's OCR (Document AI)."]
+        elif ocr:
+            notes = [
+                "Taken from the published PDF's own text, exactly as it was published; its scanned pages "
+                "were read by Google's OCR (Document AI)."
+            ]
+        else:
+            notes = ["Taken from the published PDF's own text, exactly as it was published."]
         if checks.get("alignment"):
             notes.append(
                 "Its articles were compared with the other language versions of the law; every difference was flagged."
             )
-        if checks.get("scans_read_by_docai"):
+        if ocr and layout:
+            notes.append(
+                "Those pages were read a second time by the Document AI Layout Parser and the two readings "
+                "compared word by word; the text keeps what is printed, and every difference was flagged."
+            )
+        elif layout:
             notes.append(
                 "Its scanned pages were read by Google Document AI and compared word by word with the OCR "
                 "layer already in the PDF; every difference was flagged."
             )
-        return {"primary": "the PDF's own text", "primary_version": None, "checks": [], "notes": notes}
+        primary_name = "Google's OCR of the scanned pages" if ocr and ocr == here else "the PDF's own text"
+        return {"primary": primary_name, "primary_version": None, "checks": [], "notes": notes}
     return {
         "primary": READERS.get(primary, primary),
         "primary_version": (reading["primary"].get("version") or {}).get("version"),

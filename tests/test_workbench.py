@@ -946,3 +946,23 @@ def test_a_collection_in_the_corpus_bucket_is_read_from_it_and_cached(tmp_path, 
     assert library.provenance("rw-law-009-2026-en")["url"].endswith("x.pdf")
     library.reading("rw-law-009-2026-en")
     assert asked.count("collections/rw/rw-law-009-2026-en.reading.json") == 1  # cached after the first time
+
+
+def test_a_scanned_document_says_it_was_read_by_ocr_and_checked_by_a_second_reading():
+    from workbench import content as wb_content
+
+    def named(checks, pages):
+        reading = {
+            "primary": {"reader": "text-layer"},
+            "checks": checks,
+            "pages": [{"page": n} for n in pages],
+        }
+        return wb_content.reader_names(reading)
+
+    scan = named(
+        {"alignment": {}, "scans_read_by_ocr": [9, 10, 30], "scans_read_by_docai": [9, 10, 30]}, [9, 10]
+    )
+    assert scan["primary"] == "Google's OCR of the scanned pages"
+    assert "is a scan" in scan["notes"][0] and "read a second time" in scan["notes"][-1]
+    born_digital = named({"alignment": {"aligned": True}, "scans_read_by_ocr": [30]}, [9, 10])
+    assert born_digital["primary"] == "the PDF's own text" and len(born_digital["notes"]) == 2

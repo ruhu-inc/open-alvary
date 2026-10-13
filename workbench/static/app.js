@@ -182,6 +182,27 @@ function remember(key, value) {
   return null;
 }
 
+
+// How this document's text was read, in plain words: its own text layer, or for scanned pages
+// Google's OCR, checked by the Layout Parser and against the other language versions.
+function readingDescription(data) {
+  const primary = data.readers.primary;
+  const checks = data.readers.checks || {};
+  if (primary.reader !== "text-layer") {
+    return `Primary reading: Document AI ${primary.version.version}. Checks: ${Object.keys(checks).join(", ")}.`;
+  }
+  const pages = new Set(data.pages.map((p) => p.page));
+  const ocr = (checks.scans_read_by_ocr || []).filter((n) => pages.has(n)).length;
+  const layout = (checks.scans_read_by_docai || []).filter((n) => pages.has(n)).length;
+  let text = !ocr ? "Read from the PDF's own text layer"
+    : ocr === pages.size ? "Scanned pages, read by Google's OCR"
+    : `Read from the PDF's own text layer; its ${ocr} scanned page${ocr === 1 ? "" : "s"} read by Google's OCR`;
+  const checked = [];
+  if (layout) checked.push("word by word against a second reading (Document AI Layout Parser)");
+  if (checks.alignment) checked.push("against the other language versions");
+  return `${text}${checked.length ? `, checked ${checked.join(" and ")}` : ""}.`;
+}
+
 function meter(share) {
   const bar = el("span");
   bar.style.width = `${share}%`; // CSSOM, allowed by the strict content policy
@@ -290,9 +311,7 @@ async function actView(actId) {
   main(
     el("div", { class: "card" },
       el("h2", { text: act.title }),
-      el("p", { class: "muted", text: data.readers.primary.reader === "text-layer"
-        ? "Read from the PDF's own text layer, checked against the other language versions."
-        : `Primary reading: Document AI ${data.readers.primary.version.version}. Checks: ${Object.keys(data.readers.checks).join(", ")}.` }),
+      el("p", { class: "muted", text: readingDescription(data) }),
       el("p", {},
         pill(ready.unchecked_pages.length ? "medium" : "ok", `${ready.pages - ready.unchecked_pages.length} of ${ready.pages} pages checked`), " ",
         pill(ready.open_high_flags.length ? "high" : "ok", `${ready.open_high_flags.length} high flags open`), " ",
@@ -1185,11 +1204,13 @@ function flagList(view) {
   if (!open.length) {
     bar.append(el("span", { class: "muted", text: all.length ? "All flags on this page are resolved." : "No flags on this page — compare the text with the image." }));
   } else {
-    bar.append(
+    // (DOM append writes a null as the word "null": only the parts present are added.)
+    bar.append(...[
       el("strong", { text: `${open.length} open flag${open.length === 1 ? "" : "s"}` }),
       high ? pill("high", `${high} high`) : null,
       el("button", { class: "small", title: "Previous flag (Alt+P)", text: "◀", on: { click: () => gotoFlag(view, -1) } }),
-      el("button", { class: "small primary", title: "Next flag (Alt+N)", text: "Next flag ▶", on: { click: () => gotoFlag(view, 1) } }));
+      el("button", { class: "small primary", title: "Next flag (Alt+N)", text: "Next flag ▶", on: { click: () => gotoFlag(view, 1) } }),
+    ].filter(Boolean));
   }
   for (const flag of offText) {
     bar.append(el("button", { class: `small chip ${flag.severity}`, title: "Not highlighted in the text: open it here",
