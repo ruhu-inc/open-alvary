@@ -85,10 +85,8 @@ class Library:
         self.staging = Path(staging or os.environ.get("ALVARY_REVIEW_STAGING") or first_collection.STAGING)
         self.manifest = first_collection.load_manifest()
         self.collections = [(self.manifest, self.staging), *extra_collections()]
-
-    def documents(self) -> list[dict]:
-        """Documents of any type in the collections that have a reconciled reading."""
-        return [
+        # Built once: a corpus collection lists tens of thousands of documents.
+        self._documents = [
             {
                 **document,
                 "jurisdiction": document.get("jurisdiction") or manifest.get("jurisdiction"),
@@ -98,12 +96,24 @@ class Library:
             for document in manifest["documents"]
             if manifest.get("_remote") or (staging / f"{document['id']}.reading.json").exists()
         ]
+        self._index = {d["id"]: d for d in self._documents}
+        self._places = {
+            document["id"]: (manifest, staging)
+            for manifest, staging in self.collections
+            for document in manifest["documents"]
+        }
+        self._details: dict[str, dict] = {}
+
+    def documents(self) -> list[dict]:
+        """Documents of any type in the collections that have a reconciled reading, as listed in
+        their manifests (the details only a document's own page needs are left out)."""
+        return self._documents
 
     def _where(self, act_id: str) -> tuple[dict, Path]:
-        for manifest, staging in self.collections:
-            if any(document["id"] == act_id for document in manifest["documents"]):
-                return manifest, staging
-        raise KeyError(act_id)
+        try:
+            return self._places[act_id]
+        except KeyError:
+            raise KeyError(act_id) from None
 
     def manifest_for(self, act_id: str) -> dict:
         return self._where(act_id)[0]
@@ -129,10 +139,27 @@ class Library:
         return path
 
     def act(self, act_id: str) -> dict:
-        found = next((a for a in self.documents() if a["id"] == act_id), None)
+        """A document with its details (the details suggested from its text, the issue it was
+        printed in), which a corpus collection keeps beside it in <id>.document.json."""
+        found = self._index.get(act_id)
         if found is None:
             raise KeyError(act_id)
-        return found
+        if act_id not in self._details:
+            details: dict = {}
+            manifest, staging = self._where(act_id)
+            local = staging / f"{act_id}.document.json"
+            remote = manifest.get("_remote")
+            if local.exists():
+                details = json.loads(local.read_text())
+            elif remote:
+                name = f"{remote['prefix']}{act_id}.document.json"
+                store = _store(remote["bucket"])
+                if store.exists(name):
+                    details = json.loads(store.get(name))
+            if len(self._details) >= 2000:  # a bounded cache: drop the oldest
+                self._details.pop(next(iter(self._details)))
+            self._details[act_id] = details
+        return {**found, **self._details[act_id]}
 
     def provenance(self, act_id: str) -> dict:
         """How and when the original file was retrieved (written by the fetch step)."""
