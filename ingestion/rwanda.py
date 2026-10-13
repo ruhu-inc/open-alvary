@@ -989,42 +989,86 @@ def prepare_selection(
     return {"documents": len(manifest["documents"]), "instruments": summary}
 
 
-def read_scans(selection: dict, log=print, store=None) -> dict:
-    """Every scanned page of the selection's issues read by Document AI (billed): the pages are put
-    in one PDF per issue, read, and the reading kept per issue page in docai/<sha256>.json (and in
-    the corpus bucket), for the pipeline to use in place of the OCR layer someone else laid on."""
+def scanned_in_survey() -> dict[str, int]:
+    """The ledger items whose file the survey found scanned pages in, with how many: one item per
+    file (a file listed in several folders or by both sources is read once)."""
+    found = {}
+    for path in sorted((STAGING / "survey").glob("*.json")):
+        row = json.loads(path.read_text())
+        if row.get("scanned_pages"):
+            found[row["item"]] = row["scanned_pages"]
+    return found
+
+
+def read_scans(
+    selection: dict | None = None,
+    log=print,
+    store=None,
+    max_pages: int | None = None,
+    files_at_once: int = 1,
+    reader=None,
+) -> dict:
+    """Every scanned page of the selection's files (or, without a selection, of every file the survey
+    found scans in) read by Document AI (billed): the pages are put in one PDF per file, read, and
+    the reading kept per page in docai/<sha256>.json and in the corpus bucket, for the pipeline to
+    use in place of the OCR layer someone else laid on. A file already read is not read again.
+
+    `max_pages` is the approved budget: no file is started that would take the pages read past it.
+    Several files are read at once (each in short requests side by side). A failed file is noted
+    and the run goes on; an expired sign-in, a refusal (billing, permission) or five failures in a
+    row stop it, and a repeated run resumes."""
+    import tempfile
+    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
     from io import BytesIO
 
+    import google.api_core.exceptions
     from pypdf import PdfReader, PdfWriter
 
     from ingestion import readers
 
-    reader = readers.DocAIReader()
-    reader.preflight()
+    if reader is None:
+        reader = readers.DocAIReader()
+        reader.preflight()
     ledger = Ledger(STAGING / "sync-ledger.json")
     out_dir = STAGING / "docai"
     out_dir.mkdir(parents=True, exist_ok=True)
-    pages_read = 0
-    for item_id in selection["items"]:
-        record = ledger.data["items"][item_id]
+    expected = scanned_in_survey() if selection is None else dict.fromkeys(selection["items"], 0)
+    already = set()
+    if store is not None:
+        already = {
+            name.rsplit("/", 1)[-1][: -len(".json")] for name in store.list(f"readings/{COUNTRY}/docai/")
+        }
+    queue, seen = [], set()
+    for item_id, pages in expected.items():
+        record = ledger.data["items"].get(item_id, {})
         sha = record.get("sha256")
-        target = out_dir / f"{sha}.json"
-        pdf = STAGING / "sources" / record["source"] / f"{sha}.pdf"
-        if not sha or target.exists() or not pdf.exists():
+        if not sha or sha in seen or record.get("format", "pdf") != "pdf":
             continue
-        scanned = sorted(ruled_tables.image_pages(pdf))
-        if not scanned:
+        seen.add(sha)
+        if sha in already or (out_dir / f"{sha}.json").exists():
             continue
-        source = PdfReader(str(pdf))
-        writer = PdfWriter()
-        for number in scanned:
-            writer.add_page(source.pages[number - 1])
-        buffer = BytesIO()
-        writer.write(buffer)
-        part = out_dir / f"{sha}.scanned.pdf"
-        part.write_bytes(buffer.getvalue())
-        reading = reader.read(part)
-        part.unlink()
+        queue.append((item_id, record, sha, pages))
+
+    def read_one(record: dict, sha: str) -> int:
+        with tempfile.TemporaryDirectory(dir=STAGING) as scratch:
+            pdf = STAGING / "sources" / record["source"] / f"{sha}.pdf"
+            if not pdf.exists():
+                if store is None or not record.get("stored"):
+                    return 0
+                pdf = Path(scratch) / "file.pdf"
+                pdf.write_bytes(store.get(corpus_store.source_name(COUNTRY, record["source"], sha)))
+            scanned = sorted(ruled_tables.image_pages(pdf))
+            if not scanned:
+                return 0
+            source = PdfReader(str(pdf))
+            writer = PdfWriter()
+            for number in scanned:
+                writer.add_page(source.pages[number - 1])
+            buffer = BytesIO()
+            writer.write(buffer)
+            part = Path(scratch) / "scanned.pdf"
+            part.write_bytes(buffer.getvalue())
+            reading = reader.read(part)
         kept = {
             "sha256": sha,
             "version": reader.version(),
@@ -1034,14 +1078,62 @@ def read_scans(selection: dict, log=print, store=None) -> dict:
                 for number, page in zip(scanned, reading.pages, strict=True)
             },
         }
+        target = out_dir / f"{sha}.json"
         target.write_text(json.dumps(kept, ensure_ascii=False) + "\n")
         if store is not None:
             store.put(
                 f"readings/{COUNTRY}/docai/{sha}.json", target.read_bytes(), "application/json", replace=True
             )
-        pages_read += len(scanned)
-        log(f"{record['listed']['name'][:60]}: {len(scanned)} scanned pages read")
-    return {"pages_read": pages_read}
+        return len(scanned)
+
+    stopping = (
+        google.api_core.exceptions.PermissionDenied,
+        google.api_core.exceptions.Unauthenticated,
+        google.api_core.exceptions.Forbidden,
+    )
+    pages_read = reserved = in_a_row = 0
+    failed, stop = [], None
+    with ThreadPoolExecutor(max_workers=max(files_at_once, 1)) as pool:
+        running = {}
+        while (queue and stop is None) or running:
+            while queue and stop is None and len(running) < max(files_at_once, 1):
+                item_id, record, sha, pages = queue[0]
+                if max_pages is not None and reserved + pages > max_pages:
+                    stop = f"stopped at the approved budget of {max_pages} pages"
+                    break
+                queue.pop(0)
+                reserved += pages
+                running[pool.submit(read_one, record, sha)] = (item_id, record, pages)
+            if not running:
+                break
+            done, _ = wait(running, return_when=FIRST_COMPLETED)
+            for future in done:
+                item_id, record, pages = running.pop(future)
+                name = record["listed"]["name"][:60]
+                try:
+                    read = future.result()
+                except Exception as error:  # noqa: BLE001 - a failed file is noted; a refusal stops the run
+                    reserved -= pages
+                    if _signed_out(error):
+                        stop = "stopped: the Google sign-in has expired; run `gcloud auth application-default login`"
+                    elif isinstance(error, stopping):
+                        stop = f"stopped: Document AI refused ({type(error).__name__}: {str(error)[:200]})"
+                    else:
+                        failed.append(
+                            {"item": item_id, "error": f"{type(error).__name__}: {str(error)[:300]}"}
+                        )
+                        in_a_row += 1
+                        log(f"failed {name}: {failed[-1]['error']}")
+                        if in_a_row >= 5:
+                            stop = "stopped: five files in a row failed"
+                    continue
+                in_a_row = 0
+                reserved += read - pages
+                pages_read += read
+                log(f"{name}: {read} scanned pages read ({pages_read} in all)")
+    if stop:
+        log(stop)
+    return {"pages_read": pages_read, "failed": failed, "left": len(queue), "stopped": stop}
 
 
 def survey_file(pdf: Path) -> dict:
@@ -1205,7 +1297,11 @@ def main(argv=None) -> int:
     scans = sub.add_parser(
         "read-scans", help="read the scanned pages of fetched issues with Document AI (billed)"
     )
-    scans.add_argument("--selection", required=True, type=Path)
+    scans.add_argument(
+        "--selection", type=Path, help="these files (default: every file the survey found scans in)"
+    )
+    scans.add_argument("--max-pages", type=int, required=True, help="the approved budget, in pages")
+    scans.add_argument("--files-at-once", type=int, default=4)
     bulk = sub.add_parser("bulk-selection", help="write a selection of every catalogued file not yet held")
     bulk.add_argument("--approved-by", required=True)
     bulk.add_argument("--purpose", required=True)
@@ -1230,8 +1326,15 @@ def main(argv=None) -> int:
         print(json.dumps(summary["by"].get("all", {}), ensure_ascii=False))
         return 0
     if args.command == "read-scans":
-        print(json.dumps(read_scans(load_selection(args.selection), store=corpus_store.CorpusStore())))
-        return 0
+        result = read_scans(
+            load_selection(args.selection) if args.selection else None,
+            log=lambda message: print(message, flush=True),
+            store=corpus_store.CorpusStore(),
+            max_pages=args.max_pages,
+            files_at_once=args.files_at_once,
+        )
+        print(json.dumps(result))
+        return 1 if result["stopped"] and "budget" not in result["stopped"] else 0
     if args.command == "push-held":
         store = corpus_store.CorpusStore()
         print(json.dumps({"stored": push_held(store)}))
