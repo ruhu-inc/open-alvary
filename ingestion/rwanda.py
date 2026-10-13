@@ -790,23 +790,31 @@ def prepare_selection(
         else:
             continue
         words = gazette_layout.text_layer(pdf)
+        # Scanned pages our OCR has read: its words and their places, in place of the scan's own
+        # text layer (often none, or someone else's OCR), laid out like any other page.
+        ocr_pages: set[int] = set()
+        ocr = stored_reading("ocr", sha, store)
+        for number, page in (ocr or {}).get("pages", {}).items():
+            if int(number) <= len(words):
+                words[int(number) - 1] = gazette_layout.from_ocr(page, words[int(number) - 1])
+                ocr_pages.add(int(number))
         layouts = [len(gazette_layout.columns(page)) for page in words]
         split = rw_gazette.split_issue(words, ruled_tables.document_tables(pdf, words, layouts))
         scanned = ruled_tables.image_pages(pdf)
-        read_pages: set[int] = set()
-        # Scanned pages Document AI has read: its words, in the layout of the OCR layer.
-        read = STAGING / "docai" / f"{sha}.json"
-        remote = f"readings/{COUNTRY}/docai/{sha}.json"
-        if read.exists() or (store is not None and store.exists(remote)):
-            readings = json.loads(read.read_text() if read.exists() else store.get(remote))["pages"]
+        # Scanned pages the Layout Parser has read: its words checked against the OCR's, in the
+        # OCR's layout; where they differ, its words are taken and the difference flagged.
+        layout = stored_reading("docai", sha, store)
+        if layout:
+            readings = layout["pages"]
             split = [
                 rw_gazette.correct_page(page, readings[str(page["page"])])
                 if str(page["page"]) in readings
                 else page
                 for page in split
             ]
-            read_pages = {int(n) for n in readings}
-            scanned = scanned - read_pages
+        read_pages = {page["page"] for page in split if page.get("read_by") == "docai"}
+        one_reading = (ocr_pages & scanned) - read_pages
+        scanned = scanned - read_pages - ocr_pages
         roles = rw_gazette.annex_pages(split)
         streams = rw_gazette.streams(split, skip=set(roles))
         furniture = {page["page"]: [line["text"] for line in page["furniture"]] for page in split}
@@ -892,9 +900,14 @@ def prepare_selection(
                     nodes,
                     furniture,
                     sha,
-                    {"alignment": check, "scans_read_by_docai": sorted(read_pages)},
+                    {
+                        "alignment": check,
+                        "scans_read_by_ocr": sorted(ocr_pages),
+                        "scans_read_by_docai": sorted(read_pages),
+                    },
                     sizes,
                     scanned,
+                    one_reading,
                 )
                 write_document(doc_id, reading, entry["versions"][language]["pages"])
                 documents[doc_id] = {
@@ -954,7 +967,9 @@ def prepare_selection(
             for language, lines in annex["versions"].items():
                 doc_id = f"{work}-{part}-{language}"
                 nodes = rw_gazette.structure(lines, language, part="body")
-                reading = rw_gazette.reading(nodes, furniture, sha, {"annex_of": work}, sizes, scanned)
+                reading = rw_gazette.reading(
+                    nodes, furniture, sha, {"annex_of": work}, sizes, scanned, one_reading
+                )
                 write_document(doc_id, reading, [annex["pages"][0], annex["pages"][-1]])
                 documents[doc_id] = {
                     "id": doc_id,
@@ -989,6 +1004,17 @@ def prepare_selection(
     return {"documents": len(manifest["documents"]), "instruments": summary}
 
 
+def stored_reading(folder: str, sha: str, store=None) -> dict | None:
+    """A file's reading by one of the services (folder "ocr" or "docai"), here or in the bucket."""
+    local = STAGING / folder / f"{sha}.json"
+    if local.exists():
+        return json.loads(local.read_text())
+    remote = f"readings/{COUNTRY}/{folder}/{sha}.json"
+    if store is not None and store.exists(remote):
+        return json.loads(store.get(remote))
+    return None
+
+
 def scanned_in_survey() -> dict[str, int]:
     """The ledger items whose file the survey found scanned pages in, with how many: one item per
     file (a file listed in several folders or by both sources is read once)."""
@@ -1007,11 +1033,16 @@ def read_scans(
     max_pages: int | None = None,
     files_at_once: int = 1,
     reader=None,
+    kind: str = "layout",
 ) -> dict:
     """Every scanned page of the selection's files (or, without a selection, of every file the survey
     found scans in) read by Document AI (billed): the pages are put in one PDF per file, read, and
-    the reading kept per page in docai/<sha256>.json and in the corpus bucket, for the pipeline to
-    use in place of the OCR layer someone else laid on. A file already read is not read again.
+    the reading kept per page in <kind>/<sha256>.json and in the corpus bucket (readings/rw/<kind>/).
+    A file already read is not read again.
+
+    Two readings, `kind`: "ocr" (Enterprise Document OCR: every word with its place, from which the
+    page is laid out as a text layer would be) and "layout" (the Layout Parser: the words and
+    structure that check the OCR's words; its folder is docai/).
 
     `max_pages` is the approved budget: no file is started that would take the pages read past it.
     Several files are read at once (each in short requests side by side). A failed file is noted
@@ -1026,17 +1057,18 @@ def read_scans(
 
     from ingestion import readers
 
+    folder = {"layout": "docai", "ocr": "ocr"}[kind]
     if reader is None:
-        reader = readers.DocAIReader()
+        reader = readers.DocAIReader() if kind == "layout" else readers.DocOCRReader()
         reader.preflight()
     ledger = Ledger(STAGING / "sync-ledger.json")
-    out_dir = STAGING / "docai"
+    out_dir = STAGING / folder
     out_dir.mkdir(parents=True, exist_ok=True)
     expected = scanned_in_survey() if selection is None else dict.fromkeys(selection["items"], 0)
     already = set()
     if store is not None:
         already = {
-            name.rsplit("/", 1)[-1][: -len(".json")] for name in store.list(f"readings/{COUNTRY}/docai/")
+            name.rsplit("/", 1)[-1][: -len(".json")] for name in store.list(f"readings/{COUNTRY}/{folder}/")
         }
     queue, seen = [], set()
     for item_id, pages in expected.items():
@@ -1071,18 +1103,24 @@ def read_scans(
             reading = reader.read(part)
         kept = {
             "sha256": sha,
+            "reader": kind,
             "version": reader.version(),
             "read_at": stamp(now()),
             "pages": {
-                str(number): {"text": page["text"], "tables": page.get("tables"), "nodes": page.get("nodes")}
+                str(number): {k: v for k, v in page.items() if k != "page"}
                 for number, page in zip(scanned, reading.pages, strict=True)
             },
+            # The service's own layout, kept so a converter fix needs no new (billed) reading.
+            **({"layout": reading.raw["layout"]} if getattr(reading, "raw", {}).get("layout") else {}),
         }
         target = out_dir / f"{sha}.json"
         target.write_text(json.dumps(kept, ensure_ascii=False) + "\n")
         if store is not None:
             store.put(
-                f"readings/{COUNTRY}/docai/{sha}.json", target.read_bytes(), "application/json", replace=True
+                f"readings/{COUNTRY}/{folder}/{sha}.json",
+                target.read_bytes(),
+                "application/json",
+                replace=True,
             )
         return len(scanned)
 
@@ -1302,6 +1340,7 @@ def main(argv=None) -> int:
     )
     scans.add_argument("--max-pages", type=int, required=True, help="the approved budget, in pages")
     scans.add_argument("--files-at-once", type=int, default=4)
+    scans.add_argument("--reader", choices=["ocr", "layout"], required=True)
     bulk = sub.add_parser("bulk-selection", help="write a selection of every catalogued file not yet held")
     bulk.add_argument("--approved-by", required=True)
     bulk.add_argument("--purpose", required=True)
@@ -1332,6 +1371,7 @@ def main(argv=None) -> int:
             store=corpus_store.CorpusStore(),
             max_pages=args.max_pages,
             files_at_once=args.files_at_once,
+            kind=args.reader,
         )
         print(json.dumps(result))
         return 1 if result["stopped"] and "budget" not in result["stopped"] else 0

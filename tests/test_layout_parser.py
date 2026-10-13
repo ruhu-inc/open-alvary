@@ -270,3 +270,40 @@ def test_a_number_after_a_misread_last_word_or_before_a_split_first_word_is_rest
     reference = "139. Pension and gratu-ry 140. Structure of the Agency 168. Feed -in tariffs rates"
     lp.restore_markers(nodes, 1, reference)
     assert [n.get("marker") for n in nodes] == ["139.", "140.", "168."]
+
+
+def test_an_ocr_page_gives_every_word_with_its_box_and_confidence():
+    from types import SimpleNamespace as NS
+
+    text = "Article premier.\nIl est fixé"
+
+    def token(start, end, x0, y0, x1, y1, confidence=0.98):
+        vertices = [NS(x=x0, y=y0), NS(x=x1, y=y0), NS(x=x1, y=y1), NS(x=x0, y=y1)]
+        layout = NS(
+            text_anchor=NS(text_segments=[NS(start_index=start, end_index=end)]),
+            bounding_poly=NS(normalized_vertices=vertices),
+            confidence=confidence,
+        )
+        return NS(layout=layout)
+
+    page = NS(
+        tokens=[
+            token(0, 8, 0.1, 0.1, 0.2, 0.12),
+            token(8, 17, 0.21, 0.1, 0.3, 0.12),
+            token(17, 17, 0, 0, 0, 0),
+        ],
+        dimension=NS(width=1654.0, height=2339.0),
+        detected_languages=[NS(language_code="fr", confidence=0.97)],
+    )
+    read = lp.ocr_page(page, text, 4)
+    assert read["page"] == 4 and read["width"] == 1654.0
+    assert [w["text"] for w in read["words"]] == ["Article", "premier."]  # an empty token is dropped
+    assert read["words"][1] == {
+        "text": "premier.",
+        "x0": 0.21,
+        "y0": 0.1,
+        "x1": 0.3,
+        "y1": 0.12,
+        "confidence": 0.98,
+    }
+    assert read["languages"] == [{"code": "fr", "confidence": 0.97}]

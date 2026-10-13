@@ -50,13 +50,15 @@ class DocAIConfig:
             raise ValueError("Invalid Document AI processor version")
 
     @classmethod
-    def from_environment(cls) -> "DocAIConfig":
+    def from_environment(cls, processor: str = "PROCESSOR") -> "DocAIConfig":
+        """The project and region, and the processor named by ALVARY_DOCAI_<processor>_ID and
+        _VERSION: the Layout Parser by default, "OCR_PROCESSOR" for Enterprise Document OCR."""
         from ingestion import settings
 
         settings.load()
         missing = [
             k
-            for k in ("ALVARY_DOCAI_PROJECT", "ALVARY_DOCAI_LOCATION", "ALVARY_DOCAI_PROCESSOR_ID")
+            for k in ("ALVARY_DOCAI_PROJECT", "ALVARY_DOCAI_LOCATION", f"ALVARY_DOCAI_{processor}_ID")
             if not os.environ.get(k)
         ]
         if missing:
@@ -64,8 +66,8 @@ class DocAIConfig:
         return cls(
             project=os.environ["ALVARY_DOCAI_PROJECT"],
             location=os.environ["ALVARY_DOCAI_LOCATION"],
-            processor_id=os.environ["ALVARY_DOCAI_PROCESSOR_ID"],
-            processor_version=os.environ.get("ALVARY_DOCAI_PROCESSOR_VERSION") or None,
+            processor_id=os.environ[f"ALVARY_DOCAI_{processor}_ID"],
+            processor_version=os.environ.get(f"ALVARY_DOCAI_{processor}_VERSION") or None,
         )
 
 
@@ -220,6 +222,37 @@ def make_client(config: DocAIConfig):
     )
 
 
+def _processor_name(client, config: DocAIConfig) -> str:
+    if config.processor_version:
+        return client.processor_version_path(
+            config.project, config.location, config.processor_id, config.processor_version
+        )
+    return client.processor_path(config.project, config.location, config.processor_id)
+
+
+def _retry_policy(retried: list[str]):
+    """Throttling and transient server errors retried with backoff (each noted in `retried`); a
+    credential failure is not, and neither is a deadline passed (the service may have billed it)."""
+    from google.api_core import exceptions
+    from google.api_core import retry as retries
+
+    transient = retries.if_exception_type(
+        exceptions.TooManyRequests, exceptions.ServiceUnavailable, exceptions.InternalServerError
+    )
+
+    def retryable(error: Exception) -> bool:
+        # Credential failures surface as 503s from the auth plugin; retrying them only burns time.
+        return transient(error) and not is_auth_failure(error)
+
+    return retries.Retry(
+        predicate=retryable,
+        initial=2.0,
+        maximum=60.0,
+        timeout=1800.0,
+        on_error=lambda error: retried.append(f"{type(error).__name__}: {error}"[:300]),
+    )
+
+
 def parse(
     raw: bytes, config: DocAIConfig, client=None, workers: int = 1, pages_per_request: int = ONLINE_PAGE_LIMIT
 ) -> dict:
@@ -232,34 +265,13 @@ def parse(
     """
     from concurrent.futures import ThreadPoolExecutor
 
-    from google.api_core import exceptions
-    from google.api_core import retry as retries
     from google.cloud import documentai_v1 as documentai
 
     if client is None:
         client = make_client(config)
-    if config.processor_version:
-        name = client.processor_version_path(
-            config.project, config.location, config.processor_id, config.processor_version
-        )
-    else:
-        name = client.processor_path(config.project, config.location, config.processor_id)
-    transient = retries.if_exception_type(
-        exceptions.TooManyRequests, exceptions.ServiceUnavailable, exceptions.InternalServerError
-    )
-
-    def retryable(error: Exception) -> bool:
-        # Credential failures surface as 503s from the auth plugin; retrying them only burns time.
-        return transient(error) and not is_auth_failure(error)
-
-    retry = retries.Retry(
-        predicate=retryable,
-        initial=2.0,
-        maximum=60.0,
-        timeout=1800.0,
-        on_error=lambda error: retried.append(f"{type(error).__name__}: {error}"[:300]),
-    )
+    name = _processor_name(client, config)
     retried: list[str] = []
+    retry = _retry_policy(retried)
 
     def read(item):
         first_page, chunk = item
@@ -281,6 +293,72 @@ def parse(
         layouts.append({"first_page": first_page, "blocks": layout.get("blocks", [])})
     # The processor's own layout is kept so a converter fix can be re-applied without a new call.
     return {"processor": name, "nodes": nodes, "layout": layouts, "retries": retried}
+
+
+def ocr_page(page, text: str, number: int) -> dict:
+    """One page of an Enterprise Document OCR result: its words in reading order, each with its box
+    as a share of the page (0 to 1) and the service's confidence, and the languages it detected."""
+
+    def box(layout) -> tuple[float, float, float, float]:
+        vertices = layout.bounding_poly.normalized_vertices
+        xs, ys = [v.x for v in vertices] or [0.0], [v.y for v in vertices] or [0.0]
+        return min(xs), min(ys), max(xs), max(ys)
+
+    words = []
+    for token in page.tokens:
+        segments = token.layout.text_anchor.text_segments
+        word = "".join(text[int(s.start_index) : int(s.end_index)] for s in segments).strip()
+        if not word:
+            continue
+        x0, y0, x1, y1 = box(token.layout)
+        words.append(
+            {
+                "text": word,
+                "x0": x0,
+                "y0": y0,
+                "x1": x1,
+                "y1": y1,
+                "confidence": round(token.layout.confidence, 3),
+            }
+        )
+    return {
+        "page": number,
+        "width": page.dimension.width,
+        "height": page.dimension.height,
+        "words": words,
+        "languages": [
+            {"code": lang.language_code, "confidence": round(lang.confidence, 3)}
+            for lang in page.detected_languages
+        ],
+    }
+
+
+def ocr(
+    raw: bytes, config: DocAIConfig, client=None, workers: int = 1, pages_per_request: int = ONLINE_PAGE_LIMIT
+) -> dict:
+    """Read a PDF with Enterprise Document OCR, chunk by chunk (the online limit is 15 pages):
+    every page's words with their boxes, in page order. Retries as for the Layout Parser."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from google.cloud import documentai_v1 as documentai
+
+    if client is None:
+        client = make_client(config)
+    name = _processor_name(client, config)
+    retried: list[str] = []
+    retry = _retry_policy(retried)
+
+    def read(item):
+        first_page, chunk = item
+        request = documentai.ProcessRequest(
+            name=name, raw_document=documentai.RawDocument(content=chunk, mime_type="application/pdf")
+        )
+        document = client.process_document(request=request, retry=retry, timeout=900).document
+        return [ocr_page(page, document.text, first_page + k) for k, page in enumerate(document.pages)]
+
+    with ThreadPoolExecutor(max_workers=max(workers, 1)) as pool:
+        chunks = list(pool.map(read, page_chunks(raw, max(1, min(pages_per_request, ONLINE_PAGE_LIMIT)))))
+    return {"processor": name, "pages": [page for chunk in chunks for page in chunk], "retries": retried}
 
 
 TOKEN = re.compile(r"\S+")

@@ -133,6 +133,23 @@ def words(bbox_html: str) -> list[dict]:
     return pages
 
 
+def from_ocr(reading: dict, page: dict) -> dict:
+    """A scanned page with the words Google's OCR read on it, placed as a text layer places them
+    (points from the top left of the page), in place of whatever text layer the scan carries."""
+    width, height = page["width"], page["height"]
+    words = [
+        {
+            "xmin": w["x0"] * width,
+            "ymin": w["y0"] * height,
+            "xmax": w["x1"] * width,
+            "ymax": w["y1"] * height,
+            "text": w["text"],
+        }
+        for w in reading["words"]
+    ]
+    return {**page, "words": words, "read_by": "ocr"}
+
+
 def language(texts: list[str]) -> tuple[str | None, dict]:
     """The language whose marker words are most frequent, with the counts behind the guess."""
     tokens = [t for text in texts for t in re.findall(r"[a-zàâçéèêëîïôûùüÿœ']+", text.lower())]

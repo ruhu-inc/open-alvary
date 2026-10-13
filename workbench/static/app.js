@@ -14,6 +14,7 @@ const KIND_LABEL = {
   heading_form: "article heading printed in an unusual form",
   heading_long: "check where this heading ends",
   borrowed_ocr: "the page is a picture; its text came from someone else's OCR: check it word by word",
+  one_reading: "the page is a picture read by our OCR; no second reading has checked its words",
   number_differs: "the number is printed differently in two places",
   reading_differs: "scanned page: Document AI read words differently from the OCR layer; Document AI's are shown",
   accents_restored: "scanned page: accents restored by Document AI where the OCR layer dropped them",

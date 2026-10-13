@@ -660,9 +660,7 @@ def test_scanned_pages_are_read_once_per_file_from_the_bucket_within_the_approve
     result = rwanda.read_scans(log=said.append, store=Store(), max_pages=3, files_at_once=2, reader=Reader())
     assert result["pages_read"] == 2 and result["left"] == 1 and "budget of 3" in result["stopped"]
     assert sorted(Store.put_names) == ["readings/rw/docai/a.json", "readings/rw/docai/b.json"]
-    assert json.loads((tmp_path / "docai" / "a.json").read_text())["pages"] == {
-        "2": {"text": "read", "tables": None, "nodes": None}
-    }
+    assert json.loads((tmp_path / "docai" / "a.json").read_text())["pages"] == {"2": {"text": "read"}}
 
     class Refused(Reader):
         def read(self, part):

@@ -463,3 +463,23 @@ def test_a_scanned_page_keeps_its_layout_and_takes_document_ais_words_with_diffe
     # Numbering only the OCR layer has (Document AI leaves it out) is kept; symbol noise is not.
     kept = RG.correct_lines([{"text": "a) les aéronefs ■ .:-", "page": 1}], "les aéronefs")
     assert kept[0]["text"] == "a) les aéronefs"
+
+
+def test_a_scan_read_by_our_ocr_is_laid_out_like_a_text_layer_and_flagged_until_checked():
+    from ingestion import gazette_layout
+
+    page = {
+        "width": 600.0,
+        "height": 800.0,
+        "words": [{"text": "noise", "xmin": 1, "ymin": 1, "xmax": 9, "ymax": 9}],
+    }
+    read = {"words": [{"text": "a)", "x0": 0.1, "y0": 0.5, "x1": 0.12, "y1": 0.52, "confidence": 0.99}]}
+    placed = gazette_layout.from_ocr(read, page)
+    assert placed["read_by"] == "ocr" and placed["width"] == 600.0
+    assert placed["words"] == [{"xmin": 60.0, "ymin": 400.0, "xmax": 72.0, "ymax": 416.0, "text": "a)"}]
+    # A page with no lines at all (no text layer, no OCR) cannot take a second reading's words.
+    empty = {"page": 3, "layout": "single", "columns": [{"lines": []}]}
+    assert RG.correct_page(empty, {"text": "Ingingo ya mbere", "nodes": []}) is empty
+    nodes = [{"kind": "paragraph", "text": "Ingingo ya mbere", "page": 3}]
+    flags = RG.reading(nodes, {}, "0" * 64, {}, one_reading={3})["pages"][0]["flags"]
+    assert [f["kind"] for f in flags] == ["one_reading"]

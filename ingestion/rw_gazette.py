@@ -738,6 +738,7 @@ def reading(
     checks: dict,
     sizes: dict[int, tuple[float, float]] | None = None,
     scanned: set[int] | frozenset = frozenset(),
+    one_reading: set[int] | frozenset = frozenset(),
 ) -> dict:
     """A reading in the shape the workbench reviews: the gazette's own page numbers, each page's
     nodes in order, its running header kept as furniture, and the flags placed by word position
@@ -754,6 +755,18 @@ def reading(
                 {
                     "severity": "medium",
                     "kind": "borrowed_ocr",
+                    "primary": "",
+                    "checks": {},
+                    "compare": True,
+                    "tokens": [0, 0],
+                }
+            )
+        elif number in one_reading:
+            # The page is a picture our OCR read; no second reading has checked its words yet.
+            flags.append(
+                {
+                    "severity": "medium",
+                    "kind": "one_reading",
                     "primary": "",
                     "checks": {},
                     "compare": True,
@@ -1226,8 +1239,11 @@ def correct_lines(lines: list[dict], better: str) -> list[dict]:
 
 
 def correct_page(page: dict, reading: dict) -> dict:
-    """A scanned page, split as its OCR layer lays it out, with Document AI's words."""
+    """A scanned page, split as its OCR layer lays it out, with Document AI's words. A page with no
+    OCR lines has nothing to place the words in: it is left as it is (read it with OCR first)."""
     columns = [c for c in page["columns"]]
+    if not any(c["lines"] for c in columns):
+        return page
     texts = docai_columns(reading, len(columns) if page["layout"] == "parallel" else 1)
     if len(texts) == len(columns):
         corrected = [
