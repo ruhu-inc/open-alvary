@@ -1,0 +1,24 @@
+ingestion/rwanda.py
+  s_b82616e2476856::t_0d327ee806d4e7 1426-1427
+  s_b82616e2476856::t_4d92ac96a7aef0 1037,1042-1043,1082,1346,1371-1372,1380
+tests/test_layout_parser.py
+  s_b82616e2476856::t_329b67204302de 278,294-296,303-312
+ingestion/layout_parser.py
+  s_b82616e2476856::t_f0202f1579333b 307-310,313-314,316,319-332
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "63f116831230f9cd6c40b126293886b5cf38ed99",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
