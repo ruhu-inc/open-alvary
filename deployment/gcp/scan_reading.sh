@@ -60,8 +60,13 @@ deploy() {
     echo "Commit first: the image is tagged with the commit it is built from." >&2
     exit 1
   fi
-  "${GC[@]}" builds submit --region="$REGION" --config=deployment/gcp/scan-reader.cloudbuild.yaml \
-    --substitutions="_IMAGE=$IMAGE" .
+  # Built from the commit itself (git archive): nothing untracked or private can enter the build.
+  local context
+  context="$(mktemp -d)"
+  trap 'rm -rf "$context"' RETURN
+  git archive HEAD | tar -x -C "$context"
+  "${GC[@]}" builds submit "$context" --region="$REGION" \
+    --config="$context/deployment/gcp/scan-reader.cloudbuild.yaml" --substitutions="_IMAGE=$IMAGE"
   local env=ALVARY_CORPUS_BUCKET="$CORPUS_BUCKET"
   for name in ALVARY_DOCAI_PROJECT ALVARY_DOCAI_LOCATION ALVARY_DOCAI_PROCESSOR_ID ALVARY_DOCAI_PROCESSOR_VERSION \
     ALVARY_DOCAI_OCR_PROCESSOR_ID ALVARY_DOCAI_OCR_PROCESSOR_VERSION; do
