@@ -278,8 +278,8 @@ def test_approval_waits_for_every_page_and_high_flag_and_binds_the_content(world
     assert (
         approver.get(f"/api/documents/{ACT}/export").json()["approved"] is False
     )  # an edit after approval voids it
-    listed = approver.get("/api/documents").json()[0]
-    assert listed["approval"] == "approved" and listed["approval_current"] is False
+    listed = approver.get("/api/documents").json()["documents"][0]
+    assert listed["approval"] == "out_of_date" and listed["status"] == "Approval out of date"
     actions = [e["action"] for e in approver.get(f"/api/audit?act={ACT}").json()]
     assert "act_approved" in actions and actions.count("page_saved") == 4 and "details_saved" in actions
 
@@ -668,11 +668,15 @@ def test_overview_summarises_documents_and_where_to_continue(world):
         "approved": 0,
         "ready": 0,
     }
-    assert first["documents"][0]["type"] == "act" and first["resume"] is None
+    assert first["types"] == ["act"] and first["resume"] is None
+    listed = browser.get("/api/documents").json()
+    assert listed["total"] == 1 and listed["documents"][0]["status"] == "Not started"
     save(browser)  # page 1 checked
     after = browser.get("/api/overview").json()
     assert after["resume"]["page"] == 2 and after["resume"]["id"] == ACT
-    assert after["documents"][0]["checked"] == 1 and after["activity"][0]["action"] == "page_saved"
+    assert after["activity"][0]["action"] == "page_saved"
+    row = browser.get("/api/documents").json()["documents"][0]
+    assert row["checked"] == 1 and row["status"] == "In review"
 
 
 def test_unit_alignment_is_kept_and_validated(world):
@@ -813,7 +817,7 @@ def test_a_second_collection_reviews_each_language_version_and_shares_the_laws_d
     store.add_operator("reviewer@example.org", "Rev", {"reviewer"})
     world = (store, content.Library(tmp_path))
     reviewer = signed_in(world, "reviewer@example.org")
-    ids = [d["id"] for d in reviewer.get("/api/documents").json()]
+    ids = [d["id"] for d in reviewer.get("/api/documents?limit=200").json()["documents"]]
     assert ACT in ids and {"rw-law-009-2026-en", "rw-law-009-2026-fr"} <= set(ids)
     page = reviewer.get("/api/documents/rw-law-009-2026-fr/pages/3").json()
     assert page["regions"][0]["box"][0] > 0.6  # the French column, on the right of the page
@@ -978,3 +982,41 @@ def test_a_scanned_document_says_it_was_read_by_ocr_and_checked_by_a_second_read
     assert "is a scan" in scan["notes"][0] and "read a second time" in scan["notes"][-1]
     born_digital = named({"alignment": {"aligned": True}, "scans_read_by_ocr": [30]}, [9, 10])
     assert born_digital["primary"] == "the PDF's own text" and len(born_digital["notes"]) == 2
+
+
+def test_the_document_list_is_searched_filtered_and_paged_on_the_server(tmp_path, monkeypatch):
+    """A corpus collection lists tens of thousands of documents: an untouched one is summarised from
+    its manifest entry alone (no reading opened), and the list comes a page at a time."""
+    documents = [
+        {
+            "id": f"rw-law-{n:03d}-2026-{lang}",
+            "type": "law",
+            "title": f"Law n° {n:03d}/2026 on {'water' if n % 2 else 'roads'}",
+            "language": lang,
+            "work": f"rw-law-{n:03d}-2026",
+            "page_count": 4,
+            "flag_counts": {"high": n % 3, "medium": 0, "low": 0},
+        }
+        for n in range(1, 31)
+        for lang in ("en", "fr")
+    ]
+    folder = tmp_path / "rw"
+    folder.mkdir()
+    (folder / "manifest.json").write_text(
+        json.dumps({"collection": "rw", "jurisdiction": "rw", "documents": documents})
+    )
+    for d in documents:  # the readings exist, but the list must not open them
+        (folder / f"{d['id']}.reading.json").write_text("not read by the list")
+    monkeypatch.setenv("ALVARY_REVIEW_COLLECTIONS", str(folder))
+    (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(reading()))
+    store = Store(connect(f"sqlite:///{tmp_path / 'workbench.db'}"))
+    store.add_operator("reviewer@example.org", "Rev", {"reviewer"})
+    reviewer = signed_in((store, content.Library(tmp_path)), "reviewer@example.org")
+    page = reviewer.get("/api/documents?language=fr&q=water&sort=title&limit=5").json()
+    assert page["total"] == 15 and len(page["documents"]) == 5
+    assert page["documents"][0]["id"] == "rw-law-001-2026-fr" and page["documents"][0]["pages"] == 4
+    assert page["documents"][0]["status"] == "Not started"
+    rest = reviewer.get("/api/documents?language=fr&q=water&sort=title&limit=5&offset=10").json()
+    assert [d["id"] for d in rest["documents"]][-1] == "rw-law-029-2026-fr"
+    overview = reviewer.get("/api/overview").json()
+    assert overview["totals"]["documents"] == 61 and overview["languages"] == ["en", "fr"]
