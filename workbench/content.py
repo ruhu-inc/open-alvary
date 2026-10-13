@@ -46,7 +46,7 @@ def extra_collections() -> list[tuple[dict, Path]]:
             bucket, _, prefix = place[len("gs://") :].partition("/")
             store = _store(bucket)
             manifest = json.loads(store.get(f"{prefix}manifest.json"))
-            staging = Path(os.environ.get("ALVARY_REVIEW_CACHE", "private-staging/cache")) / bucket / prefix
+            staging = cache_root() / bucket / prefix
             staging.mkdir(parents=True, exist_ok=True)
             manifest["_remote"] = {"bucket": bucket, "prefix": prefix}
         else:
@@ -57,6 +57,33 @@ def extra_collections() -> list[tuple[dict, Path]]:
                 raise ValueError(f"Invalid document id in {place}: {document['id']!r}")
         out.append((manifest, staging))
     return out
+
+
+def cache_root() -> Path:
+    return Path(os.environ.get("ALVARY_REVIEW_CACHE", "private-staging/cache"))
+
+
+def trim_cache() -> None:
+    """Keep the cache of a deployed workbench (source PDFs, readings, page images fetched from the
+    bucket) within ALVARY_REVIEW_CACHE_MB: when it grows past that, the files least recently used
+    go until it is back to four fifths. Without the setting the cache is not trimmed."""
+    budget = int(os.environ.get("ALVARY_REVIEW_CACHE_MB") or 0) * 1024 * 1024
+    root = cache_root()
+    if not budget or not root.is_dir():
+        return
+    files = []
+    for path in root.rglob("*"):
+        if path.is_file():
+            stat = path.stat()
+            files.append((stat.st_mtime, stat.st_size, path))
+    total = sum(size for _, size, _ in files)
+    if total <= budget:
+        return
+    for _, size, path in sorted(files):
+        path.unlink(missing_ok=True)
+        total -= size
+        if total <= 0.8 * budget:
+            return
 
 
 _STORES: dict = {}
@@ -122,20 +149,26 @@ class Library:
         return self._where(act_id)[1]
 
     def _here(self, act_id: str, suffix: str) -> Path:
-        """A document's file in its folder; from the bucket, fetched into the cache the first time."""
+        """A document's file in its folder; from the bucket, fetched into the cache the first time.
+        A source PDF is cached once under its own name: the language versions and annexes of one
+        Gazette issue share it."""
         manifest, staging = self._where(act_id)
         path = staging / f"{act_id}{suffix}"
         remote = manifest.get("_remote")
-        if remote and not path.exists():
-            store = _store(remote["bucket"])
-            if suffix == ".pdf":
-                document = next(d for d in manifest["documents"] if d["id"] == act_id)
-                data = store.get(document["source_object"])
+        if remote:
+            source = self._index[act_id].get("source_object") if suffix == ".pdf" else None
+            if source:
+                path = staging / "sources" / Path(source).name
+            if path.exists():
+                os.utime(path)  # recently used: kept when the cache is trimmed
             else:
-                data = store.get(f"{remote['prefix']}{act_id}{suffix}")
-            tmp = path.with_suffix(path.suffix + ".part")
-            tmp.write_bytes(data)
-            tmp.replace(path)
+                store = _store(remote["bucket"])
+                data = store.get(source) if source else store.get(f"{remote['prefix']}{act_id}{suffix}")
+                path.parent.mkdir(parents=True, exist_ok=True)
+                tmp = path.with_suffix(path.suffix + ".part")
+                tmp.write_bytes(data)
+                tmp.replace(path)
+                trim_cache()
         return path
 
     def act(self, act_id: str) -> dict:
@@ -181,12 +214,27 @@ class Library:
         return json.loads(self._here(act_id, ".reading.json").read_text())
 
     def image(self, act_id: str, page: int) -> Path:
-        """A legible page image (150 dpi), rendered once in the sealed tools container."""
-        self.original(act_id)  # the PDF, fetched first if its collection is in the bucket
-        staging = self.staging_for(act_id)
-        folder = staging / "review-images" / act_id
+        """A legible page image (150 dpi), rendered once: in the sealed tools container here, or, in
+        a deployed workbench whose own container is the sandbox (ALVARY_RENDER=direct), by
+        pdftoppm there. Images of a corpus collection's pages are shared by the documents of one
+        source file and kept in the bounded cache."""
+        pdf = self.original(act_id)  # the PDF, fetched first if its collection is in the bucket
+        manifest, staging = self._where(act_id)
+        folder = staging / "review-images" / (pdf.stem if manifest.get("_remote") else act_id)
         path = folder / f"page-{page}.jpg"
-        if not path.exists():
+        if path.exists():
+            os.utime(path)
+        elif os.environ.get("ALVARY_RENDER") == "direct":
+            folder.mkdir(parents=True, exist_ok=True)
+            subprocess.run(
+                ["pdftoppm", "-r", "150", "-jpeg", "-jpegopt", "quality=85", "-singlefile"]
+                + ["-f", str(page), "-l", str(page), str(pdf), str(folder / f"page-{page}")],
+                check=True,
+                capture_output=True,
+                timeout=120,
+            )
+            trim_cache()
+        else:
             if not shutil.which("docker"):
                 raise FileNotFoundError(
                     f"page image not prepared: run python -m workbench.prepare --act {act_id}"
@@ -210,12 +258,12 @@ class Library:
                     "HOME=/tmp",
                     *render_fonts(),
                     "-v",
-                    f"{staging}:/in:ro",
+                    f"{pdf.parent}:/in:ro",
                     "-v",
                     f"{folder}:/out",
                     first_collection.OCR_IMAGE,
                     f"pdftoppm -r 150 -jpeg -jpegopt quality=85 -singlefile -f {page} -l {page} "
-                    f"/in/{act_id}.pdf /out/page-{page}",
+                    f"/in/{pdf.name} /out/page-{page}",
                 ],
                 check=True,
                 capture_output=True,

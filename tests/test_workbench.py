@@ -1020,3 +1020,61 @@ def test_the_document_list_is_searched_filtered_and_paged_on_the_server(tmp_path
     assert [d["id"] for d in rest["documents"]][-1] == "rw-law-029-2026-fr"
     overview = reviewer.get("/api/overview").json()
     assert overview["totals"]["documents"] == 61 and overview["languages"] == ["en", "fr"]
+
+
+def test_a_deployed_workbench_renders_pages_itself_once_per_source_and_keeps_its_cache_bounded(
+    tmp_path, monkeypatch
+):
+    import os
+    import subprocess
+    from pathlib import Path
+
+    documents = [
+        {
+            "id": f"rw-law-009-2026-{lang}",
+            "type": "law",
+            "title": "Law",
+            "work": "rw-law-009-2026",
+            "source_object": "sources/rw/minijust-gazette/abc.pdf",
+            "page_count": 1,
+        }
+        for lang in ("en", "fr")
+    ]
+    objects = {
+        "collections/rw/manifest.json": json.dumps({"collection": "rw", "documents": documents}).encode(),
+        "sources/rw/minijust-gazette/abc.pdf": b"%PDF-1.4 the issue",
+    }
+    asked, ran = [], []
+
+    class Bucket:
+        def get(self, name):
+            asked.append(name)
+            return objects[name]
+
+        def exists(self, name):
+            return name in objects
+
+    def pdftoppm(command, **kwargs):
+        ran.append(command)
+        Path(command[-1] + ".jpg").write_bytes(b"\xff\xd8 image")
+        return subprocess.CompletedProcess(command, 0, b"", b"")
+
+    monkeypatch.setattr(content, "_STORES", {"test-bucket": Bucket()})
+    monkeypatch.setattr(content.subprocess, "run", pdftoppm)
+    monkeypatch.setenv("ALVARY_REVIEW_COLLECTIONS", "gs://test-bucket/collections/rw/")
+    monkeypatch.setenv("ALVARY_REVIEW_CACHE", str(tmp_path / "cache"))
+    monkeypatch.setenv("ALVARY_RENDER", "direct")
+    (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(reading()))
+    library = content.Library(tmp_path)
+    english = library.image("rw-law-009-2026-en", 3)
+    french = library.image("rw-law-009-2026-fr", 3)
+    assert english == french and english.read_bytes() == b"\xff\xd8 image"
+    assert len(ran) == 1 and ran[0][0] == "pdftoppm" and "docker" not in ran[0]
+    assert asked.count("sources/rw/minijust-gazette/abc.pdf") == 1  # one copy of the issue for both
+    # A cache past its budget drops what was used least recently.
+    old = tmp_path / "cache" / "old.bin"
+    old.write_bytes(b"x" * 1_500_000)
+    os.utime(old, (1, 1))
+    monkeypatch.setenv("ALVARY_REVIEW_CACHE_MB", "1")
+    content.trim_cache()
+    assert not old.exists() and english.exists()
