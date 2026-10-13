@@ -208,6 +208,18 @@ def is_auth_failure(error: BaseException) -> bool:
     )
 
 
+def make_client(config: DocAIConfig):
+    """A Document AI client for the processor's region. Make it once, before any thread calls the
+    service, and share it: making one looks up the Google sign-in, which may start a subprocess, and
+    gRPC aborts when a process forks while other threads are inside a call."""
+    from google.api_core.client_options import ClientOptions
+    from google.cloud import documentai_v1 as documentai
+
+    return documentai.DocumentProcessorServiceClient(
+        client_options=ClientOptions(api_endpoint=f"{config.location}-documentai.googleapis.com")
+    )
+
+
 def parse(
     raw: bytes, config: DocAIConfig, client=None, workers: int = 1, pages_per_request: int = ONLINE_PAGE_LIMIT
 ) -> dict:
@@ -222,14 +234,10 @@ def parse(
 
     from google.api_core import exceptions
     from google.api_core import retry as retries
-    from google.api_core.client_options import ClientOptions
     from google.cloud import documentai_v1 as documentai
 
     if client is None:
-        endpoint = f"{config.location}-documentai.googleapis.com"
-        client = documentai.DocumentProcessorServiceClient(
-            client_options=ClientOptions(api_endpoint=endpoint)
-        )
+        client = make_client(config)
     if config.processor_version:
         name = client.processor_version_path(
             config.project, config.location, config.processor_id, config.processor_version

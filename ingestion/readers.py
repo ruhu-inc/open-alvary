@@ -62,6 +62,13 @@ class DocAIReader:
         # side by side keep each one far inside its deadline.
         self.workers = int(os.environ.get("ALVARY_DOCAI_WORKERS") or 8)
         self.pages_per_request = int(os.environ.get("ALVARY_DOCAI_PAGES_PER_REQUEST") or 2)
+        self._client = None
+
+    def client(self):
+        """The one Document AI client every read shares (made by preflight, before any thread)."""
+        if self._client is None:
+            self._client = layout_parser.make_client(self.config)
+        return self._client
 
     def preflight(self) -> None:
         """Fail in seconds, before any page is sent, if the Google sign-in cannot be refreshed."""
@@ -76,6 +83,7 @@ class DocAIReader:
                 "Google sign-in is not usable: run `gcloud auth application-default login` "
                 f"(or use a service account). {type(error).__name__}"
             ) from error
+        self.client()
 
     def version(self) -> dict:
         return {
@@ -86,7 +94,11 @@ class DocAIReader:
 
     def read(self, pdf: Path) -> Reading:
         result = layout_parser.parse(
-            pdf.read_bytes(), self.config, workers=self.workers, pages_per_request=self.pages_per_request
+            pdf.read_bytes(),
+            self.config,
+            client=self.client(),
+            workers=self.workers,
+            pages_per_request=self.pages_per_request,
         )
         nodes, count = result["nodes"], page_count(pdf)
         pages = []
