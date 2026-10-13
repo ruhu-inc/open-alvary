@@ -763,3 +763,84 @@ def test_scan_progress_counts_the_work_list_files_each_reader_has_read():
         "ocr": {"files": 2, "pages": 12},
         "layout": {"files": 1, "pages": 3},
     }
+
+
+def test_in_a_cloud_job_the_text_layer_is_read_by_pdftotext_in_its_own_container(tmp_path, monkeypatch):
+    import subprocess
+
+    from ingestion import gazette_layout
+
+    seen = []
+
+    def run(command, **kwargs):
+        seen.append(command)
+        return subprocess.CompletedProcess(
+            command, 0, '<doc><page width="600" height="840"></page></doc>', ""
+        )
+
+    monkeypatch.setattr(gazette_layout.subprocess, "run", run)
+    monkeypatch.setenv("ALVARY_TEXT_LAYER", "direct")
+    pages = gazette_layout.text_layer(tmp_path / "issue.pdf")
+    assert seen[0][:2] == ["pdftotext", "-bbox-layout"] and "docker" not in seen[0]
+    assert pages[0]["width"] == 600.0
+
+
+def test_an_issue_prepared_by_an_older_pipeline_is_prepared_again_and_the_manifest_reads_both():
+    import json
+
+    from ingestion import rw_gazette
+
+    class Store:
+        def __init__(self):
+            self.objects = {
+                "collections/rw/issues/old.json": json.dumps([{"id": "rw-law-1-2001-en"}]).encode(),
+            }
+
+        def exists(self, name):
+            return name in self.objects
+
+        def get(self, name):
+            return self.objects[name]
+
+        def put(self, name, data, content_type, replace=False):
+            self.objects[name] = data
+
+        def list(self, prefix):
+            return sorted(n for n in self.objects if n.startswith(prefix))
+
+    store = Store()
+    collection = rwanda.BucketCollection(store)
+    assert not collection.done("old")  # a bare list: an older pipeline's index
+    collection.finish_issue("new", [{"id": "rw-law-2-2002-en"}], {"ocr": False, "docai": False})
+    assert collection.done("new")
+    store.objects["readings/rw/ocr/new.json"] = b"{}"  # its scans read since: prepared again
+    assert not collection.done("new")
+    collection.finish_issue("new", [{"id": "rw-law-2-2002-en"}], {"ocr": True, "docai": False})
+    assert collection.done("new")
+    assert json.loads(store.objects["collections/rw/issues/new.json"])["pipeline"] == rw_gazette.PIPELINE
+    collection.save_manifest(rwanda.new_manifest())
+    manifest = json.loads(store.objects["collections/rw/manifest.json"])
+    assert [d["id"] for d in manifest["documents"]] == ["rw-law-1-2001-en", "rw-law-2-2002-en"]
+
+
+def test_the_prepare_job_takes_its_share_and_the_state_from_the_bucket(tmp_path):
+    from ingestion import prepare_job
+
+    assert prepare_job.share(["a", "b", "c", "d", "e"], 1, 2) == ["b", "d"]
+
+    class Store:
+        objects = {
+            "state/rw/sync-ledger.json": b'{"items": {}}',
+            "state/rw/catalogue/rlrc-laws.json": b'{"files": []}',
+            "state/rw/catalogue/notes.txt": b"not json",
+        }
+
+        def get(self, name):
+            return self.objects[name]
+
+        def list(self, prefix):
+            return sorted(n for n in self.objects if n.startswith(prefix))
+
+    prepare_job.fetch_state(Store(), tmp_path)
+    assert (tmp_path / "sync-ledger.json").exists() and (tmp_path / "catalogue" / "rlrc-laws.json").exists()
+    assert not (tmp_path / "catalogue" / "notes.txt").exists()

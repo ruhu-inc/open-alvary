@@ -1,7 +1,7 @@
-# Cloud Build: the scan-reading job's image (deployment/gcp/scan_reading.sh deploy).
+# Cloud Build: the ingestion jobs' image (deployment/gcp/ingestion_jobs.sh deploy).
 steps:
   - name: gcr.io/cloud-builders/docker
-    args: ["build", "-f", "deployment/scan-reader.Dockerfile", "-t", "${_IMAGE}", "."]
+    args: ["build", "-f", "deployment/ingestion-jobs.Dockerfile", "-t", "${_IMAGE}", "."]
 images: ["${_IMAGE}"]
 options:
   # A build running as its own service account logs to Cloud Logging only (no logs bucket).

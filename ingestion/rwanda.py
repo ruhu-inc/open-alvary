@@ -681,7 +681,7 @@ class LocalCollection:
             json.dumps(provenance, ensure_ascii=False, indent=1) + "\n"
         )
 
-    def finish_issue(self, sha: str, documents: list[dict]) -> None:
+    def finish_issue(self, sha: str, documents: list[dict], readings: dict | None = None) -> None:
         pass
 
     def save_manifest(self, manifest: dict) -> None:
@@ -700,7 +700,19 @@ class BucketCollection:
         return new_manifest()
 
     def done(self, sha: str) -> bool:
-        return self.store.exists(f"{self.prefix}issues/{sha}.json")
+        """Prepared by this version of the pipeline with the readings there are now: an index from an
+        older pipeline is redone, and so is a scan prepared before its OCR or Layout Parser reading."""
+        name = f"{self.prefix}issues/{sha}.json"
+        if not self.store.exists(name):
+            return False
+        index = json.loads(self.store.get(name))
+        if not isinstance(index, dict) or index.get("pipeline") != rw_gazette.PIPELINE:
+            return False
+        used = index.get("readings") or {}
+        return all(
+            used.get(folder) or not self.store.exists(f"readings/{COUNTRY}/{folder}/{sha}.json")
+            for folder in ("ocr", "docai")
+        )
 
     def remove(self, doc_id: str) -> None:
         pass  # a document read again is written over
@@ -719,10 +731,11 @@ class BucketCollection:
             replace=True,
         )
 
-    def finish_issue(self, sha: str, documents: list[dict]) -> None:
+    def finish_issue(self, sha: str, documents: list[dict], readings: dict | None = None) -> None:
+        index = {"pipeline": rw_gazette.PIPELINE, "readings": readings or {}, "documents": documents}
         self.store.put(
             f"{self.prefix}issues/{sha}.json",
-            json.dumps(documents, ensure_ascii=False).encode(),
+            json.dumps(index, ensure_ascii=False).encode(),
             "application/json",
             replace=True,
         )
@@ -730,7 +743,8 @@ class BucketCollection:
     def save_manifest(self, manifest: dict) -> None:
         documents = []
         for name in self.store.list(f"{self.prefix}issues/"):
-            documents += json.loads(self.store.get(name))
+            index = json.loads(self.store.get(name))
+            documents += index["documents"] if isinstance(index, dict) else index  # older: a bare list
         manifest["documents"] = sorted(documents, key=lambda d: d["id"])
         self.store.put(
             f"{self.prefix}manifest.json",
@@ -1016,7 +1030,11 @@ def prepare_selection(
                     "pages": [annex["pages"][0], annex["pages"][-1]],
                 }
             )
-        collection.finish_issue(sha, [d for d in documents.values() if d.get("url") == record["url"]])
+        collection.finish_issue(
+            sha,
+            [d for d in documents.values() if d.get("url") == record["url"]],
+            {"ocr": bool(ocr), "docai": bool(layout)},
+        )
         if pdf.parent == Path(scratch.name):
             pdf.unlink(missing_ok=True)
         log(f"{record['listed']['name']}: {len(found)} instruments, {len(set(roles.values()))} annexes")
