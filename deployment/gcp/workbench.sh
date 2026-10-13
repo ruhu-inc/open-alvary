@@ -24,6 +24,11 @@ SQL_TIER="${WORKBENCH_SQL_TIER:-db-f1-micro}"
 RUNNER="workbench-runner"
 RUNNER_EMAIL="${RUNNER}@${PROJECT}.iam.gserviceaccount.com"
 COLLECTION="${WORKBENCH_COLLECTION_DIR:-private-staging/first-collection}"
+# The corpus collections reviewed beside the first, read from the corpus bucket (read-only).
+CORPUS_BUCKET="${ALVARY_CORPUS_BUCKET:-open-alvary-corpus}"
+CORPUS_COLLECTIONS="${WORKBENCH_CORPUS_COLLECTIONS:-gs://${CORPUS_BUCKET}/collections/rw/}"
+# Builds run as their own account (deployment/gcp/ingestion_jobs.sh setup creates it).
+BUILDER_EMAIL="image-builder@${PROJECT}.iam.gserviceaccount.com"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPOSITORY}/workbench:$(git rev-parse --short HEAD)"
 GC=(gcloud --project "$PROJECT" --quiet)
 
@@ -44,8 +49,10 @@ Project $PROJECT, region $REGION. Would create (if absent):
   - Cloud SQL PostgreSQL 16 instance $SQL_INSTANCE ($SQL_TIER, 10 GB SSD, daily backups + point-in-time recovery),
     database 'review', user 'review' with a generated password
   - Secrets: review-database-url, review-oidc-client-secret (values never printed)
-  - Service account $RUNNER_EMAIL: Cloud SQL client, read on the bucket, access to the two secrets only
-  - Cloud Run service $SERVICE (512 MiB, 0-2 instances), not public: Identity-Aware Proxy in front
+  - Service account $RUNNER_EMAIL: Cloud SQL client, read on the bucket and on gs://$CORPUS_BUCKET,
+    access to the two secrets only
+  - Cloud Run service $SERVICE (2 GiB, 0-2 instances), not public: Identity-Aware Proxy in front;
+    it reviews $CORPUS_COLLECTIONS and draws page images on demand
 Billed monthly at low use: Cloud SQL ~US\$10-15 (the main cost), Cloud Run ~\$0 (scales to zero),
 storage, registry and secrets a few cents.
 EOF
@@ -62,6 +69,7 @@ setup() {
     "${GC[@]}" iam service-accounts create "$RUNNER" --display-name="Review workbench (Cloud Run)"
   "${GC[@]}" projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$RUNNER_EMAIL" --role=roles/cloudsql.client >/dev/null
   "${GC[@]}" storage buckets add-iam-policy-binding "gs://$BUCKET" --member="serviceAccount:$RUNNER_EMAIL" --role=roles/storage.objectViewer >/dev/null
+  "${GC[@]}" storage buckets add-iam-policy-binding "gs://$CORPUS_BUCKET" --member="serviceAccount:$RUNNER_EMAIL" --role=roles/storage.objectViewer >/dev/null
   if ! "${GC[@]}" sql instances describe "$SQL_INSTANCE" >/dev/null 2>&1; then
     "${GC[@]}" sql instances create "$SQL_INSTANCE" --database-version=POSTGRES_16 --edition=ENTERPRISE \
       --tier="$SQL_TIER" --region="$REGION" --storage-size=10 --storage-type=SSD --storage-auto-increase \
@@ -93,16 +101,27 @@ upload() {
 
 deploy() {
   : "${ALVARY_REVIEW_OIDC_CLIENT_ID:?Set ALVARY_REVIEW_OIDC_CLIENT_ID (the OAuth client of type Web application)}"
-  "${GC[@]}" builds submit --tag "$IMAGE" .
+  if ! git diff --quiet HEAD; then
+    echo "Commit first: the image is tagged with the commit it is built from." >&2
+    exit 1
+  fi
+  # Built from the commit itself (git archive): nothing untracked or private can enter the build.
+  local context
+  context="$(mktemp -d)"
+  trap 'rm -rf "$context"' RETURN
+  git archive HEAD | tar -x -C "$context"
+  "${GC[@]}" builds submit "$context" --region="$REGION" \
+    --service-account="projects/$PROJECT/serviceAccounts/$BUILDER_EMAIL" \
+    --config="$context/deployment/gcp/workbench.cloudbuild.yaml" --substitutions="_IMAGE=$IMAGE"
   local number url
   number="$("${GC[@]}" projects describe "$PROJECT" --format='value(projectNumber)')"
   url="https://${SERVICE}-${number}.${REGION}.run.app"
   "${GC[@]}" run deploy "$SERVICE" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
-    --no-allow-unauthenticated --iap --memory=512Mi --cpu=1 --min-instances=0 --max-instances=2 \
+    --no-allow-unauthenticated --iap --memory=2Gi --cpu=1 --min-instances=0 --max-instances=2 \
     --add-cloudsql-instances="${PROJECT}:${REGION}:${SQL_INSTANCE}" \
     --add-volume=name=collection,type=cloud-storage,bucket="$BUCKET",readonly=true \
     --add-volume-mount=volume=collection,mount-path=/data/collection \
-    --set-env-vars="ALVARY_REVIEW_STAGING=/data/collection,ALVARY_REVIEW_BASE_URL=${url},ALVARY_REVIEW_ALLOWED_HOSTS=${SERVICE}-${number}.${REGION}.run.app,ALVARY_REVIEW_OIDC_CLIENT_ID=${ALVARY_REVIEW_OIDC_CLIENT_ID}" \
+    --set-env-vars="^|^ALVARY_REVIEW_STAGING=/data/collection|ALVARY_REVIEW_COLLECTIONS=${CORPUS_COLLECTIONS}|ALVARY_REVIEW_BASE_URL=${url}|ALVARY_REVIEW_ALLOWED_HOSTS=${SERVICE}-${number}.${REGION}.run.app|ALVARY_REVIEW_OIDC_CLIENT_ID=${ALVARY_REVIEW_OIDC_CLIENT_ID}" \
     --set-secrets="ALVARY_REVIEW_DATABASE_URL=review-database-url:latest,ALVARY_REVIEW_OIDC_CLIENT_SECRET=review-oidc-client-secret:latest" \
     --command=uvicorn --args="workbench.app:app,--host,0.0.0.0,--port,8080,--proxy-headers,--forwarded-allow-ips,*,--no-access-log"
   # Identity-Aware Proxy calls the service as Google's IAP service agent.
