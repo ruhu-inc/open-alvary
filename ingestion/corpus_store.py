@@ -14,6 +14,7 @@ prevented.
 import json
 import os
 import secrets
+import sys
 from urllib.parse import quote
 
 BUCKET = os.environ.get("ALVARY_CORPUS_BUCKET", "open-alvary-corpus")
@@ -43,18 +44,23 @@ class CorpusStore:
         import google.auth.exceptions
         import requests
 
+        # A request never waits for ever: a connection the far end has dropped would otherwise hang.
+        kwargs.setdefault("timeout", 120)
         for wait in (*self.RETRY_WAITS, None):
             try:
                 response = self.session.request(method, url, **kwargs)
                 if response.status_code < 500 or wait is None:
                     return response
+                reason = f"server error {response.status_code}"
             except (
                 requests.exceptions.ConnectionError,
                 requests.exceptions.Timeout,
                 google.auth.exceptions.TransportError,
-            ):
+            ) as error:
                 if wait is None:
                     raise
+                reason = type(error).__name__
+            print(f"bucket: {reason}; trying again in {wait} s", file=sys.stderr, flush=True)
             time.sleep(wait)
         raise RuntimeError("unreachable")
 
