@@ -593,3 +593,80 @@ def test_a_word_document_is_passed_over_by_prepare_and_the_survey_not_failed(tmp
     rwanda.prepare_selection({"items": [item]}, log=said.append, collection=collection, store=NoStore())
     assert said == ["not prepared (a Word document; not yet read by this pipeline): DECRET-LOI.docx"]
     assert rwanda.survey(store=NoStore(), log=said.append)["files_surveyed"] == 0
+
+
+def test_scanned_pages_are_read_once_per_file_from_the_bucket_within_the_approved_budget(
+    tmp_path, monkeypatch
+):
+    import io
+    import json
+    from types import SimpleNamespace
+
+    import google.api_core.exceptions
+    from pypdf import PdfReader, PdfWriter
+
+    monkeypatch.setattr(rwanda, "STAGING", tmp_path)
+    monkeypatch.setattr(rwanda.ruled_tables, "image_pages", lambda pdf: {2})  # page 2 is a scan
+    writer = PdfWriter()
+    writer.add_blank_page(600, 840)
+    writer.add_blank_page(600, 840)
+    two_pages = io.BytesIO()
+    writer.write(two_pages)
+    ledger = Ledger(tmp_path / "sync-ledger.json")
+    (tmp_path / "survey").mkdir()
+    files = {"a": ("a1", 1), "b": ("b1", 1), "c": ("c1", 5)}  # sha: (item, scanned pages found)
+    for sha, (item, pages) in files.items():
+        ledger.data["items"][item] = {
+            "source": "rlrc-laws",
+            "listed": {"name": item},
+            "sha256": sha,
+            "stored": "gs://x",
+        }
+        (tmp_path / "survey" / f"{sha}.json").write_text(json.dumps({"item": item, "scanned_pages": pages}))
+    ledger.data["items"]["a2"] = {
+        **ledger.data["items"]["a1"],
+        "listed": {"name": "a2"},
+    }  # the same file twice
+    ledger.data["items"]["d1"] = {
+        "source": "rlrc-laws",
+        "listed": {"name": "d1"},
+        "sha256": "d",
+        "stored": "gs://x",
+    }
+    (tmp_path / "survey" / "d.json").write_text(json.dumps({"item": "d1", "scanned_pages": 1}))
+    ledger.save()
+
+    class Store:
+        put_names = []
+
+        def list(self, prefix):
+            return [f"{prefix}d.json"]  # d was read before
+
+        def get(self, name):
+            assert name.startswith("sources/rw/rlrc-laws/") and name.endswith(".pdf")
+            return two_pages.getvalue()
+
+        def put(self, name, data, content_type, replace=False):
+            self.put_names.append(name)
+
+    class Reader:
+        def read(self, part):
+            return SimpleNamespace(pages=[{"text": "read"} for _ in PdfReader(str(part)).pages])
+
+        def version(self):
+            return {"reader": "fake"}
+
+    said = []
+    result = rwanda.read_scans(log=said.append, store=Store(), max_pages=3, files_at_once=2, reader=Reader())
+    assert result["pages_read"] == 2 and result["left"] == 1 and "budget of 3" in result["stopped"]
+    assert sorted(Store.put_names) == ["readings/rw/docai/a.json", "readings/rw/docai/b.json"]
+    assert json.loads((tmp_path / "docai" / "a.json").read_text())["pages"] == {
+        "2": {"text": "read", "tables": None, "nodes": None}
+    }
+
+    class Refused(Reader):
+        def read(self, part):
+            raise google.api_core.exceptions.PermissionDenied("billing is disabled")
+
+    result = rwanda.read_scans(log=said.append, store=Store(), max_pages=100, reader=Refused())
+    assert result["pages_read"] == 0 and result["stopped"].startswith("stopped: Document AI refused")
