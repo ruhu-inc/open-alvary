@@ -1026,6 +1026,39 @@ def scanned_in_survey() -> dict[str, int]:
     return found
 
 
+WORKLIST = f"work/{COUNTRY}/scan-reading.json"
+
+
+def scan_worklist(approval: dict) -> dict:
+    """The files whose scanned pages the cloud job reads (scan_job): every file the survey found
+    scans in, once each (a file in several folders or both sources is read once), largest first so
+    that the job's tasks share the pages evenly, with the operator's approval of the budget."""
+    ledger = Ledger(STAGING / "sync-ledger.json")
+    files, seen = [], set()
+    for item_id, pages in scanned_in_survey().items():
+        record = ledger.data["items"].get(item_id, {})
+        sha = record.get("sha256")
+        if not sha or sha in seen or not record.get("stored") or record.get("format", "pdf") != "pdf":
+            continue
+        seen.add(sha)
+        files.append(
+            {
+                "item": item_id,
+                "source": record["source"],
+                "sha256": sha,
+                "name": record["listed"]["name"],
+                "scanned_pages": pages,
+            }
+        )
+    files.sort(key=lambda f: (-f["scanned_pages"], f["sha256"]))
+    return {
+        "made_at": stamp(now()),
+        "approval": approval,
+        "pages": sum(f["scanned_pages"] for f in files),
+        "files": files,
+    }
+
+
 def read_scans(
     selection: dict | None = None,
     log=print,
@@ -1035,12 +1068,14 @@ def read_scans(
     reader=None,
     kind: str = "layout",
     again: bool = False,
+    worklist: list[dict] | None = None,
 ) -> dict:
     """Every scanned page of the selection's files (or, without a selection, of every file the survey
     found scans in) read by Document AI (billed): the pages are put in one PDF per file, read, and
     the reading kept per page in <kind>/<sha256>.json and in the corpus bucket (readings/rw/<kind>/).
     A file already read is not read again, unless `again` (a selection's files only: a reader
-    improved since).
+    improved since). In the cloud (scan_job) the files come as a `worklist` instead: each with its
+    item, source, fingerprint, name and scanned pages, so no ledger or survey is needed there.
 
     Two readings, `kind`: "ocr" (Enterprise Document OCR: every word with its place, from which the
     page is laid out as a text layer would be) and "layout" (the Layout Parser: the words and
@@ -1063,10 +1098,22 @@ def read_scans(
     if reader is None:
         reader = readers.DocAIReader() if kind == "layout" else readers.DocOCRReader()
         reader.preflight()
-    ledger = Ledger(STAGING / "sync-ledger.json")
     out_dir = STAGING / folder
     out_dir.mkdir(parents=True, exist_ok=True)
-    expected = scanned_in_survey() if selection is None else dict.fromkeys(selection["items"], 0)
+    if worklist is not None:
+        records = {
+            w["item"]: {
+                "source": w["source"],
+                "sha256": w["sha256"],
+                "stored": True,
+                "listed": {"name": w["name"]},
+            }
+            for w in worklist
+        }
+        expected = {w["item"]: w["scanned_pages"] for w in worklist}
+    else:
+        records = Ledger(STAGING / "sync-ledger.json").data["items"]
+        expected = scanned_in_survey() if selection is None else dict.fromkeys(selection["items"], 0)
     already = set()
     if store is not None:
         already = {
@@ -1074,7 +1121,7 @@ def read_scans(
         }
     queue, seen = [], set()
     for item_id, pages in expected.items():
-        record = ledger.data["items"].get(item_id, {})
+        record = records.get(item_id, {})
         sha = record.get("sha256")
         if not sha or sha in seen or record.get("format", "pdf") != "pdf":
             continue
@@ -1344,6 +1391,12 @@ def main(argv=None) -> int:
     scans.add_argument("--files-at-once", type=int, default=4)
     scans.add_argument("--reader", choices=["ocr", "layout"], required=True)
     scans.add_argument("--again", action="store_true", help="read the selection's files again (billed)")
+    work = sub.add_parser("scan-worklist", help="write the cloud job's list of files with scanned pages")
+    work.add_argument("--approved-by", required=True)
+    work.add_argument(
+        "--max-pages", type=int, required=True, help="the approved budget, in pages, per reader"
+    )
+    work.add_argument("--basis", required=True, help="where and when the budget was approved")
     bulk = sub.add_parser("bulk-selection", help="write a selection of every catalogued file not yet held")
     bulk.add_argument("--approved-by", required=True)
     bulk.add_argument("--purpose", required=True)
@@ -1366,6 +1419,16 @@ def main(argv=None) -> int:
             corpus_store.CorpusStore(), args.limit, log=lambda message: print(message, flush=True)
         )
         print(json.dumps(summary["by"].get("all", {}), ensure_ascii=False))
+        return 0
+    if args.command == "scan-worklist":
+        approval = {"approved_by": args.approved_by, "max_pages": args.max_pages, "basis": args.basis}
+        worklist = scan_worklist(approval)
+        if worklist["pages"] > args.max_pages:
+            parser.error(f"{worklist['pages']} scanned pages exceed the approved {args.max_pages}")
+        corpus_store.CorpusStore().put(
+            WORKLIST, json.dumps(worklist, ensure_ascii=False).encode(), "application/json", replace=True
+        )
+        print(json.dumps({"files": len(worklist["files"]), "pages": worklist["pages"], "object": WORKLIST}))
         return 0
     if args.command == "read-scans":
         if args.again and not args.selection:

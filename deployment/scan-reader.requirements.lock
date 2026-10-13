@@ -1,0 +1,15 @@
+# Google Document AI client for the scan-reading job (deployment/scan-reader.Dockerfile), pinned
+# to the versions the trial ran with; the rest comes from requirements.lock.
+google-cloud-documentai==3.16.0
+google-api-core==2.42.0
+google-auth==2.61.0
+googleapis-common-protos==1.75.5
+grpcio==1.84.0
+grpcio-status==1.84.0
+proto-plus==1.29.0
+protobuf==7.36.2
+requests==2.34.2
+urllib3==2.8.0
+charset-normalizer==3.5.2
+pyasn1==0.6.4
+pyasn1-modules==0.4.2

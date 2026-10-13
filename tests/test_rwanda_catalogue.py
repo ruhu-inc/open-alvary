@@ -668,3 +668,68 @@ def test_scanned_pages_are_read_once_per_file_from_the_bucket_within_the_approve
 
     result = rwanda.read_scans(log=said.append, store=Store(), max_pages=100, reader=Refused())
     assert result["pages_read"] == 0 and result["stopped"].startswith("stopped: Document AI refused")
+
+
+def test_the_cloud_job_reads_its_share_of_the_work_list_without_a_ledger(tmp_path, monkeypatch):
+    import io
+    import json
+    from types import SimpleNamespace
+
+    from pypdf import PdfReader, PdfWriter
+
+    from ingestion import scan_job
+
+    monkeypatch.setattr(rwanda, "STAGING", tmp_path)
+    ledger = Ledger(tmp_path / "sync-ledger.json")
+    (tmp_path / "survey").mkdir()
+    for item, sha, pages in [("x1", "x", 3), ("y1", "y", 9), ("z1", "z", 5), ("x2", "x", 3)]:
+        ledger.data["items"][item] = {
+            "source": "rlrc-laws",
+            "listed": {"name": item},
+            "sha256": sha,
+            "stored": "gs://b",
+        }
+        (tmp_path / "survey" / f"{item}.json").write_text(json.dumps({"item": item, "scanned_pages": pages}))
+    ledger.save()
+    worklist = rwanda.scan_worklist({"approved_by": "operator", "max_pages": 20, "basis": "test"})
+    assert [f["sha256"] for f in worklist["files"]] == ["y", "z", "x"]  # largest first, each file once
+    assert worklist["pages"] == 17
+    assert [f["sha256"] for f in scan_job.share(worklist["files"], 0, 2)] == ["y", "x"]
+    assert [f["sha256"] for f in scan_job.share(worklist["files"], 1, 2)] == ["z"]
+
+    # In the cloud: no ledger, no survey; the work list says what each file is.
+    cloud = tmp_path / "cloud"
+    cloud.mkdir()
+    monkeypatch.setattr(rwanda, "STAGING", cloud)
+    monkeypatch.setattr(rwanda.ruled_tables, "image_pages", lambda pdf: {1})
+    writer = PdfWriter()
+    writer.add_blank_page(600, 840)
+    one_page = io.BytesIO()
+    writer.write(one_page)
+    stored = []
+
+    class Store:
+        def list(self, prefix):
+            return []
+
+        def get(self, name):
+            return one_page.getvalue()
+
+        def put(self, name, data, content_type, replace=False):
+            stored.append(name)
+
+    class Reader:
+        def read(self, part):
+            return SimpleNamespace(pages=[{"words": []} for _ in PdfReader(str(part)).pages], raw={})
+
+        def version(self):
+            return {"reader": "fake"}
+
+    result = rwanda.read_scans(
+        store=Store(),
+        max_pages=20,
+        kind="ocr",
+        reader=Reader(),
+        worklist=scan_job.share(worklist["files"], 1, 2),
+    )
+    assert result["pages_read"] == 1 and stored == ["readings/rw/ocr/z.json"]
