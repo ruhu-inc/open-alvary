@@ -52,7 +52,7 @@ Project $PROJECT, region $REGION. Would create (if absent):
     in gs://$CORPUS_BUCKET only
   - Service account $BUILDER_EMAIL for image builds: read the uploaded sources in
     gs://$BUILD_SOURCES, push to the $REPOSITORY registry, write build logs
-  - Cloud Run job $JOB (2 vCPU, 2 GiB per task), run per reader: ocr, then layout
+  - Cloud Run job $JOB (2 vCPU, 4 GiB per task), run per reader: ocr, then layout
 Billed: Document AI per page read (Enterprise OCR \$1.50, Layout Parser \$10 per 1,000 pages);
 Cloud Run a few cents per hour of a task; the registry a few cents a month.
 PLAN
@@ -104,7 +104,7 @@ deploy() {
     env+=",$name=$value"
   done
   "${GC[@]}" run jobs deploy "$JOB" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
-    --tasks=1 --max-retries=1 --task-timeout="${SCAN_TASK_TIMEOUT:-168h}" --cpu=2 --memory=2Gi \
+    --tasks=1 --max-retries=1 --task-timeout="${SCAN_TASK_TIMEOUT:-168h}" --cpu=2 --memory=4Gi \
     --set-env-vars="$env,SCAN_READER=ocr"
 }
 
