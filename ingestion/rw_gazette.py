@@ -21,10 +21,16 @@ from ingestion import gazette_layout
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
+# A running header: the Gazette's name (in full, or J.O., O.G., B.O. on older issues), its number
+# and date, perhaps with the page number before or after it; or a page number alone ("52", "- 52 -").
+PAGE_NUMBER = r"[-–—]\s*\d{1,4}\s*[-–—]"
 FURNITURE = re.compile(
-    r"^(Official Gazette|Igazeti ya Leta|Journal Officiel)\b.*(n[°ºᵒ]|No\b).*"
-    r"(\d{2}/\d{2}/\d{4}|\d{1,2}(?:st|nd|rd|th|er)?\s+[A-Za-zÀ-ÿ]+\s+\d{4})\s*$"
-    r"|^\d{1,4}$",
+    rf"^(?:{PAGE_NUMBER}\s*)?"
+    r"(Official Gazette|Igazeti ya Leta|Journal Officiel|Bulletin Officiel|J\.\s?O\.?|O\.\s?G\.?|B\.\s?O\.?)"
+    r"\s*.*(n[°ºᵒ*]|No\b|sp[ée]cial).*"
+    r"(\d{1,2}[/.]\d{1,2}[/.]\d{4}|\d{1,2}(?:st|nd|rd|th|er)?\s+[A-Za-zÀ-ÿ]+\s+\d{4})\.?"
+    rf"\s*(?:{PAGE_NUMBER})?\s*$"
+    rf"|^\d{{1,4}}$|^{PAGE_NUMBER}$",
     re.I,
 )
 

@@ -529,3 +529,23 @@ def test_our_ocr_keeps_what_it_read_surely_and_takes_the_second_reading_where_it
     )
     again = RG.correct_lines(two, "Arrêté ministériel Iteka rya")
     assert " ".join(line["text"] for line in again).split().count("Iteka") == 1
+
+
+def test_running_headers_of_every_era_are_page_furniture_and_text_is_not():
+    for header in [
+        "J.O. n°9 du 1/5/2001 -24-",
+        "J.O.n* special du 04/06/2003 -60-",  # the OCR's "n*" for n°
+        "- 301 - J.O. n° 7 du 1er avril 1975.",
+        "Official Gazette nº 15 of 13/04/2015",
+        "Igazeti ya Leta n° 27 yo ku wa 05/07/2021",
+        "- 52 -",
+        "200",
+    ]:
+        assert RG.FURNITURE.match(header), header
+    for text in [
+        "Law n° 11/2001 of 8/2/2001 modifying the law of july 15, 1964",
+        "Official Gazette of the Republic of Rwanda",
+        "J.O. is the old name",
+        "Ingingo ya 10",
+    ]:
+        assert not RG.FURNITURE.match(text), text
