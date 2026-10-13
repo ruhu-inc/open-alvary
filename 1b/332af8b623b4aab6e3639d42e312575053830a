@@ -1,0 +1,32 @@
+tests/test_rwanda_catalogue.py
+  s_b82616e2476856::t_3bd18986e2f5c5 671-735
+deployment/scan-reader.Dockerfile
+  s_b82616e2476856::t_c31268c0e03737 1-11
+deployment/gcp/scan-reader.cloudbuild.yaml
+  s_b82616e2476856::t_c31268c0e03737 1-5
+ingestion/rwanda.py
+  s_b82616e2476856::t_db0b657b5f284b 1029-1061,1071,1077-1078,1103-1116,1124,1394-1399,1423-1431
+  s_b82616e2476856::t_fefddaba339e35 1432
+ingestion/scan_job.py
+  s_b82616e2476856::t_db0b657b5f284b 1-62
+deployment/gcp/scan_reading.sh
+  s_b82616e2476856::t_c31268c0e03737 1-97
+deployment/scan-reader.requirements.lock
+  s_b82616e2476856::t_6dcf5ea0ece843 1-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1b332af8b623b4aab6e3639d42e312575053830a",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
