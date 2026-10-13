@@ -3,3 +3,6 @@ steps:
   - name: gcr.io/cloud-builders/docker
     args: ["build", "-f", "deployment/scan-reader.Dockerfile", "-t", "${_IMAGE}", "."]
 images: ["${_IMAGE}"]
+options:
+  # A build running as its own service account logs to Cloud Logging only (no logs bucket).
+  logging: CLOUD_LOGGING_ONLY

@@ -20,6 +20,10 @@ REPOSITORY="open-alvary"
 JOB="scan-reader"
 RUNNER="scan-reader"
 RUNNER_EMAIL="${RUNNER}@${PROJECT}.iam.gserviceaccount.com"
+# Builds run as their own account: the project's default compute account has no rights here.
+BUILDER="image-builder"
+BUILDER_EMAIL="${BUILDER}@${PROJECT}.iam.gserviceaccount.com"
+BUILD_SOURCES="${PROJECT}_cloudbuild"
 CORPUS_BUCKET="${ALVARY_CORPUS_BUCKET:-open-alvary-corpus}"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPOSITORY}/${JOB}:$(git rev-parse --short HEAD)"
 GC=(gcloud --project "$PROJECT" --quiet)
@@ -37,6 +41,8 @@ Project $PROJECT, region $REGION. Would create (if absent):
   - Artifact Registry repository $REPOSITORY (Docker images)
   - Service account $RUNNER_EMAIL: Document AI API user on the project; read and write objects
     in gs://$CORPUS_BUCKET only
+  - Service account $BUILDER_EMAIL for image builds: read the uploaded sources in
+    gs://$BUILD_SOURCES, push to the $REPOSITORY registry, write build logs
   - Cloud Run job $JOB (2 vCPU, 2 GiB per task), run per reader: ocr, then layout
 Billed: Document AI per page read (Enterprise OCR \$1.50, Layout Parser \$10 per 1,000 pages);
 Cloud Run a few cents per hour of a task; the registry a few cents a month.
@@ -53,6 +59,18 @@ setup() {
     --role=roles/documentai.apiUser --condition=None >/dev/null
   "${GC[@]}" storage buckets add-iam-policy-binding "gs://$CORPUS_BUCKET" \
     --member="serviceAccount:$RUNNER_EMAIL" --role=roles/storage.objectUser >/dev/null
+  "${GC[@]}" iam service-accounts describe "$BUILDER_EMAIL" >/dev/null 2>&1 ||
+    "${GC[@]}" iam service-accounts create "$BUILDER" --display-name="Image builds (Cloud Build)"
+  "${GC[@]}" storage buckets describe "gs://$BUILD_SOURCES" >/dev/null 2>&1 ||
+    "${GC[@]}" storage buckets create "gs://$BUILD_SOURCES" --location=EU --uniform-bucket-level-access \
+      --public-access-prevention
+  "${GC[@]}" storage buckets add-iam-policy-binding "gs://$BUILD_SOURCES" \
+    --member="serviceAccount:$BUILDER_EMAIL" --role=roles/storage.objectViewer >/dev/null
+  "${GC[@]}" artifacts repositories add-iam-policy-binding "$REPOSITORY" --location="$REGION" \
+    --member="serviceAccount:$BUILDER_EMAIL" --role=roles/artifactregistry.writer >/dev/null
+  "${GC[@]}" projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$BUILDER_EMAIL" \
+    --role=roles/logging.logWriter --condition=None >/dev/null
+  echo "Set up: $RUNNER_EMAIL (reads scans) and $BUILDER_EMAIL (builds images)."
 }
 
 deploy() {
@@ -66,6 +84,7 @@ deploy() {
   trap 'rm -rf "$context"' RETURN
   git archive HEAD | tar -x -C "$context"
   "${GC[@]}" builds submit "$context" --region="$REGION" \
+    --service-account="projects/$PROJECT/serviceAccounts/$BUILDER_EMAIL" \
     --config="$context/deployment/gcp/scan-reader.cloudbuild.yaml" --substitutions="_IMAGE=$IMAGE"
   local env=ALVARY_CORPUS_BUCKET="$CORPUS_BUCKET"
   for name in ALVARY_DOCAI_PROJECT ALVARY_DOCAI_LOCATION ALVARY_DOCAI_PROCESSOR_ID ALVARY_DOCAI_PROCESSOR_VERSION \
