@@ -1,0 +1,5 @@
+# Cloud Build: the scan-reading job's image (deployment/gcp/scan_reading.sh deploy).
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "deployment/scan-reader.Dockerfile", "-t", "${_IMAGE}", "."]
+images: ["${_IMAGE}"]
