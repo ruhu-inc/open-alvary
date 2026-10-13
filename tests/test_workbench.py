@@ -1098,3 +1098,15 @@ def test_flags_at_one_place_with_no_words_of_their_own_each_have_their_own_id():
     assert len(set(ids)) == 4
     # A flag that was already distinct keeps the id it had (decisions recorded on it stay valid).
     assert ids[3] == content.flag_id(14, flags[3])
+
+
+def test_reading_a_whole_document_counts_its_pages_from_one_whatever_their_printed_numbers(
+    tmp_path, monkeypatch
+):
+    rwanda_collection(tmp_path / "rw", monkeypatch)
+    (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(reading()))
+    store = Store(connect(f"sqlite:///{tmp_path / 'workbench.db'}"))
+    store.add_operator("reviewer@example.org", "Rev", {"reviewer"})
+    reviewer = signed_in((store, content.Library(tmp_path)), "reviewer@example.org")
+    first = reviewer.get("/api/documents/rw-law-009-2026-fr/stream?start=1&count=6").json()
+    assert [p["page"] for p in first["pages"]] == [3] and first["total"] == 1  # printed as page 3

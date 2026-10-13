@@ -674,15 +674,16 @@ def create_app(
 
     @app.get("/api/documents/{act_id}/stream")
     def stream(request: Request, act_id: str, start: int = 1, count: int = 8):
-        """Final content of a run of pages, for reading the Act continuously."""
+        """Final content of a run of pages, for reading the Act continuously: `start` counts the
+        document's pages from 1, whatever their printed numbers (a law cut from a Gazette issue
+        begins on the issue's page 9, say)."""
         auth.current(request, store)
         act_or_404(act_id)
         reading, latest = library.reading(act_id), store.latest_pages(act_id)
         final = {p["page"]: p for p in content.final_pages(reading, latest)}
         out = []
-        for page in reading["pages"]:
-            if not start <= page["page"] < start + max(1, min(count, 20)):
-                continue
+        first = max(0, start - 1)
+        for page in reading["pages"][first : first + max(1, min(count, 20))]:
             revision = latest.get(page["page"])
             resolved = set(revision["resolutions"]) if revision else set()
             out.append(
