@@ -121,7 +121,16 @@ class _Words(HTMLParser):
 def words(bbox_html: str) -> list[dict]:
     parser = _Words()
     parser.feed(bbox_html)
-    return parser.pages
+    pages = parser.pages
+    # A page with no size is a reference to a page missing from a damaged file (RLRC's 2003
+    # Constitution lists 60 pages and holds 49); poppler repeats another page's words on it. It
+    # keeps its place, so the pages after it keep their numbers, but nothing is read from it.
+    sized = [p for p in pages if p["width"] and p["height"]]
+    for page in pages:
+        if not page["width"] or not page["height"]:
+            like = sized[-1] if sized else {"width": 595.0, "height": 842.0}  # A4 if none is sized
+            page.update(width=like["width"], height=like["height"], words=[], missing=True)
+    return pages
 
 
 def language(texts: list[str]) -> tuple[str | None, dict]:
