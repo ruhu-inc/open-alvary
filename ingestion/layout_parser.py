@@ -295,6 +295,11 @@ def parse(
     return {"processor": name, "nodes": nodes, "layout": layouts, "retries": retried}
 
 
+OCR_FIELDS = {
+    "paths": ["text", "pages.page_number", "pages.dimension", "pages.tokens", "pages.detected_languages"]
+}
+
+
 def ocr_page(page, text: str, number: int) -> dict:
     """One page of an Enterprise Document OCR result: its words in reading order, each with its box
     as a share of the page (0 to 1) and the service's confidence, and the languages it detected."""
@@ -360,7 +365,11 @@ def ocr(
     def read(item):
         first_page, chunk = item
         request = documentai.ProcessRequest(
-            name=name, raw_document=documentai.RawDocument(content=chunk, mime_type="application/pdf")
+            name=name,
+            raw_document=documentai.RawDocument(content=chunk, mime_type="application/pdf"),
+            # Only what is kept: the service otherwise returns an image of every page with it,
+            # some forty times the size, which ran the cloud job out of memory on large issues.
+            field_mask=OCR_FIELDS,
         )
         document = client.process_document(request=request, retry=retry, timeout=900).document
         return [ocr_page(page, document.text, first_page + k) for k, page in enumerate(document.pages)]
