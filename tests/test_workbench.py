@@ -74,9 +74,9 @@ def world(tmp_path, monkeypatch):
     return store, library
 
 
-def client(world, oidc=None, dev=True, host="127.0.0.1"):
+def client(world, oidc=None, dev=True, host="127.0.0.1", scheme="http"):
     store, library = world
-    return TestClient(create_app(store, library, oidc, dev_login=dev), base_url=f"http://{host}")
+    return TestClient(create_app(store, library, oidc, dev_login=dev), base_url=f"{scheme}://{host}")
 
 
 def signed_in(world, email):
@@ -472,7 +472,7 @@ def oidc_flow(world, **claims):
     holder = {}
     config = auth.OIDCConfig(ISSUER, "client-1", "secret", "https://review.example.org")
     oidc = auth.OIDC(config, provider(lambda: id_token(nonce=claims.pop("nonce", holder["nonce"]), **claims)))
-    browser = client(world, oidc=oidc, dev=False, host="review.example.org")
+    browser = client(world, oidc=oidc, dev=False, host="review.example.org", scheme="https")
     location = browser.get("/auth/login", follow_redirects=False).headers["location"]
     query = parse_qs(urlsplit(location).query)
     assert query["code_challenge_method"] == ["S256"] and query["redirect_uri"] == [
@@ -494,6 +494,17 @@ def test_oidc_sign_in_admits_a_verified_operator_once(world):
     cookie = signed.headers["set-cookie"]
     assert "HttpOnly" in cookie and "SameSite=strict" in cookie and "Secure" in cookie
     assert browser.get(f"/auth/callback?state={state}&code=abc").status_code == 400  # one use only
+
+
+def test_a_sign_in_must_finish_in_the_browser_that_started_it(world):
+    browser, state = oidc_flow(world)
+    store, library = world
+    elsewhere = TestClient(browser.app, base_url="https://review.example.org")  # no flow cookie
+    response = elsewhere.get(f"/auth/callback?state={state}&code=abc")
+    assert response.status_code == 400 and "set-cookie" not in response.headers
+    browser.cookies.set("oa_review_flow", "another-flow", domain="review.example.org", path="/auth")
+    assert browser.get(f"/auth/callback?state={state}&code=abc").status_code == 400
+    assert "oa_review_session" not in browser.cookies
 
 
 @pytest.mark.parametrize(
