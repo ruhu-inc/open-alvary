@@ -501,7 +501,18 @@ def flag_id(page: int, flag: dict) -> str:
 
 
 def page_flags(page: dict) -> list[dict]:
-    return [{**flag, "id": flag_id(page["page"], flag)} for flag in page["flags"]]
+    """A page's flags with their ids. Flags that would share one (eleven articles missing from one
+    version all flagged at the same place, with no words of their own) are told apart by what they
+    report: otherwise moving to the next flag, or resolving one, would act on all of them."""
+    ids = [flag_id(page["page"], flag) for flag in page["flags"]]
+    shared = {i for i in ids if ids.count(i) > 1}
+    out = []
+    for flag, base in zip(page["flags"], ids, strict=True):
+        if base in shared:
+            raw = f"{base}:{canonical_json(flag.get('checks') or flag.get('others') or {})}"
+            base = hashlib.sha256(raw.encode()).hexdigest()[:16]
+        out.append({**flag, "id": base})
+    return out
 
 
 def reading_sha256(page: dict) -> str:

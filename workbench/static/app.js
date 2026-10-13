@@ -16,6 +16,7 @@ const KIND_LABEL = {
   borrowed_ocr: "the page is a picture; its text came from someone else's OCR: check it word by word",
   one_reading: "the page is a picture read by our OCR; no second reading has checked its words",
   title_from_listing: "no title in the text was recognised: the title is the source's file name; check it against the page",
+  unsure_words_dropped: "words the OCR was unsure of and the second reading did not see (often the other side of the sheet showing through) were left out",
   number_differs: "the number is printed differently in two places",
   reading_differs: "scanned page: Document AI read words differently from the OCR layer; Document AI's are shown",
   accents_restored: "scanned page: accents restored by Document AI where the OCR layer dropped them",

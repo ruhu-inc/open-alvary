@@ -20,7 +20,7 @@ from ingestion import gazette_layout
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-13.3"
+PIPELINE = "2026-10-13.4"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -860,9 +860,13 @@ def reading(
                 # Each difference: the word kept, the other reading's, and which reading that was.
                 changed = [tuple(d) if len(d) == 3 else (*d, "OCR layer") for d in node["differences"]]
                 accents = [d for d in changed if _fold(d[0]) == _fold(d[1])]
-                worded = [d for d in changed if _fold(d[0]) != _fold(d[1])]
+                # Words our OCR was unsure of and the second reading did not see, left out: mostly the
+                # text of the other side of the sheet showing through, stamps, specks (low).
+                dropped = [d for d in changed if not d[0] and d[2] == "OCR" and _fold(d[0]) != _fold(d[1])]
+                worded = [d for d in changed if _fold(d[0]) != _fold(d[1]) and d not in dropped]
                 for kind, severity, group in (
                     ("accents_restored", "low", accents),
+                    ("unsure_words_dropped", "low", dropped),
                     ("reading_differs", "medium", worded),
                 ):
                     if group:
