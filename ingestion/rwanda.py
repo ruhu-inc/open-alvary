@@ -320,6 +320,13 @@ class FetchStopped(Exception):
 NETWORK_WAITS = (30, 60, 120, 300, 600, 600, 600, 600, 600)
 
 
+def _signed_out(error: Exception) -> bool:
+    """The Google sign-in has expired: nothing can be stored until the operator signs in again."""
+    import google.auth.exceptions
+
+    return isinstance(error, google.auth.exceptions.RefreshError)
+
+
 def _network_trouble(error: Exception) -> bool:
     """A failure of the connection (name lookup, connect, timeout, a server error from the bucket,
     the Google sign-in unreachable), not of the file: worth waiting out rather than skipping."""
@@ -380,6 +387,10 @@ def fetch_selection(
                 except FetchStopped:
                     raise
                 except Exception as error:  # noqa: BLE001 - network waited out, file failures recorded
+                    if _signed_out(error):
+                        raise FetchStopped(
+                            "stopped: the Google sign-in has expired; run `gcloud auth application-default login`"
+                        ) from error
                     if _network_trouble(error):
                         if waits == len(NETWORK_WAITS):
                             raise FetchStopped(
@@ -1058,6 +1069,10 @@ def survey(store=None, limit: int | None = None, log=print, sleep=time.sleep) ->
                         result = survey_file(pdf)
                 break
             except Exception as error:  # noqa: BLE001 - the network waited out; a bad file noted
+                if _signed_out(error):
+                    raise FetchStopped(
+                        "stopped: the Google sign-in has expired; run `gcloud auth application-default login`"
+                    ) from error
                 if _network_trouble(error) and not isinstance(
                     error, FileNotFoundError | subprocess.CalledProcessError
                 ):
