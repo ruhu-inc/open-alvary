@@ -21,6 +21,7 @@ import {
 } from "./details";
 import { DocumentTools, copyText, type DownloadLink } from "./tools";
 import {
+  jurisdictionName,
   PageTitle,
   SourceRecord,
   type RightsRecord,
@@ -481,7 +482,8 @@ export function DocumentPage({
   return (
     <div className="page doc-page-view">
       <a className="breadcrumb" href="#/browse">
-        Catalogue <ChevronRight size={14} /> {s.jurisdiction_id.toUpperCase()}
+        Catalogue <ChevronRight size={14} />{" "}
+        {jurisdictionName(s.jurisdiction_id)}
       </a>
       <PageTitle
         label={kindOf(view).toUpperCase() + " · " + citation}

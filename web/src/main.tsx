@@ -27,6 +27,7 @@ import {
   SiteHeader,
   SourceRecord,
   SourceRow,
+  jurisdictionName,
   links,
   type Project,
   type RightsRecord,
@@ -592,7 +593,8 @@ function Reader({ id }: { id: string }) {
   return (
     <div className="page">
       <a className="breadcrumb" href="#/browse">
-        Catalogue <ChevronRight size={14} /> {s.jurisdiction_id.toUpperCase()}
+        Catalogue <ChevronRight size={14} />{" "}
+        {jurisdictionName(s.jurisdiction_id)}
       </a>
       <PageTitle
         label={s.document_type.toUpperCase() + " · " + s.citation}
