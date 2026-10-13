@@ -31,6 +31,9 @@ class Session:
         self.objects[name] = body
         return Response(200)
 
+    def request(self, method, url, **kwargs):
+        return self.post(url, **kwargs) if method == "POST" else self.get(url, **kwargs)
+
     def get(self, url, params=None, timeout=None):
         from urllib.parse import unquote
 
@@ -51,3 +54,27 @@ def test_a_file_is_stored_once_under_its_fingerprint_and_read_back_as_stored():
     assert store.put("state/rw/sync-ledger.json", b"{}", "application/json", replace=True) is True
     assert store.put("state/rw/sync-ledger.json", b'{"v": 2}', "application/json", replace=True) is True
     assert store.uri(name) == f"gs://test-bucket/{name}"
+
+
+def test_a_dropped_connection_is_retried_and_a_lasting_one_raised(monkeypatch):
+    import pytest
+    import requests
+
+    monkeypatch.setattr(corpus_store.CorpusStore, "RETRY_WAITS", (0, 0))
+    session = Session()
+    store = corpus_store.CorpusStore("test-bucket", session=session)
+    store.put("state/rw/x.json", b"{}", "application/json", replace=True)
+    failures = {"left": 2}
+    real = session.request
+
+    def flaky(method, url, **kwargs):
+        if failures["left"]:
+            failures["left"] -= 1
+            raise requests.exceptions.ConnectionError("Remote end closed connection without response")
+        return real(method, url, **kwargs)
+
+    session.request = flaky
+    assert store.get("state/rw/x.json") == b"{}"  # two drops, then through
+    failures["left"] = 10
+    with pytest.raises(requests.exceptions.ConnectionError):
+        store.get("state/rw/x.json")

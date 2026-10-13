@@ -33,11 +33,36 @@ class CorpusStore:
             session = AuthorizedSession(credentials)
         self.session = session
 
+    # Waits, in seconds, before a request is tried again when the connection drops or the service
+    # answers with a server error: about twenty minutes in all, then the error is raised.
+    RETRY_WAITS = (5, 15, 30, 60, 120, 300, 600)
+
+    def _request(self, method: str, url: str, **kwargs):
+        import time
+
+        import google.auth.exceptions
+        import requests
+
+        for wait in (*self.RETRY_WAITS, None):
+            try:
+                response = self.session.request(method, url, **kwargs)
+                if response.status_code < 500 or wait is None:
+                    return response
+            except (
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout,
+                google.auth.exceptions.TransportError,
+            ):
+                if wait is None:
+                    raise
+            time.sleep(wait)
+        raise RuntimeError("unreachable")
+
     def uri(self, name: str) -> str:
         return f"gs://{self.bucket}/{name}"
 
     def exists(self, name: str) -> bool:
-        response = self.session.get(f"{API}/storage/v1/b/{self.bucket}/o/{quote(name, safe='')}")
+        response = self._request("GET", f"{API}/storage/v1/b/{self.bucket}/o/{quote(name, safe='')}")
         if response.status_code == 404:
             return False
         response.raise_for_status()
@@ -60,7 +85,8 @@ class CorpusStore:
         params = {"uploadType": "multipart"}
         if not replace:
             params["ifGenerationMatch"] = "0"  # only if no object of that name exists
-        response = self.session.post(
+        response = self._request(
+            "POST",
             f"{API}/upload/storage/v1/b/{self.bucket}/o",
             params=params,
             data=body,
@@ -79,7 +105,7 @@ class CorpusStore:
             params = {"prefix": prefix, "fields": "items(name),nextPageToken", "maxResults": 1000}
             if token:
                 params["pageToken"] = token
-            response = self.session.get(f"{API}/storage/v1/b/{self.bucket}/o", params=params, timeout=120)
+            response = self._request("GET", f"{API}/storage/v1/b/{self.bucket}/o", params=params, timeout=120)
             response.raise_for_status()
             page = response.json()
             names += [item["name"] for item in page.get("items", [])]
@@ -88,8 +114,11 @@ class CorpusStore:
                 return names
 
     def get(self, name: str) -> bytes:
-        response = self.session.get(
-            f"{API}/storage/v1/b/{self.bucket}/o/{quote(name, safe='')}", params={"alt": "media"}, timeout=600
+        response = self._request(
+            "GET",
+            f"{API}/storage/v1/b/{self.bucket}/o/{quote(name, safe='')}",
+            params={"alt": "media"},
+            timeout=600,
         )
         response.raise_for_status()
         return response.content
