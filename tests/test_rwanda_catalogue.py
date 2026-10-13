@@ -898,3 +898,54 @@ def test_a_prepare_task_notes_a_file_it_cannot_prepare_and_goes_on(monkeypatch, 
     assert prepared == ["a", "c"] and saved == [1]
     out = capsys.readouterr().out
     assert "failed b: ZeroDivisionError" in out and '"failed": 1' in out
+
+
+def test_an_order_numbered_again_each_year_takes_its_year_and_one_document_is_kept_per_id():
+    assert rwanda.work_id("presidential_order", "002/01", "2022") == "rw-presidential-order-002-01-2022"
+    assert rwanda.work_id("law", "055/2024", "2024") == "rw-law-055-2024"  # the year is in the number
+    assert rwanda.work_id("law", "1964-02-19", "1964") == "rw-law-1964-02-19"
+    rlrc = {
+        "id": "rw-law-055-2024-en",
+        "url": "https://www.rlrc.gov.rw/x.pdf",
+        "source_object": "sources/rw/rlrc-laws/b.pdf",
+        "objects": "files/b/",
+        "scanned_pages": [],
+        "flag_counts": {"high": 0},
+    }
+    gazette = {
+        **rlrc,
+        "url": "https://www.minijust.gov.rw/y.pdf",
+        "source_object": "sources/rw/minijust-gazette/g.pdf",
+        "objects": "files/g/",
+        "flag_counts": {"high": 3},
+    }
+    other = {**rlrc, "id": "rw-law-056-2024-en"}
+    [first, second] = rwanda.one_per_id([rlrc, other, gazette])
+    assert first["objects"] == "files/g/"  # the Official Gazette's printing is the one reviewed
+    assert first["other_sources"] == [
+        {"url": rlrc["url"], "source_object": rlrc["source_object"], "objects": "files/b/"}
+    ]
+    assert second["id"] == "rw-law-056-2024-en" and "other_sources" not in second
+
+
+def test_each_source_files_documents_are_kept_in_its_own_folder():
+    import json
+
+    class Store:
+        def __init__(self):
+            self.objects = {}
+
+        def put(self, name, data, content_type, replace=False):
+            self.objects[name] = data
+
+    store = Store()
+    collection = rwanda.BucketCollection(store)
+    collection.write("rw-law-1-2001-en", {"pages": []}, {"sha256": "abc"}, None)
+    collection.finish_issue("abc", [{"id": "rw-law-1-2001-en", "suggested": {"x": 1}}])
+    assert {
+        "collections/rw/files/abc/rw-law-1-2001-en.reading.json",
+        "collections/rw/files/abc/rw-law-1-2001-en.provenance.json",
+        "collections/rw/files/abc/rw-law-1-2001-en.document.json",
+    } <= set(store.objects)
+    index = json.loads(store.objects["collections/rw/issues/abc.json"])
+    assert index["documents"][0]["objects"] == "files/abc/"

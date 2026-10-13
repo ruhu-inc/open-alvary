@@ -662,6 +662,46 @@ def split_entry(document: dict) -> tuple[dict, dict]:
     return entry, {k: document[k] for k in DETAILS if document.get(k) is not None}
 
 
+def work_id(kind: str, number: str, year: str | None) -> str:
+    """A work's id: its kind and number, and its year where the number does not carry one (an
+    order's "N° 002/01" is numbered again every year)."""
+    if year and not re.search(r"(?:19|20)\d\d", number):
+        number = f"{number}-{year}"
+    return f"rw-{kind.replace('_', '-')}-{_slug(number)}"
+
+
+# Where the same document comes from several files, the one reviewed: the Official Gazette's
+# printing before a copy, then the copy with fewer scanned pages and fewer high flags.
+SOURCE_RANK = {"minijust-gazette": 0, "rlrc-laws": 1}
+
+
+def one_per_id(documents: list[dict]) -> list[dict]:
+    """The manifest's documents, one per id, the others it was found in recorded on it."""
+    groups: dict[str, list[dict]] = {}
+    for document in documents:
+        groups.setdefault(document["id"], []).append(document)
+
+    def rank(document: dict) -> tuple:
+        source = (document.get("source_object") or "").split("/")[2:3]
+        return (
+            SOURCE_RANK.get(source[0] if source else "", 9),
+            len(document.get("scanned_pages") or []),
+            (document.get("flag_counts") or {}).get("high", 0),
+            document.get("url") or "",
+        )
+
+    out = []
+    for doc_id in sorted(groups):
+        chosen, *others = sorted(groups[doc_id], key=rank)
+        if others:
+            chosen = {
+                **chosen,
+                "other_sources": [{k: d.get(k) for k in ("url", "source_object", "objects")} for d in others],
+            }
+        out.append(chosen)
+    return out
+
+
 class LocalCollection:
     """Review documents in a folder here (the samples): readings, provenance, the issue's PDF beside them."""
 
@@ -743,14 +783,17 @@ class BucketCollection:
         pass  # a document read again is written over
 
     def write(self, doc_id: str, reading: dict, provenance: dict, pdf: Path) -> None:
+        # Under the source file's own folder: the same law printed in a Gazette issue and held by
+        # RLRC gives the same document id, and neither may overwrite the other.
+        folder = f"{self.prefix}files/{provenance['sha256']}/"
         self.store.put(
-            f"{self.prefix}{doc_id}.reading.json",
+            f"{folder}{doc_id}.reading.json",
             json.dumps(reading, ensure_ascii=False).encode(),
             "application/json",
             replace=True,
         )
         self.store.put(
-            f"{self.prefix}{doc_id}.provenance.json",
+            f"{folder}{doc_id}.provenance.json",
             json.dumps(provenance, ensure_ascii=False).encode(),
             "application/json",
             replace=True,
@@ -760,8 +803,9 @@ class BucketCollection:
         light = []
         for document in documents:
             entry, details = split_entry(document)
+            entry["objects"] = f"files/{sha}/"
             self.store.put(
-                f"{self.prefix}{document['id']}.document.json",
+                f"{self.prefix}files/{sha}/{document['id']}.document.json",
                 json.dumps(details, ensure_ascii=False).encode(),
                 "application/json",
                 replace=True,
@@ -780,7 +824,7 @@ class BucketCollection:
         for name in self.store.list(f"{self.prefix}issues/"):
             index = json.loads(self.store.get(name))
             documents += index["documents"] if isinstance(index, dict) else index  # older: a bare list
-        manifest["documents"] = sorted(documents, key=lambda d: d["id"])
+        manifest["documents"] = one_per_id(documents)
         self.store.put(
             f"{self.prefix}manifest.json",
             json.dumps(manifest, ensure_ascii=False).encode(),
@@ -914,7 +958,10 @@ def prepare_selection(
             found = rw_gazette.whole_file(
                 streams,
                 kind=listed.get("kind") or "other",
-                number=listed.get("number") or (str(listed["year"]) if listed.get("year") else sha[:12]),
+                # Named by its year alone, many files would share one name: the file's own fingerprint
+                # tells them apart.
+                number=listed.get("number")
+                or (f"{listed['year']}-{sha[:6]}" if listed.get("year") else sha[:12]),
                 date=listed.get("date"),
                 title=listing_title(record["listed"]["name"]),
             )
@@ -964,7 +1011,7 @@ def prepare_selection(
                 else {}
             )
             number = issue.get("date", "") if entry["number"] == "constitution" else entry["number"]
-            work = f"rw-{entry['kind'].replace('_', '-')}-{_slug(number)}"
+            work = work_id(entry["kind"], number, (entry.get("date") or issue.get("date") or "")[:4])
             for language, nodes in versions.items():
                 doc_id = f"{work}-{language}"
                 reading = rw_gazette.reading(
@@ -1034,7 +1081,7 @@ def prepare_selection(
             if parent is None:
                 continue
             number = issue.get("date", "") if parent["number"] == "constitution" else parent["number"]
-            work = f"rw-{parent['kind'].replace('_', '-')}-{_slug(number)}"
+            work = work_id(parent["kind"], number, (parent.get("date") or issue.get("date") or "")[:4])
             part = f"annex-{annex['annex']}"
             for language, lines in annex["versions"].items():
                 doc_id = f"{work}-{part}-{language}"

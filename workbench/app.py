@@ -473,8 +473,11 @@ def create_app(
             "machine_html": content.machine_html(found),
             "flags": content.page_flags(found),
             "checks": found["checks"],
-            "regions": content.regions(library.staging_for(act_id), act_id, page),
-            "lines": content.lines(library.staging_for(act_id), act_id, page),
+            # Boxes from the positional check reader, else those the reading carries on its page.
+            "regions": content.regions(library.staging_for(act_id), act_id, page)
+            or list(found.get("regions") or []),
+            "lines": content.lines(library.staging_for(act_id), act_id, page)
+            or list(found.get("lines") or []),
             "reading_sha256": content.reading_sha256(found),
             "latest": {
                 "revision": latest["revision"],
