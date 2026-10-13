@@ -1034,11 +1034,13 @@ def read_scans(
     files_at_once: int = 1,
     reader=None,
     kind: str = "layout",
+    again: bool = False,
 ) -> dict:
     """Every scanned page of the selection's files (or, without a selection, of every file the survey
     found scans in) read by Document AI (billed): the pages are put in one PDF per file, read, and
     the reading kept per page in <kind>/<sha256>.json and in the corpus bucket (readings/rw/<kind>/).
-    A file already read is not read again.
+    A file already read is not read again, unless `again` (a selection's files only: a reader
+    improved since).
 
     Two readings, `kind`: "ocr" (Enterprise Document OCR: every word with its place, from which the
     page is laid out as a text layer would be) and "layout" (the Layout Parser: the words and
@@ -1077,7 +1079,7 @@ def read_scans(
         if not sha or sha in seen or record.get("format", "pdf") != "pdf":
             continue
         seen.add(sha)
-        if sha in already or (out_dir / f"{sha}.json").exists():
+        if not again and (sha in already or (out_dir / f"{sha}.json").exists()):
             continue
         queue.append((item_id, record, sha, pages))
 
@@ -1341,6 +1343,7 @@ def main(argv=None) -> int:
     scans.add_argument("--max-pages", type=int, required=True, help="the approved budget, in pages")
     scans.add_argument("--files-at-once", type=int, default=4)
     scans.add_argument("--reader", choices=["ocr", "layout"], required=True)
+    scans.add_argument("--again", action="store_true", help="read the selection's files again (billed)")
     bulk = sub.add_parser("bulk-selection", help="write a selection of every catalogued file not yet held")
     bulk.add_argument("--approved-by", required=True)
     bulk.add_argument("--purpose", required=True)
@@ -1365,6 +1368,8 @@ def main(argv=None) -> int:
         print(json.dumps(summary["by"].get("all", {}), ensure_ascii=False))
         return 0
     if args.command == "read-scans":
+        if args.again and not args.selection:
+            parser.error("--again reads a selection's files again, not the whole archive")
         result = read_scans(
             load_selection(args.selection) if args.selection else None,
             log=lambda message: print(message, flush=True),
@@ -1372,6 +1377,7 @@ def main(argv=None) -> int:
             max_pages=args.max_pages,
             files_at_once=args.files_at_once,
             kind=args.reader,
+            again=args.again,
         )
         print(json.dumps(result))
         return 1 if result["stopped"] and "budget" not in result["stopped"] else 0
@@ -1417,7 +1423,8 @@ def main(argv=None) -> int:
     if args.command == "prepare":
         if args.all == bool(args.selection):
             parser.error("give --selection or --all")
-        store = corpus_store.CorpusStore() if (args.to_bucket or args.all) else None
+        # Files and readings not kept here are read from the bucket, whichever collection is written.
+        store = corpus_store.CorpusStore()
         if args.all:
             ledger = Ledger(STAGING / "sync-ledger.json")
             items = sorted(i for i, r in ledger.data["items"].items() if r.get("stored"))

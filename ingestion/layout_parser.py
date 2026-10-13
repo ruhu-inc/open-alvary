@@ -304,23 +304,32 @@ def ocr_page(page, text: str, number: int) -> dict:
         xs, ys = [v.x for v in vertices] or [0.0], [v.y for v in vertices] or [0.0]
         return min(xs), min(ys), max(xs), max(ys)
 
-    words = []
+    # The service returns punctuation and the parts of a hyphenated word as tokens of their own
+    # ("a", ")"; "décret", "-", "loi"); where its text has no space or line break after a token, the
+    # next one is part of the same printed word, and they are joined.
+    words, glued = [], False
     for token in page.tokens:
         segments = token.layout.text_anchor.text_segments
-        word = "".join(text[int(s.start_index) : int(s.end_index)] for s in segments).strip()
+        raw = "".join(text[int(s.start_index) : int(s.end_index)] for s in segments)
+        word = raw.strip()
         if not word:
+            glued = False
             continue
         x0, y0, x1, y1 = box(token.layout)
-        words.append(
-            {
-                "text": word,
-                "x0": x0,
-                "y0": y0,
-                "x1": x1,
-                "y1": y1,
-                "confidence": round(token.layout.confidence, 3),
-            }
-        )
+        confidence = round(token.layout.confidence, 3)
+        if glued and words:
+            last = words[-1]
+            last.update(
+                text=last["text"] + word,
+                x0=min(last["x0"], x0),
+                y0=min(last["y0"], y0),
+                x1=max(last["x1"], x1),
+                y1=max(last["y1"], y1),
+                confidence=min(last["confidence"], confidence),
+            )
+        else:
+            words.append({"text": word, "x0": x0, "y0": y0, "x1": x1, "y1": y1, "confidence": confidence})
+        glued = not raw[-1:].isspace()
     return {
         "page": number,
         "width": page.dimension.width,
