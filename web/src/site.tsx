@@ -12,6 +12,16 @@ export type Project = {
 };
 export const ProjectContext = createContext<Project>({});
 
+// The jurisdictions the corpus covers, by name; any other is shown by its code.
+const JURISDICTION_NAMES: Record<string, string> = {
+  ng: "Nigeria",
+  rw: "Rwanda",
+};
+
+export function jurisdictionName(id: string): string {
+  return JURISDICTION_NAMES[id] ?? id.toUpperCase();
+}
+
 export type Source = {
   id: string;
   jurisdiction_id: string;
@@ -200,11 +210,7 @@ export function SourceRecord({
         <h3>Source record</h3>
         <dl>
           <dt>Jurisdiction</dt>
-          <dd>
-            {s.jurisdiction_id === "ng"
-              ? "Nigeria"
-              : s.jurisdiction_id.toUpperCase()}
-          </dd>
+          <dd>{jurisdictionName(s.jurisdiction_id)}</dd>
           <dt>Access</dt>
           <dd>
             {s.has_full_text ? "Open full text" : "Metadata / official link"}

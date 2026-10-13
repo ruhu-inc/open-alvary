@@ -12,6 +12,7 @@ import "@fontsource/libre-caslon-display/latin-400.css";
 import "./style.css";
 import "./preview.css";
 import {
+  jurisdictionName,
   PageTitle,
   SiteFooter,
   SiteHeader,
@@ -107,7 +108,8 @@ function SearchPage({ source, query }: { source: Source; query: string }) {
       </form>
       <div className="filters">
         <span>
-          <Globe2 size={16} /> Nigeria · Pilot jurisdiction
+          <Globe2 size={16} /> {jurisdictionName(source.jurisdiction_id)} ·
+          Pilot jurisdiction
         </span>
       </div>
       {found ? (
