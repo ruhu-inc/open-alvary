@@ -144,6 +144,7 @@ def from_ocr(reading: dict, page: dict) -> dict:
             "xmax": w["x1"] * width,
             "ymax": w["y1"] * height,
             "text": w["text"],
+            "confidence": w.get("confidence", 1.0),
         }
         for w in reading["words"]
     ]
