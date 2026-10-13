@@ -1,0 +1,38 @@
+deployment/ingestion-jobs.Dockerfile
+  s_b82616e2476856::t_43e53b7e6f3f37 1-17
+tests/test_rwanda_catalogue.py
+  s_b82616e2476856::t_1bd74c2e5b7690 766-813,819-846
+  s_b82616e2476856::t_ba89258f35b87b 814-818
+deployment/gcp/ingestion-jobs.cloudbuild.yaml
+  s_b82616e2476856::t_43e53b7e6f3f37 1-8
+ingestion/gazette_layout.py
+  s_b82616e2476856::t_89e53d27eb4a01 11,242-252
+ingestion/prepare_job.py
+  s_b82616e2476856::t_7e80ff9ff1d9d5 1-48,51-66
+  s_b82616e2476856::t_1bd74c2e5b7690 49-50
+ingestion/rw_gazette.py
+  s_b82616e2476856::t_89e53d27eb4a01 21-23
+ingestion/rwanda.py
+  s_b82616e2476856::t_89e53d27eb4a01 705-708,738,746-747
+  s_b82616e2476856::t_ba89258f35b87b 684,703-704,709-715,734-735,1033-1037
+deployment/gcp/ingestion_jobs.sh
+  s_b82616e2476856::t_09e64551779ac6 2-145
+deployment/ingestion-jobs.requirements.lock
+  s_b82616e2476856::t_12ed8bd29029d1 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "877f6ba595c71314f0f7e2406c0e35c7af07736c",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
