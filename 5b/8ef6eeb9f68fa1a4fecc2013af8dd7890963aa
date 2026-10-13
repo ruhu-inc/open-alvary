@@ -1,0 +1,25 @@
+workbench/auth.py
+  s_b82616e2476856::t_c4563e2b998d9a 32
+tests/test_workbench.py
+  s_b82616e2476856::t_0661f75c7dcd49 77,79,475,499-507
+  s_b82616e2476856::t_1df6b68f063d00 508-509
+workbench/app.py
+  s_b82616e2476856::t_c4563e2b998d9a 9,13,74,77-92,96-98
+  s_b82616e2476856::t_0661f75c7dcd49 109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5b8ef6eeb9f68fa1a4fecc2013af8dd7890963aa",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
