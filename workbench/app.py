@@ -737,14 +737,13 @@ def create_app(
         """The law's language versions side by side, article by article, as reviewed so far."""
         auth.current(request, store)
         act = act_or_404(act_id)
-        present = {d["id"] for d in library.documents()}
         ids = {
             lang: other
             for lang, other in (act.get("versions") or {act.get("language", "en"): act_id}).items()
         }
         versions, instrument = {}, {}
         for language, other in ids.items():
-            if other not in present:
+            if not library.has(other):
                 continue
             final = content.final_pages(library.reading(other), store.latest_pages(other))
             versions[language] = content.articles_of(final, language)
@@ -862,9 +861,9 @@ def create_app(
             "source": content.public_source(act, library.manifest_for(act_id)),
             # The other language versions of the same law (Rwanda prints three), for the switcher.
             "versions": [
-                {"language": language, "id": other, "title": library.act(other)["title"]}
+                {"language": language, "id": other, "title": library.listed(other)["title"]}
                 for language, other in (act.get("versions") or {}).items()
-                if any(d["id"] == other for d in library.documents())
+                if library.has(other)
             ],
             "details": current_details(now["record"], view),
             "record": document.model_dump(mode="json") if document else None,
