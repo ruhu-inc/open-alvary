@@ -228,6 +228,25 @@ class Store:
         with self.engine.connect() as db:
             return [dict(row._mapping) for row in db.execute(query)]
 
+    def activity_stamps(self) -> dict[str, int]:
+        """For each document anyone has worked on, its latest audited event: a document's review
+        state changes only with such an event (a page saved, an approval recorded or revoked)."""
+        query = (
+            select(audit.c.act_id, func.max(audit.c.id))
+            .where(audit.c.act_id.is_not(None))
+            .group_by(audit.c.act_id)
+        )
+        with self.engine.connect() as db:
+            return {act_id: stamp for act_id, stamp in db.execute(query)}
+
+    def detail_stamps(self) -> dict[str, int]:
+        """For each details record anyone has saved, its latest revision."""
+        query = select(detail_revision.c.act_id, func.max(detail_revision.c.revision)).group_by(
+            detail_revision.c.act_id
+        )
+        with self.engine.connect() as db:
+            return {key: revision for key, revision in db.execute(query)}
+
     def last_event(self, actor: str, action: str) -> dict | None:
         query = (
             select(audit)

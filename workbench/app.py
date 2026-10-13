@@ -235,65 +235,136 @@ def create_app(
         }
 
     def document_summary(document: dict) -> dict:
-        now = state(document)
+        now = state(library.act(document["id"]))
         reading, latest, ready, head = now["reading"], now["latest"], now["readiness"], now["head"]
         last = store.events(act_id=document["id"], limit=1)
         approval = None
         if head and head["decision"] == "approved":
             approval = "approved" if now["approved"] else "out_of_date"
+        return with_status(
+            {
+                **listed(document),
+                "pages": ready["pages"],
+                "checked": ready["pages"] - len(ready["unchecked_pages"]),
+                "attention": sum(1 for r in latest.values() if r["status"] == "attention"),
+                "open_high": len(ready["open_high_flags"]),
+                "stale": len(ready["stale_pages"]),
+                "ready": ready["ready"],
+                "approval": approval,
+                "last": {"at": last[0]["at"].isoformat(), "actor": last[0]["actor"], "page": last[0]["page"]}
+                if last
+                else None,
+                "_latest": latest,
+                "_reading": reading,
+            }
+        )
+
+    def listed(document: dict) -> dict:
         return {
             "id": document["id"],
             "title": document["title"],
             "type": document.get("type", "act"),
             "year": document.get("year"),
             "jurisdiction": document.get("jurisdiction"),
-            "pages": ready["pages"],
-            "checked": ready["pages"] - len(ready["unchecked_pages"]),
-            "attention": sum(1 for r in latest.values() if r["status"] == "attention"),
-            "open_high": len(ready["open_high_flags"]),
-            "stale": len(ready["stale_pages"]),
-            "ready": ready["ready"],
-            "approval": approval,
-            "last": {"at": last[0]["at"].isoformat(), "actor": last[0]["actor"], "page": last[0]["page"]}
-            if last
-            else None,
-            "_latest": latest,
-            "_reading": reading,
+            "language": document.get("language"),
         }
+
+    def with_status(row: dict) -> dict:
+        if row["approval"] == "approved":
+            status = "Approved"
+        elif row["approval"] == "out_of_date":
+            status = "Approval out of date"
+        elif row["ready"]:
+            status = "Ready for approval"
+        elif not row["checked"] and not row["attention"] and not row["last"]:
+            status = "Not started"
+        else:
+            status = "In review"
+        return {**row, "status": status}
+
+    def untouched(document: dict) -> dict:
+        """A document nobody has worked on, from its manifest entry alone: its machine reading's page
+        and flag counts, nothing checked (no reading is opened: there are tens of thousands)."""
+        flags = document.get("flag_counts") or {}
+        return with_status(
+            {
+                **listed(document),
+                "pages": document["page_count"],
+                "checked": 0,
+                "attention": 0,
+                "open_high": flags.get("high", 0),
+                "stale": 0,
+                "ready": False,
+                "approval": None,
+                "last": None,
+            }
+        )
+
+    # Each worked-on document's summary, kept until its latest event or details revision changes.
+    summary_cache: dict[str, tuple[tuple, dict]] = {}
+
+    def summaries() -> list[dict]:
+        acts, details = store.activity_stamps(), store.detail_stamps()
+        rows = []
+        for document in library.documents():
+            stamp = (acts.get(document["id"]), details.get(details_key(document)))
+            if stamp == (None, None) and document.get("page_count") is not None:
+                rows.append(untouched(document))
+                continue
+            cached = summary_cache.get(document["id"])
+            if cached is None or cached[0] != stamp or stamp == (None, None):
+                row = document_summary(document)
+                cached = (stamp, {k: v for k, v in row.items() if not k.startswith("_")})
+                summary_cache[document["id"]] = cached
+            rows.append(cached[1])
+        return rows
+
+    SORTS = {
+        "recent": lambda r: r["last"]["at"] if r["last"] else "",
+        "title": lambda r: r["title"].lower(),
+        "flags": lambda r: -r["open_high"],
+        "progress": lambda r: r["checked"] / r["pages"] if r["pages"] else 0,
+    }
 
     @app.get("/api/overview")
     def overview(request: Request):
-        """Everything the home page shows: totals, each document's state, where to continue."""
+        """What the home page shows above the list: totals, what needs attention, where to continue,
+        recent activity, and the types and languages to filter by. The list itself is /api/documents."""
         who = auth.current(request, store)
-        rows = [document_summary(d) for d in library.documents()]
+        rows = summaries()
         resume = None
         last = store.last_event(who["email"], "page_saved")
-        if last:
-            row = next((r for r in rows if r["id"] == last["act_id"]), None)
-            if row:
-                pages = [p["page"] for p in row["_reading"]["pages"]]
-                todo = [p for p in pages if (row["_latest"].get(p) or {}).get("status") != "checked"]
-                after = [p for p in todo if p > (last["page"] or 0)] or todo
-                resume = {
-                    "id": row["id"],
-                    "title": row["title"],
-                    "page": after[0] if after else last["page"],
-                    "last_page": last["page"],
-                    "at": last["at"].isoformat(),
-                }
-        documents = [{k: v for k, v in r.items() if not k.startswith("_")} for r in rows]
-        titles = {r["id"]: r["title"] for r in rows}
+        if last and last["act_id"] in {r["id"] for r in rows}:
+            row = document_summary(library.act(last["act_id"]))
+            pages = [p["page"] for p in row["_reading"]["pages"]]
+            todo = [p for p in pages if (row["_latest"].get(p) or {}).get("status") != "checked"]
+            after = [p for p in todo if p > (last["page"] or 0)] or todo
+            resume = {
+                "id": row["id"],
+                "title": row["title"],
+                "page": after[0] if after else last["page"],
+                "last_page": last["page"],
+                "at": last["at"].isoformat(),
+            }
+        titles = {r["id"]: r["title"] for r in rows if r["last"]}
+        attention = [
+            r
+            for r in rows
+            if r["last"]
+            and (r["open_high"] or r["attention"] or r["stale"] or r["approval"] == "out_of_date")
+        ]
         return {
             "totals": {
-                "documents": len(documents),
-                "pages": sum(r["pages"] for r in documents),
-                "checked": sum(r["checked"] for r in documents),
-                "open_high": sum(r["open_high"] for r in documents),
-                "approved": sum(1 for r in documents if r["approval"] == "approved"),
-                "ready": sum(1 for r in documents if r["ready"] and r["approval"] != "approved"),
+                "documents": len(rows),
+                "pages": sum(r["pages"] for r in rows),
+                "checked": sum(r["checked"] for r in rows),
+                "open_high": sum(r["open_high"] for r in rows),
+                "approved": sum(1 for r in rows if r["approval"] == "approved"),
+                "ready": sum(1 for r in rows if r["ready"] and r["approval"] != "approved"),
             },
-            "documents": documents,
-            "types": sorted({r["type"] for r in documents}),
+            "attention": sorted(attention, key=lambda r: -r["open_high"])[:6],
+            "types": sorted({r["type"] for r in rows}),
+            "languages": sorted({r["language"] for r in rows if r["language"]}),
             "resume": resume,
             "activity": [
                 {
@@ -310,25 +381,41 @@ def create_app(
         }
 
     @app.get("/api/documents")
-    def acts(request: Request):
+    def acts(
+        request: Request,
+        q: str = "",
+        type: str = "",
+        language: str = "",
+        status: str = "",
+        sort: str = "recent",
+        offset: int = 0,
+        limit: int = 50,
+    ):
+        """The documents, searched (title or id), filtered and sorted on the server, one page at a
+        time: a corpus collection holds tens of thousands."""
         auth.current(request, store)
-        out = []
-        for act in library.documents():
-            now = state(act)
-            reading, ready, head = now["reading"], now["readiness"], now["head"]
-            out.append(
-                {
-                    "id": act["id"],
-                    "title": act["title"],
-                    "pages": ready["pages"],
-                    "checked": ready["pages"] - len(ready["unchecked_pages"]),
-                    "open_high_flags": len(ready["open_high_flags"]),
-                    "flags": reading["summary"]["flags"],
-                    "approval": head["decision"] if head else None,
-                    "approval_current": now["approved"],
-                }
-            )
-        return out
+        words = q.lower().split()
+        rows = [
+            r
+            for r in summaries()
+            if all(w in r["title"].lower() or w in r["id"] for w in words)
+            and (not type or r["type"] == type)
+            and (not language or r["language"] == language)
+            and (not status or r["status"] == status)
+        ]
+        rows.sort(key=SORTS["title"])
+        if sort in SORTS and sort != "title":
+            # Most recent activity first; documents nobody has touched after them, by title (a
+            # stable sort keeps the title order among equals, reversed or not).
+            rows.sort(key=SORTS[sort], reverse=sort == "recent")
+        limit = max(1, min(limit, 200))
+        offset = max(0, offset)
+        return {
+            "total": len(rows),
+            "offset": offset,
+            "limit": limit,
+            "documents": rows[offset : offset + limit],
+        }
 
     @app.get("/api/documents/{act_id}")
     def act_detail(request: Request, act_id: str):

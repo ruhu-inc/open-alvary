@@ -157,16 +157,15 @@ function googleMark() {
 
 // --- dashboard -------------------------------------------------------------------------------------
 
-const TYPE_LABEL = { act: "Act", bill: "Bill", regulation: "Regulation", order: "Order", judgment: "Judgment", gazette: "Gazette", treaty: "Treaty", other: "Document" };
+const TYPE_LABEL = {
+  act: "Act", bill: "Bill", regulation: "Regulation", order: "Order", judgment: "Judgment", gazette: "Gazette", treaty: "Treaty", other: "Document",
+  constitution: "Constitution", law: "Law", organic_law: "Organic law", decree_law: "Decree-law", ordinance: "Ordinance",
+  decree: "Decree", royal_decree: "Royal decree", presidential_order: "Presidential Order", prime_ministers_order: "Prime Minister's Order",
+  ministerial_order: "Ministerial Order", regulations: "Regulations", instructions: "Instructions", agreement: "Agreement", convention: "Convention",
+};
 const ACTION_LABEL = { page_saved: "saved", details_saved: "saved the details of", act_approved: "approved", act_revoked: "revoked approval of", signed_in: "signed in", signed_out: "signed out", operator_saved: "updated operator", sign_in_refused: "was refused sign-in" };
 
-function statusOf(doc) {
-  if (doc.approval === "approved") return ["ok", "Approved"];
-  if (doc.approval === "out_of_date") return ["warn", "Approval out of date"];
-  if (doc.ready) return ["ok", "Ready for approval"];
-  if (!doc.checked && !doc.attention && !doc.last) return ["medium", "Not started"];
-  return ["medium", "In review"];
-}
+const STATUS_CLASS = { "Approved": "ok", "Approval out of date": "warn", "Ready for approval": "ok", "Not started": "medium", "In review": "medium" };
 
 function ago(iso) {
   const seconds = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -216,9 +215,9 @@ async function dashboard() {
   const t = data.totals;
   const share = t.pages ? Math.round((100 * t.checked) / t.pages) : 0;
   const tiles = el("div", { class: "tiles" },
-    el("div", { class: "tile" }, el("span", { class: "big", text: String(t.documents) }), el("span", { text: "documents" })),
+    el("div", { class: "tile" }, el("span", { class: "big", text: t.documents.toLocaleString() }), el("span", { text: "documents" })),
     el("div", { class: "tile" }, el("span", { class: "big", text: `${share}%` }), el("span", { text: `${t.checked.toLocaleString()} of ${t.pages.toLocaleString()} pages checked` }), meter(share)),
-    el("div", { class: `tile ${t.open_high ? "alert" : ""}` }, el("span", { class: "big", text: String(t.open_high) }), el("span", { text: "high flags open" })),
+    el("div", { class: `tile ${t.open_high ? "alert" : ""}` }, el("span", { class: "big", text: t.open_high.toLocaleString() }), el("span", { text: "high flags open" })),
     el("div", { class: "tile" }, el("span", { class: "big", text: String(t.approved) }), el("span", { text: `approved${t.ready ? ` · ${t.ready} ready for approval` : ""}` })));
 
   const resume = data.resume
@@ -236,45 +235,48 @@ async function dashboard() {
     d.stale ? pill("warn", `${d.stale} pages to recheck`) : null,
     d.approval === "out_of_date" ? pill("warn", "approval out of date") : null,
   ].filter(Boolean);
-  const attention = data.documents.filter((d) => reasons(d).length).sort((a, b) => b.open_high - a.open_high).slice(0, 6);
-  const needs = attention.length
+  const needs = data.attention.length
     ? el("div", { class: "card" }, el("h3", { text: "Needs attention" }),
-        el("ul", { class: "plain" }, attention.map((d) => el("li", {},
+        el("ul", { class: "plain" }, data.attention.map((d) => el("li", {},
           el("a", { href: `#/doc/${encodeURIComponent(d.id)}`, text: d.title }), " ", ...reasons(d).flatMap((r) => [r, " "])))))
     : null;
 
-  const search = el("input", { type: "search", placeholder: "Search documents", value: remember("q") || "" });
-  const typeSelect = el("select", {}, el("option", { value: "", text: "All types" }), data.types.map((type) => el("option", { value: type, text: TYPE_LABEL[type] || type })));
+  // The list is searched, filtered and paged on the server: a corpus holds tens of thousands.
+  const search = el("input", { type: "search", placeholder: "Search titles and ids", value: remember("q") || "" });
+  const typeSelect = el("select", {}, el("option", { value: "", text: "All types" }), data.types.map((type) => el("option", { value: type, text: TYPE_LABEL[type] || type.replace(/_/g, " ") })));
+  const languageSelect = el("select", {}, el("option", { value: "", text: "All languages" }), data.languages.map((code) => el("option", { value: code, text: LANGUAGE_NAMES[code] || code })));
   const statusSelect = el("select", {}, ["All statuses", "Not started", "In review", "Ready for approval", "Approved", "Approval out of date"].map((label, i) => el("option", { value: i ? label : "", text: label })));
   const sortSelect = el("select", {}, [["recent", "Recently active"], ["title", "Title"], ["flags", "Most high flags"], ["progress", "Least checked"]].map(([value, label]) => el("option", { value, text: label })));
-  typeSelect.value = remember("type") || ""; statusSelect.value = remember("status") || ""; sortSelect.value = remember("sort") || "recent";
+  typeSelect.value = remember("type") || ""; languageSelect.value = remember("language") || ""; statusSelect.value = remember("status") || ""; sortSelect.value = remember("sort") || "recent";
   const cards = el("div", { class: "doc-cards" });
-  const render = () => {
-    remember("q", search.value); remember("type", typeSelect.value); remember("status", statusSelect.value); remember("sort", sortSelect.value);
-    const q = search.value.trim().toLowerCase();
-    let list = data.documents.filter((d) => (!q || d.title.toLowerCase().includes(q) || d.id.includes(q))
-      && (!typeSelect.value || d.type === typeSelect.value) && (!statusSelect.value || statusOf(d)[1] === statusSelect.value));
-    const progress = (d) => (d.pages ? d.checked / d.pages : 0);
-    const sorts = {
-      recent: (a, b) => (b.last ? b.last.at : "").localeCompare(a.last ? a.last.at : "") || a.title.localeCompare(b.title),
-      title: (a, b) => a.title.localeCompare(b.title),
-      flags: (a, b) => b.open_high - a.open_high,
-      progress: (a, b) => progress(a) - progress(b),
-    };
-    list = list.sort(sorts[sortSelect.value]);
-    cards.replaceChildren(...(list.length ? list.map((d) => {
-      const pct = Math.round(100 * progress(d));
-      const [cls, label] = statusOf(d);
+  const pager = el("div", { class: "pager" });
+  const PAGE = 48;
+  let offset = 0, asked = 0;
+  const load = async () => {
+    remember("q", search.value); remember("type", typeSelect.value); remember("language", languageSelect.value); remember("status", statusSelect.value); remember("sort", sortSelect.value);
+    const params = new URLSearchParams({ q: search.value.trim(), type: typeSelect.value, language: languageSelect.value, status: statusSelect.value, sort: sortSelect.value, offset: String(offset), limit: String(PAGE) });
+    const ticket = ++asked;
+    const { data: page } = await api(`/api/documents?${params}`);
+    if (ticket !== asked) return; // a later search has been asked since
+    cards.replaceChildren(...(page.documents.length ? page.documents.map((d) => {
+      const pct = d.pages ? Math.round((100 * d.checked) / d.pages) : 0;
       return el("a", { class: "doc-card", href: `#/doc/${encodeURIComponent(d.id)}` },
-        el("div", { class: "doc-meta" }, el("span", { class: "type", text: TYPE_LABEL[d.type] || d.type }), d.year ? el("span", { text: String(d.year) }) : null, d.jurisdiction ? el("span", { text: d.jurisdiction.toUpperCase() }) : null),
+        el("div", { class: "doc-meta" }, el("span", { class: "type", text: TYPE_LABEL[d.type] || d.type.replace(/_/g, " ") }), d.year ? el("span", { text: String(d.year) }) : null, d.language ? el("span", { text: d.language.toUpperCase() }) : null, d.jurisdiction ? el("span", { text: d.jurisdiction.toUpperCase() }) : null),
         el("strong", { class: "doc-title", text: d.title }),
         meter(pct),
-        el("div", { class: "doc-foot" }, el("span", { class: "muted", text: `${d.checked} / ${d.pages} pages checked` }), pill(cls, label), d.open_high ? pill("high", `${d.open_high} high`) : null),
+        el("div", { class: "doc-foot" }, el("span", { class: "muted", text: `${d.checked} / ${d.pages} pages checked` }), pill(STATUS_CLASS[d.status] || "medium", d.status), d.open_high ? pill("high", `${d.open_high} high`) : null),
         el("div", { class: "muted small", text: d.last ? `Last activity: ${d.last.actor.split("@")[0]}, ${ago(d.last.at)}` : "No review activity yet" }));
     }) : [el("p", { class: "muted", text: "No documents match." })]));
+    const last = Math.min(page.offset + page.documents.length, page.total);
+    pager.replaceChildren(
+      el("span", { class: "muted", text: page.total ? `${(page.offset + 1).toLocaleString()}–${last.toLocaleString()} of ${page.total.toLocaleString()}` : "" }),
+      el("button", { class: "small", text: "← Previous", disabled: page.offset === 0, on: { click: () => { offset = Math.max(0, offset - PAGE); load(); } } }),
+      el("button", { class: "small", text: "Next →", disabled: last >= page.total, on: { click: () => { offset += PAGE; load(); } } }));
   };
-  for (const control of [search, typeSelect, statusSelect, sortSelect]) control.addEventListener("input", render);
-  render();
+  let typing;
+  search.addEventListener("input", () => { clearTimeout(typing); typing = setTimeout(() => { offset = 0; load(); }, 250); });
+  for (const control of [typeSelect, languageSelect, statusSelect, sortSelect]) control.addEventListener("input", () => { offset = 0; load(); });
+  load();
 
   const titleOf = (e) => e.title || e.id || "";
   const activity = el("div", { class: "card activity" }, el("h3", { text: "Recent activity" }),
@@ -289,8 +291,8 @@ async function dashboard() {
       el("div", { class: "home-head" }, el("h1", { text: "Review workbench" }), el("p", { class: "muted", text: `Signed in as ${app.me.name} (${app.me.roles.join(", ")})` })),
       tiles, resume, needs,
       el("div", { class: "card" },
-        el("div", { class: "doc-tools" }, el("h3", { text: "Documents" }), search, typeSelect, statusSelect, sortSelect),
-        cards)),
+        el("div", { class: "doc-tools" }, el("h3", { text: "Documents" }), search, typeSelect, languageSelect, statusSelect, sortSelect),
+        cards, pager)),
     el("aside", { class: "home-side" }, activity)));
 }
 
