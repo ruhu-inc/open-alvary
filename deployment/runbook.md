@@ -245,6 +245,49 @@ python -m ingestion.batch status                      # flags per reconciled Act
   they agree, and flag what they do not support. Review high flags (numbers, dates, words no check
   reading saw, conflicting markers) on every page before recording a content decision.
 
+## Corpus ingestion jobs on Google Cloud (Rwanda, 2026-10-13)
+
+A country's whole archive is read and prepared in the cloud, not on the operator's machine. The
+sources are already in the private corpus bucket `gs://open-alvary-corpus` (EU), fetched by
+`python -m ingestion.rwanda fetch --to-bucket`. Two Cloud Run jobs in `europe-west1`, one image
+(`deployment/ingestion-jobs.Dockerfile`), both running as `scan-reader@…` (Document AI use; read
+and write objects in the corpus bucket only); images are built from the commit by `image-builder@…`.
+
+```bash
+deployment/gcp/ingestion_jobs.sh plan      # what would be created; creates nothing
+deployment/gcp/ingestion_jobs.sh setup     # APIs, registry, the two service accounts (owner runs it)
+deployment/gcp/ingestion_jobs.sh deploy    # commit first: builds from `git archive HEAD`
+deployment/gcp/ingestion_jobs.sh run ocr 2       # scanned pages: Google Enterprise Document OCR
+deployment/gcp/ingestion_jobs.sh run layout 1    # the same pages: the Layout Parser (second reading)
+deployment/gcp/ingestion_jobs.sh prepare 10      # every stored file prepared for review
+deployment/gcp/ingestion_jobs.sh status
+python -m ingestion.rwanda scan-progress         # files and pages each reader has read
+```
+
+- **Budget first.** The scan jobs read only the work list `work/rw/scan-reading.json`, written by
+  `python -m ingestion.rwanda scan-worklist --approved-by … --max-pages … --basis …` from the
+  survey (each scanned file once, largest first) with the operator's approval; no task reads past
+  its share. List prices (2026-10-13): Enterprise OCR $1.50, Layout Parser $10 per 1,000 pages.
+- **Two readings of every scanned page.** OCR gives each word with its place, so the page is laid
+  out like a born-digital one; the Layout Parser's reading is aligned with it. OCR's confident
+  words stand (the Gazette's own slips and numbering as printed); where OCR was unsure (broken or
+  faint type), the Layout Parser's word is taken; every difference is flagged with both readings.
+- **Quotas.** The Layout Parser `v1.6-pro` is limited to 15 pages a minute per project in the EU
+  (about 10 achieved): 30,000 pages take about two days. Ask for more under IAM & Admin → Quotas
+  ("online process document pages (EU)"). OCR is not the bottleneck.
+- **Resuming.** Readings land in `readings/rw/ocr/` and `readings/rw/docai/`; a file already read
+  is skipped, so a stopped execution is simply run again. A failed task is retried once.
+- **Preparing.** `corpus-preparer` reads each stored file (pdftotext runs in the job's container),
+  splits it into its instruments and language versions with both readings of its scans, and
+  writes the review documents to `collections/rw/`: per document a reading, provenance and
+  `<id>.document.json` (the details suggested from the text), per file an index, and a light
+  `manifest.json` assembled from the indexes. A file is prepared again when the pipeline version
+  (`rw_gazette.PIPELINE`) changes or a scan's reading arrives after it was prepared; a file that
+  fails is logged (`failed …`) and the task goes on. Mirror the ledger and catalogues first:
+  `python -c "from ingestion import rwanda, corpus_store; rwanda.mirror_state(corpus_store.CorpusStore())"`.
+- **Memory.** Tasks have 4 GiB. OCR asks only for text, words and page sizes: unasked, the service
+  returns an image of every page, which ran 2 GiB tasks out of memory on large issues.
+
 ## Review workbench (operator-only web app)
 
 Reviewers check each reconciled Act page by page against the gazette image, correct it, resolve
@@ -285,8 +328,16 @@ audited policy commands to record.
   not public, Identity-Aware Proxy in front, then the app's own operator sign-in). Add operators
   with `deployment/gcp/workbench.sh operator <email> "<name>" reviewer,approver`, which both
   allow-lists them in the app and grants them through Identity-Aware Proxy. `.gcloudignore` keeps
-  private staging, `.env` and databases out of every build upload. Cloud SQL's own backups cover
-  this database on GCP.
+  private staging, `.env` and databases out of every build upload, and the image is built from
+  `git archive HEAD` by `image-builder@…` (run `deployment/gcp/ingestion_jobs.sh setup` once
+  first). Cloud SQL's own backups cover this database on GCP.
+- The deployed workbench also reviews the corpus collections in the bucket
+  (`WORKBENCH_CORPUS_COLLECTIONS`, default `gs://open-alvary-corpus/collections/rw/`, read-only):
+  it lists tens of thousands of documents from the light manifest (searched and paged on the
+  server), fetches a document's reading and details when it is opened, and draws page images on
+  demand with pdftoppm in its own container (`deployment/workbench.Dockerfile`, Liberation and
+  DejaVu fonts); downloads and images are cached in `/tmp`, kept within `ALVARY_REVIEW_CACHE_MB`.
+  The service has 2 GiB.
 - Back up the review database (every correction and approval) with the same encrypted R2 job,
   under its own prefix: `python -m operations.backup create --kind review --remote r2:<bucket>/review
   --recipient-file …` with `ALVARY_BACKUP_DATABASE_URL` pointing at `review_db`; verify with
