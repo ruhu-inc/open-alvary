@@ -1081,3 +1081,20 @@ def test_a_deployed_workbench_renders_pages_itself_once_per_source_and_keeps_its
     monkeypatch.setenv("ALVARY_REVIEW_CACHE_MB", "1")
     content.trim_cache()
     assert not old.exists() and english.exists()
+
+
+def test_flags_at_one_place_with_no_words_of_their_own_each_have_their_own_id():
+    flags = [
+        {
+            "severity": "high",
+            "kind": "not_aligned",
+            "primary": "",
+            "tokens": [0, 0],
+            "checks": {"French": f"Article {n}"},
+        }
+        for n in (26, 27, 28)
+    ] + [{"severity": "medium", "kind": "reading_differs", "primary": "x", "tokens": [3, 4], "checks": {}}]
+    ids = [f["id"] for f in content.page_flags({"page": 14, "flags": flags})]
+    assert len(set(ids)) == 4
+    # A flag that was already distinct keeps the id it had (decisions recorded on it stay valid).
+    assert ids[3] == content.flag_id(14, flags[3])

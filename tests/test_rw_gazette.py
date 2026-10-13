@@ -586,3 +586,15 @@ def test_a_file_whose_heading_is_not_known_is_one_instrument_named_as_its_source
     [entry] = RG.whole_file(streams, "ministerial_order", "1-71", None, title)
     assert entry["title_from_listing"] and list(entry["versions"]) == ["fr"]
     assert entry["versions"]["fr"]["pages"] == [1, 2] and entry["versions"]["fr"]["end"] == 2
+
+
+def test_unsure_ocr_words_left_out_are_a_low_flag_not_a_word_to_check():
+    node = {
+        "kind": "paragraph",
+        "text": "The Prime Minister",
+        "page": 1,
+        "differences": [("", "possent Isage શ્રોE", "OCR"), ("Minister", "Mimster", "OCR")],
+    }
+    flags = RG.reading([node], {}, "0" * 64, {})["pages"][0]["flags"]
+    kinds = {f["kind"]: f["severity"] for f in flags}
+    assert kinds == {"unsure_words_dropped": "low", "reading_differs": "medium"}
