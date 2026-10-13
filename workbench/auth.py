@@ -29,6 +29,7 @@ from ingestion import settings
 from workbench.store import Store
 
 COOKIE = "oa_review_session"
+FLOW_COOKIE = "oa_review_flow"  # binds a sign-in to the browser that started it
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 
 

@@ -6,10 +6,11 @@ Put it on the web only behind TLS (a reverse proxy) with ALVARY_REVIEW_BASE_URL 
 https address and an OpenID Connect client configured; see the runbook.
 """
 
+import hmac
 import html
 import os
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlsplit
 
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.responses import (
@@ -70,13 +71,31 @@ def create_app(
     # --- sign-in ---------------------------------------------------------------------------------
 
     @app.get("/auth/login")
-    def login():
+    def login(request: Request):
         if not oidc:
             raise HTTPException(404, "Sign-in with an identity provider is not configured")
-        return RedirectResponse(oidc.authorize_url(store), status_code=303)
+        url = oidc.authorize_url(store)
+        response = RedirectResponse(url, status_code=303)
+        # The sign-in must finish in the browser that started it: the flow's state goes with that
+        # browser in a short-lived cookie, and the callback is refused without it (a callback
+        # link carried to another browser cannot sign that browser in).
+        state = parse_qs(urlsplit(url).query)["state"][0]
+        response.set_cookie(
+            auth.FLOW_COOKIE,
+            state,
+            httponly=True,
+            samesite="lax",  # sent on the provider's top-level redirect back to us
+            secure=not auth.is_loopback(request),
+            path="/auth",
+            max_age=600,
+        )
+        return response
 
     @app.get("/auth/callback")
     def callback(request: Request, state: str = "", code: str = ""):
+        started = request.cookies.get(auth.FLOW_COOKIE, "")
+        if oidc and state and not (started and hmac.compare_digest(started, state)):
+            raise HTTPException(400, "Sign-in must finish in the browser that started it; start again")
         if not oidc or not state or not code:
             raise HTTPException(400, "Invalid sign-in response")
         email = oidc.finish(store, state, code)
@@ -87,6 +106,7 @@ def create_app(
             "<p>Signed in. <a href='/'>Continue</a></p>"
         )
         response.set_cookie(auth.COOKIE, token, **auth.cookie_options(request))
+        response.delete_cookie(auth.FLOW_COOKIE, path="/auth")
         return response
 
     @app.post("/auth/dev")
