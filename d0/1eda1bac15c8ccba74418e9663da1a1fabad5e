@@ -1,0 +1,21 @@
+deployment/gcp/scan_reading.sh
+  s_b82616e2476856::t_414e39b20f5e80 55,107
+ingestion/layout_parser.py
+  s_b82616e2476856::t_01ba8925ee32be 298-302,368-372
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d01eda1bac15c8ccba74418e9663da1a1fabad5e",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
