@@ -733,3 +733,33 @@ def test_the_cloud_job_reads_its_share_of_the_work_list_without_a_ledger(tmp_pat
         worklist=scan_job.share(worklist["files"], 1, 2),
     )
     assert result["pages_read"] == 1 and stored == ["readings/rw/ocr/z.json"]
+
+
+def test_scan_progress_counts_the_work_list_files_each_reader_has_read():
+    import json
+
+    worklist = {
+        "pages": 12,
+        "files": [
+            {"sha256": "a", "scanned_pages": 9},
+            {"sha256": "b", "scanned_pages": 3},
+        ],
+    }
+
+    class Store:
+        def get(self, name):
+            assert name == rwanda.WORKLIST
+            return json.dumps(worklist).encode()
+
+        def list(self, prefix):
+            return {
+                "readings/rw/ocr/": [f"{prefix}a.json", f"{prefix}b.json"],
+                "readings/rw/docai/": [f"{prefix}b.json"],
+            }[prefix]
+
+    assert rwanda.scan_progress(Store()) == {
+        "files": 2,
+        "pages": 12,
+        "ocr": {"files": 2, "pages": 12},
+        "layout": {"files": 1, "pages": 3},
+    }

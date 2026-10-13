@@ -1059,6 +1059,19 @@ def scan_worklist(approval: dict) -> dict:
     }
 
 
+def scan_progress(store) -> dict:
+    """How far the cloud reading has come: per reader, the work list's files and pages read so far."""
+    worklist = json.loads(store.get(WORKLIST))
+    out = {"files": len(worklist["files"]), "pages": worklist["pages"]}
+    for kind, folder in (("ocr", "ocr"), ("layout", "docai")):
+        done = {
+            name.rsplit("/", 1)[-1][: -len(".json")] for name in store.list(f"readings/{COUNTRY}/{folder}/")
+        }
+        read = [f for f in worklist["files"] if f["sha256"] in done]
+        out[kind] = {"files": len(read), "pages": sum(f["scanned_pages"] for f in read)}
+    return out
+
+
 def read_scans(
     selection: dict | None = None,
     log=print,
@@ -1391,6 +1404,7 @@ def main(argv=None) -> int:
     scans.add_argument("--files-at-once", type=int, default=4)
     scans.add_argument("--reader", choices=["ocr", "layout"], required=True)
     scans.add_argument("--again", action="store_true", help="read the selection's files again (billed)")
+    sub.add_parser("scan-progress", help="how far the cloud job has read the work list")
     work = sub.add_parser("scan-worklist", help="write the cloud job's list of files with scanned pages")
     work.add_argument("--approved-by", required=True)
     work.add_argument(
@@ -1419,6 +1433,9 @@ def main(argv=None) -> int:
             corpus_store.CorpusStore(), args.limit, log=lambda message: print(message, flush=True)
         )
         print(json.dumps(summary["by"].get("all", {}), ensure_ascii=False))
+        return 0
+    if args.command == "scan-progress":
+        print(json.dumps(scan_progress(corpus_store.CorpusStore())))
         return 0
     if args.command == "scan-worklist":
         approval = {"approved_by": args.approved_by, "max_pages": args.max_pages, "basis": args.basis}
