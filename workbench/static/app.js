@@ -1022,7 +1022,9 @@ function gotoFlag(view, step) {
   const next = flags[(at + step + flags.length) % flags.length] || flags[0];
   view.surface.reveal(next.id);
   setTimeout(() => {
-    const node = view.surface.flagElement(next.id);
+    // A flag with no words of its own (an article missing from this version) has no place in the
+    // text: its card opens under the flag bar instead.
+    const node = view.surface.flagElement(next.id) || document.querySelector(".flag-bar");
     if (node) { node.scrollIntoView({ block: "center" }); openFlag(view, next.id, node.getBoundingClientRect()); }
   }, 0);
 }
