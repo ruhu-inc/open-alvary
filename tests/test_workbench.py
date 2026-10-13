@@ -925,13 +925,14 @@ def test_a_collection_in_the_corpus_bucket_is_read_from_it_and_cached(tmp_path, 
         "language": "en",
         "work": "rw-law-009-2026",
         "source_object": "sources/rw/minijust-gazette/abc.pdf",
+        "objects": "files/abc/",  # the source file's own folder
     }
     objects = {
         "collections/rw/manifest.json": json.dumps({"collection": "rw", "documents": [document]}).encode(),
-        "collections/rw/rw-law-009-2026-en.reading.json": json.dumps(reading_json).encode(),
-        "collections/rw/rw-law-009-2026-en.provenance.json": b'{"url": "https://www.minijust.gov.rw/x.pdf"}',
+        "collections/rw/files/abc/rw-law-009-2026-en.reading.json": json.dumps(reading_json).encode(),
+        "collections/rw/files/abc/rw-law-009-2026-en.provenance.json": b'{"url": "https://www.minijust.gov.rw/x.pdf"}',
         # What only the document's own page needs, beside it rather than in the manifest.
-        "collections/rw/rw-law-009-2026-en.document.json": json.dumps(
+        "collections/rw/files/abc/rw-law-009-2026-en.document.json": json.dumps(
             {"suggested": {"identity.number": "009/2026"}, "issue": {"name": "OG n° 1"}}
         ).encode(),
         "sources/rw/minijust-gazette/abc.pdf": b"%PDF-1.4 the issue",
@@ -956,12 +957,14 @@ def test_a_collection_in_the_corpus_bucket_is_read_from_it_and_cached(tmp_path, 
     assert library.original("rw-law-009-2026-en").read_bytes() == b"%PDF-1.4 the issue"
     assert library.provenance("rw-law-009-2026-en")["url"].endswith("x.pdf")
     library.reading("rw-law-009-2026-en")
-    assert asked.count("collections/rw/rw-law-009-2026-en.reading.json") == 1  # cached after the first time
+    assert (
+        asked.count("collections/rw/files/abc/rw-law-009-2026-en.reading.json") == 1
+    )  # cached after the first time
     # The list carries no details; the document opened carries them, fetched once.
     assert "suggested" not in library.documents()[-1]
     assert library.act("rw-law-009-2026-en")["suggested"] == {"identity.number": "009/2026"}
     library.act("rw-law-009-2026-en")
-    assert asked.count("collections/rw/rw-law-009-2026-en.document.json") == 1
+    assert asked.count("collections/rw/files/abc/rw-law-009-2026-en.document.json") == 1
 
 
 def test_a_scanned_document_says_it_was_read_by_ocr_and_checked_by_a_second_reading():

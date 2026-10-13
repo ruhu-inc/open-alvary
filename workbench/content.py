@@ -163,14 +163,20 @@ class Library:
         path = staging / f"{act_id}{suffix}"
         remote = manifest.get("_remote")
         if remote:
-            source = self._index[act_id].get("source_object") if suffix == ".pdf" else None
-            if source:
-                path = staging / "sources" / Path(source).name
+            entry = self._index[act_id]
+            # A corpus collection keeps each source file's documents in its own folder ("objects").
+            objects = entry.get("objects", "")
+            source = entry.get("source_object") if suffix == ".pdf" else None
+            path = (
+                staging / "sources" / Path(source).name if source else staging / objects / f"{act_id}{suffix}"
+            )
             if path.exists():
                 os.utime(path)  # recently used: kept when the cache is trimmed
             else:
                 store = _store(remote["bucket"])
-                data = store.get(source) if source else store.get(f"{remote['prefix']}{act_id}{suffix}")
+                data = (
+                    store.get(source) if source else store.get(f"{remote['prefix']}{objects}{act_id}{suffix}")
+                )
                 path.parent.mkdir(parents=True, exist_ok=True)
                 tmp = path.with_suffix(path.suffix + ".part")
                 tmp.write_bytes(data)
@@ -192,7 +198,7 @@ class Library:
             if local.exists():
                 details = json.loads(local.read_text())
             elif remote:
-                name = f"{remote['prefix']}{act_id}.document.json"
+                name = f"{remote['prefix']}{found.get('objects', '')}{act_id}.document.json"
                 store = _store(remote["bucket"])
                 if store.exists(name):
                     details = json.loads(store.get(name))
