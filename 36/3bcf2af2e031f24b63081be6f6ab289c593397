@@ -1,0 +1,21 @@
+ingestion/rw_gazette.py
+  s_b82616e2476856::t_176aee8530b1c2 24-26,28-33
+tests/test_rw_gazette.py
+  s_b82616e2476856::t_8fde7f83fd78c7 532-551
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "363bcf2af2e031f24b63081be6f6ab289c593397",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
