@@ -34,6 +34,15 @@ setting() {  # a value from the environment or the git-ignored .env (never print
   grep -E "^${name}=" .env 2>/dev/null | head -1 | cut -d= -f2-
 }
 
+grant() {  # an IAM binding; a service account just created takes a moment to be known, so retry
+  local attempt
+  for attempt in 1 2 3 4 5 6; do
+    "$@" >/dev/null 2>&1 && return 0
+    sleep 10
+  done
+  "$@" >/dev/null
+}
+
 plan() {
   cat <<PLAN
 Project $PROJECT, region $REGION. Would create (if absent):
@@ -55,21 +64,21 @@ setup() {
     "${GC[@]}" artifacts repositories create "$REPOSITORY" --repository-format=docker --location="$REGION"
   "${GC[@]}" iam service-accounts describe "$RUNNER_EMAIL" >/dev/null 2>&1 ||
     "${GC[@]}" iam service-accounts create "$RUNNER" --display-name="Scan reading (Cloud Run job)"
-  "${GC[@]}" projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$RUNNER_EMAIL" \
-    --role=roles/documentai.apiUser --condition=None >/dev/null
-  "${GC[@]}" storage buckets add-iam-policy-binding "gs://$CORPUS_BUCKET" \
-    --member="serviceAccount:$RUNNER_EMAIL" --role=roles/storage.objectUser >/dev/null
+  grant "${GC[@]}" projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$RUNNER_EMAIL" \
+    --role=roles/documentai.apiUser --condition=None
+  grant "${GC[@]}" storage buckets add-iam-policy-binding "gs://$CORPUS_BUCKET" \
+    --member="serviceAccount:$RUNNER_EMAIL" --role=roles/storage.objectUser
   "${GC[@]}" iam service-accounts describe "$BUILDER_EMAIL" >/dev/null 2>&1 ||
     "${GC[@]}" iam service-accounts create "$BUILDER" --display-name="Image builds (Cloud Build)"
   "${GC[@]}" storage buckets describe "gs://$BUILD_SOURCES" >/dev/null 2>&1 ||
     "${GC[@]}" storage buckets create "gs://$BUILD_SOURCES" --location=EU --uniform-bucket-level-access \
       --public-access-prevention
-  "${GC[@]}" storage buckets add-iam-policy-binding "gs://$BUILD_SOURCES" \
-    --member="serviceAccount:$BUILDER_EMAIL" --role=roles/storage.objectViewer >/dev/null
-  "${GC[@]}" artifacts repositories add-iam-policy-binding "$REPOSITORY" --location="$REGION" \
-    --member="serviceAccount:$BUILDER_EMAIL" --role=roles/artifactregistry.writer >/dev/null
-  "${GC[@]}" projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$BUILDER_EMAIL" \
-    --role=roles/logging.logWriter --condition=None >/dev/null
+  grant "${GC[@]}" storage buckets add-iam-policy-binding "gs://$BUILD_SOURCES" \
+    --member="serviceAccount:$BUILDER_EMAIL" --role=roles/storage.objectViewer
+  grant "${GC[@]}" artifacts repositories add-iam-policy-binding "$REPOSITORY" --location="$REGION" \
+    --member="serviceAccount:$BUILDER_EMAIL" --role=roles/artifactregistry.writer
+  grant "${GC[@]}" projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$BUILDER_EMAIL" \
+    --role=roles/logging.logWriter --condition=None
   echo "Set up: $RUNNER_EMAIL (reads scans) and $BUILDER_EMAIL (builds images)."
 }
 
