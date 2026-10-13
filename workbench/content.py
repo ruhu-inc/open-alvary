@@ -136,6 +136,13 @@ class Library:
         their manifests (the details only a document's own page needs are left out)."""
         return self._documents
 
+    def has(self, act_id: str) -> bool:
+        return act_id in self._index
+
+    def listed(self, act_id: str) -> dict:
+        """A document as its manifest lists it (no details fetched): for titles and links."""
+        return self._index[act_id]
+
     def _where(self, act_id: str) -> tuple[dict, Path]:
         try:
             return self._places[act_id]
