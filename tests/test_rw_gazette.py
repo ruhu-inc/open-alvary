@@ -452,8 +452,11 @@ def test_a_scanned_page_keeps_its_layout_and_takes_document_ais_words_with_diffe
         "Désireux de promouvoir un système de",
         "transport aérien international ; d’une part ;",  # the printed apostrophe kept
     ]
-    assert fixed[0]["differences"] == [("Désireux", "Desireux"), ("système", "systerne")]
-    assert fixed[1]["differences"] == [("aérien", "adrien")]  # a lone ";" is not a difference
+    assert fixed[0]["differences"] == [
+        ("Désireux", "Desireux", "OCR layer"),
+        ("système", "systerne", "OCR layer"),
+    ]
+    assert fixed[1]["differences"] == [("aérien", "adrien", "OCR layer")]  # a lone ";" is not a difference
     nodes = RG.structure([{**line, "text": "We, EXAMPLE,"} for line in fixed[:1]] + fixed, "en")
     reading = RG.reading(nodes, {}, "0" * 64, {})
     flags = [f for page in reading["pages"] for f in page["flags"]]
@@ -476,10 +479,53 @@ def test_a_scan_read_by_our_ocr_is_laid_out_like_a_text_layer_and_flagged_until_
     read = {"words": [{"text": "a)", "x0": 0.1, "y0": 0.5, "x1": 0.12, "y1": 0.52, "confidence": 0.99}]}
     placed = gazette_layout.from_ocr(read, page)
     assert placed["read_by"] == "ocr" and placed["width"] == 600.0
-    assert placed["words"] == [{"xmin": 60.0, "ymin": 400.0, "xmax": 72.0, "ymax": 416.0, "text": "a)"}]
+    assert placed["words"] == [
+        {"xmin": 60.0, "ymin": 400.0, "xmax": 72.0, "ymax": 416.0, "text": "a)", "confidence": 0.99}
+    ]
     # A page with no lines at all (no text layer, no OCR) cannot take a second reading's words.
     empty = {"page": 3, "layout": "single", "columns": [{"lines": []}]}
     assert RG.correct_page(empty, {"text": "Ingingo ya mbere", "nodes": []}) is empty
     nodes = [{"kind": "paragraph", "text": "Ingingo ya mbere", "page": 3}]
     flags = RG.reading(nodes, {}, "0" * 64, {}, one_reading={3})["pages"][0]["flags"]
     assert [f["kind"] for f in flags] == ["one_reading"]
+
+
+def test_our_ocr_keeps_what_it_read_surely_and_takes_the_second_reading_where_it_was_unsure():
+    """As printed: the Gazette's own slip ("chirurigicales") and its numbering stand; broken type
+    the OCR was unsure of takes the Layout Parser's word; every difference names its reading."""
+    words = [
+        ("1°)", 0.99, 40),
+        ("interventions", 0.99, 80),
+        ("chirurigicales", 0.97, 200),
+        ("amara.а...у.", 0.45, 330),
+        ("yo", 0.99, 420),
+    ]
+    page_words = [
+        {"text": t, "confidence": c, "xmin": x, "xmax": x + 60, "ymin": 100, "ymax": 110} for t, c, x in words
+    ]
+    lines = [{**line, "page": 1} for line in RG.lines_of(page_words)]
+    assert lines[0]["doubtful"] == ["amara.а...у."]
+    fixed = RG.correct_lines(lines, "interventions chirurgicales amafaranga yo")
+    assert fixed[0]["text"] == "1°) interventions chirurigicales amafaranga yo"
+    assert fixed[0]["differences"] == [
+        ("chirurigicales", "chirurgicales", "Layout Parser"),
+        ("amafaranga", "amara.а...у.", "OCR"),
+    ]
+    nodes = RG.structure(fixed, "fr")
+    flags = [f for page in RG.reading(nodes, {}, "0" * 64, {})["pages"] for f in page["flags"]]
+    differs = next(f for f in flags if f["kind"] == "reading_differs")
+    assert differs["checks"] == {"Layout Parser": "chirurgicales", "OCR": "amara.а...у."}
+    # The second reading taking a passage in another order adds nothing twice.
+    two = RG.lines_of(
+        [
+            {"text": t, "confidence": 0.99, "xmin": x, "xmax": x + 50, "ymin": y, "ymax": y + 10}
+            for t, x, y in [
+                ("Iteka", 40, 100),
+                ("rya", 100, 100),
+                ("Arrêté", 40, 120),
+                ("ministériel", 100, 120),
+            ]
+        ]
+    )
+    again = RG.correct_lines(two, "Arrêté ministériel Iteka rya")
+    assert " ".join(line["text"] for line in again).split().count("Iteka") == 1

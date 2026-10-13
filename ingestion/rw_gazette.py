@@ -158,7 +158,20 @@ def lines_of(words: list[dict]) -> list[dict]:
                 "y1": round(max(w["ymax"] for w in line), 1),
             }
         )
+        if any("confidence" in w for w in line):
+            # Read by our OCR: the words it was unsure of, which a second reading may replace.
+            out[-1]["doubtful"] = [w["text"] for w in line if doubtful(w)]
     return out
+
+
+# A word our OCR read with little confidence, or that no Rwandan text spells: letters of another
+# script, a dotless ı, a full stop inside a lower-case word ("kwisuzum.sha" for broken type).
+STRANGE = re.compile(r"[^\x00-\x7f\u00c0-\u024f\u2018-\u201f«»°º–—…§€]|ı|[a-zà-ÿ]\.[a-zà-ÿ]{2,}")
+SURE = 0.9
+
+
+def doubtful(word: dict) -> bool:
+    return word.get("confidence", 1.0) < SURE or bool(STRANGE.search(word["text"]))
 
 
 def split_page(page: dict, number: int, carried: str | None = None, tables: list[dict] | None = None) -> dict:
@@ -783,20 +796,26 @@ def reading(
             if node.get("differences"):
                 # A scanned page: Document AI's words, the OCR layer's where it read otherwise. Accents
                 # restored are listed apart (low); words read differently are what to check (medium).
-                changed = list(node["differences"])
-                accents = [(new, old) for new, old in changed if _fold(new) == _fold(old)]
-                worded = [(new, old) for new, old in changed if _fold(new) != _fold(old)]
+                # Each difference: the word kept, the other reading's, and which reading that was.
+                changed = [tuple(d) if len(d) == 3 else (*d, "OCR layer") for d in node["differences"]]
+                accents = [d for d in changed if _fold(d[0]) == _fold(d[1])]
+                worded = [d for d in changed if _fold(d[0]) != _fold(d[1])]
                 for kind, severity, group in (
                     ("accents_restored", "low", accents),
                     ("reading_differs", "medium", worded),
                 ):
                     if group:
+                        others: dict[str, list[str]] = {}
+                        for _, other, reader in group:
+                            others.setdefault(reader, []).append(other or "∅")
                         node.setdefault("flags", []).append(
                             {
                                 "severity": severity,
                                 "kind": kind,
-                                "primary": "; ".join(new or "∅" for new, _ in group)[:400],
-                                "others": {"OCR layer": "; ".join(old or "∅" for _, old in group)[:400]},
+                                "primary": "; ".join(kept or "∅" for kept, _, _ in group)[:400],
+                                "others": {
+                                    reader: "; ".join(words)[:400] for reader, words in others.items()
+                                },
                             }
                         )
             for flag in node.get("flags", []):
@@ -1183,9 +1202,14 @@ MARKER_LIKE = re.compile(r"^[(\[]?(?:\d{1,3}|[a-zA-Z]{1,3}|[ivxlc]{1,5})[.)\]º�
 
 
 def correct_lines(lines: list[dict], better: str) -> list[dict]:
-    """The lines of a column with their words replaced by a better reading of the same text: the two
-    word sequences are aligned, the better words take the place of the ones they match or replace,
-    and each line keeps a note of what changed ("système" for "systerne")."""
+    """The lines of a column with their words checked against a second reading of the same text
+    (the Layout Parser's): the two word sequences are aligned, and each line keeps a note of every
+    difference (the word kept, the other reading's, and which reading that was).
+
+    Which word is kept: on lines our OCR read, its words stand where it was sure of them, so the
+    page reads as printed (the Gazette's own slips, its numbering); where it was unsure (broken or
+    faint type), the second reading's words are taken. On lines of someone else's OCR layer, the
+    second reading's words are taken, the apostrophes and numbering as printed kept."""
     import difflib
 
     owner, borrowed = [], []
@@ -1200,7 +1224,7 @@ def correct_lines(lines: list[dict], better: str) -> list[dict]:
         None, [_fold(w) for w in borrowed], [_fold(w) for w in good], autojunk=False
     )
     words: dict[int, list[str]] = {k: [] for k in range(len(lines))}
-    notes: dict[int, list[tuple[str, str]]] = {k: [] for k in range(len(lines))}
+    notes: dict[int, list[tuple[str, str, str]]] = {k: [] for k in range(len(lines))}
 
     def letters(text: str) -> str:  # what a reader would call a different word: letters and accents
         return re.sub(r"[^\w]", "", text.lower())
@@ -1208,27 +1232,81 @@ def correct_lines(lines: list[dict], better: str) -> list[dict]:
     def same_glyphs(a: str, b: str) -> bool:  # only the apostrophe or quotation marks differ
         return re.sub(r"[’‘`´']", "'", a) == re.sub(r"[’‘`´']", "'", b)
 
-    for op, i1, i2, j1, j2 in matcher.get_opcodes():
+    def sure(i: int) -> bool:  # a word our OCR read and was sure of
+        line = lines[owner[i]]
+        return "doubtful" in line and borrowed[i] not in line["doubtful"]
+
+    def base(i: int) -> str:  # the name of the reading the lines come from
+        return "OCR" if "doubtful" in lines[owner[i]] else "OCR layer"
+
+    opcodes = matcher.get_opcodes()
+    # Words the OCR has and the second reading puts elsewhere (columns taken in another order):
+    # where the OCR's sure words are kept, the second reading's copy of them is not added again.
+    kept_elsewhere = {
+        _fold(borrowed[i]) for op, i1, i2, _, _ in opcodes if op == "delete" for i in range(i1, i2) if sure(i)
+    }
+    for op, i1, i2, j1, j2 in opcodes:
         if op == "equal":
             for i, j in zip(range(i1, i2), range(j1, j2), strict=True):
                 if same_glyphs(good[j], borrowed[i]):
                     words[owner[i]].append(borrowed[i])  # the apostrophe as printed
-                    continue
-                words[owner[i]].append(good[j])
-                if letters(good[j]) != letters(borrowed[i]):
-                    notes[owner[i]].append((good[j], borrowed[i]))
-        elif op in ("replace", "insert"):
-            home = owner[i1] if i1 < len(owner) else (owner[i1 - 1] if i1 else 0)
-            words[home].extend(good[j1:j2])
+                elif sure(i):
+                    words[owner[i]].append(borrowed[i])
+                    if letters(good[j]) != letters(borrowed[i]):
+                        notes[owner[i]].append((borrowed[i], good[j], "Layout Parser"))
+                else:
+                    words[owner[i]].append(good[j])
+                    if letters(good[j]) != letters(borrowed[i]):
+                        notes[owner[i]].append((good[j], borrowed[i], base(i)))
+        elif op == "replace" and i2 - i1 == j2 - j1:
+            # As many words on each side: each pair decided on its own.
+            for i, j in zip(range(i1, i2), range(j1, j2), strict=True):
+                if sure(i):
+                    words[owner[i]].append(borrowed[i])
+                    if letters(good[j]) != letters(borrowed[i]):
+                        notes[owner[i]].append((borrowed[i], good[j], "Layout Parser"))
+                else:
+                    words[owner[i]].append(good[j])
+                    if letters(good[j]) != letters(borrowed[i]):
+                        notes[owner[i]].append((good[j], borrowed[i], base(i)))
+        elif op == "replace" and all(sure(i) for i in range(i1, i2)):
+            for i in range(i1, i2):
+                words[owner[i]].append(borrowed[i])
             new, old = " ".join(good[j1:j2]), " ".join(borrowed[i1:i2])
             if letters(new) != letters(old):
-                notes[home].append((new, old))
-        else:  # words only the OCR layer has: numbering Document AI leaves out is kept, symbols are not
+                notes[owner[i1]].append((old, new, "Layout Parser"))
+        elif op in ("replace", "insert"):
+            home = owner[i1] if i1 < len(owner) else (owner[i1 - 1] if i1 else 0)
+            added = good[j1:j2]
+            if (
+                op == "insert"
+                and added
+                and sum(_fold(w) in kept_elsewhere for w in added) >= 0.8 * len(added)
+            ):
+                continue  # the same words, which the OCR read in another place and keeps there
+            if op == "replace":
+                # Numbering only the OCR has (the Layout Parser leaves it out) stays with its line.
+                for i in range(i1, i2):
+                    if MARKER_LIKE.match(borrowed[i]) and _fold(borrowed[i]) not in {_fold(w) for w in added}:
+                        words[owner[i]].append(borrowed[i])
+            words[home].extend(added)
+            new, old = " ".join(added), " ".join(borrowed[i1:i2])
+            if letters(new) != letters(old):
+                notes[home].append((new, old, base(i1) if i1 < len(owner) else "OCR"))
+        else:  # words only the OCR has: kept where it was sure; else numbering kept, symbols not
+            if all(sure(i) for i in range(i1, i2)):
+                for i in range(i1, i2):
+                    words[owner[i]].append(borrowed[i])
+                # Numbering the Layout Parser leaves out is no difference; other words are.
+                old = " ".join(w for w in borrowed[i1:i2] if not MARKER_LIKE.match(w))
+                if letters(old):
+                    notes[owner[i1]].append((old, "", "Layout Parser"))
+                continue
             kept = [w for w in borrowed[i1:i2] if MARKER_LIKE.match(w)]
             words[owner[i1]].extend(kept)
             dropped = " ".join(w for w in borrowed[i1:i2] if w not in kept)
             if letters(dropped):
-                notes[owner[i1]].append(("", dropped))
+                notes[owner[i1]].append(("", dropped, base(i1)))
     out = []
     for k, line in enumerate(lines):
         if line.get("table"):
