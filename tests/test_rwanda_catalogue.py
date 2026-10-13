@@ -562,3 +562,28 @@ def test_a_word_document_is_taken_as_it_is_and_a_damaged_file_is_not():
     assert rwanda.file_kind(b"\x00" * 10 + b"%PDF-1.4") == (".pdf", "application/pdf")  # a little junk before
     assert rwanda.file_kind(b"\x00" * 4096) is None  # damaged at the source
     assert rwanda.file_kind(b'o"\n      ]\n ') is None
+
+
+def test_a_word_document_is_passed_over_by_prepare_and_the_survey_not_failed(tmp_path, monkeypatch):
+    monkeypatch.setattr(rwanda, "STAGING", tmp_path)
+    ledger = Ledger(tmp_path / "sync-ledger.json")
+    item = "rlrc-laws:https://www.rlrc.gov.rw/x/DECRET-LOI.docx"
+    ledger.data["items"][item] = {
+        "source": "rlrc-laws",
+        "url": "https://www.rlrc.gov.rw/x/DECRET-LOI.docx",
+        "listed": {"name": "DECRET-LOI.docx"},
+        "sha256": "ab" * 32,
+        "stored": "gs://bucket/sources/rw/rlrc-laws/" + "ab" * 32 + ".docx",
+        "format": "docx",
+    }
+    ledger.save()
+
+    class NoStore:
+        def get(self, name):
+            raise AssertionError(f"a Word document is not read as a PDF: {name}")
+
+    said = []
+    collection = rwanda.LocalCollection(tmp_path / "collection")
+    rwanda.prepare_selection({"items": [item]}, log=said.append, collection=collection, store=NoStore())
+    assert said == ["not prepared (a Word document; not yet read by this pipeline): DECRET-LOI.docx"]
+    assert rwanda.survey(store=NoStore(), log=said.append)["files_surveyed"] == 0

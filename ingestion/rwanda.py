@@ -770,6 +770,9 @@ def prepare_selection(
         if record["source"] not in ("minijust-gazette", "rlrc-laws") or not record.get("sha256"):
             continue
         sha = record["sha256"]
+        if record.get("format", "pdf") != "pdf":
+            log(f"not prepared (a Word document; not yet read by this pipeline): {record['listed']['name']}")
+            continue
         if skip_done and collection.done(sha):
             continue
         # This issue is read afresh: what an earlier reading of it produced is replaced.
@@ -1076,8 +1079,8 @@ def survey(store=None, limit: int | None = None, log=print, sleep=time.sleep) ->
     for item_id, record in ledger.data["items"].items():
         sha = record.get("sha256")
         target = out_dir / f"{sha}.json"
-        if not sha or target.exists():
-            continue
+        if not sha or target.exists() or record.get("format", "pdf") != "pdf":
+            continue  # a Word document is not measured here: it has no pages to scan
         if limit is not None and done >= limit:
             break
         local = STAGING / "sources" / record["source"] / f"{sha}.pdf"
