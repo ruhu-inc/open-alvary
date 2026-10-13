@@ -34,19 +34,26 @@ FURNITURE = re.compile(
     re.I,
 )
 
-# The heading that opens an instrument, as printed in capitals in each language.
+# The heading that opens an instrument, as printed in capitals in each language: its kind, then its
+# number ("N° 11/2001"), or on older laws only its date ("LOI DU 19 FÉVRIER 1964", "ITEGEKO RYO KUWA
+# 19 GASHYANTARE 1964"). Older kinds: decree-laws, ordinances, decrees, royal orders.
+_NUMBER = r"\s+N\s?[°ºO0]\.?\s*(\S+)"
 OPENING = {
     "rw": re.compile(
-        r"^(ITEGEKO NGENGA|ITEGEKO|ITEKA RYA PEREZIDA|ITEKA RYA MINISITIRI W[’']INTEBE|ITEKA RYA MINISITIRI"
-        r"|AMABWIRIZA)\s+N\s?[°ºO0]\.?\s*(\S+)"
+        r"^(ITEGEKO NGENGA|ITEGEKO-TEKA|ITEGEKO|ITEKA RYA PEREZIDA|ITEKA RYA MINISITIRI W[’']INTEBE"
+        r"|ITEKA RYA MINISITIRI|ITEKA RYA MINISTRI|AMABWIRIZA)"
+        rf"(?:{_NUMBER}|\s+R?YO\s+KU\s?WA\s+(.*\d{{4}}))"
     ),
     "en": re.compile(
-        r"^(ORGANIC LAW|LAW|PRESIDENTIAL ORDER|PRIME MINISTER[’']S ORDER|MINISTERIAL ORDER|REGULATIONS?"
-        r"|INSTRUCTIONS?)\s+N\s?[°ºO0]\.?\s*(\S+)"
+        r"^(ORGANIC LAW|DECREE-LAW|LAW|PRESIDENTIAL ORDER|PRIME MINISTER[’']S ORDER|MINISTERIAL ORDER"
+        r"|REGULATIONS?|INSTRUCTIONS?|DECREE|ORDINANCE)"
+        rf"(?:{_NUMBER}|\s+OF\s+(.*\d{{4}}))"
     ),
     "fr": re.compile(
-        r"^(LOI ORGANIQUE|LOI|ARR[ÊE]T[ÉE] PR[ÉE]SIDENTIEL|ARR[ÊE]T[ÉE] DU PREMIER MINISTRE"
-        r"|ARR[ÊE]T[ÉE] MINIST[ÉE]RIEL|R[ÈE]GLEMENTS?|INSTRUCTIONS?)\s+N\s?[°ºO0]\.?\s*(\S+)"
+        r"^(LOI ORGANIQUE|D[ÉE]CRET-LOI|ORDONNANCE-LOI|ORDONNANCE L[ÉE]GISLATIVE|LOI|ARR[ÊE]T[ÉE] PR[ÉE]SIDENTIEL"
+        r"|ARR[ÊE]T[ÉE] DU PREMIER MINISTRE|ARR[ÊE]T[ÉE] MINIST[ÉE]RIEL|ARR[ÊE]T[ÉE] ROYAL|R[ÈE]GLEMENTS?"
+        r"|INSTRUCTIONS?|ORDONNANCE|D[ÉE]CRET)"
+        rf"(?:{_NUMBER}|\s+DU\s+(.*\d{{4}}))"
     ),
 }
 # A constitution is printed without a number.
@@ -78,8 +85,21 @@ KIND = {
     "RÈGLEMENTS": "regulations",
     "INSTRUCTION": "instructions",
     "INSTRUCTIONS": "instructions",
+    # Older kinds (before 1994 and in RLRC's repealed laws).
+    "ITEGEKO-TEKA": "decree_law",
+    "DECREE-LAW": "decree_law",
+    "DÉCRET-LOI": "decree_law",
+    "ORDONNANCE-LOI": "ordinance",
+    "ORDONNANCE LÉGISLATIVE": "ordinance",
+    "ORDONNANCE": "ordinance",
+    "ORDINANCE": "ordinance",
+    "DÉCRET": "decree",
+    "DECREE": "decree",
+    "ARRÊTÉ ROYAL": "royal_decree",
+    "ITEKA RYA MINISTRI": "ministerial_order",
 }
-DATE = re.compile(r"\b(\d{1,2})/(\d{1,2})/((?:19|20)\d\d)\b")
+# A date in figures: "12/03/1999", and on older pages "14-3-1974" or "1.3.1964".
+DATE = re.compile(r"\b(\d{1,2})[/.-](\d{1,2})[/.-]((?:19|20)\d\d)\b")
 CONTENTS = re.compile(r"^(ISHAKIRO|TABLE OF CONTENTS|TABLE DES MATI[ÈE]RES)\b", re.I)
 # Where the body begins: a law's "We, KAGAME Paul," or an order's own author ("The Minister of …;",
 # "Minisitiri w'…;", "Le Ministre …;"), when an order has no contents list printed again after it.
@@ -368,10 +388,11 @@ def streams(split: list[dict], skip: set[int] | frozenset = frozenset()) -> dict
 
 
 def _plain_date(text: str) -> str | None:
-    match = DATE.search(text)
-    if not match:
-        return None
-    return f"{match.group(3)}-{int(match.group(2)):02d}-{int(match.group(1)):02d}"
+    for match in DATE.finditer(text):
+        day, month = int(match.group(1)), int(match.group(2))
+        if 1 <= day <= 31 and 1 <= month <= 12:  # "06-81-1981" is a number, not a date
+            return f"{match.group(3)}-{month:02d}-{day:02d}"
+    return None
 
 
 def openings(lines: list[dict], language: str) -> list[dict]:
@@ -404,13 +425,23 @@ def openings(lines: list[dict], language: str) -> list[dict]:
             .replace("PRESIDENTIEL", "PRÉSIDENTIEL")
             .replace("MINISTERIEL", "MINISTÉRIEL")
             .replace("REGLEMENT", "RÈGLEMENT")
+            .replace("DECRET", "DÉCRET")
+            .replace("LEGISLATIVE", "LÉGISLATIVE")
         )
+        date = _plain_date(title) or spoken_date(title)
+        number = (match.group(2) or "").rstrip(".,;:") if match else "constitution"
+        if not number:
+            # An older law known by its date: the date is its key across the languages.
+            if not date:
+                i += 1
+                continue
+            number = date
         found.append(
             {
                 "start": i,
                 "kind": KIND.get(word, "other") if match else "constitution",
-                "number": match.group(2).rstrip(".,;:") if match else "constitution",
-                "date": _plain_date(title),
+                "number": number,
+                "date": date,
                 "title": title,
                 "page": lines[i]["page"],
             }
@@ -476,6 +507,27 @@ def instruments(issue_streams: dict[str, list[dict]]) -> list[dict]:
         else:
             merged.append(entry)
     return merged
+
+
+def whole_file(
+    issue_streams: dict[str, list[dict]], kind: str, number: str, date: str | None, title: str
+) -> list[dict]:
+    """A file that is one instrument whose heading the openings do not know (an RLRC copy of an
+    older text): one entry over each language printed in it, its title from the source's listing,
+    marked so that the reviewer checks it."""
+    versions = {}
+    for language, lines in issue_streams.items():
+        if sum(len(line["text"].split()) for line in lines) >= 20:  # the language is printed here
+            versions[language] = {
+                "title": title,
+                "has_body": True,
+                "start": 0,
+                "end": len(lines),
+                "pages": [lines[0]["page"], lines[-1]["page"]],
+            }
+    if not versions:
+        return []
+    return [{"number": number, "kind": kind, "date": date, "versions": versions, "title_from_listing": True}]
 
 
 def _same_title_other_number(first: dict, second: dict) -> bool:
