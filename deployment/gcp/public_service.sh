@@ -224,21 +224,25 @@ edge() {
   "${C[@]}" network-endpoint-groups describe open-alvary-neg --region="$REGION" >/dev/null 2>&1 \
     || "${C[@]}" network-endpoint-groups create open-alvary-neg --region="$REGION" \
       --network-endpoint-type=serverless --cloud-run-service="$SERVICE"
-  if ! "${C[@]}" security-policies describe open-alvary-edge >/dev/null 2>&1; then
-    "${C[@]}" security-policies create open-alvary-edge --description="Open Alvary edge rules (D23)"
-    # Website paths only, never api.<domain>: a per-address throttle above any reader's pace (D23 to
-    # measure); the origin's own site class does the fine-grained admission.
-    "${C[@]}" security-policies rules create 1000 --security-policy=open-alvary-edge \
-      --expression="request.path.matches('^/(site|downloads)/')" --action=throttle \
-      --rate-limit-threshold-count=600 --rate-limit-threshold-interval-sec=60 \
+  "${C[@]}" security-policies describe open-alvary-edge >/dev/null 2>&1 \
+    || "${C[@]}" security-policies create open-alvary-edge --description="Open Alvary edge rules (D23)"
+  # Website paths only, never api.<domain>: a per-address throttle above any reader's pace (D23 to
+  # measure); the origin's own site class does the fine-grained admission. (Cloud Armor's regular
+  # expressions allow no groups, so the paths are two prefixes.)
+  "${C[@]}" security-policies rules describe 1000 --security-policy=open-alvary-edge >/dev/null 2>&1 \
+    || "${C[@]}" security-policies rules create 1000 --security-policy=open-alvary-edge \
+      --expression="request.path.startsWith('/site/') || request.path.startsWith('/downloads/')" \
+      --action=throttle --rate-limit-threshold-count=600 --rate-limit-threshold-interval-sec=60 \
       --conform-action=allow --exceed-action=deny-429 --enforce-on-key=IP
-  fi
-  if ! "${C[@]}" backend-services describe open-alvary-backend --global >/dev/null 2>&1; then
-    "${C[@]}" backend-services create open-alvary-backend --global --load-balancing-scheme=EXTERNAL_MANAGED
-    "${C[@]}" backend-services add-backend open-alvary-backend --global \
+  "${C[@]}" backend-services describe open-alvary-backend --global >/dev/null 2>&1 \
+    || "${C[@]}" backend-services create open-alvary-backend --global --load-balancing-scheme=EXTERNAL_MANAGED
+  # Each step checks for itself, so a run interrupted halfway completes on the next.
+  "${C[@]}" backend-services describe open-alvary-backend --global --format='value(backends[].group)' \
+    | grep -q open-alvary-neg \
+    || "${C[@]}" backend-services add-backend open-alvary-backend --global \
       --network-endpoint-group=open-alvary-neg --network-endpoint-group-region="$REGION"
-    "${C[@]}" backend-services update open-alvary-backend --global --security-policy=open-alvary-edge
-  fi
+  # Right after a change the backend can answer "not ready" for a few seconds: grant() retries.
+  grant "${C[@]}" backend-services update open-alvary-backend --global --security-policy=open-alvary-edge
   "${C[@]}" url-maps describe open-alvary-map >/dev/null 2>&1 \
     || "${C[@]}" url-maps create open-alvary-map --default-service=open-alvary-backend
   local M=("${GC[@]}" certificate-manager)
