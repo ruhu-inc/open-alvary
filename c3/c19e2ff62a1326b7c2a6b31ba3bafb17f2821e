@@ -1,0 +1,38 @@
+ingestion/catalogue/ng.json
+  s_b82616e2476856::t_db081d7e40af3b 52-54,67-69,82-84,97-100
+schema/public.schema.json
+  s_b82616e2476856::t_db081d7e40af3b 675-701
+tests/test_site.py
+  s_b82616e2476856::t_ff640520ae56c1 208-237
+api/service.py
+  s_b82616e2476856::t_59a76d48c3645d 28
+  s_b82616e2476856::t_66992b3715f511 19,21,24,31,33,35-36,84-108,110,114-140
+  s_b82616e2476856::t_327f51a99bc9df 141-142
+tests/test_vercel.py
+  s_b82616e2476856::t_59a76d48c3645d 22-23
+api/catalogue.py
+  s_b82616e2476856::t_04e956bcad3514 36-41,214-278
+  s_b82616e2476856::t_9ae8f81815b5fe 279
+schema/corpus.schema.json
+  s_b82616e2476856::t_db081d7e40af3b 594-620
+api/site.py
+  s_b82616e2476856::t_3c21ea509c35ba 17,29,42,106-115,209-237,240,244,248-249,255-266
+schema/models.py
+  s_b82616e2476856::t_afb4d5d548a5ee 96-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c3c19e2ff62a1326b7c2a6b31ba3bafb17f2821e",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
