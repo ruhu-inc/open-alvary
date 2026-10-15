@@ -20,10 +20,11 @@ CLAUDE_CODE = "https://claude.ai/oauth/claude-code-client-metadata"
 CLAUDE = (
     "https://claude.ai/oauth/mcp-oauth-client-metadata"  # claude.ai, desktop, mobile (seen in Auth0's log)
 )
-CHATGPT = "https://chatgpt.com/oauth/BpZIpxL-aggt/client.json"
+CHATGPT = "https://chatgpt.com/oauth/client.json"  # ChatGPT's plugin platform (seen in Auth0's log)
+CHATGPT_OLD = "https://chatgpt.com/oauth/BpZIpxL-aggt/client.json"  # its earlier connector document
 CODEX = "https://chatgpt.com/oauth/codex/client.json"
 # Tools reviewed and imported by their client metadata documents (MAC-07 "verified publisher").
-REVIEWED = [CLAUDE_CODE, CLAUDE, CHATGPT, CODEX]
+REVIEWED = [CLAUDE_CODE, CLAUDE, CHATGPT, CHATGPT_OLD, CODEX]
 
 
 def resources(base):
