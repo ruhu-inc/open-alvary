@@ -1,0 +1,33 @@
+trials/idp_check/revoke.py
+  s_b82616e2476856::t_699c7967871d78 1-44
+trials/idp_check/server.py
+  s_b82616e2476856::t_d1d05077c05045 18-19,23,30,44-52,184,262-263,272-397
+  s_b82616e2476856::t_5b1ae78e36a29d 41-43,129-132,136-137
+  s_b82616e2476856::t_699c7967871d78 180,183,185
+  s_b82616e2476856::t_50f8d9ff739de1 138-139,398-399
+trials/idp_check/cli.py
+  s_b82616e2476856::t_6ed5f026df6c91 1-45,47-57,59-68,70,73-101,103-138,140-151,153-167,169-194,196-204,211-246
+  s_b82616e2476856::t_dc2920584b9ec6 72,205-210
+  s_b82616e2476856::t_8dba477bed77aa 46,58,69,71,102,139,152,168,195
+trials/idp_check/setup.py
+  s_b82616e2476856::t_b068c24c5e96c6 96-107,166,169
+  s_b82616e2476856::t_fa9aa2ae386d65 12-14,16,108-155,167-168,170
+trials/idp_check/consent_action.js
+  s_b82616e2476856::t_ced5302c4efcc9 1-63
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3a66ee0f5cb1d95715db043ffab84a016f63b85f",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
