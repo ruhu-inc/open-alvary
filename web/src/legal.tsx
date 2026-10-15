@@ -2,8 +2,8 @@
 // acceptable use policy and the privacy notice. Their version is the date in accounts/policies.py;
 // a new version is a new date, which people accept at their next sign-in.
 
-import React, { useContext } from "react";
-import { Link, PageTitle, ProjectContext } from "./site";
+import React from "react";
+import { Link, PageTitle } from "./site";
 
 export const LEGAL_VERSION = "2026-10-15";
 // Until the owner approves them, the pages say they are a draft and not in effect.
@@ -26,13 +26,12 @@ function Status() {
   );
 }
 
-function Contact() {
-  const project = useContext(ProjectContext);
-  return project.contact_email ? (
-    <a href={`mailto:${project.contact_email}`}>{project.contact_email}</a>
-  ) : (
-    <span>the contact address on the About page</span>
-  );
+// Ruhu, Inc.'s own addresses, as on its legal pages: legal matters and privacy.
+const LEGAL_EMAIL = "hello@ruhu.ai";
+const PRIVACY_EMAIL = "privacy@ruhu.ai";
+
+function Email({ address }: { address: string }) {
+  return <a href={`mailto:${address}`}>{address}</a>;
 }
 
 export function Terms() {
@@ -120,7 +119,7 @@ export function Terms() {
         <p>
           We may suspend or end an account, an organisation, a key or a connection that breaks these terms or
           endangers the service or others, telling you why unless the law or security prevents it. You can
-          appeal by writing to <Contact />. You may close your account at any time in the console.
+          appeal by writing to <Email address={LEGAL_EMAIL} />. You may close your account at any time in the console.
         </p>
       </section>
       <section>
@@ -158,7 +157,8 @@ export function Terms() {
       <section>
         <h2>Contact</h2>
         <p>
-          Questions about these terms: <Contact />.
+          Questions and legal notices about these terms: <Email address={LEGAL_EMAIL} />, or by post to{" "}
+          {OPERATOR}, {ADDRESS}.
         </p>
       </section>
     </div>
@@ -202,7 +202,7 @@ export function AcceptableUse() {
         <h2>If this policy is broken</h2>
         <p>
           We may limit, suspend or end access, keys or connections, as the terms of service describe. Tell us
-          about misuse at <Contact />.
+          about misuse at <Email address={LEGAL_EMAIL} />.
         </p>
       </section>
     </div>
@@ -221,7 +221,7 @@ export function Privacy() {
         <h2>Who is responsible</h2>
         <p>
           {OPERATOR} operates Open Alvary and decides how personal information is used for it. Write to us
-          about privacy at <Contact />, or by post to {OPERATOR}, {ADDRESS}.
+          about privacy at <Email address={PRIVACY_EMAIL} />, or by post to {OPERATOR}, {ADDRESS}.
         </p>
       </section>
       <section>
@@ -277,7 +277,10 @@ export function Privacy() {
         <p>
           You can see and change your details in the console, export what we hold about you, and delete your
           account there. You can also ask us to access, correct or delete your information, or object to how we
-          use it, by writing to <Contact />; you may complain to your data protection authority.
+          use it, by writing to <Email address={PRIVACY_EMAIL} />; you may complain to your data protection
+          authority. Depending on where you live, these rights come from laws such as the EU and UK General Data
+          Protection Regulation, Nigeria's Data Protection Act 2023, Kenya's Data Protection Act 2019 and South
+          Africa's Protection of Personal Information Act.
         </p>
       </section>
       <section>
