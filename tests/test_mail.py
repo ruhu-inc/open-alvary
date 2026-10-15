@@ -20,16 +20,14 @@ def recorder(statuses):
 def test_messages_are_sent_through_resend_with_our_sender_and_reply_address(monkeypatch):
     monkeypatch.setattr(mail.time, "sleep", lambda s: None)
     sent, client = recorder([])
-    mailer = mail.Mailer(
-        "re_test", "Open Alvary <no-reply@mail.open.alvary.ai>", "hello@ruhu.ai", client=client
-    )
+    mailer = mail.Mailer("re_test", "Open Alvary <no-reply@ruhu.ai>", "hello@ruhu.ai", client=client)
     message = mail.invitation(
         "guest@example.org", "Legal Clinic", "Amina Uwase", "developer", "https://open.alvary.ai"
     )
     assert mailer.send(message)
     [body] = sent
     assert body["to"] == ["guest@example.org"] and body["reply_to"] == "hello@ruhu.ai"
-    assert body["from"] == "Open Alvary <no-reply@mail.open.alvary.ai>"
+    assert body["from"] == "Open Alvary <no-reply@ruhu.ai>"
     assert (
         "Amina Uwase invited you to join Legal Clinic" in body["text"] and "expires in 7 days" in body["text"]
     )

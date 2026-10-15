@@ -197,7 +197,7 @@ def plan(
     return steps
 
 
-SENDER = "Open Alvary <no-reply@mail.open.alvary.ai>"
+SENDER = "Open Alvary <no-reply@ruhu.ai>"
 CODE_SUBJECT = "Your Open Alvary sign-in code"
 CODE_BODY = (
     '<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.55;color:#22372f;'
@@ -215,7 +215,7 @@ def email_steps(m: Management) -> list[tuple[str, callable]]:
     if not key:
         return [
             (
-                "skip email: put RESEND_API_KEY in .env once the mail.open.alvary.ai domain is verified",
+                "skip email: put RESEND_API_KEY in .env (a sending key for the verified ruhu.ai domain)",
                 lambda: None,
             )
         ]
