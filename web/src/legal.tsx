@@ -257,8 +257,15 @@ export function Privacy() {
         <ul>
           <li>Auth0, by Okta, runs sign-in and second factors, in its European Union region.</li>
           <li>Google Cloud hosts the services and their database in Belgium (europe-west1).</li>
+          <li>
+            Resend sends our emails, including sign-in codes, from Ireland, and keeps its records of those emails
+            in the United States.
+          </li>
         </ul>
-        <p>They act on our instructions under contracts that protect your information.</p>
+        <p>
+          They act on our instructions under contracts that protect your information, including where it is held
+          outside your country.
+        </p>
       </section>
       <section>
         <h2>How long we keep it</h2>
