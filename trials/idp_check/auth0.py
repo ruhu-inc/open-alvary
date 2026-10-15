@@ -6,6 +6,7 @@ are never printed. Every call returns parsed JSON or raises with Auth0's own err
 
 import json
 import os
+import time
 from pathlib import Path
 
 import httpx
@@ -55,7 +56,11 @@ class Management:
         )
 
     def call(self, method, path, body=None, **params):
-        answer = self.client.request(method, path, json=body, params=params or None)
+        for wait in (1, 2, 4, 8, 0):  # the free plan's management API allows only a few calls a second
+            answer = self.client.request(method, path, json=body, params=params or None)
+            if answer.status_code != 429 or not wait:
+                break
+            time.sleep(wait)
         if answer.status_code >= 400:
             try:
                 detail = answer.json()
