@@ -183,12 +183,14 @@ setup() {
 }
 
 app_env() {
-  local name env="ALVARY_RUNTIME_MODE=persistent,PUBLIC_DOMAIN=$DOMAIN"
+  # gcloud's alternate-delimiter form (^##^…##…): values such as "Ruhu, Inc." keep their commas.
+  local name env="^##^ALVARY_RUNTIME_MODE=persistent##PUBLIC_DOMAIN=$DOMAIN"
   for name in "${SETTINGS[@]}"; do
     local value
     value="$(setting "$name")"
     [[ -n "$value" ]] || { echo "Set $name in the environment or .env" >&2; exit 1; }
-    env+=",$name=$value"
+    [[ "$value" != *"##"* ]] || { echo "$name must not contain ##" >&2; exit 1; }
+    env+="##$name=$value"
   done
   printf '%s' "$env"
 }
@@ -212,7 +214,7 @@ deploy() {
     --add-cloudsql-instances="$(connection)" --ingress=internal-and-cloud-load-balancing --no-default-url \
     --no-invoker-iam-check --min-instances=1 --max-instances="$MAX_INSTANCES" --cpu=1 --memory=1Gi \
     --concurrency=80 \
-    --set-env-vars="$env,ALVARY_ADMISSION_CONFIG=/secrets/admission/config.json,ALVARY_SITE_ADMISSION_CONFIG=/secrets/site-admission/config.json" \
+    --set-env-vars="$env##ALVARY_ADMISSION_CONFIG=/secrets/admission/config.json##ALVARY_SITE_ADMISSION_CONFIG=/secrets/site-admission/config.json" \
     --set-secrets="DATABASE_URL=database-url:latest,/secrets/admission/config.json=admission-config:latest,/secrets/site-admission/config.json=site-admission-config:latest"
   echo "Deployed $IMAGE. Next: $0 edge (once), then $0 verify"
 }
