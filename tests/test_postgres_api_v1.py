@@ -140,3 +140,56 @@ def test_the_organisation_allowance_answers_429_with_retry_after(api):
     assert limited.json()["code"] == "rate_limited" and int(limited.headers["retry-after"]) >= 1
     [day] = accounts.usage(person, organisation)
     assert day["requests"] == 2 and day["refusals"]["rate_limited"] == 2
+
+
+def rpc(method, params=None, id_=1):
+    return {"jsonrpc": "2.0", "id": id_, "method": method, **({"params": params} if params else {})}
+
+
+def test_mcp_needs_a_credential_and_answers_tools_within_the_access(api):
+    client, accounts, person, organisation = api
+    refused = client.post("/mcp", json=rpc("initialize", {"protocolVersion": "2025-06-18"}))
+    assert refused.status_code == 401 and refused.json()["error"]["code"] == 10001
+    assert refused.json()["error"]["data"]["code"] == "credential_required"
+    assert (
+        'resource_metadata="https://api.open.alvary.ai/.well-known/oauth-protected-resource/mcp"'
+        in (refused.headers["www-authenticate"])
+    )
+    metadata = client.get("/.well-known/oauth-protected-resource/mcp").json()
+    assert metadata["resource"] == "https://api.open.alvary.ai/mcp"
+    assert client.get("/.well-known/oauth-protected-resource").json() == metadata
+    grant(accounts, organisation, scope={"jurisdictions": ["ng"]})
+    headers = key(accounts, person, organisation)
+    assert (
+        client.post(
+            "/mcp", json=rpc("initialize", {"protocolVersion": "2025-06-18"}), headers=headers
+        ).json()["result"]["serverInfo"]["name"]
+        == "open-alvary"
+    )
+    tools = client.post("/mcp", json=rpc("tools/list"), headers=headers).json()["result"]["tools"]
+    assert {t["name"] for t in tools} == {"search_catalogue", "get_source", "get_coverage"}
+    found = client.post(
+        "/mcp",
+        json=rpc("tools/call", {"name": "get_source", "arguments": {"source_id": "ng-foi-act-2011"}}),
+        headers=headers,
+    ).json()["result"]
+    assert not found["isError"] and "Freedom of Information" in found["content"][0]["text"]
+    assert client.get("/mcp", headers=headers).status_code == 405  # no server-initiated stream
+    [usage] = accounts.usage(person, organisation)
+    assert usage["class"] == "mcp" and usage["requests"] == 4  # the GET counts too
+
+
+def test_mcp_tools_refuse_records_outside_the_access(api):
+    client, accounts, person, organisation = api
+    grant(accounts, organisation, scope={"jurisdictions": ["rw"]})
+    headers = key(accounts, person, organisation)
+    outside = client.post(
+        "/mcp",
+        json=rpc("tools/call", {"name": "get_source", "arguments": {"source_id": "ng-foi-act-2011"}}),
+        headers=headers,
+    ).json()["result"]
+    assert outside["isError"] and "outside your organisation's access" in outside["content"][0]["text"]
+    accounts.revoke_access("op", organisation, "Test")
+    lapsed = client.post("/mcp", json=rpc("tools/list"), headers=headers)
+    assert lapsed.status_code == 403 and lapsed.json()["error"]["data"]["code"] == "entitlement_lapsed"
+    assert "www-authenticate" not in lapsed.headers

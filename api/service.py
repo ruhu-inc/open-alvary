@@ -3,6 +3,7 @@
     /site/v1/...    the website's own data path (api.site), admitted in the "site" class
     /downloads/...  public release files, rechecked on every response
     /api/v1/...     REST v1 for organisations with access (api.v1), behind the credential gate
+    /mcp            MCP for organisations with access, behind the same gate
     /api/...        the legacy anonymous API, unchanged until activation B; its release-file route
                     now redirects to /downloads
     /console/...    the developer console and its API (api.console), PostgreSQL only
@@ -18,6 +19,7 @@ configured too (``ALVARY_SITE_ADMISSION_CONFIG``), or the service refuses to sta
 """
 
 import os
+from contextlib import contextmanager
 from html import escape
 from pathlib import Path
 from urllib.parse import quote
@@ -25,9 +27,11 @@ from urllib.parse import quote
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.routing import Route
 
 from accounts.store import Accounts
 from api.admission import AdmissionConfig, AdmissionStore
@@ -35,7 +39,8 @@ from api.catalogue import LegacyCatalogue
 from api.console import ConsoleConfig, Provider, create_console_app
 from api.credentials import CredentialGate, GateConfig, TokenVerifier
 from api.main import create_app
-from api.repositories import LegacyRepository
+from api.mcp import create_router as create_mcp_router
+from api.repositories import LegacyRepository, PublicUnavailable
 from api.site import create_downloads_app, create_site_app
 from api.store import ROOT, Store, check_legacy_authority, engine_for
 from api.v1 import PUBLIC_PATHS as V1_PUBLIC
@@ -110,11 +115,42 @@ def create_service(
             ),
         )
 
-        @service.get("/.well-known/oauth-protected-resource/api/v1", include_in_schema=False)
-        def api_resource_metadata():
+        mcp_resource = api_origin + "/mcp"
+        mcp_metadata = api_origin + "/.well-known/oauth-protected-resource/mcp"
+        mcp = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
+        @contextmanager
+        def catalogue_session():
+            with store.engine.begin() as connection:
+                check_legacy_authority(connection, write=False)
+                yield LegacyCatalogue(LegacyRepository(connection))
+
+        def reach(request: Request):
+            scope = request.state.access["scope"]
+            return None if scope.get("all") else set(scope.get("jurisdictions") or [])
+
+        mcp.include_router(
+            create_mcp_router(catalogue_session, (SQLAlchemyError, ValidationError, PublicUnavailable), reach)
+        )
+        service.router.routes.append(
+            Route(
+                "/mcp",
+                CredentialGate(
+                    mcp,
+                    config=GateConfig(mcp_resource, "mcp", "mcp", mcp_metadata, jsonrpc=True),
+                    check=accounts.check_credential,
+                    record_usage=accounts.record_usage,
+                    admission=AdmissionStore(store.engine, namespace),
+                    verifier=TokenVerifier(config.issuer) if config else None,
+                ),
+                methods=["GET", "POST", "DELETE"],
+            )
+        )
+
+        def resource_metadata(resource_url: str) -> JSONResponse:
             # RFC 9728: which authorisation server issues tokens for this resource, and for what.
             body = {
-                "resource": resource,
+                "resource": resource_url,
                 "authorization_servers": [config.issuer.rstrip("/")] if config else [],
                 "scopes_supported": ["corpus:read"],
                 "bearer_methods_supported": ["header"],
@@ -123,6 +159,15 @@ def create_service(
             return JSONResponse(
                 body, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "max-age=300"}
             )
+
+        service.add_api_route(
+            "/.well-known/oauth-protected-resource/api/v1",
+            lambda: resource_metadata(resource),
+            include_in_schema=False,
+        )
+        for path in ("/.well-known/oauth-protected-resource/mcp", "/.well-known/oauth-protected-resource"):
+            # The bare path too: some MCP hosts look there first.
+            service.add_api_route(path, lambda: resource_metadata(mcp_resource), include_in_schema=False)
 
         service.add_api_route(
             "/console", lambda: RedirectResponse("/console/", status_code=308), include_in_schema=False
