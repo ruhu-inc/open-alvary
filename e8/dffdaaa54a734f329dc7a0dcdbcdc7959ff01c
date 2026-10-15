@@ -1,0 +1,28 @@
+web/src/console/consent.tsx
+  s_b82616e2476856::t_97396cf5b4d035 1-160
+tests/test_postgres_console.py
+  s_b82616e2476856::t_36e17e1fd0aeb0 65,69-73,273-372
+web/src/console/main.tsx
+  s_b82616e2476856::t_7b7828d606479e 11,61,76
+api/service.py
+  s_b82616e2476856::t_9e6b472a5dafd5 183-185
+api/console.py
+  s_b82616e2476856::t_9e6b472a5dafd5 26,38,153-189,230,232-233,727-840
+  s_b82616e2476856::t_18a874f4a3e944 841
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e8dffdaaa54a734f329dc7a0dcdbcdc7959ff01c",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
