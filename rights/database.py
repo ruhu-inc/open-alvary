@@ -18,7 +18,7 @@ class PolicyNamespace:
     base: str = "public"
 
     def schema(self, kind: str) -> str:
-        if kind not in {"policy", "staging", "corpus"}:
+        if kind not in {"policy", "staging", "corpus", "accounts"}:
             raise ValueError("Unknown policy schema")
         return f"{self.base}_{kind}" if self.base.startswith("test_") else kind
 
