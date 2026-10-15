@@ -1,0 +1,63 @@
+/**
+ * Auth0 post-login Action for the identity-provider checks (MAC-07, MAC-16).
+ *
+ * When a person signs in for one of the check resources, Auth0 sends them to our consent page, which
+ * names the tool, shows where it returns, and asks which organisation the connection is for. The
+ * choice comes back in a signed token and becomes the access token's organisation claim. Renewals
+ * cannot open a page, so they reuse the choice stored for that tool.
+ *
+ * Secrets (set by trials/idp_check/setup.py): CONSENT_SECRET, CONSENT_URL, RESOURCES (comma-separated).
+ */
+
+const CLAIM = "https://open.alvary.ai/org";
+
+function resourceOf(event) {
+  const query = event.request && event.request.query ? event.request.query : {};
+  return (event.resource_server && event.resource_server.identifier) || query.resource || query.audience || "";
+}
+
+function ours(event) {
+  const resources = (event.secrets.RESOURCES || "").split(",").filter(Boolean);
+  return resources.includes(resourceOf(event));
+}
+
+function stored(event) {
+  const orgs = (event.user.app_metadata && event.user.app_metadata.oa_check_orgs) || {};
+  return orgs[event.client.client_id];
+}
+
+exports.onExecutePostLogin = async (event, api) => {
+  if (!ours(event)) return;
+  const renewal = event.transaction && event.transaction.protocol === "oauth2-refresh-token";
+  const canRedirect = !renewal && (!api.redirect.canRedirect || api.redirect.canRedirect());
+  if (!canRedirect) {
+    const org = stored(event);
+    if (!org) return api.access.deny("No organisation was chosen for this connection; connect again.");
+    api.accessToken.setCustomClaim(CLAIM, org);
+    return;
+  }
+  const query = event.request && event.request.query ? event.request.query : {};
+  const token = api.redirect.encodeToken({
+    secret: event.secrets.CONSENT_SECRET,
+    expiresInSeconds: 600,
+    payload: {
+      client_id: event.client.client_id,
+      client_name: event.client.name,
+      redirect_uri: query.redirect_uri || "",
+      resource: resourceOf(event),
+      email: event.user.email || "",
+    },
+  });
+  api.redirect.sendUserTo(event.secrets.CONSENT_URL, { query: { session_token: token } });
+};
+
+exports.onContinuePostLogin = async (event, api) => {
+  const answer = api.redirect.validateToken({ secret: event.secrets.CONSENT_SECRET, tokenParameterName: "consent_token" });
+  if (answer.decision !== "allow" || !answer.org) {
+    return api.access.deny("The connection was not allowed.");
+  }
+  const orgs = Object.assign({}, (event.user.app_metadata && event.user.app_metadata.oa_check_orgs) || {});
+  orgs[event.client.client_id] = answer.org;
+  api.user.setAppMetadata("oa_check_orgs", orgs);
+  api.accessToken.setCustomClaim(CLAIM, answer.org);
+};
