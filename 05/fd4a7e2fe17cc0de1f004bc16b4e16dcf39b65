@@ -1,0 +1,21 @@
+api/store.py
+  s_b82616e2476856::t_859abc899f06f5 67-69,72,75
+tests/test_runtime_config.py
+  s_b82616e2476856::t_859abc899f06f5 27-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "05fd4a7e2fe17cc0de1f004bc16b4e16dcf39b65",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
