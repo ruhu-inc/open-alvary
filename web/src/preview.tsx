@@ -13,6 +13,7 @@ import "./style.css";
 import "./preview.css";
 import {
   jurisdictionName,
+  LinkStyle,
   PageTitle,
   SiteFooter,
   SiteHeader,
@@ -257,7 +258,9 @@ function Preview() {
     }
     meta.content =
       String(preview.view.values["text.summary.text"] ?? "") ||
-      preview.source.catalogue_note;
+      preview.source.summary ||
+      preview.source.catalogue_note ||
+      preview.source.title;
   }, [preview]);
   useEffect(() => {
     if (preview)
@@ -342,6 +345,9 @@ function Preview() {
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <Preview />
+    {/* The preview keeps its own #/ addresses inside the workbench. */}
+    <LinkStyle.Provider value="hash">
+      <Preview />
+    </LinkStyle.Provider>
   </React.StrictMode>,
 );
