@@ -302,11 +302,14 @@ verify() {
   echo "  page 26 refused -> $(curl_lb -o /dev/null -w '%{http_code}' "$base/site/v1/sources?page=26")"
   echo "  old download link -> $(curl_lb -o /dev/null -w '%{http_code} %header{location}' "$base/api/releases/x/ng/metadata/manifest.json")"
   echo "  no CORS -> '$(curl_lb -o /dev/null -w '%header{access-control-allow-origin}' -H 'Origin: https://elsewhere.example' "$base/site/v1/sources")'"
-  # A forged X-Forwarded-For must land in the caller's own bucket: the remaining count keeps falling.
-  local one two
-  one="$(curl_lb -o /dev/null -w '%header{ratelimit}' "$base/site/v1/project")"
-  two="$(curl_lb -o /dev/null -w '%header{ratelimit}' -H 'X-Forwarded-For: 198.51.100.77' "$base/site/v1/project")"
-  echo "  forged X-Forwarded-For: $one then $two (the second must show one fewer remaining)"
+  # Forged X-Forwarded-For values must all land in the caller's own bucket: 40 requests, each with a
+  # different forged address, must drain one allowance (the bucket refills too fast to compare two).
+  local lowest
+  lowest="$(seq 1 40 | xargs -P 20 -I{} curl -s -o /dev/null --max-time 20 --resolve "$DOMAIN:443:$ip" \
+    -H "X-Forwarded-For: 198.51.100.{}" -w '%header{ratelimit}\n' "$base/site/v1/project" \
+    | sed -E 's/.*r=([0-9]+).*/\1/' | sort -n | head -1)"
+  echo "  40 forged addresses -> lowest remaining $lowest (must fall well below the capacity: one shared bucket)"
+  echo "  (separate real visitors keep separate buckets: probe from another network, as on 2026-10-15)"
   local repository
   repository="$(setting PUBLIC_REPOSITORY_URL)"
   echo "  repository link $repository -> $(curl -s -o /dev/null -w '%{http_code}' "$repository") (must be 200)"
