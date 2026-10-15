@@ -1,7 +1,7 @@
 """Account email (ACS-07, MAC-04, MAC-08): invitations, access requests and decisions, sign-in changes.
 
-Sent through Resend's HTTP API from a subdomain of our own (ALVARY_MAIL_FROM, for example
-"Open Alvary <no-reply@mail.open.alvary.ai>"), with RESEND_API_KEY from Secret Manager. Without a
+Sent through Resend's HTTP API from Ruhu, Inc.'s verified domain (ALVARY_MAIL_FROM, by default
+"Open Alvary <no-reply@ruhu.ai>"), with RESEND_API_KEY from Secret Manager. Without a
 key, messages are only logged (local trials, tests). Mail never decides an outcome: the change is
 already committed, a failed send is logged and retried a few times, and nothing waits for it, so
 delivery timing cannot reveal whether an address has an account (ACS-02).
@@ -35,7 +35,7 @@ class Mailer:
     def from_environment(cls) -> "Mailer":
         return cls(
             os.getenv("RESEND_API_KEY") or None,
-            os.getenv("ALVARY_MAIL_FROM", "Open Alvary <no-reply@mail.open.alvary.ai>"),
+            os.getenv("ALVARY_MAIL_FROM", "Open Alvary <no-reply@ruhu.ai>"),
             os.getenv("ALVARY_MAIL_REPLY_TO", "hello@ruhu.ai"),
         )
 
