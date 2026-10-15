@@ -64,12 +64,15 @@ def engine_for(url: str | None = None, pool_size: int | None = None) -> Engine:
         if not valid:
             raise ValueError("Persistent mode requires a postgresql+psycopg database URL") from None
     url = url or f"sqlite:///{ROOT / 'open_alvary.db'}"
+    # A connection the database or its proxy closed while idle (Cloud SQL does) must never reach a
+    # request: each is checked before use and replaced after 30 minutes.
+    live = {} if url.startswith("sqlite") else {"pool_pre_ping": True, "pool_recycle": 1800}
     if pool_size is not None and not url.startswith("sqlite"):
         # A fixed, budgeted pool: no overflow beyond the share approved for this replica.
-        engine = create_engine(url, pool_size=pool_size, max_overflow=0, pool_timeout=5)
+        engine = create_engine(url, pool_size=pool_size, max_overflow=0, pool_timeout=5, **live)
     else:
         engine = create_engine(
-            url, connect_args={"check_same_thread": False} if url.startswith("sqlite") else {}
+            url, connect_args={"check_same_thread": False} if url.startswith("sqlite") else {}, **live
         )
     if url.startswith("sqlite"):
 

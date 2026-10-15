@@ -24,3 +24,13 @@ def test_unknown_runtime_mode_fails(monkeypatch):
     monkeypatch.setenv("ALVARY_RUNTIME_MODE", "persistant")
     with pytest.raises(ValueError, match="ALVARY_RUNTIME_MODE"):
         engine_for("sqlite://")
+
+
+def test_database_connections_are_checked_before_use_and_recycled(monkeypatch):
+    """A connection closed while idle (Cloud SQL closes them) must never fail a request."""
+    from api.store import engine_for
+
+    monkeypatch.setenv("ALVARY_RUNTIME_MODE", "persistent")
+    for pool_size in (None, 4):
+        engine = engine_for("postgresql+psycopg://u:p@localhost:1/db", pool_size=pool_size)
+        assert engine.pool._pre_ping is True and engine.pool._recycle == 1800
