@@ -1,0 +1,21 @@
+trials/idp_check/cli.py
+  s_b82616e2476856::t_5528fa0f527b7f 129-130,238-239,245
+  s_b82616e2476856::t_dff6c2ae8c287f 123
+  s_b82616e2476856::t_b145b375e4fd42 34-36,63,92,110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6f0280b0c66d48f4f77be45f4a9947221dd636d6",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
