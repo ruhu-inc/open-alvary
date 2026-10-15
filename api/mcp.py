@@ -67,10 +67,19 @@ def _tool_result(payload, is_error=False):
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
 
 
-def create_router(catalogue_factory: Callable, unavailable: tuple[type[Exception], ...]) -> APIRouter:
+class OutsideAccess(LookupError):
+    """A record or jurisdiction outside the organisation's access (MAC-06 jurisdiction_not_included)."""
+
+
+def create_router(
+    catalogue_factory: Callable,
+    unavailable: tuple[type[Exception], ...],
+    reach: Callable[[Request], set[str] | None] = lambda request: None,
+) -> APIRouter:
+    """``reach`` gives the jurisdictions a request may read (None: all), from its organisation's access."""
     router = APIRouter()
 
-    def call_tool(name, arguments):
+    def call_tool(name, arguments, allowed):
         if not isinstance(arguments, dict):
             return None
         with catalogue_factory() as service:
@@ -80,11 +89,19 @@ def create_router(catalogue_factory: Callable, unavailable: tuple[type[Exception
                     return None
                 if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 25:
                     return None
-                return service.search(query, limit=limit, offset=0).model_dump(mode="json")
+                if allowed is not None and len(allowed) != 1:
+                    raise OutsideAccess("Your access covers several jurisdictions; search one at a time.")
+                jurisdiction = next(iter(allowed)) if allowed else None
+                return service.search(query, jurisdiction=jurisdiction, limit=limit, offset=0).model_dump(
+                    mode="json"
+                )
             if name == "get_source" and set(arguments) == {"source_id"}:
                 if not isinstance(arguments["source_id"], str) or not 1 <= len(arguments["source_id"]) <= 160:
                     return None
-                return service.source(arguments["source_id"]).model_dump(mode="json")
+                view = service.source(arguments["source_id"])
+                if allowed is not None and view.jurisdiction_id not in allowed:
+                    raise OutsideAccess("That source is outside your organisation's access.")
+                return view.model_dump(mode="json")
             if name == "get_coverage" and not arguments:
                 return service.coverage().model_dump(mode="json")
         return None
@@ -128,9 +145,13 @@ def create_router(catalogue_factory: Callable, unavailable: tuple[type[Exception
                 return _error(id_, -32602, "Invalid params")
             try:
                 # Database work runs in a worker thread, never on the event loop.
-                payload = await run_in_threadpool(call_tool, params["name"], params.get("arguments", {}))
+                payload = await run_in_threadpool(
+                    call_tool, params["name"], params.get("arguments", {}), reach(request)
+                )
             except unavailable:
                 return _result(id_, _tool_result("Catalogue authority unavailable", is_error=True))
+            except OutsideAccess as outside:
+                return _result(id_, _tool_result(str(outside), is_error=True))
             except LookupError:
                 return _result(id_, _tool_result("Source not available", is_error=True))
             except ValueError:

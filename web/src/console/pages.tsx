@@ -1146,7 +1146,7 @@ export function Usage({ org }: PageProps) {
           <span>requests today (UTC)</span>
         </div>
         <div className="card stat">
-          <b>{(todayBytes / 1e6).toLocaleString("en-GB", { maximumFractionDigits: 1 })} MB</b>
+          <b>{size(todayBytes)}</b>
           <span>sent today</span>
         </div>
         <div className="card stat">
@@ -1244,6 +1244,12 @@ function Chart({ series }: { series: { day: string; requests: number }[] }) {
       </text>
     </svg>
   );
+}
+
+function size(bytes: number) {
+  if (bytes < 1000) return `${bytes} bytes`;
+  if (bytes < 1e6) return `${(bytes / 1e3).toLocaleString("en-GB", { maximumFractionDigits: 1 })} KB`;
+  return `${(bytes / 1e6).toLocaleString("en-GB", { maximumFractionDigits: 1 })} MB`;
 }
 
 function niceCeiling(value: number) {

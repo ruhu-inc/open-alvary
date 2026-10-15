@@ -64,6 +64,36 @@ DETAIL = {
 }
 
 
+# MCP carries the same codes as a JSON-RPC error (agent-access application numbers), at the same
+# HTTP status, so a host starts sign-in on the 401 exactly as for REST.
+MCP_NUMBERS = {400: -32600, 401: 10001, 403: 10002, 429: 10003, 503: 10004}
+
+
+def jsonrpc_problem(
+    code: str,
+    request_id: str,
+    *,
+    detail: str | None = None,
+    challenge: str | None = None,
+    retry_after: int | None = None,
+) -> JSONResponse:
+    status = STATUS[code]
+    data = {"code": code, "request_id": request_id}
+    headers = {"Cache-Control": "no-store", "X-Request-ID": request_id}
+    if challenge:
+        headers["WWW-Authenticate"] = challenge
+    if retry_after is not None:
+        headers["Retry-After"] = str(retry_after)
+        data["retry_after_seconds"] = retry_after
+    message = detail or DETAIL.get(code, "Request refused.")
+    body = {
+        "jsonrpc": "2.0",
+        "id": None,
+        "error": {"code": MCP_NUMBERS[status], "message": message, "data": data},
+    }
+    return JSONResponse(body, status_code=status, headers=headers)
+
+
 def problem(
     code: str,
     request_id: str,
@@ -163,6 +193,7 @@ class GateConfig:
     public_paths: frozenset[str] = frozenset()
     global_concurrency: int = 512
     lease_seconds: int = 60
+    jsonrpc: bool = False  # MCP: refusals as JSON-RPC errors
 
 
 class CredentialGate:
@@ -196,7 +227,7 @@ class CredentialGate:
             kwargs["challenge"] = (
                 f'Bearer error="insufficient_scope", scope="{SCOPE}", resource_metadata="{self.config.metadata_url}"'
             )
-        return problem(code, request_id, **kwargs)
+        return (jsonrpc_problem if self.config.jsonrpc else problem)(code, request_id, **kwargs)
 
     def credential_request(self, token: str) -> dict:
         """What to ask the accounts check for this bearer value; raises ValueError/PermissionError."""
