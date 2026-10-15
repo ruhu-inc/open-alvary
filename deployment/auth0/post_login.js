@@ -12,7 +12,8 @@
  * page: they reuse the grant recorded for that tool, and our own check refuses it once revoked.
  *
  * Secrets (set by deployment/auth0/configure.py): CONSENT_SECRET (shared with the console),
- * CONSENT_URL, RESOURCES (comma-separated resource URLs).
+ * CONSENT_URL, LOCAL_CONSENT_URL (the approval page of a local trial, for http://localhost resources),
+ * RESOURCES (comma-separated resource URLs).
  */
 
 const GRANT = "https://open.alvary.ai/grant";
@@ -73,7 +74,9 @@ exports.onExecutePostLogin = async (event, api) => {
       email: event.user.email || "",
     },
   });
-  api.redirect.sendUserTo(event.secrets.CONSENT_URL, { query: { session_token: token } });
+  const local = resourceOf(event).startsWith("http://localhost:");
+  const consent = local && event.secrets.LOCAL_CONSENT_URL ? event.secrets.LOCAL_CONSENT_URL : event.secrets.CONSENT_URL;
+  api.redirect.sendUserTo(consent, { query: { session_token: token } });
 };
 
 exports.onContinuePostLogin = async (event, api) => {
