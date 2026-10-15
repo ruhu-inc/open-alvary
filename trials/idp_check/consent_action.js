@@ -12,6 +12,9 @@
 
 const CLAIM = "https://open.alvary.ai/org";
 const GRANT = "https://open.alvary.ai/grant";
+// Allowing the connection on our consent page grants reading, whatever scopes the tool asked for
+// (Codex asks only for the provider's profile scopes, never the resource's corpus:read).
+const SCOPE = "corpus:read";
 
 function resourceOf(event) {
   const query = event.request && event.request.query ? event.request.query : {};
@@ -37,6 +40,7 @@ exports.onExecutePostLogin = async (event, api) => {
     if (!choice || !choice.grant) return api.access.deny("No organisation was chosen for this connection; connect again.");
     api.accessToken.setCustomClaim(CLAIM, choice.org);
     api.accessToken.setCustomClaim(GRANT, choice.grant);
+    api.accessToken.addScope(SCOPE);
     return;
   }
   const query = event.request && event.request.query ? event.request.query : {};
@@ -65,4 +69,5 @@ exports.onContinuePostLogin = async (event, api) => {
   api.user.setAppMetadata("oa_check_orgs", orgs);
   api.accessToken.setCustomClaim(CLAIM, answer.org);
   api.accessToken.setCustomClaim(GRANT, answer.grant);
+  api.accessToken.addScope(SCOPE);
 };
