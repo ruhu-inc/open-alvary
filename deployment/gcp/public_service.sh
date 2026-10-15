@@ -17,7 +17,7 @@
 # switches open.alvary.ai over when `verify` passes. Every step can be run again.
 set -euo pipefail
 
-PROJECT="${GCP_PROJECT:-open-alvary-public}"
+PROJECT="${GCP_PROJECT:-open-alvary-prod}"  # staging later: GCP_PROJECT=open-alvary-staging
 BILLING_FROM="${GCP_BILLING_FROM:-open-alvary-ingestion}"
 REGION="${GCP_REGION:-europe-west1}"
 DOMAIN="${PUBLIC_DOMAIN:-open.alvary.ai}"
@@ -97,7 +97,7 @@ PLAN
 
 project() {
   if ! gcloud projects describe "$PROJECT" >/dev/null 2>&1; then
-    gcloud projects create "$PROJECT" --name="Open Alvary public service"
+    gcloud projects create "$PROJECT" --name="Open Alvary ${PROJECT##*-}"
   fi
   local account
   account="$(gcloud billing projects describe "$BILLING_FROM" --format='value(billingAccountName)')"

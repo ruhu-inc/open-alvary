@@ -388,7 +388,7 @@ appends to `X-Forwarded-For` (`trusted_proxies` 2, confirmed by `verify`).
 
 1. `plan` prints the resources, the required settings (`PUBLIC_REPOSITORY_URL`, `PUBLIC_MAINTAINER`,
    `PUBLIC_CONTACT_EMAIL`, `METADATA_LICENCE` in the environment or `.env`) and the monthly estimate.
-2. The owner runs `project` (a separate project, billed with the ingestion project's account) and
+2. The owner runs `project` (`open-alvary-prod`, and later `open-alvary-staging` with `GCP_PROJECT`, billed with the ingestion project's account) and
    `setup` (APIs, registry, service accounts, database, secrets with fresh HMAC secrets).
 3. `deploy` builds from the commit, runs launch checks, migrations and the seed as a Cloud Run job,
    and deploys the service; `edge` creates the load balancer and prints the DNS records.
