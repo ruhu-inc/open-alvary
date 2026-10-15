@@ -17,9 +17,10 @@ from trials.idp_check.auth0 import ROOT, Auth0Error, Management
 
 LOCAL = "http://localhost:8766"
 CLAUDE_CODE = "https://claude.ai/oauth/claude-code-client-metadata"
+CLAUDE = "https://claude.ai/oauth/mcp-oauth-client-metadata"  # claude.ai, desktop, mobile (seen in Auth0's log)
 CHATGPT = "https://chatgpt.com/oauth/BpZIpxL-aggt/client.json"
 # Tools reviewed and imported by their client metadata documents (MAC-07 "verified publisher").
-REVIEWED = [CLAUDE_CODE, CHATGPT]
+REVIEWED = [CLAUDE_CODE, CLAUDE, CHATGPT]
 
 
 def resources(base):

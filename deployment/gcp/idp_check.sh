@@ -49,9 +49,10 @@ deploy() {
   echo "Deployed at $base/mcp. Next: python -m trials.idp_check.setup --public-url $base"
 }
 
-logs() {
-  "${GC[@]}" logging read "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"$SERVICE\" AND textPayload:\"\\\"check\\\": \\\"idp\\\"\"" \
-    --limit="${1:-30}" --freshness=1d --format='value(textPayload)' | tail -r
+logs() {  # the server's JSON lines arrive as structured entries (jsonPayload)
+  "${GC[@]}" logging read "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=\"$SERVICE\" AND jsonPayload.check=\"idp\"" \
+    --limit="${1:-30}" --freshness=1d --format=json \
+    | python3 -c 'import json,sys; [print(json.dumps(r["jsonPayload"])) for r in reversed(json.load(sys.stdin))]'
 }
 
 delete() {
