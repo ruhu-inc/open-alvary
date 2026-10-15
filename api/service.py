@@ -4,9 +4,10 @@
     /downloads/...  public release files, rechecked on every response
     /api/v1/...     REST v1 for organisations with access (api.v1), behind the credential gate
     /mcp            MCP for organisations with access, behind the same gate
+                    (these three only with ALVARY_ACCOUNTS=1: activation B, PostgreSQL)
     /api/...        the legacy anonymous API, unchanged until activation B; its release-file route
                     now redirects to /downloads
-    /console/...    the developer console and its API (api.console), PostgreSQL only
+    /console/...    the developer console and its API (api.console)
     /healthz        liveness of the catalogue authority
     /               the built website, where a frontend directory is given (Vercel, Cloud Run with
                     ALVARY_FRONTEND, local)
@@ -93,8 +94,9 @@ def create_service(
 
     service.mount("/site/v1", create_site_app(store, release_root, site_admission))
     service.mount("/downloads", create_downloads_app(store, release_root, site_admission))
-    if store.engine.dialect.name == "postgresql":
-        # Accounts, the developer console and REST v1 need the accounts schema (PostgreSQL only).
+    if store.engine.dialect.name == "postgresql" and os.getenv("ALVARY_ACCOUNTS") == "1":
+        # Activation B (MAC-15): accounts, the console, REST v1 and MCP go live together, only when
+        # switched on, and need the accounts schema (PostgreSQL only).
         with store.engine.connect() as connection:
             namespace = PolicyNamespace(connection.scalar(text("SELECT current_schema()")))
         accounts = Accounts(store.engine, namespace)
@@ -216,7 +218,16 @@ def create_service(
     return service
 
 
-STATIC_PAGES = ("/", "/browse", "/coverage", "/governance", "/releases", "/developers", "/about", "/privacy")
+STATIC_PAGES = (
+    "/",
+    "/browse",
+    "/coverage",
+    "/governance",
+    "/releases",
+    "/developers",
+    "/about",
+    "/privacy",
+)
 
 
 def _origin(request: Request) -> str:

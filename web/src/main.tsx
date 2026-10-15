@@ -19,6 +19,7 @@ import "@fontsource/dm-sans/latin-500.css";
 import "@fontsource/dm-sans/latin-600.css";
 import "@fontsource/libre-caslon-display/latin-400.css";
 import "./style.css";
+import { AcceptableUse, Privacy, Terms } from "./legal";
 import {
   PageTitle,
   ProjectContext,
@@ -193,6 +194,8 @@ function App() {
       ...links,
       ["/about", "About & contribute"],
       ["/privacy", "Privacy"],
+      ["/terms", "Terms of service"],
+      ["/acceptable-use", "Acceptable use"],
     ].find(([url]) => url === pathname)?.[1];
     // Record pages and the not-found page name themselves.
     if (title) document.title = `${title} · Open Alvary`;
@@ -238,6 +241,10 @@ function App() {
             <About />
           ) : pathname === "/privacy" ? (
             <Privacy />
+          ) : pathname === "/terms" ? (
+            <Terms />
+          ) : pathname === "/acceptable-use" ? (
+            <AcceptableUse />
           ) : pathname === "/developers" ? (
             <Developers />
           ) : import.meta.env.DEV && pathname === "/dev/reader" ? (
@@ -1192,72 +1199,6 @@ function About() {
     </div>
   );
 }
-function Privacy() {
-  const project = useContext(ProjectContext);
-  return (
-    <div className="page">
-      <PageTitle
-        label="PRIVACY & USE"
-        title="A small public service, with clear limits."
-      >
-        The pilot has no account registration, advertising, third-party
-        analytics, document uploads or AI chat.
-      </PageTitle>
-      <div className="two-columns">
-        <section>
-          <h2>Data used to operate the site</h2>
-          <p>
-            Your browser requests pages, fonts and data from this site. Search
-            terms are sent to this site's server to return matching public
-            records.
-            Fonts are bundled locally. We do not set application cookies or use
-            browser storage to track visitors.
-          </p>
-          <p>
-            Hosting infrastructure processes connection information such as IP
-            addresses and may retain request metadata and operational logs. The
-            Docker configuration disables application access logs; a managed
-            host such as Vercel has separate logging and retention settings. The
-            operator must verify those settings for the deployed service.
-          </p>
-          <p>
-            Please avoid entering personal, confidential or client-specific
-            information in searches.
-          </p>
-        </section>
-        <section>
-          <h2>Links and correspondence</h2>
-          <p>
-            Official-source links and GitHub are separate services with their
-            own terms and privacy practices. Opening an email link uses your
-            chosen email provider.
-          </p>
-          <p>
-            If you contact the project, the maintainer receives the information
-            you choose to send. Share only what is necessary to address your
-            request; do not attach private legal files.
-          </p>
-          {project.contact_email ? (
-            <a className="text-link" href={`mailto:${project.contact_email}`}>
-              Contact the maintainer <ArrowUpRight size={16} />
-            </a>
-          ) : (
-            <p>A public contact must be configured before launch.</p>
-          )}
-          <h2>Using the catalogue</h2>
-          <p>
-            This service provides source discovery and provenance, not legal
-            advice. Coverage is incomplete and currentness may be unverified.
-            Consult the official source and the relevant rights record.
-            Availability of a download does not grant rights to external source
-            documents.
-          </p>
-        </section>
-      </div>
-    </div>
-  );
-}
-
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />
