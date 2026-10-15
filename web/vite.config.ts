@@ -2,6 +2,8 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
+  // The public site and the developer console (/console) are two pages of one build.
+  build: { rollupOptions: { input: { main: "index.html", console: "console.html" } } },
   server: {
     port: 5178,
     strictPort: true,

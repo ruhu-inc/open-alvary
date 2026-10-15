@@ -169,7 +169,7 @@ function App() {
       const url = new URL(a.href, location.href);
       if (
         url.origin !== location.origin ||
-        /^\/(site|api|downloads|assets)\//.test(url.pathname) ||
+        /^\/(site|api|downloads|assets|console)(\/|$)/.test(url.pathname) ||
         /\.[a-z0-9]+$/i.test(url.pathname) ||
         (url.pathname === location.pathname && url.search === location.search && url.hash)
       )

@@ -22,7 +22,7 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, PlainTextResponse, Response
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -90,6 +90,9 @@ def create_service(
         with store.engine.connect() as connection:
             namespace = PolicyNamespace(connection.scalar(text("SELECT current_schema()")))
         config = ConsoleConfig.from_environment()
+        service.add_api_route(
+            "/console", lambda: RedirectResponse("/console/", status_code=308), include_in_schema=False
+        )
         service.mount(
             "/console",
             create_console_app(

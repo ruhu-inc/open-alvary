@@ -161,9 +161,11 @@ def network_prefix(address: str | None) -> str | None:
         parsed = ipaddress.ip_address(address or "")
     except ValueError:
         return None
-    if isinstance(parsed, ipaddress.IPv6Address) and parsed.ipv4_mapped is None:
-        return str(ipaddress.ip_network(f"{parsed}/48", strict=False))
-    return str(ipaddress.ip_network(f"{parsed.ipv4_mapped or parsed}/24", strict=False))
+    if isinstance(parsed, ipaddress.IPv6Address):
+        if parsed.ipv4_mapped is None:
+            return str(ipaddress.ip_network(f"{parsed}/48", strict=False))
+        parsed = parsed.ipv4_mapped
+    return str(ipaddress.ip_network(f"{parsed}/24", strict=False))
 
 
 def client_family(user_agent: str) -> str:
