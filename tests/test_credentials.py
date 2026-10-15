@@ -6,7 +6,7 @@ import time
 
 import httpx
 import pytest
-from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
@@ -125,17 +125,25 @@ def test_a_tier_without_rest_is_refused():
     assert response.status_code == 403 and response.json()["code"] == "entitlement_required"
 
 
+def _b64(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def _number(n: int) -> str:
+    return _b64(n.to_bytes((n.bit_length() + 7) // 8, "big"))
+
+
+def _part(data: dict) -> str:
+    return _b64(json.dumps(data).encode())
+
+
 class Signer:
     def __init__(self):
         self.key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         numbers = self.key.public_key().public_numbers()
-        enc = lambda n: (
-            base64.urlsafe_b64encode(n.to_bytes((n.bit_length() + 7) // 8, "big")).rstrip(b"=").decode()
-        )  # noqa: E731
-        self.jwks = {"keys": [{"kty": "RSA", "kid": "k1", "n": enc(numbers.n), "e": enc(numbers.e)}]}
+        self.jwks = {"keys": [{"kty": "RSA", "kid": "k1", "n": _number(numbers.n), "e": _number(numbers.e)}]}
 
     def token(self, **claims):
-        part = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).rstrip(b"=").decode()  # noqa: E731
         body = {
             "iss": ISSUER,
             "aud": RESOURCE,
@@ -145,9 +153,8 @@ class Signer:
             GRANT_CLAIM: "grt_00000000000000000000000000",
             **claims,
         }
-        signing = f"{part({'alg': 'RS256', 'kid': 'k1'})}.{part(body)}"
-        signature = self.key.sign(signing.encode(), padding.PKCS1v15(), hashes.SHA256())
-        return signing + "." + base64.urlsafe_b64encode(signature).rstrip(b"=").decode()
+        signing = f"{_part({'alg': 'RS256', 'kid': 'k1'})}.{_part(body)}"
+        return signing + "." + _b64(self.key.sign(signing.encode(), padding.PKCS1v15(), hashes.SHA256()))
 
 
 @pytest.fixture
@@ -189,4 +196,3 @@ def test_access_tokens_are_verified_bound_to_the_resource_and_need_the_scope(sig
     other = Signer()
     forged = client.get("/api/v1/sources", headers={"Authorization": f"Bearer {other.token()}"})
     assert forged.json()["code"] == "invalid_credentials"
-    assert serialization  # keys are generated in memory only
