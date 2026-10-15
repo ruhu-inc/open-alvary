@@ -2,6 +2,7 @@
 
     /site/v1/...    the website's own data path (api.site), admitted in the "site" class
     /downloads/...  public release files, rechecked on every response
+    /api/v1/...     REST v1 for organisations with access (api.v1), behind the credential gate
     /api/...        the legacy anonymous API, unchanged until activation B; its release-file route
                     now redirects to /downloads
     /console/...    the developer console and its API (api.console), PostgreSQL only
@@ -29,13 +30,16 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from accounts.store import Accounts
-from api.admission import AdmissionConfig
+from api.admission import AdmissionConfig, AdmissionStore
 from api.catalogue import LegacyCatalogue
 from api.console import ConsoleConfig, Provider, create_console_app
+from api.credentials import CredentialGate, GateConfig, TokenVerifier
 from api.main import create_app
 from api.repositories import LegacyRepository
 from api.site import create_downloads_app, create_site_app
 from api.store import ROOT, Store, check_legacy_authority, engine_for
+from api.v1 import PUBLIC_PATHS as V1_PUBLIC
+from api.v1 import create_v1_app
 from rights.database import PolicyNamespace
 from rights.policy import decide
 
@@ -84,25 +88,56 @@ def create_service(
 
     service.mount("/site/v1", create_site_app(store, release_root, site_admission))
     service.mount("/downloads", create_downloads_app(store, release_root, site_admission))
-    service.mount("/api", create_app(store, release_root, downloads_path="/downloads"))
     if store.engine.dialect.name == "postgresql":
-        # The developer console needs the accounts schema, which only PostgreSQL carries.
+        # Accounts, the developer console and REST v1 need the accounts schema (PostgreSQL only).
         with store.engine.connect() as connection:
             namespace = PolicyNamespace(connection.scalar(text("SELECT current_schema()")))
+        accounts = Accounts(store.engine, namespace)
         config = ConsoleConfig.from_environment()
+        api_origin = os.getenv("ALVARY_API_ORIGIN", "https://api.open.alvary.ai").rstrip("/")
+        resource = api_origin + "/api/v1"
+        metadata = api_origin + "/.well-known/oauth-protected-resource/api/v1"
+        v1 = create_v1_app(store, release_root, lambda: accounts.tiers(published_only=True))
+        service.mount(
+            "/api/v1",
+            CredentialGate(
+                v1,
+                config=GateConfig(resource, "rest", "api", metadata, public_paths=V1_PUBLIC),
+                check=accounts.check_credential,
+                record_usage=accounts.record_usage,
+                admission=AdmissionStore(store.engine, namespace),
+                verifier=TokenVerifier(config.issuer) if config else None,
+            ),
+        )
+
+        @service.get("/.well-known/oauth-protected-resource/api/v1", include_in_schema=False)
+        def api_resource_metadata():
+            # RFC 9728: which authorisation server issues tokens for this resource, and for what.
+            body = {
+                "resource": resource,
+                "authorization_servers": [config.issuer.rstrip("/")] if config else [],
+                "scopes_supported": ["corpus:read"],
+                "bearer_methods_supported": ["header"],
+                "resource_documentation": "https://open.alvary.ai/developers",
+            }
+            return JSONResponse(
+                body, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "max-age=300"}
+            )
+
         service.add_api_route(
             "/console", lambda: RedirectResponse("/console/", status_code=308), include_in_schema=False
         )
         service.mount(
             "/console",
             create_console_app(
-                Accounts(store.engine, namespace),
+                accounts,
                 Provider(config) if config else None,
                 frontend=frontend,
                 trusted_proxies=site_admission.trusted_proxies if site_admission else 0,
                 dev_login=os.getenv("ALVARY_CONSOLE_DEV_LOGIN") == "1",
             ),
         )
+    service.mount("/api", create_app(store, release_root, downloads_path="/downloads"))
 
     @service.get("/robots.txt", include_in_schema=False)
     def robots(request: Request):
