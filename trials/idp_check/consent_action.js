@@ -12,8 +12,10 @@
 
 const CLAIM = "https://open.alvary.ai/org";
 const GRANT = "https://open.alvary.ai/grant";
-// Allowing the connection on our consent page grants reading, whatever scopes the tool asked for
-// (Codex asks only for the provider's profile scopes, never the resource's corpus:read).
+// Every sign-in for our resources requests reading, whatever scopes the tool asked for (Codex asks only
+// for the provider's profile scopes, never the resource's corpus:read). A target scope, unlike a scope
+// added to the token, still passes Auth0's client-grant and consent checks, so it works for
+// third-party tools too.
 const SCOPE = "corpus:read";
 
 function resourceOf(event) {
@@ -33,6 +35,7 @@ function stored(event) {
 
 exports.onExecutePostLogin = async (event, api) => {
   if (!ours(event)) return;
+  if (api.transaction && api.transaction.addTargetScope) api.transaction.addTargetScope(SCOPE);
   const renewal = event.transaction && event.transaction.protocol === "oauth2-refresh-token";
   const canRedirect = !renewal && (!api.redirect.canRedirect || api.redirect.canRedirect());
   if (!canRedirect) {
@@ -40,7 +43,6 @@ exports.onExecutePostLogin = async (event, api) => {
     if (!choice || !choice.grant) return api.access.deny("No organisation was chosen for this connection; connect again.");
     api.accessToken.setCustomClaim(CLAIM, choice.org);
     api.accessToken.setCustomClaim(GRANT, choice.grant);
-    api.accessToken.addScope(SCOPE);
     return;
   }
   const query = event.request && event.request.query ? event.request.query : {};
@@ -69,5 +71,4 @@ exports.onContinuePostLogin = async (event, api) => {
   api.user.setAppMetadata("oa_check_orgs", orgs);
   api.accessToken.setCustomClaim(CLAIM, answer.org);
   api.accessToken.setCustomClaim(GRANT, answer.grant);
-  api.accessToken.addScope(SCOPE);
 };
