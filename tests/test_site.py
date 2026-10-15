@@ -183,3 +183,21 @@ def test_site_class_refusals_are_problem_details():
     assert response.json()["code"] == "rate_limited" and response.json()["retry_after_seconds"] == 7
     down = site_app(FakeStore(["down"])).get("/sources", headers=HEADERS)
     assert down.status_code == 503 and down.json()["code"] == "temporarily_unavailable"
+
+
+def test_every_response_carries_the_websites_security_headers(client):
+    for path in ["/site/v1/sources", "/api/sources", "/healthz", "/site/v1/sources?page=99"]:
+        headers = client.get(path).headers
+        assert "default-src 'self'" in headers["content-security-policy"], path
+        assert headers["strict-transport-security"].startswith("max-age="), path
+        assert headers["referrer-policy"] == "strict-origin-when-cross-origin", path
+        assert headers["x-content-type-options"] == "nosniff", path
+
+
+def test_the_built_website_is_served_beside_the_data(catalogue, store, tmp_path):
+    store.save(catalogue)
+    (tmp_path / "web").mkdir()
+    (tmp_path / "web" / "index.html").write_text("<h1>Open Alvary</h1>")
+    client = TestClient(create_service(store, tmp_path, frontend=tmp_path / "web"))
+    assert client.get("/").text == "<h1>Open Alvary</h1>"
+    assert client.get("/site/v1/sources").status_code == 200
