@@ -8,10 +8,9 @@ import { Link, PageTitle, ProjectContext } from "./site";
 export const LEGAL_VERSION = "2026-10-15";
 // Until the owner approves them, the pages say they are a draft and not in effect.
 const APPROVED = false;
-const TO_CONFIRM = [
-  "Ruhu Inc.'s registered address",
-  "the law and courts that govern these terms",
-];
+const TO_CONFIRM: string[] = [];
+const OPERATOR = "Ruhu, Inc.";
+const ADDRESS = "1111B South Governors Ave, STE 52865, Dover, DE 19904, United States";
 
 function Status() {
   return (
@@ -22,7 +21,7 @@ function Status() {
           ? "In effect for developer accounts."
           : "Draft for review: not yet in effect. Developer accounts open once it is final."}
       </p>
-      {!APPROVED ? <p>Still to confirm: {TO_CONFIRM.join("; ")}.</p> : null}
+      {!APPROVED && TO_CONFIRM.length ? <p>Still to confirm: {TO_CONFIRM.join("; ")}.</p> : null}
     </div>
   );
 }
@@ -47,7 +46,8 @@ export function Terms() {
       <section>
         <h2>1. Who we are</h2>
         <p>
-          Open Alvary is operated by Ruhu Inc. ("we", "us"). These terms are an agreement between us and you,
+          Open Alvary is operated by {OPERATOR}, a Delaware company whose registered address is {ADDRESS}
+          ("we", "us"). These terms are an agreement between us and you,
           the person creating or using a developer account, and, where you act for an organisation, that
           organisation too.
         </p>
@@ -146,8 +146,14 @@ export function Terms() {
         </p>
       </section>
       <section>
-        <h2>12. Law</h2>
-        <p>These terms are governed by the law stated here once confirmed (see the note above).</p>
+        <h2>12. Law and disputes</h2>
+        <p>
+          These terms are governed by the laws of the State of Delaware, United States. If a dispute arises, we
+          will first try to settle it with you in good faith for at least 30 days, and then through mediation,
+          before either of us goes to court. The courts of the State of Delaware have exclusive jurisdiction.
+          Nothing in these terms takes away rights you have under the consumer law of the country where you
+          live.
+        </p>
       </section>
       <section>
         <h2>Contact</h2>
@@ -214,8 +220,8 @@ export function Privacy() {
       <section>
         <h2>Who is responsible</h2>
         <p>
-          Ruhu Inc. operates Open Alvary and decides how personal information is used for it. Contact us about
-          privacy at <Contact />.
+          {OPERATOR} operates Open Alvary and decides how personal information is used for it. Write to us
+          about privacy at <Contact />, or by post to {OPERATOR}, {ADDRESS}.
         </p>
       </section>
       <section>
