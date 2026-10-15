@@ -15,16 +15,19 @@ the outcome, the client ID and a shortened subject.
 
 import base64
 import hashlib
+import hmac
+import html
 import json
 import os
 import time
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from trials.idp_check.auth0 import ROOT, environment
 
@@ -35,6 +38,18 @@ SCOPE = "corpus:read"
 RESOURCES = {"mcp": f"{BASE}/mcp", "api": f"{BASE}/api/v1"}
 VERSIONS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"]
 EVENTS = ROOT / "private-staging" / "idp-check" / "events.jsonl"
+# Our own grant check (MAC-04, MAC-09): {"<subject>|<client>": revoked_at}. A token is refused when
+# the sign-in it rests on (auth_time) came before the revocation, even if renewed afterwards.
+REVOKED = ROOT / "private-staging" / "idp-check" / "revoked.json"
+CONSENT_SECRET = ROOT / "private-staging" / "idp-check" / "consent-secret"
+ORG_CLAIM = "https://open.alvary.ai/org"
+# Test organisations of the signed-in person: only entitled ones may be chosen (MAC-07).
+ORGS = [
+    {"id": "org_test_personal", "name": "Personal (test)", "entitled": True},
+    {"id": "org_test_firm", "name": "Example Law Firm (test)", "entitled": True},
+    {"id": "org_test_lapsed", "name": "Lapsed Ltd (test)", "entitled": False},
+]
+PUBLISHERS = {"claude.ai": "Anthropic", "chatgpt.com": "OpenAI", "openai.com": "OpenAI"}
 
 CORPUS = [
     {
@@ -111,7 +126,15 @@ def check_token(token, resource):
         raise ValueError("expired or not yet valid")
     if SCOPE not in str(claims.get("scope", "")).split():
         raise PermissionError("insufficient scope")
+    revoked = json.loads(REVOKED.read_text()) if REVOKED.exists() else {}
+    revoked_at = revoked.get(f"{subject(claims)}|{claims.get('client_id') or claims.get('azp')}")
+    if revoked_at and claims.get("auth_time", claims.get("iat", 0)) < revoked_at:
+        raise ValueError("grant revoked")
     return claims
+
+
+def subject(claims):
+    return hashlib.sha256(str(claims.get("sub")).encode()).hexdigest()[:12]
 
 
 def challenge(kind, error=None):
@@ -154,9 +177,12 @@ def authenticate(request, kind):
 def who(claims):
     return {
         "client": claims.get("client_id") or claims.get("azp"),
-        "subject": hashlib.sha256(str(claims.get("sub")).encode()).hexdigest()[:12],
+        "subject": subject(claims),
         "audience": claims.get("aud"),
         "expires_in": int(claims.get("exp", 0) - time.time()),
+        "signed_in_at": claims.get("auth_time"),
+        "org": claims.get(ORG_CLAIM),
+        "claim_names": sorted(claims),
     }
 
 
@@ -233,12 +259,142 @@ async def mcp(request: Request):
             if not query or any(w in (d["title"] + d["text"]).lower() for w in query.split())
         ]
         text = "\n\n".join(f"{d['title']}\n{d['text']}" for d in hits) or "No match in the test corpus."
+        org = {o["id"]: o["name"] for o in ORGS}.get(claims.get(ORG_CLAIM), "none chosen")
+        text += f"\n\n(Connected for organisation: {org})"
         result = {"content": [{"type": "text", "text": text}], "isError": False}
     else:
         return JSONResponse(
             {"jsonrpc": "2.0", "id": ident, "error": {"code": -32601, "message": "Method not found"}}
         )
     return JSONResponse({"jsonrpc": "2.0", "id": ident, "result": result})
+
+
+def _secret():
+    return CONSENT_SECRET.read_text().strip().encode()
+
+
+def _b64e(data):
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def sign_hs256(payload):
+    head = _b64e(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+    body = _b64e(json.dumps(payload).encode())
+    signature = hmac.new(_secret(), f"{head}.{body}".encode(), hashlib.sha256).digest()
+    return f"{head}.{body}.{_b64e(signature)}"
+
+
+def verify_hs256(token):
+    """Return the payload of a token Auth0's Action signed with the shared secret, or raise ValueError."""
+    try:
+        head, body, signature = token.split(".")
+        header, payload = json.loads(b64(head)), json.loads(b64(body))
+    except ValueError as error:
+        raise ValueError("malformed session token") from error
+    expected = hmac.new(_secret(), f"{head}.{body}".encode(), hashlib.sha256).digest()
+    if header.get("alg") != "HS256" or not hmac.compare_digest(expected, b64(signature)):
+        raise ValueError("bad session token signature")
+    if payload.get("exp", 0) < time.time():
+        raise ValueError("session token expired")
+    return payload
+
+
+def label(client_id, name):
+    host = urlsplit(client_id).hostname if client_id.startswith("https://") else None
+    if host in PUBLISHERS:
+        return f"Verified publisher: {PUBLISHERS[host]}", True
+    if host:
+        return f"From {host}", True
+    return f"Unverified client “{name}”", False
+
+
+PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Allow access · Open Alvary (test)</title>
+<style>body{{font:16px/1.5 system-ui,sans-serif;max-width:34rem;margin:2rem auto;padding:0 1rem;color:#1b1b1b}}
+.warn{{background:#fff4e5;border-left:4px solid #b25e00;padding:.6rem .8rem}}fieldset{{border:1px solid #ccc;border-radius:6px}}
+label{{display:block;margin:.3rem 0}}.muted{{color:#5c5c5c}}button{{font:inherit;padding:.5rem 1rem;margin-right:.5rem}}</style>
+</head><body><main><p class="muted">Open Alvary (sign-in check, test data only)</p>
+<h1>Allow {name} to read Open Alvary?</h1>
+<p><strong>{publisher}</strong></p>
+<p>It will be able to: read the published Open Alvary corpus within your organisation's access.</p>
+<p>After you choose, you return to: <strong>{host}</strong></p>{warning}
+<form method="post" action="/consent">
+<input type="hidden" name="session_token" value="{session}"><input type="hidden" name="state" value="{state}">
+<fieldset><legend>Which organisation is this connection for?</legend>{orgs}</fieldset>
+<p><button type="submit" name="decision" value="allow">Allow</button>
+<button type="submit" name="decision" value="deny">Cancel</button></p></form>
+<p class="muted">Signed in as {email}. You can disconnect it at any time in the console.</p></main></body></html>"""
+
+
+@app.get("/consent")
+def consent_page(session_token: str = "", state: str = ""):
+    try:
+        session = verify_hs256(session_token)
+    except ValueError as reason:
+        record({"path": "/consent", "outcome": "refused", "reason": str(reason)})
+        return HTMLResponse(
+            "<p>This sign-in link is not valid any more. Start again from your tool.</p>", 400
+        )
+    publisher, known = label(session.get("client_id", ""), session.get("client_name", "this tool"))
+    host = urlsplit(session.get("redirect_uri", "")).hostname or "an unknown address"
+    loopback = host in ("localhost", "127.0.0.1", "::1")
+    warning = (
+        '<p class="warn">This tool returns to an address on your own computer. Any program on your computer '
+        "could receive it: continue only if you started this connection yourself.</p>"
+        if loopback
+        else ""
+    )
+    if not known:
+        warning += '<p class="warn">We have not reviewed this tool. Allow it only if you trust it.</p>'
+    orgs = "".join(
+        f'<label><input type="radio" name="org" value="{o["id"]}" required{" checked" if i == 0 else ""}> '
+        f"{html.escape(o['name'])}</label>"
+        if o["entitled"]
+        else f'<label class="muted"><input type="radio" disabled> {html.escape(o["name"])} — no active access</label>'
+        for i, o in enumerate(ORGS)
+    )
+    record({"path": "/consent", "outcome": "shown", "client": session.get("client_id"), "return_host": host})
+    return HTMLResponse(
+        PAGE.format(
+            name=html.escape(session.get("client_name") or "this tool"),
+            publisher=html.escape(publisher),
+            host=html.escape(host),
+            warning=warning,
+            session=html.escape(session_token),
+            state=html.escape(state),
+            orgs=orgs,
+            email=html.escape(session.get("email") or "your account"),
+        ),
+        headers={"Cache-Control": "no-store", "X-Frame-Options": "DENY"},
+    )
+
+
+@app.post("/consent")
+async def consent_answer(request: Request):
+    form = {k: v[0] for k, v in parse_qs((await request.body()).decode()).items()}
+    try:
+        session = verify_hs256(form.get("session_token", ""))
+    except ValueError as reason:
+        return HTMLResponse(f"<p>{html.escape(str(reason))}. Start again from your tool.</p>", 400)
+    allowed = {o["id"] for o in ORGS if o["entitled"]}
+    decision = "allow" if form.get("decision") == "allow" and form.get("org") in allowed else "deny"
+    now = int(time.time())
+    answer = sign_hs256(
+        {
+            "sub": session["sub"],
+            "iss": BASE,
+            "iat": now,
+            "exp": now + 120,
+            "state": form.get("state", ""),
+            "decision": decision,
+            "org": form.get("org") if decision == "allow" else None,
+        }
+    )
+    record(
+        {"path": "/consent", "outcome": decision, "client": session.get("client_id"), "org": form.get("org")}
+    )
+    query = urlencode({"state": form.get("state", ""), "consent_token": answer})
+    return RedirectResponse(f"{ISSUER}continue?{query}", status_code=303)
 
 
 if __name__ == "__main__":
