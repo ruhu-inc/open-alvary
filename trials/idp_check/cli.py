@@ -31,6 +31,9 @@ STATE = ROOT / "private-staging" / "idp-check"
 CLIENT_FILE = STATE / "cli-client.json"
 TOKENS = STATE / "cli-tokens.json"
 NAME = "Open Alvary CLI (check)"
+# Auth0 matches loopback ports loosely only for tools identified by a client metadata document; a
+# pre-registered client needs its exact callback, so our tool listens on a fixed port.
+FIXED_PORT = 53682
 
 
 def issuer():
@@ -57,7 +60,7 @@ def client_id():
                     "refresh_token",
                     "urn:ietf:params:oauth:grant-type:device_code",
                 ],
-                "callbacks": ["http://127.0.0.1/callback"],
+                "callbacks": [f"http://127.0.0.1:{FIXED_PORT}/callback"],
                 "oidc_conformant": True,
                 "refresh_token": {
                     "rotation_type": "rotating",
@@ -86,7 +89,7 @@ def token_request(data):
     return httpx.post(f"{issuer()}oauth/token", data=data, timeout=20)
 
 
-def login_loopback():
+def login_loopback(fresh=False, open_browser=True, port=FIXED_PORT):
     verifier = secrets.token_urlsafe(48)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     state, answer = secrets.token_urlsafe(16), {}
@@ -104,7 +107,7 @@ def login_loopback():
         def log_message(self, *args):
             pass
 
-    server = http.server.HTTPServer(("127.0.0.1", 0), Callback)
+    server = http.server.HTTPServer(("127.0.0.1", port), Callback)
     redirect = f"http://127.0.0.1:{server.server_port}/callback"
     threading.Thread(target=server.handle_request, daemon=True).start()
     url = f"{issuer()}authorize?" + urlencode(
@@ -117,12 +120,14 @@ def login_loopback():
             "state": state,
             "code_challenge": challenge,
             "code_challenge_method": "S256",
+            **({"prompt": "login"} if fresh else {}),
         }
     )
     print(
         f"Opening the browser to sign in (callback on port {server.server_port}).\nIf it does not open: {url}"
     )
-    webbrowser.open(url)
+    if open_browser:
+        webbrowser.open(url)
     deadline = time.time() + 300
     while "code" not in answer and "error" not in answer and time.time() < deadline:
         time.sleep(0.3)
@@ -230,12 +235,14 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     login = sub.add_parser("login")
     login.add_argument("--device", action="store_true")
+    login.add_argument("--fresh", action="store_true", help="ask to sign in even if a session exists")
+    login.add_argument("--no-browser", action="store_true", help="only print the sign-in address")
     found = sub.add_parser("search")
     found.add_argument("words", nargs="+")
     sub.add_parser("reuse-check")
     args = parser.parse_args()
     if args.command == "login":
-        login_device() if args.device else login_loopback()
+        login_device() if args.device else login_loopback(args.fresh, not args.no_browser)
     elif args.command == "search":
         search(args.words)
     else:
