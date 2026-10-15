@@ -21,7 +21,7 @@ TIER = {
     "id": "pilot",
     "name": "Pilot access",
     "description": "Placeholder tier until plans are set.",
-    "includes": ["rest", "mcp", "bulk"],
+    "includes": ["rest", "mcp"],
     "allowance": {"requests_per_minute": 120, "burst": 60, "concurrency": 8, "bytes_per_day": 1_000_000_000},
     "published": True,
 }

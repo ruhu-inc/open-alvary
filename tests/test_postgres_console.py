@@ -25,7 +25,7 @@ TIER = {
     "id": "pilot",
     "name": "Pilot",
     "description": "Test",
-    "includes": ["rest", "mcp", "bulk"],
+    "includes": ["rest", "mcp"],
     "allowance": {"requests_per_minute": 60},
     "published": True,
 }

@@ -143,7 +143,7 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
             "grouping": "organisation",
             "note": (
                 "Each organisation's access tier sets its requests a minute, burst and concurrent requests "
-                "(see /tiers), shared by every key and app of the organisation across REST, MCP and bulk. "
+                "(see /tiers), shared by every key and app of the organisation across REST and MCP. "
                 "One key or app may use at most half the organisation's concurrent requests. A refused "
                 "request answers 429 with Retry-After."
             ),

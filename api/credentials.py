@@ -1,4 +1,4 @@
-"""The credential gate for machine access (MAC-05–07): REST v1, MCP and bulk share it.
+"""The credential gate for machine access (MAC-05–07): REST v1 and MCP share it.
 
 Every request carries one bearer credential in the Authorization header: an API key
 (`oa_live_…`) or an access token from the identity provider whose audience is exactly this

@@ -20,7 +20,6 @@ ALLOWED = {
     "client.revoke_any": MANAGERS,
     "access.request": frozenset({"owner"}),
     "access.end": frozenset({"owner"}),
-    "bulk.download": BUILDERS,
     "organisation.delete": frozenset({"owner"}),
     "ownership.transfer": frozenset({"owner"}),
 }

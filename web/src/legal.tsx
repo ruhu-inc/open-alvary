@@ -40,7 +40,7 @@ export function Terms() {
   return (
     <div className="page legal">
       <PageTitle label="TERMS OF SERVICE" title="Terms of service.">
-        For developer accounts, the console, the API, MCP and bulk downloads. Reading the website needs no
+        For developer accounts, the console, the API and MCP. Reading the website needs no
         account and is not covered by these terms.
       </PageTitle>
       <Status />
@@ -55,8 +55,8 @@ export function Terms() {
       <section>
         <h2>2. What these terms cover</h2>
         <p>
-          The developer console at open.alvary.ai/console, the REST API and MCP server at api.open.alvary.ai,
-          and bulk downloads for organisations with access (together, "the services"). Searching and reading
+          The developer console at open.alvary.ai/console, the REST API and MCP server at api.open.alvary.ai
+          (together, "the services"). Searching and reading
           the website stay open to everyone without an account.
         </p>
       </section>
@@ -75,7 +75,7 @@ export function Terms() {
       <section>
         <h2>4. Access, plans and limits</h2>
         <p>
-          The API, MCP and bulk downloads are for organisations with access. We grant access, including any
+          The API and MCP are for organisations with access. We grant access, including any
           free or reduced access for public-interest work, at our discretion, for the jurisdictions and
           period we state. Each plan has limits on requests; we publish them and may change them with notice,
           or at once to protect the service.
@@ -230,7 +230,7 @@ export function Privacy() {
       </section>
       <section>
         <h2>Developer accounts</h2>
-        <p>If you create an account for the API, MCP or bulk downloads, we process:</p>
+        <p>If you create an account for the API or MCP, we process:</p>
         <ul>
           <li>your email address, name and how you sign in (Google or an email code), to identify you and keep your account secure;</li>
           <li>your organisations, roles and invitations, and the access requests you make, to run access;</li>
