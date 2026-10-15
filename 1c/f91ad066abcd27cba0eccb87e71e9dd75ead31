@@ -1,0 +1,46 @@
+web/vite.config.ts
+  s_b82616e2476856::t_c65122af938638 5-6
+web/src/console/api.ts
+  s_b82616e2476856::t_2758dc98934916 97-98,104-110
+  s_b82616e2476856::t_42c543cf3f3bfa 1-56,73-96,99-103,111-143
+  s_b82616e2476856::t_aabd2c7d543585 57-72
+web/src/console/pages.tsx
+  s_b82616e2476856::t_c3806564caa989 1-2,5-792,798-1820
+  s_b82616e2476856::t_2758dc98934916 3-4,793-797
+tests/test_console_helpers.py
+  s_b82616e2476856::t_60b06dbdf671e8 1-18
+web/src/console/ui.tsx
+  s_b82616e2476856::t_882fce57b38e9b 1-216
+web/src/main.tsx
+  s_b82616e2476856::t_af9793fe3a254c 172
+accounts/operator.py
+  s_b82616e2476856::t_0012e637579bb4 1-21,23-27,31-70,78-82,88-99
+  s_b82616e2476856::t_69897b0123dc92 22,28-30,71-77,83-87
+web/console.html
+  s_b82616e2476856::t_42c543cf3f3bfa 1-16
+api/service.py
+  s_b82616e2476856::t_af9793fe3a254c 25,93-95
+web/src/console/main.tsx
+  s_b82616e2476856::t_aabd2c7d543585 10,225
+  s_b82616e2476856::t_5bc12e29d70d2e 1-9,11-224,226-387
+web/src/console/console.css
+  s_b82616e2476856::t_26207a49d7da0e 1-825
+api/console.py
+  s_b82616e2476856::t_60b06dbdf671e8 164-168
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1cf91ad066abcd27cba0eccb87e71e9dd75ead31",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
