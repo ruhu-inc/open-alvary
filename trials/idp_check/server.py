@@ -78,9 +78,11 @@ _keys = {"at": 0.0, "keys": {}}
 
 
 def record(event):
+    line = json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "check": "idp", **event})
+    print(line, flush=True)  # on Cloud Run this is the record (Cloud Logging); never a token
     EVENTS.parent.mkdir(parents=True, exist_ok=True)
     with EVENTS.open("a", encoding="utf-8") as out:
-        out.write(json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), **event}) + "\n")
+        out.write(line + "\n")
 
 
 def b64(data):
@@ -283,7 +285,8 @@ async def mcp(request: Request):
 
 
 def _secret():
-    return CONSENT_SECRET.read_text().strip().encode()
+    shared = os.environ.get("IDP_CHECK_CONSENT_SECRET")
+    return (shared or CONSENT_SECRET.read_text()).strip().encode()
 
 
 def _b64e(data):
@@ -426,4 +429,11 @@ async def consent_answer(request: Request):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("IDP_CHECK_PORT", "8766")))
+    # Locally only on loopback; on Cloud Run (PORT set) on all interfaces behind Google's front end.
+    cloud = "PORT" in os.environ
+    uvicorn.run(
+        app,
+        host="0.0.0.0" if cloud else "127.0.0.1",  # noqa: S104
+        port=int(os.environ.get("PORT") or os.environ.get("IDP_CHECK_PORT", "8766")),
+        proxy_headers=cloud,
+    )

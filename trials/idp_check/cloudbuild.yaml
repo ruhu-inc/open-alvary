@@ -1,0 +1,7 @@
+# Cloud Build: the identity-provider check server's image (deployment/gcp/idp_check.sh deploy).
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-f", "trials/idp_check/Dockerfile", "-t", "${_IMAGE}", "."]
+images: ["${_IMAGE}"]
+options:
+  logging: CLOUD_LOGGING_ONLY
