@@ -34,3 +34,15 @@ these values with `api_replicas=1`): the 60-second D3 fixture made 200 requests 
 p50 17.7 ms and p95 28.5 ms. Repeated while a second address flooded 800 requests in 10 seconds,
 the fixture again had no 429 (p95 25.5 ms) while the flooding address received 349 × 200 and
 451 × 429. This is not production evidence; repeat on the deployed host.
+
+## The website's own data path (site class, MAC-01)
+
+The service (`api.service:app`) admits the website's `/site/v1` and `/downloads` requests in a
+separate `site` class, with its own buckets, concurrency and global ceiling (keys prefixed `site:`),
+configured by `ALVARY_SITE_ADMISSION_CONFIG` (overlay variable `SITE_ADMISSION_CONFIG_FILE`, a private
+copy of `site-admission.example.json` with its own `hmac_secret`). The example repeats the anonymous
+class's values as a starting point: they are proposals under D3, to be measured against the real
+website's request pattern before activation A. Both classes share the process's database pool; the
+service sizes it to the larger of the two `public_pool_size / api_replicas` shares. Site refusals are
+RFC 9457 problem details with the MAC-06 codes (`rate_limited`, `capacity_exhausted`,
+`temporarily_unavailable`).

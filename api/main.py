@@ -8,7 +8,7 @@ from typing import Literal
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -36,7 +36,11 @@ from schema.public import (
 )
 
 
-def create_app(store: Store | None = None, releases: Path | None = None) -> FastAPI:
+def create_app(
+    store: Store | None = None, releases: Path | None = None, downloads_path: str | None = None
+) -> FastAPI:
+    """The legacy anonymous API, unchanged until activation B (MAC-02). With ``downloads_path``, its
+    release-file route redirects (308) to the website's public downloads instead of serving them."""
     app = FastAPI(
         title="Open Alvary",
         version="0.1.0",
@@ -230,6 +234,8 @@ def create_app(store: Store | None = None, releases: Path | None = None) -> Fast
 
     @app.get("/releases/{release_id}/{jurisdiction}/{mode}/{filename}")
     def release_file(release_id: str, jurisdiction: str, mode: str, filename: str):
+        if downloads_path is not None:
+            return RedirectResponse(f"{downloads_path}/{release_id}/{jurisdiction}/{mode}/{filename}", 308)
         try:
             path = LegacyReleases(app.state.store, release_root).file(
                 release_id, jurisdiction, mode, filename

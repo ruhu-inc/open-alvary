@@ -5,11 +5,11 @@ export default defineConfig({
   server: {
     port: 5178,
     strictPort: true,
+    // The API service (api.service:app) serves the website's data path, downloads and the legacy API.
     proxy: {
-      "/api": {
-        target: "http://127.0.0.1:8018",
-        rewrite: (p) => p.replace(/^\/api/, ""),
-      },
+      "/site": "http://127.0.0.1:8018",
+      "/downloads": "http://127.0.0.1:8018",
+      "/api": "http://127.0.0.1:8018",
     },
   },
 });
