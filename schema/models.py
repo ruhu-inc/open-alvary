@@ -93,6 +93,10 @@ class Source(Model):
     legal_status: Literal["unknown", "current", "historical", "repealed", "superseded"] = "unknown"
     status_evidence: HttpUrl | None = None
     catalogue_note: str | None = None
+    # Public reading aids: what the instrument is, in a sentence, and the year it was made. The
+    # catalogue note above is a public caveat about the record, never an internal instruction.
+    summary: Nonempty | None = None
+    year: int | None = Field(default=None, ge=1800, le=2200)
 
 
 class SourceVersion(Model):

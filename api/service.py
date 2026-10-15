@@ -16,18 +16,24 @@ configured too (``ALVARY_SITE_ADMISSION_CONFIG``), or the service refuses to sta
 """
 
 import os
+from html import escape
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.admission import AdmissionConfig
+from api.catalogue import LegacyCatalogue
 from api.main import create_app
+from api.repositories import LegacyRepository
 from api.site import create_downloads_app, create_site_app
-from api.store import ROOT, Store, engine_for
+from api.store import ROOT, Store, check_legacy_authority, engine_for
+from rights.policy import decide
 
 SECURITY_HEADERS = {
     "Strict-Transport-Security": "max-age=31536000",
@@ -75,9 +81,63 @@ def create_service(
     service.mount("/site/v1", create_site_app(store, release_root, site_admission))
     service.mount("/downloads", create_downloads_app(store, release_root, site_admission))
     service.mount("/api", create_app(store, release_root, downloads_path="/downloads"))
+
+    @service.get("/robots.txt", include_in_schema=False)
+    def robots(request: Request):
+        return PlainTextResponse(
+            "User-agent: *\nDisallow: /site/\nDisallow: /api/\nAllow: /\n"
+            f"Sitemap: {_origin(request)}/sitemap.xml\n"
+        )
+
+    @service.get("/sitemap.xml", include_in_schema=False)
+    def sitemap(request: Request):
+        # Every public page a reader can open, so search engines find each source's record.
+        origin = _origin(request)
+        paths = list(STATIC_PAGES)
+        with store.engine.begin() as connection:
+            check_legacy_authority(connection, write=False)
+            catalogue = LegacyCatalogue(LegacyRepository(connection))
+            for source, rights in catalogue.repository.sources():
+                if len(paths) >= 50000:
+                    break
+                if decide(rights, now=catalogue.now).metadata:
+                    paths.append(f"/sources/{quote(source.id)}")
+        urls = "".join(f"<url><loc>{escape(origin + path)}</loc></url>" for path in paths)
+        body = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>'
+        return Response(body, media_type="application/xml", headers={"Cache-Control": "no-store"})
+
     if frontend is not None:
-        service.mount("/", StaticFiles(directory=frontend, html=True, check_dir=False), name="website")
+        service.mount("/", WebsiteFiles(directory=frontend, html=True, check_dir=False), name="website")
     return service
+
+
+STATIC_PAGES = ("/", "/browse", "/coverage", "/governance", "/releases", "/developers", "/about", "/privacy")
+
+
+def _origin(request: Request) -> str:
+    domain = os.getenv("PUBLIC_DOMAIN")
+    return f"https://{domain}" if domain else str(request.base_url).rstrip("/")
+
+
+class WebsiteFiles(StaticFiles):
+    """The built website with real page addresses: any path that is not a file (/browse,
+    /sources/<id>) answers with the website's page, which reads the address itself. Fingerprinted
+    files under /assets are cached for a year; the page itself is revalidated on every visit."""
+
+    async def get_response(self, path: str, scope):
+        page = "." not in path.rsplit("/", 1)[-1]
+        try:
+            response = await super().get_response(path, scope)
+        except StarletteHTTPException as error:
+            if error.status_code != 404 or not page:
+                raise
+            response = await super().get_response("index.html", scope)
+        if response.status_code == 404 and page:
+            response = await super().get_response("index.html", scope)
+        response.headers["Cache-Control"] = (
+            "public, max-age=31536000, immutable" if path.startswith("assets/") else "no-cache"
+        )
+        return response
 
 
 app = create_service(frontend=Path(os.environ["ALVARY_FRONTEND"]) if os.getenv("ALVARY_FRONTEND") else None)

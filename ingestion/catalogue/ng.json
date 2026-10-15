@@ -49,7 +49,9 @@
       "jurisdiction_id": "ng",
       "language": "en",
       "legal_status": "unknown",
-      "catalogue_note": "Consolidation and amendment coverage require verification; no current consolidated text is asserted."
+      "catalogue_note": "Later amendments have not yet been checked, so no consolidated text is offered here. Use the official source for the current text.",
+      "year": 1999,
+      "summary": "The supreme law of Nigeria: it sets up the federal government, the states and the courts, and guarantees fundamental rights."
     },
     {
       "id": "ng-cbn-act-2007",
@@ -62,7 +64,9 @@
       "jurisdiction_id": "ng",
       "language": "en",
       "legal_status": "unknown",
-      "catalogue_note": "Official-host document located. Amendment coverage and redistribution rights remain unverified."
+      "catalogue_note": "The official copy is published by the Central Bank of Nigeria. Amendments since 2007 have not yet been checked.",
+      "year": 2007,
+      "summary": "Establishes the Central Bank of Nigeria and sets out its objects, powers and governance."
     },
     {
       "id": "ng-foi-act-2011",
@@ -75,7 +79,9 @@
       "jurisdiction_id": "ng",
       "language": "en",
       "legal_status": "unknown",
-      "catalogue_note": "Official ministry landing page. Follow the official document link only after an acquisition review."
+      "catalogue_note": "The official link leads to the Federal Ministry of Justice's page for the Act.",
+      "year": 2011,
+      "summary": "Gives everyone a right of access to records and information held by public institutions in Nigeria."
     },
     {
       "id": "ng-isa-2007",
@@ -88,8 +94,10 @@
       "jurisdiction_id": "ng",
       "language": "en",
       "legal_status": "repealed",
-      "catalogue_note": "Historical candidate: SEC reports repeal by the 2025 Act. Effective dates and section-level effects need content review.",
-      "status_evidence": "https://www.sec.gov.ng/our-mandate/regulation/acts/"
+      "catalogue_note": "Repealed: the Securities and Exchange Commission reports that the Investments and Securities Act 2025 replaced it. Kept for historical reference.",
+      "status_evidence": "https://www.sec.gov.ng/our-mandate/regulation/acts/",
+      "year": 2007,
+      "summary": "Regulated Nigeria's capital market and the Securities and Exchange Commission until it was replaced."
     }
   ],
   "rights": [
