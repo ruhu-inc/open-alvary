@@ -1,0 +1,32 @@
+web/src/legal.tsx
+  s_b82616e2476856::t_4b63289b1c3c14 1-286
+api/service.py
+  s_b82616e2476856::t_ecb0e086c4a554 7,10,97-99
+  s_b82616e2476856::t_bef7fd957beece 221-230
+web/src/main.tsx
+  s_b82616e2476856::t_bef7fd957beece 22,197-198,244-247
+web/src/site.tsx
+  s_b82616e2476856::t_bef7fd957beece 245
+tests/test_policies.py
+  s_b82616e2476856::t_065eb5bc8fb7bc 1-14
+web/src/style.css
+  s_b82616e2476856::t_e7222f1ae83e27 2138-2169
+tests/test_postgres_api_v1.py
+  s_b82616e2476856::t_ecb0e086c4a554 32,197-205
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f73a51f5b10e0d185e522894c9a2f49ce0f4c7d9",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
