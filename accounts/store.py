@@ -263,6 +263,13 @@ class Accounts:
                 summary={"method": method},
             )
 
+    def person_for_identity(self, issuer: str, subject: str) -> str | None:
+        with self.engine.connect() as conn:
+            return conn.scalar(
+                text(f"SELECT person_id FROM {self._t(conn, 'identity')} WHERE issuer = :i AND subject = :s"),
+                {"i": issuer, "s": subject},
+            )
+
     def identities(self, person_id: str) -> list[dict]:
         with self.engine.connect() as conn:
             rows = conn.execute(
