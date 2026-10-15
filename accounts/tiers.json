@@ -1,0 +1,17 @@
+[
+  {
+    "id": "pilot",
+    "name": "Pilot access",
+    "description": "Access granted by Open Alvary during the pilot, until published plans replace it. Limits are unmeasured proposals (access-defaults-2) under review.",
+    "includes": ["rest", "mcp", "bulk"],
+    "allowance": {
+      "requests_per_minute": 1200,
+      "burst": 600,
+      "concurrency": 256,
+      "bytes_per_day": 5000000000,
+      "bulk_files_per_day": 200,
+      "bulk_bytes_per_day": 20000000000
+    },
+    "published": false
+  }
+]

@@ -189,5 +189,15 @@
       "policy.release_receipt",
       "policy.apply_release_command"
     ]
+  },
+  {
+    "revision": "0021",
+    "anchor": "policy.check_credential",
+    "file": "v0021.sql",
+    "requires": [
+      "policy.accounts_access",
+      "policy.check_credential",
+      "policy.record_usage"
+    ]
   }
 ]

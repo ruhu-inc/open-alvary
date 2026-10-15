@@ -17,9 +17,10 @@ ingestion = ["google-cloud-documentai>=3.16,<4"]
 alvary-operator = "rights.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["api*", "schema*", "rights*", "ingestion*", "exports*", "operations*", "workbench*"]
+include = ["accounts*", "api*", "schema*", "rights*", "ingestion*", "exports*", "operations*", "workbench*"]
 
 [tool.setuptools.package-data]
+accounts = ["*.json"]
 schema = ["*.json", "vocabularies/*.json"]
 rights = ["sql/*/*.sql", "sql/*/*.json"]
 ingestion = ["catalogue/*.json"]

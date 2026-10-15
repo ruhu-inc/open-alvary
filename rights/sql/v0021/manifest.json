@@ -1,0 +1,35 @@
+{
+  "vocabulary": "policy-vocabulary-1",
+  "literals": {},
+  "vocabulary_file": "vocabularies/v1.json",
+  "vocabulary_hash": "cac594e752fdb6c2cb6adfc63930ceea8a8fe8be3afe9570552d5c2f486d8c80",
+  "revision": "0021",
+  "functions": [],
+  "ddl": "accounts.sql",
+  "new_functions": [
+    {
+      "signature": "accounts_membership_guard()",
+      "current_definition_hash": "ce8edfa65b4c09e2f2db7ec805c893f69d63600cf7d87f723d0cccd3c33d0918"
+    },
+    {
+      "signature": "accounts_entitlement_guard()",
+      "current_definition_hash": "bd9a8dde8b6a7157744c25d1d3a44bde0320a2fbb0ae6aec379db8c73a832586"
+    },
+    {
+      "signature": "accounts_append_only()",
+      "current_definition_hash": "c846ba51f39553aa8b11b2feb46387ea6aecef9cc3e928de5614ed8ac4b8a72e"
+    },
+    {
+      "signature": "accounts_access(text)",
+      "current_definition_hash": "fd49dc709a1f6da64c695a7f86946174bc7683c186c66fc2482ed9db0b75cd89"
+    },
+    {
+      "signature": "check_credential(jsonb)",
+      "current_definition_hash": "8b07f49d111026e5d6c2dde63c4c4f18ce61b14071f4f3019dd3bbe9a932eb2a"
+    },
+    {
+      "signature": "record_usage(jsonb)",
+      "current_definition_hash": "b82b8660c2d9de615e3c0994ba49492f20fd4d1ddb17829741613ae0d058d7e3"
+    }
+  ]
+}
