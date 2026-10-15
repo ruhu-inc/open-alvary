@@ -260,7 +260,17 @@ def email_steps(m: Management) -> list[tuple[str, callable]]:
         ),
         None,
     )
-    if connection is not None:
+    if connection is not None and "options" not in connection:
+        # Without read:connections_options the options come back absent; writing them would replace
+        # every setting of the connection with only ours, so never write what could not be read.
+        steps.append(
+            (
+                "skip the code email's wording: grant read:connections_options and"
+                " update:connections_options to the management application",
+                lambda: None,
+            )
+        )
+    elif connection is not None:
         options = dict(connection.get("options") or {})
         email = dict(options.get("email") or {})
         if (email.get("from"), email.get("subject"), email.get("body")) != (SENDER, CODE_SUBJECT, CODE_BODY):
