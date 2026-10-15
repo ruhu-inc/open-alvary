@@ -4,6 +4,7 @@
     /downloads/...  public release files, rechecked on every response
     /api/...        the legacy anonymous API, unchanged until activation B; its release-file route
                     now redirects to /downloads
+    /console/...    the developer console and its API (api.console), PostgreSQL only
     /healthz        liveness of the catalogue authority
     /               the built website, where a frontend directory is given (Vercel, Cloud Run with
                     ALVARY_FRONTEND, local)
@@ -27,12 +28,15 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from accounts.store import Accounts
 from api.admission import AdmissionConfig
 from api.catalogue import LegacyCatalogue
+from api.console import ConsoleConfig, Provider, create_console_app
 from api.main import create_app
 from api.repositories import LegacyRepository
 from api.site import create_downloads_app, create_site_app
 from api.store import ROOT, Store, check_legacy_authority, engine_for
+from rights.database import PolicyNamespace
 from rights.policy import decide
 
 SECURITY_HEADERS = {
@@ -81,6 +85,21 @@ def create_service(
     service.mount("/site/v1", create_site_app(store, release_root, site_admission))
     service.mount("/downloads", create_downloads_app(store, release_root, site_admission))
     service.mount("/api", create_app(store, release_root, downloads_path="/downloads"))
+    if store.engine.dialect.name == "postgresql":
+        # The developer console needs the accounts schema, which only PostgreSQL carries.
+        with store.engine.connect() as connection:
+            namespace = PolicyNamespace(connection.scalar(text("SELECT current_schema()")))
+        config = ConsoleConfig.from_environment()
+        service.mount(
+            "/console",
+            create_console_app(
+                Accounts(store.engine, namespace),
+                Provider(config) if config else None,
+                frontend=frontend,
+                trusted_proxies=site_admission.trusted_proxies if site_admission else 0,
+                dev_login=os.getenv("ALVARY_CONSOLE_DEV_LOGIN") == "1",
+            ),
+        )
 
     @service.get("/robots.txt", include_in_schema=False)
     def robots(request: Request):
