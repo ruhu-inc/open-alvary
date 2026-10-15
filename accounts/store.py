@@ -148,6 +148,21 @@ class Accounts:
                 return self.access(organisation_id, conn)
         return conn.scalar(text(f"SELECT {self._fn(conn, 'accounts_access')}(:o)"), {"o": organisation_id})
 
+    # ---------- the runtime's view ----------
+    def check_credential(self, request: dict) -> dict:
+        """The narrow database check (check_credential): organisation, credential, tier and scope."""
+        with self.engine.begin() as conn:
+            return conn.scalar(
+                text(f"SELECT {self._fn(conn, 'check_credential')}(CAST(:r AS jsonb))"),
+                {"r": json.dumps(request)},
+            )
+
+    def record_usage(self, entry: dict) -> None:
+        with self.engine.begin() as conn:
+            conn.execute(
+                text(f"SELECT {self._fn(conn, 'record_usage')}(CAST(:e AS jsonb))"), {"e": json.dumps(entry)}
+            )
+
     # ---------- people and sign-in ----------
     def sign_in(
         self, *, issuer: str, subject: str, method: str, email: str, label: str, context=None
