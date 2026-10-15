@@ -139,11 +139,21 @@ class Store:
                         conn.execute(table.update().where(table.c.id == model.id).values(**row))
 
 
+# What the catalogue says to readers about a source; its file stays the authority for these.
+CATALOGUE_TEXT = ("summary", "year", "catalogue_note")
+
+
 def seed(store: Store) -> None:
     catalogue = Corpus.model_validate_json((ROOT / "ingestion/catalogue/ng.json").read_text())
-    # Do not overwrite a maintainer's later review when rerunning bootstrap.
+    # Do not overwrite a maintainer's later review when rerunning bootstrap: existing records keep
+    # everything but the catalogue's reader-facing text, which follows the file.
     current = store.load()
     for name in Corpus.model_fields:
         existing = {m.id for m in getattr(current, name)}
         getattr(current, name).extend(m for m in getattr(catalogue, name) if m.id not in existing)
+    written = {s.id: s for s in catalogue.sources}
+    current.sources = [
+        s.model_copy(update={f: getattr(written[s.id], f) for f in CATALOGUE_TEXT}) if s.id in written else s
+        for s in current.sources
+    ]
     store.save(current)

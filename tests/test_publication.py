@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from api.main import create_app
+from api.store import seed
 from exports.release import write_release
 from rights.policy import decide, public_corpus
 from schema.models import Citation, Corpus
@@ -19,6 +20,28 @@ def test_seed_has_no_cleared_text(catalogue):
     assert public.versions == []
     assert all(r.status == "RIGHTS_UNDER_REVIEW" for r in public.rights)
     assert next(s for s in public.sources if s.id == "ng-isa-2007").legal_status == "repealed"
+
+
+def test_reseed_refreshes_catalogue_text_and_keeps_later_decisions(store, catalogue):
+    written = catalogue.sources[0]
+    stale = written.model_copy(
+        update={
+            "summary": None,
+            "year": None,
+            "catalogue_note": "Check amendments",
+            "legal_status": "historical",
+        }
+    )
+    assert written.legal_status != "historical" and written.summary and written.year
+    store.save(catalogue.model_copy(update={"sources": [stale, *catalogue.sources[1:]]}))
+    seed(store)
+    after = next(s for s in store.load().sources if s.id == written.id)
+    assert (after.summary, after.year, after.catalogue_note) == (
+        written.summary,
+        written.year,
+        written.catalogue_note,
+    )
+    assert after.legal_status == "historical"  # a maintainer's later decision stays
 
 
 def test_cleared_exact_version_is_published(cleared):
