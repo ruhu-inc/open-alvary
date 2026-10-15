@@ -1,5 +1,21 @@
 # Manual Vercel deployment — metadata pilot
 
+> **Retired as a website (one front door).** The public site and API now run behind the Google
+> load balancer at https://open.alvary.ai (`deployment/gcp/public_service.sh`). The Vercel
+> project only forwards visitors there: `deployment/vercel-redirect/vercel.json` sends every path
+> (query strings and `#/` addresses carry over) to the same path on open.alvary.ai with a
+> permanent redirect. Upload it from that directory, linked to the existing project:
+>
+> ```sh
+> cd deployment/vercel-redirect
+> vercel link --yes --scope ijidai-lassas-projects --project open-alvary
+> vercel deploy --prod --scope ijidai-lassas-projects
+> ```
+>
+> Earlier deployment addresses (`open-alvary-<id>.vercel.app`) keep their old snapshots; remove
+> them in the dashboard once the redirect is live. The rest of this page describes the pilot as it
+> ran before.
+
 This target serves the React build from Vercel's CDN and the existing FastAPI routes
 under `/api`. Configuration is at the repository root in `vercel.json`; the Python
 entrypoint is `api.vercel:app`. Do not select `web` as the project root: that would
