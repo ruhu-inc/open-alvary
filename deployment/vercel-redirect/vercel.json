@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "redirects": [
+    {
+      "source": "/:path*",
+      "destination": "https://open.alvary.ai/:path*",
+      "permanent": true
+    }
+  ],
+  "git": {
+    "deploymentEnabled": false
+  }
+}
