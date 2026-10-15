@@ -1,11 +1,15 @@
 # ACS admission overlay: add with -f deployment/admission.yaml after compose.yaml.
-# ADMISSION_CONFIG_FILE points at a private copy of deployment/admission.example.json.
+# ADMISSION_CONFIG_FILE points at a private copy of deployment/admission.example.json (the legacy API's
+# anonymous class); SITE_ADMISSION_CONFIG_FILE at one of deployment/site-admission.example.json (the
+# website's own data path, MAC-01). The service refuses to start with one and not the other.
 services:
   api:
     environment:
       ALVARY_ADMISSION_CONFIG: /run/config/admission.json
+      ALVARY_SITE_ADMISSION_CONFIG: /run/config/site-admission.json
     volumes:
       - ${ADMISSION_CONFIG_FILE:?Set the private admission configuration file}:/run/config/admission.json:ro
+      - ${SITE_ADMISSION_CONFIG_FILE:?Set the private site admission configuration file}:/run/config/site-admission.json:ro
     # Uvicorn's own cap must exceed admitted work plus the ingress queue, so excess load gets
     # the admission layer's 503/429 with Retry-After rather than a bare server 503.
-    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8018", "--no-access-log", "--limit-concurrency", "320", "--timeout-keep-alive", "5"]
+    command: ["uvicorn", "api.service:app", "--host", "0.0.0.0", "--port", "8018", "--no-access-log", "--limit-concurrency", "320", "--timeout-keep-alive", "5"]

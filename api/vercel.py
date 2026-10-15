@@ -2,16 +2,17 @@
 
 Each function instance rebuilds a small in-memory catalogue from the committed
 snapshot. Updates require redeployment; this is never a mutable corpus database.
+It serves the same public service as every other deployment (api.service): the
+website's data path, public downloads, the legacy API and the built website.
 """
 
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
-from api.main import create_app
+from api.service import create_service
 from api.store import ROOT, Store, metadata
 from schema.models import Corpus
 
@@ -28,12 +29,7 @@ def create_vercel_app(catalogue: Corpus | None = None, frontend: Path | None = N
     metadata.create_all(engine)
     store = Store(engine)
     store.save(catalogue)
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
-    app.mount("/api", create_app(store))
-    app.mount(
-        "/", StaticFiles(directory=frontend or ROOT / "web/dist", html=True, check_dir=False), name="website"
-    )
-    return app
+    return create_service(store, frontend=frontend or ROOT / "web/dist")
 
 
 app = create_vercel_app()

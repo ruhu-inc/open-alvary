@@ -55,7 +55,8 @@ function useData<T>(path: string) {
   useEffect(() => {
     const controller = new AbortController();
     set({ path });
-    fetch("/api" + path, { signal: controller.signal })
+    // The website's own data path (MAC-01): anonymous, bounded, never the developer API.
+    fetch("/site/v1" + path, { signal: controller.signal })
       .then((r) => {
         if (!r.ok) throw new Error(`Request failed (${r.status})`);
         return r.json();
@@ -389,8 +390,8 @@ function Home() {
           <Code2 />
           <h3>Made to build on</h3>
           <p>
-            Read-only APIs and versioned releases. Useful for research and
-            software, with or without AI.
+            Versioned releases anyone can download, with checksums. Useful
+            for research and software, with or without AI.
           </p>
         </div>
       </section>
@@ -404,12 +405,13 @@ function Home() {
           </h2>
         </div>
         <a className="button light" href="#/developers">
-          Explore the API <ArrowUpRight size={17} />
+          For developers <ArrowUpRight size={17} />
         </a>
       </section>
     </>
   );
 }
+const PAGE_SIZE = 20;
 function SourceList(props: { compact?: boolean; q?: string; filter?: string }) {
   return (
     <SourcePageList
@@ -431,36 +433,38 @@ function SourcePageList({
   q?: string;
   filter?: string;
 }) {
-  const [offset, setOffset] = useState(0);
+  const [page, setPage] = useState(1);
   const resultsRef = useRef<HTMLDivElement>(null);
   const pageNavigation = useRef(false);
   const movePage = (next: number) => {
     pageNavigation.current = true;
-    setOffset(next);
+    setPage(next);
   };
-  const limit = compact ? 6 : 25;
-  const params = new URLSearchParams({
-    limit: String(limit),
-    offset: String(offset),
-    access: filter,
-  });
+  const params = new URLSearchParams({ access: filter, page: String(page) });
   if (q) params.set("q", q);
-  const { data, error } = useData<{ items: Source[]; total: number }>(
-    (q ? "/search?" : "/sources?") + params,
-  );
+  const { data, error } = useData<{
+    items: Source[];
+    total: number;
+    page: number;
+    last_page: number;
+  }>((q ? "/search?" : "/sources?") + params);
   useEffect(() => {
-    if (data && offset > 0 && offset >= data.total) {
-      setOffset(Math.max(0, Math.floor((data.total - 1) / limit) * limit));
+    if (data && page > 1 && page > data.last_page) {
+      setPage(Math.max(1, data.last_page));
     }
-  }, [data, offset, limit]);
+  }, [data, page]);
   useEffect(() => {
-    if (data && offset < data.total && pageNavigation.current) {
+    if (data && page <= Math.max(1, data.last_page) && pageNavigation.current) {
       resultsRef.current?.focus();
       pageNavigation.current = false;
     }
-  }, [data, offset]);
-  if (!data || (offset > 0 && offset >= data.total))
+  }, [data, page]);
+  if (!data || (page > 1 && page > data.last_page))
     return <Feedback error={error} />;
+  // Fixed pages of 20, at most 25 of them for a search or filter (MAC-01).
+  const first = (page - 1) * PAGE_SIZE;
+  const items = compact ? data.items.slice(0, 6) : data.items;
+  const capped = data.total > data.last_page * PAGE_SIZE;
   return (
     <>
       <div
@@ -470,16 +474,16 @@ function SourcePageList({
         aria-label="Catalogue results"
         className={"source-list " + (compact ? "compact" : "")}
       >
-        {data.items.map((s, i) => (
+        {items.map((s, i) => (
           <SourceRow
             key={s.id}
             source={s}
-            number={offset + i + 1}
+            number={first + i + 1}
             compact={compact}
           />
         ))}
       </div>
-      {!data.items.length && (
+      {!items.length && (
         <div className="empty">
           <BookOpen size={30} />
           <h3>No sources found</h3>
@@ -493,25 +497,26 @@ function SourcePageList({
       {data.total > 0 && (
         <div className="catalogue-pagination" aria-label="Catalogue pagination">
           <p role="status">
-            Showing {offset + 1}–
-            {Math.min(offset + data.items.length, data.total)} of {data.total}{" "}
-            sources
+            Showing {first + 1}–{first + items.length} of {data.total} sources
           </p>
+          {!compact && capped && page === data.last_page && (
+            <p>
+              Only the first {data.last_page * PAGE_SIZE} results are shown.
+              Refine the search to narrow them.
+            </p>
+          )}
           {compact ? (
             <a href={"#/browse" + (q ? "?q=" + encodeURIComponent(q) : "")}>
               View all results <ArrowRight size={16} />
             </a>
           ) : (
             <nav aria-label="Results pages">
-              <button
-                disabled={offset === 0}
-                onClick={() => movePage(Math.max(0, offset - limit))}
-              >
+              <button disabled={page === 1} onClick={() => movePage(page - 1)}>
                 Previous
               </button>
               <button
-                disabled={offset + limit >= data.total}
-                onClick={() => movePage(offset + limit)}
+                disabled={page >= data.last_page}
+                onClick={() => movePage(page + 1)}
               >
                 Next
               </button>
@@ -748,8 +753,8 @@ function Governance() {
             <p>Researchers, legal-aid groups, universities, developers.</p>
           </div>
           <div className="flow-box">
-            <h3>API access</h3>
-            <p>Read-only interfaces and versioned bulk releases.</p>
+            <h3>Data for software</h3>
+            <p>Versioned releases with checksums, free to download.</p>
           </div>
         </div>
       </div>
@@ -768,7 +773,8 @@ function Governance() {
           </p>
           <p>
             <b>Restricted / licensed.</b> Excluded from this public repository
-            and its API. Any lawful commercial access is managed separately.
+            and its data services. Any lawful commercial access is managed
+            separately.
           </p>
         </section>
         <section>
@@ -819,14 +825,14 @@ function Releases() {
               </div>
               <a
                 className="button secondary"
-                href={"/api" + r.download_base + "/manifest.json"}
+                href={r.download_base + "/manifest.json"}
               >
                 <Download size={16} /> Manifest
               </a>
             </div>
             <div className="download-grid">
               {Object.entries(r.files).map(([name, info]) => (
-                <a key={name} href={"/api" + r.download_base + "/" + name}>
+                <a key={name} href={r.download_base + "/" + name}>
                   <FileText size={16} />
                   <span>
                     {name}
@@ -847,59 +853,40 @@ function Releases() {
   );
 }
 function Developers() {
-  const apiBase = `${location.origin}/api`;
-  const endpoints = [
-    "/jurisdictions",
-    "/sources",
-    "/sources/{id}",
-    "/sources/{id}/versions",
-    "/search?q=constitution",
-    "/citations/FOI%20Act%202011",
-    "/coverage",
-    "/rights/{source_id}",
-    "/releases",
-  ];
   return (
     <div className="page">
       <PageTitle
         label="BUILD ON THE PUBLIC LAYER"
         title="Legal data. Without the guesswork."
       >
-        A small read-only API, explicit rights states, and portable releases. No
-        LLM, embedding model, or account required.
+        Reading this website needs no account. For software and research, take
+        the versioned releases: explicit rights states, provenance and
+        checksums.
       </PageTitle>
       <div className="two-columns">
-        <div>
-          <h2>Start with the catalogue</h2>
+        <section>
+          <h2>Download the data</h2>
           <p>
-            API base for this site: <code>{apiBase}</code>. All public data
-            routes are read-only and use the same rights gate as downloads.
+            Each release is a set of JSONL files with a SHA-256 manifest,
+            recording its scope and the rights status of every record. No
+            blanket licence is claimed over linked legal text.
           </p>
-          <pre className="code-block">
-            {`curl "${apiBase}/sources"\n\ncurl "${apiBase}/search?q=constitution"`}
-          </pre>
-          <p>
-            Lists accept <code>limit</code> and <code>offset</code>. Source and
-            search results include access mode and rights status. Citation
-            resolution returns resolved, ambiguous, or unresolved.
-          </p>
-          <a className="text-link" href="/api/openapi.json" target="_blank">
-            OpenAPI specification <ArrowUpRight size={16} />
+          <a className="text-link" href="#/releases">
+            Go to the releases <ArrowUpRight size={16} />
           </a>
-        </div>
-        <div className="endpoint-list">
-          {endpoints.map((e) => (
-            <div key={e}>
-              <span>GET</span>
-              <code>{e}</code>
-            </div>
-          ))}
-        </div>
+        </section>
+        <section>
+          <h2>Machine access</h2>
+          <p>
+            A REST API and an MCP server for developers and AI tools are being
+            prepared, for organisations with a subscription or an approved
+            waiver. They are not open yet; this page will explain how to get
+            access when they are.
+          </p>
+        </section>
       </div>
       <div className="notice">
-        Search covers catalogue metadata and cleared full text only. MCP tools,
-        embeddings, hosted billing, and large-scale search indexing are future
-        work.
+        Search covers catalogue metadata and cleared full text only.
       </div>
     </div>
   );
@@ -922,7 +909,7 @@ function About() {
           <h2>What exists today</h2>
           <p>
             Four independently authored source records, explicit rights states,
-            a read-only API, versioned metadata downloads and open-source
+            versioned metadata downloads and open-source
             software. No Nigerian legal full text has been cleared or
             redistributed.
           </p>
@@ -1046,8 +1033,9 @@ function Privacy() {
         <section>
           <h2>Data used to operate the site</h2>
           <p>
-            Your browser requests pages, fonts and API data from this site.
-            Search terms are sent to our API to return matching public records.
+            Your browser requests pages, fonts and data from this site. Search
+            terms are sent to this site's server to return matching public
+            records.
             Fonts are bundled locally. We do not set application cookies or use
             browser storage to track visitors.
           </p>

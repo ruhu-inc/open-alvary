@@ -109,8 +109,8 @@ class AdmissionConfig:
         return cls(**data)
 
     @classmethod
-    def from_environment(cls) -> "AdmissionConfig | None":
-        path = os.environ.get("ALVARY_ADMISSION_CONFIG")
+    def from_environment(cls, variable: str = "ALVARY_ADMISSION_CONFIG") -> "AdmissionConfig | None":
+        path = os.environ.get(variable)
         return cls.load(Path(path)) if path else None
 
     @property
@@ -170,22 +170,55 @@ class AdmissionStore:
         self._call("release_admission", "SELECT {fn}(CAST(:l AS uuid))", {"l": lease_id})
 
 
-def failure(status: int, error: str, retry_after: int | None, config: AdmissionConfig):
+# The site class answers in RFC 9457 problem details with the MAC-06 codes; the legacy API keeps
+# its existing body.
+SITE_CODES = {
+    "Client address unavailable": "invalid_input",
+    "Quota store unavailable": "temporarily_unavailable",
+    "Rate limit exceeded": "rate_limited",
+    "capacity_exhausted": "capacity_exhausted",
+}
+
+
+def failure(
+    status: int, error: str, retry_after: int | None, config: AdmissionConfig, route_class: str = "anonymous"
+):
     headers = {"Cache-Control": "no-store", "Open-Alvary-Quota-Policy": config.policy_revision}
-    headers["Open-Alvary-Quota-Tier"] = "anonymous"
-    body = {"detail": error}
+    headers["Open-Alvary-Quota-Tier"] = route_class
+    if route_class == "anonymous":
+        body = {"detail": error}
+        media_type = "application/json"
+    else:
+        code = SITE_CODES.get(error, "temporarily_unavailable")
+        body = {
+            "type": f"https://open.alvary.ai/docs/errors#{code}",
+            "title": "Request refused",
+            "status": status,
+            "detail": error,
+            "code": code,
+            "retryable": status in (429, 503),
+        }
+        media_type = "application/problem+json"
     if retry_after is not None:
         headers["Retry-After"] = str(retry_after)
         body["retry_after_seconds"] = retry_after
-    return JSONResponse(status_code=status, content=body, headers=headers)
+    return JSONResponse(status_code=status, content=body, headers=headers, media_type=media_type)
 
 
 class AdmissionMiddleware:
-    def __init__(self, app, config: AdmissionConfig, store: AdmissionStore):
+    """One admission class. "anonymous" is the legacy API's; any other class (the website's "site")
+    keeps its own buckets, concurrency and global ceiling under keys prefixed with its name."""
+
+    def __init__(self, app, config: AdmissionConfig, store: AdmissionStore, route_class: str = "anonymous"):
         self.app = app
         self.config = config
         self.store = store
+        self.route_class = route_class
+        self.prefix = "" if route_class == "anonymous" else f"{route_class}:"
         self.waiting = 0
+
+    def _failure(self, status, error, retry_after):
+        return failure(status, error, retry_after, self.config, self.route_class)
 
     def request_for(self, scope) -> dict | None:
         peer = scope.get("client")[0] if scope.get("client") else None
@@ -196,26 +229,31 @@ class AdmissionMiddleware:
             group = None
         if group is None:
             return None
-        keys = [pseudonym(self.config.hmac_secret, group)]
+        keys = [self.prefix + pseudonym(self.config.hmac_secret, group)]
         if self.config.previous_hmac_secret:
             # Rotation keeps the previous bucket's debt until it refills; it never resets quota.
-            keys.append(pseudonym(self.config.previous_hmac_secret, group))
+            keys.append(self.prefix + pseudonym(self.config.previous_hmac_secret, group))
         limits = {"capacity": self.config.capacity, "refill_per_minute": self.config.refill_per_minute}
         return {
             "buckets": [{"key": k, **limits} for k in keys],
             "concurrency": [
                 {"key": keys[0], "limit": self.config.identity_concurrency},
-                {"key": GLOBAL_KEY, "limit": self.config.global_concurrency},
+                {"key": self.prefix + GLOBAL_KEY, "limit": self.config.global_concurrency},
             ],
             "lease_seconds": self.config.lease_seconds,
         }
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http" or scope["path"] in EXEMPT_PATHS:
+        # Mounted apps see the full path; exemptions apply to the path within this app.
+        path = scope.get("path", "")
+        root = scope.get("root_path", "")
+        if root and path.startswith(root):
+            path = path[len(root) :] or "/"
+        if scope["type"] != "http" or path in EXEMPT_PATHS:
             return await self.app(scope, receive, send)
         request = self.request_for(scope)
         if request is None:
-            return await failure(400, "Client address unavailable", None, self.config)(scope, receive, send)
+            return await self._failure(400, "Client address unavailable", None)(scope, receive, send)
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self.config.queue_deadline_seconds
         queued, delay = False, 0.02
@@ -224,21 +262,21 @@ class AdmissionMiddleware:
                 try:
                     result = await to_thread.run_sync(self.store.admit, request)
                 except AdmissionUnavailable:
-                    response = failure(503, "Quota store unavailable", None, self.config)
+                    response = self._failure(503, "Quota store unavailable", None)
                     return await response(scope, receive, send)
                 if result["admitted"]:
                     break
-                if set(result["blocked"]) != {GLOBAL_KEY}:
-                    response = failure(429, "Rate limit exceeded", result["retry_after"], self.config)
+                if set(result["blocked"]) != {self.prefix + GLOBAL_KEY}:
+                    response = self._failure(429, "Rate limit exceeded", result["retry_after"])
                     return await response(scope, receive, send)
                 # Only global capacity is exhausted: wait in the bounded ingress queue, uncharged.
                 if not queued:
                     if self.waiting >= self.config.queue_size:
-                        response = failure(503, "capacity_exhausted", result["retry_after"], self.config)
+                        response = self._failure(503, "capacity_exhausted", result["retry_after"])
                         return await response(scope, receive, send)
                     self.waiting, queued = self.waiting + 1, True
                 if loop.time() + delay > deadline:
-                    response = failure(503, "capacity_exhausted", result["retry_after"], self.config)
+                    response = self._failure(503, "capacity_exhausted", result["retry_after"])
                     return await response(scope, receive, send)
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, 0.5)
@@ -251,11 +289,11 @@ class AdmissionMiddleware:
         headers = [
             (
                 b"ratelimit-policy",
-                f'"anonymous";q={self.config.capacity};w={self.config.window_seconds}'.encode(),
+                f'"{self.route_class}";q={self.config.capacity};w={self.config.window_seconds}'.encode(),
             ),
-            (b"ratelimit", f'"anonymous";r={bucket["remaining"]};t={bucket["reset"]}'.encode()),
+            (b"ratelimit", f'"{self.route_class}";r={bucket["remaining"]};t={bucket["reset"]}'.encode()),
             (b"open-alvary-quota-policy", self.config.policy_revision.encode()),
-            (b"open-alvary-quota-tier", b"anonymous"),
+            (b"open-alvary-quota-tier", self.route_class.encode()),
         ]
 
         async def with_headers(message):
