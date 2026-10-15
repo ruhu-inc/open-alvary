@@ -44,7 +44,7 @@ deploy() {
   base="$(url)"
   secret="$(cat private-staging/idp-check/consent-secret)"
   "${GC[@]}" run deploy "$SERVICE" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
-    --allow-unauthenticated --min-instances=1 --max-instances=1 --cpu=1 --memory=512Mi \
+    --no-invoker-iam-check --min-instances=1 --max-instances=1 --cpu=1 --memory=512Mi \
     --set-env-vars="AUTH0_DOMAIN=$(setting AUTH0_DOMAIN),IDP_CHECK_BASE_URL=$base,IDP_CHECK_CONSENT_SECRET=$secret"
   echo "Deployed at $base/mcp. Next: python -m trials.idp_check.setup --public-url $base"
 }

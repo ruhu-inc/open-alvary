@@ -17,6 +17,9 @@ from trials.idp_check.auth0 import ROOT, Auth0Error, Management
 
 LOCAL = "http://localhost:8766"
 CLAUDE_CODE = "https://claude.ai/oauth/claude-code-client-metadata"
+CHATGPT = "https://chatgpt.com/oauth/BpZIpxL-aggt/client.json"
+# Tools reviewed and imported by their client metadata documents (MAC-07 "verified publisher").
+REVIEWED = [CLAUDE_CODE, CHATGPT]
 
 
 def resources(base):
@@ -84,13 +87,20 @@ def create_email(m):
     )
 
 
+def imported(m, document):
+    """Auth0's client ID for a reviewed tool's metadata document, importing it if needed."""
+    preview = m.post("clients/cimd/preview", {"external_client_id": document})
+    return (
+        preview.get("client_id")
+        or m.post("clients/cimd/register", {"external_client_id": document})["client_id"]
+    )
+
+
 def ensure_registration(m):
     m.patch("tenants/settings", {"flags": {"enable_dynamic_client_registration": True}})
-    preview = m.post("clients/cimd/preview", {"external_client_id": CLAUDE_CODE})
-    if preview.get("client_id"):
-        return [f"Claude Code already imported ({preview['client_id']})", "dynamic registration on"]
-    created = m.post("clients/cimd/register", {"external_client_id": CLAUDE_CODE})
-    return [f"Claude Code imported ({created['client_id']})", "dynamic registration on"]
+    return [f"imported {document} ({imported(m, document)})" for document in REVIEWED] + [
+        "dynamic registration on"
+    ]
 
 
 def ensure_user_grant(m, client_id, audience):
@@ -163,10 +173,10 @@ def main():
             print(ensure_resource(m, identifier, name))
     for line in ensure_connections(m) + ensure_registration(m):
         print(line)
-    claude_code = m.post("clients/cimd/preview", {"external_client_id": CLAUDE_CODE})["client_id"]
     bases = [LOCAL] + ([args.public_url.rstrip("/")] if args.public_url else [])
-    for base in bases:
-        print(ensure_user_grant(m, claude_code, f"{base}/mcp"))
+    for document in REVIEWED:
+        for base in bases:
+            print(ensure_user_grant(m, imported(m, document), f"{base}/mcp"))
     print(ensure_consent_action(m, bases[::-1]))
     print("issuer:", m.issuer)
 
