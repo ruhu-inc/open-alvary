@@ -62,10 +62,13 @@ def console(pg_engine):
     accounts = Accounts(pg_engine, namespace, key_pepper=b"k" * 32)
     accounts.set_tiers([TIER])
     fake = FakeProvider()
-    config = ConsoleConfig(issuer=ISSUER, client_id="console", client_secret="secret", base_url=BASE)
-    provider = Provider(config, client=httpx.Client(transport=httpx.MockTransport(fake.handler)))
-    app = create_console_app(accounts, provider)
+    app = create_console_app(accounts, app_provider(fake))
     return accounts, fake, app
+
+
+def app_provider(fake):
+    config = ConsoleConfig(issuer=ISSUER, client_id="console", client_secret="secret", base_url=BASE)
+    return Provider(config, client=httpx.Client(transport=httpx.MockTransport(fake.handler)))
 
 
 def mounted(app):
@@ -267,3 +270,103 @@ def test_sign_out_ends_the_session_and_dev_login_stays_off(console, tmp_path):
         and response.headers["cache-control"] == ("no-cache")
     )
     assert page.get("/api/v1/nothing").json()["error"]["code"] == "not_found"
+
+
+CONSENT_SECRET = b"c" * 32
+
+
+def hand_off(sub="google-oauth2|amina", **extra):
+    from api.console import sign_hs256
+
+    payload = {
+        "sub": sub,
+        "email": "amina@example.org",
+        "exp": time.time() + 600,
+        "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadata",
+        "client_name": "claude.ai",
+        "redirect_uri": "https://claude.ai/api/mcp/auth_callback",
+        "resource": "https://api.open.alvary.ai/mcp",
+        **extra,
+    }
+    return sign_hs256(payload, CONSENT_SECRET)
+
+
+def test_approving_an_app_creates_a_grant_the_credential_check_accepts(console):
+    accounts, fake, app = console
+    consent_app = create_console_app(accounts, app_provider(fake), consent_secret=CONSENT_SECRET)
+    browser = client(consent_app)
+    organisation, headers, _ = onboard(browser, fake)
+    token = hand_off()
+    session = browser.get("/oauth/api/session", params={"session_token": token}).json()
+    assert (
+        session["client"]["label"] == "verified_publisher" and session["client"]["publisher"] == "Anthropic"
+    )
+    assert session["client"]["name"] == "Claude" and session["client"]["resource"] == "mcp"
+    assert session["organisations"] == [
+        {"id": organisation, "name": "Amina Uwase", "eligible": False, "reason": "No access yet"}
+    ]
+    refused = browser.post(
+        "/oauth/api/decision",
+        json={"session_token": token, "state": "s1", "decision": "allow", "organisation": organisation},
+    )
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "organisation_not_eligible"
+    accounts.grant_access(
+        "op", organisation, tier="pilot", scope={"all": True}, source="manual", ends_at=None, reason="Pilot"
+    )
+    stranger = client(consent_app)  # the hand-off proves the person; no console session is needed
+    answer = stranger.post(
+        "/oauth/api/decision",
+        json={"session_token": token, "state": "s1", "decision": "allow", "organisation": organisation},
+    )
+    redirect = urlparse(answer.json()["redirect"])
+    assert f"{redirect.scheme}://{redirect.netloc}/" == ISSUER and redirect.path == "/continue"
+    from api.console import verify_hs256
+
+    query = parse_qs(redirect.query)
+    signed = verify_hs256(query["consent_token"][0], CONSENT_SECRET)
+    assert query["state"] == ["s1"] and signed["decision"] == "allow" and signed["org"] == organisation
+    [grant] = accounts.list_grants(accounts.person_for_identity(ISSUER, "google-oauth2|amina"), organisation)
+    assert grant["id"] == signed["grant"] and grant["client_name"] == "Claude" and grant["resource"] == "mcp"
+    assert accounts.check_credential(
+        {
+            "kind": "grant",
+            "grant_id": signed["grant"],
+            "resource": "mcp",
+            "issuer": ISSUER,
+            "subject": "google-oauth2|amina",
+        }
+    )["ok"]
+
+
+def test_denying_and_bad_hand_offs(console):
+    accounts, fake, app = console
+    consent_app = create_console_app(accounts, app_provider(fake), consent_secret=CONSENT_SECRET)
+    browser = client(consent_app)
+    onboard(browser, fake)
+    from api.console import verify_hs256
+
+    denied = browser.post(
+        "/oauth/api/decision", json={"session_token": hand_off(), "state": "s2", "decision": "deny"}
+    )
+    token = parse_qs(urlparse(denied.json()["redirect"]).query)["consent_token"][0]
+    assert verify_hs256(token, CONSENT_SECRET)["decision"] == "deny"
+    expired = browser.get("/oauth/api/session", params={"session_token": hand_off(exp=time.time() - 1)})
+    assert expired.status_code == 400 and expired.json()["error"]["code"] == "consent_expired"
+    from api.console import sign_hs256
+
+    forged = sign_hs256({"sub": "google-oauth2|amina", "exp": time.time() + 60}, b"x" * 32)
+    assert browser.get("/oauth/api/session", params={"session_token": forged}).status_code == 400
+    unknown = browser.get(
+        "/oauth/api/session",
+        params={
+            "session_token": hand_off(
+                client_id="https://tools.example/oauth.json", redirect_uri="http://127.0.0.1:5000/callback"
+            )
+        },
+    ).json()
+    assert unknown["client"]["label"] == "from_host" and unknown["client"]["host"] == "tools.example"
+    assert unknown["client"]["loopback"] is True
+    nobody = browser.get(
+        "/oauth/api/session", params={"session_token": hand_off(sub="google-oauth2|new")}
+    ).json()
+    assert nobody["account"] is False and nobody["organisations"] == []

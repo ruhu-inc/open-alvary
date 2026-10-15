@@ -180,6 +180,9 @@ def create_service(
                 frontend=frontend,
                 trusted_proxies=site_admission.trusted_proxies if site_admission else 0,
                 dev_login=os.getenv("ALVARY_CONSOLE_DEV_LOGIN") == "1",
+                consent_secret=os.environ["ALVARY_CONSENT_SECRET"].encode()
+                if os.getenv("ALVARY_CONSENT_SECRET")
+                else None,
             ),
         )
     service.mount("/api", create_app(store, release_root, downloads_path="/downloads"))

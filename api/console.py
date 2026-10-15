@@ -23,6 +23,7 @@ A development sign-in exists for a local trial only: it must be switched on expl
 
 import base64
 import hashlib
+import hmac
 import ipaddress
 import json
 import os
@@ -34,7 +35,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from html import escape
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 from fastapi import FastAPI, Request
@@ -149,6 +150,43 @@ def _claims(token: str) -> dict:
         raise AccountError("sign_in_refused", 401, "The sign-in could not be verified. Try again.") from error
 
 
+# Tools reviewed by the operator and pinned by their client metadata document address (MAC-07):
+# shown as verified publishers. Any other https client ID is "from <host>"; the rest unverified.
+VERIFIED = {
+    "https://claude.ai/oauth/mcp-oauth-client-metadata": ("Claude", "Anthropic"),
+    "https://claude.ai/oauth/claude-code-client-metadata": ("Claude Code", "Anthropic"),
+    "https://chatgpt.com/oauth/client.json": ("ChatGPT", "OpenAI"),
+    "https://chatgpt.com/oauth/codex/client.json": ("Codex", "OpenAI"),
+}
+
+
+def _b64e(data: bytes) -> str:
+    return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
+
+
+def sign_hs256(payload: dict, secret: bytes) -> str:
+    head = _b64e(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+    body = _b64e(json.dumps(payload).encode())
+    return f"{head}.{body}.{_b64e(hmac.new(secret, f'{head}.{body}'.encode(), hashlib.sha256).digest())}"
+
+
+def verify_hs256(token: str, secret: bytes) -> dict | None:
+    """The payload of a token signed with the shared secret and not expired, or None."""
+    try:
+        head, body, signature = token.split(".")
+        header = json.loads(base64.urlsafe_b64decode(head + "=" * (-len(head) % 4)))
+        payload = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+        given = base64.urlsafe_b64decode(signature + "=" * (-len(signature) % 4))
+    except ValueError:
+        return None
+    expected = hmac.new(secret, f"{head}.{body}".encode(), hashlib.sha256).digest()
+    if header.get("alg") != "HS256" or not hmac.compare_digest(expected, given):
+        return None
+    if not isinstance(payload, dict) or float(payload.get("exp", 0)) < time.time():
+        return None
+    return payload
+
+
 def is_loopback(request: Request) -> bool:
     host = (request.url.hostname or "").lower()
     client = request.client.host if request.client else ""
@@ -189,7 +227,10 @@ def create_console_app(
     frontend: Path | None = None,
     trusted_proxies: int = 0,
     dev_login: bool = False,
+    consent_secret: bytes | None = None,
 ) -> FastAPI:
+    """``consent_secret`` is shared with the provider's post-login step, which signs the hand-off
+    to the approval page and verifies our answer (MAC-07)."""
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     base_url = provider.config.base_url if provider else None
 
@@ -682,6 +723,121 @@ def create_console_app(
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PATCH", "DELETE", "PUT"])
     def unknown(request: Request, rest: str):
         return error(request, 404, "not_found", "No such console route.")
+
+    # ---------- approving an app (MAC-07) ----------
+    def hand_off(token: str) -> dict:
+        """The provider's signed hand-off: who signed in, which app, for which resource."""
+        if consent_secret is None or provider is None:
+            raise AccountError("unavailable", 503, "Connecting apps isn't available right now.")
+        payload = verify_hs256(token, consent_secret)
+        if payload is None or not payload.get("sub"):
+            raise AccountError(
+                "consent_expired", 400, "This approval link has expired. Start again from your app."
+            )
+        return payload
+
+    def app_label(payload: dict) -> dict:
+        client_id = str(payload.get("client_id") or "")
+        name, publisher = VERIFIED.get(client_id, (None, None))
+        host = urlsplit(client_id).hostname if client_id.startswith("https://") else None
+        returns = urlsplit(str(payload.get("redirect_uri") or "")).hostname or ""
+        return {
+            "client_id": client_id,
+            "name": name or str(payload.get("client_name") or "This app")[:200],
+            "label": "verified_publisher" if publisher else "from_host" if host else "unverified",
+            "publisher": publisher,
+            "host": host,
+            "returns_to": returns,
+            "loopback": returns in ("localhost", "127.0.0.1", "::1"),
+            "resource": "mcp" if str(payload.get("resource", "")).rstrip("/").endswith("/mcp") else "api",
+        }
+
+    def eligible(person_id: str, resource: str) -> list[dict]:
+        wanted = "mcp" if resource == "mcp" else "rest"
+        result = []
+        for organisation in accounts.organisations(person_id):
+            access = organisation["access"]
+            reason = None
+            if not roles.can(organisation["role"], "client.connect"):
+                reason = "Your role here doesn't allow connecting apps"
+            elif access["state"] != "active":
+                reason = "No access yet"
+            elif wanted not in (access.get("tier") or {}).get("includes", []):
+                reason = "Its plan doesn't include this"
+            result.append(
+                {
+                    "id": organisation["id"],
+                    "name": organisation["name"],
+                    "eligible": reason is None,
+                    "reason": reason,
+                }
+            )
+        return result
+
+    @app.get("/oauth/api/session")
+    def consent_session(session_token: str = ""):
+        payload = hand_off(session_token)
+        person_id = accounts.person_for_identity(provider.config.issuer, payload["sub"])
+        person = accounts.person(person_id) if person_id else None
+        client = app_label(payload)
+        return {
+            "client": client,
+            "email": payload.get("email") or "",
+            "account": person is not None,
+            "policies_pending": bool(person and person["policies_pending"]),
+            "organisations": eligible(person_id, client["resource"])
+            if person and not person["policies_pending"]
+            else [],
+        }
+
+    @app.post("/oauth/api/decision")
+    async def consent_decision(request: Request):
+        data = await body(request)
+        payload = hand_off(str(data.get("session_token") or ""))
+        state = str(data.get("state") or "")
+        if not re.fullmatch(r"[A-Za-z0-9._~-]{1,2048}", state):
+            raise AccountError(
+                "invalid_input", 400, "This approval link is incomplete. Start again from your app."
+            )
+        person_id = accounts.person_for_identity(provider.config.issuer, payload["sub"])
+        client = app_label(payload)
+        decision, organisation, grant = "deny", None, None
+        if data.get("decision") == "allow" and person_id:
+            chosen = str(data.get("organisation") or "")
+            if not any(o["id"] == chosen and o["eligible"] for o in eligible(person_id, client["resource"])):
+                raise AccountError(
+                    "organisation_not_eligible",
+                    409,
+                    "Choose an organisation with access where you may connect apps.",
+                )
+            grant = accounts.create_grant(
+                person_id,
+                chosen,
+                client_id=client["client_id"] or client["name"],
+                client_name=client["name"],
+                client_label=client["label"],
+                client_host=client["host"],
+                resource=client["resource"],
+                context=context(request),
+            )
+            decision, organisation = "allow", chosen
+        now = int(time.time())
+        answer = sign_hs256(
+            {
+                "sub": payload["sub"],
+                "iss": provider.config.base_url,
+                "iat": now,
+                "exp": now + 120,
+                "state": state,
+                "decision": decision,
+                "org": organisation,
+                "grant": grant,
+            },
+            consent_secret,
+        )
+        return {
+            "redirect": f"{provider.config.issuer}continue?{urlencode({'state': state, 'consent_token': answer})}"
+        }
 
     # ---------- the console page ----------
     @app.get("/{path:path}")

@@ -8,6 +8,7 @@ import "@fontsource/dm-sans/latin-600.css";
 import "@fontsource/libre-caslon-display/latin-400.css";
 import "./console.css";
 import { ApiError, api, go, setCsrf, signOut, type Me, type Organisation } from "./api";
+import { Consent } from "./consent";
 import { AccessPage, Apps, Connect, Keys, MembersPage, Overview, Security, Settings, Usage } from "./pages";
 import { Loading, Mark, Problem } from "./ui";
 
@@ -57,7 +58,7 @@ function App() {
   const [me, setMe] = useState<Me | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [version, setVersion] = useState(0);
-  const signingIn = path === "/console/sign-in";
+  const signingIn = path === "/console/sign-in" || path === "/console/oauth/consent";
   useEffect(() => {
     if (signingIn) return;
     api<Me>("/me").then(
@@ -72,6 +73,7 @@ function App() {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version, signingIn]);
+  if (path === "/console/oauth/consent") return <Consent />;
   if (signingIn) return <SignIn />;
   if (error) {
     if (error instanceof ApiError && error.code === "credential_required") return <Loading />;
