@@ -19,6 +19,7 @@ import hmac
 import html
 import json
 import os
+import secrets
 import time
 from urllib.parse import parse_qs, urlencode, urlsplit
 
@@ -38,9 +39,10 @@ SCOPE = "corpus:read"
 RESOURCES = {"mcp": f"{BASE}/mcp", "api": f"{BASE}/api/v1"}
 VERSIONS = ["2026-07-28", "2025-11-25", "2025-06-18", "2025-03-26"]
 EVENTS = ROOT / "private-staging" / "idp-check" / "events.jsonl"
-# Our own grant check (MAC-04, MAC-09): {"<subject>|<client>": revoked_at}. A token is refused when
-# the sign-in it rests on (auth_time) came before the revocation, even if renewed afterwards.
-REVOKED = ROOT / "private-staging" / "idp-check" / "revoked.json"
+# Our own grant check (MAC-04, MAC-09): each Allow on the consent page creates a grant; its ID travels
+# in every access token, renewals included, and a revoked or unknown grant is refused at once.
+GRANTS = ROOT / "private-staging" / "idp-check" / "grants.json"
+GRANT_CLAIM = "https://open.alvary.ai/grant"
 CONSENT_SECRET = ROOT / "private-staging" / "idp-check" / "consent-secret"
 ORG_CLAIM = "https://open.alvary.ai/org"
 # Test organisations of the signed-in person: only entitled ones may be chosen (MAC-07).
@@ -126,11 +128,21 @@ def check_token(token, resource):
         raise ValueError("expired or not yet valid")
     if SCOPE not in str(claims.get("scope", "")).split():
         raise PermissionError("insufficient scope")
-    revoked = json.loads(REVOKED.read_text()) if REVOKED.exists() else {}
-    revoked_at = revoked.get(f"{subject(claims)}|{claims.get('client_id') or claims.get('azp')}")
-    if revoked_at and claims.get("auth_time", claims.get("iat", 0)) < revoked_at:
-        raise ValueError("grant revoked")
+    if str(claims.get("sub", "")).endswith("@clients"):  # the self-test's machine tokens: no person, no grant
+        return claims
+    grant = grants().get(claims.get(GRANT_CLAIM) or "")
+    if not grant or grant.get("revoked_at") or grant.get("subject") != subject(claims):
+        raise ValueError("no active grant")
     return claims
+
+
+def grants():
+    return json.loads(GRANTS.read_text()) if GRANTS.exists() else {}
+
+
+def save_grants(data):
+    GRANTS.parent.mkdir(parents=True, exist_ok=True)
+    GRANTS.write_text(json.dumps(data, indent=1))
 
 
 def subject(claims):
@@ -182,6 +194,7 @@ def who(claims):
         "expires_in": int(claims.get("exp", 0) - time.time()),
         "signed_in_at": claims.get("auth_time"),
         "org": claims.get(ORG_CLAIM),
+        "grant": claims.get(GRANT_CLAIM),
         "claim_names": sorted(claims),
     }
 
@@ -379,6 +392,18 @@ async def consent_answer(request: Request):
     allowed = {o["id"] for o in ORGS if o["entitled"]}
     decision = "allow" if form.get("decision") == "allow" and form.get("org") in allowed else "deny"
     now = int(time.time())
+    grant_id = None
+    if decision == "allow":
+        grant_id = "grt_" + secrets.token_hex(8)
+        data = grants()
+        data[grant_id] = {
+            "subject": hashlib.sha256(session["sub"].encode()).hexdigest()[:12],
+            "client": session.get("client_id"),
+            "org": form.get("org"),
+            "created_at": now,
+            "revoked_at": None,
+        }
+        save_grants(data)
     answer = sign_hs256(
         {
             "sub": session["sub"],
@@ -388,6 +413,7 @@ async def consent_answer(request: Request):
             "state": form.get("state", ""),
             "decision": decision,
             "org": form.get("org") if decision == "allow" else None,
+            "grant": grant_id,
         }
     )
     record(
