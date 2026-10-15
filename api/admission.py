@@ -207,15 +207,19 @@ def failure(
 
 class AdmissionMiddleware:
     """One admission class. "anonymous" is the legacy API's; any other class (the website's "site")
-    keeps its own buckets, concurrency and global ceiling under keys prefixed with its name."""
+    keeps its own buckets, concurrency and global ceiling under keys in its own namespace. The
+    database accepts keys of one shape, ``name:value`` with a single colon, so "ip:<hash>" becomes
+    "site:ip-<hash>" and "global:all" becomes "site:global-all"."""
 
     def __init__(self, app, config: AdmissionConfig, store: AdmissionStore, route_class: str = "anonymous"):
         self.app = app
         self.config = config
         self.store = store
         self.route_class = route_class
-        self.prefix = "" if route_class == "anonymous" else f"{route_class}:"
         self.waiting = 0
+
+    def key(self, key: str) -> str:
+        return key if self.route_class == "anonymous" else f"{self.route_class}:{key.replace(':', '-')}"
 
     def _failure(self, status, error, retry_after):
         return failure(status, error, retry_after, self.config, self.route_class)
@@ -229,16 +233,16 @@ class AdmissionMiddleware:
             group = None
         if group is None:
             return None
-        keys = [self.prefix + pseudonym(self.config.hmac_secret, group)]
+        keys = [self.key(pseudonym(self.config.hmac_secret, group))]
         if self.config.previous_hmac_secret:
             # Rotation keeps the previous bucket's debt until it refills; it never resets quota.
-            keys.append(self.prefix + pseudonym(self.config.previous_hmac_secret, group))
+            keys.append(self.key(pseudonym(self.config.previous_hmac_secret, group)))
         limits = {"capacity": self.config.capacity, "refill_per_minute": self.config.refill_per_minute}
         return {
             "buckets": [{"key": k, **limits} for k in keys],
             "concurrency": [
                 {"key": keys[0], "limit": self.config.identity_concurrency},
-                {"key": self.prefix + GLOBAL_KEY, "limit": self.config.global_concurrency},
+                {"key": self.key(GLOBAL_KEY), "limit": self.config.global_concurrency},
             ],
             "lease_seconds": self.config.lease_seconds,
         }
@@ -266,7 +270,7 @@ class AdmissionMiddleware:
                     return await response(scope, receive, send)
                 if result["admitted"]:
                     break
-                if set(result["blocked"]) != {self.prefix + GLOBAL_KEY}:
+                if set(result["blocked"]) != {self.key(GLOBAL_KEY)}:
                     response = self._failure(429, "Rate limit exceeded", result["retry_after"])
                     return await response(scope, receive, send)
                 # Only global capacity is exhausted: wait in the bounded ingress queue, uncharged.

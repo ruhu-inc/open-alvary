@@ -291,7 +291,8 @@ verify() {
   local ip base status
   ip="$(address)"
   base="https://$DOMAIN"
-  curl_lb() { curl -sS --resolve "$DOMAIN:443:$ip" "$@"; }
+  # Each check reports its own result; one failure never hides the others.
+  curl_lb() { curl -sS --max-time 20 --resolve "$DOMAIN:443:$ip" "$@" 2>/dev/null || printf 'failed'; }
   echo "Through the load balancer at $ip (before or after DNS):"
   for path in / /site/v1/project /site/v1/coverage /site/v1/sources "/site/v1/search?q=act" /site/v1/releases; do
     status="$(curl_lb -o /dev/null -w '%{http_code} %header{cache-control}' "$base$path")"
