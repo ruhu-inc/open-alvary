@@ -302,6 +302,9 @@ verify() {
   one="$(curl_lb -o /dev/null -w '%header{ratelimit}' "$base/site/v1/project")"
   two="$(curl_lb -o /dev/null -w '%header{ratelimit}' -H 'X-Forwarded-For: 198.51.100.77' "$base/site/v1/project")"
   echo "  forged X-Forwarded-For: $one then $two (the second must show one fewer remaining)"
+  local repository
+  repository="$(setting PUBLIC_REPOSITORY_URL)"
+  echo "  repository link $repository -> $(curl -s -o /dev/null -w '%{http_code}' "$repository") (must be 200)"
   echo "  the service's own address: $("${GC[@]}" run services describe "$SERVICE" --region="$REGION" --format='value(status.url)' || true) (empty: no default address)"
 }
 

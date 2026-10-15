@@ -32,7 +32,7 @@ verify the public repository, and set these Vercel production environment variab
 
 | Name | Value |
 |---|---|
-| PUBLIC_REPOSITORY_URL | https://github.com/ruhu-ai/open-alvary |
+| PUBLIC_REPOSITORY_URL | https://github.com/ruhu-inc/open-alvary |
 | PUBLIC_MAINTAINER | Owner-confirmed maintainer name |
 | PUBLIC_CONTACT_EMAIL | Owner-confirmed monitored public address |
 | METADATA_LICENCE | CC-BY-4.0, only after approval is recorded |
