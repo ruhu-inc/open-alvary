@@ -29,6 +29,7 @@ TIER = {
 @pytest.fixture
 def api(pg_engine, monkeypatch):
     monkeypatch.setenv("ALVARY_KEY_PEPPER", base64.b64encode(PEPPER).decode())
+    monkeypatch.setenv("ALVARY_ACCOUNTS", "1")
     for name in ("ALVARY_CONSOLE_CLIENT_ID", "ALVARY_ADMISSION_CONFIG", "ALVARY_SITE_ADMISSION_CONFIG"):
         monkeypatch.delenv(name, raising=False)
     migrate(pg_engine)
@@ -193,3 +194,12 @@ def test_mcp_tools_refuse_records_outside_the_access(api):
     lapsed = client.post("/mcp", json=rpc("tools/list"), headers=headers)
     assert lapsed.status_code == 403 and lapsed.json()["error"]["data"]["code"] == "entitlement_lapsed"
     assert "www-authenticate" not in lapsed.headers
+
+
+def test_activation_b_stays_off_unless_switched_on(pg_engine, monkeypatch):
+    monkeypatch.delenv("ALVARY_ACCOUNTS", raising=False)
+    migrate(pg_engine)
+    client = TestClient(create_service(store=Store(pg_engine)))
+    assert client.get("/console/api/v1/me").status_code == 404
+    assert client.post("/mcp", json=rpc("tools/list")).status_code in (404, 405)
+    assert client.get("/.well-known/oauth-protected-resource/mcp").status_code == 404

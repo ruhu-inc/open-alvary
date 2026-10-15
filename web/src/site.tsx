@@ -242,6 +242,7 @@ export function SiteFooter() {
       <div className="footer-links">
         <Link to="/about">About & contribute</Link>
         <Link to="/privacy">Privacy</Link>
+        <Link to="/terms">Terms</Link>
         <ProjectRepository />
       </div>
     </footer>

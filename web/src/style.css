@@ -2135,3 +2135,35 @@ nav.breadcrumb a:hover {
     display: none;
   }
 }
+
+/* Terms, acceptable use and privacy: readable long-form text with a version note. */
+.legal section {
+  max-width: 46rem;
+  margin: 0 0 26px;
+}
+.legal section h2 {
+  font-size: 22px;
+  margin: 0 0 10px;
+}
+.legal section p,
+.legal section li {
+  font-size: 16px;
+  line-height: 1.7;
+  color: #33463d;
+}
+.legal section ul {
+  padding-left: 22px;
+  display: grid;
+  gap: 6px;
+}
+.legal-status {
+  max-width: 46rem;
+  border-left: 3px solid #8a5a1c;
+  background: #f8eee3;
+  color: #6b4314;
+  padding: 12px 16px;
+  margin: 0 0 30px;
+  font-size: 15px;
+  display: grid;
+  gap: 4px;
+}
