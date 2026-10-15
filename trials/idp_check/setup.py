@@ -17,7 +17,9 @@ from trials.idp_check.auth0 import ROOT, Auth0Error, Management
 
 LOCAL = "http://localhost:8766"
 CLAUDE_CODE = "https://claude.ai/oauth/claude-code-client-metadata"
-CLAUDE = "https://claude.ai/oauth/mcp-oauth-client-metadata"  # claude.ai, desktop, mobile (seen in Auth0's log)
+CLAUDE = (
+    "https://claude.ai/oauth/mcp-oauth-client-metadata"  # claude.ai, desktop, mobile (seen in Auth0's log)
+)
 CHATGPT = "https://chatgpt.com/oauth/BpZIpxL-aggt/client.json"
 CODEX = "https://chatgpt.com/oauth/codex/client.json"
 # Tools reviewed and imported by their client metadata documents (MAC-07 "verified publisher").
@@ -165,6 +167,17 @@ def ensure_consent_action(m, bases):
     return f"consent Action deployed and bound (consent page {bases[0]}/consent)"
 
 
+FACTORS = ["otp", "webauthn-platform", "webauthn-roaming", "recovery-code"]  # MAC-08 second factors
+
+
+def ensure_factors(m):
+    """Authenticator apps, device biometrics (Touch ID, Windows Hello), security keys, recovery codes.
+    Nobody is asked for them unless the consent Action requires it (MAC-08: by role, at the action)."""
+    for factor in FACTORS:
+        m.call("PUT", f"guardian/factors/{factor}", {"enabled": True})
+    return f"second factors on: {', '.join(FACTORS)}"
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--public-url", help="the public test address, once approved and created")
@@ -173,7 +186,7 @@ def main():
     for base in [LOCAL] + ([args.public_url.rstrip("/")] if args.public_url else []):
         for identifier, name in resources(base).items():
             print(ensure_resource(m, identifier, name))
-    for line in ensure_connections(m) + ensure_registration(m):
+    for line in ensure_connections(m) + ensure_registration(m) + [ensure_factors(m)]:
         print(line)
     bases = [LOCAL] + ([args.public_url.rstrip("/")] if args.public_url else [])
     for document in REVIEWED:
