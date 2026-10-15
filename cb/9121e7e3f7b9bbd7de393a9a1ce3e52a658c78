@@ -1,0 +1,21 @@
+deployment/vercel.md
+  s_b82616e2476856::t_9fb3451ae74110 3-18
+deployment/vercel-redirect/vercel.json
+  s_b82616e2476856::t_9fb3451ae74110 1-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cb9121e7e3f7b9bbd7de393a9a1ce3e52a658c78",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
