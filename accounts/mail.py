@@ -1,0 +1,161 @@
+"""Account email (ACS-07, MAC-04, MAC-08): invitations, access requests and decisions, sign-in changes.
+
+Sent through Resend's HTTP API from a subdomain of our own (ALVARY_MAIL_FROM, for example
+"Open Alvary <no-reply@mail.open.alvary.ai>"), with RESEND_API_KEY from Secret Manager. Without a
+key, messages are only logged (local trials, tests). Mail never decides an outcome: the change is
+already committed, a failed send is logged and retried a few times, and nothing waits for it, so
+delivery timing cannot reveal whether an address has an account (ACS-02).
+"""
+
+import logging
+import os
+import time
+from dataclasses import dataclass
+from html import escape
+
+import httpx
+
+log = logging.getLogger("open_alvary.mail")
+RESEND = "https://api.resend.com/emails"
+
+
+@dataclass(frozen=True)
+class Message:
+    to: str
+    subject: str
+    text: str  # the message; the HTML version is built from it
+
+
+class Mailer:
+    def __init__(self, api_key: str | None, sender: str, reply_to: str, client: httpx.Client | None = None):
+        self.api_key, self.sender, self.reply_to = api_key, sender, reply_to
+        self.http = client or httpx.Client(timeout=15)
+
+    @classmethod
+    def from_environment(cls) -> "Mailer":
+        return cls(
+            os.getenv("RESEND_API_KEY") or None,
+            os.getenv("ALVARY_MAIL_FROM", "Open Alvary <no-reply@mail.open.alvary.ai>"),
+            os.getenv("ALVARY_MAIL_REPLY_TO", "hello@ruhu.ai"),
+        )
+
+    def send(self, message: Message) -> bool:
+        if not self.api_key:
+            log.info("mail not sent (no RESEND_API_KEY): %s", message.subject)
+            return False
+        body = {
+            "from": self.sender,
+            "to": [message.to],
+            "reply_to": self.reply_to,
+            "subject": message.subject,
+            "text": message.text,
+            "html": html(message.text),
+        }
+        for wait in (1, 4, 0):
+            try:
+                answer = self.http.post(
+                    RESEND, json=body, headers={"Authorization": f"Bearer {self.api_key}"}
+                )
+                if answer.status_code < 300:
+                    return True
+                if answer.status_code < 500 and answer.status_code != 429:
+                    break  # a refusal that a retry cannot fix
+            except httpx.HTTPError:
+                pass
+            if wait:
+                time.sleep(wait)
+        log.warning("mail not delivered: %s", message.subject)  # never the address or the content
+        return False
+
+
+def html(text: str) -> str:
+    paragraphs = "".join(f"<p>{escape(p).replace(chr(10), '<br>')}</p>" for p in text.strip().split("\n\n"))
+    return (
+        '<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.55;color:#22372f;'
+        f'max-width:560px">{paragraphs}</div>'
+    )
+
+
+SIGN_OFF = "Open Alvary\nOperated by Ruhu, Inc. · https://open.alvary.ai"
+
+
+def invitation(to: str, organisation: str, inviter: str, role: str, base: str) -> Message:
+    return Message(
+        to,
+        f"You're invited to {organisation} on Open Alvary",
+        f"{inviter} invited you to join {organisation} on Open Alvary as {role}.\n\n"
+        f"To accept, sign in at {base}/console with this email address ({to}). The invitation is on the "
+        "overview page and expires in 7 days.\n\n"
+        "If you weren't expecting this, you can ignore it.\n\n" + SIGN_OFF,
+    )
+
+
+def request_received(to: str, organisation: str, base: str) -> Message:
+    return Message(
+        to,
+        "We received your Open Alvary access request",
+        f"Thank you. We received the request for {organisation} to use the Open Alvary API and MCP.\n\n"
+        f"We'll email you when it's decided, or if we need more information. You can follow it under Access "
+        f"and plan at {base}/console/access.\n\n" + SIGN_OFF,
+    )
+
+
+def request_for_operator(to: str, organisation: str, reduced: bool, base: str) -> Message:
+    kind = "free or reduced access" if reduced else "access"
+    return Message(
+        to,
+        f"New Open Alvary access request: {organisation}",
+        f"{organisation} asked for {kind}. List open requests with:\n\n"
+        "python -m accounts.operator --operator <you> requests\n\n" + SIGN_OFF,
+    )
+
+
+def access_granted(to: str, organisation: str, until: str | None, base: str) -> Message:
+    period = f" until {until}" if until else ""
+    return Message(
+        to,
+        f"Access granted for {organisation}",
+        f"{organisation} now has access to the Open Alvary API and MCP{period}.\n\n"
+        f"Next: owners and admins set up a second factor, then create an API key or connect Claude, "
+        f"ChatGPT or Codex at {base}/console.\n\n" + SIGN_OFF,
+    )
+
+
+def access_declined(to: str, organisation: str, reason: str, renewable: str, base: str) -> Message:
+    return Message(
+        to,
+        f"Your Open Alvary access request for {organisation}",
+        f"We can't grant access for {organisation} at this time.\n\nReason: {reason}\n\n"
+        f"You can ask again after {renewable}, or sooner if you have new information, at "
+        f"{base}/console/access.\n\n" + SIGN_OFF,
+    )
+
+
+def more_information(to: str, organisation: str, question: str, base: str) -> Message:
+    return Message(
+        to,
+        f"We need more information: {organisation}",
+        f"To decide on the access request for {organisation}, we need more information:\n\n{question}\n\n"
+        f"Reply to this email or update the request at {base}/console/access.\n\n" + SIGN_OFF,
+    )
+
+
+def access_revoked(to: str, organisation: str, base: str) -> Message:
+    return Message(
+        to,
+        f"Access ended for {organisation}",
+        f"{organisation}'s access to the Open Alvary API and MCP has ended. Keys and connected apps are "
+        f"kept, and work again if access is granted later.\n\nQuestions or an appeal: reply to this email. "
+        f"Details at {base}/console/access.\n\n" + SIGN_OFF,
+    )
+
+
+def sign_in_changed(to: str, added: bool, method: str, base: str) -> Message:
+    what = {"google": "Google", "email": "Email code"}.get(method, method)
+    change = "added to" if added else "removed from"
+    return Message(
+        to,
+        f"A sign-in method was {'added' if added else 'removed'}",
+        f"{what} was {change} your Open Alvary account.\n\nIf this wasn't you, sign in at {base}/console, "
+        "review Security, sign out everywhere, and tell us by replying to this email.\n\n" + SIGN_OFF,
+    )

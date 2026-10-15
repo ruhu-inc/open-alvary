@@ -25,7 +25,7 @@ import secrets
 import time
 from pathlib import Path
 
-from trials.idp_check.auth0 import Management
+from trials.idp_check.auth0 import Management, environment
 
 ROOT = Path(__file__).resolve().parents[2]
 PRIVATE = ROOT / "private-staging" / "auth0"
@@ -148,6 +148,8 @@ def plan(
 
     steps.append(("enable Google and email codes for the console (where not already)", enable_connections))
 
+    steps += email_steps(m)
+
     code = (Path(__file__).parent / "post_login.js").read_text()
     actions = {a["name"]: a for a in m.call("GET", "actions/actions").get("actions", [])}
 
@@ -192,6 +194,90 @@ def plan(
         steps.append(
             ("deploy the post-login Action and bind it (replacing the sign-in check's)", deploy_action)
         )
+    return steps
+
+
+SENDER = "Open Alvary <no-reply@mail.open.alvary.ai>"
+CODE_SUBJECT = "Your Open Alvary sign-in code"
+CODE_BODY = (
+    '<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.55;color:#22372f;'
+    'max-width:560px"><p>Your Open Alvary sign-in code is:</p>'
+    '<p style="font-size:28px;letter-spacing:4px;font-weight:600">{{ code }}</p>'
+    "<p>It works for a few minutes, and a new code replaces this one. If you didn't try to sign in, "
+    "ignore this email.</p><p>Open Alvary · Operated by Ruhu, Inc.</p></div>"
+)
+
+
+def email_steps(m: Management) -> list[tuple[str, callable]]:
+    """Sign-in codes through Resend's SMTP (Auth0's own email is for testing only), once
+    RESEND_API_KEY is in the environment or .env."""
+    key = environment().get("RESEND_API_KEY")
+    if not key:
+        return [
+            (
+                "skip email: put RESEND_API_KEY in .env once the mail.open.alvary.ai domain is verified",
+                lambda: None,
+            )
+        ]
+    steps = []
+    try:
+        provider = m.call(
+            "GET",
+            "emails/provider",
+            fields="name,enabled,default_from_address,credentials",
+            include_fields="true",
+        )
+    except Exception:
+        provider = None
+    wanted = {
+        "name": "smtp",
+        "enabled": True,
+        "default_from_address": SENDER,
+        "credentials": {
+            "smtp_host": "smtp.resend.com",
+            "smtp_port": 465,
+            "smtp_user": "resend",
+            "smtp_pass": key,
+        },
+    }
+    current = provider or {}
+    if (
+        current.get("name"),
+        current.get("default_from_address"),
+        (current.get("credentials") or {}).get("smtp_host"),
+    ) != ("smtp", SENDER, "smtp.resend.com"):
+        steps.append(
+            (
+                "send Auth0's email through Resend (SMTP)",
+                lambda: m.call("PATCH" if provider else "POST", "emails/provider", wanted),
+            )
+        )
+    connection = next(
+        (
+            c
+            for c in m.call("GET", "connections", fields="id,name,options", include_fields="true")
+            if c["name"] == "email"
+        ),
+        None,
+    )
+    if connection is not None:
+        options = dict(connection.get("options") or {})
+        email = dict(options.get("email") or {})
+        if (email.get("from"), email.get("subject"), email.get("body")) != (SENDER, CODE_SUBJECT, CODE_BODY):
+            # Connection options are replaced as a whole, so the rest is sent back unchanged.
+            options["email"] = {
+                **email,
+                "from": SENDER,
+                "subject": CODE_SUBJECT,
+                "body": CODE_BODY,
+                "syntax": "liquid",
+            }
+            steps.append(
+                (
+                    "word the sign-in code email for Open Alvary",
+                    lambda: m.call("PATCH", f"connections/{connection['id']}", {"options": options}),
+                )
+            )
     return steps
 
 

@@ -38,10 +38,10 @@ from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
-from accounts import policies, roles
+from accounts import mail, policies, roles
 from accounts.store import AccountError, Accounts, Context
 from api.admission import client_address
 
@@ -228,11 +228,23 @@ def create_console_app(
     trusted_proxies: int = 0,
     dev_login: bool = False,
     consent_secret: bytes | None = None,
+    mailer: mail.Mailer | None = None,
 ) -> FastAPI:
     """``consent_secret`` is shared with the provider's post-login step, which signs the hand-off
     to the approval page and verifies our answer (MAC-07)."""
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     base_url = provider.config.base_url if provider else None
+    mailer = mailer or mail.Mailer.from_environment()
+    site = base_url or "https://open.alvary.ai"
+    operator_email = os.getenv("ALVARY_OPERATOR_EMAIL", "hello@ruhu.ai")
+
+    def later(response: Response, *messages: mail.Message) -> Response:
+        """Send after the response: the change is committed, and nothing waits for the mail."""
+        tasks = BackgroundTasks()
+        for message in messages:
+            tasks.add_task(mailer.send, message)
+        response.background = tasks
+        return response
 
     def context(request: Request) -> Context:
         peer = request.client.host if request.client else None
@@ -334,6 +346,7 @@ def create_console_app(
 
     def _complete(request, flow, issuer, subject, method, email, mfa) -> Response:
         ctx = context(request)
+        notices: list[mail.Message] = []
         purpose = flow["purpose"]
         if purpose == "sign_in":
             signed = accounts.sign_in(
@@ -369,6 +382,9 @@ def create_console_app(
                     label=email,
                     context=ctx,
                 )
+                notices.append(
+                    mail.sign_in_changed(accounts.person(session["person_id"])["email"], True, method, site)
+                )
             elif accounts.person_for_identity(issuer, subject) != session["person_id"]:
                 raise AccountError(
                     "wrong_account", 403, "That is a different account. Use the one you signed in with."
@@ -378,7 +394,7 @@ def create_console_app(
             accounts.refresh_session(token, second_factor=mfa)
             response = RedirectResponse(flow["return_to"], status_code=303)
         response.delete_cookie(FLOW_COOKIE, path="/console/auth")
-        return response
+        return later(response, *notices)
 
     def _back(request: Request, code: str) -> Response:
         response = RedirectResponse(f"/console/sign-in?error={code}", status_code=303)
@@ -517,8 +533,14 @@ def create_console_app(
     def unlink(request: Request, identity_id: str):
         session = guard(request, write=True)
         fresh(session, second_factor=False)
+        method = next(
+            (i["method"] for i in accounts.identities(session["person_id"]) if i["id"] == identity_id), ""
+        )
         accounts.unlink_identity(session["person_id"], identity_id, context(request))
-        return Response(status_code=204)
+        return later(
+            Response(status_code=204),
+            mail.sign_in_changed(accounts.person(session["person_id"])["email"], False, method, site),
+        )
 
     @app.get("/api/v1/me/sessions")
     def sessions(request: Request):
@@ -575,10 +597,16 @@ def create_console_app(
     @app.post("/api/v1/organisations/{organisation_id}/access-requests")
     async def request_access(request: Request, organisation_id: str):
         session = guard(request, write=True)
-        request_id = accounts.request_access(
-            session["person_id"], organisation_id, await body(request), context(request)
+        data = await body(request)
+        request_id = accounts.request_access(session["person_id"], organisation_id, data, context(request))
+        notice = accounts.notice_recipients(organisation_id, request_id)
+        return later(
+            JSONResponse({"id": request_id}, status_code=201),
+            *(mail.request_received(to, notice["organisation"], site) for to in notice["to"]),
+            mail.request_for_operator(
+                operator_email, notice["organisation"], bool(data.get("reduced")), site
+            ),
         )
-        return JSONResponse({"id": request_id}, status_code=201)
 
     @app.post("/api/v1/organisations/{organisation_id}/access-requests/{request_id}/withdraw")
     def withdraw(request: Request, organisation_id: str, request_id: str):
@@ -665,7 +693,11 @@ def create_console_app(
             data.get("role", ""),
             context(request),
         )
-        return JSONResponse({"id": invitation}, status_code=201)
+        sent = accounts.invitation_notice(invitation)
+        return later(
+            JSONResponse({"id": invitation}, status_code=201),
+            mail.invitation(sent["email"], sent["organisation"], sent["inviter"], sent["role"], site),
+        )
 
     @app.delete("/api/v1/organisations/{organisation_id}/invitations/{invitation_id}")
     def revoke_invitation(request: Request, organisation_id: str, invitation_id: str):

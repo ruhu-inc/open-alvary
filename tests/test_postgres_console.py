@@ -370,3 +370,52 @@ def test_denying_and_bad_hand_offs(console):
         "/oauth/api/session", params={"session_token": hand_off(sub="google-oauth2|new")}
     ).json()
     assert nobody["account"] is False and nobody["organisations"] == []
+
+
+class RecordingMailer:
+    def __init__(self):
+        self.sent = []
+
+    def send(self, message):
+        self.sent.append(message)
+        return True
+
+
+def test_invitations_and_access_requests_send_mail_after_the_change(console):
+    accounts, fake, _ = console
+    mailer = RecordingMailer()
+    app = create_console_app(accounts, app_provider(fake), mailer=mailer)
+    browser = client(app)
+    organisation, headers, _ = onboard(browser, fake)
+    invited = browser.post(
+        f"/api/v1/organisations/{organisation}/invitations",
+        headers=headers,
+        json={"email": "guest@example.org", "role": "developer"},
+    )
+    assert invited.status_code == 201
+    [invitation] = mailer.sent
+    assert (
+        invitation.to == "guest@example.org"
+        and "Amina Uwase invited you to join Amina Uwase" in invitation.text
+    )
+    requested = browser.post(
+        f"/api/v1/organisations/{organisation}/access-requests",
+        headers=headers,
+        json={
+            "purpose": "Research",
+            "expected_volume": "Some",
+            "contact_name": "Amina",
+            "contact_email": "contact@example.org",
+            "reduced": True,
+        },
+    )
+    assert requested.status_code == 201
+    received, operator = mailer.sent[1:]
+    assert (
+        received.to == "contact@example.org"
+        and received.subject == "We received your Open Alvary access request"
+    )
+    assert operator.to == "hello@ruhu.ai" and "free or reduced access" in operator.text
+    assert accounts.notice_recipients(organisation)["to"] == [
+        "amina@example.org"
+    ]  # owners, without a request

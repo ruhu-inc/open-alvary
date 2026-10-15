@@ -15,10 +15,11 @@ DATABASE_URL for the PostgreSQL database that holds the accounts schema.
 import argparse
 import json
 import os
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
 
+from accounts import mail
 from accounts.store import AccountError, Accounts
 from api.store import engine_for
 from rights.database import PolicyNamespace
@@ -55,6 +56,14 @@ def main(argv=None) -> int:
     with engine.connect() as conn:
         accounts = Accounts(engine, PolicyNamespace(conn.scalar(text("SELECT current_schema()"))))
     operator = args.operator.strip()
+    mailer = mail.Mailer.from_environment()
+    site = os.getenv("ALVARY_CONSOLE_BASE_URL", "https://open.alvary.ai").rstrip("/")
+
+    def tell(organisation, request, build):
+        notice = accounts.notice_recipients(organisation, request)
+        for to in notice["to"]:
+            mailer.send(build(to, notice["organisation"]))
+
     try:
         if args.command == "requests":
             for request in accounts.open_requests():
@@ -78,6 +87,8 @@ def main(argv=None) -> int:
                 request_id=args.request,
             )
             print(f"Granted {entitlement}")
+            until = f"{until:%-d %B %Y}" if until else None
+            tell(args.organisation, args.request, lambda to, name: mail.access_granted(to, name, until, site))
         elif args.command in ("decline", "ask"):
             accounts.decide_request(
                 operator,
@@ -87,9 +98,20 @@ def main(argv=None) -> int:
                 args.reason,
             )
             print("Recorded")
+            renewable = f"{datetime.now(UTC) + timedelta(days=30):%-d %B %Y}"
+            tell(
+                args.organisation,
+                args.request,
+                (
+                    (lambda to, name: mail.access_declined(to, name, args.reason, renewable, site))
+                    if args.command == "decline"
+                    else (lambda to, name: mail.more_information(to, name, args.reason, site))
+                ),
+            )
         else:
             accounts.revoke_access(operator, args.organisation, args.reason)
             print("Revoked")
+            tell(args.organisation, None, lambda to, name: mail.access_revoked(to, name, site))
     except AccountError as error:
         raise SystemExit(f"{error.code}: {error.message}") from None
     return 0

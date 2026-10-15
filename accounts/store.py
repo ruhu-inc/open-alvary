@@ -163,6 +163,50 @@ class Accounts:
                 text(f"SELECT {self._fn(conn, 'record_usage')}(CAST(:e AS jsonb))"), {"e": json.dumps(entry)}
             )
 
+    # ---------- who to tell ----------
+    def notice_recipients(self, organisation_id: str, request_id: str | None = None) -> dict:
+        """The organisation's name and who hears about its access: the request's contact, else its owners."""
+        with self.engine.connect() as conn:
+            name = conn.scalar(
+                text(f"SELECT name FROM {self._t(conn, 'organisation')} WHERE id = :o"),
+                {"o": organisation_id},
+            )
+            contact = (
+                conn.scalar(
+                    text(
+                        f"SELECT contact_email FROM {self._t(conn, 'access_request')} WHERE id = :r AND organisation_id = :o"
+                    ),
+                    {"r": request_id, "o": organisation_id},
+                )
+                if request_id
+                else None
+            )
+            owners = conn.scalars(
+                text(
+                    f"SELECT p.email FROM {self._t(conn, 'membership')} m JOIN {self._t(conn, 'person')} p"
+                    " ON p.id = m.person_id WHERE m.organisation_id = :o AND m.role = 'owner' AND p.state = 'active'"
+                ),
+                {"o": organisation_id},
+            ).all()
+        return {"organisation": name, "to": [contact] if contact else sorted(set(owners))}
+
+    def invitation_notice(self, invitation_id: str) -> dict:
+        with self.engine.connect() as conn:
+            row = (
+                conn.execute(
+                    text(
+                        f"SELECT i.email, i.role, o.name AS organisation, coalesce(a.display_name, 'A member') AS inviter"
+                        f" FROM {self._t(conn, 'invitation')} i JOIN {self._t(conn, 'organisation')} o"
+                        f" ON o.id = i.organisation_id JOIN {self._t(conn, 'membership')} m ON m.id = i.invited_by"
+                        f" LEFT JOIN {self._t(conn, 'actor')} a ON a.person_id = m.person_id WHERE i.id = :i"
+                    ),
+                    {"i": invitation_id},
+                )
+                .mappings()
+                .one()
+            )
+            return dict(row)
+
     # ---------- people and sign-in ----------
     def sign_in(
         self, *, issuer: str, subject: str, method: str, email: str, label: str, context=None
