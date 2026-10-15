@@ -33,8 +33,18 @@ function stored(event) {
   return orgs[event.client.client_id];
 }
 
+// The standard way to ask for a second factor (OpenID PAPE); the console asks for it before a
+// sensitive action, and requires it for owners, admins and operators (MAC-08).
+const MFA = "http://schemas.openid.net/pape/policies/2007/06/multi-factor";
+
+function mfaRequested(event) {
+  const query = event.request && event.request.query ? event.request.query : {};
+  return String(query.acr_values || "").split(" ").includes(MFA);
+}
+
 exports.onExecutePostLogin = async (event, api) => {
   if (!ours(event)) return;
+  if (mfaRequested(event)) api.multifactor.enable("any", { allowRememberBrowser: false });
   if (api.transaction && api.transaction.addTargetScope) api.transaction.addTargetScope(SCOPE);
   const renewal = event.transaction && event.transaction.protocol === "oauth2-refresh-token";
   const canRedirect = !renewal && (!api.redirect.canRedirect || api.redirect.canRedirect());

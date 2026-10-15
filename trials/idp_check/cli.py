@@ -89,7 +89,7 @@ def token_request(data):
     return httpx.post(f"{issuer()}oauth/token", data=data, timeout=20)
 
 
-def login_loopback(fresh=False, open_browser=True, port=FIXED_PORT):
+def login_loopback(fresh=False, open_browser=True, port=FIXED_PORT, mfa=False):
     verifier = secrets.token_urlsafe(48)
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     state, answer = secrets.token_urlsafe(16), {}
@@ -121,6 +121,7 @@ def login_loopback(fresh=False, open_browser=True, port=FIXED_PORT):
             "code_challenge": challenge,
             "code_challenge_method": "S256",
             **({"prompt": "login"} if fresh else {}),
+            **({"acr_values": "http://schemas.openid.net/pape/policies/2007/06/multi-factor"} if mfa else {}),
         }
     )
     print(
@@ -147,7 +148,10 @@ def login_loopback(fresh=False, open_browser=True, port=FIXED_PORT):
     if reply.status_code != 200:
         raise SystemExit(f"code exchange refused: {reply.json()}")
     save(reply.json())
-    print("Signed in; pass stored for the check.")
+    claims = json.loads(base64.urlsafe_b64decode(reply.json()["id_token"].split(".")[1] + "=="))
+    print(
+        f"Signed in; pass stored for the check. Sign-in methods (amr): {claims.get('amr', ['none reported'])}"
+    )
 
 
 def login_device():
@@ -237,12 +241,13 @@ def main():
     login.add_argument("--device", action="store_true")
     login.add_argument("--fresh", action="store_true", help="ask to sign in even if a session exists")
     login.add_argument("--no-browser", action="store_true", help="only print the sign-in address")
+    login.add_argument("--mfa", action="store_true", help="require a second factor for this sign-in")
     found = sub.add_parser("search")
     found.add_argument("words", nargs="+")
     sub.add_parser("reuse-check")
     args = parser.parse_args()
     if args.command == "login":
-        login_device() if args.device else login_loopback(args.fresh, not args.no_browser)
+        login_device() if args.device else login_loopback(args.fresh, not args.no_browser, mfa=args.mfa)
     elif args.command == "search":
         search(args.words)
     else:
