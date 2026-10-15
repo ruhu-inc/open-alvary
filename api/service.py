@@ -5,15 +5,20 @@
     /api/...        the legacy anonymous API, unchanged until activation B; its release-file route
                     now redirects to /downloads
     /healthz        liveness of the catalogue authority
-    /               the built website, where a frontend directory is given (Vercel, local)
+    /               the built website, where a frontend directory is given (Vercel, Cloud Run with
+                    ALVARY_FRONTEND, local)
+
+Every response carries the website's security headers, which Vercel and nginx used to add, so the
+service can stand alone behind the load balancer (MAC-12).
 
 Admission is all or nothing: when the API's allowance is configured, the website's own class must be
 configured too (``ALVARY_SITE_ADMISSION_CONFIG``), or the service refuses to start.
 """
 
+import os
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
@@ -23,6 +28,17 @@ from api.admission import AdmissionConfig
 from api.main import create_app
 from api.site import create_downloads_app, create_site_app
 from api.store import ROOT, Store, engine_for
+
+SECURITY_HEADERS = {
+    "Strict-Transport-Security": "max-age=31536000",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; "
+        "connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+    ),
+}
 
 
 def create_service(
@@ -39,6 +55,13 @@ def create_service(
         store = Store(engine_for(pool_size=pool))
     release_root = releases or ROOT / "releases"
     service = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
+    @service.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        for name, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(name, value)
+        return response
 
     @service.get("/healthz", include_in_schema=False)
     def health():
@@ -57,4 +80,4 @@ def create_service(
     return service
 
 
-app = create_service()
+app = create_service(frontend=Path(os.environ["ALVARY_FRONTEND"]) if os.getenv("ALVARY_FRONTEND") else None)

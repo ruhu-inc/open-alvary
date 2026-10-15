@@ -376,3 +376,25 @@ then removes that project's containers and volumes. Existing projects are untouc
 It starts only `web` and its dependencies so Caddy does not request a real certificate.
 This validates the production images and internal routing, not live DNS/TLS or an
 actual hosting provider.
+
+## Public service on Google Cloud (activation A, MAC-12, D7)
+
+`deployment/gcp/public_service.sh` puts the website and its data path behind one Google load balancer
+(the "one front door"): one Cloud Run service (`api.service` with the built website,
+`deployment/public-service.Dockerfile`), Cloud SQL PostgreSQL 16, Cloud Armor on the website paths,
+and a certificate for `open.alvary.ai` by DNS authorisation. The service has no default address and
+accepts traffic only from the load balancer; the visitor's address is the entry the load balancer
+appends to `X-Forwarded-For` (`trusted_proxies` 2, confirmed by `verify`).
+
+1. `plan` prints the resources, the required settings (`PUBLIC_REPOSITORY_URL`, `PUBLIC_MAINTAINER`,
+   `PUBLIC_CONTACT_EMAIL`, `METADATA_LICENCE` in the environment or `.env`) and the monthly estimate.
+2. The owner runs `project` (a separate project, billed with the ingestion project's account) and
+   `setup` (APIs, registry, service accounts, database, secrets with fresh HMAC secrets).
+3. `deploy` builds from the commit, runs launch checks, migrations and the seed as a Cloud Run job,
+   and deploys the service; `edge` creates the load balancer and prints the DNS records.
+4. The owner adds the certificate's DNS record; `status` shows the certificate becoming active.
+5. `verify` runs the MAC-15 acceptance A checks through the load balancer's address before any visitor
+   moves: pages, `no-store`, credential and page-26 refusals, the old download redirect, no CORS, a
+   forged `X-Forwarded-For` landing in the caller's own bucket, and no default service address.
+6. Cutover: the owner points `open.alvary.ai` at the load balancer (`dns` prints the record) and the
+   Vercel deployment is switched to a redirect to `https://open.alvary.ai` (MAC-02).
