@@ -202,3 +202,52 @@ def test_real_app_charges_text_bytes_and_settles_with_the_payload_length(
             )
         )
     assert rows == [("settled", len(response.content))] and int(spent) == len(response.content)
+
+
+def test_real_service_admits_the_website_in_its_own_class(pg_engine, tmp_path, monkeypatch):
+    """The site class against the real admission function: its keys pass the database's checks,
+    its buckets are separate from the API's, and refusals are problem details (MAC-01)."""
+    from fastapi.testclient import TestClient
+
+    from api.service import create_service
+    from api.store import Store
+    from scripts.seed import seed
+
+    migrate(pg_engine)
+    seed(Store(pg_engine))
+    settings = dict(
+        policy_revision="synthetic-1",
+        capacity=2,
+        refill_per_minute=0.001,
+        identity_concurrency=2,
+        global_concurrency=4,
+        lease_seconds=30,
+        queue_size=1,
+        queue_deadline_seconds=0.2,
+        trusted_proxies=1,
+        db_connections=10,
+        operator_reserve=2,
+        other_workers=1,
+        public_pool_size=5,
+        api_replicas=1,
+    )
+    for name, secret in [("ALVARY_ADMISSION_CONFIG", "ab"), ("ALVARY_SITE_ADMISSION_CONFIG", "cd")]:
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps({**settings, "hmac_secret": secret * 32}))
+        monkeypatch.setenv(name, str(path))
+    with pg_engine.connect() as conn:
+        monkeypatch.setenv("ALVARY_POLICY_SCHEMA", conn.scalar(text("SELECT current_schema()")))
+    client = TestClient(
+        create_service(Store(pg_engine), tmp_path), headers={"X-Forwarded-For": "203.0.113.9"}
+    )
+    assert [client.get("/site/v1/sources").status_code for _ in range(3)] == [200, 200, 429]
+    refused = client.get("/site/v1/sources")
+    assert refused.json()["code"] == "rate_limited" and refused.headers["Retry-After"]
+    # The website's class spent its own allowance; the API's is untouched.
+    assert client.get("/api/sources").status_code == 200
+    with pg_engine.connect() as conn:
+        table = PolicyNamespace(conn.scalar(text("SELECT current_schema()"))).qualified(
+            conn, "policy", "admission_bucket"
+        )
+        keys = conn.scalars(text(f"SELECT scope_key FROM {table}")).all()
+    assert any(k.startswith("site:ip-") for k in keys) and any(k.startswith("ip:") for k in keys)

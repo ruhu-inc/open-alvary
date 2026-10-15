@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import re
 
 import pytest
 from fastapi import FastAPI
@@ -163,19 +164,22 @@ HEADERS = {"X-Forwarded-For": "203.0.113.7"}
 
 
 def test_site_class_keeps_its_own_buckets_and_ceiling():
-    key = "site:" + pseudonym(SECRET, "203.0.113.7")
+    key = "site:" + pseudonym(SECRET, "203.0.113.7").replace(":", "-")
     store = FakeStore([{"admitted": True, "lease_id": "l", "buckets": {key: {"remaining": 9, "reset": 2}}}])
     response = site_app(store).get("/sources", headers=HEADERS)
     assert response.status_code == 200
     request = store.requests[0]
     assert [b["key"] for b in request["buckets"]] == [key]
-    assert {c["key"] for c in request["concurrency"]} == {key, "site:" + GLOBAL_KEY}
+    assert {c["key"] for c in request["concurrency"]} == {key, "site:global-all"}
+    # The database accepts keys of one shape: name, one colon, then letters, digits, - and _.
+    shape = re.compile(r"^[a-z]+:[A-Za-z0-9_-]{1,128}$")
+    assert all(shape.match(k) for k in [key, "site:global-all", GLOBAL_KEY])
     assert response.headers["open-alvary-quota-tier"] == "site"
     assert response.headers["ratelimit-policy"].startswith('"site"')
 
 
 def test_site_class_refusals_are_problem_details():
-    key = "site:" + pseudonym(SECRET, "203.0.113.7")
+    key = "site:" + pseudonym(SECRET, "203.0.113.7").replace(":", "-")
     store = FakeStore([{"admitted": False, "blocked": [key], "retry_after": 7}])
     response = site_app(store).get("/sources", headers=HEADERS)
     assert response.status_code == 429 and response.headers["retry-after"] == "7"
