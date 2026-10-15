@@ -19,7 +19,8 @@ def test_vercel_snapshot_serves_prefixed_api_and_verified_downloads(tmp_path):
     source_id = result["items"][0]["id"]
     assert client.get(f"/api/sources/{source_id}/versions").json()["items"] == []
     assert client.post("/api/sources", json={}).status_code == 405
-    assert client.get("/sources").status_code == 404
+    # A website address answers with the website's page, never with data.
+    assert client.get("/sources").text == "<h1>Open Alvary</h1>"
     releases = client.get("/api/releases").json()
     assert releases
     for release in releases:

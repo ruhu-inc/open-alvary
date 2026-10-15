@@ -33,6 +33,12 @@ class SourceUnavailable(LookupError):
     pass
 
 
+# The website's filters (MAC-01): each is a source field, except access, which follows the rights
+# decision. Values are counted over at most the pilot's bound of examined sources.
+FACETS = ("jurisdiction", "type", "language", "status", "year", "access")
+SORTS = ("relevance", "newest", "oldest", "title")
+
+
 class InvalidSearch(ValueError):
     pass
 
@@ -204,6 +210,72 @@ class LegacyCatalogue:
             access_where=access_where,
         )
         return SearchPage(total=total, items=tuple(self._view(pair) for pair in pairs))
+
+    def browse(self, *, query=None, filters=None, sort="relevance", limit=20, offset=0):
+        """The website's catalogue (MAC-01): an optional search, filters and sorting, with a count per
+        filter value. Each count applies every other selected filter, so choosing a value never hides
+        the alternatives. Bounded like the pilot search: at most 10,000 sources are examined."""
+        filters = {k: v for k, v in (filters or {}).items() if v is not None}
+        unknown = set(filters) - set(FACETS)
+        if unknown or sort not in SORTS:
+            raise InvalidSearch("Invalid filter or sort")
+        term = None
+        if query is not None:
+            term = normalize_citation(query)
+            if not term:
+                raise InvalidSearch("Search term must not be blank")
+        candidates = []
+        for source, rights in self.repository.sources():
+            if len(candidates) >= 10000:
+                raise ResultTooLarge("Pilot catalogue browsing exceeds declared bound")
+            if not decide(rights, now=self.now).metadata:
+                continue
+            rank = 0
+            if term is not None:
+                if term in normalize_citation(source.title):
+                    rank = 3
+                elif term in normalize_citation(source.citation):
+                    rank = 2
+                elif term in normalize_citation(source.summary or ""):
+                    rank = 1
+                elif any(term in v.canonical_text.casefold() for v in self._approved(source, rights)):
+                    rank = 1
+                else:
+                    continue
+            has_text = next(self._approved(source, rights), None) is not None
+            values = {
+                "jurisdiction": source.jurisdiction_id,
+                "type": source.document_type,
+                "language": source.language,
+                "status": source.legal_status,
+                "year": str(source.year) if source.year else None,
+                "access": "open" if has_text else "metadata",
+            }
+            candidates.append((rank, source, rights, values))
+
+        def selected(values, skip=None):
+            return all(values[k] == v for k, v in filters.items() if k != skip)
+
+        results = [c for c in candidates if selected(c[3])]
+        facets = {
+            name: Counter(c[3][name] for c in candidates if selected(c[3], skip=name) and c[3][name])
+            for name in FACETS
+        }
+        by_title = lambda c: c[1].title.casefold()  # noqa: E731
+        if sort == "relevance":
+            results.sort(key=lambda c: (-c[0], by_title(c)))
+        elif sort == "title":
+            results.sort(key=by_title)
+        else:
+            dated = [c for c in results if c[1].year]
+            results = sorted(
+                dated, key=lambda c: (c[1].year, by_title(c)), reverse=sort == "newest"
+            ) + sorted((c for c in results if not c[1].year), key=by_title)
+        page = results[offset : offset + limit]
+        return (
+            SearchPage(total=len(results), items=tuple(self._view((s, r)) for _, s, r, _ in page)),
+            {name: dict(counts.most_common()) for name, counts in facets.items()},
+        )
 
     def citations(self, value):
         term = normalize_citation(value)

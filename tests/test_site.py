@@ -205,3 +205,33 @@ def test_the_built_website_is_served_beside_the_data(catalogue, store, tmp_path)
     client = TestClient(create_service(store, tmp_path, frontend=tmp_path / "web"))
     assert client.get("/").text == "<h1>Open Alvary</h1>"
     assert client.get("/site/v1/sources").status_code == 200
+
+
+def test_filters_counts_and_sorting(client):
+    listing = client.get("/site/v1/sources").json()
+    facets = {name: {f["value"]: f for f in values} for name, values in listing["facets"].items()}
+    assert facets["jurisdiction"]["ng"]["label"] == "Nigeria" and facets["jurisdiction"]["ng"]["count"] == 4
+    assert facets["language"]["en"]["label"] == "English"
+    assert facets["type"]["act"]["count"] == 3 and facets["type"]["constitution"]["count"] == 1
+    acts = client.get("/site/v1/sources?type=act").json()
+    assert acts["total"] == 3 and all(s["document_type"] == "act" for s in acts["items"])
+    # A selected filter still shows its alternatives with their counts.
+    assert {f["value"] for f in acts["facets"]["type"]} == {"act", "constitution"}
+    newest = [s["year"] for s in client.get("/site/v1/sources?sort=newest").json()["items"]]
+    assert newest == sorted(newest, reverse=True)
+    assert client.get("/site/v1/sources?year=2011").json()["total"] == 1
+    assert client.get("/site/v1/search?q=freedom&type=constitution").json()["total"] == 0
+    for bad in ["sort=random", "type=a%20b", "year=" + "9" * 70]:
+        assert client.get("/site/v1/sources?" + bad).json()["code"] == "invalid_input", bad
+
+
+def test_search_ranks_titles_first_and_reads_summaries(client):
+    found = client.get("/site/v1/search?q=information").json()
+    assert found["items"][0]["id"] == SOURCE and found["sort"] == "relevance"
+    assert client.get("/site/v1/search?q=fundamental%20rights").json()["total"] == 1  # in a summary
+
+
+def test_source_record_carries_plain_names(client):
+    record = client.get(f"/site/v1/sources/{SOURCE}").json()
+    assert record["jurisdiction_name"] == "Nigeria" and record["language_name"] == "English"
+    assert record["authority_name"] and record["summary"] and record["year"] == 2011

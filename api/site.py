@@ -14,6 +14,7 @@ shows can be read by a program behaving like a browser.
 
 import math
 import os
+import re
 from contextlib import contextmanager
 from pathlib import Path
 from uuid import uuid4
@@ -25,7 +26,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 from api.admission import AdmissionConfig, AdmissionMiddleware, AdmissionStore
-from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable
+from api.catalogue import FACETS, SORTS, InvalidSearch, LegacyCatalogue, SourceUnavailable
 from api.emission import CheckedFileResponse, CheckedResponse
 from api.project import project_info
 from api.release_adapter import LegacyReleases, ReleaseMissing, ReleaseWithdrawn
@@ -38,6 +39,7 @@ PAGE_SIZE = 20
 MAX_PAGES = 25
 MAX_VERSIONS_BYTES = 2 * 1024 * 1024  # larger texts follow the public-reader specification
 ACCESS = {"all", "open", "metadata"}
+FILTER_VALUE = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._:-]{0,63}")
 TITLES = {
     "invalid_input": "The request is not valid",
     "beyond_bounds": "Past the end of what this page shows",
@@ -99,6 +101,16 @@ def _access(value: str | None) -> str:
 def _paged(result, page: int) -> dict:
     pages = min(MAX_PAGES, math.ceil(result.total / PAGE_SIZE)) if result.total else 0
     return {**result.model_dump(mode="json"), "page": page, "page_size": PAGE_SIZE, "last_page": pages}
+
+
+def _names(service: LegacyCatalogue, facets: dict) -> dict:
+    """Display names for the jurisdictions and languages offered as filters."""
+    names = {}
+    for facet, relation in (("jurisdiction", "jurisdictions"), ("language", "languages")):
+        ids = list(facets.get(facet, {}))
+        for row in service.repository.rows(relation, ids=ids) if ids else []:
+            names[(facet, row["id"])] = row.get("name")
+    return names
 
 
 def _base(admission: AdmissionConfig | None, store: Store) -> FastAPI:
@@ -194,41 +206,64 @@ def create_site_app(store: Store, release_root: Path, admission: AdmissionConfig
         with catalogue() as service:
             return service.coverage()
 
+    def _browse(request: Request, query: str | None):
+        page = _page(request.query_params.get("page"))
+        sort = request.query_params.get("sort", "relevance" if query else "title")
+        if sort not in SORTS:
+            raise SiteProblem(400, "invalid_input", "sort must be relevance, newest, oldest or title")
+        filters = {}
+        for name in FACETS:
+            value = request.query_params.get(name)
+            if value is not None and not FILTER_VALUE.fullmatch(value):
+                raise SiteProblem(400, "invalid_input", f"{name} is not a valid filter value")
+            filters[name] = value
+        if filters["access"] is not None:
+            _access(filters["access"])
+        if filters["access"] == "all":
+            filters["access"] = None
+        with catalogue() as service:
+            result, facets = service.browse(
+                query=query, filters=filters, sort=sort, limit=PAGE_SIZE, offset=(page - 1) * PAGE_SIZE
+            )
+            names = _names(service, facets)
+        return {
+            **_paged(result, page),
+            "sort": sort,
+            "facets": {
+                name: [{"value": v, "count": n, "label": names.get((name, v))} for v, n in counts.items()]
+                for name, counts in facets.items()
+            },
+        }
+
     @app.get("/search")
     def search(request: Request):
-        _only(request, "q", "jurisdiction", "access", "page")
+        _only(request, "q", "page", "sort", *FACETS)
         q = request.query_params.get("q", "")
         if not 1 <= len(q) <= 200:
             raise SiteProblem(400, "invalid_input", "q must be 1 to 200 characters")
-        page = _page(request.query_params.get("page"))
-        with catalogue() as service:
-            result = service.search(
-                q,
-                jurisdiction=request.query_params.get("jurisdiction"),
-                limit=PAGE_SIZE,
-                offset=(page - 1) * PAGE_SIZE,
-                access=_access(request.query_params.get("access")),
-            )
-        return _paged(result, page)
+        return _browse(request, q)
 
     @app.get("/sources")
     def sources(request: Request):
-        _only(request, "jurisdiction", "access", "page")
-        page = _page(request.query_params.get("page"))
-        with catalogue() as service:
-            result = service.sources(
-                jurisdiction=request.query_params.get("jurisdiction"),
-                limit=PAGE_SIZE,
-                offset=(page - 1) * PAGE_SIZE,
-                access=_access(request.query_params.get("access")),
-            )
-        return _paged(result, page)
+        _only(request, "page", "sort", *FACETS)
+        return _browse(request, None)
 
     @app.get("/sources/{source_id}")
     def source(source_id: str, request: Request):
         _only(request)
         with catalogue() as service:
-            return service.source(source_id)
+            view = service.source(source_id)
+            repository = service.repository
+            authority = repository.rows("authorities", ids=[view.authority_id])
+            jurisdiction = repository.rows("jurisdictions", ids=[view.jurisdiction_id])
+            language = repository.rows("languages", ids=[view.language])
+        # Plain names beside the identifiers, for the record page.
+        return {
+            **view.model_dump(mode="json"),
+            "authority_name": authority[0].get("name") if authority else None,
+            "jurisdiction_name": jurisdiction[0].get("name") if jurisdiction else None,
+            "language_name": language[0].get("name") if language else None,
+        }
 
     @app.get("/sources/{source_id}/versions")
     def versions(source_id: str, request: Request):
