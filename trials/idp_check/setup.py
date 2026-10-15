@@ -19,8 +19,9 @@ LOCAL = "http://localhost:8766"
 CLAUDE_CODE = "https://claude.ai/oauth/claude-code-client-metadata"
 CLAUDE = "https://claude.ai/oauth/mcp-oauth-client-metadata"  # claude.ai, desktop, mobile (seen in Auth0's log)
 CHATGPT = "https://chatgpt.com/oauth/BpZIpxL-aggt/client.json"
+CODEX = "https://chatgpt.com/oauth/codex/client.json"
 # Tools reviewed and imported by their client metadata documents (MAC-07 "verified publisher").
-REVIEWED = [CLAUDE_CODE, CLAUDE, CHATGPT]
+REVIEWED = [CLAUDE_CODE, CLAUDE, CHATGPT, CODEX]
 
 
 def resources(base):
