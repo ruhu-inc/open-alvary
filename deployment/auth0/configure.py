@@ -10,6 +10,8 @@ What it keeps in line, by name, so reruns change nothing:
     documents) allowed on both resources for people signing in;
   - the console's web application ("Open Alvary console") with its callback, using Google and email
     codes only;
+  - for a local trial (--local-origin, http://localhost:8022 by default): local API and MCP resources
+    and the console's local callback, so the whole flow can be tried before a deploy;
   - the post-login Action (deployment/auth0/post_login.js) with its secrets, bound in place of the
     sign-in check's.
 
@@ -33,9 +35,17 @@ TOOLS = ("Claude", "Claude Code", "ChatGPT", "Codex")
 CONNECTIONS = ("google-oauth2", "email")
 
 
-def plan(m: Management, api_origin: str, site: str, local: list[str]) -> list[tuple[str, callable]]:
+def plan(
+    m: Management, api_origin: str, site: str, local: list[str], local_origin: str | None = None
+) -> list[tuple[str, callable]]:
     steps = []
     resources = {"Open Alvary API": api_origin + "/api/v1", "Open Alvary MCP": api_origin + "/mcp"}
+    if local_origin:
+        # A local trial of the whole flow (console, approval page, Claude Code) before any deploy.
+        resources |= {
+            "Open Alvary API (local trial)": local_origin + "/api/v1",
+            "Open Alvary MCP (local trial)": local_origin + "/mcp",
+        }
     existing = {r["identifier"]: r for r in m.call("GET", "resource-servers")}
     for name, identifier in resources.items():
         wanted = {
@@ -151,6 +161,7 @@ def plan(m: Management, api_origin: str, site: str, local: list[str]) -> list[tu
             "secrets": [
                 {"name": "CONSENT_SECRET", "value": consent},
                 {"name": "CONSENT_URL", "value": site + "/console/oauth/consent"},
+                {"name": "LOCAL_CONSENT_URL", "value": (local_origin or site) + "/console/oauth/consent"},
                 {"name": "RESOURCES", "value": ",".join(resources.values())},
             ],
         }
@@ -172,7 +183,12 @@ def plan(m: Management, api_origin: str, site: str, local: list[str]) -> list[tu
         )
 
     current = actions.get(ACTION)
-    if current is None or current.get("code") != code:
+    wanted_secrets = {"CONSENT_URL", "LOCAL_CONSENT_URL", "CONSENT_SECRET", "RESOURCES"}
+    if (
+        current is None
+        or current.get("code") != code
+        or {x["name"] for x in current.get("secrets", [])} != wanted_secrets
+    ):
         steps.append(
             ("deploy the post-login Action and bind it (replacing the sign-in check's)", deploy_action)
         )
@@ -201,14 +217,20 @@ def main(argv=None) -> int:
     parser.add_argument("--site", default="https://open.alvary.ai")
     parser.add_argument("--api-origin", default="https://api.open.alvary.ai")
     parser.add_argument(
-        "--local-callback",
-        action="append",
-        default=["http://localhost:8022/console/auth/callback"],
-        help="Extra callback for a local trial of the console",
+        "--local-origin",
+        default="http://localhost:8022",
+        help="Origin of a local trial (its console callback, API and MCP resources); '' for none",
     )
     args = parser.parse_args(argv)
     m = Management()
-    steps = plan(m, args.api_origin.rstrip("/"), args.site.rstrip("/"), args.local_callback)
+    local = args.local_origin.rstrip("/") or None
+    steps = plan(
+        m,
+        args.api_origin.rstrip("/"),
+        args.site.rstrip("/"),
+        [local + "/console/auth/callback"] if local else [],
+        local,
+    )
     for description, _ in steps:
         print(("applying: " if args.apply else "would ") + description)
     if args.apply:
