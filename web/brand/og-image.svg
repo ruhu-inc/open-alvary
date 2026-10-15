@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1200" viewBox="0 0 1200 1200">
+  <rect width="1200" height="1200" fill="#fcfbf7"/>
+  <g transform="translate(0,285)">
+  <rect x="0" y="600" width="1200" height="30" fill="#214b3b"/>
+  <g transform="translate(80,70) scale(1.5)" fill="none" stroke="#214b3b" stroke-width="2.4"><polygon points="32,6.83 19.72,33 32,40.89 44.28,33"/><polygon points="17.61,37.52 28.62,44.31 8.54,56.83"/><polygon points="46.39,37.52 55.46,56.83 35.38,44.31"/></g>
+  <text x="192" y="136" fill="#214b3b" font-family="Helvetica Neue, Arial, sans-serif" font-weight="500" font-size="44">open alvary</text>
+  <text x="80" y="300" fill="#22372f" font-family="Georgia, serif" font-size="84">A shared foundation</text>
+  <text x="80" y="400" fill="#22372f" font-family="Georgia, serif" font-size="84">for <tspan fill="#5f7d6c">African law.</tspan></text>
+  <text x="80" y="484" fill="#4a5a50" font-family="Helvetica Neue, Arial, sans-serif" font-size="32">Public legal information with clear rights and traceable sources.</text>
+  <text x="80" y="548" fill="#214b3b" font-family="Helvetica Neue, Arial, sans-serif" font-weight="500" font-size="28">open.alvary.ai</text>
+  </g>
+</svg>

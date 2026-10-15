@@ -28,6 +28,11 @@ import {
   SourceRecord,
   SourceRow,
   jurisdictionName,
+  Link,
+  navigate,
+  typeLabel,
+  LANGUAGE_NAMES,
+  LEGAL_STATUS,
   links,
   type Project,
   type RightsRecord,
@@ -39,6 +44,7 @@ type Coverage = {
   open_full_text_sources: number;
   metadata_only_sources: number;
   published_versions: number;
+  jurisdictions: Record<string, number>; // sources per jurisdiction
 };
 type Manifest = {
   release_id: string;
@@ -107,7 +113,7 @@ class PageBoundary extends React.Component<
       <div className="page" role="alert">
         <h1>Something went wrong</h1>
         <p>This page could not be displayed.</p>
-        <a href="#/">Return home</a>
+        <Link to="/">Return home</Link>
       </div>
     ) : (
       this.props.children
@@ -116,26 +122,67 @@ class PageBoundary extends React.Component<
 }
 
 function NotFound() {
+  useEffect(() => {
+    document.title = "Page not found · Open Alvary";
+  }, []);
   return (
-    <div className="page">
-      <h1>Page not found</h1>
-      <a href="#/">Return home</a>
+    <div className="page not-found">
+      <h1>This page doesn’t exist.</h1>
+      <p>The address may be mistyped, or the page may have moved.</p>
+      <p>
+        <Link className="button primary" to="/browse">
+          Search the catalogue <ArrowRight size={17} aria-hidden="true" />
+        </Link>{" "}
+        <Link className="text-link" to="/">
+          Go to the home page
+        </Link>
+      </p>
     </div>
   );
 }
 
+// The page's address and query, as the site routes them.
+function currentRoute() {
+  return location.pathname + location.search;
+}
 function App() {
   const project = useData<Project>("/project");
-  const [route, setRoute] = useState(location.hash.slice(1) || "/");
+  const [route, setRoute] = useState(() => {
+    // Old #/ addresses keep working: /#/sources/x becomes /sources/x.
+    if (location.hash.startsWith("#/"))
+      history.replaceState(null, "", location.hash.slice(1));
+    return currentRoute();
+  });
   const [menu, setMenu] = useState(false);
   useEffect(() => {
     const change = () => {
-      setRoute(location.hash.slice(1) || "/");
+      setRoute(currentRoute());
       setMenu(false);
       window.scrollTo(0, 0);
     };
-    window.addEventListener("hashchange", change);
-    return () => window.removeEventListener("hashchange", change);
+    // Links to the site's own pages move without reloading it; files, data and other sites load.
+    const click = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
+        return;
+      const a = (e.target as HTMLElement).closest("a");
+      if (!a || a.target || a.hasAttribute("download") || !a.href) return;
+      const url = new URL(a.href, location.href);
+      if (
+        url.origin !== location.origin ||
+        /^\/(site|api|downloads|assets)\//.test(url.pathname) ||
+        /\.[a-z0-9]+$/i.test(url.pathname) ||
+        (url.pathname === location.pathname && url.search === location.search && url.hash)
+      )
+        return;
+      e.preventDefault();
+      navigate(url.pathname + url.search);
+    };
+    window.addEventListener("popstate", change);
+    document.addEventListener("click", click);
+    return () => {
+      window.removeEventListener("popstate", change);
+      document.removeEventListener("click", click);
+    };
   }, []);
   const pathname = route.split("?")[0];
   const sourceId = pathname.startsWith("/sources/")
@@ -147,9 +194,13 @@ function App() {
       ["/about", "About & contribute"],
       ["/privacy", "Privacy"],
     ].find(([url]) => url === pathname)?.[1];
-    document.title = title
-      ? `${title} · Open Alvary`
-      : "Open Alvary · A shared foundation for law";
+    // Record pages and the not-found page name themselves.
+    if (title) document.title = `${title} · Open Alvary`;
+    else if (pathname === "/")
+      document.title = "Open Alvary · A shared foundation for African law";
+    document
+      .querySelector('link[rel="canonical"]')
+      ?.setAttribute("href", location.origin + pathname);
     document.querySelector<HTMLElement>("main")?.focus({ preventScroll: true });
   }, [pathname]);
   return (
@@ -223,28 +274,28 @@ function Home() {
             everyone.
           </p>
           <div className="hero-actions">
-            <a className="button primary" href="#/browse">
-              Explore the corpus <ArrowRight size={17} />
-            </a>
-            <a className="text-link" href="#/developers">
-              Build with the data <ArrowUpRight size={17} />
-            </a>
+            <Link className="button primary" to="/browse">
+              Explore the corpus <ArrowRight size={17} aria-hidden="true" />
+            </Link>
+            <Link className="text-link" to="/developers">
+              Build with the data <ArrowUpRight size={17} aria-hidden="true" />
+            </Link>
           </div>
           <div className="pilot">
-            <span className="flag">▌</span>
-            <span>Starting in Nigeria</span>
-            <span className="pilot-divider" />
             <span>v0.1 · Catalogue preview</span>
+            <span className="pilot-divider" />
+            <span>Jurisdictions are added as their sources are verified</span>
           </div>
         </div>
         <div
           className="hero-art"
+          role="img"
           aria-label="A connected legal corpus with source, structure, provenance and access layers"
         >
           <div className="art-grid" />
           <div className="art-top">
             <span>THE OPEN CORPUS</span>
-            <span>01 / NG</span>
+            <span>v0.1</span>
           </div>
           <div className="orbit orbit-one" />
           <div className="orbit orbit-two" />
@@ -252,20 +303,18 @@ function Home() {
             <div>
               <Globe2 size={18} /> Authoritative sources
             </div>
-            <small>GOVERNMENT · COURTS · REGULATORS</small>
           </div>
           <div className="data-card layer-middle">
             <div>
               <ShieldCheck size={18} /> Rights & provenance
             </div>
-            <small>VERIFY · ATTRIBUTE · TRACE</small>
           </div>
           <div className="data-card layer-front">
             <span className="tiny-label">STRUCTURED LEGAL DATA</span>
             <div className="code-row">
               <span>01</span>
               <b>source</b>
-              <i>"ng"</i>
+              <i>"official"</i>
             </div>
             <div className="code-row">
               <span>02</span>
@@ -294,10 +343,15 @@ function Home() {
       </section>
       <section className="stats-strip">
         <div>
-          <small>THE FIRST CHAPTER</small>
           <strong>
-            Nigeria <span>NG</span>
+            {data ? Object.keys(data.jurisdictions).length : "—"}
+            <span>
+              {data && Object.keys(data.jurisdictions).length === 1
+                ? "jurisdiction"
+                : "jurisdictions"}
+            </span>
           </strong>
+          <small>Added as their sources are verified</small>
         </div>
         <div>
           <strong>
@@ -329,18 +383,18 @@ function Home() {
             <div className="eyebrow">EXPLORE THE COLLECTION</div>
             <h2>Start with the source.</h2>
           </div>
-          <a className="text-link" href="#/browse">
-            View the catalogue <ArrowRight size={17} />
-          </a>
+          <Link className="text-link" to="/browse">
+            View the catalogue <ArrowRight size={17} aria-hidden="true" />
+          </Link>
         </div>
         <form
           className="home-search"
           onSubmit={(e) => {
             e.preventDefault();
-            location.hash = "/browse?q=" + encodeURIComponent(q);
+            navigate("/browse" + (q.trim() ? "?q=" + encodeURIComponent(q.trim()) : ""));
           }}
         >
-          <Search size={20} />
+          <Search size={20} aria-hidden="true" />
           <input
             aria-label="Search legal sources"
             value={q}
@@ -353,9 +407,9 @@ function Home() {
         </form>
         <SourceList compact />
         <div className="quiet-note">
-          <span className="dot amber" /> The pilot contains catalogue metadata
-          only. Legal full text remains withheld pending rights and content
-          review.
+          <span className="dot amber" /> Today the catalogue holds details and
+          official links. Full texts are added once their rights and content
+          have been reviewed.
         </div>
       </section>
       <section className="principles">
@@ -366,9 +420,9 @@ function Home() {
             <br />
             with trust.
           </h2>
-          <a className="text-link" href="#/governance">
-            Our approach to governance <ArrowUpRight size={17} />
-          </a>
+          <Link className="text-link" to="/governance">
+            Our approach to governance <ArrowUpRight size={17} aria-hidden="true" />
+          </Link>
         </div>
         <div className="principle">
           <ShieldCheck />
@@ -404,69 +458,140 @@ function Home() {
             For everyone working with law.
           </h2>
         </div>
-        <a className="button light" href="#/developers">
+        <Link className="button light" to="/developers">
           For developers <ArrowUpRight size={17} />
-        </a>
+        </Link>
       </section>
     </>
   );
 }
 const PAGE_SIZE = 20;
-function SourceList(props: { compact?: boolean; q?: string; filter?: string }) {
-  return (
-    <SourcePageList
-      key={JSON.stringify([
-        props.q ?? "",
-        props.filter ?? "all",
-        props.compact ?? false,
-      ])}
-      {...props}
-    />
-  );
+type Facet = { value: string; count: number; label?: string | null };
+type BrowseResult = {
+  items: Source[];
+  total: number;
+  page: number;
+  last_page: number;
+  sort: string;
+  facets: Record<string, Facet[]>;
+};
+// The catalogue's filters, in the order a reader narrows a search.
+const FILTERS: [string, string][] = [
+  ["jurisdiction", "Jurisdiction"],
+  ["type", "Type"],
+  ["year", "Year"],
+  ["language", "Language"],
+  ["status", "Status"],
+  ["access", "Text"],
+];
+const ACCESS_LABELS: Record<string, string> = {
+  open: "Full text on this site",
+  metadata: "Details and official link",
+};
+function facetLabel(name: string, f: Facet): string {
+  if (name === "jurisdiction") return f.label || jurisdictionName(f.value);
+  if (name === "type") return typeLabel(f.value);
+  if (name === "language") return f.label || LANGUAGE_NAMES[f.value] || f.value;
+  if (name === "status") return LEGAL_STATUS[f.value] ?? f.value;
+  if (name === "access") return ACCESS_LABELS[f.value] ?? f.value;
+  return f.value;
 }
-function SourcePageList({
+function plural(n: number, one: string, many: string) {
+  return `${n} ${n === 1 ? one : many}`;
+}
+// The catalogue for a route's query: results, filters with counts, sorting and pages. Compact, on the
+// home page, it shows the first few sources and a link to the rest.
+function SourceList({
   compact = false,
-  q = "",
-  filter = "all",
+  params = new URLSearchParams(),
+  onChange,
 }: {
   compact?: boolean;
-  q?: string;
-  filter?: string;
+  params?: URLSearchParams;
+  onChange?: (changes: Record<string, string | null>) => void;
 }) {
-  const [page, setPage] = useState(1);
+  const q = params.get("q") || "";
+  const page = Math.max(1, Number(params.get("page")) || 1);
+  const query = new URLSearchParams();
+  if (q) query.set("q", q);
+  for (const [name] of FILTERS) {
+    const value = params.get(name);
+    if (value) query.set(name, value);
+  }
+  if (params.get("sort")) query.set("sort", params.get("sort")!);
+  if (page > 1) query.set("page", String(page));
+  const { data, error } = useData<BrowseResult>(
+    (q ? "/search?" : "/sources?") + query,
+  );
   const resultsRef = useRef<HTMLDivElement>(null);
-  const pageNavigation = useRef(false);
-  const movePage = (next: number) => {
-    pageNavigation.current = true;
-    setPage(next);
-  };
-  const params = new URLSearchParams({ access: filter, page: String(page) });
-  if (q) params.set("q", q);
-  const { data, error } = useData<{
-    items: Source[];
-    total: number;
-    page: number;
-    last_page: number;
-  }>((q ? "/search?" : "/sources?") + params);
-  useEffect(() => {
-    if (data && page > 1 && page > data.last_page) {
-      setPage(Math.max(1, data.last_page));
-    }
-  }, [data, page]);
-  useEffect(() => {
-    if (data && page <= Math.max(1, data.last_page) && pageNavigation.current) {
-      resultsRef.current?.focus();
-      pageNavigation.current = false;
-    }
-  }, [data, page]);
-  if (!data || (page > 1 && page > data.last_page))
-    return <Feedback error={error} />;
-  // Fixed pages of 20, at most 25 of them for a search or filter (MAC-01).
+  if (!data) return <Feedback error={error} />;
   const first = (page - 1) * PAGE_SIZE;
   const items = compact ? data.items.slice(0, 6) : data.items;
   const capped = data.total > data.last_page * PAGE_SIZE;
+  const selected = FILTERS.some(([name]) => params.get(name));
+  const move = (next: number) => {
+    onChange?.({ page: next > 1 ? String(next) : null });
+    resultsRef.current?.focus();
+  };
   return (
     <>
+      {!compact && onChange && (
+        <div className="filters" role="group" aria-label="Filter and sort the catalogue">
+          {FILTERS.map(([name, label]) => {
+            const values = data.facets[name] ?? [];
+            const value = params.get(name) || "";
+            if (values.length < 2 && !value) return null;
+            return (
+              <label key={name}>
+                {label}
+                <select
+                  value={value}
+                  onChange={(e) => onChange({ [name]: e.target.value || null })}
+                >
+                  <option value="">All</option>
+                  {values.map((f) => (
+                    <option key={f.value} value={f.value}>
+                      {facetLabel(name, f)} ({f.count})
+                    </option>
+                  ))}
+                </select>
+              </label>
+            );
+          })}
+          <label>
+            Sort
+            <select
+              value={data.sort}
+              onChange={(e) => onChange({ sort: e.target.value })}
+            >
+              {q && <option value="relevance">Best match</option>}
+              <option value="title">Title A–Z</option>
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+            </select>
+          </label>
+          {selected && (
+            <button
+              type="button"
+              className="clear-filters"
+              onClick={() =>
+                onChange(Object.fromEntries(FILTERS.map(([name]) => [name, null])))
+              }
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
+      {!compact && (
+        <p className="result-count" role="status">
+          {plural(data.total, "source", "sources")}
+          {q ? ` for “${q}”` : ""}
+          {data.last_page > 1
+            ? ` · showing ${first + 1}–${first + items.length}`
+            : ""}
+        </p>
+      )}
       <div
         ref={resultsRef}
         tabIndex={-1}
@@ -480,98 +605,99 @@ function SourcePageList({
             source={s}
             number={first + i + 1}
             compact={compact}
+            query={q}
           />
         ))}
       </div>
       {!items.length && (
         <div className="empty">
-          <BookOpen size={30} />
+          <BookOpen size={30} aria-hidden="true" />
           <h3>No sources found</h3>
-          <p>
-            Try another title or citation. No full text is cleared in this
-            pilot.
-          </p>
-          <a href="#/browse">Reset search</a>
+          <p>Try other words, or clear the filters.</p>
+          <Link to="/browse">Start again</Link>
         </div>
       )}
-      {data.total > 0 && (
-        <div className="catalogue-pagination" aria-label="Catalogue pagination">
-          <p role="status">
-            Showing {first + 1}–{first + items.length} of {data.total} sources
-          </p>
-          {!compact && capped && page === data.last_page && (
-            <p>
-              Only the first {data.last_page * PAGE_SIZE} results are shown.
-              Refine the search to narrow them.
-            </p>
-          )}
-          {compact ? (
-            <a href={"#/browse" + (q ? "?q=" + encodeURIComponent(q) : "")}>
-              View all results <ArrowRight size={16} />
-            </a>
-          ) : (
-            <nav aria-label="Results pages">
-              <button disabled={page === 1} onClick={() => movePage(page - 1)}>
-                Previous
-              </button>
-              <button
-                disabled={page >= data.last_page}
-                onClick={() => movePage(page + 1)}
-              >
-                Next
-              </button>
-            </nav>
-          )}
+      {compact && data.total > items.length && (
+        <div className="catalogue-pagination">
+          <p>{plural(data.total, "source", "sources")} in the catalogue</p>
+          <Link to="/browse">
+            View all <ArrowRight size={16} aria-hidden="true" />
+          </Link>
         </div>
+      )}
+      {!compact && data.last_page > 1 && (
+        <nav className="catalogue-pagination" aria-label="Results pages">
+          <p>
+            Page {page} of {data.last_page}
+            {capped && page === data.last_page
+              ? ` · only the first ${data.last_page * PAGE_SIZE} results are shown; refine the search to narrow them`
+              : ""}
+          </p>
+          <div>
+            <button disabled={page === 1} onClick={() => move(page - 1)}>
+              Previous
+            </button>
+            <button disabled={page >= data.last_page} onClick={() => move(page + 1)}>
+              Next
+            </button>
+          </div>
+        </nav>
       )}
     </>
   );
 }
 function Browse({ route }: { route: string }) {
-  const query = new URLSearchParams(route.split("?")[1]).get("q") || "";
+  const params = new URLSearchParams(route.split("?")[1] || "");
+  const query = params.get("q") || "";
   const [q, setQ] = useState(query);
-  const [filter, setFilter] = useState("all");
   useEffect(() => setQ(query), [query]);
+  // Every choice lives in the address, so a search can be bookmarked and shared.
+  const change = (changes: Record<string, string | null>) => {
+    const next = new URLSearchParams(params);
+    for (const [name, value] of Object.entries(changes))
+      value ? next.set(name, value) : next.delete(name);
+    if (!("page" in changes)) next.delete("page");
+    const s = next.toString();
+    navigate("/browse" + (s ? "?" + s : ""));
+  };
   return (
     <div className="page">
       <PageTitle label="THE PUBLIC CATALOGUE" title="Explore the corpus.">
-        Start with an official source. See its rights status, provenance, and
-        available versions.
+        Search by title, citation or subject. Each source shows its rights
+        status, where it comes from and what you may do with it.
       </PageTitle>
       <form
         className="home-search"
+        role="search"
         onSubmit={(e) => {
           e.preventDefault();
-          location.hash = "/browse?q=" + encodeURIComponent(q);
+          change({ q: q.trim() || null, sort: null });
         }}
       >
-        <Search size={20} />
+        <Search size={20} aria-hidden="true" />
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          aria-label="Search catalogue"
-          placeholder="Search by title or citation"
+          aria-label="Search the catalogue"
+          placeholder="Search by title, citation or subject"
         />
         <button>
-          Search <ArrowRight size={16} />
+          Search <ArrowRight size={16} aria-hidden="true" />
         </button>
       </form>
-      <div className="filters">
-        <span>
-          <Globe2 size={16} /> Nigeria · Pilot jurisdiction
-        </span>
-        <label>
-          Access{" "}
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="all">All sources</option>
-            <option value="metadata">Metadata only</option>
-            <option value="open">Open full text</option>
-          </select>
-        </label>
-      </div>
-      <SourceList q={query} filter={filter} />
+      <SourceList params={params} onChange={change} />
     </div>
   );
+}
+// The record's own title and description in the browser and in search results.
+function RecordTitle({ source: s }: { source: Source }) {
+  useEffect(() => {
+    document.title = `${s.title} · Open Alvary`;
+    document
+      .querySelector('meta[name="description"]')
+      ?.setAttribute("content", s.summary || `${typeLabel(s.document_type)}: ${s.citation}`);
+  }, [s]);
+  return null;
 }
 function Reader({ id }: { id: string }) {
   const source = useData<Source>("/sources/" + encodeURIComponent(id));
@@ -597,15 +723,16 @@ function Reader({ id }: { id: string }) {
   const s = source.data;
   return (
     <div className="page">
-      <a className="breadcrumb" href="#/browse">
-        Catalogue <ChevronRight size={14} />{" "}
-        {jurisdictionName(s.jurisdiction_id)}
-      </a>
-      <PageTitle
-        label={s.document_type.toUpperCase() + " · " + s.citation}
-        title={s.title}
-      >
-        {s.catalogue_note}
+      <RecordTitle source={s} />
+      <nav className="breadcrumb" aria-label="Breadcrumb">
+        <Link to="/browse">Catalogue</Link>
+        <ChevronRight size={14} aria-hidden="true" />
+        <Link to={"/browse?jurisdiction=" + encodeURIComponent(s.jurisdiction_id)}>
+          {s.jurisdiction_name || jurisdictionName(s.jurisdiction_id)}
+        </Link>
+      </nav>
+      <PageTitle label={typeLabel(s.document_type) + " · " + s.citation} title={s.title}>
+        {s.summary || s.citation}
       </PageTitle>
       <div className="reader-grid">
         <article className="reader">
@@ -626,11 +753,11 @@ function Reader({ id }: { id: string }) {
               ))
             ) : (
               <div className="empty">
-                <ShieldCheck size={36} />
-                <h2>Rights review comes first.</h2>
+                <ShieldCheck size={36} aria-hidden="true" />
+                <h2>The text isn’t on this site yet.</h2>
                 <p>
-                  {versions.data.notice} You can consult the official source
-                  directly.
+                  It will be added once its rights and content have been
+                  reviewed. Until then, read it at the official source.
                 </p>
                 <a
                   className="button primary"
@@ -638,7 +765,7 @@ function Reader({ id }: { id: string }) {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Visit official source <ExternalLink size={16} />
+                  Read the official source <ExternalLink size={16} aria-hidden="true" />
                 </a>
               </div>
             )
@@ -653,6 +780,13 @@ function Reader({ id }: { id: string }) {
     </div>
   );
 }
+// What each jurisdiction's coverage does and does not include.
+const JURISDICTION_NOTES: Record<string, string[]> = {
+  ng: [
+    "Four federal instruments, with details and official links. Not yet covered: state law, judgments, regulations, translations and later amendments.",
+    "The Investments and Securities Act 2007 is kept for historical reference: its official publisher reports a 2025 replacement.",
+  ],
+};
 function CoveragePage() {
   const { data, error } = useData<Coverage>("/coverage");
   return (
@@ -661,8 +795,8 @@ function CoveragePage() {
         label="COVERAGE & LIMITATIONS"
         title="An honest view of the corpus."
       >
-        We publish what we have verified, and make the gaps visible. This is a
-        catalogue pilot, not a complete collection of Nigerian law.
+        We publish what we have verified and make the gaps visible.
+        Jurisdictions appear here as their sources are verified.
       </PageTitle>
       {data ? (
         <>
@@ -679,24 +813,23 @@ function CoveragePage() {
               </div>
             ))}
           </div>
-          <div className="info-panel">
-            <h2>
-              Nigeria <span className="badge">Pilot</span>
-            </h2>
-            <p>
-              The initial catalogue covers four federal instruments. There is no
-              claimed coverage of state law, judgments, regulations,
-              translations, or all subsequent amendments.
-            </p>
-            <p>
-              The 2007 Investments and Securities Act is retained as a
-              historical candidate. Its official publisher identifies a 2025
-              replacement.
-            </p>
-            <a className="text-link" href="#/browse">
-              Explore the catalogue <ArrowRight size={16} />
-            </a>
-          </div>
+          {Object.entries(data.jurisdictions).map(([jurisdiction, count]) => (
+            <div className="info-panel" key={jurisdiction}>
+              <h2>
+                {jurisdictionName(jurisdiction)}{" "}
+                <span className="badge">{plural(count, "source", "sources")}</span>
+              </h2>
+              {(JURISDICTION_NOTES[jurisdiction] ?? []).map((note) => (
+                <p key={note}>{note}</p>
+              ))}
+              <Link
+                className="text-link"
+                to={"/browse?jurisdiction=" + encodeURIComponent(jurisdiction)}
+              >
+                Explore its sources <ArrowRight size={16} aria-hidden="true" />
+              </Link>
+            </div>
+          ))}
         </>
       ) : (
         <Feedback error={error} />
@@ -714,6 +847,7 @@ function Governance() {
         Official publication is a source of provenance. It is not, by itself,
         permission to redistribute.
       </PageTitle>
+      <h2 className="flow-heading">How a source becomes public</h2>
       <div className="governance-flow">
         <div className="flow-top">
           <div className="flow-box good">
@@ -798,8 +932,58 @@ function Governance() {
     </div>
   );
 }
+const MODES: Record<string, [string, string]> = {
+  metadata: ["Metadata", "Records, rights and official links, without legal texts."],
+  corpus: ["Corpus", "Records plus every legal text cleared for reuse."],
+};
+function releaseDate(id: string) {
+  const day = /^\d{4}-\d{2}-\d{2}/.exec(id)?.[0];
+  return day
+    ? new Date(day + "T00:00:00Z").toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC",
+      })
+    : id;
+}
+function ReleaseFiles({ release: r }: { release: Manifest }) {
+  const files = Object.entries(r.files);
+  const empty = files.filter(([, info]) => info.records === 0);
+  const shown = files.filter(([, info]) => info.records !== 0);
+  const file = ([name, info]: [string, { sha256: string; records?: number }]) => (
+    <a key={name} href={r.download_base + "/" + name}>
+      <FileText size={16} aria-hidden="true" />
+      <span>
+        {name}
+        <small>
+          {info.records !== undefined
+            ? plural(info.records, "record", "records")
+            : "Release documentation"}
+        </small>
+      </span>
+      <Download size={15} aria-hidden="true" />
+    </a>
+  );
+  return (
+    <>
+      <div className="download-grid">{shown.map(file)}</div>
+      {empty.length > 0 && (
+        <details className="empty-files">
+          <summary>{plural(empty.length, "empty file", "empty files")}</summary>
+          <div className="download-grid">{empty.map(file)}</div>
+        </details>
+      )}
+    </>
+  );
+}
 function Releases() {
   const { data, error } = useData<Manifest[]>("/releases");
+  const groups = new Map<string, Manifest[]>();
+  for (const r of data ?? []) {
+    const key = r.release_id + "|" + r.jurisdiction;
+    groups.set(key, [...(groups.get(key) ?? []), r]);
+  }
   return (
     <div className="page">
       <PageTitle label="VERSIONED & VERIFIABLE" title="Take the data with you.">
@@ -812,40 +996,32 @@ function Releases() {
       ) : !data.length ? (
         <p>No releases published yet.</p>
       ) : (
-        data.map((r) => (
-          <section className="release-card" key={r.download_base}>
+        [...groups.values()].map((modes) => (
+          <section className="release-card" key={modes[0].release_id + modes[0].jurisdiction}>
             <div className="release-heading">
               <div>
-                <div className="eyebrow">NIGERIA · {r.mode.toUpperCase()}</div>
-                <h2>{r.release_id}</h2>
+                <div className="eyebrow">{jurisdictionName(modes[0].jurisdiction)}</div>
+                <h2>{releaseDate(modes[0].release_id)}</h2>
                 <p>
-                  {r.coverage.catalogued_sources} catalogue entries ·{" "}
-                  {r.coverage.open_full_text_sources} cleared full-text sources
+                  {plural(modes[0].coverage.catalogued_sources, "catalogue entry", "catalogue entries")} ·{" "}
+                  {plural(modes[0].coverage.open_full_text_sources, "text", "texts")} cleared for reuse
                 </p>
               </div>
-              <a
-                className="button secondary"
-                href={r.download_base + "/manifest.json"}
-              >
-                <Download size={16} /> Manifest
-              </a>
             </div>
-            <div className="download-grid">
-              {Object.entries(r.files).map(([name, info]) => (
-                <a key={name} href={r.download_base + "/" + name}>
-                  <FileText size={16} />
-                  <span>
-                    {name}
-                    <small>
-                      {info.records !== undefined
-                        ? `${info.records} records`
-                        : "Release documentation"}
-                    </small>
-                  </span>
-                  <Download size={15} />
-                </a>
-              ))}
-            </div>
+            {modes.map((r) => (
+              <div className="release-mode" key={r.download_base}>
+                <div className="release-mode-heading">
+                  <div>
+                    <h3>{MODES[r.mode]?.[0] ?? r.mode}</h3>
+                    <p>{MODES[r.mode]?.[1]}</p>
+                  </div>
+                  <a className="button secondary" href={r.download_base + "/manifest.json"}>
+                    <Download size={16} aria-hidden="true" /> Manifest
+                  </a>
+                </div>
+                <ReleaseFiles release={r} />
+              </div>
+            ))}
           </section>
         ))
       )}
@@ -871,9 +1047,9 @@ function Developers() {
             recording its scope and the rights status of every record. No
             blanket licence is claimed over linked legal text.
           </p>
-          <a className="text-link" href="#/releases">
-            Go to the releases <ArrowUpRight size={16} />
-          </a>
+          <Link className="text-link" to="/releases">
+            Go to the releases <ArrowUpRight size={16} aria-hidden="true" />
+          </Link>
         </section>
         <section>
           <h2>Machine access</h2>
@@ -901,17 +1077,16 @@ function About() {
         title="A public foundation, built in the open."
       >
         Open Alvary is building reusable legal-data infrastructure for African
-        jurisdictions, starting with Nigeria. This is an early metadata
-        catalogue pilot.
+        jurisdictions, each added as its sources are verified. This is an early
+        catalogue preview.
       </PageTitle>
       <div className="two-columns">
         <section>
           <h2>What exists today</h2>
           <p>
-            Four independently authored source records, explicit rights states,
-            versioned metadata downloads and open-source
-            software. No Nigerian legal full text has been cleared or
-            redistributed.
+            A catalogue of independently authored source records with explicit
+            rights states, versioned metadata downloads and open-source
+            software. No legal full text has been cleared or republished yet.
           </p>
           <p>
             The public website, API and ingestion software are MIT-licensed.
@@ -924,7 +1099,7 @@ function About() {
           <h2>Who maintains it</h2>
           <p>
             {project.maintainer
-              ? `Accountable maintainer: ${project.maintainer}.`
+              ? `Accountable maintainer: ${project.maintainer.replace(/\.$/, "")}.`
               : "Maintainer identity is being confirmed before public launch."}
           </p>
           <p>
@@ -995,8 +1170,7 @@ function About() {
             Qualified rights review, source-specific parsers, tested OCR
             integration, detailed legal anchors and review operations. Expansion
             across African jurisdictions depends on verified permissions, source
-            availability, qualified reviewers and content quality. Nigeria is
-            the first implementation pilot.
+            availability, qualified reviewers and content quality.
           </p>
           <p>
             We are preparing a funding application for development and
