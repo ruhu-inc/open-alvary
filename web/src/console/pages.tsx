@@ -62,7 +62,7 @@ function NeedsAccess({ what, org }: { what: string; org: Organisation }) {
     <div className="card tint">
       <h2>{what} are available once this organisation has access</h2>
       <p className="lede">
-        Reading the corpus on the website needs no account. The API, MCP and bulk downloads need access,
+        Reading the corpus on the website needs no account. The API and MCP need access,
         granted per organisation.
       </p>
       <div className="row">
@@ -98,7 +98,7 @@ export function Overview({ me, org }: PageProps) {
       ))}
       {org.access.state === "none" && !openRequest ? (
         <div className="card tint">
-          <h2>Get access to the API, MCP and bulk data</h2>
+          <h2>Get access to the API and MCP</h2>
           <p className="lede">
             Access is granted per organisation. Tell us how you'll use the corpus and which jurisdictions you
             need; we reply by email, and the decision shows here.
@@ -352,7 +352,7 @@ export function AccessPage({ me, org, refresh }: PageProps) {
           </p>
           <dl className="facts">
             <dt>Includes</dt>
-            <dd>{(data.current.tier?.includes ?? []).map((i) => ({ rest: "REST API", mcp: "MCP", bulk: "Bulk downloads" })[i] ?? i).join(", ")}</dd>
+            <dd>{(data.current.tier?.includes ?? []).map((i) => ({ rest: "REST API", mcp: "MCP" } as Record<string, string>)[i] ?? i).join(", ")}</dd>
             <dt>Requests</dt>
             <dd>{number(data.current.tier?.allowance?.requests_per_minute ?? 0)} a minute, shared across the organisation</dd>
             <dt>Jurisdictions</dt>

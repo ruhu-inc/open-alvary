@@ -255,7 +255,7 @@ function SignIn() {
       <main className="solo-card" id="main" tabIndex={-1}>
         <Mark size={40} />
         <h1>Sign in to Open Alvary</h1>
-        <p className="fine">For API, MCP and bulk access. Reading the corpus on the website needs no account.</p>
+        <p className="fine">For API and MCP access. Reading the corpus on the website needs no account.</p>
         {error ? (
           <div className="callout bad" role="alert">
             {SIGN_IN_ERRORS[error] ?? SIGN_IN_ERRORS.invalid}
