@@ -1,0 +1,22 @@
+deployment/auth0/configure.py
+  s_b82616e2476856::t_254535398433e3 1-50,57-60,67-73,89-92,94,110-112,114-115,122-123,129-132,139-157,163-167,174-175,179-196,200-202,209-224
+  s_b82616e2476856::t_90bf7aa6b7620c 51-56,61-66,74-88,93,95-109,113,116-121,124-128,133-138,158-162,168-173,176-178,197-199,203-208
+deployment/auth0/post_login.js
+  s_b82616e2476856::t_c1359e6a6b21bc 1-89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7b5dd19207bbd78057e2d00ff37c191b44568b8c",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
