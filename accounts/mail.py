@@ -90,18 +90,21 @@ def invitation(to: str, organisation: str, inviter: str, role: str, base: str) -
     )
 
 
-def request_received(to: str, organisation: str, base: str) -> Message:
+def request_received(to: str, organisation: str, base: str, plan: str | None = None) -> Message:
+    asked = f"the {plan} plan" if plan else "more access to the Open Alvary API and MCP"
     return Message(
         to,
-        "We received your Open Alvary access request",
-        f"Thank you. We received the request for {organisation} to use the Open Alvary API and MCP.\n\n"
-        f"We'll email you when it's decided, or if we need more information. You can follow it under Access "
-        f"and plan at {base}/console/access.\n\n" + SIGN_OFF,
+        "We received your Open Alvary request",
+        f"Thank you. We received the request for {organisation} to move to {asked}.\n\n"
+        f"We'll email you when it's decided, or if we need more information. You can follow it under Plan "
+        f"and limits at {base}/console/access.\n\n" + SIGN_OFF,
     )
 
 
-def request_for_operator(to: str, organisation: str, reduced: bool, base: str) -> Message:
-    kind = "free or reduced access" if reduced else "access"
+def request_for_operator(
+    to: str, organisation: str, reduced: bool, base: str, plan: str | None = None
+) -> Message:
+    kind = (f"the {plan} plan" if plan else "more access") + (", free or reduced" if reduced else "")
     return Message(
         to,
         f"New Open Alvary access request: {organisation}",

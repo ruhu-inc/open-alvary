@@ -2,7 +2,7 @@
   {
     "id": "starter",
     "name": "Starter",
-    "description": "Free for every organisation: modest limits for trying the API and MCP and building with them. Ask for more when you need it. Limits are placeholders until tiers are set.",
+    "description": "For trying the API and MCP and building with them.",
     "includes": [
       "rest",
       "mcp"
@@ -13,12 +13,112 @@
       "concurrency": 4,
       "bytes_per_day": 200000000
     },
-    "published": true
+    "published": true,
+    "listing": {
+      "order": 1,
+      "for": "Everyone, automatically",
+      "price": "Free",
+      "action": "included",
+      "note": "No card needed"
+    }
+  },
+  {
+    "id": "developer",
+    "name": "Developer",
+    "description": "For individual developers and small products in production.",
+    "includes": [
+      "rest",
+      "mcp"
+    ],
+    "allowance": {
+      "requests_per_minute": 300,
+      "burst": 150,
+      "concurrency": 10,
+      "bytes_per_day": 2000000000
+    },
+    "published": true,
+    "listing": {
+      "order": 2,
+      "for": "Individuals and small products",
+      "price": "Coming soon",
+      "action": "upgrade",
+      "note": "Monthly subscription"
+    }
+  },
+  {
+    "id": "team",
+    "name": "Team",
+    "description": "For organisations with several members and steady traffic.",
+    "includes": [
+      "rest",
+      "mcp"
+    ],
+    "allowance": {
+      "requests_per_minute": 1200,
+      "burst": 600,
+      "concurrency": 40,
+      "bytes_per_day": 10000000000
+    },
+    "published": true,
+    "listing": {
+      "order": 3,
+      "for": "Organisations and teams",
+      "price": "Coming soon",
+      "action": "upgrade",
+      "note": "Monthly subscription"
+    }
+  },
+  {
+    "id": "enterprise",
+    "name": "Enterprise",
+    "description": "Custom limits, invoicing and support terms for large or critical use.",
+    "includes": [
+      "rest",
+      "mcp"
+    ],
+    "allowance": {
+      "requests_per_minute": 1200,
+      "burst": 600,
+      "concurrency": 40,
+      "bytes_per_day": 10000000000
+    },
+    "published": true,
+    "listing": {
+      "order": 4,
+      "for": "Large or critical use",
+      "price": "Custom",
+      "action": "contact",
+      "limits": "Limits set for your use",
+      "note": "Agreed with you"
+    }
+  },
+  {
+    "id": "public-interest",
+    "name": "Public interest",
+    "description": "Team limits for research, government and legal aid, free or reduced, by application.",
+    "includes": [
+      "rest",
+      "mcp"
+    ],
+    "allowance": {
+      "requests_per_minute": 1200,
+      "burst": 600,
+      "concurrency": 40,
+      "bytes_per_day": 10000000000
+    },
+    "published": true,
+    "listing": {
+      "order": 5,
+      "for": "Research, government and legal aid",
+      "price": "Free or reduced",
+      "action": "apply",
+      "note": "By application"
+    }
   },
   {
     "id": "pilot",
     "name": "Pilot access",
-    "description": "Access granted by Open Alvary during the pilot, until published plans replace it. Limits are unmeasured proposals (access-defaults-2) under review.",
+    "description": "Access granted by Open Alvary during the pilot, before published plans.",
     "includes": [
       "rest",
       "mcp"
@@ -29,6 +129,9 @@
       "concurrency": 256,
       "bytes_per_day": 5000000000
     },
-    "published": false
+    "published": false,
+    "listing": {
+      "order": 9
+    }
   }
 ]

@@ -621,11 +621,12 @@ def create_console_app(
         data = await body(request)
         request_id = accounts.request_access(session["person_id"], organisation_id, data, context(request))
         notice = accounts.notice_recipients(organisation_id, request_id)
+        plan = next((t["name"] for t in accounts.tiers() if t["id"] == data.get("tier")), None)
         return later(
             JSONResponse({"id": request_id}, status_code=201),
-            *(mail.request_received(to, notice["organisation"], site) for to in notice["to"]),
+            *(mail.request_received(to, notice["organisation"], site, plan) for to in notice["to"]),
             mail.request_for_operator(
-                operator_email, notice["organisation"], bool(data.get("reduced")), site
+                operator_email, notice["organisation"], bool(data.get("reduced")), site, plan
             ),
         )
 

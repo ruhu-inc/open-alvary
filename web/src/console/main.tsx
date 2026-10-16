@@ -325,7 +325,7 @@ function OrgSwitcher({ me, org, onChoose }: { me: Me; org: Organisation; onChoos
 function planName(org: Organisation) {
   if (org.access.state !== "active") return "No access";
   if (org.access.starter) return "Starter · free";
-  return org.access.tier?.id === "pilot" ? "Pilot access" : (org.access.tier?.id ?? "Access");
+  return org.access.tier?.name ?? org.access.tier?.id ?? "Access";
 }
 
 function CreateOrganisation({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {

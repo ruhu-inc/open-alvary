@@ -48,7 +48,8 @@ body {
   margin: 0;
   background: var(--page);
   color: var(--ink);
-  font: 15px/1.55 var(--sans);
+  font: 14px/1.5 var(--sans);
+  -webkit-font-smoothing: antialiased;
 }
 h1,
 h2,
@@ -110,7 +111,7 @@ code,
    account menu at its foot, as in the Claude and OpenAI consoles. */
 .shell {
   display: grid;
-  grid-template-columns: 252px minmax(0, 1fr);
+  grid-template-columns: 240px minmax(0, 1fr);
   min-height: 100vh;
 }
 .side {
@@ -142,7 +143,7 @@ code,
   align-items: center;
   gap: 9px;
   font-weight: 600;
-  font-size: 15.5px;
+  font-size: 14.5px;
   color: var(--ink);
   text-decoration: none;
 }
@@ -154,7 +155,7 @@ code,
 .brand small {
   font-weight: 400;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12.5px;
 }
 .menu-toggle {
   display: none;
@@ -169,9 +170,9 @@ code,
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--surface);
   text-align: left;
   color: var(--ink);
@@ -197,21 +198,21 @@ code,
 }
 .switcher-text b {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13.5px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .switcher-text small {
-  font-size: 12.5px;
+  font-size: 12px;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .org-badge {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 7px;
   background: var(--accent-soft);
   color: var(--accent-text);
@@ -259,9 +260,9 @@ code,
   text-align: left;
   border: 0;
   background: none;
-  padding: 8px;
-  border-radius: 7px;
-  font-size: 14px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  font-size: 13.5px;
   color: var(--ink);
 }
 .popover button:hover {
@@ -274,26 +275,26 @@ code,
 }
 .nav {
   display: grid;
-  gap: 10px;
+  gap: 6px;
 }
 .nav-section {
   display: grid;
   gap: 1px;
 }
 .nav-group {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--muted);
-  padding: 8px 10px 4px;
+  padding: 8px 10px 3px;
   font-weight: 500;
 }
 .nav a,
 .foot-link {
   text-decoration: none;
   color: var(--ink);
-  padding: 7px 10px;
-  border-radius: 7px;
-  font-size: 14px;
-  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  min-height: 32px;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -333,9 +334,9 @@ code,
   align-items: center;
   gap: 18px;
   padding: 0 32px;
-  min-height: 56px;
+  min-height: 52px;
   border-bottom: 1px solid var(--line);
-  font-size: 14px;
+  font-size: 13.5px;
   background: var(--surface);
   position: sticky;
   top: 0;
@@ -370,21 +371,21 @@ code,
   color: var(--ink);
 }
 .avatar {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: var(--accent);
   color: var(--on-accent);
   display: grid;
   place-items: center;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   flex: none;
 }
 .content {
   padding: 28px 32px 56px;
   display: grid;
-  gap: 22px;
+  gap: 20px;
   align-content: start;
   max-width: 1120px;
   width: 100%;
@@ -403,13 +404,14 @@ code,
 }
 .page-head h1 {
   font-family: var(--sans);
-  font-weight: 650;
-  font-size: 26px;
-  line-height: 1.2;
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1.25;
   letter-spacing: -0.01em;
 }
 .lede {
   color: var(--muted);
+  font-size: 14px;
   max-width: 66ch;
 }
 @media (max-width: 860px) {
@@ -450,11 +452,15 @@ code,
   .topbar-links {
     gap: 14px;
   }
+  .crumbs span:first-child,
+  .crumbs span:first-child + span {
+    display: none;
+  }
   .content {
     padding: 20px 16px 40px;
   }
   .page-head h1 {
-    font-size: 23px;
+    font-size: 20px;
   }
 }
 
@@ -462,21 +468,21 @@ code,
 .card {
   border: 1px solid var(--line);
   border-radius: 10px;
-  padding: 20px 22px;
+  padding: 18px 20px;
   background: var(--surface);
   display: grid;
-  gap: 12px;
+  gap: 10px;
   align-content: start;
 }
 .card.tint {
   background: var(--panel);
 }
 .card h2 {
-  font-size: 18px;
+  font-size: 15.5px;
   font-weight: 600;
 }
 .card h3 {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
 }
 .row {
@@ -496,14 +502,15 @@ code,
   gap: 16px;
 }
 .btn {
-  min-height: 42px;
-  padding: 9px 18px;
+  min-height: 36px;
+  padding: 7px 14px;
   border-radius: 7px;
   border: 1px solid var(--accent);
   background: var(--accent);
   color: var(--on-accent);
   font-weight: 500;
-  font-size: 14px;
+  font-size: 13.5px;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -537,22 +544,22 @@ code,
   color: var(--accent-text);
   text-decoration: underline;
   text-underline-offset: 3px;
-  font-size: 14px;
-  min-height: 32px;
+  font-size: 13.5px;
+  min-height: 28px;
 }
 .link.danger {
   color: var(--bad-ink);
 }
 .fine {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--muted);
 }
 .pill {
   display: inline-flex;
   align-items: center;
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
-  padding: 3px 10px;
+  padding: 2px 8px;
   border-radius: 999px;
   background: var(--panel);
   color: var(--muted);
@@ -599,7 +606,7 @@ code,
   background: var(--warn-bg);
   color: var(--warn-ink);
   padding: 12px 14px;
-  font-size: 14px;
+  font-size: 13.5px;
   display: grid;
   gap: 10px;
   justify-items: start;
@@ -630,7 +637,7 @@ code,
 .checklist small {
   display: block;
   color: var(--muted);
-  font-size: 13.5px;
+  font-size: 13px;
 }
 .tick {
   width: 26px;
@@ -657,12 +664,13 @@ code,
   gap: 4px;
 }
 .stat b {
-  font-size: 26px;
-  font-weight: 500;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   font-variant-numeric: tabular-nums;
 }
 .stat span {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--muted);
 }
 .facts {
@@ -670,7 +678,7 @@ code,
   grid-template-columns: max-content 1fr;
   gap: 8px 18px;
   margin: 0;
-  font-size: 14.5px;
+  font-size: 13.5px;
 }
 .facts dt {
   color: var(--muted);
@@ -687,20 +695,20 @@ code,
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14.5px;
+  font-size: 13.5px;
 }
 th {
   text-align: left;
   font-weight: 500;
   color: var(--muted);
-  font-size: 13px;
-  padding: 10px 14px;
+  font-size: 12.5px;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
   white-space: nowrap;
 }
 td {
-  padding: 12px 14px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
   font-variant-numeric: tabular-nums;
@@ -711,7 +719,7 @@ tr:last-child td {
 td small {
   display: block;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12.5px;
 }
 td.actions {
   text-align: right;
@@ -741,14 +749,14 @@ tr.dim td {
 .field > label,
 .field > span,
 .field > legend {
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 500;
   padding: 0;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 .field small {
   color: var(--muted);
-  font-size: 13.5px;
+  font-size: 12.5px;
 }
 fieldset.plain {
   border: 0;
@@ -761,29 +769,43 @@ input[type="email"],
 input[type="url"],
 select,
 textarea {
-  min-height: 44px;
-  padding: 9px 12px;
+  min-height: 36px;
+  padding: 7px 10px;
   border: 1px solid var(--line);
   border-radius: 7px;
   background: var(--surface);
   width: 100%;
-  font-size: 16px;
+  font-size: 14px;
+}
+/* Phones zoom into fields below 16px, so fields keep it there. */
+@media (max-width: 860px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="url"],
+  select,
+  textarea {
+    font-size: 16px;
+    min-height: 44px;
+  }
+  .btn {
+    min-height: 40px;
+  }
 }
 textarea {
   min-height: 96px;
   resize: vertical;
 }
 td select {
-  min-height: 38px;
-  font-size: 14.5px;
+  min-height: 32px;
+  font-size: 13.5px;
   width: auto;
 }
 .choice {
   display: flex;
   gap: 10px;
   align-items: flex-start;
-  font-size: 14.5px;
-  padding: 11px 12px;
+  font-size: 13.5px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   cursor: pointer;
@@ -797,14 +819,14 @@ td select {
 .choice small {
   display: block;
   color: var(--muted);
-  font-size: 13.5px;
+  font-size: 12.5px;
 }
 .code {
   display: block;
   background: var(--code-bg);
   border-radius: 8px;
   padding: 12px 14px;
-  font: 13.5px/1.6 var(--mono);
+  font: 12.5px/1.6 var(--mono);
   overflow-x: auto;
   white-space: pre;
   min-width: 0;
@@ -831,12 +853,12 @@ td select {
 .tabs button {
   border: 0;
   background: none;
-  padding: 10px 14px;
+  padding: 8px 12px;
   border-bottom: 2px solid transparent;
-  font-size: 14.5px;
+  font-size: 13.5px;
   white-space: nowrap;
   color: var(--muted);
-  min-height: 44px;
+  min-height: 38px;
 }
 .tabs button[aria-selected="true"] {
   border-color: var(--accent-text);
@@ -866,7 +888,7 @@ ol.steps {
   height: 10px;
   border-radius: 50%;
   background: var(--line);
-  margin-top: 7px;
+  margin-top: 6px;
   margin-left: 4px;
 }
 .timeline li.on::before {
@@ -875,7 +897,7 @@ ol.steps {
 .timeline small {
   display: block;
   color: var(--muted);
-  font-size: 13.5px;
+  font-size: 12.5px;
 }
 svg .bar {
   fill: var(--accent);
@@ -912,14 +934,14 @@ svg .chart-label {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 12px;
-  width: min(580px, 100%);
-  padding: 24px;
+  width: min(560px, 100%);
+  padding: 22px 24px;
   display: grid;
-  gap: 16px;
+  gap: 14px;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.18);
 }
 .dialog h2 {
-  font-size: 20px;
+  font-size: 17px;
   font-weight: 600;
 }
 .dialog-actions {
@@ -951,11 +973,11 @@ svg .chart-label {
 .solo-card h1 {
   font-family: var(--serif);
   font-weight: 400;
-  font-size: 30px;
+  font-size: 27px;
   line-height: 1.15;
 }
 .provider {
-  min-height: 46px;
+  min-height: 42px;
   border: 1px solid var(--line);
   background: var(--surface);
   border-radius: 8px;
@@ -964,7 +986,7 @@ svg .chart-label {
   justify-content: center;
   gap: 10px;
   font-weight: 500;
-  font-size: 15px;
+  font-size: 14px;
   color: var(--ink);
   text-decoration: none;
 }
@@ -990,33 +1012,41 @@ svg .chart-label {
 }
 .quick-card {
   display: grid;
-  gap: 6px;
-  align-content: start;
+  grid-template-columns: 32px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: start;
   text-align: left;
-  padding: 18px 20px;
+  padding: 14px 16px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--surface);
   color: var(--ink);
   text-decoration: none;
-  font-size: 14px;
+  font-size: 13px;
 }
 .quick-card:hover {
   border-color: var(--accent-text);
 }
-.quick-card svg {
+.quick-card > svg {
+  grid-row: span 2;
   color: var(--accent-text);
-  margin-bottom: 4px;
+  background: var(--accent-soft);
+  border-radius: 8px;
+  padding: 7px;
+  width: 32px;
+  height: 32px;
 }
 .quick-card b {
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 600;
 }
 .quick-card span {
   color: var(--muted);
 }
 .stat-label {
-  font-size: 12.5px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--muted);
   text-transform: none;
@@ -1042,7 +1072,7 @@ svg .chart-label {
   justify-items: center;
   text-align: center;
   gap: 10px;
-  padding: 44px 20px;
+  padding: 36px 20px;
   border: 1px dashed var(--line);
   border-radius: 12px;
   background: var(--surface);
@@ -1051,7 +1081,7 @@ svg .chart-label {
   color: var(--muted);
 }
 .empty h2 {
-  font-size: 17px;
+  font-size: 15px;
   font-weight: 600;
 }
 .btn svg {
@@ -1083,4 +1113,120 @@ svg .chart-label {
   width: 36px;
   height: 36px;
   font-size: 14px;
+}
+
+/* Plans: the current plan, then every published plan side by side. */
+.current-plan {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px 20px;
+}
+.current-plan > div {
+  display: grid;
+  gap: 4px;
+}
+.current-plan h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.plans-section {
+  display: grid;
+  gap: 12px;
+}
+.plans {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+.plan-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plan-card.current {
+  border-color: var(--accent-text);
+  box-shadow: inset 0 0 0 1px var(--accent-text);
+}
+.plan-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.plan-card h3 {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+.plan-for {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-top: -4px;
+}
+.plan-price {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+.plan-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+.plan-limits {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 4px;
+  font-size: 12.5px;
+}
+.plan-limits li::before {
+  content: "✓";
+  color: var(--good-ink);
+  margin-right: 6px;
+}
+.request-status,
+.plan-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px 20px;
+}
+.request-status > div,
+.plan-strip > div {
+  display: grid;
+  gap: 4px;
+  max-width: 70ch;
+}
+.request-status h3,
+.plan-strip h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.plan-strip.current {
+  border-color: var(--accent-text);
+}
+.plan-action {
+  margin-top: auto;
+  padding-top: 8px;
+  min-height: 44px;
+  display: flex;
+  align-items: flex-end;
+}
+.plan-action .btn {
+  width: 100%;
 }
