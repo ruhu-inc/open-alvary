@@ -114,3 +114,17 @@ def test_a_persistent_deployment_without_keys_has_webhooks_off(monkeypatch):
     monkeypatch.delenv("ALVARY_WEBHOOK_KEYS", raising=False)
     monkeypatch.setenv("ALVARY_RUNTIME_MODE", "persistent")
     assert Sealer.from_environment() is None
+
+
+def test_a_delivery_has_one_deadline_for_the_whole_attempt(monkeypatch):
+    monkeypatch.setattr("changes.webhooks.TIMEOUT", 0.2)
+
+    def slow(*args):
+        time.sleep(1)
+        return 200, {}, b""
+
+    started = time.monotonic()
+    outcome = Sender(resolver=lambda host: ["93.184.216.34"], transport=slow).post(
+        "https://hooks.example.org/x", b"{}", {}
+    )
+    assert outcome.status is None and "No answer" in outcome.error and time.monotonic() - started < 0.8

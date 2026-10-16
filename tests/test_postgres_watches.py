@@ -90,7 +90,7 @@ def test_starter_limits_and_what_a_watch_must_name(world):
     with pytest.raises(AccountError) as full:
         watches.create(owner, organisation, {"name": "One more", "filters": NIGERIA})
     assert full.value.code == "limit_reached"
-    listed = watches.list(owner, organisation)
+    listed = watches.listing(owner, organisation)
     assert listed["limits"] == {"watches": 3, "digest": "weekly", "shared": False, "used": 3}
 
 
@@ -136,7 +136,7 @@ def test_private_watches_stay_private_and_shared_ones_need_a_team_plan(world):
     colleague, _ = person(accounts, "chidi")
     invitation = accounts.invite(owner, organisation, "chidi@example.org", "developer")
     accounts.accept_invitation(colleague, invitation)
-    seen = {w["name"] for w in watches.list(colleague, organisation)["watches"]}
+    seen = {w["name"] for w in watches.listing(colleague, organisation)["watches"]}
     assert seen == {"Ours"}
     with pytest.raises(AccountError) as not_owner:
         watches.update(colleague, organisation, shared["id"], {"name": "Renamed"})
@@ -198,7 +198,7 @@ def test_going_down_a_plan_pauses_the_newest_watches_and_tells_the_owner(world):
     accounts.end_access(owner, organisation)  # back to Starter: 3 watches
     mailer = Mailer()
     assert worker.enforce_limits(accounts, mailer, BASE) == 2
-    states = {w["name"]: w["state"] for w in watches.list(owner, organisation)["watches"]}
+    states = {w["name"]: w["state"] for w in watches.listing(owner, organisation)["watches"]}
     assert states == {"W0": "active", "W1": "active", "W2": "active", "W3": "paused", "W4": "paused"}
     assert "2 monitors were paused" in mailer.sent[0].subject
 
@@ -275,3 +275,49 @@ def test_old_matches_digest_records_and_links_are_purged(world):
         )
     assert worker.purge(accounts) == 2
     assert watches.inbox(owner, organisation, BASE)["items"] == []
+
+
+def test_bounces_and_complaints_from_the_mail_provider_stop_digests(world, monkeypatch):
+    import base64
+    import hashlib
+    import hmac
+    import time
+
+    from fastapi.testclient import TestClient
+    from test_postgres_console import FakeProvider, app_provider
+
+    from api.console import create_console_app
+
+    _, accounts, watches = world
+    owner, _ = person(accounts, "amina")
+    key = b"resend-signing-key-for-tests-123"
+    secret = "whsec_" + base64.b64encode(key).decode()
+    monkeypatch.setenv("RESEND_WEBHOOK_SECRET", secret)
+    client = TestClient(create_console_app(accounts, app_provider(FakeProvider())))
+
+    def post(event, signing_key=key):
+        body = json.dumps(event).encode()
+        stamp = str(int(time.time()))
+        signature = base64.b64encode(
+            hmac.new(signing_key, b"msg_1." + stamp.encode() + b"." + body, hashlib.sha256).digest()
+        )
+        headers = {"svix-id": "msg_1", "svix-timestamp": stamp, "svix-signature": "v1," + signature.decode()}
+        return client.post("/mail-events", content=body, headers=headers)
+
+    assert (
+        post(
+            {"type": "email.bounced", "data": {"to": ["amina@example.org"]}}, signing_key=b"x" * 32
+        ).status_code
+        == 401
+    )
+    transient = {
+        "type": "email.bounced",
+        "data": {"to": ["amina@example.org"], "bounce": {"type": "Transient"}},
+    }
+    assert post(transient).status_code == 204 and not watches.preferences(owner)["bounced"]
+    assert post({"type": "email.bounced", "data": {"to": ["AMINA@example.org"]}}).status_code == 204
+    assert watches.preferences(owner)["bounced"] and watches.preferences(owner)["email_on"]
+    watches.set_preferences(owner, {"email_on": True})  # turning email on again clears the bounce
+    assert not watches.preferences(owner)["bounced"]
+    assert post({"type": "email.complained", "data": {"to": ["amina@example.org"]}}).status_code == 204
+    assert watches.preferences(owner)["email_on"] is False

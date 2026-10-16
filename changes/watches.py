@@ -80,7 +80,7 @@ class Watches:
         return self.accounts._t(conn, name)
 
     # ---------- reading ----------
-    def list(self, person_id: str, organisation_id: str) -> dict:
+    def listing(self, person_id: str, organisation_id: str) -> dict:
         with self.engine.connect() as conn:
             self.accounts._membership(conn, person_id, organisation_id)
             rows = conn.execute(
@@ -489,6 +489,33 @@ class Watches:
                 },
             )
         return self.preferences(person_id)
+
+    # ---------- what the mail provider reports (bounces and complaints) ----------
+    def mail_event(self, kind: str, addresses: list[str]) -> int:
+        """A permanent bounce stops digests until the person turns email on again (SUB-05); a spam
+        complaint unsubscribes them. Returns how many people it applied to."""
+        if kind not in ("bounce", "complaint") or not addresses:
+            return 0
+        with self.engine.begin() as conn:
+            people = conn.scalars(
+                text(f"SELECT id FROM {self._t(conn, 'person')} WHERE lower(email) = ANY(:a)"),
+                {"a": [a.strip().lower() for a in addresses if isinstance(a, str)][:50]},
+            ).all()
+            for person_id in people:
+                conn.execute(
+                    text(
+                        f"INSERT INTO {self._t(conn, 'notification_pref')} (person_id, email_on, bounced_at) VALUES"
+                        " (:p, :on, :b) ON CONFLICT (person_id) DO UPDATE SET email_on = EXCLUDED.email_on AND"
+                        f" {self._t(conn, 'notification_pref')}.email_on, bounced_at = coalesce(EXCLUDED.bounced_at,"
+                        f" {self._t(conn, 'notification_pref')}.bounced_at), updated_at = statement_timestamp()"
+                    ),
+                    {
+                        "p": person_id,
+                        "on": kind == "bounce",
+                        "b": datetime.now(UTC) if kind == "bounce" else None,
+                    },
+                )
+            return len(people)
 
     # ---------- unsubscribe (no session: the token is the credential) ----------
     def issue_token(self, conn, person_id: str, watch_id: str | None) -> str:
