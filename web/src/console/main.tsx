@@ -1,6 +1,25 @@
 // The developer console (MAC-10) at /console: sign-in, first-sign-in terms, and the console shell.
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  BarChart3,
+  BookOpen,
+  Check,
+  ChevronsUpDown,
+  Gauge,
+  KeyRound,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  Plug,
+  Plus,
+  Settings,
+  ShieldCheck,
+  Users,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { createRoot } from "react-dom/client";
 import "@fontsource/dm-sans/latin-400.css";
 import "@fontsource/dm-sans/latin-500.css";
@@ -9,30 +28,37 @@ import "@fontsource/libre-caslon-display/latin-400.css";
 import "./console.css";
 import { ApiError, api, go, setCsrf, signOut, type Me, type Organisation } from "./api";
 import { Consent } from "./consent";
-import { AccessPage, Apps, Connect, Keys, MembersPage, Overview, Security, Settings, Usage } from "./pages";
-import { Loading, Mark, Problem } from "./ui";
+import { AccessPage, Apps, Connect, Keys, MembersPage, Overview, Security, Settings as Settings_, Usage } from "./pages";
+import { Dialog, Loading, Mark, Problem } from "./ui";
 
-const NAV: ([string, string] | string)[] = [
-  ["/console", "Overview"],
-  ["/console/keys", "API keys"],
-  ["/console/apps", "Connected apps"],
-  ["/console/usage", "Usage"],
-  "Organisation",
-  ["/console/members", "Members"],
-  ["/console/access", "Access and plan"],
-  ["/console/settings", "Settings"],
-  "Your account",
-  ["/console/security", "Security"],
+type NavItem = { to: string; label: string; icon: LucideIcon };
+const NAV: { group?: string; items: NavItem[] }[] = [
+  {
+    items: [
+      { to: "/console", label: "Dashboard", icon: LayoutDashboard },
+      { to: "/console/keys", label: "API keys", icon: KeyRound },
+      { to: "/console/apps", label: "Connected apps", icon: Plug },
+      { to: "/console/usage", label: "Usage", icon: BarChart3 },
+    ],
+  },
+  {
+    group: "Organisation",
+    items: [
+      { to: "/console/members", label: "Members", icon: Users },
+      { to: "/console/access", label: "Plan and limits", icon: Gauge },
+      { to: "/console/settings", label: "Settings", icon: Settings },
+    ],
+  },
 ];
 
 const TITLES: Record<string, string> = {
-  "/console": "Overview",
+  "/console": "Dashboard",
   "/console/keys": "API keys",
   "/console/apps": "Connected apps",
   "/console/connect": "Connect an app",
   "/console/usage": "Usage",
   "/console/members": "Members",
-  "/console/access": "Access and plan",
+  "/console/access": "Plan and limits",
   "/console/settings": "Settings",
   "/console/security": "Security",
   "/console/sign-in": "Sign in",
@@ -128,7 +154,7 @@ function Shell({ me, path, refresh }: { me: Me; path: string; refresh: () => voi
       case "/console/access":
         return <AccessPage {...props} />;
       case "/console/settings":
-        return <Settings {...props} />;
+        return <Settings_ {...props} />;
       case "/console/security":
         return <Security me={me} refresh={refresh} />;
       default:
@@ -136,84 +162,86 @@ function Shell({ me, path, refresh }: { me: Me; path: string; refresh: () => voi
           <div className="page-head">
             <h1>This page doesn't exist</h1>
             <button className="btn secondary" type="button" onClick={() => go("/console")}>
-              Go to the overview
+              Go to the dashboard
             </button>
           </div>
         );
     }
   })();
-  const initials = (me.person.display_name ?? me.person.email)
-    .split(/[\s@.]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]!.toUpperCase())
-    .join("");
+  const current = (to: string) => path === to || (path === "/console/connect" && to === "/console/apps");
   return (
     <div className="shell">
       <a className="skip" href="#main">
         Skip to content
       </a>
-      <nav className="side" aria-label="Console">
-        <a className="brand" href="/console" onClick={(e) => (e.preventDefault(), go("/console"))}>
-          <Mark size={28} />
-          <span>
-            open alvary <small>console</small>
-          </span>
-        </a>
-        {me.organisations.length > 1 ? (
-          <label className="org">
-            <span className="sr-only">Organisation</span>
-            <select value={org.id} onChange={(e) => choose(e.target.value)}>
-              {me.organisations.map((o) => (
-                <option key={o.id} value={o.id}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : (
-          <div className="org">
-            <b>{org.name}</b>
-          </div>
-        )}
-        <button className="menu-toggle" type="button" aria-expanded={menu} aria-controls="console-nav" onClick={() => setMenu(!menu)}>
-          Menu
-        </button>
-        <div id="console-nav" className={"nav" + (menu ? " open" : "")}>
-          {NAV.map((item) =>
-            typeof item === "string" ? (
-              <div className="nav-group" key={item}>
-                {item}
+      <aside className="side">
+        <div className="side-top">
+          <a className="brand" href="/console" onClick={(e) => (e.preventDefault(), go("/console"))}>
+            <Mark size={26} />
+            <span>
+              open alvary <small>console</small>
+            </span>
+          </a>
+          <button
+            className="menu-toggle"
+            type="button"
+            aria-expanded={menu}
+            aria-controls="console-nav"
+            onClick={() => setMenu(!menu)}
+          >
+            {menu ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
+            <span className="sr-only">Menu</span>
+          </button>
+        </div>
+        <div id="console-nav" className={"side-body" + (menu ? " open" : "")}>
+          <OrgSwitcher me={me} org={org} onChoose={(id) => (choose(id), setMenu(false))} />
+          <nav className="nav" aria-label="Console">
+            {NAV.map((section, i) => (
+              <div key={i} className="nav-section">
+                {section.group ? <div className="nav-group">{section.group}</div> : null}
+                {section.items.map(({ to, label, icon: Icon }) => (
+                  <a
+                    key={to}
+                    href={to}
+                    aria-current={current(to) ? "page" : undefined}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setMenu(false);
+                      go(to);
+                    }}
+                  >
+                    <Icon size={17} strokeWidth={1.8} aria-hidden="true" />
+                    {label}
+                  </a>
+                ))}
               </div>
-            ) : (
-              <a
-                key={item[0]}
-                href={item[0]}
-                aria-current={path === item[0] || (path === "/console/connect" && item[0] === "/console/apps") ? "page" : undefined}
-                onClick={(e) => {
-                  e.preventDefault();
-                  setMenu(false);
-                  go(item[0]);
-                }}
-              >
-                {item[1]}
-              </a>
-            ),
-          )}
+            ))}
+          </nav>
+          <div className="side-foot">
+            <a href="/developers" className="foot-link">
+              <BookOpen size={17} strokeWidth={1.8} aria-hidden="true" />
+              Documentation
+            </a>
+            <a href="/" className="foot-link">
+              <ArrowLeft size={17} strokeWidth={1.8} aria-hidden="true" />
+              Back to the website
+            </a>
+            <AccountMenu me={me} active={path === "/console/security"} />
+          </div>
         </div>
-        <div className="side-foot">
-          <a href="/developers">Documentation</a>
-          <a href="/">Back to reading</a>
-        </div>
-      </nav>
+      </aside>
       <div className="main-column">
-        <div className="topbar">
-          <a href="/about">Help</a>
-          <SignOut />
-          <span className="avatar" title={me.person.email} aria-label={`Signed in as ${me.person.email}`}>
-            {initials}
-          </span>
-        </div>
+        <header className="topbar">
+          <nav className="crumbs" aria-label="You are here">
+            <span>{org.name}</span>
+            <span aria-hidden="true">/</span>
+            <b>{TITLES[path] ?? "Console"}</b>
+          </nav>
+          <div className="topbar-links">
+            <a href="/developers">Docs</a>
+            <a href="/about">Help</a>
+          </div>
+        </header>
         <main id="main" tabIndex={-1} className="content">
           {page}
         </main>
@@ -222,11 +250,175 @@ function Shell({ me, path, refresh }: { me: Me; path: string; refresh: () => voi
   );
 }
 
-function SignOut() {
+function initials(text: string) {
+  return text
+    .split(/[\s@.]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]!.toUpperCase())
+    .join("");
+}
+
+// The organisation switcher (as in the Claude and OpenAI consoles): the current organisation and
+// its plan, the others to switch to, and a way to make a new one.
+function OrgSwitcher({ me, org, onChoose }: { me: Me; org: Organisation; onChoose: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    const key = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("keydown", key);
+    };
+  }, [open]);
   return (
-    <button className="link" type="button" onClick={signOut}>
-      Sign out
-    </button>
+    <div className="switcher" ref={ref}>
+      <button className="switcher-button" type="button" aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(!open)}>
+        <span className="org-badge" aria-hidden="true">
+          {initials(org.name)}
+        </span>
+        <span className="switcher-text">
+          <b>{org.name}</b>
+          <small>{planName(org)}</small>
+        </span>
+        <ChevronsUpDown size={16} aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="popover" role="menu">
+          <div className="popover-label">Organisations</div>
+          {me.organisations.map((o) => (
+            <button
+              key={o.id}
+              role="menuitemradio"
+              aria-checked={o.id === org.id}
+              type="button"
+              onClick={() => (setOpen(false), onChoose(o.id))}
+            >
+              <span className="org-badge small" aria-hidden="true">
+                {initials(o.name)}
+              </span>
+              <span className="switcher-text">
+                <b>{o.name}</b>
+                <small>{planName(o)}</small>
+              </span>
+              {o.id === org.id ? <Check size={16} aria-hidden="true" /> : null}
+            </button>
+          ))}
+          <div className="popover-rule" />
+          <button role="menuitem" type="button" onClick={() => (setOpen(false), setCreating(true))}>
+            <Plus size={16} aria-hidden="true" />
+            Create organisation
+          </button>
+        </div>
+      ) : null}
+      {creating ? <CreateOrganisation onClose={() => setCreating(false)} onCreated={onChoose} /> : null}
+    </div>
+  );
+}
+
+function planName(org: Organisation) {
+  if (org.access.state !== "active") return "No access";
+  if (org.access.starter) return "Starter · free";
+  return org.access.tier?.id === "pilot" ? "Pilot access" : (org.access.tier?.id ?? "Access");
+}
+
+function CreateOrganisation({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState("company");
+  const [error, setError] = useState<unknown>(null);
+  async function create(event: React.FormEvent) {
+    event.preventDefault();
+    try {
+      const made = await api<{ id: string }>("/organisations", { method: "POST", body: { name, kind } });
+      onCreated(made.id);
+      location.assign("/console");
+    } catch (e) {
+      setError(e);
+    }
+  }
+  return (
+    <Dialog title="Create an organisation" onClose={onClose}>
+      <form className="form" onSubmit={create}>
+        <p className="fine">
+          An organisation holds its own keys, connected apps, members and limits. It starts on the free starter plan.
+        </p>
+        <div className="field">
+          <label htmlFor="new-org-name">Name</label>
+          <input id="new-org-name" type="text" required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="field">
+          <label htmlFor="new-org-kind">Type</label>
+          <select id="new-org-kind" value={kind} onChange={(e) => setKind(e.target.value)}>
+            <option value="company">Company</option>
+            <option value="academic">Academic</option>
+            <option value="non_profit">Non-profit</option>
+            <option value="government">Government</option>
+            <option value="individual">Individual</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <Problem error={error} />
+        <div className="dialog-actions">
+          <button className="btn secondary" type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn" type="submit">
+            Create organisation
+          </button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+// The account menu at the foot of the sidebar: who is signed in, security, sign out.
+function AccountMenu({ me, active }: { me: Me; active: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  const name = me.person.display_name ?? me.person.email;
+  return (
+    <div className="account" ref={ref}>
+      {open ? (
+        <div className="popover up" role="menu">
+          <div className="popover-label">{me.person.email}</div>
+          <button role="menuitem" type="button" onClick={() => (setOpen(false), go("/console/security"))}>
+            <ShieldCheck size={16} aria-hidden="true" />
+            Security and profile
+          </button>
+          <button role="menuitem" type="button" onClick={signOut}>
+            <LogOut size={16} aria-hidden="true" />
+            Sign out
+          </button>
+        </div>
+      ) : null}
+      <button
+        className={"account-button" + (active ? " current" : "")}
+        type="button"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => setOpen(!open)}
+      >
+        <span className="avatar" aria-hidden="true">
+          {initials(name)}
+        </span>
+        <span className="switcher-text">
+          <b>{name}</b>
+          <small>{me.person.email}</small>
+        </span>
+        <ChevronsUpDown size={16} aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 

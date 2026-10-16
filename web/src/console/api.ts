@@ -113,7 +113,8 @@ export function clearDraft(key: string) {
 
 export type Access = {
   state: "none" | "active" | "lapsed" | "revoked" | "ended" | "scheduled";
-  entitlement?: string;
+  entitlement?: string | null;
+  starter?: boolean; // the free starter tier every organisation holds when it has nothing else
   tier?: { id: string; includes: string[]; allowance: Record<string, number> };
   scope?: { all?: boolean; jurisdictions?: string[] };
   ends_at?: string | null;
