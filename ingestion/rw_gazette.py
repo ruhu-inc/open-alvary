@@ -107,26 +107,33 @@ CONTENTS = re.compile(r"^(ISHAKIRO|TABLE OF CONTENTS|TABLE DES MATI[ÈE]RES)\b",
 # Where the body begins: a law's "We, KAGAME Paul," or an order's own author ("The Minister of …;",
 # "Minisitiri w'…;", "Le Ministre …;"), when an order has no contents list printed again after it.
 PREAMBLE = re.compile(
-    r"^(Twebwe|We|Nous)\s*,\s|^(The\s+(Prime\s+)?Minister|Minisitiri|Le\s+(Premier\s+)?Ministre|La\s+Ministre)\b.{0,120};$",
+    r"^(Twebwe|We|Nous)\s*,\s|^(The\s+(Prime\s+)?Minister|Minisitiri|Le\s+(Premier\s+)?Ministre|La\s+Ministre)\b.{0,120};$"
+    # A treaty (RLRC's international instruments) heads its preamble.
+    r"|^(PR[ÉE]AMBULE|PREAMBLE|IRANGASHINGIRO)\s*:?$",
     re.I,
 )
+# A title never runs on to another page, nor past this length (the longest printed is about 300
+# characters): beyond either, the body has begun even where nothing above recognised its start.
+HEADING_MAX = 600
 
 # Structure, in each language. "mbere", "One" and "premier" are the first of each.
 ONE = r"(?i:mbere|one|premi(?:er|ère)|first)"
+# Treaties number their articles in Roman numerals: "Article I", "Article XIV" (never empty).
+ROMAN = r"(?=[IVXL])(?:XL|L?X{0,3})(?:IX|IV|V?I{0,3})(?![A-Za-z])"
 # An article heading: the number, then a colon (or full stop), a capitalised title or nothing;
 # "Article 119 of this Law" at the start of a wrapped line is a reference, not a heading. The
 # Gazette's own slips are accepted and flagged for the reviewer: "Ingingoya 2", "ngingo ya 119",
 # "Ingingo 152", "Article167", and "Article 20" printed in the Kinyarwanda column.
 _TAIL = r"\s*(?:[:.]\s*(.*)|\s+([A-ZÀ-Ý].*)|$)"
 ARTICLE = {
-    "rw": re.compile(rf"^(?:[Ii]?ngingo\s*(?:ya\s*)?|INGINGO\s+YA\s+|Article\s*)({ONE}|\d+){_TAIL}"),
-    "en": re.compile(rf"^(?:Article|ARTICLE)\s*({ONE}|\d+){_TAIL}"),
-    "fr": re.compile(rf"^(?:Article|ARTICLE)\s*({ONE}|\d+){_TAIL}"),
+    "rw": re.compile(rf"^(?:[Ii]?ngingo\s*(?:ya\s*)?|INGINGO\s+YA\s+|Article\s*)({ONE}|\d+|{ROMAN}){_TAIL}"),
+    "en": re.compile(rf"^(?:Article|ARTICLE)\s*({ONE}|\d+|{ROMAN}){_TAIL}"),
+    "fr": re.compile(rf"^(?:Article|ARTICLE)\s*({ONE}|\d+|{ROMAN}){_TAIL}"),
 }
 STANDARD_ARTICLE = {
-    "rw": re.compile(rf"^Ingingo ya ({ONE}|\d+)\s?:"),
-    "en": re.compile(rf"^Article ({ONE}|\d+)\s?:"),
-    "fr": re.compile(rf"^Article ({ONE}|\d+)\s?:"),
+    "rw": re.compile(rf"^Ingingo ya ({ONE}|\d+|{ROMAN})\s?:"),
+    "en": re.compile(rf"^Article ({ONE}|\d+|{ROMAN})\s?:"),
+    "fr": re.compile(rf"^Article ({ONE}|\d+|{ROMAN})\s?:"),
 }
 LANGUAGE_NAMES = {"rw": "Kinyarwanda", "en": "English", "fr": "French"}
 DIVISIONS = {
@@ -569,8 +576,17 @@ def _capitals(text: str) -> bool:
     return bool(letters) and sum(c.isupper() for c in letters) >= 0.8 * len(letters)
 
 
+ROMAN_VALUES = {"I": 1, "V": 5, "X": 10, "L": 50}
+
+
 def _number(word: str) -> str:
-    return "1" if re.fullmatch(ONE, word, re.I) else word
+    """An article's number in figures: "mbere"/"One"/"premier" are 1, "XIV" is 14."""
+    if re.fullmatch(ONE, word, re.I):
+        return "1"
+    if re.fullmatch(ROMAN, word):
+        values = [ROMAN_VALUES[c] for c in word]
+        return str(sum(-v if i + 1 < len(values) and v < values[i + 1] else v for i, v in enumerate(values)))
+    return word
 
 
 def structure(lines: list[dict], language: str, part: str = "heading") -> list[dict]:
@@ -596,6 +612,16 @@ def structure(lines: list[dict], language: str, part: str = "heading") -> list[d
             )
             previous = line
             continue
+        if (
+            part == "heading"
+            and nodes
+            and nodes[-1]["kind"] == "heading"
+            and previous is not None
+            and (previous["page"] != line["page"] or len(nodes[-1]["text"]) > HEADING_MAX)
+        ):
+            # The title cannot go on: whatever opened the body was not recognised (a treaty's "The
+            # State Parties", an order without a minister's line). Read the rest as the body.
+            part = "body"
         if part in ("heading", "contents") and PREAMBLE.match(text):
             part = "body"
         if part == "contents" and (OPENING[language].match(text) or CONSTITUTION[language].match(text)):
