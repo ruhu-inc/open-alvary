@@ -170,7 +170,7 @@ async function accessView(parts) {
   setCrumbs(el("a", { href: "#/", text: "Home" }), parts[0] ? el("a", { href: "#/access", text: "Access" }) : "Access", ...(parts[0] === "audit" ? ["Audit log"] : []));
   if (parts[0] === "org" && parts[1]) return organisationView(parts[1]);
   if (parts[0] === "audit") return accessAuditView();
-  const [bar, requests] = await Promise.all([passkeyBar(), api("/api/access/requests")]);
+  const [bar, requests, clients] = await Promise.all([passkeyBar(), api("/api/access/requests"), api("/api/access/clients")]);
   const search = el("input", { type: "search", placeholder: "Organisation name or ID, or a member's email" });
   const results = el("ul", { class: "plain" });
   search.addEventListener("input", async () => {
@@ -196,6 +196,20 @@ async function accessView(parts) {
     el("div", { class: "card" }, el("h3", { text: "Revoke a leaked key or connected app" }),
       el("p", { class: "muted", text: "A pasted key is read only for its ID; it is never stored or logged." }),
       form("", [["credential", "Key or ID", credential]], "Revoke", (v) => change("/api/access/credentials/revoke", v, async () => { credential.value = ""; }), { danger: true })),
+    el("div", { class: "card" }, el("h3", { text: "Verified publishers" }),
+      el("p", { class: "muted", text: "Apps connecting with exactly this client metadata address are shown to people as from their publisher. Review the document first; apps already connected keep their label." }),
+      table(["Name", "Publisher", "Client metadata", "Pinned", ""], clients.data.map((c) => el("tr", {},
+        el("td", { text: c.name }), el("td", { text: c.publisher }),
+        el("td", {}, el("a", { href: c.client_id, target: "_blank", rel: "noreferrer", text: c.client_id })),
+        el("td", { text: c.unpinned_at ? `unpinned ${day(c.unpinned_at)} by ${c.unpinned_by}` : `${day(c.pinned_at)} by ${c.pinned_by}` }),
+        el("td", {}, c.unpinned_at ? null : el("details", {}, el("summary", { text: "Unpin" }),
+          form("Unpin", [], "Unpin", (v) => change("/api/access/clients/unpin", { ...v, client_id: c.client_id }, () => route()), { danger: true })))))),
+      el("details", {}, el("summary", { text: "Pin a tool" }),
+        form("", [
+          ["client_id", "Client metadata (https)", el("input", { type: "text", placeholder: "https://…/client.json" })],
+          ["name", "Name", el("input", { type: "text", maxlength: "100" })],
+          ["publisher", "Publisher", el("input", { type: "text", maxlength: "100" })],
+        ], "Pin", (v) => change("/api/access/clients", v, () => route())))),
     el("p", {}, el("a", { href: "#/access/audit", text: "The whole audit log →" })),
   );
 }

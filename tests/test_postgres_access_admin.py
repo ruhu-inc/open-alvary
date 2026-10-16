@@ -223,3 +223,28 @@ def test_the_role_signs_in_with_its_password_and_refuses_an_unsafe_one(pg_engine
         with pg_engine.begin() as conn:
             conn.execute(text(f'DROP OWNED BY "{role}"'))
             conn.execute(text(f'DROP ROLE "{role}"'))
+
+
+def test_operators_pin_and_unpin_verified_publishers_and_the_label_follows(world):
+    owner_store, admin, _, _ = world
+    claude = "https://claude.ai/oauth/mcp-oauth-client-metadata"
+    assert owner_store.verified_client(claude) == ("Claude", "Anthropic")  # certified hosts, seeded
+    tool = "https://tools.example.org/oauth/client.json"
+    assert owner_store.verified_client(tool) is None
+    with pytest.raises(AccountError):
+        admin.pin(act("Reviewed"), "http://tools.example.org/client.json", "Tool", "Example")
+    admin.pin(act("Metadata reviewed", "review notes 12"), tool, "Example Tool", "Example Ltd")
+    assert owner_store.verified_client(tool) == ("Example Tool", "Example Ltd")
+    admin.unpin(act("Publisher changed hands"), tool)
+    assert owner_store.verified_client(tool) is None
+    with pytest.raises(AccountError) as again:
+        admin.unpin(act("Twice"), tool)
+    assert again.value.code == "not_found"
+    admin.pin(act("Reviewed again"), tool, "Example Tool", "Example Ltd")  # pinned again, same row
+    listed = {c["client_id"]: c for c in admin.verified_clients()}
+    assert listed[tool]["pinned_by"] == "operator@example.org" and listed[tool]["unpinned_at"] is None
+    assert [e["action"] for e in admin.audit(action="client.")][:3] == [
+        "client.pinned",
+        "client.unpinned",
+        "client.pinned",
+    ]

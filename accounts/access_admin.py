@@ -434,6 +434,72 @@ class AccessAdmin:
             )
             return {"kind": kind, "id": value, "organisation_id": row["organisation_id"]}
 
+    # --- verified publishers (MAC-07) ---------------------------------------------------------
+
+    def verified_clients(self) -> list[dict]:
+        with self.accounts.engine.connect() as conn:
+            return self._rows(
+                conn,
+                f"SELECT client_id, name, publisher, pinned_by, reason, pinned_at, unpinned_at, unpinned_by"
+                f" FROM {self._t(conn, 'verified_client')} ORDER BY unpinned_at IS NOT NULL, publisher, name",
+            )
+
+    def pin(self, action: Action, client_id: str, name: str, publisher: str) -> None:
+        """Show a tool as a verified publisher, after reviewing its client metadata document: the
+        label applies to that exact address only, and to apps connected from now on."""
+        client_id, name, publisher = client_id.strip(), " ".join(name.split()), " ".join(publisher.split())
+        if not re.fullmatch(r"https://[^\s]{1,2000}", client_id) or not (
+            0 < len(name) <= 100 and 0 < len(publisher) <= 100
+        ):
+            raise AccountError(
+                "invalid_input", 400, "Give the https address of its client metadata, a name and a publisher."
+            )
+        with self.accounts.engine.begin() as conn:
+            conn.execute(
+                text(
+                    f"INSERT INTO {self._t(conn, 'verified_client')} (client_id, name, publisher, pinned_by, reason)"
+                    " VALUES (:c, :n, :p, :by, :r) ON CONFLICT (client_id) DO UPDATE SET name = EXCLUDED.name,"
+                    " publisher = EXCLUDED.publisher, pinned_by = EXCLUDED.pinned_by, reason = EXCLUDED.reason,"
+                    " pinned_at = statement_timestamp(), unpinned_at = NULL, unpinned_by = NULL"
+                ),
+                {
+                    "c": client_id,
+                    "n": name,
+                    "p": publisher,
+                    "by": action.operator,
+                    "r": action.reason.strip(),
+                },
+            )
+            self.accounts._audit(
+                conn,
+                ("operator", action.operator),
+                "client.pinned",
+                target=("client", client_id[:200]),
+                summary=action.summary(name=name, publisher=publisher),
+                context=action.context,
+            )
+
+    def unpin(self, action: Action, client_id: str) -> None:
+        """Stop showing a tool as a verified publisher; apps already connected keep their label."""
+        with self.accounts.engine.begin() as conn:
+            done = conn.execute(
+                text(
+                    f"UPDATE {self._t(conn, 'verified_client')} SET unpinned_at = statement_timestamp(),"
+                    " unpinned_by = :by WHERE client_id = :c AND unpinned_at IS NULL"
+                ),
+                {"c": client_id, "by": action.operator},
+            ).rowcount
+            if not done:
+                raise AccountError("not_found", 404, "No pinned tool with that address.")
+            self.accounts._audit(
+                conn,
+                ("operator", action.operator),
+                "client.unpinned",
+                target=("client", client_id[:200]),
+                summary=action.summary(),
+                context=action.context,
+            )
+
 
 # --- the database role ----------------------------------------------------------------------------
 
@@ -457,6 +523,7 @@ READ = {
     "usage_day": None,
     "audit_event": None,
     "console_session": "person_id, revoked_at",
+    "verified_client": None,
 }
 WRITE = (
     "INSERT ON {a}.audit_event, {a}.entitlement, {a}.entitlement_event",
@@ -466,6 +533,8 @@ WRITE = (
     "UPDATE (role, revision, updated_at) ON {a}.membership",
     "UPDATE (revoked_at, revoked_reason) ON {a}.api_key, {a}.client_grant",
     "UPDATE (revoked_at) ON {a}.console_session",
+    "INSERT ON {a}.verified_client",
+    "UPDATE (name, publisher, pinned_by, reason, pinned_at, unpinned_at, unpinned_by) ON {a}.verified_client",
 )
 
 

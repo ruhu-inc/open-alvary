@@ -160,16 +160,6 @@ def _claims(token: str) -> dict:
         raise AccountError("sign_in_refused", 401, "The sign-in could not be verified. Try again.") from error
 
 
-# Tools reviewed by the operator and pinned by their client metadata document address (MAC-07):
-# shown as verified publishers. Any other https client ID is "from <host>"; the rest unverified.
-VERIFIED = {
-    "https://claude.ai/oauth/mcp-oauth-client-metadata": ("Claude", "Anthropic"),
-    "https://claude.ai/oauth/claude-code-client-metadata": ("Claude Code", "Anthropic"),
-    "https://chatgpt.com/oauth/client.json": ("ChatGPT", "OpenAI"),
-    "https://chatgpt.com/oauth/codex/client.json": ("Codex", "OpenAI"),
-}
-
-
 def _b64e(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).rstrip(b"=").decode()
 
@@ -855,7 +845,9 @@ def create_console_app(
 
     def app_label(payload: dict) -> dict:
         client_id = str(payload.get("client_id") or "")
-        name, publisher = VERIFIED.get(client_id, (None, None))
+        # Tools an operator reviewed and pinned by their client metadata document's address (MAC-07,
+        # MAC-11): verified publishers. Any other https client ID is "from <host>"; the rest unverified.
+        name, publisher = accounts.verified_client(client_id) or (None, None)
         host = urlsplit(client_id).hostname if client_id.startswith("https://") else None
         returns = urlsplit(str(payload.get("redirect_uri") or "")).hostname or ""
         return {
