@@ -120,7 +120,7 @@ upload() {
   "${PYTHON:-.venv/bin/python}" -m workbench.prepare
   # Only what the workbench reads: reconciled readings, the positional reader's output, page images.
   "${GC[@]}" storage rsync "$COLLECTION" "gs://$BUCKET" --recursive --delete-unmatched-destination-objects \
-    --exclude='.*\.pdf$|.*\.txt$|.*\.pages\.json$|.*\.extraction\.json$|.*\.provenance\.json$|.*\.layout\.json$|.*\.review\.html$|^pages/.*|^runs/.*|^readings/[^/]+/(docai|mineru)\.json$|^readings/\..*|.*/\..*'
+    --exclude='.*\.pdf$|.*\.txt$|.*\.pages\.json$|.*\.extraction\.json$|.*\.provenance\.json$|.*\.layout\.json$|(.*\.)?review\.html$|^pages/.*|^runs/.*|^readings/[^/]+/(docai|mineru)\.json$|^readings/\..*|.*/\..*'
 }
 
 deploy() {
