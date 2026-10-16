@@ -598,3 +598,42 @@ def test_unsure_ocr_words_left_out_are_a_low_flag_not_a_word_to_check():
     flags = RG.reading([node], {}, "0" * 64, {})["pages"][0]["flags"]
     kinds = {f["kind"]: f["severity"] for f in flags}
     assert kinds == {"unsure_words_dropped": "low", "reading_differs": "medium"}
+
+
+def _lines(*pages: list[str]) -> list[dict]:
+    """Lines laid out as printed: each page's lines 14 pt apart (a new paragraph each)."""
+    return [
+        {"text": text, "page": number, "x0": 0, "x1": 300, "y0": 20 * i, "y1": 20 * i + 10}
+        for number, texts in enumerate(pages, 2)
+        for i, text in enumerate(texts)
+    ]
+
+
+def test_a_treaty_reads_as_articles_on_their_own_pages_not_one_title():
+    # RLRC's international instruments open on "PREAMBULE", not "Nous, …", and number articles
+    # in Roman numerals: once read as one 14,000-character title on the first page (2,908 versions).
+    lines = _lines(
+        ["PREAMBULE", "Les États parties au présent Protocole,", "CONVAINCUS de l'importance des immunités,"],
+        [
+            "Article I: Définition",
+            "Aux fins du présent protocole, « Fonctionnaire » signifie toute personne.",
+        ],
+        ["Article XIV : Entrée en vigueur", "Le présent Protocole entre en vigueur à sa signature."],
+    )
+    nodes = RG.structure(lines, "fr")
+    assert {n["page"] for n in nodes} == {2, 3, 4}
+    articles = [(n["article"], n["text"], n["page"]) for n in nodes if n.get("article")]
+    assert articles == [("1", "Définition", 3), ("14", "Entrée en vigueur", 4)]
+    assert not any(n.get("unusual") for n in nodes)
+
+
+def test_a_title_never_runs_on_to_another_page():
+    # Whatever opened the body went unrecognised: the title still ends with its page.
+    lines = _lines(
+        ["ITEKA RYA MINISITIRI N° 001 RYO KUWA 01/01/2020", "RIGENA IBIJYANYE N'IBINDI"],
+        ["Ingingo ya mbere: Icyo iri teka rigamije", "Iri teka rigena ibijyanye n'ibindi."],
+    )
+    nodes = RG.structure(lines, "rw")
+    assert nodes[0]["kind"] == "heading" and nodes[0]["page"] == 2 and "Ingingo" not in nodes[0]["text"]
+    assert [n["article"] for n in nodes if n.get("article")] == ["1"]
+    assert all(n["page"] == 3 for n in nodes[1:])
