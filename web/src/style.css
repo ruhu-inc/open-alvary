@@ -2282,3 +2282,9 @@ nav.breadcrumb a:hover {
 .developer-changes dd {
   line-height: 1.7;
 }
+.record-follow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 6px;
+}

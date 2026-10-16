@@ -1,7 +1,7 @@
 // The public record of changes (SUB C1, changes-contracts.md): records added, corrected or withdrawn
 // and texts published, newest first, with the coverage they rest on and feeds to follow them.
 import { useEffect, useMemo, useState } from "react";
-import { Check, Copy, ExternalLink, History, Rss } from "lucide-react";
+import { Bell, Check, Copy, ExternalLink, History, Rss } from "lucide-react";
 import { Link, PageTitle, jurisdictionName } from "./site";
 import { copyText } from "./tools";
 
@@ -212,9 +212,14 @@ export function RecordChanges({ id }: { id: string }) {
       ) : (
         <p>{recent.data ? "No changes in the last 90 days." : "Loading…"}</p>
       )}
-      <a className="text-link" href={"/api/changes/feed.atom?work=" + encodeURIComponent(id)}>
-        <Rss size={14} aria-hidden="true" /> Follow this record’s changes
-      </a>
+      <div className="record-follow">
+        <a className="text-link" href={"/console/monitor?new=1&work=" + encodeURIComponent(id)}>
+          <Bell size={14} aria-hidden="true" /> Monitor this record
+        </a>
+        <a className="text-link" href={"/api/changes/feed.atom?work=" + encodeURIComponent(id)}>
+          <Rss size={14} aria-hidden="true" /> Feed
+        </a>
+      </div>
     </section>
   );
 }

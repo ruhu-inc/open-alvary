@@ -24,6 +24,7 @@ class Message:
     to: str
     subject: str
     text: str  # the message; the HTML version is built from it
+    headers: tuple[tuple[str, str], ...] = ()  # for example List-Unsubscribe (RFC 8058)
 
 
 class Mailer:
@@ -51,6 +52,8 @@ class Mailer:
             "text": message.text,
             "html": html(message.text),
         }
+        if message.headers:
+            body["headers"] = dict(message.headers)
         for wait in (1, 4, 0):
             try:
                 answer = self.http.post(
@@ -162,3 +165,67 @@ def sign_in_changed(to: str, added: bool, method: str, base: str) -> Message:
         f"{what} was {change} your Open Alvary account.\n\nIf this wasn't you, sign in at {base}/console, "
         "review Security, sign out everywhere, and tell us by replying to this email.\n\n" + SIGN_OFF,
     )
+
+
+def digest(
+    to: str,
+    cadence: str,
+    groups: list[tuple[str, list[dict], str | None]],
+    extra: int,
+    base: str,
+    stop_all: str,
+) -> Message:
+    """A watch digest: per watch, each change's label, title, date, summary and link. No full text,
+    no tracking. ``groups`` holds (watch name, events, link to stop this watch's email)."""
+    count = sum(len(events) for _, events, _ in groups) + extra
+    noun = "change" if count == 1 else "changes"
+    subject = f"Open Alvary: {count} {noun} for your monitors" + (" this week" if cadence == "weekly" else "")
+    parts = [f"Here is what changed in the catalogue for your monitors ({cadence} digest)."]
+    for name, events, stop in groups:
+        lines = [name]
+        for e in events:
+            title = (
+                (e.get("work") or {}).get("title") or (e.get("jurisdiction") or {}).get("name") or "A record"
+            )
+            lines.append(
+                f"- {LABELS.get(e['event_type'], e['event_type'])}: {title} ({e['committed_at'][:10]})"
+            )
+            lines.append(f"  {e['summary']}")
+            if (e.get("work") or {}).get("url"):
+                lines.append(f"  {e['work']['url']}")
+        if stop:
+            lines.append(f"Stop emails for this monitor: {stop}")
+        parts.append("\n".join(lines))
+    if extra:
+        parts.append(f"And {extra} more in your inbox.")
+    parts.append(
+        f"See everything in your inbox: {base}/console/monitor\n"
+        "These are changes to what Open Alvary holds, not every change in a country's law."
+    )
+    parts.append(f"Stop all digest emails: {stop_all}")
+    return Message(
+        to,
+        subject,
+        "\n\n".join(parts) + "\n\n" + SIGN_OFF,
+        (("List-Unsubscribe", f"<{stop_all}>"), ("List-Unsubscribe-Post", "List-Unsubscribe=One-Click")),
+    )
+
+
+def watches_paused(to: str, organisation: str, count: int, base: str) -> Message:
+    noun = "monitor was" if count == 1 else "monitors were"
+    return Message(
+        to,
+        f"{count} {noun} paused for {organisation}",
+        f"{organisation}'s plan includes fewer monitors than it has, so {count} {noun} paused, newest first. "
+        f"Nothing was deleted. Resume them after removing others, or see Plan and limits at "
+        f"{base}/console/access.\n\n" + SIGN_OFF,
+    )
+
+
+LABELS = {
+    "catalogue_added": "Added",
+    "metadata_corrected": "Corrected",
+    "text_version_published": "Text published",
+    "withdrawal": "Withdrawn",
+    "coverage_changed": "Coverage",
+}

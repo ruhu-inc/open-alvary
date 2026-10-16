@@ -40,11 +40,14 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
 from accounts import mail, policies, roles
 from accounts.store import AccountError, Accounts, Context
 from api.admission import client_address
+from changes.routes import site_origin
+from changes.watches import Watches
 
 SESSION_COOKIE = "oa_console"
 FLOW_COOKIE = "oa_console_flow"
@@ -791,10 +794,6 @@ def create_console_app(
     def audit(request: Request, organisation_id: str, before: int | None = None):
         return {"events": accounts.audit_log(guard(request)["person_id"], organisation_id, before=before)}
 
-    @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PATCH", "DELETE", "PUT"])
-    def unknown(request: Request, rest: str):
-        return error(request, 404, "not_found", "No such console route.")
-
     # ---------- approving an app (MAC-07) ----------
     def hand_off(token: str) -> dict:
         """The provider's signed hand-off: who signed in, which app, for which resource."""
@@ -911,6 +910,85 @@ def create_console_app(
         return {
             "redirect": f"{provider.config.issuer}continue?{urlencode({'state': state, 'consent_token': answer})}"
         }
+
+    # ---------- watches, inbox and digest email (SUB C2) ----------
+    watches = Watches(accounts)
+    watch_path = "/api/v1/organisations/{organisation_id}/watches"
+
+    @app.get(watch_path)
+    def list_watches(request: Request, organisation_id: str):
+        return watches.list(guard(request)["person_id"], organisation_id)
+
+    @app.post(watch_path)
+    async def create_watch(request: Request, organisation_id: str):
+        session = guard(request, write=True)
+        created = watches.create(session["person_id"], organisation_id, await body(request), context(request))
+        return JSONResponse(jsonable_encoder(created), status_code=201)
+
+    @app.post(watch_path + "/preview")
+    async def preview_watch(request: Request, organisation_id: str):
+        session = guard(request, write=True)
+        data = await body(request)
+        return watches.preview(
+            session["person_id"], organisation_id, data.get("filters"), site_origin(request)
+        )
+
+    @app.patch(watch_path + "/{watch_id}")
+    async def update_watch(request: Request, organisation_id: str, watch_id: str):
+        session = guard(request, write=True)
+        data = await body(request)
+        return watches.update(session["person_id"], organisation_id, watch_id, data, context(request))
+
+    @app.post(watch_path + "/{watch_id}/email")
+    async def watch_email(request: Request, organisation_id: str, watch_id: str):
+        session = guard(request, write=True)
+        data = await body(request)
+        watches.set_email(session["person_id"], organisation_id, watch_id, data.get("email"))
+        return Response(status_code=204)
+
+    @app.delete(watch_path + "/{watch_id}")
+    def delete_watch(request: Request, organisation_id: str, watch_id: str):
+        session = guard(request, write=True)
+        watches.delete(session["person_id"], organisation_id, watch_id, context(request))
+        return Response(status_code=204)
+
+    @app.get("/api/v1/organisations/{organisation_id}/inbox")
+    def inbox(request: Request, organisation_id: str, watch: str | None = None, unread: bool = False):
+        session = guard(request)
+        return watches.inbox(
+            session["person_id"], organisation_id, site_origin(request), watch_id=watch, unread=unread
+        )
+
+    @app.post("/api/v1/organisations/{organisation_id}/inbox/read")
+    async def inbox_read(request: Request, organisation_id: str):
+        session = guard(request, write=True)
+        data = await body(request)
+        watches.mark_read(session["person_id"], organisation_id, data.get("ids"))
+        return Response(status_code=204)
+
+    @app.get("/api/v1/me/notifications")
+    def notifications(request: Request):
+        return watches.preferences(guard(request)["person_id"])
+
+    @app.patch("/api/v1/me/notifications")
+    async def set_notifications(request: Request):
+        session = guard(request, write=True)
+        return watches.set_preferences(session["person_id"], await body(request))
+
+    # The link in each digest: GET describes (link scanners open links), POST unsubscribes; the
+    # token is the credential, so neither needs a session (RFC 8058 one-click).
+    @app.get("/api/v1/unsubscribe/{token}")
+    def describe_unsubscribe(token: str):
+        return watches.describe_unsubscribe(token)
+
+    @app.post("/unsubscribe/{token}")
+    def unsubscribe(token: str):
+        return watches.unsubscribe(token)
+
+    # Declared last: every console API route above wins over this.
+    @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PATCH", "DELETE", "PUT"])
+    def unknown(request: Request, rest: str):
+        return error(request, 404, "not_found", "No such console route.")
 
     # ---------- the console page ----------
     @app.get("/{path:path}")
