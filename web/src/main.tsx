@@ -21,6 +21,7 @@ import "@fontsource/dm-sans/latin-600.css";
 import "@fontsource/libre-caslon-display/latin-400.css";
 import "./style.css";
 import { AcceptableUse, Privacy, Terms } from "./legal";
+import { Security } from "./security";
 import {
   PageTitle,
   ProjectContext,
@@ -197,6 +198,7 @@ function App() {
       ["/privacy", "Privacy"],
       ["/terms", "Terms of service"],
       ["/acceptable-use", "Acceptable use"],
+      ["/security", "Security"],
     ].find(([url]) => url === pathname)?.[1];
     // Record pages and the not-found page name themselves.
     if (title) document.title = `${title} · Open Alvary`;
@@ -248,6 +250,8 @@ function App() {
             <Terms />
           ) : pathname === "/acceptable-use" ? (
             <AcceptableUse />
+          ) : pathname === "/security" ? (
+            <Security />
           ) : pathname === "/developers" ? (
             <Developers />
           ) : import.meta.env.DEV && pathname === "/dev/reader" ? (

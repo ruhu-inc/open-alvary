@@ -196,6 +196,20 @@ every endpoint's secret unreadable: endpoints must then rotate their secrets. To
 key, add a version holding both keys and deploy with `WEBHOOK_KEY_ID=<new id>`; existing secrets stay
 readable under the old key. Without the secret, webhooks are off (503) and the worker skips delivery.
 
+## Security page and security.txt (MAC-13)
+
+`/security` describes how accounts and data are protected and gives the vulnerability disclosure
+policy; `/.well-known/security.txt` (RFC 9116) points to it, on the website's domain and, after
+activation B, on the API's.
+
+- Reports arrive at hello@ruhu.ai with "Security" in the subject. Acknowledge each within 3 working
+  days, keep the reporter informed, and agree the publication date with them.
+- Renew `EXPIRES` in `api/security_txt.py` every six months (next by 2027-03-31). A test in
+  `tests/test_site.py` fails 30 days before it lapses; `public_service.sh verify` prints the live value.
+- Keep the page true: a change to sign-in methods, second-factor rules, providers, retention or
+  encryption updates `web/src/security.tsx` in the same commit. Its disclosure terms take effect
+  with the legal pages (`APPROVED` in `web/src/legal.tsx`).
+
 ## Serving epochs and restore recovery
 
 Policy-governed public serving (migration `0015`; currently the `eligible_metadata` view, not the

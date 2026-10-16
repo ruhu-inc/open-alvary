@@ -466,6 +466,7 @@ verify() {
   echo "  repository link $repository -> $(curl -s -o /dev/null -w '%{http_code}' "$repository") (must be 200)"
   echo "  the service's own address: $("${GC[@]}" run services describe "$SERVICE" --region="$REGION" --format='value(status.url)' || true) (empty: no default address)"
   echo "  change feed -> $(curl_lb -o /dev/null -w '%{http_code}' "$base/api/changes") (200, before and after activation B)"
+  echo "  security.txt -> $(curl_lb "$base/.well-known/security.txt" | sed -n 's/^Expires: //p') (expiry more than 30 days ahead; MAC-13)"
   if [[ "$ACCOUNTS" == 1 ]]; then
     echo "Activation B:"
     echo "  console -> $(curl_lb -o /dev/null -w '%{http_code}' "$base/console/") (200)"

@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import FastAPI
@@ -135,6 +136,24 @@ def test_legacy_api_unchanged_beside_the_site(client):
     assert client.get("/api/sources?limit=2&offset=2").status_code == 200
     assert client.get("/healthz").json() == {"status": "ok"}
     assert client.get("/api/healthz").json() == {"status": "ok"}
+
+
+def test_security_txt_follows_rfc_9116_and_is_renewed_before_it_lapses(client, monkeypatch):
+    monkeypatch.setenv("PUBLIC_DOMAIN", "open.alvary.ai")
+    response = client.get("/.well-known/security.txt")
+    assert response.status_code == 200 and response.headers["content-type"] == "text/plain; charset=utf-8"
+    fields = [line.split(": ", 1) for line in response.text.splitlines()]
+    assert fields == [
+        ["Contact", "mailto:hello@ruhu.ai"],
+        ["Expires", fields[1][1]],
+        ["Policy", "https://open.alvary.ai/security#disclosure"],
+        ["Canonical", "https://open.alvary.ai/.well-known/security.txt"],  # the API's domain is not live yet
+        ["Preferred-Languages", "en"],
+    ]
+    expires = datetime.strptime(fields[1][1], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+    # RFC 9116 asks for less than a year ahead; renew api/security_txt.EXPIRES before this fails.
+    assert timedelta(days=30) < expires - datetime.now(UTC) < timedelta(days=366)
+    assert "/security" in client.get("/sitemap.xml").text
 
 
 def test_service_refuses_to_start_without_the_site_class(monkeypatch, tmp_path, store):

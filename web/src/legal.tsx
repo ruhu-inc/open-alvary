@@ -12,7 +12,7 @@ const TO_CONFIRM: string[] = [];
 const OPERATOR = "Ruhu, Inc.";
 const ADDRESS = "1111B South Governors Ave, STE 52865, Dover, DE 19904, United States";
 
-function Status() {
+export function Status() {
   return (
     <div className="legal-status" role="note">
       <p>
@@ -27,10 +27,10 @@ function Status() {
 }
 
 // Ruhu, Inc.'s own addresses, as on its legal pages: legal matters and privacy.
-const LEGAL_EMAIL = "hello@ruhu.ai";
+export const LEGAL_EMAIL = "hello@ruhu.ai";
 const PRIVACY_EMAIL = "privacy@ruhu.ai";
 
-function Email({ address }: { address: string }) {
+export function Email({ address }: { address: string }) {
   return <a href={`mailto:${address}`}>{address}</a>;
 }
 
