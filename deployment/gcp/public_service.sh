@@ -439,6 +439,48 @@ audit_seals() {  # once: the seals' copy outside the database (MAC-13.7), kept 8
   echo "retention (irreversible): gcloud --project $PROJECT logging buckets update audit-seals --location=$REGION --locked"
 }
 
+alerts() {  # once: email whoever answers when a scheduled job fails (a broken audit seal fails the daily run)
+  local email channel policy="Open Alvary: a scheduled job failed"
+  email="$(setting ALERT_EMAIL)"
+  [[ -n "$email" ]] || { echo "Set ALERT_EMAIL (who answers the alerts) in the environment or .env" >&2; exit 1; }
+  channel="$("${GC[@]}" beta monitoring channels list --filter="type=\"email\" AND labels.email_address=\"$email\"" \
+    --format='value(name)' | head -1)"
+  [[ -n "$channel" ]] || channel="$("${GC[@]}" beta monitoring channels create --display-name="Open Alvary operator" \
+    --type=email --channel-labels=email_address="$email" --format='value(name)')"
+  if "${GC[@]}" alpha monitoring policies list --filter="displayName=\"$policy\"" --format='value(name)' | grep -q .; then
+    echo "Alert policy already there: $policy"
+    return
+  fi
+  local file
+  file="$(mktemp)"
+  trap 'rm -f "$file"' RETURN
+  cat >"$file" <<POLICY
+{
+  "displayName": "$policy",
+  "combiner": "OR",
+  "conditions": [{
+    "displayName": "A run of $DAILY_JOB or $WORKER_JOB failed",
+    "conditionThreshold": {
+      "filter": "resource.type = \"cloud_run_job\" AND metric.type = \"run.googleapis.com/job/completed_execution_count\" AND metric.labels.result = \"failed\" AND (resource.labels.job_name = \"$DAILY_JOB\" OR resource.labels.job_name = \"$WORKER_JOB\")",
+      "aggregations": [{"alignmentPeriod": "300s", "perSeriesAligner": "ALIGN_SUM", "crossSeriesReducer": "REDUCE_SUM", "groupByFields": ["resource.label.job_name"]}],
+      "comparison": "COMPARISON_GT",
+      "thresholdValue": 0,
+      "duration": "0s",
+      "trigger": {"count": 1}
+    }
+  }],
+  "notificationChannels": ["$channel"],
+  "alertStrategy": {"autoClose": "86400s"},
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "A scheduled job failed. For $DAILY_JOB, look first for an ERROR line 'audit seal check' (deployment/runbook.md, Audit log seals); for $WORKER_JOB, see Monitors and webhooks."
+  }
+}
+POLICY
+  "${GC[@]}" alpha monitoring policies create --policy-from-file="$file" --format='value(name)'
+  echo "Alerts on failed runs of $DAILY_JOB and $WORKER_JOB go to $email."
+}
+
 access_role() {  # once, after an ACCOUNTS=1 deploy: the role the workbench's Access section signs in as (MAC-11)
   "${GC[@]}" secrets describe access-role-password >/dev/null 2>&1 \
     || python3 -c 'import secrets,string; a=string.ascii_letters+string.digits; print("".join(secrets.choice(a) for _ in range(40)), end="")' \
@@ -516,4 +558,4 @@ status() {
   echo "Load balancer address: $(address 2>/dev/null || echo none)"
 }
 
-"${1:?plan, project, setup, deploy, edge, dns, verify, status; activation B: accounts, api_edge, schedule, audit_seals, access_role}" "${@:2}"
+"${1:?plan, project, setup, deploy, edge, dns, verify, status; activation B: accounts, api_edge, schedule, audit_seals, alerts, access_role}" "${@:2}"

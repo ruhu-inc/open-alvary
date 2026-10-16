@@ -152,6 +152,8 @@ and, once Resend's webhook exists, `RESEND_WEBHOOK_SECRET`:
    `email.complained`; its signing secret into `.env`, then step 2 again and a deploy.
 7. `deployment/gcp/public_service.sh audit_seals` (once): the log bucket that keeps the audit seals
    outside the database; lock its retention once the first seals are in it.
+   Then `deployment/gcp/public_service.sh alerts` (once, `ALERT_EMAIL` in `.env`): an email when a
+   scheduled job fails.
 8. `ACCOUNTS=1 deployment/gcp/public_service.sh verify`.
 
 Turning activation B off again is a deploy without `ACCOUNTS=1`: the anonymous API reopens and the
@@ -198,7 +200,8 @@ a changed, removed or back-dated entry, or a missing day, fails the check. Seals
 
 - A failed check prints an ERROR line `audit seal check` naming the days and problems
   (`entries_changed`, `missing_seal`, `chain_broken`, `seal_altered`, `entries_before_first_seal`,
-  `sealing_behind`), and the daily run fails. Alert on failed runs of `open-alvary-daily`.
+  `sealing_behind`), and the daily run fails. `public_service.sh alerts` (once, with `ALERT_EMAIL`
+  in `.env`) emails that address whenever a run of `open-alvary-daily` or `open-alvary-worker` fails.
 - On a failure: do not repair seals or entries. Compare the day's seal in the database with the copy
   in the `audit-seals` bucket, restore the day's entries from a backup to see what changed, and treat
   it as a security incident until explained.
