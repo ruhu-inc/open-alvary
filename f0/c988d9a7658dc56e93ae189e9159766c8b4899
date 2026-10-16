@@ -1,0 +1,23 @@
+web/src/security.tsx
+  s_b82616e2476856::t_54c5ae39460130 113-114
+.github/workflows/security.yml
+  s_b82616e2476856::t_972c3b150e4a20 1-37
+deployment/runbook.md
+  s_b82616e2476856::t_54c5ae39460130 232-236
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f0c988d9a7658dc56e93ae189e9159766c8b4899",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
