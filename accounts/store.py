@@ -9,6 +9,7 @@ import json
 import secrets
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
@@ -17,6 +18,9 @@ from sqlalchemy.exc import DBAPIError
 from accounts import keys, policies, roles
 from accounts.ids import new_id, valid
 from rights.database import PolicyNamespace
+
+TIERS = Path(__file__).with_name("tiers.json")
+
 
 SESSION_DAYS = 30
 IDLE_DAYS = 7
@@ -146,7 +150,12 @@ class Accounts:
         if conn is None:
             with self.engine.connect() as conn:
                 return self.access(organisation_id, conn)
-        return conn.scalar(text(f"SELECT {self._fn(conn, 'accounts_access')}(:o)"), {"o": organisation_id})
+        access = conn.scalar(text(f"SELECT {self._fn(conn, 'accounts_access')}(:o)"), {"o": organisation_id})
+        if access and access.get("tier"):
+            access["tier"]["name"] = conn.scalar(
+                text(f"SELECT name FROM {self._t(conn, 'tier')} WHERE id = :t"), {"t": access["tier"]["id"]}
+            )
+        return access
 
     # ---------- the runtime's view ----------
     def check_credential(self, request: dict) -> dict:
@@ -751,7 +760,7 @@ class Accounts:
             requests = (
                 conn.execute(
                     text(
-                        f"SELECT id, revision, purpose, expected_volume, scope_requested, reduced, contact_name,"
+                        f"SELECT id, revision, purpose, expected_volume, scope_requested, reduced, tier_requested, contact_name,"
                         f" contact_email, state, decision, renewable_after, created_at, updated_at"
                         f" FROM {self._t(conn, 'access_request')} WHERE organisation_id = :o"
                         " ORDER BY created_at DESC LIMIT 10"
@@ -802,15 +811,26 @@ class Accounts:
                     409,
                     f"You can ask again after {blocked:%-d %B %Y}, or sooner if you have new information.",
                 )
+            plan = request.get("tier")
+            if plan is not None and not (
+                isinstance(plan, str)
+                and conn.scalar(
+                    text(f"SELECT published FROM {self._t(conn, 'tier')} WHERE id = :t AND id <> 'starter'"),
+                    {"t": plan},
+                )
+            ):
+                raise AccountError("invalid_input", 400, "Choose one of the published plans.")
             request_id = new_id("wrq")
             try:
                 conn.execute(
                     text(
                         f"INSERT INTO {self._t(conn, 'access_request')} (id, organisation_id, purpose,"
-                        " expected_volume, scope_requested, reduced, contact_name, contact_email, created_by)"
-                        " VALUES (:id, :o, :purpose, :volume, CAST(:scope AS jsonb), :reduced, :name, :email, :by)"
+                        " expected_volume, scope_requested, reduced, contact_name, contact_email, created_by,"
+                        " tier_requested) VALUES (:id, :o, :purpose, :volume, CAST(:scope AS jsonb), :reduced,"
+                        " :name, :email, :by, :plan)"
                     ),
                     {
+                        "plan": plan,
                         "id": request_id,
                         "o": organisation_id,
                         "purpose": purpose,
@@ -834,7 +854,7 @@ class Accounts:
                 "access.requested",
                 organisation=organisation_id,
                 target=("access_request", request_id),
-                summary={"reduced": bool(request.get("reduced"))},
+                summary={"reduced": bool(request.get("reduced")), "plan": plan},
                 context=context,
             )
             return request_id
@@ -1082,7 +1102,7 @@ class Accounts:
             rows = conn.execute(
                 text(
                     f"SELECT r.id, r.organisation_id, o.name AS organisation, o.kind, o.country, r.purpose,"
-                    f" r.expected_volume, r.scope_requested, r.reduced, r.contact_name, r.contact_email, r.state,"
+                    f" r.expected_volume, r.scope_requested, r.reduced, r.tier_requested, r.contact_name, r.contact_email, r.state,"
                     f" r.created_at FROM {self._t(conn, 'access_request')} r JOIN {self._t(conn, 'organisation')} o"
                     " ON o.id = r.organisation_id WHERE r.state IN ('submitted','needs_information')"
                     " ORDER BY r.created_at"
@@ -1106,19 +1126,25 @@ class Accounts:
                         f" {self._t(conn, 'tier')}.published) IS DISTINCT FROM (EXCLUDED.name,"
                         " EXCLUDED.description, EXCLUDED.includes, EXCLUDED.allowance, EXCLUDED.published)"
                     ),
-                    {**tier, "allowance": json.dumps(tier["allowance"]), "includes": list(tier["includes"])},
+                    {
+                        **{k: tier[k] for k in ("id", "name", "description", "published")},
+                        "allowance": json.dumps(tier["allowance"]),
+                        "includes": list(tier["includes"]),
+                    },
                 )
 
     def tiers(self, published_only=True) -> list[dict]:
+        """The plans, in the order people compare them, with how each is shown (accounts/tiers.json)."""
+        listings = {t["id"]: t.get("listing", {}) for t in json.loads(TIERS.read_text())}
         with self.engine.connect() as conn:
             rows = conn.execute(
                 text(
                     f"SELECT id, name, description, includes, allowance FROM {self._t(conn, 'tier')}"
                     + (" WHERE published" if published_only else "")
-                    + " ORDER BY id"
                 )
             )
-            return [dict(r) for r in rows.mappings()]
+            tiers = [dict(r) | {"listing": listings.get(r["id"], {})} for r in rows.mappings()]
+        return sorted(tiers, key=lambda t: (t["listing"].get("order", 99), t["id"]))
 
     # ---------- API keys ----------
     def create_key(

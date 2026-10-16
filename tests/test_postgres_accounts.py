@@ -474,3 +474,35 @@ def test_an_organisation_with_only_starter_access_can_be_deleted(accounts):
     key = accounts.create_key(owner, organisation, kind="service", name="k")
     accounts.delete_organisation(owner, organisation)
     assert check_key(accounts, key["secret"])["code"] == "invalid_credentials"
+
+
+def test_a_request_names_a_published_plan_and_the_operator_grants_it(accounts, monkeypatch):
+    from accounts import operator
+
+    developer = TIER | {"id": "developer", "name": "Developer", "published": True}
+    hidden = TIER | {"id": "hidden", "name": "Hidden", "published": False}
+    accounts.set_tiers([TIER, STARTER, developer, hidden])
+    owner, organisation = person(accounts)
+    ask = {
+        "purpose": "Research",
+        "expected_volume": "1",
+        "contact_name": "A",
+        "contact_email": "a@example.org",
+    }
+    for refused in ("starter", "hidden", "nonexistent", {"id": "developer"}):
+        with pytest.raises(AccountError) as wrong:
+            accounts.request_access(owner, organisation, ask | {"tier": refused})
+        assert wrong.value.code == "invalid_input"
+    request = accounts.request_access(owner, organisation, ask | {"tier": "developer"})
+    [listed] = accounts.open_requests()
+    assert listed["id"] == request and listed["tier_requested"] == "developer"
+    assert accounts.access_details(owner, organisation)["requests"][0]["tier_requested"] == "developer"
+    # Without --tier the operator grants the plan the request named.
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test")
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.setattr(operator, "engine_for", lambda: accounts.engine)
+    argv = ["--operator", "op-test", "grant", organisation, "--reason", "Asked", "--request", request]
+    assert operator.main(argv) == 0
+    tier = accounts.access(organisation)["tier"]
+    assert (tier["id"], tier["name"]) == ("developer", "Developer")
+    assert accounts.open_requests() == []

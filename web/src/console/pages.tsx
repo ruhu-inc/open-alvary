@@ -90,17 +90,17 @@ export function Overview({ me, org }: PageProps) {
       {active && builder ? (
         <section className="quick" aria-label="Quick start">
           <button className="quick-card" type="button" onClick={() => go("/console/keys?create=1")}>
-            <KeyRound size={22} strokeWidth={1.6} aria-hidden="true" />
+            <KeyRound size={18} strokeWidth={1.7} aria-hidden="true" />
             <b>Create an API key</b>
             <span>Call the REST API or MCP from your code.</span>
           </button>
           <button className="quick-card" type="button" onClick={() => go("/console/connect?app=claude")}>
-            <Plug size={22} strokeWidth={1.6} aria-hidden="true" />
+            <Plug size={18} strokeWidth={1.7} aria-hidden="true" />
             <b>Connect Claude or Codex</b>
             <span>Ask questions over the corpus from your AI tools.</span>
           </button>
           <External className="quick-card" href="/developers" icon={false}>
-            <BookOpen size={22} strokeWidth={1.6} aria-hidden="true" />
+            <BookOpen size={18} strokeWidth={1.7} aria-hidden="true" />
             <b>
               Read the docs <ExternalLink size={13} strokeWidth={1.8} aria-hidden="true" className="ext-icon" />
             </b>
@@ -111,11 +111,11 @@ export function Overview({ me, org }: PageProps) {
       <div className="grid3">
         <div className="card stat">
           <span className="stat-label">Plan</span>
-          <b>{org.access.starter ? "Starter" : active ? "Pilot access" : "Paused"}</b>
+          <b>{active ? (org.access.tier?.name ?? "Starter") : "Paused"}</b>
           <span>
             {org.access.starter ? "Free" : org.access.ends_at ? `Until ${when(org.access.ends_at)}` : "No end date"} ·{" "}
             <button className="link" type="button" onClick={() => go("/console/access")}>
-              {org.access.starter ? "Ask for more" : "Details"}
+              {org.access.starter ? "Upgrade" : "Details"}
             </button>
           </span>
         </div>
@@ -214,6 +214,7 @@ type AccessRequest = {
   expected_volume: string;
   scope_requested: { all?: boolean; jurisdictions?: string[] };
   reduced: boolean;
+  tier_requested: string | null;
   contact_name: string;
   contact_email: string;
   state: "submitted" | "needs_information" | "granted" | "declined" | "withdrawn";
@@ -237,22 +238,42 @@ type AccessDetails = {
   requests: AccessRequest[];
 };
 
+type Plan = {
+  id: string;
+  name: string;
+  description: string;
+  includes: string[];
+  allowance: Record<string, number>;
+  listing: {
+    order?: number;
+    for?: string;
+    price?: string;
+    note?: string;
+    action?: "included" | "upgrade" | "contact" | "apply";
+    limits?: string;
+  };
+};
+
 export function AccessPage({ me, org, refresh }: PageProps) {
   const details = useAsync(() => api<AccessDetails>(`/organisations/${org.id}/access`), [org.id]);
+  const plans = useAsync(() => api<{ tiers: Plan[] }>("/tiers"), []);
   const [error, setError] = useState<unknown>(null);
   const [confirmEnd, setConfirmEnd] = useState(false);
-  const [asking, setAsking] = useState(false);
-  if (details.loading && !details.data) return <Loading />;
+  const [asking, setAsking] = useState<Plan | null>(null);
+  if ((details.loading && !details.data) || (plans.loading && !plans.data)) return <Loading />;
   if (details.error) return <Problem error={details.error} />;
   const data = details.data!;
+  const published = (plans.data?.tiers ?? []).filter((t) => t.listing.action);
   const open = data.requests.find((r) => ["submitted", "needs_information"].includes(r.state));
   const declined = data.requests.find((r) => r.state === "declined");
-  const starter = !!data.current.starter;
+  const currentId = data.current.state === "active" ? data.current.tier?.id : null;
   const current = data.history.find((h) => h.state === "active");
-  const limits = data.current.tier?.allowance ?? {};
+  const owner = org.role === "owner";
   async function withdraw(id: string) {
     try {
-      await api(`/organisations/${org.id}/access-requests/${id}/withdraw`, { method: "POST" });
+      await api(`/organisations/${org.id}/access-requests/${id}/withdraw`, {
+        method: "POST",
+      });
       details.reload();
     } catch (e) {
       setError(e);
@@ -269,84 +290,120 @@ export function AccessPage({ me, org, refresh }: PageProps) {
       setConfirmEnd(false);
     }
   }
+  function planAction(plan: Plan) {
+    const action = plan.listing.action;
+    if (plan.id === currentId) return <span className="fine">Your current plan</span>;
+    if (action === "included") return <span className="fine">Included for everyone</span>;
+    if (!owner) return <span className="fine">Owners can change plans</span>;
+    if (open) return <span className="fine">A request is open</span>;
+    return (
+      <button
+        className={"btn" + (action === "upgrade" ? "" : " secondary")}
+        type="button"
+        onClick={() => setAsking(plan)}
+      >
+        {action === "contact" ? "Contact us" : action === "apply" ? "Apply" : "Request upgrade"}
+      </button>
+    );
+  }
+  const nameOf = (id?: string | null) =>
+    published.find((p) => p.id === id)?.name ?? (id === data.current.tier?.id ? data.current.tier?.name : id);
   return (
     <>
       <Heading
         title="Plan and limits"
         org={org}
-        description="Every plan reads the same published corpus as the website. Plans differ in limits and in the jurisdictions keys and apps can reach."
+        description="Every plan reads the same published corpus as the website. Plans differ in their limits, shared by every key and app in the organisation."
       />
       <AccessEnded org={org} />
       <Problem error={error} onDismiss={() => setError(null)} />
-      {data.current.state === "active" ? (
-        <div className="card plan">
-          <div className="card-head">
-            <div>
-              <span className="stat-label">Current plan</span>
-              <h2>
-                {starter ? "Starter" : current?.tier_name ?? "Access"}{" "}
-                <Pill tone="good">{starter ? "Free" : current?.source === "waiver" ? "Free or reduced" : "Granted"}</Pill>
-              </h2>
-            </div>
-            {org.role === "owner" && !open ? (
-              <button className="btn" type="button" onClick={() => setAsking(true)}>
-                {starter ? "Ask for more" : "Change plan"}
-              </button>
-            ) : null}
+      {currentId ? (
+        <div className="card current-plan">
+          <div>
+            <span className="stat-label">Current plan</span>
+            <h2>
+              {nameOf(currentId)}{" "}
+              <Pill tone="good">
+                {data.current.starter ? "Free" : current?.source === "waiver" ? "Free or reduced" : "Active"}
+              </Pill>
+            </h2>
+            <p className="fine">
+              {number(data.current.tier?.allowance?.requests_per_minute ?? 0)} requests a minute ·{" "}
+              {number(data.current.tier?.allowance?.concurrency ?? 0)} at once ·{" "}
+              {scopeLabel(data.current.scope ?? { all: true })}
+              {!data.current.starter && current?.ends_at ? ` · until ${when(current.ends_at)}, then Starter` : ""}
+            </p>
           </div>
-          <dl className="facts">
-            <dt>Requests</dt>
-            <dd>
-              {number(limits.requests_per_minute ?? 0)} a minute, bursts of {number(limits.burst ?? 0)}, shared by every
-              key and app in this organisation
-            </dd>
-            <dt>At the same time</dt>
-            <dd>{number(limits.concurrency ?? 0)} requests</dd>
-            <dt>Includes</dt>
-            <dd>
-              {(data.current.tier?.includes ?? [])
-                .map((i) => ({ rest: "REST API", mcp: "MCP" } as Record<string, string>)[i] ?? i)
-                .join(" and ")}
-            </dd>
-            <dt>Jurisdictions</dt>
-            <dd>{scopeLabel(data.current.scope ?? { all: true })}</dd>
-            {!starter && current ? (
-              <>
-                <dt>Period</dt>
-                <dd>
-                  From {when(current.starts_at)} {current.ends_at ? `to ${when(current.ends_at)}` : "with no end date"}; then
-                  back to Starter
-                </dd>
-              </>
-            ) : null}
-          </dl>
-          {!starter && org.role === "owner" ? (
-            <div className="row">
-              <button className="link" type="button" onClick={() => setConfirmEnd(true)}>
-                Go back to Starter
-              </button>
-            </div>
+          {!data.current.starter && owner ? (
+            <button className="btn secondary" type="button" onClick={() => setConfirmEnd(true)}>
+              Go back to Starter
+            </button>
           ) : null}
         </div>
       ) : null}
-      {open ? <RequestStatus request={open} onWithdraw={() => withdraw(open.id)} owner={org.role === "owner"} /> : null}
-      {asking && !open && org.role === "owner" ? (
-        <RequestForm
-          me={me}
-          org={org}
-          declined={declined}
-          renewal={!starter}
-          onCancel={() => setAsking(false)}
-          onSent={() => {
-            setAsking(false);
-            details.reload();
-            refresh();
-          }}
+      {open ? (
+        <RequestStatus
+          request={open}
+          plan={nameOf(open.tier_requested)}
+          onWithdraw={() => withdraw(open.id)}
+          owner={owner}
         />
       ) : null}
-      {starter && org.role !== "owner" ? (
-        <p className="fine">Owners of this organisation can ask for higher limits.</p>
-      ) : null}
+      <section aria-labelledby="plans-title" className="plans-section">
+        <h2 id="plans-title" className="section-title">
+          Plans
+        </h2>
+        <div className="plans">
+          {published
+            .filter((plan) => plan.listing.action !== "apply")
+            .map((plan) => (
+              <div key={plan.id} className={"plan-card" + (plan.id === currentId ? " current" : "")}>
+                <div className="plan-top">
+                  <h3>{plan.name}</h3>
+                  {plan.id === currentId ? <Pill tone="good">Current</Pill> : null}
+                </div>
+                <p className="plan-for">{plan.listing.for}</p>
+                <div>
+                  <p className="plan-price">{plan.listing.price}</p>
+                  <p className="plan-note">{plan.listing.note}</p>
+                </div>
+                <ul className="plan-limits">
+                  {plan.listing.limits ? (
+                    <li>{plan.listing.limits}</li>
+                  ) : (
+                    <>
+                      <li>{number(plan.allowance.requests_per_minute ?? 0)} requests a minute</li>
+                      <li>{number(plan.allowance.concurrency ?? 0)} requests at once</li>
+                    </>
+                  )}
+                  <li>REST API and MCP</li>
+                  <li>All jurisdictions</li>
+                </ul>
+                <div className="plan-action">{planAction(plan)}</div>
+              </div>
+            ))}
+        </div>
+        {published
+          .filter((plan) => plan.listing.action === "apply")
+          .map((plan) => (
+            <div key={plan.id} className={"card plan-strip" + (plan.id === currentId ? " current" : "")}>
+              <div>
+                <h3>
+                  {plan.name}{" "}
+                  <Pill tone={plan.id === currentId ? "good" : undefined}>
+                    {plan.id === currentId ? "Current" : plan.listing.price}
+                  </Pill>
+                </h3>
+                <p className="fine">{plan.description}</p>
+              </div>
+              {planAction(plan)}
+            </div>
+          ))}
+        <p className="fine">
+          Prices for paid plans are coming. Until then, we confirm each upgrade by email. Need something else? Write to
+          hello@ruhu.ai.
+        </p>
+      </section>
       {declined && !open ? (
         <div className="card">
           <h3>Your last request was declined</h3>
@@ -375,9 +432,25 @@ export function AccessPage({ me, org, refresh }: PageProps) {
           </ul>
         </div>
       ) : null}
+      {asking ? (
+        <RequestForm
+          me={me}
+          org={org}
+          plan={asking}
+          declined={declined}
+          onCancel={() => setAsking(null)}
+          onSent={() => {
+            setAsking(null);
+            details.reload();
+            refresh();
+          }}
+        />
+      ) : null}
       {confirmEnd ? (
         <Dialog title="Go back to the Starter plan?" onClose={() => setConfirmEnd(false)}>
-          <p>Your granted access ends now and the free Starter limits apply again. Keys and connected apps keep working.</p>
+          <p>
+            Your current plan ends now and the free Starter limits apply again. Keys and connected apps keep working.
+          </p>
           <div className="dialog-actions">
             <button className="btn secondary" type="button" onClick={() => setConfirmEnd(false)}>
               Cancel
@@ -393,50 +466,50 @@ export function AccessPage({ me, org, refresh }: PageProps) {
 }
 
 function stateName(state: string) {
-  return { active: "Active", lapsed: "Ended", ended: "Ended by an owner", revoked: "Revoked", scheduled: "Scheduled" }[state] ?? state;
+  return (
+    {
+      active: "Active",
+      lapsed: "Ended",
+      ended: "Ended by an owner",
+      revoked: "Revoked",
+      scheduled: "Scheduled",
+    }[state] ?? state
+  );
 }
 
 function scopeLabel(scope: { all?: boolean; jurisdictions?: string[] } | undefined) {
   return scope?.all ? "All jurisdictions" : (scope?.jurisdictions ?? []).map((j) => j.toUpperCase()).join(", ");
 }
 
-function RequestStatus({ request, onWithdraw, owner }: { request: AccessRequest; onWithdraw: () => void; owner: boolean }) {
+function RequestStatus({
+  request,
+  plan,
+  onWithdraw,
+  owner,
+}: {
+  request: AccessRequest;
+  plan?: string | null;
+  onWithdraw: () => void;
+  owner: boolean;
+}) {
+  const asked = request.state === "needs_information";
   return (
-    <div className="card">
-      <h2>Your request</h2>
-      <ul className="timeline">
-        <li className="on">
-          <div>
-            <b>Sent</b>
-            <small>
-              {when(request.created_at, true)} · {scopeLabel(request.scope_requested)} · {request.expected_volume}
-              {request.reduced ? " · free or reduced access asked" : ""}
-            </small>
-          </div>
-        </li>
-        <li className={request.state === "needs_information" ? "on" : ""}>
-          <div>
-            <b>{request.state === "needs_information" ? "More information needed" : "Being reviewed"}</b>
-            <small>
-              {request.state === "needs_information"
-                ? request.decision?.reason ?? "Check your email for our question."
-                : "We may ask for more information by email."}
-            </small>
-          </div>
-        </li>
-        <li>
-          <div>
-            <b>Decision</b>
-            <small>Granted, or declined with a reason. A declined request can be renewed after 30 days.</small>
-          </div>
-        </li>
-      </ul>
+    <div className="card request-status">
+      <div>
+        <h3>
+          Your request{plan ? ` for ${plan}` : ""}{" "}
+          <Pill tone="warn">{asked ? "Information needed" : "Being reviewed"}</Pill>
+        </h3>
+        <p className="fine">
+          {asked
+            ? (request.decision?.reason ?? "Check your email for our question.")
+            : `Sent ${when(request.created_at)} · ${request.expected_volume}${request.reduced ? " · free or reduced asked" : ""}. We reply by email.`}
+        </p>
+      </div>
       {owner ? (
-        <div className="row">
-          <button className="link" type="button" onClick={onWithdraw}>
-            Withdraw request
-          </button>
-        </div>
+        <button className="link" type="button" onClick={onWithdraw}>
+          Withdraw
+        </button>
       ) : null}
     </div>
   );
@@ -445,24 +518,23 @@ function RequestStatus({ request, onWithdraw, owner }: { request: AccessRequest;
 function RequestForm({
   me,
   org,
+  plan,
   declined,
-  renewal,
   onSent,
   onCancel,
 }: {
   me: Me;
   org: Organisation;
+  plan: Plan;
   declined?: AccessRequest;
-  renewal: boolean;
   onSent: () => void;
   onCancel: () => void;
 }) {
+  const apply = plan.listing.action === "apply";
   const [form, setForm] = useState({
     purpose: "",
     expected_volume: "Up to 1,000 a day",
-    all: true,
-    jurisdictions: "",
-    reduced: false,
+    reduced: apply,
     contact_name: me.person.display_name ?? "",
     contact_email: me.person.email,
     new_information: false,
@@ -480,17 +552,7 @@ function RequestForm({
     try {
       await api(`/organisations/${org.id}/access-requests`, {
         method: "POST",
-        body: {
-          purpose: form.purpose,
-          expected_volume: form.expected_volume,
-          scope: form.all
-            ? { all: true }
-            : { jurisdictions: form.jurisdictions.split(/[\s,]+/).filter(Boolean).map((j) => j.toLowerCase()) },
-          reduced: form.reduced,
-          contact_name: form.contact_name,
-          contact_email: form.contact_email,
-          new_information: form.new_information,
-        },
+        body: { ...form, tier: plan.id, scope: { all: true } },
       });
       onSent();
     } catch (e) {
@@ -499,92 +561,92 @@ function RequestForm({
       setSending(false);
     }
   }
+  const title =
+    plan.listing.action === "contact"
+      ? `Contact us about ${plan.name}`
+      : apply
+        ? "Apply for public-interest access"
+        : `Upgrade to ${plan.name}`;
   return (
-    <form className="card form" onSubmit={send}>
-      <h2>{renewal ? "Change your plan" : "Ask for higher limits"}</h2>
-      <p className="lede">
-        Tell us how you'll use the corpus and what you need. We reply by email, usually with a plan for your
-        organisation; public-interest work can ask for free or reduced access.
-      </p>
-      <div className="field">
-        <label htmlFor="purpose">How will you use it?</label>
-        <textarea
-          id="purpose"
-          required
-          maxLength={2000}
-          value={form.purpose}
-          onChange={(e) => set("purpose", e.target.value)}
-          placeholder="Research assistant for Rwandan legislation in a university legal clinic."
-        />
-        <small>Don't include confidential client or case details.</small>
-      </div>
-      <fieldset className="field">
-        <legend>Jurisdictions</legend>
-        <label className="choice">
-          <input type="radio" name="scope" checked={form.all} onChange={() => set("all", true)} />
-          <span>
-            All jurisdictions<small>New ones are added as their sources are verified.</small>
-          </span>
-        </label>
-        <label className="choice">
-          <input type="radio" name="scope" checked={!form.all} onChange={() => set("all", false)} />
-          <span>Only some</span>
-        </label>
-        {!form.all ? (
-          <input
-            type="text"
-            aria-label="Jurisdiction codes"
-            placeholder="ng, rw"
-            value={form.jurisdictions}
-            onChange={(e) => set("jurisdictions", e.target.value)}
+    <Dialog title={title} onClose={onCancel}>
+      <form className="form" onSubmit={send}>
+        <p className="fine">
+          {apply
+            ? "For research, government and legal aid. Tell us who you are and how the corpus serves the public; we decide case by case."
+            : "Tell us how you'll use the corpus. We reply by email to confirm the plan for your organisation."}
+        </p>
+        <div className="field">
+          <label htmlFor="purpose">{apply ? "Who you are and how you'll use it" : "How will you use it?"}</label>
+          <textarea
+            id="purpose"
+            required
+            maxLength={2000}
+            value={form.purpose}
+            onChange={(e) => set("purpose", e.target.value)}
+            placeholder={
+              apply
+                ? "University legal clinic: students research Rwandan legislation with Claude."
+                : "A legal research assistant for our firm's lawyers."
+            }
           />
+          <small>Don't include confidential client or case details.</small>
+        </div>
+        <div className="field">
+          <label htmlFor="volume">Expected requests a day</label>
+          <select id="volume" value={form.expected_volume} onChange={(e) => set("expected_volume", e.target.value)}>
+            <option>Up to 1,000 a day</option>
+            <option>1,000 to 50,000 a day</option>
+            <option>More than 50,000 a day</option>
+          </select>
+        </div>
+        <div className="grid2">
+          <div className="field">
+            <label htmlFor="contact-name">Contact name</label>
+            <input
+              id="contact-name"
+              type="text"
+              required
+              autoComplete="name"
+              value={form.contact_name}
+              onChange={(e) => set("contact_name", e.target.value)}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="contact-email">Contact email</label>
+            <input
+              id="contact-email"
+              type="email"
+              required
+              autoComplete="email"
+              value={form.contact_email}
+              onChange={(e) => set("contact_email", e.target.value)}
+            />
+          </div>
+        </div>
+        {blocked ? (
+          <label className="choice">
+            <input
+              type="checkbox"
+              checked={form.new_information}
+              onChange={(e) => set("new_information", e.target.checked)}
+            />
+            <span>
+              I have new information since the last decision
+              <small>Otherwise you can ask again after {when(declined!.renewable_after)}.</small>
+            </span>
+          </label>
         ) : null}
-      </fieldset>
-      <div className="field">
-        <label htmlFor="volume">Expected requests a day</label>
-        <select id="volume" value={form.expected_volume} onChange={(e) => set("expected_volume", e.target.value)}>
-          <option>Up to 1,000 a day</option>
-          <option>1,000 to 50,000 a day</option>
-          <option>More than 50,000 a day</option>
-        </select>
-      </div>
-      <label className="choice">
-        <input type="checkbox" checked={form.reduced} onChange={(e) => set("reduced", e.target.checked)} />
-        <span>
-          I'm asking for free or reduced access
-          <small>For public-interest work such as research, legal aid or government. Say why above; we decide case by case.</small>
-        </span>
-      </label>
-      <div className="grid2">
-        <div className="field">
-          <label htmlFor="contact-name">Contact name</label>
-          <input id="contact-name" type="text" required autoComplete="name" value={form.contact_name} onChange={(e) => set("contact_name", e.target.value)} />
+        <Problem error={error} />
+        <div className="dialog-actions">
+          <button className="btn secondary" type="button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button className="btn" type="submit" disabled={sending}>
+            {sending ? "Sending…" : "Send request"}
+          </button>
         </div>
-        <div className="field">
-          <label htmlFor="contact-email">Contact email</label>
-          <input id="contact-email" type="email" required autoComplete="email" value={form.contact_email} onChange={(e) => set("contact_email", e.target.value)} />
-        </div>
-      </div>
-      {blocked ? (
-        <label className="choice">
-          <input type="checkbox" checked={form.new_information} onChange={(e) => set("new_information", e.target.checked)} />
-          <span>
-            I have new information since the last decision
-            <small>Otherwise you can ask again after {when(declined!.renewable_after)}.</small>
-          </span>
-        </label>
-      ) : null}
-      <Problem error={error} />
-      <div className="row">
-        <button className="btn" type="submit" disabled={sending}>
-          {sending ? "Sending…" : "Send request"}
-        </button>
-        <button className="btn secondary" type="button" onClick={onCancel}>
-          Cancel
-        </button>
-        <span className="fine">We reply by email to {form.contact_email || "your contact address"}.</span>
-      </div>
-    </form>
+      </form>
+    </Dialog>
   );
 }
 
@@ -614,7 +676,9 @@ export function Keys({ org }: PageProps) {
   const builder = BUILDERS.has(org.role);
   async function revoke(key: Key) {
     try {
-      await api(`/organisations/${org.id}/keys/${key.id}/revoke`, { method: "POST" });
+      await api(`/organisations/${org.id}/keys/${key.id}/revoke`, {
+        method: "POST",
+      });
       setConfirm(null);
       list.reload();
     } catch (e) {
@@ -774,7 +838,12 @@ function CreateKey({ org, onClose, onCreated }: { org: Organisation; onClose: ()
     setBusy(true);
     setError(null);
     try {
-      onCreated(await api<NewKey>(`/organisations/${org.id}/keys`, { method: "POST", body: { name, kind, days } }));
+      onCreated(
+        await api<NewKey>(`/organisations/${org.id}/keys`, {
+          method: "POST",
+          body: { name, kind, days },
+        }),
+      );
     } catch (e) {
       // Keep the choices for the trip to the sign-in service and back.
       if (e instanceof ApiError) saveDraft("key", { name, kind, days });
@@ -796,14 +865,16 @@ function CreateKey({ org, onClose, onCreated }: { org: Organisation; onClose: ()
           <label className="choice">
             <input type="radio" name="kind" checked={kind === "personal"} onChange={() => setKind("personal")} />
             <span>
-              Personal<small>For your own scripts. Stops working if you leave the organisation.</small>
+              Personal
+              <small>For your own scripts. Stops working if you leave the organisation.</small>
             </span>
           </label>
           {MANAGERS.has(org.role) ? (
             <label className="choice">
               <input type="radio" name="kind" checked={kind === "service"} onChange={() => setKind("service")} />
               <span>
-                Shared, for servers<small>Belongs to the organisation and survives people leaving.</small>
+                Shared, for servers
+                <small>Belongs to the organisation and survives people leaving.</small>
               </span>
             </label>
           ) : null}
@@ -890,7 +961,9 @@ export function Apps({ org }: PageProps) {
   const active = org.access.state === "active";
   async function revoke(grant: Grant) {
     try {
-      await api(`/organisations/${org.id}/clients/${grant.id}/revoke`, { method: "POST" });
+      await api(`/organisations/${org.id}/clients/${grant.id}/revoke`, {
+        method: "POST",
+      });
       list.reload();
     } catch (e) {
       setError(e);
@@ -1080,7 +1153,7 @@ type UsageDay = {
 
 const REFUSALS: Record<string, [string, string]> = {
   rate_limited: ["More requests than your limit allows", "Wait the seconds in Retry-After"],
-  jurisdiction_not_included: ["A jurisdiction outside your access", "Add it under Access and plan"],
+  jurisdiction_not_included: ["A jurisdiction outside your access", "Change it under Plan and limits"],
   entitlement_lapsed: ["Access had ended", "Renew access"],
   entitlement_required: ["No access yet", "Request access"],
 };
@@ -1258,7 +1331,13 @@ type Member = {
 };
 type Members = {
   members: Member[];
-  invitations: { id: string; email: string; role: string; created_at: string; expires_at: string }[];
+  invitations: {
+    id: string;
+    email: string;
+    role: string;
+    created_at: string;
+    expires_at: string;
+  }[];
   invite_roles: string[];
 };
 
@@ -1347,7 +1426,17 @@ export function MembersPage({ org, refresh }: PageProps) {
                           Make owner
                         </button>
                       ) : null}
-                      <button className="link danger" type="button" onClick={() => run(() => api(`/organisations/${org.id}/members/${m.id}`, { method: "DELETE" }))}>
+                      <button
+                        className="link danger"
+                        type="button"
+                        onClick={() =>
+                          run(() =>
+                            api(`/organisations/${org.id}/members/${m.id}`, {
+                              method: "DELETE",
+                            }),
+                          )
+                        }
+                      >
                         Remove
                       </button>
                     </>
@@ -1364,7 +1453,17 @@ export function MembersPage({ org, refresh }: PageProps) {
                 <td>{ROLE_NAMES[i.role]}</td>
                 {manager ? <td>—</td> : null}
                 <td className="actions">
-                  <button className="link danger" type="button" onClick={() => run(() => api(`/organisations/${org.id}/invitations/${i.id}`, { method: "DELETE" }))}>
+                  <button
+                    className="link danger"
+                    type="button"
+                    onClick={() =>
+                      run(() =>
+                        api(`/organisations/${org.id}/invitations/${i.id}`, {
+                          method: "DELETE",
+                        }),
+                      )
+                    }
+                  >
                     Revoke invitation
                   </button>
                 </td>
@@ -1379,7 +1478,10 @@ export function MembersPage({ org, refresh }: PageProps) {
           onSubmit={(e) => {
             e.preventDefault();
             run(async () => {
-              await api(`/organisations/${org.id}/invitations`, { method: "POST", body: { email, role } });
+              await api(`/organisations/${org.id}/invitations`, {
+                method: "POST",
+                body: { email, role },
+              });
               setEmail("");
             });
           }}
@@ -1435,7 +1537,9 @@ export function MembersPage({ org, refresh }: PageProps) {
               type="button"
               onClick={() =>
                 run(async () => {
-                  await api(`/organisations/${org.id}/members/${you.id}`, { method: "DELETE" });
+                  await api(`/organisations/${org.id}/members/${you.id}`, {
+                    method: "DELETE",
+                  });
                   localStorage.removeItem("oa_console_org");
                   location.assign("/console");
                 }).finally(() => setLeave(null))
@@ -1682,8 +1786,20 @@ export function Settings({ org, refresh }: PageProps) {
 }
 
 // ---------- Security ----------
-type Identity = { id: string; method: string; label: string; linked_at: string; last_used_at: string | null };
-type Session = { ref: string; created_at: string; last_seen_at: string; client_family: string | null; network_prefix: string | null };
+type Identity = {
+  id: string;
+  method: string;
+  label: string;
+  linked_at: string;
+  last_used_at: string | null;
+};
+type Session = {
+  ref: string;
+  created_at: string;
+  last_seen_at: string;
+  client_family: string | null;
+  network_prefix: string | null;
+};
 
 export function Security({ me, refresh }: { me: Me; refresh: () => void }) {
   const identities = useAsync(() => api<{ identities: Identity[] }>("/me/identities"), []);

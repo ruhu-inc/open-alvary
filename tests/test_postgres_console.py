@@ -411,14 +411,44 @@ def test_invitations_and_access_requests_send_mail_after_the_change(console):
     )
     assert requested.status_code == 201
     received, operator = mailer.sent[1:]
-    assert (
-        received.to == "contact@example.org"
-        and received.subject == "We received your Open Alvary access request"
-    )
-    assert operator.to == "hello@ruhu.ai" and "free or reduced access" in operator.text
+    assert received.to == "contact@example.org" and received.subject == "We received your Open Alvary request"
+    assert operator.to == "hello@ruhu.ai" and "free or reduced" in operator.text
     assert accounts.notice_recipients(organisation)["to"] == [
         "amina@example.org"
     ]  # owners, without a request
+
+
+def test_a_plan_request_names_the_plan_in_the_mail_and_the_tiers_list_carries_listings(console):
+    accounts, fake, _ = console
+    accounts.set_tiers([TIER, TIER | {"id": "developer", "name": "Developer"}])
+    mailer = RecordingMailer()
+    browser = client(create_console_app(accounts, app_provider(fake), mailer=mailer))
+    organisation, headers, _ = onboard(browser, fake)
+    tiers = browser.get("/api/v1/tiers").json()["tiers"]
+    developer = next(t for t in tiers if t["id"] == "developer")
+    assert developer["listing"]["action"] == "upgrade" and developer["listing"]["for"]
+    ask = {
+        "purpose": "Research",
+        "expected_volume": "Some",
+        "contact_name": "A",
+        "contact_email": "a@example.org",
+    }
+    wrong = browser.post(
+        f"/api/v1/organisations/{organisation}/access-requests",
+        headers=headers,
+        json=ask | {"tier": "starter"},
+    )
+    assert wrong.status_code == 400
+    asked = browser.post(
+        f"/api/v1/organisations/{organisation}/access-requests",
+        headers=headers,
+        json=ask | {"tier": "developer"},
+    )
+    assert asked.status_code == 201
+    received, operator = mailer.sent
+    assert "move to the Developer plan" in received.text and "the Developer plan" in operator.text
+    details = browser.get(f"/api/v1/organisations/{organisation}/access").json()
+    assert details["requests"][0]["tier_requested"] == "developer"
 
 
 def test_starter_organisations_create_keys_without_a_second_factor(console):

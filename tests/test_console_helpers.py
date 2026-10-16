@@ -14,5 +14,7 @@ def test_client_family_is_coarse():
     chrome = "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"
     assert client_family(chrome) == "Chrome"
     assert client_family(chrome + " Edg/129.0") == "Edge"
-    assert client_family("Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15") == "Safari"
+    assert (
+        client_family("Mozilla/5.0 (Macintosh) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15") == "Safari"
+    )
     assert client_family("curl/8.7.1") == "curl" and client_family("") == "Other"
