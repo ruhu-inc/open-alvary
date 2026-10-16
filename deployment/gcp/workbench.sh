@@ -192,7 +192,9 @@ access() {  # once: the Access section's connection to the public accounts datab
 Stored access-database-url and resend-api-key. The owner then grants this service account the Cloud
 SQL client role in $PUBLIC_PROJECT (once):
   gcloud projects add-iam-policy-binding $PUBLIC_PROJECT --member=serviceAccount:$RUNNER_EMAIL --role=roles/cloudsql.client
-Then: ACCESS=1 $0 deploy; $0 operator <email> "<name>" reviewer,access_admin; $0 enrol <email>.
+Then: ACCESS=1 $0 deploy
+  $0 operator $(gcloud config get-value account 2>/dev/null) "Your Name" reviewer,approver,access_admin
+  $0 enrol $(gcloud config get-value account 2>/dev/null)
 NEXT
 }
 
