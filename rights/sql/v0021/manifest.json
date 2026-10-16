@@ -21,7 +21,7 @@
     },
     {
       "signature": "accounts_access(text)",
-      "current_definition_hash": "fd49dc709a1f6da64c695a7f86946174bc7683c186c66fc2482ed9db0b75cd89"
+      "current_definition_hash": "43e4535ea9c960258d1d4a6030107788e72588bdb83fbbb9f0438fe3f5762cb7"
     },
     {
       "signature": "check_credential(jsonb)",

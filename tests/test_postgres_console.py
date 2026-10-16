@@ -419,3 +419,62 @@ def test_invitations_and_access_requests_send_mail_after_the_change(console):
     assert accounts.notice_recipients(organisation)["to"] == [
         "amina@example.org"
     ]  # owners, without a request
+
+
+def test_starter_organisations_create_keys_without_a_second_factor(console):
+    accounts, fake, app = console
+    accounts.set_tiers([TIER, {**TIER, "id": "starter", "name": "Starter"}])
+    browser = client(app)
+    organisation, headers, _ = onboard(browser, fake)
+    created = browser.post(
+        f"/api/v1/organisations/{organisation}/keys", json={"name": "first"}, headers=headers
+    )
+    assert created.status_code == 201  # right after sign-up: no request, no second factor
+    accounts.grant_access(
+        "op",
+        organisation,
+        tier="pilot",
+        scope={"all": True},
+        source="manual",
+        ends_at=None,
+        reason="Approved",
+    )
+    refused = browser.post(
+        f"/api/v1/organisations/{organisation}/keys", json={"name": "second"}, headers=headers
+    )
+    assert refused.json()["error"]["code"] == "second_factor_required"  # approved access: owners need one
+
+
+def test_the_approval_answer_asks_for_a_second_factor_only_where_the_role_needs_one(console):
+    accounts, fake, _ = console
+    accounts.set_tiers([TIER, {**TIER, "id": "starter", "name": "Starter"}])
+    consent_app = create_console_app(accounts, app_provider(fake), consent_secret=CONSENT_SECRET)
+    browser = client(consent_app)
+    organisation, _, _ = onboard(browser, fake)
+    from api.console import verify_hs256
+
+    def answer(state):
+        reply = browser.post(
+            "/oauth/api/decision",
+            json={
+                "session_token": hand_off(),
+                "state": state,
+                "decision": "allow",
+                "organisation": organisation,
+            },
+        )
+        return verify_hs256(
+            parse_qs(urlparse(reply.json()["redirect"]).query)["consent_token"][0], CONSENT_SECRET
+        )
+
+    assert answer("s1")["mfa"] is False  # starter
+    accounts.grant_access(
+        "op",
+        organisation,
+        tier="pilot",
+        scope={"all": True},
+        source="manual",
+        ends_at=None,
+        reason="Approved",
+    )
+    assert answer("s2")["mfa"] is True  # owner of an organisation with approved access
