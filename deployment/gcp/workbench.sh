@@ -209,10 +209,17 @@ enrol() {  # a one-time code (24 hours) with which an access_admin registers a f
     --set-cloudsql-instances="${PROJECT}:${REGION}:${SQL_INSTANCE}" \
     --set-secrets="ALVARY_REVIEW_DATABASE_URL=review-database-url:latest" \
     --command=python --args="-m,workbench.admin,enrol,${email}${replace}" --max-retries=0
-  "${GC[@]}" run jobs execute workbench-enrol --region="$REGION" --wait
-  # The code is only in the job's log, which only the project's owners read; give it to the operator yourself.
-  "${GC[@]}" logging read "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"workbench-enrol\" AND textPayload:\"enrolment code\"" \
-    --limit=1 --freshness=1h --format='value(textPayload)'
+  local execution line="" attempt
+  execution="$("${GC[@]}" run jobs execute workbench-enrol --region="$REGION" --wait --format='value(metadata.name)')"
+  # The code is only in this execution's log, which only the project's owners read; give it to the
+  # operator yourself. Logs arrive a few seconds late, so wait for this execution's own line.
+  for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+    line="$("${GC[@]}" logging read "resource.type=\"cloud_run_job\" AND labels.\"run.googleapis.com/execution_name\"=\"$execution\" AND textPayload:\"enrolment code\"" \
+      --limit=1 --freshness=1h --format='value(textPayload)')"
+    [[ -n "$line" ]] && break
+    sleep 5
+  done
+  echo "${line:-The code is in the log of execution $execution, which has not reached Cloud Logging yet: read it there.}"
 }
 
 status() {
