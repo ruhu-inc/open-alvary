@@ -110,7 +110,8 @@ export function Security() {
           Before developer accounts open, a qualified independent firm tests the website, the console, the API
           and MCP, sign-in and downloads. Critical and high findings are fixed and retested before launch. The
           test is repeated every year and after major changes, and a summary letter is available to customers on
-          request.
+          request. Between tests, every change to our code, and every week, is checked for dependencies with known
+          vulnerabilities and for secrets committed by mistake.
         </p>
       </section>
       <section>
