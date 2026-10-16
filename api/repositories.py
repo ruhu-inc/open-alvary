@@ -57,11 +57,11 @@ class LegacyRepository:
             .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
             .where(self._visible())
         )
-        return (
-            statement.where(self._sources.c.jurisdiction_id == jurisdiction)
-            if jurisdiction is not None
-            else statement
-        )
+        if jurisdiction is None:
+            return statement
+        if isinstance(jurisdiction, str):
+            return statement.where(self._sources.c.jurisdiction_id == jurisdiction)
+        return statement.where(self._sources.c.jurisdiction_id.in_(sorted(jurisdiction)))  # a plan's reach
 
     @staticmethod
     def _pair(row):

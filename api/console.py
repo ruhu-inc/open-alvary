@@ -31,6 +31,7 @@ import re
 import secrets
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import timedelta
 from html import escape
@@ -234,9 +235,11 @@ def create_console_app(
     dev_login: bool = False,
     consent_secret: bytes | None = None,
     mailer: mail.Mailer | None = None,
+    countries: Callable[[], list[dict]] | None = None,
 ) -> FastAPI:
     """``consent_secret`` is shared with the provider's post-login step, which signs the hand-off
-    to the approval page and verifies our answer (MAC-07)."""
+    to the approval page and verifies our answer (MAC-07). ``countries`` lists the countries with
+    published material, to choose a plan's countries from."""
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     base_url = provider.config.base_url if provider else None
     mailer = mailer or mail.Mailer.from_environment()
@@ -643,10 +646,24 @@ def create_console_app(
         accounts.end_access(session["person_id"], organisation_id, context(request))
         return Response(status_code=204)
 
+    @app.post("/api/v1/organisations/{organisation_id}/access/countries")
+    async def change_countries(request: Request, organisation_id: str):
+        session = guard(request, write=True)
+        data = await body(request)
+        accounts.change_countries(
+            session["person_id"], organisation_id, data.get("jurisdictions"), context(request)
+        )
+        return Response(status_code=204)
+
     @app.get("/api/v1/tiers")
     def tiers(request: Request):
         guard(request)
         return {"tiers": accounts.tiers(published_only=False)}
+
+    @app.get("/api/v1/countries")
+    def country_list(request: Request):
+        guard(request)
+        return {"countries": countries() if countries else []}
 
     # ---------- keys ----------
     @app.get("/api/v1/organisations/{organisation_id}/keys")

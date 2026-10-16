@@ -30,6 +30,7 @@ from fastapi.responses import JSONResponse
 
 from accounts import keys
 from api.admission import AdmissionStore, AdmissionUnavailable
+from api.reach import OutsidePlanLimited, Reach
 
 SCOPE = "corpus:read"
 GRANT_CLAIM = "https://open.alvary.ai/grant"
@@ -194,6 +195,9 @@ class GateConfig:
     global_concurrency: int = 512
     lease_seconds: int = 60
     jsonrpc: bool = False  # MCP: refusals as JSON-RPC errors
+    # Requests outside a plan's countries also draw on this, the Starter rate (api.reach).
+    outside_per_minute: int = 60
+    outside_burst: int = 30
 
 
 class CredentialGate:
@@ -335,6 +339,7 @@ class CredentialGate:
             "credential": credential,
             "scope": result.get("scope") or {},
             "tier": result.get("tier"),
+            "reach": Reach.of(result.get("scope"), lambda: self._outside(organisation)),
         }
         sent = {"bytes": 0, "refused": None, "status": 0}
 
@@ -369,8 +374,29 @@ class CredentialGate:
                     await to_thread.run_sync(self.admission.release, lease)
                 except AdmissionUnavailable:
                     pass  # the lease expires on its own
-            refusal = sent["refused"] or ("jurisdiction_not_included" if sent["status"] == 403 else None)
+            refusal = sent["refused"] or ("rate_limited" if sent["status"] == 429 else None)
             await self._count({**usage, **({"refusal": refusal} if refusal else {"bytes": sent["bytes"]})})
+
+    def _outside(self, organisation: str) -> None:
+        """Admit one request outside the plan's countries at the Starter rate (called from a worker
+        thread by the route); raises OutsidePlanLimited, or AdmissionUnavailable."""
+        if self.admission is None:
+            return
+        decision = self.admission.admit(
+            {
+                "buckets": [
+                    {
+                        "key": "outside:" + organisation.removeprefix("org_"),
+                        "capacity": self.config.outside_burst,
+                        "refill_per_minute": self.config.outside_per_minute,
+                    }
+                ],
+                "concurrency": [],
+                "lease_seconds": self.config.lease_seconds,
+            }
+        )
+        if not decision["admitted"]:
+            raise OutsidePlanLimited(int(decision["retry_after"]))
 
     async def _count(self, entry: dict) -> None:
         try:

@@ -1123,7 +1123,7 @@ svg .chart-label {
   align-items: center;
   gap: 12px 20px;
 }
-.current-plan > div {
+.current-plan > div:first-child {
   display: grid;
   gap: 4px;
 }
@@ -1229,4 +1229,19 @@ svg .chart-label {
 }
 .plan-action .btn {
   width: 100%;
+}
+
+/* Choosing a plan's countries. */
+.country-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px;
+}
+.country-list .choice.on {
+  border-color: var(--accent-text);
+  background: var(--accent-soft);
+}
+.country-list .choice:has(input:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
 }

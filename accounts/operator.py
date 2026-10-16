@@ -36,7 +36,9 @@ def main(argv=None) -> int:
     grant.add_argument("organisation")
     grant.add_argument("--reason", required=True)
     grant.add_argument("--tier", help="The plan to grant; by default the plan the request asked for")
-    grant.add_argument("--jurisdictions", help="Comma-separated jurisdiction IDs; all when omitted")
+    grant.add_argument(
+        "--jurisdictions", help="Comma-separated country codes; by default the request's, else all"
+    )
     grant.add_argument("--until", help="End date (UTC), YYYY-MM-DD; no end when omitted")
     grant.add_argument("--waiver", action="store_true", help="Free or reduced access (otherwise manual)")
     grant.add_argument("--request", help="The access request this grant answers")
@@ -70,15 +72,14 @@ def main(argv=None) -> int:
                 print(json.dumps(request, default=str, indent=2))
             return 0
         if args.command == "grant":
+            asked = next((r for r in accounts.open_requests() if r["id"] == args.request), {})
             scope = (
-                {"jurisdictions": [j.strip() for j in args.jurisdictions.split(",") if j.strip()]}
+                {"jurisdictions": [j.strip().lower() for j in args.jurisdictions.split(",") if j.strip()]}
                 if args.jurisdictions
-                else {"all": True}
+                else asked.get("scope_requested") or {"all": True}
             )
             until = datetime.strptime(args.until, "%Y-%m-%d").replace(tzinfo=UTC) if args.until else None
-            tier = args.tier or next(
-                (r["tier_requested"] for r in accounts.open_requests() if r["id"] == args.request), None
-            )
+            tier = args.tier or asked.get("tier_requested")
             if not tier:
                 raise SystemExit("Name the plan with --tier (the request did not ask for one)")
             entitlement = accounts.grant_access(

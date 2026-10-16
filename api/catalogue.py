@@ -4,6 +4,7 @@ from collections import Counter
 from datetime import UTC, datetime
 from typing import Protocol
 
+from api.reach import country
 from api.repositories import (
     MAX_BUFFER_BYTES,
     MAX_UNPAGED_ROWS,
@@ -308,6 +309,22 @@ class LegacyCatalogue:
 
     def jurisdictions(self):
         return tuple(JurisdictionView.model_validate(row) for row in self.repository.rows("jurisdictions"))
+
+    def countries(self):
+        """Each country with catalogued material, for choosing a plan's countries: its sources and how
+        many have open full text. Sub-national material counts under its country (api.reach)."""
+        names = {j.id: j.name for j in self.jurisdictions()}
+        found: dict[str, dict] = {}
+        for source, rights in self.repository.sources():
+            code = country(source.jurisdiction_id)
+            if code is None:
+                continue
+            entry = found.setdefault(
+                code, {"id": code, "name": names.get(code, code.upper()), "sources": 0, "full_text": 0}
+            )
+            entry["sources"] += 1
+            entry["full_text"] += any(True for _ in self._approved(source, rights))
+        return sorted(found.values(), key=lambda c: c["name"])
 
     def coverage(self):
         total, open_sources, published = 0, 0, 0
