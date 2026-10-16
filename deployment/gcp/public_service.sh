@@ -128,13 +128,21 @@ project() {
   echo "Project $PROJECT ready, billed with $BILLING_FROM's account."
 }
 
-secret_put() {  # create or add a version, from standard input
-  local name="$1"
+secret_put() {  # create, or add a version when the value changed, from standard input (never printed)
+  local name="$1" value
+  value="$(mktemp)"
+  cat >"$value"
   if "${GC[@]}" secrets describe "$name" >/dev/null 2>&1; then
-    "${GC[@]}" secrets versions add "$name" --data-file=- >/dev/null
+    if [[ "$("${GC[@]}" secrets versions access latest --secret="$name" 2>/dev/null | shasum -a 256)" \
+      == "$(shasum -a 256 <"$value")" ]]; then
+      echo "Unchanged: $name"
+    else
+      "${GC[@]}" secrets versions add "$name" --data-file="$value" >/dev/null
+    fi
   else
-    "${GC[@]}" secrets create "$name" --replication-policy=user-managed --locations="$REGION" --data-file=- >/dev/null
+    "${GC[@]}" secrets create "$name" --replication-policy=user-managed --locations="$REGION" --data-file="$value" >/dev/null
   fi
+  rm -f "$value"
 }
 
 admission_json() {  # an admission class from its example, with a fresh secret and this deployment's pool
@@ -242,12 +250,12 @@ accounts() {  # activation B's secrets, from this machine's files and .env; neve
     grant "${GC[@]}" secrets add-iam-policy-binding "$secret" --member="serviceAccount:$RUNNER_EMAIL" \
       --role=roles/secretmanager.secretAccessor
   done
-  cat <<NEXT
-Activation B secrets stored: ${names[*]}.
+  echo "Activation B secrets in place: ${names[*]}."
+  [[ -n "$(setting RESEND_WEBHOOK_SECRET)" ]] || cat <<BOUNCES
 Bounces: in Resend, add a webhook to https://$DOMAIN/console/mail-events for email.bounced and
 email.complained, put its signing secret in .env as RESEND_WEBHOOK_SECRET and run this again.
-Next: ACCOUNTS=1 $0 deploy, then $0 api_edge (once) and $0 schedule (once).
-NEXT
+BOUNCES
+  echo "Next: ACCOUNTS=1 $0 deploy (new values reach the service only with a deploy). First time only: api_edge, schedule."
 }
 
 accounts_env() {  # the extra settings activation B adds to the service and the worker
