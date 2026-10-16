@@ -2162,6 +2162,9 @@ nav.breadcrumb a:hover {
   display: grid;
   gap: 6px;
 }
+.legal code {
+  overflow-wrap: anywhere;
+}
 .legal-status {
   max-width: 46rem;
   border-left: 3px solid #8a5a1c;

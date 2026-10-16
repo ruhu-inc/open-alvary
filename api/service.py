@@ -257,6 +257,7 @@ STATIC_PAGES = (
     "/about",
     "/privacy",
     "/security",
+    "/docs/errors",
 )
 
 
