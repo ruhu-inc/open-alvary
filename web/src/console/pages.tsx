@@ -1,6 +1,7 @@
 // The console's pages (MAC-10), in the words people use: access, keys, connected apps, members.
 
 import React, { useEffect, useState } from "react";
+import { BookOpen, KeyRound, PauseCircle, Plug, Plus } from "lucide-react";
 import { ApiError, api, clearDraft, go, peekDraft, saveDraft, type Me, type Organisation } from "./api";
 import {
   CopyField,
@@ -25,225 +26,154 @@ const MCP_URL = API_ORIGIN + "/mcp";
 const MANAGERS = new Set(["owner", "admin"]);
 const BUILDERS = new Set(["owner", "admin", "developer"]);
 
-function Heading({ title, org, action }: { title: string; org: Organisation; action?: React.ReactNode }) {
-  const [label, tone] = accessLabel(org.access.state);
+function Heading({ title, description, action }: { title: string; org?: Organisation; description?: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="page-head">
-      <h1>{title}</h1>
-      <div className="row">
-        <Pill tone={tone}>{label}</Pill>
-        {action}
+      <div className="page-title">
+        <h1>{title}</h1>
+        {description ? <p className="lede">{description}</p> : null}
       </div>
+      {action ? <div className="row">{action}</div> : null}
     </div>
   );
 }
 
 function AccessEnded({ org }: { org: Organisation }) {
-  if (!["lapsed", "ended", "revoked"].includes(org.access.state)) return null;
+  if (org.access.state === "active") return null;
   return (
     <div className="banner bad" role="alert">
       <p>
-        <b>This organisation's access {org.access.state === "revoked" ? "was revoked" : "has ended"}
-        {org.access.ends_at ? ` on ${when(org.access.ends_at)}` : ""}.</b> Keys and connected apps are
-        paused, not deleted. Requests are refused with <code>403 entitlement_lapsed</code> until access is
-        renewed.
+        <b>API and MCP access is paused for this organisation.</b> Keys and connected apps are kept, not deleted;
+        requests are refused with <code>403 entitlement_lapsed</code> until access is restored. Reply to our email
+        or write to hello@ruhu.ai.
       </p>
-      {org.role === "owner" ? (
-        <button className="btn" type="button" onClick={() => go("/console/access")}>
-          Renew access
-        </button>
-      ) : null}
     </div>
   );
 }
 
-function NeedsAccess({ what, org }: { what: string; org: Organisation }) {
+function NeedsAccess({ what }: { what: string; org?: Organisation }) {
   return (
-    <div className="card tint">
-      <h2>{what} are available once this organisation has access</h2>
-      <p className="lede">
-        Reading the corpus on the website needs no account. The API and MCP need access,
-        granted per organisation.
-      </p>
-      <div className="row">
-        {org.role === "owner" ? (
-          <button className="btn" type="button" onClick={() => go("/console/access")}>
-            Request access
-          </button>
-        ) : (
-          <p className="fine">Ask an owner of this organisation to request access.</p>
-        )}
-      </div>
+    <div className="empty">
+      <PauseCircle size={28} strokeWidth={1.5} aria-hidden="true" />
+      <h2>{what} are paused</h2>
+      <p className="lede">This organisation's access was stopped. Write to hello@ruhu.ai to restore it.</p>
     </div>
   );
 }
 
-// ---------- Overview ----------
+// ---------- Dashboard ----------
 export function Overview({ me, org }: PageProps) {
-  const keys = useAsync(() => api<{ keys: { state: string }[] }>(`/organisations/${org.id}/keys`), [org.id]);
-  const apps = useAsync(() => api<{ clients: { revoked_at: string | null }[] }>(`/organisations/${org.id}/clients`), [org.id]);
-  const access = useAsync(() => api<AccessDetails>(`/organisations/${org.id}/access`), [org.id]);
+  const keys = useAsync(() => api<{ keys: Key[] }>(`/organisations/${org.id}/keys`), [org.id]);
+  const apps = useAsync(() => api<{ clients: Grant[] }>(`/organisations/${org.id}/clients`), [org.id]);
+  const usage = useAsync(() => api<{ days: UsageDay[] }>(`/organisations/${org.id}/usage?days=7`), [org.id]);
   const active = org.access.state === "active";
-  const manager = MANAGERS.has(org.role);
-  const factor = me.person.second_factor !== "none" || !!me.second_factor_until;
-  const hasKey = (keys.data?.keys ?? []).some((k) => k.state === "active");
-  const hasApp = (apps.data?.clients ?? []).some((c) => !c.revoked_at);
-  const openRequest = (access.data?.requests ?? []).find((r) => ["submitted", "needs_information"].includes(r.state));
+  const builder = BUILDERS.has(org.role);
+  const activeKeys = (keys.data?.keys ?? []).filter((k) => k.state === "active");
+  const connected = (apps.data?.clients ?? []).filter((c) => !c.revoked_at);
+  const today = new Date().toISOString().slice(0, 10);
+  const todayRequests = (usage.data?.days ?? []).filter((d) => d.day === today).reduce((a, d) => a + d.requests, 0);
+  const firstName = (me.person.display_name ?? "").split(" ")[0];
+  const limits = org.access.tier?.allowance ?? {};
   return (
     <>
-      <Heading title="Overview" org={org} />
+      <Heading
+        title={firstName ? `Welcome, ${firstName}` : "Dashboard"}
+        description="Search and read Africa's published law from your own code and AI tools."
+      />
       <AccessEnded org={org} />
       {me.invitations.map((invitation) => (
         <Invitation key={invitation.id} invitation={invitation} />
       ))}
-      {org.access.state === "none" && !openRequest ? (
-        <div className="card tint">
-          <h2>Get access to the API and MCP</h2>
-          <p className="lede">
-            Access is granted per organisation. Tell us how you'll use the corpus and which jurisdictions you
-            need; we reply by email, and the decision shows here.
-          </p>
-          <div className="row">
-            {org.role === "owner" ? (
-              <button className="btn" type="button" onClick={() => go("/console/access")}>
-                Request access
-              </button>
-            ) : (
-              <p className="fine">Ask an owner of this organisation to request access.</p>
-            )}
-          </div>
-        </div>
+      {active && builder ? (
+        <section className="quick" aria-label="Quick start">
+          <button className="quick-card" type="button" onClick={() => go("/console/keys?create=1")}>
+            <KeyRound size={22} strokeWidth={1.6} aria-hidden="true" />
+            <b>Create an API key</b>
+            <span>Call the REST API or MCP from your code.</span>
+          </button>
+          <button className="quick-card" type="button" onClick={() => go("/console/connect?app=claude")}>
+            <Plug size={22} strokeWidth={1.6} aria-hidden="true" />
+            <b>Connect Claude or Codex</b>
+            <span>Ask questions over the corpus from your AI tools.</span>
+          </button>
+          <a className="quick-card" href="/developers">
+            <BookOpen size={22} strokeWidth={1.6} aria-hidden="true" />
+            <b>Read the docs</b>
+            <span>Endpoints, examples, limits and error codes.</span>
+          </a>
+        </section>
       ) : null}
-      {openRequest ? (
-        <div className="card tint">
-          <h2>Request sent on {when(openRequest.created_at)}</h2>
-          <p className="lede">
-            {openRequest.state === "needs_information"
-              ? "We need more information. Check your email, then update the request."
-              : `We'll email ${openRequest.contact_email} when it's decided. You can follow it under Access and plan.`}
-          </p>
-          <div className="row">
-            <button className="btn secondary" type="button" onClick={() => go("/console/access")}>
-              See the request
+      <div className="grid3">
+        <div className="card stat">
+          <span className="stat-label">Plan</span>
+          <b>{org.access.starter ? "Starter" : active ? "Pilot access" : "Paused"}</b>
+          <span>
+            {org.access.starter ? "Free" : org.access.ends_at ? `Until ${when(org.access.ends_at)}` : "No end date"} ·{" "}
+            <button className="link" type="button" onClick={() => go("/console/access")}>
+              {org.access.starter ? "Ask for more" : "Details"}
+            </button>
+          </span>
+        </div>
+        <div className="card stat">
+          <span className="stat-label">Requests today</span>
+          <b>{number(todayRequests)}</b>
+          <span>
+            Up to {number(limits.requests_per_minute ?? 0)} a minute ·{" "}
+            <button className="link" type="button" onClick={() => go("/console/usage")}>
+              Usage
+            </button>
+          </span>
+        </div>
+        <div className="card stat">
+          <span className="stat-label">In use</span>
+          <b>
+            {activeKeys.length} {activeKeys.length === 1 ? "key" : "keys"} · {connected.length}{" "}
+            {connected.length === 1 ? "app" : "apps"}
+          </b>
+          <span>
+            <button className="link" type="button" onClick={() => go("/console/keys")}>
+              Manage keys
+            </button>
+          </span>
+        </div>
+      </div>
+      {activeKeys.length ? (
+        <div className="card">
+          <div className="card-head">
+            <h2>Recent keys</h2>
+            <button className="link" type="button" onClick={() => go("/console/keys")}>
+              View all
             </button>
           </div>
+          <table>
+            <tbody>
+              {activeKeys.slice(0, 3).map((k) => (
+                <tr key={k.id}>
+                  <td>
+                    {k.name}
+                    <small className="mono" dir="ltr">
+                      oa_live_{k.id.slice(4, 10)}…{k.last_four}
+                    </small>
+                  </td>
+                  <td className="actions">{ago(k.last_used_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : null}
-      {active && manager && !factor ? (
+      {MANAGERS.has(org.role) && active && !org.access.starter && me.person.second_factor === "none" && !me.second_factor_until ? (
         <div className="banner warn">
           <p>
-            <b>Access granted.</b> Owners and admins confirm key creation and other sensitive changes with a
-            second factor. Set one up now so your first key isn't held up.
+            <b>Set up a second factor.</b> Owners and admins of organisations with approved access confirm keys and
+            other sensitive changes with one.
           </p>
           <button className="btn" type="button" onClick={() => go("/console/security")}>
-            Set up a second factor
+            Set up
           </button>
         </div>
       ) : null}
-      {active ? (
-        <div className="grid2">
-          <div className="card">
-            <h3>Access</h3>
-            <p>
-              <b>{org.access.tier?.id === "pilot" ? "Pilot access" : org.access.tier?.id}</b> ·{" "}
-              {org.access.scope?.all ? "All jurisdictions" : (org.access.scope?.jurisdictions ?? []).join(", ").toUpperCase()}
-            </p>
-            <p className="fine">{org.access.ends_at ? `Until ${when(org.access.ends_at)}` : "No end date"}</p>
-            <button className="link" type="button" onClick={() => go("/console/access")}>
-              Details
-            </button>
-          </div>
-          <div className="card">
-            <h3>Limits</h3>
-            <p>
-              {number(org.access.tier?.allowance?.requests_per_minute ?? 0)} requests a minute, shared by every key
-              and app in this organisation.
-            </p>
-            <button className="link" type="button" onClick={() => go("/console/usage")}>
-              See usage
-            </button>
-          </div>
-        </div>
-      ) : null}
-      <div className="card">
-        <h2>Getting started</h2>
-        <ol className="checklist">
-          <Step done title="Create your account" />
-          <Step
-            done={active}
-            title="Get access"
-            note={openRequest ? "Request sent." : "Usually the only wait."}
-            action={!active && org.role === "owner" && !openRequest ? ["Request", "/console/access"] : undefined}
-          />
-          {manager ? (
-            <Step
-              done={factor}
-              title="Set up a second factor"
-              note="Needed by owners and admins to create keys."
-              action={factor ? undefined : ["Set up", "/console/security"]}
-            />
-          ) : null}
-          <Step
-            done={hasKey}
-            title="Create an API key"
-            note="For your own code and scripts."
-            action={active && BUILDERS.has(org.role) && !hasKey ? ["Create key", "/console/keys?create=1"] : undefined}
-          />
-          <Step
-            done={hasApp}
-            title="Connect Claude, ChatGPT or Codex"
-            note="They sign in themselves; there's no key to paste."
-            action={active && BUILDERS.has(org.role) && !hasApp ? ["Connect", "/console/connect"] : undefined}
-          />
-        </ol>
-      </div>
-      <div className="grid2">
-        <div className="card">
-          <h3>Documentation</h3>
-          <p className="fine">
-            The <a href="/developers">API and MCP guide</a> has example requests and responses, limits and every
-            error code.
-          </p>
-        </div>
-        <div className="card">
-          <h3>Reading stays open</h3>
-          <p className="fine">
-            Everything on <a href="/">the website</a> stays free to search and read without signing in. Access
-            changes volume and machine use, never what you can see.
-          </p>
-        </div>
-      </div>
     </>
-  );
-}
-
-function Step({
-  done = false,
-  title,
-  note,
-  action,
-}: {
-  done?: boolean;
-  title: string;
-  note?: string;
-  action?: [string, string];
-}) {
-  return (
-    <li className={done ? "done" : ""}>
-      <span className="tick" aria-hidden="true" />
-      <div>
-        {title}
-        {done ? <span className="sr-only"> (done)</span> : null}
-        {note && !done ? <small>{note}</small> : null}
-      </div>
-      {action ? (
-        <button className="btn secondary" type="button" onClick={() => go(action[1])}>
-          {action[0]}
-        </button>
-      ) : (
-        <span />
-      )}
-    </li>
   );
 }
 
@@ -306,13 +236,15 @@ export function AccessPage({ me, org, refresh }: PageProps) {
   const details = useAsync(() => api<AccessDetails>(`/organisations/${org.id}/access`), [org.id]);
   const [error, setError] = useState<unknown>(null);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [asking, setAsking] = useState(false);
   if (details.loading && !details.data) return <Loading />;
   if (details.error) return <Problem error={details.error} />;
   const data = details.data!;
   const open = data.requests.find((r) => ["submitted", "needs_information"].includes(r.state));
   const declined = data.requests.find((r) => r.state === "declined");
-  const active = data.current.state === "active";
+  const starter = !!data.current.starter;
   const current = data.history.find((h) => h.state === "active");
+  const limits = data.current.tier?.allowance ?? {};
   async function withdraw(id: string) {
     try {
       await api(`/organisations/${org.id}/access-requests/${id}/withdraw`, { method: "POST" });
@@ -334,54 +266,83 @@ export function AccessPage({ me, org, refresh }: PageProps) {
   }
   return (
     <>
-      <Heading title="Access and plan" org={org} />
+      <Heading
+        title="Plan and limits"
+        org={org}
+        description="Every plan reads the same published corpus as the website. Plans differ in limits and in the jurisdictions keys and apps can reach."
+      />
       <AccessEnded org={org} />
       <Problem error={error} onDismiss={() => setError(null)} />
-      {active && current ? (
-        <div className="card">
-          <h2>
-            {current.tier_name} · {scopeLabel(current.scope)}
-          </h2>
-          <p className="fine">
-            {current.source === "waiver"
-              ? "Free or reduced access, granted by Open Alvary"
-              : current.source === "payment"
-                ? "Subscription"
-                : "Granted by Open Alvary"}{" "}
-            · {when(current.starts_at)} {current.ends_at ? `to ${when(current.ends_at)}` : "with no end date"}
-          </p>
+      {data.current.state === "active" ? (
+        <div className="card plan">
+          <div className="card-head">
+            <div>
+              <span className="stat-label">Current plan</span>
+              <h2>
+                {starter ? "Starter" : current?.tier_name ?? "Access"}{" "}
+                <Pill tone="good">{starter ? "Free" : current?.source === "waiver" ? "Free or reduced" : "Granted"}</Pill>
+              </h2>
+            </div>
+            {org.role === "owner" && !open ? (
+              <button className="btn" type="button" onClick={() => setAsking(true)}>
+                {starter ? "Ask for more" : "Change plan"}
+              </button>
+            ) : null}
+          </div>
           <dl className="facts">
-            <dt>Includes</dt>
-            <dd>{(data.current.tier?.includes ?? []).map((i) => ({ rest: "REST API", mcp: "MCP" } as Record<string, string>)[i] ?? i).join(", ")}</dd>
             <dt>Requests</dt>
-            <dd>{number(data.current.tier?.allowance?.requests_per_minute ?? 0)} a minute, shared across the organisation</dd>
+            <dd>
+              {number(limits.requests_per_minute ?? 0)} a minute, bursts of {number(limits.burst ?? 0)}, shared by every
+              key and app in this organisation
+            </dd>
+            <dt>At the same time</dt>
+            <dd>{number(limits.concurrency ?? 0)} requests</dd>
+            <dt>Includes</dt>
+            <dd>
+              {(data.current.tier?.includes ?? [])
+                .map((i) => ({ rest: "REST API", mcp: "MCP" } as Record<string, string>)[i] ?? i)
+                .join(" and ")}
+            </dd>
             <dt>Jurisdictions</dt>
-            <dd>{scopeLabel(current.scope)}</dd>
+            <dd>{scopeLabel(data.current.scope ?? { all: true })}</dd>
+            {!starter && current ? (
+              <>
+                <dt>Period</dt>
+                <dd>
+                  From {when(current.starts_at)} {current.ends_at ? `to ${when(current.ends_at)}` : "with no end date"}; then
+                  back to Starter
+                </dd>
+              </>
+            ) : null}
           </dl>
-          {org.role === "owner" ? (
+          {!starter && org.role === "owner" ? (
             <div className="row">
               <button className="link" type="button" onClick={() => setConfirmEnd(true)}>
-                End access
+                Go back to Starter
               </button>
             </div>
           ) : null}
         </div>
       ) : null}
       {open ? <RequestStatus request={open} onWithdraw={() => withdraw(open.id)} owner={org.role === "owner"} /> : null}
-      {!active && !open && org.role === "owner" ? (
+      {asking && !open && org.role === "owner" ? (
         <RequestForm
           me={me}
           org={org}
           declined={declined}
-          renewal={data.history.length > 0}
+          renewal={!starter}
+          onCancel={() => setAsking(false)}
           onSent={() => {
+            setAsking(false);
             details.reload();
             refresh();
           }}
         />
       ) : null}
-      {!active && !open && org.role !== "owner" ? <NeedsAccess what="The API and MCP" org={org} /> : null}
-      {declined && !open && !active ? (
+      {starter && org.role !== "owner" ? (
+        <p className="fine">Owners of this organisation can ask for higher limits.</p>
+      ) : null}
+      {declined && !open ? (
         <div className="card">
           <h3>Your last request was declined</h3>
           <p className="fine">
@@ -410,17 +371,14 @@ export function AccessPage({ me, org, refresh }: PageProps) {
         </div>
       ) : null}
       {confirmEnd ? (
-        <Dialog title="End this organisation's access?" onClose={() => setConfirmEnd(false)}>
-          <p>
-            Every key and connected app stops working at their next request. They are kept and work again if
-            access is granted later.
-          </p>
+        <Dialog title="Go back to the Starter plan?" onClose={() => setConfirmEnd(false)}>
+          <p>Your granted access ends now and the free Starter limits apply again. Keys and connected apps keep working.</p>
           <div className="dialog-actions">
             <button className="btn secondary" type="button" onClick={() => setConfirmEnd(false)}>
               Cancel
             </button>
             <button className="btn danger" type="button" onClick={end}>
-              End access
+              Go back to Starter
             </button>
           </div>
         </Dialog>
@@ -485,12 +443,14 @@ function RequestForm({
   declined,
   renewal,
   onSent,
+  onCancel,
 }: {
   me: Me;
   org: Organisation;
   declined?: AccessRequest;
   renewal: boolean;
   onSent: () => void;
+  onCancel: () => void;
 }) {
   const [form, setForm] = useState({
     purpose: "",
@@ -536,10 +496,10 @@ function RequestForm({
   }
   return (
     <form className="card form" onSubmit={send}>
-      <h2>{renewal ? "Request access again" : "Request access"}</h2>
+      <h2>{renewal ? "Change your plan" : "Ask for higher limits"}</h2>
       <p className="lede">
-        Every plan sees the same published corpus as the website. Access sets your limits and the
-        jurisdictions your keys and apps can reach.
+        Tell us how you'll use the corpus and what you need. We reply by email, usually with a plan for your
+        organisation; public-interest work can ask for free or reduced access.
       </p>
       <div className="field">
         <label htmlFor="purpose">How will you use it?</label>
@@ -614,6 +574,9 @@ function RequestForm({
         <button className="btn" type="submit" disabled={sending}>
           {sending ? "Sending…" : "Send request"}
         </button>
+        <button className="btn secondary" type="button" onClick={onCancel}>
+          Cancel
+        </button>
         <span className="fine">We reply by email to {form.contact_email || "your contact address"}.</span>
       </div>
     </form>
@@ -672,21 +635,17 @@ export function Keys({ org }: PageProps) {
       <Heading
         title="API keys"
         org={org}
+        description="Keys let your code call the REST API and MCP. Claude, ChatGPT and Codex don't need one: they sign in themselves."
         action={
           active && builder ? (
             <button className="btn" type="button" onClick={() => setCreating(true)}>
+              <Plus size={16} aria-hidden="true" />
               Create key
             </button>
           ) : null
         }
       />
       <AccessEnded org={org} />
-      {org.access.state === "none" ? <NeedsAccess what="API keys" org={org} /> : null}
-      <p className="lede">
-        Keys read the published corpus within this organisation's access. A personal key stops working if you
-        leave the organisation; a shared key for servers stays with the organisation. Claude, ChatGPT and Codex
-        don't need a key: they sign in themselves.
-      </p>
       <Problem error={error} onDismiss={() => setError(null)} />
       {list.loading && !list.data ? <Loading /> : null}
       {list.error ? <Problem error={list.error} /> : null}
@@ -740,9 +699,16 @@ export function Keys({ org }: PageProps) {
           </table>
         </div>
       ) : !list.loading && active ? (
-        <div className="card tint">
-          <h2>No keys yet</h2>
-          <p className="lede">A key lets your own code call the REST API and MCP.</p>
+        <div className="empty">
+          <KeyRound size={28} strokeWidth={1.5} aria-hidden="true" />
+          <h2>No API keys yet</h2>
+          <p className="lede">Create a key to call the REST API or MCP from your own code.</p>
+          {builder ? (
+            <button className="btn" type="button" onClick={() => setCreating(true)}>
+              <Plus size={16} aria-hidden="true" />
+              Create key
+            </button>
+          ) : null}
         </div>
       ) : null}
       {active ? (
@@ -931,6 +897,7 @@ export function Apps({ org }: PageProps) {
       <Heading
         title="Connected apps"
         org={org}
+        description="Apps such as Claude, Claude Code and Codex that you've allowed to read the corpus for this organisation."
         action={
           active && BUILDERS.has(org.role) ? (
             <button className="btn" type="button" onClick={() => go("/console/connect")}>
@@ -940,7 +907,7 @@ export function Apps({ org }: PageProps) {
         }
       />
       <AccessEnded org={org} />
-      {org.access.state === "none" ? <NeedsAccess what="Connected apps" org={org} /> : null}
+      {org.access.state !== "active" ? <NeedsAccess what="Connected apps" org={org} /> : null}
       <Problem error={error} onDismiss={() => setError(null)} />
       {list.loading && !list.data ? <Loading /> : null}
       {grants.length ? (
@@ -982,9 +949,15 @@ export function Apps({ org }: PageProps) {
           </table>
         </div>
       ) : !list.loading && active ? (
-        <div className="card tint">
+        <div className="empty">
+          <Plug size={28} strokeWidth={1.5} aria-hidden="true" />
           <h2>No apps connected</h2>
-          <p className="lede">Connect Claude, ChatGPT or Codex to ask questions over the corpus.</p>
+          <p className="lede">Connect Claude, Claude Code or Codex to ask questions over the corpus.</p>
+          {BUILDERS.has(org.role) ? (
+            <button className="btn" type="button" onClick={() => go("/console/connect")}>
+              Connect an app
+            </button>
+          ) : null}
         </div>
       ) : null}
       <p className="fine">
@@ -1008,12 +981,12 @@ export function Connect({ org }: PageProps) {
   const command = `claude mcp add --transport http open-alvary ${MCP_URL}`;
   return (
     <>
-      <Heading title="Connect an app" org={org} />
+      <Heading
+        title="Connect an app"
+        org={org}
+        description="Apps sign in with your Open Alvary account and act for one organisation. You approve each one, and can disconnect it any time."
+      />
       {org.access.state !== "active" ? <NeedsAccess what="Connected apps" org={org} /> : null}
-      <p className="lede">
-        Apps sign in with your Open Alvary account and act for one organisation. You approve each one, and can
-        disconnect it any time.
-      </p>
       <div className="card">
         <div className="tabs" role="tablist">
           {TABS.map(([id, label]) => (
@@ -1138,7 +1111,7 @@ export function Usage({ org }: PageProps) {
   });
   return (
     <>
-      <Heading title="Usage" org={org} />
+      <Heading title="Usage" org={org} description="Requests by this organisation's keys and apps, counted per day (UTC)." />
       <AccessEnded org={org} />
       <div className="grid3">
         <div className="card stat">
@@ -1297,7 +1270,7 @@ export function MembersPage({ org, refresh }: PageProps) {
   const you = members.find((m) => m.you);
   return (
     <>
-      <Heading title="Members" org={org} />
+      <Heading title="Members" org={org} description="People in this organisation and what their role lets them do." />
       <Problem error={error} onDismiss={() => setError(null)} />
       <div className="table-wrap">
         <table>
@@ -1565,7 +1538,7 @@ export function Settings({ org, refresh }: PageProps) {
   }
   return (
     <>
-      <Heading title="Settings" org={org} />
+      <Heading title="Settings" org={org} description="This organisation's details, its audit log, and deleting it." />
       <Problem error={error} onDismiss={() => setError(null)} />
       <form className="card form" onSubmit={save}>
         <h2>Organisation</h2>
