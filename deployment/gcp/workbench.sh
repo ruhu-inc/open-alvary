@@ -158,6 +158,8 @@ operator() {
 access() {  # once: the Access section's connection to the public accounts database (MAC-11)
   # Run 'deployment/gcp/public_service.sh access_role' first. Copies, never prints, two secrets
   # from the public project: the access role's password (inside a connection URL) and the mail key.
+  "${GC[@]}" iam service-accounts describe "$RUNNER_EMAIL" >/dev/null 2>&1 \
+    || { echo "The workbench is not set up in $PROJECT yet: run $0 setup (and deploy) first." >&2; exit 1; }
   local password key
   password="$(gcloud --project "$PUBLIC_PROJECT" secrets versions access latest --secret=access-role-password)"
   secret access-database-url "postgresql+psycopg://open_alvary_access:${password}@/open_alvary?host=/cloudsql/${PUBLIC_CONNECTION}"
