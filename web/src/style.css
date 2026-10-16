@@ -2297,3 +2297,272 @@ nav.breadcrumb a:hover {
   gap: 18px;
   margin-top: 6px;
 }
+
+/* The console guide (/docs/console): numbered steps beside annotated pictures. The orange numbers
+   match the ones drawn in the pictures. */
+.guide section {
+  max-width: 56rem;
+  margin: 0 0 56px;
+  scroll-margin-top: 90px;
+}
+.guide section h2 {
+  font-size: 28px;
+  margin: 0 0 12px;
+}
+.guide section h3 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 26px 0 6px;
+}
+.guide section p {
+  font-size: 16px;
+  line-height: 1.7;
+  color: #33463d;
+}
+.guide section p a,
+.guide-steps a,
+.guide .page-title a,
+.guide .notice a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.guide .notice a {
+  display: inline;
+  margin: 0;
+}
+.guide code {
+  font: 14px ui-monospace, monospace;
+  background: #ecefe6;
+  padding: 1px 5px;
+  border-radius: 3px;
+  overflow-wrap: anywhere;
+}
+.guide-contents {
+  max-width: 56rem;
+  margin: 0 0 48px;
+  padding: 18px 22px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f7f7ee;
+}
+.guide-contents ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 8px 20px;
+}
+.guide-contents a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
+  color: var(--green);
+}
+.guide-contents a:hover {
+  text-decoration: underline;
+}
+.guide-contents a span {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid #cbd4c3;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+.guide-steps {
+  list-style: none;
+  padding: 0;
+  margin: 14px 0;
+  display: grid;
+  gap: 10px;
+}
+.guide-steps li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: #33463d;
+}
+.guide-n {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  border-radius: 50%;
+  background: #e8590c;
+  color: #fff;
+  font: 700 13px/24px "DM Sans", system-ui, sans-serif;
+  text-align: center;
+}
+.guide-n.quiet {
+  background: none;
+  border: 2px solid #f0b48f;
+  width: 12px;
+  height: 12px;
+  margin: 7px 6px 0;
+}
+.guide-shot {
+  margin: 18px 0 30px;
+}
+.guide-shot a {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+}
+.guide-shot img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(34, 55, 47, 0.06), 0 8px 24px rgba(34, 55, 47, 0.08);
+}
+.guide-shot figcaption {
+  font-size: 14px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+.guide-code {
+  margin: 12px 0 18px;
+  padding: 14px 16px;
+  background: #ecefe6;
+  border-radius: 6px;
+  font: 14px/1.6 ui-monospace, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.guide-note {
+  border-left: 3px solid #8a5a1c;
+  background: #f8eee3;
+  color: #6b4314;
+  padding: 12px 16px;
+  margin: 14px 0;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.guide-note a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Developers page: the three starting steps, endpoints and the plans table. */
+.start-steps {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 26px 28px;
+  margin: 0 0 40px;
+  background: #fffefa;
+}
+.start-steps h2 {
+  margin: 0 0 14px;
+}
+.start-steps ol {
+  margin: 0 0 20px;
+  padding-left: 22px;
+  display: grid;
+  gap: 8px;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.start-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px 26px;
+}
+.start-actions .button {
+  display: inline-flex;
+  padding: 12px 18px;
+  align-items: center;
+  gap: 8px;
+}
+.developers code {
+  font: 13px ui-monospace, monospace;
+  background: #ecefe6;
+  padding: 1px 5px;
+  border-radius: 3px;
+  overflow-wrap: anywhere;
+}
+.dev-code {
+  margin: 12px 0 18px;
+  padding: 14px 16px;
+  background: #ecefe6;
+  border-radius: 6px;
+  font: 13px/1.6 ui-monospace, monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.endpoints dt {
+  margin: 14px 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.endpoints dd {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #33463d;
+}
+.developer-plans {
+  margin: 30px 0;
+}
+.plan-table-wrap {
+  overflow-x: auto;
+  margin: 16px 0;
+}
+.plan-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  min-width: 640px;
+}
+.plan-table th,
+.plan-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+.plan-table thead th {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.plan-table tbody th {
+  font-weight: 600;
+}
+/* On wide screens the guide's contents sit beside it and stay in view. */
+@media (min-width: 1100px) {
+  .guide {
+    display: grid;
+    grid-template-columns: minmax(0, 56rem) 230px;
+    column-gap: 64px;
+    align-items: start;
+  }
+  .guide > * {
+    grid-column: 1;
+  }
+  .guide > .guide-contents {
+    grid-column: 2;
+    grid-row: 2 / span 11;
+    position: sticky;
+    top: 90px;
+    margin: 0;
+    padding: 16px 18px;
+  }
+  .guide-contents ol {
+    grid-template-columns: 1fr;
+  }
+}
+.developers p a:not(.text-link),
+.developers dd a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

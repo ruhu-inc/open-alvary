@@ -6,6 +6,8 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   base: "/static/public-preview/",
+  // The site's public files (icons, the console guide's pictures) aren't used by the preview.
+  publicDir: false,
   build: {
     outDir: "../workbench/static/public-preview",
     emptyOutDir: true,
