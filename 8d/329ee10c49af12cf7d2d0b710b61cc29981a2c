@@ -1,0 +1,21 @@
+accounts/ids.py
+  s_b82616e2476856::t_543ab659731117 7-23
+changes/watches.py
+  s_b82616e2476856::t_b8e583b134fac6 219-221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8d329ee10c49af12cf7d2d0b710b61cc29981a2c",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "unknown"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
