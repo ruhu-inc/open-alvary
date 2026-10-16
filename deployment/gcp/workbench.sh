@@ -81,7 +81,8 @@ EOF
 
 setup() {
   "${GC[@]}" services enable run.googleapis.com sqladmin.googleapis.com artifactregistry.googleapis.com \
-    secretmanager.googleapis.com iap.googleapis.com cloudbuild.googleapis.com storage.googleapis.com
+    secretmanager.googleapis.com iap.googleapis.com cloudbuild.googleapis.com storage.googleapis.com \
+    cloudresourcemanager.googleapis.com
   "${GC[@]}" artifacts repositories describe "$REPOSITORY" --location="$REGION" >/dev/null 2>&1 ||
     "${GC[@]}" artifacts repositories create "$REPOSITORY" --repository-format=docker --location="$REGION"
   "${GC[@]}" storage buckets describe "gs://$BUCKET" >/dev/null 2>&1 ||
