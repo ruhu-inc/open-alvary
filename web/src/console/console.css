@@ -893,7 +893,7 @@ svg .grid {
 }
 svg .chart-label {
   fill: var(--muted);
-  font-size: 12px;
+  font-size: 10px;
   font-family: var(--sans);
 }
 
@@ -1056,4 +1056,31 @@ svg .chart-label {
 }
 .btn svg {
   flex: none;
+}
+
+/* Links that open elsewhere carry a small mark. */
+.ext-icon {
+  display: inline-block;
+  vertical-align: -1px;
+  margin-left: 4px;
+  opacity: 0.7;
+}
+.foot-link .ext-icon {
+  margin-left: auto;
+}
+.topbar-links a {
+  display: inline-flex;
+  align-items: center;
+}
+/* "Continue as …" on the sign-in page. */
+.provider.remembered {
+  justify-content: flex-start;
+  text-align: left;
+  padding: 10px 14px;
+  min-height: 60px;
+}
+.provider.remembered .avatar {
+  width: 36px;
+  height: 36px;
+  font-size: 14px;
 }

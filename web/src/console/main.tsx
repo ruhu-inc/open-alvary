@@ -2,12 +2,12 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ArrowLeft,
   BarChart3,
   BookOpen,
   Check,
   ChevronsUpDown,
   Gauge,
+  Globe,
   KeyRound,
   LayoutDashboard,
   LogOut,
@@ -29,7 +29,7 @@ import "./console.css";
 import { ApiError, api, go, setCsrf, signOut, type Me, type Organisation } from "./api";
 import { Consent } from "./consent";
 import { AccessPage, Apps, Connect, Keys, MembersPage, Overview, Security, Settings as Settings_, Usage } from "./pages";
-import { Dialog, Loading, Mark, Problem } from "./ui";
+import { Dialog, External, Loading, Mark, Problem } from "./ui";
 
 type NavItem = { to: string; label: string; icon: LucideIcon };
 const NAV: { group?: string; items: NavItem[] }[] = [
@@ -91,6 +91,7 @@ function App() {
       (data) => {
         setCsrf(data.csrf);
         setMe(data);
+        remember({ name: data.person.display_name ?? "", email: data.person.email });
         setError(null);
         const welcomed = data.policies.pending.length === 0 && data.organisations.length > 0;
         if (!welcomed && path !== "/console/welcome") go("/console/welcome");
@@ -218,14 +219,14 @@ function Shell({ me, path, refresh }: { me: Me; path: string; refresh: () => voi
             ))}
           </nav>
           <div className="side-foot">
-            <a href="/developers" className="foot-link">
+            <External href="/developers" className="foot-link">
               <BookOpen size={17} strokeWidth={1.8} aria-hidden="true" />
               Documentation
-            </a>
-            <a href="/" className="foot-link">
-              <ArrowLeft size={17} strokeWidth={1.8} aria-hidden="true" />
-              Back to the website
-            </a>
+            </External>
+            <External href="/" className="foot-link">
+              <Globe size={17} strokeWidth={1.8} aria-hidden="true" />
+              Open Alvary website
+            </External>
             <AccountMenu me={me} active={path === "/console/security"} />
           </div>
         </div>
@@ -233,13 +234,13 @@ function Shell({ me, path, refresh }: { me: Me; path: string; refresh: () => voi
       <div className="main-column">
         <header className="topbar">
           <nav className="crumbs" aria-label="You are here">
-            <span>{org.name}</span>
+            <span>{path === "/console/security" ? "Your account" : org.name}</span>
             <span aria-hidden="true">/</span>
             <b>{TITLES[path] ?? "Console"}</b>
           </nav>
           <div className="topbar-links">
-            <a href="/developers">Docs</a>
-            <a href="/about">Help</a>
+            <External href="/developers">Docs</External>
+            <External href="/about">Help</External>
           </div>
         </header>
         <main id="main" tabIndex={-1} className="content">
@@ -436,38 +437,95 @@ const SIGN_IN_ERRORS: Record<string, string> = {
   invalid: "Something was wrong with that sign-in link. Start again.",
 };
 
+// The last account used in this browser, for "Continue as …" (a convenience on the person's own
+// device, as at Google and GitHub: name, email and how they signed in; never a secret).
+type Remembered = { name: string; email: string; method?: "google" | "email" };
+function recall(): Remembered | null {
+  try {
+    const raw = localStorage.getItem("oa_console_account");
+    return raw ? (JSON.parse(raw) as Remembered) : null;
+  } catch {
+    return null;
+  }
+}
+function remember(update: Partial<Remembered>) {
+  try {
+    localStorage.setItem("oa_console_account", JSON.stringify({ ...recall(), ...update }));
+  } catch {
+    /* storage unavailable: the sign-in page offers every method */
+  }
+}
+function forget() {
+  try {
+    localStorage.removeItem("oa_console_account");
+  } catch {
+    /* nothing to forget */
+  }
+}
+
 function SignIn() {
   const params = new URLSearchParams(location.search);
   const error = params.get("error");
   const returnTo = params.get("return_to") ?? "/console";
-  const start = (method: string) =>
-    `/console/auth/start?method=${method}&return_to=${encodeURIComponent(returnTo.startsWith("/console") ? returnTo : "/console")}`;
+  const [known, setKnown] = useState(recall);
+  useEffect(() => {
+    // Still signed in (the console session lasts up to 30 days): go straight back in.
+    if (error) return;
+    fetch("/console/api/v1/me", { credentials: "same-origin" }).then(
+      (r) => r.ok && location.replace(returnTo.startsWith("/console") ? returnTo : "/console"),
+      () => undefined,
+    );
+  }, [error, returnTo]);
+  const start = (method: string, hint?: string) =>
+    `/console/auth/start?method=${method}&return_to=${encodeURIComponent(returnTo.startsWith("/console") ? returnTo : "/console")}` +
+    (hint ? `&login_hint=${encodeURIComponent(hint)}` : "");
   return (
     <div className="solo">
       <main className="solo-card" id="main" tabIndex={-1}>
         <Mark size={40} />
-        <h1>Sign in to Open Alvary</h1>
+        <h1>{known?.email ? "Welcome back" : "Sign in to Open Alvary"}</h1>
         <p className="fine">For API and MCP access. Reading the corpus on the website needs no account.</p>
         {error ? (
           <div className="callout bad" role="alert">
             {SIGN_IN_ERRORS[error] ?? SIGN_IN_ERRORS.invalid}
           </div>
         ) : null}
-        <a className="provider" href={start("google")}>
-          <GoogleIcon />
-          Continue with Google
-        </a>
-        <a className="provider" href={start("email")}>
-          Continue with email
-        </a>
-        <p className="fine">We email you a code. No password to remember.</p>
+        {known?.email && known.method ? (
+          <>
+            <a className="provider remembered" href={start(known.method, known.email)}>
+              <span className="avatar" aria-hidden="true">
+                {(known.name || known.email).slice(0, 1).toUpperCase()}
+              </span>
+              <span className="switcher-text">
+                <b>Continue as {known.name || known.email}</b>
+                <small>
+                  {known.email} · {known.method === "google" ? "Google" : "email code"}
+                </small>
+              </span>
+            </a>
+            <button className="link" type="button" onClick={() => (forget(), setKnown(null))}>
+              Use another account
+            </button>
+          </>
+        ) : (
+          <>
+            <a className="provider" href={start("google")} onClick={() => remember({ method: "google" })}>
+              <GoogleIcon />
+              Continue with Google
+            </a>
+            <a className="provider" href={start("email")} onClick={() => remember({ method: "email" })}>
+              Continue with email
+            </a>
+            <p className="fine">We email you a code. No password to remember.</p>
+          </>
+        )}
         <p className="fine">
-          <a href="/">Read the corpus without signing in</a>
+          <External href="/">Read the corpus without signing in</External>
         </p>
         <p className="fine">
-          By continuing you agree to the <a href="/terms">terms of service</a> and the{" "}
-          <a href="/acceptable-use">acceptable use policy</a>, and confirm you have read the{" "}
-          <a href="/privacy">privacy notice</a>.
+          By continuing you agree to the <External href="/terms">terms of service</External> and the{" "}
+          <External href="/acceptable-use">acceptable use policy</External>, and confirm you have read the{" "}
+          <External href="/privacy">privacy notice</External>.
         </p>
       </main>
     </div>
@@ -533,13 +591,9 @@ function Welcome({ me, onDone }: { me: Me; onDone: () => void }) {
             <input type="checkbox" required checked={agree.terms} onChange={(e) => setAgree({ ...agree, terms: e.target.checked })} />
             <span>
               I agree to the{" "}
-              <a href="/terms" target="_blank" rel="noreferrer">
-                terms of service
-              </a>{" "}
+              <External href="/terms">terms of service</External>{" "}
               and the{" "}
-              <a href="/acceptable-use" target="_blank" rel="noreferrer">
-                acceptable use policy
-              </a>
+              <External href="/acceptable-use">acceptable use policy</External>
               .
             </span>
           </label>
@@ -547,9 +601,7 @@ function Welcome({ me, onDone }: { me: Me; onDone: () => void }) {
             <input type="checkbox" required checked={agree.privacy} onChange={(e) => setAgree({ ...agree, privacy: e.target.checked })} />
             <span>
               I have read the{" "}
-              <a href="/privacy" target="_blank" rel="noreferrer">
-                privacy notice
-              </a>
+              <External href="/privacy">privacy notice</External>
               .
             </span>
           </label>

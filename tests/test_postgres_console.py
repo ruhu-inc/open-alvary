@@ -478,3 +478,11 @@ def test_the_approval_answer_asks_for_a_second_factor_only_where_the_role_needs_
         reason="Approved",
     )
     assert answer("s2")["mfa"] is True  # owner of an organisation with approved access
+
+
+def test_continue_as_passes_the_remembered_account_to_the_provider(console):
+    _, _, app = console
+    start = client(app).get("/auth/start", params={"method": "google", "login_hint": "amina@example.org"})
+    assert parse_qs(urlparse(start.headers["location"]).query)["login_hint"] == ["amina@example.org"]
+    odd = client(app).get("/auth/start", params={"method": "google", "login_hint": "<script>"})
+    assert "login_hint" not in parse_qs(urlparse(odd.headers["location"]).query)
