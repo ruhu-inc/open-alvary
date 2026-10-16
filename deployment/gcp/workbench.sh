@@ -169,10 +169,11 @@ operator() {
   local email="${1:?email}" name="${2:?name}" roles="${3:?roles}"
   local image
   image="$(deployed_image)"
+  # "^|^" makes | the separator, so the comma-separated roles stay one argument (gcloud topic escaping).
   "${GC[@]}" run jobs deploy workbench-admin --image="$image" --region="$REGION" --service-account="$RUNNER_EMAIL" \
     --set-cloudsql-instances="${PROJECT}:${REGION}:${SQL_INSTANCE}" \
     --set-secrets="ALVARY_REVIEW_DATABASE_URL=review-database-url:latest" \
-    --command=python --args="-m,workbench.admin,add,${email},--name,${name},--roles,${roles}" --max-retries=0
+    --command=python --args="^|^-m|workbench.admin|add|${email}|--name|${name}|--roles|${roles}" --max-retries=0
   "${GC[@]}" run jobs execute workbench-admin --region="$REGION" --wait
   "${GC[@]}" iap web add-iam-policy-binding --resource-type=cloud-run --service="$SERVICE" --region="$REGION" \
     --member="user:${email}" --role=roles/iap.httpsResourceAccessor
