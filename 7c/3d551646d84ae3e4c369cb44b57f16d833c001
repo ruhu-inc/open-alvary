@@ -1,0 +1,41 @@
+deployment/auth0/post_login.js
+  s_b82616e2476856::t_91c35d9a68eaa6 7-10,89
+rights/sql/v0021/accounts.sql
+  s_b82616e2476856::t_9466d7aff283ab 339-340,348,357,364-375
+api/console.py
+  s_b82616e2476856::t_91c35d9a68eaa6 467-468,470-475,874-875
+tests/test_postgres_console.py
+  s_b82616e2476856::t_d37a50ec3c2ab2 422-480
+accounts/tiers.json
+  s_b82616e2476856::t_57b40a55d96cb2 3-17
+  s_b82616e2476856::t_aeb9476277f5b4 2
+web/src/console/main.tsx
+  s_b82616e2476856::t_91c35d9a68eaa6 319
+accounts/store.py
+  s_b82616e2476856::t_a9b7b614487697 1713
+  s_b82616e2476856::t_e4b4e92ff4a63c 870-873,1043-1044,1049-1077
+  s_b82616e2476856::t_d6d7a03f2105a4 957
+migrations/versions/0021_accounts.py
+  s_b82616e2476856::t_9466d7aff283ab 17
+rights/sql/v0021/manifest.json
+  s_b82616e2476856::t_9466d7aff283ab 24
+tests/test_postgres_accounts.py
+  s_b82616e2476856::t_a9b7b614487697 469-476
+  s_b82616e2476856::t_d37a50ec3c2ab2 432-468
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7c3d551646d84ae3e4c369cb44b57f16d833c001",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
