@@ -197,3 +197,29 @@ def test_operators_find_organisations_by_name_email_or_id(world):
     assert [o["id"] for o in admin.search("law clinic")] == [own]
     assert [o["id"] for o in admin.search(own)] == [own]
     assert admin.search("%") == [] and admin.search("zz-nothing") == []
+
+
+def test_the_role_signs_in_with_its_password_and_refuses_an_unsafe_one(pg_engine):
+    migrate(pg_engine)
+    with pg_engine.connect() as conn:
+        base = PolicyNamespace(conn.scalar(text("SELECT current_schema()"))).base
+    role = "oa_" + sha256(base.encode()).hexdigest()[:12] + "_login"
+    password = "A" * 20 + "b" * 20
+    with pytest.raises(ValueError):
+        provision_role(pg_engine, role, "short'; DROP ROLE x; --")
+    provision_role(pg_engine, role, password)
+    try:
+        signed = create_engine(
+            pg_engine.url.set(username=role, password=password),
+            poolclass=NullPool,
+            connect_args={"options": f"-csearch_path={base}"},
+        )
+        with signed.connect() as conn:
+            assert conn.scalar(text("SELECT current_user")) == role
+            with pytest.raises(ProgrammingError, match="permission denied"):
+                conn.execute(text(f"SELECT secret_hash FROM {base}_accounts.api_key"))
+        signed.dispose()
+    finally:
+        with pg_engine.begin() as conn:
+            conn.execute(text(f'DROP OWNED BY "{role}"'))
+            conn.execute(text(f'DROP ROLE "{role}"'))

@@ -95,6 +95,7 @@ async function loadMe() {
   app.csrf = result.data.csrf;
   const who = document.getElementById("who");
   who.replaceChildren(
+    result.data.access ? el("a", { href: "#/access", text: "Access" }) : "",
     el("span", { text: `${result.data.name} · ${result.data.roles.join(", ")}` }),
     el("button", { class: "small", text: "Sign out", on: { click: signOut } }),
   );
@@ -1391,6 +1392,7 @@ async function route() {
     if (parts[0] === "doc" && parts[2] === "languages") return await languagesView(parts[1]);
     if (parts[0] === "doc" && parts[1]) return await actView(parts[1]);
     if (parts[0] === "audit" && parts[1]) return await auditView(parts[1]);
+    if (parts[0] === "access" && app.me.access) return await accessView(parts.slice(1));
     return await dashboard();
   } catch (error) {
     if (error.message !== "signed out") toast(error.message);

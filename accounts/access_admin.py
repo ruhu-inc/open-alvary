@@ -11,6 +11,7 @@ them out), cannot act as a person, and grant plans from the catalogue (the pilot
 which reach only the published corpus. Who may act, and the fresh passkey check, are the workbench's.
 
   python -m accounts.access_admin provision-role ROLE   the database role the workbench signs in as
+                                  (LOGIN with ALVARY_ACCESS_ROLE_PASSWORD set, else NOLOGIN)
 """
 
 import argparse
@@ -479,17 +480,23 @@ def grant_statements(accounts_schema: str, policy_schema: str, role: str) -> lis
     return statements
 
 
-def provision_role(engine, role: str) -> list[str]:
-    """Create the workbench's role (NOLOGIN; the administrator gives it a login separately) and its
-    grants. Run as the schema owner."""
+def provision_role(engine, role: str, password: str | None = None) -> list[str]:
+    """Create the workbench's role and its grants; with a password it can sign in (LOGIN), without
+    one it stays NOLOGIN. Run as an administrator with CREATEROLE (the deploy job's user)."""
     from rights.database import PolicyNamespace
 
+    if password is not None and not re.fullmatch(r"[A-Za-z0-9]{32,128}", password):
+        raise ValueError("The role's password must be 32 to 128 letters and digits")
     with engine.begin() as conn:
         ns = PolicyNamespace(conn.scalar(text("SELECT current_schema()")))
         quote = conn.dialect.identifier_preparer.quote_identifier
-        if not conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = :r)"), {"r": role}):
+        login = f"LOGIN PASSWORD '{password}'" if password else "NOLOGIN"  # checked above: no quotes
+        if conn.scalar(text("SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname = :r)"), {"r": role}):
+            if password:
+                conn.execute(text(f"ALTER ROLE {quote(role)} {login}"))
+        else:
             conn.execute(
-                text(f"CREATE ROLE {quote(role)} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS")
+                text(f"CREATE ROLE {quote(role)} {login} NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS")
             )
         statements = grant_statements(quote(ns.schema("accounts")), quote(ns.schema("policy")), quote(role))
         for statement in statements:
@@ -506,7 +513,10 @@ def main(argv=None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("provision-role").add_argument("role")
     args = parser.parse_args(argv)
-    for statement in provision_role(engine_for(), args.role):
+    # The deploy job passes the password from Secret Manager; it is never printed.
+    for statement in provision_role(
+        engine_for(), args.role, os.environ.get("ALVARY_ACCESS_ROLE_PASSWORD") or None
+    ):
         print(statement)
     return 0
 

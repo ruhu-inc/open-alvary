@@ -103,7 +103,8 @@ Activation B adds (owner's go-ahead): secrets console-client-secret, consent-sec
 resend-api-key, resend-webhook-secret ('accounts'); Cloud Run jobs $WORKER_JOB and $DAILY_JOB
 ('ACCOUNTS=1 deploy'); service account $SCHEDULER and two Cloud Scheduler jobs, every 5 minutes and
 daily ('schedule'); a certificate for $API_DOMAIN ('api_edge'); a log bucket keeping the audit seals
-800 days, with its sink ('audit_seals').
+800 days, with its sink ('audit_seals'); the database role
+open_alvary_access and its password secret, for the review workbench's Access section ('access_role').
   Worker runs, ~8,600 a month of a few seconds   ~ \$1-3 (largely within Cloud Run's free tier)
   Cloud Scheduler, two jobs                        ~ \$0 (three jobs a month are free)
   Five more secrets                                ~ \$0.30
@@ -438,6 +439,22 @@ audit_seals() {  # once: the seals' copy outside the database (MAC-13.7), kept 8
   echo "retention (irreversible): gcloud --project $PROJECT logging buckets update audit-seals --location=$REGION --locked"
 }
 
+access_role() {  # once, after an ACCOUNTS=1 deploy: the role the workbench's Access section signs in as (MAC-11)
+  "${GC[@]}" secrets describe access-role-password >/dev/null 2>&1 \
+    || python3 -c 'import secrets,string; a=string.ascii_letters+string.digits; print("".join(secrets.choice(a) for _ in range(40)), end="")' \
+      | secret_put access-role-password
+  grant "${GC[@]}" secrets add-iam-policy-binding access-role-password --member="serviceAccount:$RUNNER_EMAIL" \
+    --role=roles/secretmanager.secretAccessor
+  # Reads only what the Access section shows (no key hashes, session tokens or provider subjects) and
+  # writes only what its actions change (accounts.access_admin); never a Cloud SQL superuser.
+  "${GC[@]}" run jobs deploy open-alvary-access-role --image="$IMAGE" --region="$REGION" \
+    --service-account="$RUNNER_EMAIL" --set-cloudsql-instances="$(connection)" --tasks=1 --max-retries=0 \
+    --set-secrets="DATABASE_URL=database-url:latest,ALVARY_ACCESS_ROLE_PASSWORD=access-role-password:latest" \
+    --command=python --args=-m,accounts.access_admin,provision-role,open_alvary_access
+  "${GC[@]}" run jobs execute open-alvary-access-role --region="$REGION" --wait
+  echo "Role open_alvary_access ready. Next: deployment/gcp/workbench.sh access (in the ingestion project)."
+}
+
 address() { "${GC[@]}" compute addresses describe open-alvary-ip --global --format='value(address)'; }
 
 dns() {
@@ -499,4 +516,4 @@ status() {
   echo "Load balancer address: $(address 2>/dev/null || echo none)"
 }
 
-"${1:?plan, project, setup, deploy, edge, dns, verify, status; activation B: accounts, api_edge, schedule, audit_seals}" "${@:2}"
+"${1:?plan, project, setup, deploy, edge, dns, verify, status; activation B: accounts, api_edge, schedule, audit_seals, access_role}" "${@:2}"

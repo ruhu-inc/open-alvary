@@ -6,6 +6,9 @@
 #   deployment/gcp/workbench.sh upload     # reconciled readings and page images -> bucket (read-only to the app)
 #   deployment/gcp/workbench.sh deploy     # build the image, deploy Cloud Run behind Identity-Aware Proxy
 #   deployment/gcp/workbench.sh operator <email> "<name>" reviewer,approver   # allow-list an operator
+#   deployment/gcp/workbench.sh access     # once: the Access section's connection to the accounts database
+#   ACCESS=1 deployment/gcp/workbench.sh deploy                              # deploy with the Access section
+#   deployment/gcp/workbench.sh enrol <email> [--replace]   # a one-time code for an access_admin's passkey
 #   deployment/gcp/workbench.sh status
 #
 # Cloud Run (scales to zero) reads a Cloud Storage bucket mounted read-only and a Cloud SQL
@@ -31,6 +34,10 @@ CORPUS_COLLECTIONS="${WORKBENCH_CORPUS_COLLECTIONS:-gs://${CORPUS_BUCKET}/collec
 BUILDER_EMAIL="image-builder@${PROJECT}.iam.gserviceaccount.com"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPOSITORY}/workbench:$(git rev-parse --short HEAD)"
 GC=(gcloud --project "$PROJECT" --quiet)
+# The Access section (MAC-11) reaches the public accounts database in the public project.
+ACCESS="${ACCESS:-0}"
+PUBLIC_PROJECT="${PUBLIC_PROJECT:-open-alvary-prod}"
+PUBLIC_CONNECTION="${PUBLIC_PROJECT}:${REGION}:${PUBLIC_SQL_INSTANCE:-open-alvary-db}"
 
 secret() {  # create a secret once; later runs keep it
   local name="$1" value="$2"
@@ -116,13 +123,18 @@ deploy() {
   local number url
   number="$("${GC[@]}" projects describe "$PROJECT" --format='value(projectNumber)')"
   url="https://${SERVICE}-${number}.${REGION}.run.app"
+  local instances="${PROJECT}:${REGION}:${SQL_INSTANCE}" secrets="ALVARY_REVIEW_DATABASE_URL=review-database-url:latest,ALVARY_REVIEW_OIDC_CLIENT_SECRET=review-oidc-client-secret:latest"
+  if [[ "$ACCESS" == 1 ]]; then  # every later deploy must keep ACCESS=1, or the Access section goes dark
+    instances+=",${PUBLIC_CONNECTION}"
+    secrets+=",ALVARY_ACCESS_DATABASE_URL=access-database-url:latest,RESEND_API_KEY=resend-api-key:latest"
+  fi
   "${GC[@]}" run deploy "$SERVICE" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
     --no-allow-unauthenticated --iap --memory=2Gi --cpu=1 --min-instances=0 --max-instances=2 \
-    --add-cloudsql-instances="${PROJECT}:${REGION}:${SQL_INSTANCE}" \
+    --set-cloudsql-instances="$instances" \
     --add-volume=name=collection,type=cloud-storage,bucket="$BUCKET",readonly=true \
     --add-volume-mount=volume=collection,mount-path=/data/collection \
     --set-env-vars="^|^ALVARY_REVIEW_STAGING=/data/collection|ALVARY_REVIEW_COLLECTIONS=${CORPUS_COLLECTIONS}|ALVARY_REVIEW_BASE_URL=${url}|ALVARY_REVIEW_ALLOWED_HOSTS=${SERVICE}-${number}.${REGION}.run.app|ALVARY_REVIEW_OIDC_CLIENT_ID=${ALVARY_REVIEW_OIDC_CLIENT_ID}" \
-    --set-secrets="ALVARY_REVIEW_DATABASE_URL=review-database-url:latest,ALVARY_REVIEW_OIDC_CLIENT_SECRET=review-oidc-client-secret:latest" \
+    --set-secrets="$secrets" \
     --command=uvicorn --args="workbench.app:app,--host,0.0.0.0,--port,8080,--proxy-headers,--forwarded-allow-ips,*,--no-access-log"
   # Identity-Aware Proxy calls the service as Google's IAP service agent.
   "${GC[@]}" run services add-iam-policy-binding "$SERVICE" --region="$REGION" \
@@ -143,6 +155,35 @@ operator() {
     --member="user:${email}" --role=roles/iap.httpsResourceAccessor
 }
 
+access() {  # once: the Access section's connection to the public accounts database (MAC-11)
+  # Run 'deployment/gcp/public_service.sh access_role' first. Copies, never prints, two secrets
+  # from the public project: the access role's password (inside a connection URL) and the mail key.
+  local password key
+  password="$(gcloud --project "$PUBLIC_PROJECT" secrets versions access latest --secret=access-role-password)"
+  secret access-database-url "postgresql+psycopg://open_alvary_access:${password}@/open_alvary?host=/cloudsql/${PUBLIC_CONNECTION}"
+  key="$(gcloud --project "$PUBLIC_PROJECT" secrets versions access latest --secret=resend-api-key)"
+  secret resend-api-key "$key"
+  cat <<NEXT
+Stored access-database-url and resend-api-key. The owner then grants this service account the Cloud
+SQL client role in $PUBLIC_PROJECT (once):
+  gcloud projects add-iam-policy-binding $PUBLIC_PROJECT --member=serviceAccount:$RUNNER_EMAIL --role=roles/cloudsql.client
+Then: ACCESS=1 $0 deploy; $0 operator <email> "<name>" reviewer,access_admin; $0 enrol <email>.
+NEXT
+}
+
+enrol() {  # a one-time code (24 hours) with which an access_admin registers a first passkey
+  local email="${1:?email}" replace=""
+  [[ "${2:-}" == "--replace" ]] && replace=",--replace"  # after revoking their passkeys (one was lost)
+  "${GC[@]}" run jobs deploy workbench-enrol --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
+    --add-cloudsql-instances="${PROJECT}:${REGION}:${SQL_INSTANCE}" \
+    --set-secrets="ALVARY_REVIEW_DATABASE_URL=review-database-url:latest" \
+    --command=python --args="-m,workbench.admin,enrol,${email}${replace}" --max-retries=0
+  "${GC[@]}" run jobs execute workbench-enrol --region="$REGION" --wait
+  # The code is only in the job's log, which only the project's owners read; give it to the operator yourself.
+  "${GC[@]}" logging read "resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"workbench-enrol\" AND textPayload:\"enrolment code\"" \
+    --limit=1 --freshness=1h --format='value(textPayload)'
+}
+
 status() {
   "${GC[@]}" run services describe "$SERVICE" --region="$REGION" --format='value(status.url,status.conditions[0].status)' || true
   "${GC[@]}" sql instances describe "$SQL_INSTANCE" --format='value(state,settings.tier)' || true
@@ -154,6 +195,8 @@ case "${1:-plan}" in
   upload) upload ;;
   deploy) deploy ;;
   operator) shift; operator "$@" ;;
+  access) access ;;
+  enrol) shift; enrol "$@" ;;
   status) status ;;
-  *) echo "usage: $0 plan|setup|upload|deploy|operator <email> <name> <roles>|status"; exit 2 ;;
+  *) echo "usage: $0 plan|setup|upload|deploy|operator <email> <name> <roles>|access|enrol <email>|status"; exit 2 ;;
 esac

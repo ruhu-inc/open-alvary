@@ -13,6 +13,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     Column,
     DateTime,
@@ -33,9 +34,11 @@ from sqlalchemy import (
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
-ROLES = {"reviewer", "approver", "admin"}
+ROLES = {"reviewer", "approver", "admin", "access_admin"}
 SESSION_IDLE = timedelta(hours=1)
 SESSION_MAX = timedelta(hours=12)
+CHALLENGE_TTL = timedelta(minutes=5)
+ENROLMENT_TTL = timedelta(hours=24)
 
 metadata = MetaData()
 
@@ -58,6 +61,35 @@ session = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("last_seen", DateTime(timezone=True), nullable=False),
     Column("ended_at", DateTime(timezone=True)),
+    Column("passkey_at", DateTime(timezone=True)),  # the last passkey check in this session
+    Column("challenge", String(64)),  # one WebAuthn challenge at a time, used once
+    Column("challenge_purpose", String(20)),
+    Column("challenge_at", DateTime(timezone=True)),
+)
+
+# Operators' passkeys for the Access section (workbench/passkeys.py); never deleted, only revoked.
+passkey = Table(
+    "operator_passkey",
+    metadata,
+    Column("credential_id", String(1400), primary_key=True),
+    Column("email", String(320), nullable=False, index=True),
+    Column("name", String(100), nullable=False),
+    Column("public_key", Text, nullable=False),
+    Column("algorithm", Integer, nullable=False),
+    Column("sign_count", BigInteger, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("last_used_at", DateTime(timezone=True)),
+    Column("revoked_at", DateTime(timezone=True)),
+)
+
+# One-time codes, issued on the server, that let an operator register a first passkey.
+enrolment = Table(
+    "passkey_enrolment",
+    metadata,
+    Column("code_hash", String(64), primary_key=True),
+    Column("email", String(320), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("used_at", DateTime(timezone=True)),
 )
 
 auth_flow = Table(
@@ -163,10 +195,21 @@ def connect(url: str) -> Engine:
 
 def _upgrade(engine: Engine) -> None:
     """Columns added after a database was first created (create_all adds only missing tables)."""
-    columns = {column["name"] for column in inspect(engine).get_columns("approval")}
-    if "details_sha256" not in columns:
-        with engine.begin() as db:
-            db.execute(text("ALTER TABLE approval ADD COLUMN details_sha256 VARCHAR(64)"))
+    added = {
+        "approval": {"details_sha256": "VARCHAR(64)"},
+        "session": {
+            "passkey_at": "TIMESTAMP WITH TIME ZONE",
+            "challenge": "VARCHAR(64)",
+            "challenge_purpose": "VARCHAR(20)",
+            "challenge_at": "TIMESTAMP WITH TIME ZONE",
+        },
+    }
+    for table, columns in added.items():
+        present = {column["name"] for column in inspect(engine).get_columns(table)}
+        for name, kind in columns.items():
+            if name not in present:
+                with engine.begin() as db:
+                    db.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {kind}"))
 
 
 class Store:
@@ -289,7 +332,15 @@ class Store:
                 return None
             db.execute(update(session).where(session.c.token_hash == row.token_hash).values(last_seen=moment))
         person = self.operator(row.email)
-        return {"email": row.email, "csrf": row.csrf, "operator": person} if person else None
+        if not person:
+            return None
+        return {
+            "email": row.email,
+            "csrf": row.csrf,
+            "operator": person,
+            "token_hash": row.token_hash,
+            "passkey_at": row.passkey_at and _aware(row.passkey_at),
+        }
 
     def end_session(self, token: str) -> None:
         with self.engine.begin() as db:
@@ -299,6 +350,95 @@ class Store:
                     update(session).where(session.c.token_hash == row.token_hash).values(ended_at=now())
                 )
                 self._audit(db, row.email, "signed_out")
+
+    # --- passkeys (Access section) --------------------------------------------------------------
+
+    def issue_enrolment(self, email: str, actor: str = "admin-cli") -> str:
+        """A one-time code (24 hours) with which an operator registers a passkey; printed once."""
+        email = email.strip().lower()
+        if not self.operator(email):
+            raise ValueError("No active operator with that email")
+        alphabet = "ABCDEFGHJKMNPQRSTVWXYZ23456789"
+        code = "-".join("".join(secrets.choice(alphabet) for _ in range(4)) for _ in range(4))
+        with self.engine.begin() as db:
+            db.execute(insert(enrolment).values(code_hash=digest(code), email=email, created_at=now()))
+            self._audit(db, actor, "passkey_enrolment_issued", detail={"email": email})
+        return code
+
+    def take_enrolment(self, email: str, code: str) -> bool:
+        """Spend a code: only the operator it was issued to, once, within 24 hours."""
+        letters = "".join(c for c in code.upper() if c.isalnum())
+        code = "-".join(letters[i : i + 4] for i in range(0, len(letters), 4))
+        with self.engine.begin() as db:
+            row = db.execute(
+                select(enrolment).where(enrolment.c.code_hash == digest(code), enrolment.c.email == email)
+            ).first()
+            if not row or row.used_at or now() - _aware(row.created_at) > ENROLMENT_TTL:
+                return False
+            db.execute(update(enrolment).where(enrolment.c.code_hash == row.code_hash).values(used_at=now()))
+        return True
+
+    def passkeys(self, email: str) -> list[dict]:
+        with self.engine.connect() as db:
+            rows = db.execute(
+                select(passkey)
+                .where(passkey.c.email == email, passkey.c.revoked_at.is_(None))
+                .order_by(passkey.c.created_at)
+            )
+            return [dict(row._mapping) for row in rows]
+
+    def add_passkey(self, email: str, record: dict, name: str) -> None:
+        with self.engine.begin() as db:
+            db.execute(insert(passkey).values(email=email, name=name, created_at=now(), **record))
+            self._audit(db, email, "passkey_added", detail={"name": name})
+
+    def revoke_passkey(self, email: str, credential_id: str) -> bool:
+        with self.engine.begin() as db:
+            done = db.execute(
+                update(passkey)
+                .where(
+                    passkey.c.credential_id == credential_id,
+                    passkey.c.email == email,
+                    passkey.c.revoked_at.is_(None),
+                )
+                .values(revoked_at=now())
+            ).rowcount
+            if done:
+                self._audit(db, email, "passkey_removed", detail={"credential": credential_id[:16]})
+            return bool(done)
+
+    def begin_challenge(self, token_hash: str, purpose: str) -> str:
+        challenge = secrets.token_urlsafe(32)
+        with self.engine.begin() as db:
+            db.execute(
+                update(session)
+                .where(session.c.token_hash == token_hash)
+                .values(challenge=challenge, challenge_purpose=purpose, challenge_at=now())
+            )
+        return challenge
+
+    def take_challenge(self, token_hash: str, purpose: str) -> str | None:
+        """The session's open challenge for this purpose, once, within five minutes."""
+        with self.engine.begin() as db:
+            row = db.execute(select(session).where(session.c.token_hash == token_hash)).first()
+            db.execute(
+                update(session)
+                .where(session.c.token_hash == token_hash)
+                .values(challenge=None, challenge_purpose=None, challenge_at=None)
+            )
+        if not row or not row.challenge or row.challenge_purpose != purpose:
+            return None
+        return row.challenge if now() - _aware(row.challenge_at) <= CHALLENGE_TTL else None
+
+    def passkey_checked(self, token_hash: str, email: str, credential_id: str, counter: int) -> None:
+        with self.engine.begin() as db:
+            db.execute(
+                update(passkey)
+                .where(passkey.c.credential_id == credential_id)
+                .values(sign_count=counter, last_used_at=now())
+            )
+            db.execute(update(session).where(session.c.token_hash == token_hash).values(passkey_at=now()))
+            self._audit(db, email, "passkey_checked")
 
     def begin_flow(self, nonce: str, verifier: str) -> str:
         state = secrets.token_urlsafe(32)
