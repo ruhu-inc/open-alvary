@@ -50,6 +50,7 @@ FLOW_COOKIE = "oa_console_flow"
 FRESH = timedelta(minutes=10)
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 RETURN = re.compile(r"^/console(/[A-Za-z0-9/_?=&%.-]*)?$")
+EMAIL = re.compile(r"[^\s@<>\"']{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}")
 # Provider connections offered at launch (D24); Microsoft waits for its MAC-16 check.
 CONNECTIONS = {"google": "google-oauth2", "email": "email"}
 METHODS = {"google-oauth2": "google", "email": "email"}
@@ -94,7 +95,9 @@ class Provider:
             self._discovery = response.json()
         return self._discovery
 
-    def authorize_url(self, flow: dict, purpose: str, method: str | None) -> str:
+    def authorize_url(
+        self, flow: dict, purpose: str, method: str | None, login_hint: str | None = None
+    ) -> str:
         challenge = base64.urlsafe_b64encode(hashlib.sha256(flow["verifier"].encode()).digest()).rstrip(b"=")
         query = {
             "response_type": "code",
@@ -108,6 +111,8 @@ class Provider:
         }
         if method:
             query["connection"] = CONNECTIONS[method]
+        if login_hint:
+            query["login_hint"] = login_hint  # "Continue as …": the provider pre-fills the account
         if purpose != "sign_in":
             query["prompt"] = "login"  # a fresh sign-in, never the provider's remembered session
         if purpose == "second_factor":
@@ -289,7 +294,11 @@ def create_console_app(
     # ---------- sign-in ----------
     @app.get("/auth/start")
     def start(
-        request: Request, purpose: str = "sign_in", method: str | None = None, return_to: str = "/console"
+        request: Request,
+        purpose: str = "sign_in",
+        method: str | None = None,
+        return_to: str = "/console",
+        login_hint: str | None = None,
     ):
         if purpose not in ("sign_in", "reauthenticate", "second_factor", "link") or (
             method is not None and method not in CONNECTIONS
@@ -306,7 +315,12 @@ def create_console_app(
                 return RedirectResponse(f"/console/auth/dev?{query}", status_code=303)
             return RedirectResponse("/console/sign-in?error=unavailable", status_code=303)
         flow = accounts.begin_flow(purpose, return_to, session if purpose != "sign_in" else None)
-        response = RedirectResponse(provider.authorize_url(flow, purpose, method), status_code=303)
+        response = RedirectResponse(
+            provider.authorize_url(
+                flow, purpose, method, login_hint if login_hint and EMAIL.fullmatch(login_hint) else None
+            ),
+            status_code=303,
+        )
         response.set_cookie(
             FLOW_COOKIE,
             flow["browser"],

@@ -1,11 +1,14 @@
 // The console's pages (MAC-10), in the words people use: access, keys, connected apps, members.
 
 import React, { useEffect, useState } from "react";
-import { BookOpen, KeyRound, PauseCircle, Plug, Plus } from "lucide-react";
+import { BarChart3, BookOpen, ExternalLink, KeyRound, PauseCircle, Plug, Plus } from "lucide-react";
 import { ApiError, api, clearDraft, go, peekDraft, saveDraft, type Me, type Organisation } from "./api";
 import {
+  COUNTRIES,
   CopyField,
   Dialog,
+  External,
+  maskedKey,
   Loading,
   Pill,
   Problem,
@@ -96,11 +99,13 @@ export function Overview({ me, org }: PageProps) {
             <b>Connect Claude or Codex</b>
             <span>Ask questions over the corpus from your AI tools.</span>
           </button>
-          <a className="quick-card" href="/developers">
+          <External className="quick-card" href="/developers" icon={false}>
             <BookOpen size={22} strokeWidth={1.6} aria-hidden="true" />
-            <b>Read the docs</b>
+            <b>
+              Read the docs <ExternalLink size={13} strokeWidth={1.8} aria-hidden="true" className="ext-icon" />
+            </b>
             <span>Endpoints, examples, limits and error codes.</span>
-          </a>
+          </External>
         </section>
       ) : null}
       <div className="grid3">
@@ -152,7 +157,7 @@ export function Overview({ me, org }: PageProps) {
                   <td>
                     {k.name}
                     <small className="mono" dir="ltr">
-                      oa_live_{k.id.slice(4, 10)}…{k.last_four}
+                      {maskedKey(k.id, k.last_four)}
                     </small>
                   </td>
                   <td className="actions">{ago(k.last_used_at)}</td>
@@ -670,7 +675,7 @@ export function Keys({ org }: PageProps) {
                   <td>
                     {key.name}
                     <small className="mono" dir="ltr">
-                      {key.id.slice(0, 12)}…{key.last_four}
+                      {maskedKey(key.id, key.last_four)}
                     </small>
                   </td>
                   <td>
@@ -718,7 +723,7 @@ export function Keys({ org }: PageProps) {
             {`curl ${API_ORIGIN}/api/v1/search?q=land \\\n  -H "Authorization: Bearer $OPEN_ALVARY_KEY"`}
           </div>
           <p className="fine">
-            <a href="/developers">API reference, limits and errors</a>
+            <External href="/developers">API reference, limits and errors</External>
           </p>
         </div>
       ) : null}
@@ -1127,10 +1132,21 @@ export function Usage({ org }: PageProps) {
           <span>requests refused in 30 days</span>
         </div>
       </div>
-      <div className="card">
-        <h3>Requests a day</h3>
-        <Chart series={series} />
-      </div>
+      {days.length ? (
+        <div className="card">
+          <h3>Requests a day</h3>
+          <Chart series={series} />
+        </div>
+      ) : (
+        <div className="empty">
+          <BarChart3 size={28} strokeWidth={1.5} aria-hidden="true" />
+          <h2>No requests yet</h2>
+          <p className="lede">Calls from your keys and connected apps appear here within a minute.</p>
+          <button className="btn secondary" type="button" onClick={() => go("/console/keys")}>
+            Go to API keys
+          </button>
+        </div>
+      )}
       {refusals.size ? (
         <div className="table-wrap">
           <table>
@@ -1172,7 +1188,7 @@ export function Usage({ org }: PageProps) {
                   <td>
                     {names.get(credential) ?? "Removed"}
                     <small className="mono" dir="ltr">
-                      {credential.slice(0, 16)}…
+                      {credential.startsWith("key_") ? maskedKey(credential) : `${credential.slice(0, 12)}…`}
                     </small>
                   </td>
                   <td>{number(count)}</td>
@@ -1182,7 +1198,6 @@ export function Usage({ org }: PageProps) {
           </table>
         </div>
       ) : null}
-      {!days.length ? <p className="fine">No requests in the last 30 days.</p> : null}
     </>
   );
 }
@@ -1309,7 +1324,17 @@ export function MembersPage({ org, refresh }: PageProps) {
                     ROLE_NAMES[m.role]
                   )}
                 </td>
-                {manager ? <td>{m.second_factor !== "none" ? <Pill tone="good">On</Pill> : ["owner", "admin"].includes(m.role) ? <Pill tone="warn">Needed</Pill> : "—"}</td> : null}
+                {manager ? (
+                  <td>
+                    {m.second_factor !== "none" ? (
+                      <Pill tone="good">On</Pill>
+                    ) : ["owner", "admin"].includes(m.role) && !org.access.starter ? (
+                      <Pill tone="warn">Needed</Pill>
+                    ) : (
+                      <span className="fine">Not set up</span>
+                    )}
+                  </td>
+                ) : null}
                 <td className="actions">
                   {m.you ? (
                     <button className="link" type="button" onClick={() => setLeave(m)}>
@@ -1560,8 +1585,15 @@ export function Settings({ org, refresh }: PageProps) {
               </select>
             </div>
             <div className="field">
-              <label htmlFor="org-country">Country (two-letter code)</label>
-              <input id="org-country" name="country" type="text" maxLength={2} defaultValue={o.country ?? ""} placeholder="RW" />
+              <label htmlFor="org-country">Country</label>
+              <select id="org-country" name="country" defaultValue={o.country ?? ""}>
+                <option value="">Not set</option>
+                {COUNTRIES.map(([code, name]) => (
+                  <option key={code} value={code}>
+                    {name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="field">
               <label htmlFor="org-website">Website (optional)</label>
@@ -1605,7 +1637,7 @@ export function Settings({ org, refresh }: PageProps) {
                         {ACTIONS[e.action] ?? e.action}
                         {e.target_id?.startsWith("key_") ? (
                           <small className="mono" dir="ltr">
-                            {e.target_id.slice(0, 16)}…
+                            {maskedKey(e.target_id)}
                           </small>
                         ) : null}
                       </td>
@@ -1670,16 +1702,14 @@ export function Security({ me, refresh }: { me: Me; refresh: () => void }) {
   }
   return (
     <>
-      <div className="page-head">
-        <h1>Security</h1>
-      </div>
+      <Heading title="Security" description="How you sign in, your second factor, your profile and where you're signed in." />
       <Problem error={error} onDismiss={() => setError(null)} />
       <div className="card">
         <h2>Second factor</h2>
         <p className="lede">
-          Owners and admins of an organisation with access confirm key creation, connecting apps and other
-          sensitive changes with a second factor: a passkey (Touch ID, Face ID, Windows Hello or a security key)
-          or an authenticator app. It's checked at the moment of the change, not only at sign-in.
+          A second proof that it's you, with Touch ID, a security key or an authenticator app. Owners and admins of
+          organisations with approved or paid access need one to create keys, connect apps and make other sensitive
+          changes; on the free Starter plan it's recommended.
         </p>
         <p>{factorSeen ? <Pill tone="good">Used in this session</Pill> : <Pill>Not used yet</Pill>}</p>
         <div className="row">
@@ -1743,7 +1773,7 @@ export function Security({ me, refresh }: { me: Me; refresh: () => void }) {
       >
         <h2>Profile</h2>
         <div className="field">
-          <label htmlFor="profile-name">Your name</label>
+          <label htmlFor="profile-name">Full name</label>
           <input id="profile-name" type="text" autoComplete="name" required maxLength={100} value={name} onChange={(e) => setName(e.target.value)} />
           <small>Members of your organisations see it. Your email ({me.person.email}) is shown only to their owners and admins.</small>
         </div>

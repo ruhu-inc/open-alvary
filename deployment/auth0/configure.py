@@ -298,10 +298,13 @@ def branding_steps(m: Management, site: str) -> list[tuple[str, callable]]:
     settings = m.call(
         "GET",
         "tenants/settings",
-        fields="friendly_name,picture_url,support_email,support_url",
+        fields="friendly_name,picture_url,support_email,support_url,session_lifetime,idle_session_lifetime",
         include_fields="true",
     )
     wanted = {
+        # The sign-in service remembers people for 30 days at most and 3 days idle (this plan's limit).
+        "session_lifetime": 720,
+        "idle_session_lifetime": 72,  # the most this plan allows
         "friendly_name": "Open Alvary",
         "picture_url": site + "/icon-512.png",
         "support_email": "hello@ruhu.ai",
