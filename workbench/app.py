@@ -97,14 +97,33 @@ def create_app(
         )
         return response
 
+    def back_to_sign_in(reason: str) -> RedirectResponse:
+        """A failed sign-in goes back to the sign-in page, which says why from a fixed list."""
+        response = RedirectResponse(f"/?signin={reason}", status_code=303)
+        response.delete_cookie(auth.FLOW_COOKIE, path="/auth")
+        return response
+
     @app.get("/auth/callback")
     def callback(request: Request, state: str = "", code: str = ""):
         started = request.cookies.get(auth.FLOW_COOKIE, "")
         if oidc and state and not (started and hmac.compare_digest(started, state)):
-            raise HTTPException(400, "Sign-in must finish in the browser that started it; start again")
+            return back_to_sign_in("other_browser")
         if not oidc or not state or not code:
-            raise HTTPException(400, "Invalid sign-in response")
-        email = oidc.finish(store, state, code)
+            return back_to_sign_in("failed")
+        try:
+            email = oidc.finish(store, state, code)
+        except HTTPException as error:
+            detail = str(error.detail)
+            reason = (
+                "not_operator"
+                if error.status_code == 403
+                else "unverified"
+                if "not verified" in detail
+                else "expired"
+                if "xpired" in detail or "already used" in detail
+                else "failed"
+            )
+            return back_to_sign_in(reason)
         token, _ = store.start_session(email)
         # A same-site navigation home, so the strict session cookie is sent with it.
         response = HTMLResponse(
@@ -290,6 +309,18 @@ def create_app(
                 "at": last["at"].isoformat(),
             }
         titles = {r["id"]: r["title"] for r in rows if r["last"]}
+        activity = [
+            {
+                "at": e["at"].isoformat(),
+                "actor": e["actor"],
+                "action": e["action"],
+                "id": e["act_id"],
+                "title": titles.get(e["act_id"]),
+                "page": e["page"],
+            }
+            for e in store.events(limit=300)
+            if e["action"] in {"page_saved", "details_saved", "act_approved", "act_revoked"}
+        ][:60]
         attention = [
             r
             for r in rows
@@ -309,18 +340,11 @@ def create_app(
             "types": sorted({r["type"] for r in rows}),
             "languages": sorted({r["language"] for r in rows if r["language"]}),
             "resume": resume,
-            "activity": [
-                {
-                    "at": e["at"].isoformat(),
-                    "actor": e["actor"],
-                    "action": e["action"],
-                    "id": e["act_id"],
-                    "title": titles.get(e["act_id"]),
-                    "page": e["page"],
-                }
-                for e in store.events(limit=200)
-                if e["action"] in {"page_saved", "details_saved", "act_approved", "act_revoked"}
-            ][:12],
+            "activity": activity,
+            # Operators by display name, for the activity and each document's last activity.
+            "names": store.names(
+                {e["actor"] for e in activity} | {r["last"]["actor"] for r in rows if r["last"]}
+            ),
         }
 
     @app.get("/api/documents")

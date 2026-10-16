@@ -167,7 +167,7 @@ async function passkeyBar() {
 
 async function accessView(parts) {
   parts = parts.map((part) => part.split("?")[0]);
-  setCrumbs(el("a", { href: "#/", text: "Home" }), parts[0] ? el("a", { href: "#/access", text: "Access" }) : "Access", ...(parts[0] === "audit" ? ["Audit log"] : []));
+  setCrumbs(parts[0] ? el("a", { href: "#/access", text: "Access" }) : "Access", ...(parts[0] === "audit" ? ["Audit log"] : []));
   if (parts[0] === "org" && parts[1]) return organisationView(parts[1]);
   if (parts[0] === "audit") return accessAuditView();
   const [bar, requests, clients] = await Promise.all([passkeyBar(), api("/api/access/requests"), api("/api/access/clients")]);
@@ -228,7 +228,7 @@ async function organisationView(id) {
   const access = o.access || {};
   const open = o.requests.find((r) => r.state === "submitted" || r.state === "needs_information");
   const owned = o.members.some((m) => m.role === "owner" && m.state === "active");
-  setCrumbs(el("a", { href: "#/", text: "Home" }), el("a", { href: "#/access", text: "Access" }), o.name);
+  setCrumbs(el("a", { href: "#/access", text: "Access" }), o.name);
 
   const tier = el("select", {}, tiers.data.map((t) => el("option", { value: t.id, text: `${t.name}${t.countries ? ` (up to ${t.countries} countries)` : ""}` })));
   if (open && open.tier_requested) tier.value = open.tier_requested;

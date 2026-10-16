@@ -77,6 +77,9 @@ function message(result) {
 function setCrumbs(...parts) {
   const crumbs = document.getElementById("crumbs");
   crumbs.replaceChildren(...parts.flatMap((part, i) => (i ? [" › ", part] : [part])));
+  // The tab names the screen, most specific first: "Page 2 · Electricity Act, 2023 · Open Alvary Review".
+  const names = parts.map((part) => (typeof part === "string" ? part : part.textContent || "")).filter(Boolean);
+  document.title = [...names.reverse().slice(0, 2), "Open Alvary Review"].join(" · ");
 }
 
 function main(...children) {
@@ -85,6 +88,8 @@ function main(...children) {
 }
 
 const pill = (cls, text) => el("span", { class: `pill ${cls}`, text });
+// An operator by display name where the workbench knows it (app.names, from /api/overview).
+const operatorName = (email) => (app.names || {})[email] || (email || "").split("@")[0];
 
 // --- sign-in -------------------------------------------------------------------------------------
 
@@ -95,8 +100,9 @@ async function loadMe() {
   app.csrf = result.data.csrf;
   const who = document.getElementById("who");
   who.replaceChildren(
-    result.data.access ? el("a", { href: "#/access", text: "Access" }) : "",
-    el("span", { text: `${result.data.name} · ${result.data.roles.join(", ")}` }),
+    el("a", { class: "nav-link", href: "#/", text: "Documents" }),
+    result.data.access ? el("a", { class: "nav-link", href: "#/access", text: "Access" }) : "",
+    el("span", { class: "who-name", text: result.data.name, title: `${result.data.email} · ${result.data.roles.join(", ")}` }),
     el("button", { class: "small", text: "Sign out", on: { click: signOut } }),
   );
   return null;
@@ -106,18 +112,47 @@ async function signOut() {
   if (app.dirty && !confirm("Discard unsaved changes and sign out?")) return;
   await api("/auth/logout", { method: "POST" });
   app.dirty = false;
-  location.hash = "#/";
-  location.reload();
+  location.replace("/?signed_out=1");
+}
+
+// Why a sign-in ended back here (/auth/callback sends a code, never free text: a link cannot put
+// words of its choosing on this page).
+const SIGNIN_ERRORS = {
+  other_browser: "Sign-in has to finish in the browser that started it. Start again here.",
+  expired: "That sign-in took too long or was already used. Start again.",
+  not_operator: "This Google account is not on the operator list. Ask an administrator to add you.",
+  unverified: "Google has not verified this account's email address.",
+  failed: "Sign-in did not complete. Start again; if it keeps failing, tell an administrator.",
+};
+
+function brandMark(size = 36) {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  for (const [k, v] of Object.entries({ class: "brand-mark", width: size, height: size, viewBox: "0 0 64 64", "aria-hidden": "true", focusable: "false" })) svg.setAttribute(k, v);
+  const g = document.createElementNS(ns, "g");
+  // The site's mark (web/src/site.tsx, MARK_LINES.regular).
+  g.setAttribute("fill", "none"); g.setAttribute("stroke", "currentColor"); g.setAttribute("stroke-width", "2.2");
+  for (const points of ["32,6.59 19.59,33.04 32,41.01 44.41,33.04", "17.56,37.37 28.81,44.31 8.31,57.1", "46.44,37.37 55.69,57.1 35.19,44.31"]) {
+    const polygon = document.createElementNS(ns, "polygon"); polygon.setAttribute("points", points); g.append(polygon);
+  }
+  svg.append(g);
+  return svg;
 }
 
 async function showSignIn(info) {
   info = info || (await api("/api/me")).data || {};
   document.getElementById("who").replaceChildren();
   setCrumbs("");
+  document.title = "Sign in · Open Alvary Review";
+  const query = new URLSearchParams(location.search);
+  const problem = SIGNIN_ERRORS[query.get("signin")];
   const panel = el("div", { class: "signin-panel" },
-    el("div", { class: "signin-brand" }, el("span", { class: "mark", text: "OA" }), el("span", { text: "Open Alvary" })),
+    el("div", { class: "signin-brand" }, brandMark(36), el("span", { class: "brand-name", text: "Open Alvary" })),
     el("h1", { text: "Review workbench" }),
-    el("p", { class: "muted", text: "Check machine readings of legal documents against the original, correct them, and approve them for publication." }));
+    el("p", { class: "muted", text: "Check machine readings of legal documents against the original, correct them, and approve them for publication." }),
+    problem ? el("p", { class: "signin-error", role: "alert", text: problem }) : null,
+    !problem && query.has("signed_out") ? el("p", { class: "signin-notice", role: "status", text: "You are signed out." }) : null);
+  if (query.has("signin") || query.has("signed_out")) history.replaceState(null, "", "/" + location.hash);
   if (info.oidc) {
     panel.append(el("a", { class: "signin-button", href: "/auth/login" }, googleMark(), el("span", { text: "Sign in with Google" })));
   }
@@ -125,14 +160,14 @@ async function showSignIn(info) {
     const email = el("input", { type: "email", placeholder: "you@organisation.org", required: true, autocomplete: "username", "aria-label": "Operator email" });
     const error = el("p", { class: "signin-error", role: "alert", hidden: true });
     panel.append(
-      info.oidc ? el("div", { class: "signin-or", text: "or, on this computer only" }) : el("p", { class: "signin-note", text: "Local trial sign-in — this computer only, no password." }),
+      info.oidc ? el("div", { class: "signin-or", text: "or, on this computer only" }) : el("p", { class: "signin-note", text: "Local trial sign-in: this computer only, no password." }),
+      error,
       el("form", { class: "signin-form", on: { submit: async (event) => {
         event.preventDefault();
         const result = await api("/auth/dev", { method: "POST", body: { email: email.value } });
         if (!result.ok) { error.textContent = result.status === 403 ? "That email is not on the operator list." : message(result); error.hidden = false; return; }
         await start();
-      } } }, email, el("button", { class: "primary", text: "Continue" })),
-      error);
+      } } }, email, el("button", { class: "primary", text: "Continue" })));
   }
   if (!info.oidc && !info.dev_login) panel.append(el("p", { class: "signin-error", text: "Sign-in is not configured on this server. Ask an administrator." }));
   panel.append(el("ul", { class: "signin-facts" },
@@ -212,7 +247,8 @@ function meter(share) {
 }
 
 async function dashboard() {
-  setCrumbs("Home");
+  setCrumbs("");
+  document.title = "Documents · Open Alvary Review";
   const { data } = await api("/api/overview");
   const t = data.totals;
   const share = t.pages ? Math.round((100 * t.checked) / t.pages) : 0;
@@ -267,7 +303,7 @@ async function dashboard() {
         el("strong", { class: "doc-title", text: d.title }),
         meter(pct),
         el("div", { class: "doc-foot" }, el("span", { class: "muted", text: `${d.checked} / ${d.pages} pages checked` }), pill(STATUS_CLASS[d.status] || "medium", d.status), d.open_high ? pill("high", `${d.open_high} high`) : null),
-        el("div", { class: "muted small", text: d.last ? `Last activity: ${d.last.actor.split("@")[0]}, ${ago(d.last.at)}` : "No review activity yet" }));
+        el("div", { class: "muted small", text: d.last ? `Last activity: ${operatorName(d.last.actor)}, ${ago(d.last.at)}` : "No review activity yet" }));
     }) : [el("p", { class: "muted", text: "No documents match." })]));
     const last = Math.min(page.offset + page.documents.length, page.total);
     pager.replaceChildren(
@@ -280,17 +316,40 @@ async function dashboard() {
   for (const control of [typeSelect, languageSelect, statusSelect, sortSelect]) control.addEventListener("input", () => { offset = 0; load(); });
   load();
 
+  app.names = data.names || {};
   const titleOf = (e) => e.title || e.id || "";
+  // Consecutive saves of one document by one person read as one line: "saved pages 1, 3–6".
+  const groups = [];
+  for (const e of data.activity) {
+    const last = groups[groups.length - 1];
+    if (last && last.actor === e.actor && last.action === e.action && last.id === e.id) {
+      if (e.page) last.pages.add(e.page);
+    } else {
+      groups.push({ ...e, pages: new Set(e.page ? [e.page] : []) });
+    }
+  }
+  const pageList = (pages) => {
+    const sorted = [...pages].sort((a, b) => a - b);
+    const runs = [];
+    for (const page of sorted) {
+      const run = runs[runs.length - 1];
+      if (run && page === run[1] + 1) run[1] = page; else runs.push([page, page]);
+    }
+    return runs.map(([a, b]) => (a === b ? String(a) : `${a}–${b}`)).join(", ");
+  };
   const activity = el("div", { class: "card activity" }, el("h3", { text: "Recent activity" }),
-    data.activity.length ? el("ul", { class: "plain" }, data.activity.map((e) => el("li", {},
-      el("span", { text: `${e.actor.split("@")[0]} ${ACTION_LABEL[e.action] || e.action.replace(/_/g, " ")}` }),
-      e.page ? " " : "", e.page && e.id ? el("a", { href: `#/doc/${encodeURIComponent(e.id)}/page/${e.page}`, text: `page ${e.page}` }) : "",
-      titleOf(e) ? el("span", { class: "muted", text: ` · ${titleOf(e)}` }) : "",
-      el("div", { class: "muted small", text: ago(e.at) })))) : el("p", { class: "muted", text: "Nothing yet." }));
+    groups.length ? el("ul", { class: "plain" }, groups.slice(0, 10).map((g) => el("li", {},
+      el("div", {},
+        el("strong", { text: operatorName(g.actor) }), ` ${ACTION_LABEL[g.action] || g.action.replace(/_/g, " ")} `,
+        g.pages.size && g.id
+          ? el("a", { href: `#/doc/${encodeURIComponent(g.id)}/page/${Math.max(...g.pages)}`, text: `${g.pages.size > 1 ? "pages" : "page"} ${pageList(g.pages)}` })
+          : ""),
+      titleOf(g) ? el("div", { class: "activity-title", text: titleOf(g) }) : "",
+      el("div", { class: "muted small", text: ago(g.at) })))) : el("p", { class: "muted", text: "Nothing yet." }));
 
   main(el("div", { class: "home" },
     el("div", { class: "home-main" },
-      el("div", { class: "home-head" }, el("h1", { text: "Review workbench" }), el("p", { class: "muted", text: `Signed in as ${app.me.name} (${app.me.roles.join(", ")})` })),
+      el("div", { class: "home-head" }, el("h1", { text: "Review workbench" })),
       tiles, resume, needs,
       el("div", { class: "card" },
         el("div", { class: "doc-tools" }, el("h3", { text: "Documents" }), search, typeSelect, languageSelect, statusSelect, sortSelect),
@@ -303,7 +362,7 @@ async function dashboard() {
 async function actView(actId) {
   const { data } = await api(`/api/documents/${encodeURIComponent(actId)}`);
   const act = data.act;
-  setCrumbs(el("a", { href: "#/", text: "Home" }), act.title);
+  setCrumbs(el("a", { href: "#/", text: "Documents" }), act.title);
   const ready = data.readiness;
   const grid = el("div", { class: "pages" }, data.pages.map((page) => {
     const classes = [page.status || "", page.open_high ? "high" : "", page.stale ? "stale" : ""].join(" ");
@@ -450,7 +509,7 @@ async function languagesView(actId) {
   const { ok, data } = await api(`/api/documents/${encodeURIComponent(actId)}/languages`);
   if (!ok) return main(el("p", { text: message({ ok, data }) }));
   const own = data.instrument[Object.keys(data.instrument).find((l) => data.instrument[l].id === actId)] || {};
-  setCrumbs(el("a", { href: "#/", text: "Home" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: own.title || actId }), "Language versions");
+  setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: own.title || actId }), "Language versions");
   const versionLink = (language, page) => `#/doc/${encodeURIComponent(data.instrument[language].id)}/page/${page}`;
   const instrument = el("table", { class: "instrument" },
     el("thead", {}, el("tr", {}, el("th", { text: "Version" }), el("th", { text: "Title as printed" }), el("th", { text: "Pages" }))),
@@ -485,7 +544,7 @@ async function languagesView(actId) {
 
 async function readView(actId) {
   const { data } = await api(`/api/documents/${encodeURIComponent(actId)}`);
-  setCrumbs(el("a", { href: "#/", text: "Home" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: data.act.title }), "Read");
+  setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: data.act.title }), "Read");
   const list = el("div", { class: "reading" });
   const sentinel = el("p", { class: "muted", text: "Loading…" });
   const canEdit = app.me.roles.includes("reviewer");
@@ -609,7 +668,7 @@ async function detailsView(actId) {
   const { data } = await api(`/api/documents/${encodeURIComponent(actId)}/details`);
   const doc = await api(`/api/documents/${encodeURIComponent(actId)}`);
   const title = doc.data.act.title;
-  setCrumbs(el("a", { href: "#/", text: "Home" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: title }), "Details");
+  setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: title }), "Details");
   const { standard, record, suggestions } = data;
   const canEdit = app.me.roles.includes("reviewer");
   const values = structuredClone(record.details);
@@ -810,7 +869,7 @@ async function pageView(actId, pageNumber) {
   };
   app.view = view;
   app.dirty = false;
-  setCrumbs(el("a", { href: "#/", text: "Home" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: detail.act.title }), `Page ${pageNumber}`);
+  setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: detail.act.title }), `Page ${pageNumber}`);
   renderPage(view);
 }
 
@@ -1366,7 +1425,7 @@ function saveBar(view) {
 
 async function auditView(actId) {
   const { data } = await api(`/api/audit?act=${encodeURIComponent(actId)}`);
-  setCrumbs(el("a", { href: "#/", text: "Home" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: actId }), "Activity");
+  setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: actId }), "Activity");
   main(el("div", { class: "card" }, el("h3", { text: "Activity log" }),
     el("table", { class: "list" }, el("tbody", {}, data.map((e) => el("tr", {},
       el("td", { text: e.at.slice(0, 19).replace("T", " ") }), el("td", { text: e.actor }), el("td", { text: e.action }),
@@ -1383,8 +1442,11 @@ async function route() {
   }
   app.dirty = false;
   lastHash = location.hash;
-  if (!location.hash.includes("/page/") || !document.querySelector(".review")) main(el("p", { class: "muted", text: "Loading…" }));
+  if (!location.hash.includes("/page/") || !document.querySelector(".review")) main(el("div", { class: "loading" }, el("span", { class: "spinner" }), "Loading…"));
   const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
+  for (const link of document.querySelectorAll("#who .nav-link")) {
+    link.classList.toggle("on", parts[0] === "access" ? link.hash === "#/access" : link.hash === "#/");
+  }
   try {
     if (parts[0] === "doc" && parts[2] === "page") return await pageView(parts[1], Number(parts[3]));
     if (parts[0] === "doc" && parts[2] === "read") return await readView(parts[1]);

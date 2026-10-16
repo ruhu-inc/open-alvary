@@ -11,11 +11,14 @@
 </head>
 <body>
 <header class="bar">
-  <a class="brand" href="#/">Open Alvary · Review</a>
-  <nav id="crumbs"></nav>
+  <a class="brand" href="#/" aria-label="Open Alvary review workbench: home">
+    <svg class="brand-mark" width="26" height="26" viewBox="0 0 64 64" aria-hidden="true" focusable="false"><g fill="none" stroke="currentColor" stroke-width="3.2"><polygon points="32,7.77 20.23,32.85 32,40.42 43.77,32.85"/><polygon points="17.78,38.09 27.86,44.31 9.48,55.78"/><polygon points="46.22,38.09 54.52,55.78 36.14,44.31"/></g></svg>
+    <span class="brand-name">Open Alvary</span><span class="brand-tag">Review</span>
+  </a>
+  <nav id="crumbs" aria-label="Where you are"></nav>
   <div id="who"></div>
 </header>
-<main id="main"><p class="muted">Loading…</p></main>
+<main id="main"><div class="loading"><span class="spinner"></span>Loading…</div></main>
 <div id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
