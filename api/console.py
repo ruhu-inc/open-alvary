@@ -43,7 +43,7 @@ from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
-from accounts import mail, policies, roles
+from accounts import mail, policies, privacy, roles
 from accounts.store import AccountError, Accounts, Context
 from api.admission import client_address
 from changes.routes import site_origin
@@ -581,6 +581,52 @@ def create_console_app(
         response = Response(status_code=204)
         response.delete_cookie(SESSION_COOKIE, path="/console")
         return response
+
+    # ---------- your data: export and deletion (MAC-14) ----------
+    def attachment(data: dict, name: str) -> Response:
+        return Response(
+            json.dumps(data, ensure_ascii=False, indent=2, default=str),
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="{name}-{time.strftime("%Y-%m-%d")}.json"',
+                "Cache-Control": "no-store",
+            },
+        )
+
+    @app.post("/api/v1/me/export")
+    def export_me(request: Request):
+        session = guard(request, write=True)
+        fresh(session, second_factor=False)
+        return attachment(privacy.export_person(accounts, session["person_id"]), "open-alvary-account")
+
+    @app.get("/api/v1/me/deletion")
+    def deletion_check(request: Request):
+        return privacy.deletion_check(accounts, guard(request)["person_id"])
+
+    @app.post("/api/v1/me/delete")
+    async def delete_me(request: Request):
+        session = guard(request, write=True)
+        data = await body(request)
+        fresh(session, second_factor=False)
+        me = accounts.person(session["person_id"])
+        if str(data.get("confirm", "")).strip().lower() != me["email"].lower():
+            return error(request, 400, "invalid_input", "Type your email address to confirm.")
+        closed = privacy.close_account(accounts, session["person_id"], context(request))
+        response = later(
+            JSONResponse({"deleted": True}),
+            mail.account_deleted(closed["email"], [o["name"] for o in closed["deleted_organisations"]], site),
+        )
+        response.delete_cookie(SESSION_COOKIE, path="/console")
+        return response
+
+    @app.post("/api/v1/organisations/{organisation_id}/export")
+    def export_organisation(request: Request, organisation_id: str):
+        session = guard(request, write=True)
+        fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id))
+        return attachment(
+            privacy.export_organisation(accounts, session["person_id"], organisation_id),
+            "open-alvary-organisation",
+        )
 
     # ---------- organisations ----------
     @app.post("/api/v1/organisations")

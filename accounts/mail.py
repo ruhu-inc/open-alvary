@@ -222,6 +222,23 @@ def watches_paused(to: str, organisation: str, count: int, base: str) -> Message
     )
 
 
+def account_deleted(to: str, organisations: list[str], base: str) -> Message:
+    deleted = (
+        f" These organisations, where you were the only member, were deleted with it: {', '.join(organisations)}."
+        if organisations
+        else ""
+    )
+    return Message(
+        to,
+        "Your Open Alvary account was deleted",
+        "Your Open Alvary account was deleted. Your keys and connected apps stopped working at once, and"
+        f" your monitors and email settings were removed.{deleted}\n\n"
+        "Your profile and sign-in details are removed completely within 30 days. Entries in your former"
+        " organisations' audit logs stay, without your name.\n\n"
+        f"If you didn't do this, reply to this email at once.\n\n" + SIGN_OFF,
+    )
+
+
 def webhook_stopped(to: str, organisation: str, url: str, state: str, why: str, base: str) -> Message:
     action = "disabled" if state == "disabled" else "paused"
     return Message(

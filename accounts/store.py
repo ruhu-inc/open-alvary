@@ -1861,46 +1861,49 @@ class Accounts:
         with self.engine.begin() as conn:
             membership = self._membership(conn, person_id, organisation_id, lock=True)
             self._require(membership, "organisation.delete")
-            current = self.access(organisation_id, conn)
-            actor = self._actor(conn, person_id)
-            if current["state"] == "active" and current.get("entitlement"):
-                self._change_entitlement(
-                    conn, current["entitlement"], "ended", actor, "Organisation deleted", context
-                )
-            for table in ("api_key", "client_grant"):
-                conn.execute(
-                    text(
-                        f"UPDATE {self._t(conn, table)} SET revoked_at = statement_timestamp(),"
-                        " revoked_reason = 'organisation_deleted' WHERE organisation_id = :o AND revoked_at IS NULL"
-                    ),
-                    {"o": organisation_id},
-                )
+            self._delete_organisation(conn, organisation_id, self._actor(conn, person_id), context)
+
+    def _delete_organisation(self, conn, organisation_id, actor, context=None) -> None:
+        """The deletion itself, in the caller's transaction (also used when an account closes)."""
+        current = self.access(organisation_id, conn)
+        if current["state"] == "active" and current.get("entitlement"):
+            self._change_entitlement(
+                conn, current["entitlement"], "ended", actor, "Organisation deleted", context
+            )
+        for table in ("api_key", "client_grant"):
             conn.execute(
                 text(
-                    f"UPDATE {self._t(conn, 'organisation')} SET state = 'deleted', deleted_at = statement_timestamp(),"
-                    " revision = revision + 1 WHERE id = :o"
+                    f"UPDATE {self._t(conn, table)} SET revoked_at = statement_timestamp(),"
+                    " revoked_reason = 'organisation_deleted' WHERE organisation_id = :o AND revoked_at IS NULL"
                 ),
                 {"o": organisation_id},
             )
-            conn.execute(
-                text(
-                    f"UPDATE {self._t(conn, 'invitation')} SET state = 'void', ended_at = statement_timestamp()"
-                    " WHERE organisation_id = :o AND state = 'pending'"
-                ),
-                {"o": organisation_id},
-            )
-            conn.execute(
-                text(f"DELETE FROM {self._t(conn, 'membership')} WHERE organisation_id = :o"),
-                {"o": organisation_id},
-            )
-            self._audit(
-                conn,
-                actor,
-                "organisation.deleted",
-                organisation=organisation_id,
-                target=("organisation", organisation_id),
-                context=context,
-            )
+        conn.execute(
+            text(
+                f"UPDATE {self._t(conn, 'organisation')} SET state = 'deleted', deleted_at = statement_timestamp(),"
+                " revision = revision + 1 WHERE id = :o"
+            ),
+            {"o": organisation_id},
+        )
+        conn.execute(
+            text(
+                f"UPDATE {self._t(conn, 'invitation')} SET state = 'void', ended_at = statement_timestamp()"
+                " WHERE organisation_id = :o AND state = 'pending'"
+            ),
+            {"o": organisation_id},
+        )
+        conn.execute(
+            text(f"DELETE FROM {self._t(conn, 'membership')} WHERE organisation_id = :o"),
+            {"o": organisation_id},
+        )
+        self._audit(
+            conn,
+            actor,
+            "organisation.deleted",
+            organisation=organisation_id,
+            target=("organisation", organisation_id),
+            context=context,
+        )
 
     # ---------- usage and audit ----------
     def usage(self, person_id: str, organisation_id: str, days: int = 30) -> list[dict]:

@@ -32,6 +32,7 @@ import { ApiError, api, go, setCsrf, signOut, type Me, type Organisation } from 
 import { Consent } from "./consent";
 import { AccessPage, Apps, Connect, Keys, MembersPage, Overview, Security, Settings as Settings_, Usage } from "./pages";
 import { Dialog, External, Loading, Mark, Problem } from "./ui";
+import { OrganisationData, YourData } from "./privacy";
 import { DigestSettings, Unsubscribe, WatchesPage } from "./watches";
 import { WebhooksPage } from "./webhooks";
 
@@ -167,7 +168,12 @@ function Shell({ me, path, refresh }: { me: Me; path: string; refresh: () => voi
       case "/console/access":
         return <AccessPage {...props} />;
       case "/console/settings":
-        return <Settings_ {...props} />;
+        return (
+          <>
+            <Settings_ {...props} />
+            <OrganisationData org={org} />
+          </>
+        );
       case "/console/monitor":
         return <WatchesPage {...props} />;
       case "/console/webhooks":
@@ -177,6 +183,7 @@ function Shell({ me, path, refresh }: { me: Me; path: string; refresh: () => voi
           <>
             <Security me={me} refresh={refresh} />
             <DigestSettings />
+            <YourData me={me} />
           </>
         );
       default:
@@ -488,7 +495,9 @@ function SignIn() {
   const params = new URLSearchParams(location.search);
   const error = params.get("error");
   const returnTo = params.get("return_to") ?? "/console";
-  const [known, setKnown] = useState(recall);
+  const deleted = params.get("deleted") === "1";
+  // After deleting an account, this browser forgets it too.
+  const [known, setKnown] = useState(() => (deleted ? (forget(), null) : recall()));
   useEffect(() => {
     // Still signed in (the console session lasts up to 30 days): go straight back in.
     if (error) return;
@@ -510,6 +519,11 @@ function SignIn() {
           <div className="callout bad" role="alert">
             {SIGN_IN_ERRORS[error] ?? SIGN_IN_ERRORS.invalid}
           </div>
+        ) : null}
+        {deleted ? (
+          <p className="callout" role="status">
+            Your account was deleted and you're signed out. We've emailed you a confirmation.
+          </p>
         ) : null}
         {known?.email && known.method ? (
           <>

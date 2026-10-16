@@ -173,6 +173,17 @@ text. Each run takes down records whose approval has lapsed. The change log reco
 Publishing text needs more first: the copyright check of official texts (Law N° 055/2024 for
 Rwanda), a rights decision verified against the law itself (POL-02) and the public reader (MAC-01).
 
+## Account deletion and retention
+
+People export their data and delete their account in the console (Security); owners export an
+organisation (Settings). Deleting revokes keys and apps and ends memberships at once; the profile and
+sign-in identities are purged 30 days later by `python -m accounts.privacy purge` (in the daily job),
+which first deletes the person's Auth0 user with the `Open Alvary account deletion` client
+(`configure.py` creates it; `accounts` stores its secrets). Without that client, closed accounts wait
+(`provider_pending` in the job's output) rather than losing the link to their Auth0 user. The same
+purge applies the rest of the privacy notice's schedule: sessions and invitations after 30 days,
+revoked keys and apps after a year, usage and audit entries after two years.
+
 ## Monitors and webhooks
 
 `python -m changes.worker run` (every 5 minutes, as a scheduled job) matches new changes to

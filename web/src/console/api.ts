@@ -54,6 +54,31 @@ export async function api<T = unknown>(
   return data as T;
 }
 
+// A POST that answers a file (an export): saved by the browser under the server's file name.
+export async function download(path: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch("/console/api/v1" + path, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "X-CSRF-Token": csrf },
+    });
+  } catch {
+    throw new ApiError(0, "network", "We couldn't reach Open Alvary. Check your connection and try again.");
+  }
+  if (!response.ok) {
+    const error = (await response.json().catch(() => ({})))?.error ?? {};
+    throw new ApiError(response.status, error.code ?? "unknown", error.message ?? "The export failed. Try again.");
+  }
+  const name = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "")?.[1] ?? "open-alvary.json";
+  const url = URL.createObjectURL(await response.blob());
+  const link = Object.assign(document.createElement("a"), { href: url, download: name });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 // Moves the console to another page without reloading it.
 export function go(to: string) {
   history.pushState(null, "", to);
