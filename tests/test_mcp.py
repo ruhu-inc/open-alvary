@@ -27,7 +27,13 @@ def test_initialize_negotiates_protocol_and_declares_read_only_tools(client):
     fallback = rpc(client, "initialize", {"protocolVersion": "1999-01-01"}).json()["result"]
     assert fallback["protocolVersion"] == "2025-06-18"
     tools = rpc(client, "tools/list").json()["result"]["tools"]
-    assert {t["name"] for t in tools} == {"search_catalogue", "get_source", "get_coverage"}
+    assert {t["name"] for t in tools} == {
+        "search_catalogue",
+        "get_source",
+        "get_coverage",
+        "list_changes",
+        "get_change",
+    }
     assert all(t["annotations"]["readOnlyHint"] for t in tools)
 
 

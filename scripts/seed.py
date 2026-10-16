@@ -5,6 +5,7 @@ from sqlalchemy import text
 
 from accounts.store import Accounts
 from api.store import Store, engine_for, seed
+from changes.record import sweep
 from rights.database import PolicyNamespace
 
 TIERS = Path(__file__).resolve().parents[1] / "accounts" / "tiers.json"
@@ -18,3 +19,5 @@ if __name__ == "__main__":
             namespace = PolicyNamespace(conn.scalar(text("SELECT current_schema()")))
         Accounts(engine, namespace).set_tiers(json.loads(TIERS.read_text()))
         print("Access tiers in line with accounts/tiers.json.")
+        with engine.begin() as conn:
+            print(f"Change log swept: {sweep(conn)} changes recorded.")

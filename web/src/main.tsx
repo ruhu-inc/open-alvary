@@ -1,4 +1,5 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
+import { ChangesPage, RecordChanges } from "./changes";
 import { createRoot } from "react-dom/client";
 import {
   ArrowUpRight,
@@ -233,6 +234,8 @@ function App() {
             <Reader id={sourceId} />
           ) : pathname === "/coverage" ? (
             <CoveragePage />
+          ) : pathname === "/changes" ? (
+            <ChangesPage route={route} />
           ) : pathname === "/governance" ? (
             <Governance />
           ) : pathname === "/releases" ? (
@@ -782,6 +785,7 @@ function Reader({ id }: { id: string }) {
         </article>
         <aside>
           <SourceRecord source={s} rights={rights.data?.record} />
+          <RecordChanges id={s.id} />
         </aside>
       </div>
     </div>
@@ -1068,6 +1072,41 @@ function Developers() {
           </p>
         </section>
       </div>
+      <section className="info-panel developer-changes">
+        <h2>Follow changes</h2>
+        <p>
+          Every record added, corrected or withdrawn, and every text published,
+          is recorded in order. No account is needed.
+        </p>
+        <dl>
+          <dt>Replay and keep up</dt>
+          <dd>
+            <code>GET /api/changes</code> answers changes oldest first with a{" "}
+            <code>resume_token</code>; send it back to get only newer ones.
+            Filter with <code>jurisdiction</code>, <code>work</code>,{" "}
+            <code>type</code>, <code>class</code>, <code>language</code> and{" "}
+            <code>q</code>. Deduplicate by <code>feed_epoch</code>,{" "}
+            <code>event_id</code> and <code>event_revision</code>; a{" "}
+            <code>feed_reset</code> answer means reconcile from a current release.
+          </dd>
+          <dt>Feeds</dt>
+          <dd>
+            <code>/api/changes/feed.atom</code> and{" "}
+            <code>/api/changes/feed.rss</code>, with the same filters: the last
+            90 days, newest first.
+          </dd>
+          <dt>MCP</dt>
+          <dd>
+            The <code>list_changes</code> and <code>get_change</code> tools.
+          </dd>
+          <dt>What it covers</dt>
+          <dd>
+            <code>/api/change-coverage</code>: when recording began and what is
+            held for each country. Changes cover what Open Alvary holds, not
+            every change in a country's law.
+          </dd>
+        </dl>
+      </section>
       <div className="notice">
         Search covers catalogue metadata and cleared full text only.
       </div>

@@ -26,7 +26,7 @@ def context(conn, namespace, literals=None, vocabulary=VOCABULARY):
     quote = conn.dialect.identifier_preparer.quote_identifier
     names = {
         "base": namespace.base,
-        **{k: namespace.schema(k) for k in ("policy", "staging", "corpus", "accounts")},
+        **{k: namespace.schema(k) for k in ("policy", "staging", "corpus", "accounts", "changes")},
     }
     identifiers = {k: quote(v) for k, v in names.items()}
     identifiers.update(
@@ -63,7 +63,7 @@ def render(source, tokens):
 def normalize_body(body, tokens):
     # Normalize qualified identifiers (including pg_get_functiondef's unquoted headers)
     # and complete SQL literals. No input-derived values enter function definitions.
-    for key in ("policy", "staging", "corpus", "accounts", "base"):
+    for key in ("policy", "staging", "corpus", "accounts", "changes", "base"):
         name = tokens[key]
         body = body.replace(name + ".", "{{" + key + "}}.")
         bare = name[1:-1].replace('""', '"')

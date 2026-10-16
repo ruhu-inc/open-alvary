@@ -137,6 +137,11 @@ class Store:
                         conn.execute(table.insert().values(**row))
                     else:
                         conn.execute(table.update().where(table.c.id == model.id).values(**row))
+            # SUB C1: what this write changed in the public catalogue, recorded before it commits.
+            from changes.record import publish
+
+            affected = {s.id for s in corpus.sources} | {r.source_id for r in corpus.rights}
+            publish(conn, affected | {v.source_id for v in corpus.versions})
 
 
 # What the catalogue says to readers about a source; its file stays the authority for these.

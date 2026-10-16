@@ -6,6 +6,7 @@ or account data. Responses are single JSON bodies (no server-initiated streams).
 """
 
 import json
+import os
 from collections.abc import Callable
 from urllib.parse import urlsplit
 
@@ -14,6 +15,8 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
 from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
+from changes.feed import Feed, FeedError, Filters
+from changes.routes import tokens
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26")
 SERVER_INFO = {"name": "open-alvary", "title": "Open Alvary public legal catalogue", "version": "0.1.0"}
@@ -54,6 +57,42 @@ TOOLS = [
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
     },
     {
+        "name": "list_changes",
+        "title": "List catalogue changes",
+        "description": "Changes to the catalogue in commit order: records added, corrected or withdrawn, and text "
+        "published. Filter by jurisdiction, work, type, document class, language or keyword. Pass the "
+        "returned resume_token next time to get only newer changes. Changes to what Open Alvary holds, not "
+        "every change in a country's law.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "jurisdiction": {"type": "array", "items": {"type": "string"}, "maxItems": 50},
+                "work": {"type": "array", "items": {"type": "string"}, "maxItems": 50},
+                "type": {"type": "array", "items": {"type": "string"}, "maxItems": 9},
+                "class": {"type": "array", "items": {"type": "string"}, "maxItems": 50},
+                "language": {"type": "array", "items": {"type": "string"}, "maxItems": 50},
+                "q": {"type": "string", "maxLength": 200},
+                "resume_token": {"type": "string", "maxLength": 2000},
+                "cursor": {"type": "string", "maxLength": 2000},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 25},
+            },
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
+        "name": "get_change",
+        "title": "Get one change",
+        "description": "One catalogue change by its event_id.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"event_id": {"type": "string", "minLength": 36, "maxLength": 36}},
+            "required": ["event_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
         "name": "get_coverage",
         "title": "Catalogue coverage",
         "description": "Counts of catalogued sources and of sources with openly redistributable full text.",
@@ -61,6 +100,34 @@ TOOLS = [
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
     },
 ]
+
+
+def changes_tool(conn, name, arguments):
+    """The change feed as MCP tools: the same events and errors as GET /changes (changes-contracts)."""
+    origin = "https://" + os.getenv("PUBLIC_DOMAIN", "open.alvary.ai")
+    feed = Feed(conn, tokens(), origin)
+    if name == "get_change":
+        if set(arguments) != {"event_id"} or not isinstance(arguments["event_id"], str):
+            return None
+        return feed.event(arguments["event_id"])
+    lists = ("jurisdiction", "work", "type", "class", "language")
+    if not set(arguments) <= {*lists, "q", "resume_token", "cursor", "limit"}:
+        return None
+    if any(
+        not isinstance(arguments.get(k, []), list)
+        or not all(isinstance(v, str) for v in arguments.get(k, []))
+        for k in lists
+    ):
+        return None
+    limit = arguments.get("limit", 10)
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 25:
+        return None
+    values = {k: arguments[k] for k in lists if k in arguments}
+    if isinstance(arguments.get("q"), str):
+        values["q"] = [arguments["q"]]
+    return feed.page(
+        Filters.parse(values), limit, cursor=arguments.get("cursor"), resume=arguments.get("resume_token")
+    )
 
 
 def _error(id_, code, message):
@@ -112,6 +179,8 @@ def create_router(
                 view = service.source(arguments["source_id"])
                 plan.admit(view.jurisdiction_id)
                 return view.model_dump(mode="json")
+            if name in ("list_changes", "get_change"):
+                return changes_tool(service.repository.connection, name, arguments)
             if name == "get_coverage" and not arguments:
                 return service.coverage().model_dump(mode="json")
         return None
@@ -160,6 +229,8 @@ def create_router(
                 )
             except unavailable:
                 return _result(id_, _tool_result("Catalogue authority unavailable", is_error=True))
+            except FeedError as refused:
+                return _result(id_, _tool_result(f"{refused.code}: {refused.detail}", is_error=True))
             except OutsidePlanLimited as outside:
                 return _result(
                     id_, _tool_result(f"{outside} Retry after {outside.retry_after} seconds.", is_error=True)

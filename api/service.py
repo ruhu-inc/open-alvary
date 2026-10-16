@@ -237,6 +237,7 @@ STATIC_PAGES = (
     "/",
     "/browse",
     "/coverage",
+    "/changes",
     "/governance",
     "/releases",
     "/developers",

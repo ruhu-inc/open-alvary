@@ -32,6 +32,7 @@ from api.project import project_info
 from api.release_adapter import LegacyReleases, ReleaseMissing, ReleaseWithdrawn
 from api.repositories import LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import Store, check_legacy_authority
+from changes.routes import create_router as create_changes_router
 from rights.bytes import ByteLedger, Scope
 from rights.database import PolicyNamespace
 
@@ -194,6 +195,15 @@ def create_site_app(store: Store, release_root: Path, admission: AdmissionConfig
         with store.engine.begin() as connection:
             check_legacy_authority(connection, write=False)
             yield LegacyCatalogue(LegacyRepository(connection))
+
+    @contextmanager
+    def change_session():
+        with store.engine.begin() as connection:
+            check_legacy_authority(connection, write=False)
+            yield connection
+
+    if store.engine.dialect.name == "postgresql":  # the change log lives in PostgreSQL
+        app.include_router(create_changes_router(change_session))
 
     @app.get("/project")
     def project(request: Request):
