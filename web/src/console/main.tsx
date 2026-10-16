@@ -18,6 +18,7 @@ import {
   Settings,
   ShieldCheck,
   Users,
+  Webhook,
   X,
   type LucideIcon,
 } from "lucide-react";
@@ -32,6 +33,7 @@ import { Consent } from "./consent";
 import { AccessPage, Apps, Connect, Keys, MembersPage, Overview, Security, Settings as Settings_, Usage } from "./pages";
 import { Dialog, External, Loading, Mark, Problem } from "./ui";
 import { DigestSettings, Unsubscribe, WatchesPage } from "./watches";
+import { WebhooksPage } from "./webhooks";
 
 type NavItem = { to: string; label: string; icon: LucideIcon };
 const NAV: { group?: string; items: NavItem[] }[] = [
@@ -41,6 +43,7 @@ const NAV: { group?: string; items: NavItem[] }[] = [
       { to: "/console/monitor", label: "Monitor", icon: Bell },
       { to: "/console/keys", label: "API keys", icon: KeyRound },
       { to: "/console/apps", label: "Connected apps", icon: Plug },
+      { to: "/console/webhooks", label: "Webhooks", icon: Webhook },
       { to: "/console/usage", label: "Usage", icon: BarChart3 },
     ],
   },
@@ -60,6 +63,7 @@ const TITLES: Record<string, string> = {
   "/console/unsubscribe": "Email settings",
   "/console/keys": "API keys",
   "/console/apps": "Connected apps",
+  "/console/webhooks": "Webhooks",
   "/console/connect": "Connect an app",
   "/console/usage": "Usage",
   "/console/members": "Members",
@@ -166,6 +170,8 @@ function Shell({ me, path, refresh }: { me: Me; path: string; refresh: () => voi
         return <Settings_ {...props} />;
       case "/console/monitor":
         return <WatchesPage {...props} />;
+      case "/console/webhooks":
+        return <WebhooksPage {...props} />;
       case "/console/security":
         return (
           <>

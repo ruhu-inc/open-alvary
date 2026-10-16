@@ -10,6 +10,9 @@ x-app-environment: &app-environment
   # Change-feed cursor key, {"k1": "<base64 32 bytes>"}; without it replay answers 503 (runbook).
   ALVARY_FEED_KEYS: ${ALVARY_FEED_KEYS:-}
   ALVARY_FEED_KEY_ID: ${ALVARY_FEED_KEY_ID:-k1}
+  # Seals webhook signing secrets, {"w1": "<base64 32 bytes>"}; without it webhooks are off.
+  ALVARY_WEBHOOK_KEYS: ${ALVARY_WEBHOOK_KEYS:-}
+  ALVARY_WEBHOOK_KEY_ID: ${ALVARY_WEBHOOK_KEY_ID:-w1}
 services:
   db:
     image: postgres:16-alpine
