@@ -1,0 +1,48 @@
+tests/test_webhooks.py
+  s_b82616e2476856::t_341f8a9ea44bf9 117-130
+changes/webhooks.py
+  s_b82616e2476856::t_341f8a9ea44bf9 24,43,173-193,212-214
+  s_b82616e2476856::t_9741f2dcf0d337 253-280
+changes/watches.py
+  s_b82616e2476856::t_9741f2dcf0d337 493-519
+  s_b82616e2476856::t_53c254bd1bf12a 83
+tests/test_postgres_watches.py
+  s_b82616e2476856::t_68645eca0d37df 278-323
+  s_b82616e2476856::t_815d1f064c4c8e 93,139,201
+deployment/gcp/public_service.sh
+  s_b82616e2476856::t_08557bc35d0b1a 42-50,101-108,212-260,276-278,295-300,305-316,375-415,458-466,476
+api/console.py
+  s_b82616e2476856::t_9741f2dcf0d337 51,921,1043-1063
+  s_b82616e2476856::t_f049583675239a 1064
+deployment/runbook.md
+  s_b82616e2476856::t_19e58896893b6f 138-157
+api/service.py
+  s_b82616e2476856::t_23289313312cb8 260-261
+  s_165332455313a3::t_792299c58bdb25 98-99,206-209,253-259,262-293
+tests/test_postgres_api_v1.py
+  s_b82616e2476856::t_8b480853b7eb4d 228-241
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "eac48770c3129a8cb801dbd33c11741e4d3ecfe6",
+  "prompts": {},
+  "sessions": {
+    "s_165332455313a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "641d577a-f1a0-4404-86cd-ae1269afbc5f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    },
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
