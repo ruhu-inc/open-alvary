@@ -21,6 +21,7 @@ import logging
 import os
 import secrets
 import socket
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -39,7 +40,7 @@ from changes.feed import Feed, _Visibility
 from changes.watches import plan_limits
 
 log = logging.getLogger("open_alvary.webhooks")
-TIMEOUT = 10.0  # seconds per phase (D19)
+TIMEOUT = 10.0  # seconds for the whole delivery, and for each phase within it (D19)
 MAX_BODY = 64 * 1024
 MAX_ANSWER = 8 * 1024
 RETRIES = (60, 300, 1800, 7200, 28800)  # after attempts 1-5; terminal at 24 h (D19)
@@ -169,6 +170,27 @@ def _send(url: str, address: str, body: bytes, headers: dict) -> tuple[int, dict
         pool.close()
 
 
+def _within(limit: float, work, *args):
+    """Run one delivery with a deadline on the whole of it. A late attempt is abandoned to its own
+    per-phase timeouts in a daemon thread (it ends on its own and its answer is ignored)."""
+    outcome: dict = {}
+
+    def run():
+        try:
+            outcome["value"] = work(*args)
+        except BaseException as error:  # handed back to the caller
+            outcome["error"] = error
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    thread.join(limit)
+    if thread.is_alive():
+        raise TimeoutError
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome["value"]
+
+
 class Sender:
     """POSTs to an endpoint after vetting every address its host resolves to, at each attempt."""
 
@@ -187,7 +209,9 @@ class Sender:
         if not addresses or not all(public(a) for a in addresses):
             return Outcome(None, error="That address is not reachable from the internet.")
         try:
-            status, answer_headers, answer = self.transport(url, addresses[0], body, headers)
+            status, answer_headers, answer = _within(
+                TIMEOUT, self.transport, url, addresses[0], body, headers
+            )
         except (httpcore.TimeoutException, TimeoutError):
             return Outcome(None, error=f"No answer within {int(TIMEOUT)} seconds.")
         except (httpcore.ConnectError, ConnectionError):
@@ -223,6 +247,34 @@ def verify_signature(secret: str, body: bytes, timestamp: str, signature: str, t
     expected = hmac.new(secret.encode(), f"{timestamp}.".encode() + body, hashlib.sha256).hexdigest()
     return any(
         hmac.compare_digest(expected, part.strip().removeprefix("v1=")) for part in signature.split(",")
+    )
+
+
+def svix_valid(secret: str | None, headers, body: bytes, tolerance: int = 300) -> bool:
+    """Inbound events signed the Svix way (Resend): base64 HMAC-SHA256 of "id.timestamp.body" with
+    the base64 key after "whsec_", one or more "v1,<signature>" values, within five minutes."""
+    if not secret or not secret.startswith("whsec_"):
+        return False
+    ident, stamp, given = headers.get("svix-id"), headers.get("svix-timestamp"), headers.get("svix-signature")
+    if (
+        not ident
+        or not stamp
+        or not given
+        or not stamp.isdigit()
+        or abs(time.time() - int(stamp)) > tolerance
+    ):
+        return False
+    try:
+        key = base64.b64decode(secret.removeprefix("whsec_"))
+    except ValueError:
+        return False
+    expected = base64.b64encode(
+        hmac.new(key, f"{ident}.{stamp}.".encode() + body, hashlib.sha256).digest()
+    ).decode()
+    return any(
+        hmac.compare_digest(expected, part.split(",", 1)[1])
+        for part in given.split()
+        if part.startswith("v1,")
     )
 
 

@@ -48,7 +48,7 @@ from accounts.store import AccountError, Accounts, Context
 from api.admission import client_address
 from changes.routes import site_origin
 from changes.watches import Watches
-from changes.webhooks import Webhooks
+from changes.webhooks import Webhooks, svix_valid
 
 SESSION_COOKIE = "oa_console"
 FLOW_COOKIE = "oa_console_flow"
@@ -918,7 +918,7 @@ def create_console_app(
 
     @app.get(watch_path)
     def list_watches(request: Request, organisation_id: str):
-        return watches.list(guard(request)["person_id"], organisation_id)
+        return watches.listing(guard(request)["person_id"], organisation_id)
 
     @app.post(watch_path)
     async def create_watch(request: Request, organisation_id: str):
@@ -1039,6 +1039,28 @@ def create_console_app(
     def replay_webhook(request: Request, organisation_id: str, endpoint_id: str, delivery_id: str):
         session = guard(request, write=True)
         return hooks.replay(session["person_id"], organisation_id, endpoint_id, delivery_id)
+
+    # Resend reports bounces and complaints here (Svix-signed; RESEND_WEBHOOK_SECRET).
+    @app.post("/mail-events")
+    async def mail_events(request: Request):
+        raw = await request.body()
+        if len(raw) > 65536 or not svix_valid(os.getenv("RESEND_WEBHOOK_SECRET"), request.headers, raw):
+            return Response(status_code=401)
+        try:
+            event = json.loads(raw)
+        except ValueError:
+            return Response(status_code=400)
+        data = event.get("data") if isinstance(event, dict) else None
+        to = (data or {}).get("to") or []
+        to = [to] if isinstance(to, str) else to
+        if (
+            event.get("type") == "email.bounced"
+            and ((data or {}).get("bounce") or {}).get("type") != "Transient"
+        ):
+            watches.mail_event("bounce", to)
+        elif event.get("type") == "email.complained":
+            watches.mail_event("complaint", to)
+        return Response(status_code=204)
 
     # Declared last: every console API route above wins over this.
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PATCH", "DELETE", "PUT"])

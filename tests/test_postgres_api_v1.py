@@ -225,3 +225,17 @@ def test_activation_b_stays_off_unless_switched_on(pg_engine, monkeypatch):
     assert client.get("/console/api/v1/me").status_code == 404
     assert client.post("/mcp", json=rpc("tools/list")).status_code in (404, 405)
     assert client.get("/.well-known/oauth-protected-resource/mcp").status_code == 404
+
+
+def test_activation_b_closes_the_anonymous_api_but_not_the_change_feed(api):
+    client, _, _, _ = api
+    gone = client.get("/api/sources")
+    assert gone.status_code == 410 and gone.json()["successor"] == "https://api.open.alvary.ai/api/v1"
+    assert 'rel="successor-version"' in gone.headers["link"]
+    mcp = client.post("/api/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    assert mcp.status_code == 410 and mcp.json()["successor"] == "https://api.open.alvary.ai/mcp"
+    assert client.get("/api/openapi.json").json()["successor"].endswith("/api/v1/openapi.json")
+    assert client.get("/api/releases/x/ng/metadata/manifest.json").status_code == 410
+    assert client.get("/api/changes").status_code == 200  # the change feed stays anonymous (SUB C1)
+    assert client.get("/api/change-coverage").status_code == 200
+    assert client.get("/healthz").status_code == 200

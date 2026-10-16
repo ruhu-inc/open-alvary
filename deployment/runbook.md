@@ -135,6 +135,26 @@ a new epoch, so readers are told to resynchronise rather than refused.
 Without the secret, a persistent deployment keeps the Changes page and the feeds but answers replay
 requests with 503.
 
+## Switching on activation B (GCP)
+
+Accounts, the console, keys, REST v1, MCP and the closing of the anonymous API go live together
+(MAC-15), after acceptance B passes on staging. With `.env` holding `AUTH0_DOMAIN`, `RESEND_API_KEY`
+and, once Resend's webhook exists, `RESEND_WEBHOOK_SECRET`:
+
+1. `python deployment/auth0/configure.py` (production URLs) writes `private-staging/auth0/*`.
+2. `deployment/gcp/public_service.sh accounts` stores the secrets; the API-key pepper is made once
+   and must never be replaced.
+3. `ACCOUNTS=1 deployment/gcp/public_service.sh deploy` deploys the service with activation B and
+   the worker jobs. Every later deploy must keep `ACCOUNTS=1`, or the console and keys go dark.
+4. `deployment/gcp/public_service.sh api_edge`, then add its two DNS records for `api.<domain>`.
+5. `deployment/gcp/public_service.sh schedule` (once): the worker every 5 minutes, the daily sweep.
+6. In Resend, a webhook to `https://<domain>/console/mail-events` for `email.bounced` and
+   `email.complained`; its signing secret into `.env`, then step 2 again and a deploy.
+7. `ACCOUNTS=1 deployment/gcp/public_service.sh verify`.
+
+Turning activation B off again is a deploy without `ACCOUNTS=1`: the anonymous API reopens and the
+console, keys and connected apps stop answering; nothing is deleted.
+
 ## Monitors and webhooks
 
 `python -m changes.worker run` (every 5 minutes, as a scheduled job) matches new changes to

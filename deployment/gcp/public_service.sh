@@ -39,6 +39,15 @@ TRUSTED_PROXIES="${TRUSTED_PROXIES:-2}"
 MAX_INSTANCES="${MAX_INSTANCES:-3}"
 FEED_KEY_ID="${FEED_KEY_ID:-k1}"  # the key in the feed-keys secret that seals new feed tokens
 WEBHOOK_KEY_ID="${WEBHOOK_KEY_ID:-w1}"  # the key in the webhook-keys secret that seals new webhook secrets
+# Activation B (MAC-15): ACCOUNTS=1 on `deploy` switches on the console, keys, REST v1 and MCP, and
+# closes the anonymous API, together. Run `accounts` (secrets) first; `schedule` once afterwards.
+ACCOUNTS="${ACCOUNTS:-0}"
+API_DOMAIN="${API_DOMAIN:-api.$DOMAIN}"
+AUTH0_FILES="private-staging/auth0"  # written by deployment/auth0/configure.py; never committed
+WORKER_JOB="open-alvary-worker"
+DAILY_JOB="open-alvary-daily"
+SCHEDULER="scheduler"
+SCHEDULER_EMAIL="${SCHEDULER}@${PROJECT}.iam.gserviceaccount.com"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPOSITORY}/public-service:$(git rev-parse --short HEAD)"
 GC=(gcloud --project "$PROJECT" --quiet)
 SETTINGS=(PUBLIC_REPOSITORY_URL PUBLIC_MAINTAINER PUBLIC_CONTACT_EMAIL METADATA_LICENCE)
@@ -89,6 +98,14 @@ Monthly cost, estimated (europe-west1, list prices, low traffic):
 
 Owner actions: run 'project' and 'setup' (they create billed resources and IAM bindings); add the DNS
 records 'dns' prints (certificate first; open.alvary.ai only when 'verify' passes).
+
+Activation B adds (owner's go-ahead): secrets console-client-secret, consent-secret, key-pepper,
+resend-api-key, resend-webhook-secret ('accounts'); Cloud Run jobs $WORKER_JOB and $DAILY_JOB
+('ACCOUNTS=1 deploy'); service account $SCHEDULER and two Cloud Scheduler jobs, every 5 minutes and
+daily ('schedule'); a certificate for $API_DOMAIN ('api_edge').
+  Worker runs, ~8,600 a month of a few seconds   ~ \$1-3 (largely within Cloud Run's free tier)
+  Cloud Scheduler, two jobs                        ~ \$0 (three jobs a month are free)
+  Five more secrets                                ~ \$0.30
 PLAN
   if ((${#missing[@]})); then
     echo "Settings missing (environment or .env): ${missing[*]}"
@@ -192,6 +209,55 @@ setup() {
   echo "Setup done. Next: $0 deploy"
 }
 
+accounts() {  # activation B's secrets, from this machine's files and .env; never printed
+  local file
+  for file in console-client-id console-client-secret consent-secret; do
+    [[ -s "$AUTH0_FILES/$file" ]] || { echo "Missing $AUTH0_FILES/$file: run deployment/auth0/configure.py" >&2; exit 1; }
+  done
+  [[ -n "$(setting RESEND_API_KEY)" ]] || { echo "Set RESEND_API_KEY in the environment or .env" >&2; exit 1; }
+  secret_put console-client-secret < "$AUTH0_FILES/console-client-secret"
+  # The Auth0 post-login Action was deployed with this same secret: they must match.
+  secret_put consent-secret < "$AUTH0_FILES/consent-secret"
+  # The API-key pepper is made once and never replaced: replacing it would invalidate every key.
+  "${GC[@]}" secrets describe key-pepper >/dev/null 2>&1 \
+    || python3 -c 'import base64,secrets; print(base64.b64encode(secrets.token_bytes(32)).decode(), end="")' \
+      | secret_put key-pepper
+  printf '%s' "$(setting RESEND_API_KEY)" | secret_put resend-api-key
+  local names=(console-client-secret consent-secret key-pepper resend-api-key)
+  if [[ -n "$(setting RESEND_WEBHOOK_SECRET)" ]]; then
+    printf '%s' "$(setting RESEND_WEBHOOK_SECRET)" | secret_put resend-webhook-secret
+    names+=(resend-webhook-secret)
+  fi
+  local secret
+  for secret in "${names[@]}"; do
+    grant "${GC[@]}" secrets add-iam-policy-binding "$secret" --member="serviceAccount:$RUNNER_EMAIL" \
+      --role=roles/secretmanager.secretAccessor
+  done
+  cat <<NEXT
+Activation B secrets stored: ${names[*]}.
+Bounces: in Resend, add a webhook to https://$DOMAIN/console/mail-events for email.bounced and
+email.complained, put its signing secret in .env as RESEND_WEBHOOK_SECRET and run this again.
+Next: ACCOUNTS=1 $0 deploy, then $0 api_edge (once) and $0 schedule (once).
+NEXT
+}
+
+accounts_env() {  # the extra settings activation B adds to the service and the worker
+  local domain
+  domain="$(setting AUTH0_DOMAIN | sed 's#^https://##; s#/$##')"
+  [[ -n "$domain" ]] || { echo "Set AUTH0_DOMAIN in the environment or .env" >&2; exit 1; }
+  printf '##ALVARY_ACCOUNTS=1##ALVARY_CONSOLE_ISSUER=https://%s/##ALVARY_CONSOLE_CLIENT_ID=%s' \
+    "$domain" "$(cat "$AUTH0_FILES/console-client-id")"
+  printf '##ALVARY_CONSOLE_BASE_URL=https://%s##ALVARY_API_ORIGIN=https://%s' "$DOMAIN" "$API_DOMAIN"
+}
+
+accounts_secrets() {
+  printf ',ALVARY_KEY_PEPPER=key-pepper:latest,ALVARY_CONSENT_SECRET=consent-secret:latest'
+  printf ',ALVARY_CONSOLE_CLIENT_SECRET=console-client-secret:latest,RESEND_API_KEY=resend-api-key:latest'
+  if "${GC[@]}" secrets describe resend-webhook-secret >/dev/null 2>&1; then
+    printf ',RESEND_WEBHOOK_SECRET=resend-webhook-secret:latest'
+  fi
+}
+
 app_env() {
   # gcloud's alternate-delimiter form (^##^…##…): values such as "Ruhu, Inc." keep their commas.
   local name env="^##^ALVARY_RUNTIME_MODE=persistent##PUBLIC_DOMAIN=$DOMAIN"
@@ -207,8 +273,9 @@ app_env() {
 
 deploy() {
   local env context
-  local key
-  for key in feed-keys webhook-keys; do
+  local key keys=(feed-keys webhook-keys)
+  [[ "$ACCOUNTS" == 1 ]] && keys+=(console-client-secret consent-secret key-pepper resend-api-key)
+  for key in "${keys[@]}"; do
     "${GC[@]}" secrets describe "$key" >/dev/null 2>&1 \
       || { echo "The $key secret is missing: run $0 setup first" >&2; exit 1; }
   done
@@ -225,12 +292,28 @@ deploy() {
     --set-env-vars="$env" --set-secrets="DATABASE_URL=database-url:latest,POSTGRES_PASSWORD=database-password:latest" \
     --command=sh --args=-c,"python -m scripts.check_launch && alembic upgrade head && python -m scripts.seed"
   "${GC[@]}" run jobs execute "$MIGRATE_JOB" --region="$REGION" --wait
+  local keys_env="##ALVARY_FEED_KEY_ID=$FEED_KEY_ID##ALVARY_WEBHOOK_KEY_ID=$WEBHOOK_KEY_ID"
+  local secrets="DATABASE_URL=database-url:latest,ALVARY_FEED_KEYS=feed-keys:latest,ALVARY_WEBHOOK_KEYS=webhook-keys:latest"
+  if [[ "$ACCOUNTS" == 1 ]]; then
+    keys_env+="$(accounts_env)"
+    secrets+="$(accounts_secrets)"
+  fi
   "${GC[@]}" run deploy "$SERVICE" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
     --add-cloudsql-instances="$(connection)" --ingress=internal-and-cloud-load-balancing --no-default-url \
     --no-invoker-iam-check --min-instances=1 --max-instances="$MAX_INSTANCES" --cpu=1 --memory=1Gi \
     --concurrency=80 \
-    --set-env-vars="$env##ALVARY_ADMISSION_CONFIG=/secrets/admission/config.json##ALVARY_SITE_ADMISSION_CONFIG=/secrets/site-admission/config.json##ALVARY_FEED_KEY_ID=$FEED_KEY_ID##ALVARY_WEBHOOK_KEY_ID=$WEBHOOK_KEY_ID" \
-    --set-secrets="DATABASE_URL=database-url:latest,/secrets/admission/config.json=admission-config:latest,/secrets/site-admission/config.json=site-admission-config:latest,ALVARY_FEED_KEYS=feed-keys:latest,ALVARY_WEBHOOK_KEYS=webhook-keys:latest"
+    --set-env-vars="$env$keys_env##ALVARY_ADMISSION_CONFIG=/secrets/admission/config.json##ALVARY_SITE_ADMISSION_CONFIG=/secrets/site-admission/config.json" \
+    --set-secrets="$secrets,/secrets/admission/config.json=admission-config:latest,/secrets/site-admission/config.json=site-admission-config:latest"
+  if [[ "$ACCOUNTS" == 1 ]]; then
+    # The worker (monitors, digests, webhooks) and the daily sweep and purge run the same image.
+    "${GC[@]}" run jobs deploy "$WORKER_JOB" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
+      --set-cloudsql-instances="$(connection)" --tasks=1 --max-retries=0 --task-timeout=280s --memory=1Gi \
+      --set-env-vars="$env$keys_env" --set-secrets="$secrets" --command=python --args=-m,changes.worker,run
+    "${GC[@]}" run jobs deploy "$DAILY_JOB" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
+      --set-cloudsql-instances="$(connection)" --tasks=1 --max-retries=0 --task-timeout=600s \
+      --set-env-vars="$env$keys_env" --set-secrets="$secrets" \
+      --command=sh --args=-c,"python -m changes.admin sweep && python -m changes.admin purge"
+  fi
   echo "Deployed $IMAGE. Next: $0 edge (once), then $0 verify"
 }
 
@@ -289,6 +372,47 @@ edge() {
   dns
 }
 
+api_edge() {  # api.<domain> on the same load balancer, with its own certificate (MAC-02, D7)
+  local M=("${GC[@]}" certificate-manager)
+  "${M[@]}" dns-authorizations describe open-alvary-api-dns-auth >/dev/null 2>&1 \
+    || "${M[@]}" dns-authorizations create open-alvary-api-dns-auth --domain="$API_DOMAIN"
+  "${M[@]}" certificates describe open-alvary-api-cert >/dev/null 2>&1 \
+    || "${M[@]}" certificates create open-alvary-api-cert --domains="$API_DOMAIN" \
+      --dns-authorizations=open-alvary-api-dns-auth
+  "${M[@]}" maps entries describe open-alvary-api-entry --map=open-alvary-certs >/dev/null 2>&1 \
+    || "${M[@]}" maps entries create open-alvary-api-entry --map=open-alvary-certs \
+      --certificates=open-alvary-api-cert --hostname="$API_DOMAIN"
+  local record
+  record="$("${M[@]}" dns-authorizations describe open-alvary-api-dns-auth \
+    --format='value(dnsResourceRecord.name,dnsResourceRecord.type,dnsResourceRecord.data)')"
+  cat <<DNS
+DNS records for $API_DOMAIN (alvary.ai's zone):
+  1. For the certificate:  $record
+  2. Then:                 $API_DOMAIN.  A  $(address)
+DNS
+}
+
+schedule() {  # once, after the first ACCOUNTS=1 deploy: the worker every 5 minutes, the sweep daily
+  "${GC[@]}" services enable cloudscheduler.googleapis.com
+  "${GC[@]}" iam service-accounts describe "$SCHEDULER_EMAIL" >/dev/null 2>&1 \
+    || "${GC[@]}" iam service-accounts create "$SCHEDULER" --display-name="Runs the Open Alvary jobs"
+  local job
+  for job in "$WORKER_JOB" "$DAILY_JOB"; do
+    grant "${GC[@]}" run jobs add-iam-policy-binding "$job" --region="$REGION" \
+      --member="serviceAccount:$SCHEDULER_EMAIL" --role=roles/run.invoker
+  done
+  local base="https://run.googleapis.com/v2/projects/$PROJECT/locations/$REGION/jobs"
+  scheduled() {  # name, cron, job
+    local verb=create
+    "${GC[@]}" scheduler jobs describe "$1" --location="$REGION" >/dev/null 2>&1 && verb=update
+    "${GC[@]}" scheduler jobs "$verb" http "$1" --location="$REGION" --schedule="$2" --time-zone=UTC \
+      --uri="$base/$3:run" --http-method=POST --oauth-service-account-email="$SCHEDULER_EMAIL"
+  }
+  scheduled open-alvary-worker-every-5-minutes "*/5 * * * *" "$WORKER_JOB"
+  scheduled open-alvary-daily-sweep "15 3 * * *" "$DAILY_JOB"
+  echo "Scheduled: $WORKER_JOB every 5 minutes, $DAILY_JOB daily at 03:15 UTC."
+}
+
 address() { "${GC[@]}" compute addresses describe open-alvary-ip --global --format='value(address)'; }
 
 dns() {
@@ -331,6 +455,15 @@ verify() {
   repository="$(setting PUBLIC_REPOSITORY_URL)"
   echo "  repository link $repository -> $(curl -s -o /dev/null -w '%{http_code}' "$repository") (must be 200)"
   echo "  the service's own address: $("${GC[@]}" run services describe "$SERVICE" --region="$REGION" --format='value(status.url)' || true) (empty: no default address)"
+  echo "  change feed -> $(curl_lb -o /dev/null -w '%{http_code}' "$base/api/changes") (200, before and after activation B)"
+  if [[ "$ACCOUNTS" == 1 ]]; then
+    echo "Activation B:"
+    echo "  console -> $(curl_lb -o /dev/null -w '%{http_code}' "$base/console/") (200)"
+    echo "  anonymous API closed -> $(curl_lb -o /dev/null -w '%{http_code}' "$base/api/sources") (410)"
+    echo "  REST v1 without a key -> $(curl_lb -o /dev/null -w '%{http_code} %header{www-authenticate}' "$base/api/v1/sources") (401 with a Bearer challenge)"
+    echo "  MCP metadata -> $(curl_lb -o /dev/null -w '%{http_code}' "$base/.well-known/oauth-protected-resource/mcp") (200)"
+    echo "  $API_DOMAIN -> $(curl -sS -o /dev/null --max-time 20 -w '%{http_code}' "https://$API_DOMAIN/api/v1/sources" 2>/dev/null || printf 'not yet') (401 once its DNS and certificate are live)"
+  fi
 }
 
 status() {
@@ -340,4 +473,4 @@ status() {
   echo "Load balancer address: $(address 2>/dev/null || echo none)"
 }
 
-"${1:?plan, project, setup, deploy, edge, dns, verify or status}" "${@:2}"
+"${1:?plan, project, setup, deploy, edge, dns, verify, status; activation B: accounts, api_edge, schedule}" "${@:2}"

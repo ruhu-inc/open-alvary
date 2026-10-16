@@ -95,7 +95,8 @@ def create_service(
 
     service.mount("/site/v1", create_site_app(store, release_root, site_admission))
     service.mount("/downloads", create_downloads_app(store, release_root, site_admission))
-    if store.engine.dialect.name == "postgresql" and os.getenv("ALVARY_ACCOUNTS") == "1":
+    accounts_on = store.engine.dialect.name == "postgresql" and os.getenv("ALVARY_ACCOUNTS") == "1"
+    if accounts_on:
         # Activation B (MAC-15): accounts, the console, REST v1 and MCP go live together, only when
         # switched on, and need the accounts schema (PostgreSQL only).
         with store.engine.connect() as connection:
@@ -202,7 +203,10 @@ def create_service(
                 countries=published_countries,
             ),
         )
-    service.mount("/api", create_app(store, release_root, downloads_path="/downloads"))
+    anonymous = create_app(store, release_root, downloads_path="/downloads")
+    if accounts_on:
+        close_anonymous(anonymous, os.getenv("ALVARY_API_ORIGIN", "https://api.open.alvary.ai").rstrip("/"))
+    service.mount("/api", anonymous)
 
     @service.get("/robots.txt", include_in_schema=False)
     def robots(request: Request):
@@ -244,6 +248,47 @@ STATIC_PAGES = (
     "/about",
     "/privacy",
 )
+
+
+def close_anonymous(app, api_origin: str) -> None:
+    """Activation B closes the anonymous API (MAC-02): every old route answers 410 Gone with where to
+    go instead. The change feed stays anonymous (SUB C1), with the app's own admission and headers."""
+    keep = ("/changes", "/change-coverage")
+
+    def kept(route) -> bool:
+        # Included routers can sit here as nested objects without a path of their own.
+        inner = getattr(getattr(route, "original_router", route), "routes", [])
+        paths = [getattr(route, "path", None)] + [getattr(r, "path", None) for r in inner]
+        return any(isinstance(p, str) and p.startswith(keep) for p in paths)
+
+    app.router.routes = [r for r in app.router.routes if kept(r)]
+
+    @app.api_route(
+        "/{path:path}", methods=["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"], include_in_schema=False
+    )
+    def gone(path: str):
+        target = (
+            f"{api_origin}/mcp"
+            if path.rstrip("/") == "mcp"
+            else f"{api_origin}/api/v1/openapi.json"
+            if path == "openapi.json"
+            else f"{api_origin}/api/v1"
+        )
+        return JSONResponse(
+            {
+                "type": "https://open.alvary.ai/docs/errors#gone",
+                "title": "Gone",
+                "status": 410,
+                "detail": "The anonymous API has closed. Use the API with a key or a connected app, see the developer"
+                " pages, or follow the change feed, which stays open at /api/changes.",
+                "code": "gone",
+                "successor": target,
+                "developers": "https://open.alvary.ai/developers",
+            },
+            status_code=410,
+            media_type="application/problem+json",
+            headers={"Link": f'<{target}>; rel="successor-version"'},
+        )
 
 
 def _origin(request: Request) -> str:
