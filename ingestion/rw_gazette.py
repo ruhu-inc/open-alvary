@@ -20,7 +20,7 @@ from ingestion import gazette_layout
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-13.4"
+PIPELINE = "2026-10-16.1"  # titles end at a page; treaty preambles; Roman-numeral articles
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
