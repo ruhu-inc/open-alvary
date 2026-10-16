@@ -493,36 +493,40 @@ def test_oidc_sign_in_admits_a_verified_operator_once(world):
     assert signed.status_code == 200 and "Signed in" in signed.text
     cookie = signed.headers["set-cookie"]
     assert "HttpOnly" in cookie and "SameSite=strict" in cookie and "Secure" in cookie
-    assert browser.get(f"/auth/callback?state={state}&code=abc").status_code == 400  # one use only
+    again = browser.get(f"/auth/callback?state={state}&code=abc", follow_redirects=False)  # one use only
+    assert again.status_code == 303 and again.headers["location"].startswith("/?signin=")
 
 
 def test_a_sign_in_must_finish_in_the_browser_that_started_it(world):
     browser, state = oidc_flow(world)
     store, library = world
     elsewhere = TestClient(browser.app, base_url="https://review.example.org")  # no flow cookie
-    response = elsewhere.get(f"/auth/callback?state={state}&code=abc")
-    assert response.status_code == 400 and "set-cookie" not in response.headers
+    response = elsewhere.get(f"/auth/callback?state={state}&code=abc", follow_redirects=False)
+    assert response.headers["location"] == "/?signin=other_browser"
+    assert "oa_review_session" not in response.headers.get("set-cookie", "")
     browser.cookies.set("oa_review_flow", "another-flow", domain="review.example.org", path="/auth")
-    assert browser.get(f"/auth/callback?state={state}&code=abc").status_code == 400
+    refused = browser.get(f"/auth/callback?state={state}&code=abc", follow_redirects=False)
+    assert refused.headers["location"] == "/?signin=other_browser"
     assert "oa_review_session" not in browser.cookies
 
 
 @pytest.mark.parametrize(
-    ("claims", "status"),
+    ("claims", "reason"),
     [
-        ({"aud": "someone-else"}, 401),
-        ({"iss": "https://evil.example.org"}, 401),
-        ({"nonce": "replayed"}, 401),
-        ({"exp": time.time() - 10}, 401),
-        ({"email_verified": False}, 401),
-        ({"email": "stranger@example.org"}, 403),
+        ({"aud": "someone-else"}, "failed"),
+        ({"iss": "https://evil.example.org"}, "failed"),
+        ({"nonce": "replayed"}, "expired"),
+        ({"exp": time.time() - 10}, "expired"),
+        ({"email_verified": False}, "unverified"),
+        ({"email": "stranger@example.org"}, "not_operator"),
     ],
 )
-def test_oidc_sign_in_rejects_bad_claims_and_strangers(world, claims, status):
+def test_oidc_sign_in_rejects_bad_claims_and_strangers_back_on_the_sign_in_page(world, claims, reason):
+    # Refused sign-ins go back to the sign-in page with a reason from a fixed list, never free text.
     browser, state = oidc_flow(world, **claims)
-    response = browser.get(f"/auth/callback?state={state}&code=abc")
-    assert response.status_code == status
-    assert "set-cookie" not in response.headers
+    response = browser.get(f"/auth/callback?state={state}&code=abc", follow_redirects=False)
+    assert response.status_code == 303 and response.headers["location"] == f"/?signin={reason}"
+    assert "oa_review_session" not in response.headers.get("set-cookie", "")
 
 
 # --- document surface support and Akoma Ntoso --------------------------------------------------------
