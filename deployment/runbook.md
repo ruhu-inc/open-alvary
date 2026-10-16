@@ -155,6 +155,24 @@ and, once Resend's webhook exists, `RESEND_WEBHOOK_SECRET`:
 Turning activation B off again is a deploy without `ACCOUNTS=1`: the anonymous API reopens and the
 console, keys and connected apps stop answering; nothing is deleted.
 
+## Publishing approved works (catalogue records)
+
+`python -m operations.publish` takes works approved in the review workbench into the public
+catalogue as records only (title, number, year, citation, status, issuer, official link); never their
+text. Each run takes down records whose approval has lapsed. The change log records both.
+
+1. Once per jurisdiction, the owner records the collection decision, then commits the file:
+   `python -m operations.publish decide --jurisdiction rw --by "Full Name" --evidence <url>`
+   (`ingestion/decisions/rw-catalogue.json`, 12 months by default; run again to renew).
+2. With both databases reachable (for example two Cloud SQL Auth Proxy ports: the review database
+   in open-alvary-ingestion, the public one in open-alvary-prod) and read access to the collection:
+   `ALVARY_REVIEW_DATABASE_URL=… ALVARY_REVIEW_COLLECTIONS=gs://open-alvary-corpus/collections/rw/
+   DATABASE_URL=… python -m operations.publish records --jurisdiction rw --dry-run`, then without
+   `--dry-run`. The review database is only read.
+
+Publishing text needs more first: the copyright check of official texts (Law N° 055/2024 for
+Rwanda), a rights decision verified against the law itself (POL-02) and the public reader (MAC-01).
+
 ## Monitors and webhooks
 
 `python -m changes.worker run` (every 5 minutes, as a scheduled job) matches new changes to

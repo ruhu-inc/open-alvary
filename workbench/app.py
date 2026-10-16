@@ -28,6 +28,7 @@ from ingestion import settings
 from schema import record as R
 from schema.jurisdictions import registry as jurisdiction_registry
 from workbench import akn, auth, content, details, record_view
+from workbench.review import Review
 from workbench.store import Conflict, Store, engine_from_environment
 
 STATIC = Path(__file__).with_name("static")
@@ -167,92 +168,8 @@ def create_app(
         return reading, found
 
     profiles = jurisdiction_registry()
-
-    def details_key(document: dict) -> str:
-        """Whose details these are: the work, shared by its language versions (Rwanda's three
-        texts of one law), or the document itself."""
-        return document.get("work") or document["id"]
-
-    def described(act: dict, record: dict | None, reading: dict) -> dict:
-        """The document's details in the record view: values, what is accounted for, its fields."""
-        place, profile = record_view.place_for(act, library.manifest_for(act["id"]), profiles)
-        if record:
-            values, absent = record["details"], record["absent"]
-            if not record_view.is_view(values):  # saved under the Nigerian DETAILS-1: read it in this view
-                values, absent = record_view.from_legacy(values, absent)
-        elif place.code == "ng":
-            values, absent = record_view.from_legacy(
-                *details.initial(details.suggest(reading, act, library.manifest_for(act["id"])))
-            )
-        else:
-            values = record_view.base_values(act, library.manifest_for(act["id"]))
-            absent = dict(act.get("suggested_absent") or {})
-        if act.get("language") and isinstance(values.get("expressions"), list):
-            # One record for the work; each language version is "this text" on its own page.
-            values = {
-                **values,
-                "expressions": [
-                    {**row, "this_text": "yes" if row.get("language") == act["language"] else "no"}
-                    for row in values["expressions"]
-                ],
-            }
-        family, kind = values["identity.family"], values["identity.type"]
-        specs = record_view.fields(family, kind, profile)
-        return {
-            "values": values,
-            "absent": absent,
-            "specs": specs,
-            "place": place,
-            "profile": profile,
-            "family": family,
-            "kind": kind,
-            "missing": record_view.missing(values, absent, specs),
-        }
-
-    def built(act: dict, view: dict):
-        """The validated record (document-record-1), or None while details are incomplete."""
-        try:
-            return record_view.to_record(
-                view["values"],
-                view["absent"],
-                view["place"],
-                view["profile"],
-                record_view.slugify(act["id"][3:]),
-            )
-        except (ValueError, KeyError):
-            return None
-
-    def state(document: dict) -> dict:
-        """Everything that decides a document's review status, read once: its pages, its details,
-        and whether the latest approval still covers both exactly."""
-        reading, latest = library.reading(document["id"]), store.latest_pages(document["id"])
-        final = content.final_pages(reading, latest)
-        record = store.latest_details(details_key(document))
-        view = described(document, record, reading)
-        sha, details_sha = content.content_sha256(final), content.details_sha256(record)
-        approvals = store.approvals(document["id"])
-        head = approvals[0] if approvals else None
-        approved = bool(
-            head
-            and head["decision"] == "approved"
-            and head["content_sha256"] == sha
-            and head.get("details_sha256") == details_sha
-            and record
-            and record["status"] == "confirmed"
-        )
-        return {
-            "reading": reading,
-            "latest": latest,
-            "final": final,
-            "record": record,
-            "content_sha256": sha,
-            "details_sha256": details_sha,
-            "approvals": approvals,
-            "head": head,
-            "approved": approved,
-            "view": view,
-            "readiness": content.readiness(reading, latest, content.details_state(record, view["missing"])),
-        }
+    review = Review(store, library, profiles)
+    details_key, described, built, state = review.details_key, review.described, review.built, review.state
 
     def document_summary(document: dict) -> dict:
         now = state(library.act(document["id"]))
