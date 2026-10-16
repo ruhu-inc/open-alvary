@@ -184,6 +184,11 @@ def install(app: FastAPI, store: Store, admin: AccessAdmin | None, relying: Rely
         operator(request)
         return run(lambda: admin.audit(organisation_id=organisation, action=action, before=before, limit=200))
 
+    @app.get("/api/access/clients")
+    def clients(request: Request):
+        operator(request)
+        return run(admin.verified_clients)
+
     # --- changes: role, CSRF and a fresh passkey ----------------------------------------------
 
     @app.post("/api/access/organisations/{organisation_id}/grant")
@@ -251,6 +256,25 @@ def install(app: FastAPI, store: Store, admin: AccessAdmin | None, relying: Rely
             "ok": True,
             **run(lambda: admin.revoke_credential(action(found, body), str(body.get("credential")))),
         }
+
+    @app.post("/api/access/clients")
+    def pin(request: Request, body: dict = JSON_BODY):
+        found = changing(request)
+        run(
+            lambda: admin.pin(
+                action(found, body),
+                str(body.get("client_id") or ""),
+                str(body.get("name") or ""),
+                str(body.get("publisher") or ""),
+            )
+        )
+        return {"ok": True}
+
+    @app.post("/api/access/clients/unpin")
+    def unpin(request: Request, body: dict = JSON_BODY):
+        found = changing(request)
+        run(lambda: admin.unpin(action(found, body), str(body.get("client_id") or "")))
+        return {"ok": True}
 
 
 def from_environment(dev_login: bool) -> tuple[AccessAdmin | None, RelyingParty | None]:

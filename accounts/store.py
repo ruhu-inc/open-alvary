@@ -1457,6 +1457,20 @@ class Accounts:
             return new
 
     # ---------- connected apps ----------
+    def verified_client(self, client_id: str) -> tuple[str, str] | None:
+        """(name, publisher) of a tool pinned as a verified publisher, or None."""
+        if not client_id.startswith("https://"):
+            return None
+        with self.engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    f"SELECT name, publisher FROM {self._t(conn, 'verified_client')}"
+                    " WHERE client_id = :c AND unpinned_at IS NULL"
+                ),
+                {"c": client_id},
+            ).first()
+        return (row.name, row.publisher) if row else None
+
     def create_grant(
         self,
         person_id: str,
