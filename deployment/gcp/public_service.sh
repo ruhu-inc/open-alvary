@@ -497,7 +497,9 @@ access_role() {  # once, after an ACCOUNTS=1 deploy: the role the workbench's Ac
     --role=roles/secretmanager.secretAccessor
   # Reads only what the Access section shows (no key hashes, session tokens or provider subjects) and
   # writes only what its actions change (accounts.access_admin); never a Cloud SQL superuser.
-  "${GC[@]}" run jobs deploy open-alvary-access-role --image="$IMAGE" --region="$REGION" \
+  local image  # the image the service runs now, not the local commit's (which may not be built)
+  image="$("${GC[@]}" run services describe "$SERVICE" --region="$REGION" --format='value(spec.template.spec.containers[0].image)')"
+  "${GC[@]}" run jobs deploy open-alvary-access-role --image="$image" --region="$REGION" \
     --service-account="$RUNNER_EMAIL" --set-cloudsql-instances="$(connection)" --tasks=1 --max-retries=0 \
     --set-secrets="DATABASE_URL=database-url:latest,ALVARY_ACCESS_ROLE_PASSWORD=access-role-password:latest" \
     --command=python --args=-m,accounts.access_admin,provision-role,open_alvary_access
