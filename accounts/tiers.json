@@ -34,7 +34,8 @@
       "requests_per_minute": 300,
       "burst": 150,
       "concurrency": 10,
-      "bytes_per_day": 2000000000
+      "bytes_per_day": 2000000000,
+      "jurisdictions": 2
     },
     "published": true,
     "listing": {
@@ -57,7 +58,8 @@
       "requests_per_minute": 1200,
       "burst": 600,
       "concurrency": 40,
-      "bytes_per_day": 10000000000
+      "bytes_per_day": 10000000000,
+      "jurisdictions": 5
     },
     "published": true,
     "listing": {

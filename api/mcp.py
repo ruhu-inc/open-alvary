@@ -13,6 +13,8 @@ from fastapi import APIRouter, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
+from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
+
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26")
 SERVER_INFO = {"name": "open-alvary", "title": "Open Alvary public legal catalogue", "version": "0.1.0"}
 
@@ -26,6 +28,13 @@ TOOLS = [
             "properties": {
                 "query": {"type": "string", "minLength": 1, "maxLength": 200},
                 "limit": {"type": "integer", "minimum": 1, "maximum": 25},
+                "jurisdiction": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 40,
+                    "description": "One jurisdiction to search, such as rw (Rwanda) or ng (Nigeria). "
+                    "Without it, the search covers every jurisdiction available to you.",
+                },
             },
             "required": ["query"],
             "additionalProperties": False,
@@ -67,31 +76,33 @@ def _tool_result(payload, is_error=False):
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
 
 
-class OutsideAccess(LookupError):
-    """A record or jurisdiction outside the organisation's access (MAC-06 jurisdiction_not_included)."""
-
-
 def create_router(
     catalogue_factory: Callable,
     unavailable: tuple[type[Exception], ...],
-    reach: Callable[[Request], set[str] | None] = lambda request: None,
+    reach: Callable[[Request], Reach] = lambda request: EVERYWHERE,
 ) -> APIRouter:
-    """``reach`` gives the jurisdictions a request may read (None: all), from its organisation's access."""
+    """``reach`` gives the organisation's plan (api.reach): its countries at the plan's limits, every
+    other jurisdiction at the Starter rate."""
     router = APIRouter()
 
-    def call_tool(name, arguments, allowed):
+    def call_tool(name, arguments, plan: Reach):
         if not isinstance(arguments, dict):
             return None
         with catalogue_factory() as service:
-            if name == "search_catalogue" and set(arguments) <= {"query", "limit"}:
+            if name == "search_catalogue" and set(arguments) <= {"query", "limit", "jurisdiction"}:
                 query, limit = arguments.get("query"), arguments.get("limit", 10)
+                jurisdiction = arguments.get("jurisdiction")
                 if not isinstance(query, str) or not 1 <= len(query) <= 200:
                     return None
                 if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 25:
                     return None
-                if allowed is not None and len(allowed) != 1:
-                    raise OutsideAccess("Your access covers several jurisdictions; search one at a time.")
-                jurisdiction = next(iter(allowed)) if allowed else None
+                if jurisdiction is not None:
+                    if not isinstance(jurisdiction, str) or not 2 <= len(jurisdiction) <= 40:
+                        return None
+                    jurisdiction = jurisdiction.lower()
+                    plan.admit(jurisdiction)
+                else:
+                    jurisdiction = plan.within(j.id for j in service.jurisdictions())
                 return service.search(query, jurisdiction=jurisdiction, limit=limit, offset=0).model_dump(
                     mode="json"
                 )
@@ -99,8 +110,7 @@ def create_router(
                 if not isinstance(arguments["source_id"], str) or not 1 <= len(arguments["source_id"]) <= 160:
                     return None
                 view = service.source(arguments["source_id"])
-                if allowed is not None and view.jurisdiction_id not in allowed:
-                    raise OutsideAccess("That source is outside your organisation's access.")
+                plan.admit(view.jurisdiction_id)
                 return view.model_dump(mode="json")
             if name == "get_coverage" and not arguments:
                 return service.coverage().model_dump(mode="json")
@@ -150,8 +160,10 @@ def create_router(
                 )
             except unavailable:
                 return _result(id_, _tool_result("Catalogue authority unavailable", is_error=True))
-            except OutsideAccess as outside:
-                return _result(id_, _tool_result(str(outside), is_error=True))
+            except OutsidePlanLimited as outside:
+                return _result(
+                    id_, _tool_result(f"{outside} Retry after {outside.retry_after} seconds.", is_error=True)
+                )
             except LookupError:
                 return _result(id_, _tool_result("Source not available", is_error=True))
             except ValueError:

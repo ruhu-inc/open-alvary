@@ -516,3 +516,32 @@ def test_continue_as_passes_the_remembered_account_to_the_provider(console):
     assert parse_qs(urlparse(start.headers["location"]).query)["login_hint"] == ["amina@example.org"]
     odd = client(app).get("/auth/start", params={"method": "google", "login_hint": "<script>"})
     assert "login_hint" not in parse_qs(urlparse(odd.headers["location"]).query)
+
+
+def test_owners_see_the_published_countries_and_change_their_plans_countries(console):
+    accounts, fake, _ = console
+    limited = TIER | {
+        "id": "developer",
+        "name": "Developer",
+        "allowance": TIER["allowance"] | {"jurisdictions": 2},
+    }
+    accounts.set_tiers([TIER, limited])
+    published = [{"id": "rw", "name": "Rwanda", "sources": 3, "full_text": 3}]
+    browser = client(create_console_app(accounts, app_provider(fake), countries=lambda: published))
+    organisation, headers, _ = onboard(browser, fake)
+    assert browser.get("/api/v1/countries").json() == {"countries": published}
+    accounts.grant_access(
+        "op",
+        organisation,
+        tier="developer",
+        scope={"jurisdictions": ["rw"]},
+        source="manual",
+        ends_at=None,
+        reason="Test",
+    )
+    path = f"/api/v1/organisations/{organisation}/access/countries"
+    assert browser.post(path, headers=headers, json={"jurisdictions": ["rw", "ng"]}).status_code == 204
+    details = browser.get(f"/api/v1/organisations/{organisation}/access", headers=headers).json()
+    assert details["current"]["scope"] == {"jurisdictions": ["ng", "rw"]} and details["country_change_after"]
+    again = browser.post(path, headers=headers, json={"jurisdictions": ["ke"]})
+    assert again.status_code == 409 and again.json()["error"]["code"] == "change_too_soon"

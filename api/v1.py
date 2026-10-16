@@ -1,7 +1,8 @@
 """REST v1 (MAC-06): the read routes for entitled organisations, at https://api.<domain>/api/v1.
 
 The same response shapes as today's read routes (API-01–06), behind the credential gate
-(api.credentials), limited to the jurisdictions the organisation's access covers. Public without a
+(api.credentials). A plan's countries are read at its own limits and every other one at the Starter
+rate (api.reach); a search or listing without a jurisdiction covers the plan's. Public without a
 credential, and open to any origin without credentials: the OpenAPI document, the quota policy and
 the tier catalogue. Data routes send no CORS headers: keys never belong in a browser (N18).
 """
@@ -16,8 +17,10 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
+from api.admission import AdmissionUnavailable
 from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable
 from api.credentials import problem
+from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
 from api.release_adapter import LegacyReleases
 from api.repositories import LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import Store, check_legacy_authority
@@ -33,14 +36,6 @@ from schema.public import (
 )
 
 PUBLIC_PATHS = frozenset({"/openapi.json", "/quota-policy", "/tiers"})
-
-
-class OutOfScope(Exception):
-    pass
-
-
-class Unbounded(Exception):
-    pass
 
 
 def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]]) -> FastAPI:
@@ -68,16 +63,10 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
     def request_id(request: Request) -> str:
         return getattr(request.state, "request_id", "-")
 
-    @app.exception_handler(OutOfScope)
-    async def out_of_scope(request, exception):
-        return problem("jurisdiction_not_included", request_id(request))
-
-    @app.exception_handler(Unbounded)
-    async def unbounded(request, exception):
+    @app.exception_handler(OutsidePlanLimited)
+    async def outside_plan(request, exception):
         return problem(
-            "invalid_input",
-            request_id(request),
-            detail="Your access covers several jurisdictions: ask for one at a time with ?jurisdiction=.",
+            "rate_limited", request_id(request), retry_after=exception.retry_after, detail=str(exception)
         )
 
     @app.exception_handler(SourceUnavailable)
@@ -97,6 +86,7 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
     @app.exception_handler(SQLAlchemyError)
     @app.exception_handler(ValidationError)
     @app.exception_handler(PublicUnavailable)
+    @app.exception_handler(AdmissionUnavailable)
     async def unavailable(request, exception):
         return problem("temporarily_unavailable", request_id(request))
 
@@ -110,29 +100,21 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
         with session() as service:
             yield service
 
-    def allowed(request: Request) -> set[str] | None:
-        """The jurisdictions this request may reach; None means all."""
-        scope = request.state.access["scope"]
-        return None if scope.get("all") else set(scope.get("jurisdictions") or [])
+    def reach(request: Request) -> Reach:
+        return getattr(request.state, "access", {}).get("reach", EVERYWHERE)
 
-    def within(request: Request, jurisdiction: str | None) -> str | None:
-        """The jurisdiction filter to apply for a list or search."""
-        reach = allowed(request)
-        if reach is None:
-            return jurisdiction
+    def within(request: Request, service: LegacyCatalogue, jurisdiction: str | None):
+        """The jurisdiction filter for a list or search: one named jurisdiction (outside the plan, at
+        the Starter rate), or else the plan's."""
+        plan = reach(request)
         if jurisdiction is not None:
-            if jurisdiction not in reach:
-                raise OutOfScope
+            plan.admit(jurisdiction)
             return jurisdiction
-        if len(reach) == 1:
-            return next(iter(reach))
-        raise Unbounded
+        return plan.within(j.id for j in service.jurisdictions())
 
     def check_source(request: Request, service: LegacyCatalogue, source_id: str) -> SourceView:
         view = service.source(source_id)
-        reach = allowed(request)
-        if reach is not None and view.jurisdiction_id not in reach:
-            raise OutOfScope
+        reach(request).admit(view.jurisdiction_id)
         return view
 
     @app.get("/quota-policy")
@@ -157,8 +139,7 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
     def jurisdictions(
         request: Request, service: LegacyCatalogue = Depends(catalogue)
     ) -> tuple[JurisdictionView, ...]:
-        reach = allowed(request)
-        return tuple(j for j in service.jurisdictions() if reach is None or j.id in reach)
+        return service.jurisdictions()
 
     @app.get("/sources")
     def sources(
@@ -170,7 +151,7 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
         service: LegacyCatalogue = Depends(catalogue),
     ) -> SourcePage:
         return service.sources(
-            jurisdiction=within(request, jurisdiction), limit=limit, offset=offset, access=access
+            jurisdiction=within(request, service, jurisdiction), limit=limit, offset=offset, access=access
         )
 
     @app.get("/sources/{source_id}")
@@ -195,7 +176,7 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
         service: LegacyCatalogue = Depends(catalogue),
     ) -> SearchPage:
         return service.search(
-            q, jurisdiction=within(request, jurisdiction), limit=limit, offset=offset, access=access
+            q, jurisdiction=within(request, service, jurisdiction), limit=limit, offset=offset, access=access
         )
 
     @app.get("/citations/{citation:path}")
@@ -203,16 +184,8 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
         request: Request, citation: str, service: LegacyCatalogue = Depends(catalogue)
     ) -> CitationView:
         view = service.citations(citation)
-        reach = allowed(request)
-        if reach is None:
-            return view
-        matches = tuple(m for m in view.matches if m.jurisdiction_id in reach)
-        status = (
-            view.status
-            if len(matches) == len(view.matches)
-            else ("resolved" if len(matches) == 1 else "ambiguous" if matches else "unresolved")
-        )
-        return CitationView(status=status, matches=matches)
+        reach(request).admit(*(m.jurisdiction_id for m in view.matches))
+        return view
 
     @app.get("/coverage")
     def coverage(service: LegacyCatalogue = Depends(catalogue)) -> CoverageView:
@@ -225,8 +198,6 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
 
     @app.get("/releases")
     def release_listing(request: Request):
-        listing = LegacyReleases(store, releases).listing()
-        reach = allowed(request)
-        return listing if reach is None else [m for m in listing if m.get("jurisdiction") in reach]
+        return LegacyReleases(store, releases).listing()
 
     return app

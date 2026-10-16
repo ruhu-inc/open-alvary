@@ -236,7 +236,12 @@ type AccessDetails = {
     reason: string | null;
   }[];
   requests: AccessRequest[];
+  country_change_after: string | null;
 };
+
+// A country with published material, for choosing a plan's countries.
+type Country = { id: string; name: string; sources: number; full_text: number };
+type Scope = { all?: boolean; jurisdictions?: string[] };
 
 type Plan = {
   id: string;
@@ -257,9 +262,11 @@ type Plan = {
 export function AccessPage({ me, org, refresh }: PageProps) {
   const details = useAsync(() => api<AccessDetails>(`/organisations/${org.id}/access`), [org.id]);
   const plans = useAsync(() => api<{ tiers: Plan[] }>("/tiers"), []);
+  const countries = useAsync(() => api<{ countries: Country[] }>("/countries"), []);
   const [error, setError] = useState<unknown>(null);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [asking, setAsking] = useState<Plan | null>(null);
+  const [changing, setChanging] = useState(false);
   if ((details.loading && !details.data) || (plans.loading && !plans.data)) return <Loading />;
   if (details.error) return <Problem error={details.error} />;
   const data = details.data!;
@@ -269,6 +276,9 @@ export function AccessPage({ me, org, refresh }: PageProps) {
   const currentId = data.current.state === "active" ? data.current.tier?.id : null;
   const current = data.history.find((h) => h.state === "active");
   const owner = org.role === "owner";
+  const published_countries = countries.data?.countries ?? [];
+  const names = Object.fromEntries(published_countries.map((c) => [c.id, c.name]));
+  const chosenLimit = data.current.tier?.allowance?.jurisdictions;
   async function withdraw(id: string) {
     try {
       await api(`/organisations/${org.id}/access-requests/${id}/withdraw`, {
@@ -330,20 +340,36 @@ export function AccessPage({ me, org, refresh }: PageProps) {
             <p className="fine">
               {number(data.current.tier?.allowance?.requests_per_minute ?? 0)} requests a minute ·{" "}
               {number(data.current.tier?.allowance?.concurrency ?? 0)} at once ·{" "}
-              {scopeLabel(data.current.scope ?? { all: true })}
+              {scopeLabel(data.current.scope ?? { all: true }, names)}
               {!data.current.starter && current?.ends_at ? ` · until ${when(current.ends_at)}, then Starter` : ""}
             </p>
+            {data.current.scope?.jurisdictions ? (
+              <p className="fine">
+                Other countries at the Starter rate.
+                {owner && data.country_change_after
+                  ? ` You can change countries again from ${when(data.country_change_after)}.`
+                  : ""}
+              </p>
+            ) : null}
           </div>
           {!data.current.starter && owner ? (
-            <button className="btn secondary" type="button" onClick={() => setConfirmEnd(true)}>
-              Go back to Starter
-            </button>
+            <div className="row">
+              {chosenLimit && !data.country_change_after ? (
+                <button className="btn secondary" type="button" onClick={() => setChanging(true)}>
+                  Change countries
+                </button>
+              ) : null}
+              <button className="btn secondary" type="button" onClick={() => setConfirmEnd(true)}>
+                Go back to Starter
+              </button>
+            </div>
           ) : null}
         </div>
       ) : null}
       {open ? (
         <RequestStatus
           request={open}
+          names={names}
           plan={nameOf(open.tier_requested)}
           onWithdraw={() => withdraw(open.id)}
           owner={owner}
@@ -376,8 +402,18 @@ export function AccessPage({ me, org, refresh }: PageProps) {
                       <li>{number(plan.allowance.concurrency ?? 0)} requests at once</li>
                     </>
                   )}
+                  {plan.allowance.jurisdictions ? (
+                    <>
+                      <li>
+                        {plan.allowance.jurisdictions} {plan.allowance.jurisdictions === 1 ? "country" : "countries"} of
+                        your choice
+                      </li>
+                      <li>Others at the Starter rate</li>
+                    </>
+                  ) : (
+                    <li>{plan.listing.action === "contact" ? "All countries, including new ones" : "All countries"}</li>
+                  )}
                   <li>REST API and MCP</li>
-                  <li>All jurisdictions</li>
                 </ul>
                 <div className="plan-action">{planAction(plan)}</div>
               </div>
@@ -400,8 +436,9 @@ export function AccessPage({ me, org, refresh }: PageProps) {
             </div>
           ))}
         <p className="fine">
-          Prices for paid plans are coming. Until then, we confirm each upgrade by email. Need something else? Write to
-          hello@ruhu.ai.
+          A country includes its states, provinces and local law. African Union and regional law, such as the EAC,
+          ECOWAS and OHADA, is in every plan. Prices for paid plans are coming; until then, we confirm each upgrade by
+          email. Need something else? Write to hello@ruhu.ai.
         </p>
       </section>
       {declined && !open ? (
@@ -424,7 +461,7 @@ export function AccessPage({ me, org, refresh }: PageProps) {
                     {h.tier_name} · {stateName(h.state)}
                   </b>
                   <small>
-                    {when(h.starts_at)} {h.ends_at ? `to ${when(h.ends_at)}` : ""} · {scopeLabel(h.scope)}
+                    {when(h.starts_at)} {h.ends_at ? `to ${when(h.ends_at)}` : ""} · {scopeLabel(h.scope, names)}
                   </small>
                 </div>
               </li>
@@ -437,10 +474,26 @@ export function AccessPage({ me, org, refresh }: PageProps) {
           me={me}
           org={org}
           plan={asking}
+          countries={published_countries}
+          current={data.current.scope?.jurisdictions ?? []}
           declined={declined}
           onCancel={() => setAsking(null)}
           onSent={() => {
             setAsking(null);
+            details.reload();
+            refresh();
+          }}
+        />
+      ) : null}
+      {changing && chosenLimit ? (
+        <ChangeCountries
+          org={org}
+          countries={published_countries}
+          limit={chosenLimit}
+          current={data.current.scope?.jurisdictions ?? []}
+          onCancel={() => setChanging(false)}
+          onSaved={() => {
+            setChanging(false);
             details.reload();
             refresh();
           }}
@@ -470,24 +523,128 @@ function stateName(state: string) {
     {
       active: "Active",
       lapsed: "Ended",
-      ended: "Ended by an owner",
+      ended: "Ended",
       revoked: "Revoked",
       scheduled: "Scheduled",
     }[state] ?? state
   );
 }
 
-function scopeLabel(scope: { all?: boolean; jurisdictions?: string[] } | undefined) {
-  return scope?.all ? "All jurisdictions" : (scope?.jurisdictions ?? []).map((j) => j.toUpperCase()).join(", ");
+function scopeLabel(scope: Scope | undefined, names: Record<string, string> = {}) {
+  return scope?.all || !scope?.jurisdictions
+    ? "All countries"
+    : scope.jurisdictions.map((j) => names[j] ?? j.toUpperCase()).join(", ");
+}
+
+// Choose up to `limit` countries; ones already chosen stay listed even without published material.
+function CountryPicker({
+  countries,
+  limit,
+  value,
+  onChange,
+}: {
+  countries: Country[];
+  limit: number;
+  value: string[];
+  onChange: (value: string[]) => void;
+}) {
+  const listed = [
+    ...countries,
+    ...value.filter((id) => !countries.some((c) => c.id === id)).map((id) => ({ id, name: id.toUpperCase(), sources: 0, full_text: 0 })),
+  ];
+  return (
+    <fieldset className="field plain">
+      <legend>
+        Countries <span className="fine">· choose up to {limit}</span>
+      </legend>
+      {listed.length ? (
+        <div className="country-list">
+          {listed.map((c) => {
+            const on = value.includes(c.id);
+            return (
+              <label key={c.id} className={"choice" + (on ? " on" : "")}>
+                <input
+                  type="checkbox"
+                  checked={on}
+                  disabled={!on && value.length >= limit}
+                  onChange={(e) => onChange(e.target.checked ? [...value, c.id] : value.filter((v) => v !== c.id))}
+                />
+                <span>
+                  {c.name}
+                  <small>
+                    {c.full_text ? `${number(c.full_text)} with full text` : c.sources ? "Metadata only" : "Not yet published"}
+                    {c.sources ? ` · ${number(c.sources)} ${c.sources === 1 ? "source" : "sources"}` : ""}
+                  </small>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="fine">No countries are published yet.</p>
+      )}
+      <small>Other countries still answer, at the Starter rate. You can change countries once a month.</small>
+    </fieldset>
+  );
+}
+
+function ChangeCountries({
+  org,
+  countries,
+  limit,
+  current,
+  onCancel,
+  onSaved,
+}: {
+  org: Organisation;
+  countries: Country[];
+  limit: number;
+  current: string[];
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const [chosen, setChosen] = useState(current);
+  const [error, setError] = useState<unknown>(null);
+  const [saving, setSaving] = useState(false);
+  const same = chosen.length === current.length && chosen.every((c) => current.includes(c));
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      await api(`/organisations/${org.id}/access/countries`, { method: "POST", body: { jurisdictions: chosen } });
+      onSaved();
+    } catch (e) {
+      setError(e);
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <Dialog title="Change your plan's countries" onClose={onCancel}>
+      <CountryPicker countries={countries} limit={limit} value={chosen} onChange={setChosen} />
+      <p className="fine">The change applies at once. After it, the next change is possible in 30 days.</p>
+      <Problem error={error} />
+      <div className="dialog-actions">
+        <button className="btn secondary" type="button" onClick={onCancel}>
+          Cancel
+        </button>
+        <button className="btn" type="button" disabled={saving || same || !chosen.length} onClick={save}>
+          {saving ? "Saving…" : "Save countries"}
+        </button>
+      </div>
+    </Dialog>
+  );
 }
 
 function RequestStatus({
   request,
+  names,
   plan,
   onWithdraw,
   owner,
 }: {
   request: AccessRequest;
+  names: Record<string, string>;
   plan?: string | null;
   onWithdraw: () => void;
   owner: boolean;
@@ -503,7 +660,7 @@ function RequestStatus({
         <p className="fine">
           {asked
             ? (request.decision?.reason ?? "Check your email for our question.")
-            : `Sent ${when(request.created_at)} · ${request.expected_volume}${request.reduced ? " · free or reduced asked" : ""}. We reply by email.`}
+            : `Sent ${when(request.created_at)} · ${request.expected_volume}${request.scope_requested.jurisdictions ? ` · ${scopeLabel(request.scope_requested, names)}` : ""}${request.reduced ? " · free or reduced asked" : ""}. We reply by email.`}
         </p>
       </div>
       {owner ? (
@@ -519,6 +676,8 @@ function RequestForm({
   me,
   org,
   plan,
+  countries,
+  current,
   declined,
   onSent,
   onCancel,
@@ -526,6 +685,8 @@ function RequestForm({
   me: Me;
   org: Organisation;
   plan: Plan;
+  countries: Country[];
+  current: string[];
   declined?: AccessRequest;
   onSent: () => void;
   onCancel: () => void;
@@ -539,6 +700,10 @@ function RequestForm({
     contact_email: me.person.email,
     new_information: false,
   });
+  const limit = plan.allowance.jurisdictions;
+  const [chosen, setChosen] = useState<string[]>(() =>
+    (current.length ? current : countries.slice(0, 1).map((c) => c.id)).slice(0, limit ?? 0),
+  );
   const [error, setError] = useState<unknown>(null);
   const [sending, setSending] = useState(false);
   const blocked = declined?.renewable_after && new Date(declined.renewable_after) > new Date();
@@ -552,7 +717,7 @@ function RequestForm({
     try {
       await api(`/organisations/${org.id}/access-requests`, {
         method: "POST",
-        body: { ...form, tier: plan.id, scope: { all: true } },
+        body: { ...form, tier: plan.id, scope: limit ? { jurisdictions: chosen } : { all: true } },
       });
       onSent();
     } catch (e) {
@@ -591,6 +756,7 @@ function RequestForm({
           />
           <small>Don't include confidential client or case details.</small>
         </div>
+        {limit ? <CountryPicker countries={countries} limit={limit} value={chosen} onChange={setChosen} /> : null}
         <div className="field">
           <label htmlFor="volume">Expected requests a day</label>
           <select id="volume" value={form.expected_volume} onChange={(e) => set("expected_volume", e.target.value)}>
@@ -641,7 +807,7 @@ function RequestForm({
           <button className="btn secondary" type="button" onClick={onCancel}>
             Cancel
           </button>
-          <button className="btn" type="submit" disabled={sending}>
+          <button className="btn" type="submit" disabled={sending || (!!limit && !chosen.length)}>
             {sending ? "Sending…" : "Send request"}
           </button>
         </div>

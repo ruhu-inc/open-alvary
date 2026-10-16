@@ -19,6 +19,7 @@ Admission is all or nothing: when the API's allowance is configured, the website
 configured too (``ALVARY_SITE_ADMISSION_CONFIG``), or the service refuses to start.
 """
 
+import json
 import os
 from contextlib import contextmanager
 from html import escape
@@ -34,8 +35,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.routing import Route
 
-from accounts.store import Accounts
-from api.admission import AdmissionConfig, AdmissionStore
+from accounts.store import TIERS, Accounts
+from api.admission import AdmissionConfig, AdmissionStore, AdmissionUnavailable
 from api.catalogue import LegacyCatalogue
 from api.console import ConsoleConfig, Provider, create_console_app
 from api.credentials import CredentialGate, GateConfig, TokenVerifier
@@ -105,11 +106,17 @@ def create_service(
         resource = api_origin + "/api/v1"
         metadata = api_origin + "/.well-known/oauth-protected-resource/api/v1"
         v1 = create_v1_app(store, release_root, lambda: accounts.tiers(published_only=True))
+        # Outside a plan's countries, requests also run at the Starter rate (api.reach).
+        starter = next(t for t in json.loads(TIERS.read_text()) if t["id"] == "starter")["allowance"]
+        outside = {
+            "outside_per_minute": starter["requests_per_minute"],
+            "outside_burst": starter.get("burst", starter["requests_per_minute"]),
+        }
         service.mount(
             "/api/v1",
             CredentialGate(
                 v1,
-                config=GateConfig(resource, "rest", "api", metadata, public_paths=V1_PUBLIC),
+                config=GateConfig(resource, "rest", "api", metadata, public_paths=V1_PUBLIC, **outside),
                 check=accounts.check_credential,
                 record_usage=accounts.record_usage,
                 admission=AdmissionStore(store.engine, namespace),
@@ -128,18 +135,21 @@ def create_service(
                 yield LegacyCatalogue(LegacyRepository(connection))
 
         def reach(request: Request):
-            scope = request.state.access["scope"]
-            return None if scope.get("all") else set(scope.get("jurisdictions") or [])
+            return request.state.access["reach"]
 
         mcp.include_router(
-            create_mcp_router(catalogue_session, (SQLAlchemyError, ValidationError, PublicUnavailable), reach)
+            create_mcp_router(
+                catalogue_session,
+                (SQLAlchemyError, ValidationError, PublicUnavailable, AdmissionUnavailable),
+                reach,
+            )
         )
         service.router.routes.append(
             Route(
                 "/mcp",
                 CredentialGate(
                     mcp,
-                    config=GateConfig(mcp_resource, "mcp", "mcp", mcp_metadata, jsonrpc=True),
+                    config=GateConfig(mcp_resource, "mcp", "mcp", mcp_metadata, jsonrpc=True, **outside),
                     check=accounts.check_credential,
                     record_usage=accounts.record_usage,
                     admission=AdmissionStore(store.engine, namespace),
@@ -148,6 +158,10 @@ def create_service(
                 methods=["GET", "POST", "DELETE"],
             )
         )
+
+        def published_countries() -> list[dict]:
+            with catalogue_session() as service:
+                return service.countries()
 
         def resource_metadata(resource_url: str) -> JSONResponse:
             # RFC 9728: which authorisation server issues tokens for this resource, and for what.
@@ -185,6 +199,7 @@ def create_service(
                 consent_secret=os.environ["ALVARY_CONSENT_SECRET"].encode()
                 if os.getenv("ALVARY_CONSENT_SECRET")
                 else None,
+                countries=published_countries,
             ),
         )
     service.mount("/api", create_app(store, release_root, downloads_path="/downloads"))

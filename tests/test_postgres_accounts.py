@@ -506,3 +506,69 @@ def test_a_request_names_a_published_plan_and_the_operator_grants_it(accounts, m
     tier = accounts.access(organisation)["tier"]
     assert (tier["id"], tier["name"]) == ("developer", "Developer")
     assert accounts.open_requests() == []
+
+
+def test_a_plan_with_countries_takes_the_requests_countries_and_changes_them_once_a_month(
+    accounts, monkeypatch
+):
+    from accounts import operator
+
+    developer = TIER | {
+        "id": "developer",
+        "name": "Developer",
+        "allowance": TIER["allowance"] | {"jurisdictions": 2},
+    }
+    enterprise = TIER | {"id": "enterprise", "name": "Enterprise"}
+    accounts.set_tiers([TIER, STARTER, developer, enterprise])
+    owner, organisation = person(accounts)
+    ask = {
+        "purpose": "Research",
+        "expected_volume": "1",
+        "contact_name": "A",
+        "contact_email": "a@example.org",
+    }
+    for wrong in ({"all": True}, {"jurisdictions": ["rw", "ng", "ke"]}, {"jurisdictions": ["rwa"]}):
+        with pytest.raises(AccountError) as refused:
+            accounts.request_access(owner, organisation, ask | {"tier": "developer", "scope": wrong})
+        assert refused.value.code == "invalid_input"
+    # A plan without a number of countries asks for all of them, whatever was sent.
+    asked = accounts.request_access(
+        owner, organisation, ask | {"tier": "enterprise", "scope": {"jurisdictions": ["rw"]}}
+    )
+    assert accounts.open_requests()[0]["scope_requested"] == {"all": True}
+    accounts.withdraw_request(owner, organisation, asked)
+    request = accounts.request_access(
+        owner, organisation, ask | {"tier": "developer", "scope": {"jurisdictions": ["rw", "ng"]}}
+    )
+    # The operator's grant takes the plan and the countries the request named.
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test")
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+    monkeypatch.setattr(operator, "engine_for", lambda: accounts.engine)
+    argv = ["--operator", "op-test", "grant", organisation, "--reason", "Asked", "--request", request]
+    assert operator.main(argv) == 0
+    assert accounts.access(organisation)["scope"] == {"jurisdictions": ["ng", "rw"]}
+    with pytest.raises(AccountError) as too_many:
+        accounts.grant_access(
+            "op-test",
+            organisation,
+            tier="developer",
+            scope={"all": True},
+            source="manual",
+            ends_at=None,
+            reason="No",
+        )
+    assert too_many.value.code == "invalid_input"
+    # An owner swaps a country; the next swap waits 30 days.
+    assert accounts.access_details(owner, organisation)["country_change_after"] is None
+    accounts.change_countries(owner, organisation, ["rw", "ke"])
+    access = accounts.access(organisation)
+    assert access["scope"] == {"jurisdictions": ["ke", "rw"]} and access["tier"]["id"] == "developer"
+    with pytest.raises(AccountError) as soon:
+        accounts.change_countries(owner, organisation, ["rw", "ug"])
+    assert soon.value.code == "change_too_soon" and "once a month" in soon.value.message
+    assert accounts.access_details(owner, organisation)["country_change_after"] is not None
+    monkeypatch.setattr("accounts.store.COUNTRY_CHANGE_DAYS", 0)  # the audit log cannot be backdated
+    accounts.change_countries(owner, organisation, ["ug"])
+    assert accounts.access(organisation)["scope"] == {"jurisdictions": ["ug"]}
+    states = [h["state"] for h in accounts.access_details(owner, organisation)["history"]]
+    assert states[:3] == ["active", "ended", "ended"]

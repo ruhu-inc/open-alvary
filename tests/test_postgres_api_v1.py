@@ -115,20 +115,31 @@ def test_no_access_lapse_and_revocation_answer_403_without_a_challenge(api):
     assert client.get("/api/v1/sources", headers=headers).json()["code"] == "invalid_credentials"
 
 
-def test_a_jurisdiction_scope_limits_lists_and_refuses_other_records(api):
+def test_outside_the_plans_countries_reads_at_the_starter_rate(api, pg_engine, monkeypatch, tmp_path):
     client, accounts, person, organisation = api
     grant(accounts, organisation, scope={"jurisdictions": ["rw"]})
     headers = key(accounts, person, organisation)
+    # Without a jurisdiction, lists and searches cover the plan's countries (no Nigerian law here).
     assert client.get("/api/v1/sources", headers=headers).json()["total"] == 0
-    outside = client.get("/api/v1/sources/ng-foi-act-2011", headers=headers)
-    assert outside.status_code == 403 and outside.json()["code"] == "jurisdiction_not_included"
-    assert (
-        client.get("/api/v1/search", params={"q": "act", "jurisdiction": "ng"}, headers=headers).status_code
-        == 403
-    )
-    assert client.get("/api/v1/jurisdictions", headers=headers).json() == []
+    assert client.get("/api/v1/search", params={"q": "act"}, headers=headers).json()["total"] == 0
+    # Named, or by ID, every other country still answers.
+    assert client.get("/api/v1/sources/ng-foi-act-2011", headers=headers).status_code == 200
+    named = client.get("/api/v1/search", params={"q": "information", "jurisdiction": "ng"}, headers=headers)
+    assert named.status_code == 200 and named.json()["total"] >= 1
+    assert "ng" in {j["id"] for j in client.get("/api/v1/jurisdictions", headers=headers).json()}
+    # ...at the Starter rate, on an allowance of its own.
+    tiers = tmp_path / "tiers.json"
+    tiers.write_text('[{"id": "starter", "allowance": {"requests_per_minute": 1, "burst": 2}}]')
+    monkeypatch.setattr("api.service.TIERS", tiers)
+    slow = TestClient(create_service(store=Store(pg_engine)))
+    codes = [slow.get("/api/v1/sources/ng-foi-act-2011", headers=headers).status_code for _ in range(4)]
+    assert codes[-1] == 429
+    limited = slow.get("/api/v1/sources/ng-foi-act-2011", headers=headers)
+    assert limited.json()["code"] == "rate_limited" and "Starter rate" in limited.json()["detail"]
+    assert int(limited.headers["retry-after"]) >= 1
+    assert slow.get("/api/v1/coverage", headers=headers).status_code == 200  # within the plan: unaffected
     [day] = accounts.usage(person, organisation)
-    assert day["refusals"] == {"jurisdiction_not_included": 2}
+    assert day["refusals"]["rate_limited"] >= 2
 
 
 def test_the_organisation_allowance_answers_429_with_retry_after(api):
@@ -180,16 +191,21 @@ def test_mcp_needs_a_credential_and_answers_tools_within_the_access(api):
     assert usage["class"] == "mcp" and usage["requests"] == 4  # the GET counts too
 
 
-def test_mcp_tools_refuse_records_outside_the_access(api):
+def test_mcp_searches_the_plans_countries_and_reads_others_at_the_starter_rate(api):
     client, accounts, person, organisation = api
     grant(accounts, organisation, scope={"jurisdictions": ["rw"]})
     headers = key(accounts, person, organisation)
-    outside = client.post(
-        "/mcp",
-        json=rpc("tools/call", {"name": "get_source", "arguments": {"source_id": "ng-foi-act-2011"}}),
-        headers=headers,
-    ).json()["result"]
-    assert outside["isError"] and "outside your organisation's access" in outside["content"][0]["text"]
+
+    def call(name, arguments):
+        return client.post(
+            "/mcp", json=rpc("tools/call", {"name": name, "arguments": arguments}), headers=headers
+        ).json()["result"]
+
+    outside = call("get_source", {"source_id": "ng-foi-act-2011"})
+    assert not outside["isError"] and "Freedom of Information" in outside["content"][0]["text"]
+    assert '"total": 0' in call("search_catalogue", {"query": "information"})["content"][0]["text"]
+    named = call("search_catalogue", {"query": "information", "jurisdiction": "NG"})
+    assert not named["isError"] and "Freedom of Information" in named["content"][0]["text"]
     accounts.revoke_access("op", organisation, "Test")
     lapsed = client.post("/mcp", json=rpc("tools/list"), headers=headers)
     assert lapsed.status_code == 403 and lapsed.json()["error"]["data"]["code"] == "entitlement_lapsed"

@@ -6,6 +6,7 @@ invariants the database itself guards (last owner, access periods, append-only l
 
 import hashlib
 import json
+import re
 import secrets
 from dataclasses import dataclass
 from datetime import datetime
@@ -20,6 +21,8 @@ from accounts.ids import new_id, valid
 from rights.database import PolicyNamespace
 
 TIERS = Path(__file__).with_name("tiers.json")
+COUNTRY = re.compile(r"^[a-z]{2}$")  # a plan's countries: ISO 3166-1 alpha-2, lower case
+COUNTRY_CHANGE_DAYS = 30
 
 
 SESSION_DAYS = 30
@@ -772,6 +775,7 @@ class Accounts:
             )
             return {
                 "current": self.access(organisation_id, conn),
+                "country_change_after": self._country_change_after(conn, organisation_id),
                 "history": [dict(h) | ({} if owner else {"reason": None}) for h in history],
                 "requests": [dict(r) for r in requests] if owner else [],
             }
@@ -820,6 +824,8 @@ class Accounts:
                 )
             ):
                 raise AccountError("invalid_input", 400, "Choose one of the published plans.")
+            if plan is not None:
+                scope = self._plan_scope(conn, plan, scope)
             request_id = new_id("wrq")
             try:
                 conn.execute(
@@ -973,35 +979,14 @@ class Accounts:
             )
             if found is None:
                 raise AccountError("not_found", 404, "No active organisation with that ID.")
+            scope = self._plan_scope(conn, tier, scope, request=False)
             current = self.access(organisation_id, conn)
             if current["state"] == "active" and current.get("entitlement"):  # starter has nothing to end
                 self._change_entitlement(
                     conn, current["entitlement"], "ended", actor, "Replaced by a new grant", context
                 )
-            entitlement_id = new_id("ent")
-            conn.execute(
-                text(
-                    f"INSERT INTO {self._t(conn, 'entitlement')} (id, organisation_id, tier_id, source, scope,"
-                    " starts_at, ends_at, state, reference, reason) VALUES (:id, :o, :tier, :source,"
-                    " CAST(:scope AS jsonb), statement_timestamp(), :ends, 'active', :ref, :reason)"
-                ),
-                {
-                    "id": entitlement_id,
-                    "o": organisation_id,
-                    "tier": tier,
-                    "source": source,
-                    "scope": json.dumps(scope),
-                    "ends": ends_at,
-                    "ref": reference,
-                    "reason": reason,
-                },
-            )
-            conn.execute(
-                text(
-                    f"INSERT INTO {self._t(conn, 'entitlement_event')} (entitlement_id, actor_type, actor_ref,"
-                    " to_state, reason) VALUES (:e, 'operator', :r, 'active', :reason)"
-                ),
-                {"e": entitlement_id, "r": operator, "reason": reason},
+            entitlement_id = self._start_entitlement(
+                conn, organisation_id, tier, source, scope, ends_at, reference, reason, actor
             )
             if request_id:
                 conn.execute(
@@ -1033,6 +1018,148 @@ class Accounts:
                 context=context,
             )
             return entitlement_id
+
+    def _start_entitlement(
+        self, conn, organisation_id, tier, source, scope, ends_at, reference, reason, actor
+    ):
+        entitlement_id = new_id("ent")
+        conn.execute(
+            text(
+                f"INSERT INTO {self._t(conn, 'entitlement')} (id, organisation_id, tier_id, source, scope,"
+                " starts_at, ends_at, state, reference, reason) VALUES (:id, :o, :tier, :source,"
+                " CAST(:scope AS jsonb), statement_timestamp(), :ends, 'active', :ref, :reason)"
+            ),
+            {
+                "id": entitlement_id,
+                "o": organisation_id,
+                "tier": tier,
+                "source": source,
+                "scope": json.dumps(scope),
+                "ends": ends_at,
+                "ref": reference,
+                "reason": reason,
+            },
+        )
+        conn.execute(
+            text(
+                f"INSERT INTO {self._t(conn, 'entitlement_event')} (entitlement_id, actor_type, actor_ref,"
+                " to_state, reason) VALUES (:e, :t, :r, 'active', :reason)"
+            ),
+            {"e": entitlement_id, "t": actor[0], "r": actor[1], "reason": reason},
+        )
+        return entitlement_id
+
+    def _plan_scope(self, conn, tier: str, scope: dict, request: bool = True) -> dict:
+        """The scope a plan allows. A plan with a number of countries (Developer, Team) covers 1 to that
+        many, chosen by the organisation; each country includes everything under it, and the
+        continent's and regional bodies' law is within every plan (api.reach). A plan without a number
+        covers every country: a request for it asks for all; an operator may still grant it narrower."""
+        row = (
+            conn.execute(
+                text(
+                    f"SELECT name, (allowance->>'jurisdictions')::int AS countries FROM {self._t(conn, 'tier')}"
+                    " WHERE id = :t"
+                ),
+                {"t": tier},
+            )
+            .mappings()
+            .first()
+        )
+        if row is None:
+            raise AccountError("invalid_input", 400, "No such plan.")
+        if row["countries"] is None:
+            return {"all": True} if request else scope
+        chosen = (
+            scope.get("jurisdictions")
+            if isinstance(scope, dict) and set(scope) == {"jurisdictions"}
+            else None
+        )
+        if not (
+            isinstance(chosen, list)
+            and 1 <= len(chosen) <= row["countries"]
+            and all(isinstance(c, str) and COUNTRY.match(c) for c in chosen)
+            and len(set(chosen)) == len(chosen)
+        ):
+            raise AccountError(
+                "invalid_input",
+                400,
+                f"{row['name']} covers up to {row['countries']} countries: choose 1 to {row['countries']}.",
+            )
+        return {"jurisdictions": sorted(chosen)}
+
+    def _country_change_after(self, conn, organisation_id: str) -> datetime | None:
+        """When an owner may next change the plan's countries; None when they may now."""
+        return conn.scalar(
+            text(
+                f"SELECT max(at) + make_interval(days => {COUNTRY_CHANGE_DAYS}) FROM {self._t(conn, 'audit_event')}"
+                " WHERE organisation_id = :o AND action = 'access.countries_changed'"
+                f" HAVING max(at) + make_interval(days => {COUNTRY_CHANGE_DAYS}) > statement_timestamp()"
+            ),
+            {"o": organisation_id},
+        )
+
+    def change_countries(self, person_id: str, organisation_id: str, countries: list, context=None) -> None:
+        """An owner swaps the plan's chosen countries, at most once every 30 days. The current access
+        ends and the same plan continues with the new countries, so the history shows both."""
+        with self.engine.begin() as conn:
+            membership = self._membership(conn, person_id, organisation_id, lock=True)
+            self._require(membership, "access.request")
+            current = self.access(organisation_id, conn)
+            if current["state"] != "active" or not current.get("entitlement"):
+                raise AccountError("entitlement_inactive", 409, "Starter covers every country already.")
+            old = (
+                conn.execute(
+                    text(
+                        f"SELECT tier_id, source, scope, ends_at, reference FROM {self._t(conn, 'entitlement')}"
+                        " WHERE id = :e"
+                    ),
+                    {"e": current["entitlement"]},
+                )
+                .mappings()
+                .one()
+            )
+            if (
+                conn.scalar(
+                    text(f"SELECT allowance->>'jurisdictions' FROM {self._t(conn, 'tier')} WHERE id = :t"),
+                    {"t": old["tier_id"]},
+                )
+                is None
+            ):
+                raise AccountError("invalid_input", 400, "Your plan covers every country.")
+            scope = self._plan_scope(conn, old["tier_id"], {"jurisdictions": countries})
+            if scope == old["scope"]:
+                raise AccountError("invalid_input", 400, "Those are your countries already.")
+            after = self._country_change_after(conn, organisation_id)
+            if after is not None:
+                raise AccountError(
+                    "change_too_soon",
+                    409,
+                    f"You can change countries once a month: next from {after:%-d %B %Y}.",
+                )
+            actor = self._actor(conn, person_id)
+            self._change_entitlement(
+                conn, current["entitlement"], "ended", actor, "Countries changed", context
+            )
+            entitlement_id = self._start_entitlement(
+                conn,
+                organisation_id,
+                old["tier_id"],
+                old["source"],
+                scope,
+                old["ends_at"],
+                old["reference"],
+                "Countries changed by an owner",
+                actor,
+            )
+            self._audit(
+                conn,
+                actor,
+                "access.countries_changed",
+                organisation=organisation_id,
+                target=("entitlement", entitlement_id),
+                summary={"from": old["scope"].get("jurisdictions"), "to": scope["jurisdictions"]},
+                context=context,
+            )
 
     def decide_request(self, operator, organisation_id, request_id, decision: str, reason: str, context=None):
         """Decline a request (with a reason; renewable after 30 days) or ask for more information."""
