@@ -14,6 +14,14 @@ from schema.models import Corpus, RightsRecord, SourceVersion, StructureNode
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
+@pytest.fixture(autouse=True)
+def no_real_mail_or_operator_secrets(monkeypatch):
+    """Tests never read the repository's .env (operator keys) and never hold a mail key, so no test
+    can send real email; tests that check mail use a recording mailer."""
+    monkeypatch.setattr("ingestion.settings.ENV_FILE", Path("/nonexistent/open-alvary-test.env"))
+    monkeypatch.delenv("RESEND_API_KEY", raising=False)
+
+
 @pytest.fixture
 def catalogue():
     return Corpus.model_validate_json(Path("ingestion/catalogue/ng.json").read_text())

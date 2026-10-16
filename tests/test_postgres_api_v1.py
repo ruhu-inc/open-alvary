@@ -179,7 +179,13 @@ def test_mcp_needs_a_credential_and_answers_tools_within_the_access(api):
         == "open-alvary"
     )
     tools = client.post("/mcp", json=rpc("tools/list"), headers=headers).json()["result"]["tools"]
-    assert {t["name"] for t in tools} == {"search_catalogue", "get_source", "get_coverage"}
+    assert {t["name"] for t in tools} == {
+        "search_catalogue",
+        "get_source",
+        "get_coverage",
+        "list_changes",
+        "get_change",
+    }
     found = client.post(
         "/mcp",
         json=rpc("tools/call", {"name": "get_source", "arguments": {"source_id": "ng-foi-act-2011"}}),

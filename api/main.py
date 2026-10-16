@@ -22,6 +22,7 @@ from api.project import project_info
 from api.release_adapter import LegacyReleases, ReleaseMissing, ReleaseWithdrawn
 from api.repositories import LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import ROOT, Store, check_legacy_authority, engine_for
+from changes.routes import create_router as create_changes_router
 from rights.bytes import ByteLedger, Scope
 from rights.database import PolicyNamespace
 from schema.public import (
@@ -107,6 +108,15 @@ def create_app(
     app.include_router(
         create_mcp_router(catalogue_session, (SQLAlchemyError, ValidationError, PublicUnavailable))
     )
+
+    @contextmanager
+    def change_session():
+        with app.state.store.engine.begin() as connection:
+            check_legacy_authority(connection, write=False)
+            yield connection
+
+    if app.state.store.engine.dialect.name == "postgresql":  # the change log lives in PostgreSQL
+        app.include_router(create_changes_router(change_session))
 
     @app.get("/quota-policy")
     def quota_policy():

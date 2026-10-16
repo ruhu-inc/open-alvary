@@ -199,5 +199,14 @@
       "policy.check_credential",
       "policy.record_usage"
     ]
+  },
+  {
+    "revision": "0023",
+    "anchor": "policy.allocate_publication_revision",
+    "file": "v0023.sql",
+    "requires": [
+      "policy.allocate_publication_revision",
+      "policy.changes_append_only"
+    ]
   }
 ]

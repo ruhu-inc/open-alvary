@@ -168,6 +168,7 @@ export type RightsRecord = {
 export const links = [
   ["/browse", "Explore the corpus"],
   ["/coverage", "Coverage"],
+  ["/changes", "Changes"],
   ["/governance", "Rights & governance"],
   ["/releases", "Releases"],
   ["/developers", "Developers"],

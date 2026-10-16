@@ -24,6 +24,7 @@ from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
 from api.release_adapter import LegacyReleases
 from api.repositories import LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import Store, check_legacy_authority
+from changes.routes import create_router as create_changes_router
 from schema.public import (
     CitationView,
     CoverageView,
@@ -116,6 +117,16 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
         view = service.source(source_id)
         reach(request).admit(view.jurisdiction_id)
         return view
+
+    @contextmanager
+    def change_session():
+        with store.engine.begin() as connection:
+            check_legacy_authority(connection, write=False)
+            yield connection
+
+    # Changes are public: plan countries do not narrow them (changes-contracts.md).
+    if store.engine.dialect.name == "postgresql":
+        app.include_router(create_changes_router(change_session))
 
     @app.get("/quota-policy")
     def quota_policy():

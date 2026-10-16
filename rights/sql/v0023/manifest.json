@@ -1,0 +1,19 @@
+{
+  "vocabulary": "policy-vocabulary-1",
+  "literals": {},
+  "vocabulary_file": "vocabularies/v1.json",
+  "vocabulary_hash": "cac594e752fdb6c2cb6adfc63930ceea8a8fe8be3afe9570552d5c2f486d8c80",
+  "revision": "0023",
+  "functions": [],
+  "ddl": "changes.sql",
+  "new_functions": [
+    {
+      "signature": "changes_append_only()",
+      "current_definition_hash": "776656f2c275edeab0c57816de9d369e8080979692370e50dba4b6aa3a3928c4"
+    },
+    {
+      "signature": "allocate_publication_revision()",
+      "current_definition_hash": "72a3f8ee7a6523952c22b40dc5151998e5e23e0fb5992a8bec6618e8f5026a25"
+    }
+  ]
+}
