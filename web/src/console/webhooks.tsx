@@ -222,9 +222,12 @@ export function WebhooksPage({ org }: PageProps) {
               <p className="fine">The endpoint answered the challenge and is active.</p>
             ) : (
               <p className="callout">
-                Not verified yet: {secret.verification.error} Your endpoint must answer the first POST (type{" "}
-                <code>endpoint.verification</code>) with 2xx and the body <code>{'{"challenge": "<the challenge>"}'}</code>. Then
-                choose Verify.
+                {/* One child: the callout's grid would put each code element on a row of its own. */}
+                <span>
+                  Not verified yet: {secret.verification.error} Your endpoint must answer the first POST (type{" "}
+                  <code>endpoint.verification</code>) with 2xx and the body <code>{'{"challenge": "<the challenge>"}'}</code>.
+                  Then choose Verify.
+                </span>
               </p>
             )
           ) : null}
