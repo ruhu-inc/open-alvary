@@ -102,6 +102,7 @@ async function loadMe() {
   who.replaceChildren(
     el("a", { class: "nav-link", href: "#/", text: "Documents" }),
     result.data.access ? el("a", { class: "nav-link", href: "#/access", text: "Access" }) : "",
+    result.data.operators ? el("a", { class: "nav-link", href: "#/operators", text: "Operators" }) : "",
     el("span", { class: "who-name", text: result.data.name, title: `${result.data.email} · ${result.data.roles.join(", ")}` }),
     el("button", { class: "small", text: "Sign out", on: { click: signOut } }),
   );
@@ -1445,7 +1446,8 @@ async function route() {
   if (!location.hash.includes("/page/") || !document.querySelector(".review")) main(el("div", { class: "loading" }, el("span", { class: "spinner" }), "Loading…"));
   const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
   for (const link of document.querySelectorAll("#who .nav-link")) {
-    link.classList.toggle("on", parts[0] === "access" ? link.hash === "#/access" : link.hash === "#/");
+    const section = ["access", "operators"].includes(parts[0]) ? `#/${parts[0]}` : "#/";
+    link.classList.toggle("on", link.hash === section);
   }
   try {
     if (parts[0] === "doc" && parts[2] === "page") return await pageView(parts[1], Number(parts[3]));
@@ -1455,6 +1457,7 @@ async function route() {
     if (parts[0] === "doc" && parts[1]) return await actView(parts[1]);
     if (parts[0] === "audit" && parts[1]) return await auditView(parts[1]);
     if (parts[0] === "access" && app.me.access) return await accessView(parts.slice(1));
+    if (parts[0] === "operators" && app.me.operators) return await operatorsView();
     return await dashboard();
   } catch (error) {
     if (error.message !== "signed out") toast(error.message);

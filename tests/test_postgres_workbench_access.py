@@ -25,7 +25,9 @@ def bench(world, tmp_path):
     store = Store(connect(f"sqlite:///{tmp_path / 'workbench.db'}"))
     store.add_operator("ops@example.org", "Ops", {"reviewer", "access_admin"})
     store.add_operator("reviewer@example.org", "Rev", {"reviewer"})
-    app = create_app(store, content.Library(tmp_path), dev_login=True, access=(admin, RelyingParty(ORIGIN)))
+    app = create_app(
+        store, content.Library(tmp_path), dev_login=True, access=admin, relying=RelyingParty(ORIGIN)
+    )
     return owner_store, store, app, mailer
 
 
@@ -37,16 +39,16 @@ def browser(app, email):
 
 
 def enrol(client, store, key, code=None):
-    options = client.post("/api/access/passkeys/options", json={"purpose": "register"}).json()
+    options = client.post("/api/passkeys/options", json={"purpose": "register"}).json()
     code = code or store.issue_enrolment("ops@example.org")
     return client.post(
-        "/api/access/passkeys", json={"name": "Laptop", "code": code, "credential": key.create(options)}
+        "/api/passkeys", json={"name": "Laptop", "code": code, "credential": key.create(options)}
     )
 
 
 def check(client, key):
-    options = client.post("/api/access/passkeys/options", json={"purpose": "verify"}).json()
-    return client.post("/api/access/passkeys/verify", json={"credential": key.get(options)})
+    options = client.post("/api/passkeys/options", json={"purpose": "verify"}).json()
+    return client.post("/api/passkeys/verify", json={"credential": key.get(options)})
 
 
 def test_only_access_admins_reach_it_and_a_first_passkey_needs_the_enrolment_code(bench):
@@ -56,7 +58,7 @@ def test_only_access_admins_reach_it_and_a_first_passkey_needs_the_enrolment_cod
     assert reviewer.get("/api/access/requests").status_code == 403
     ops = browser(app, "ops@example.org")
     assert ops.get("/api/me").json()["access"] is True
-    assert ops.get("/api/access/me").json()["needs_enrolment"] is True
+    assert ops.get("/api/passkeys/me").json()["needs_enrolment"] is True
     key = SoftKey()
     refused = enrol(ops, store, key, code="AAAA-BBBB-CCCC-DDDD")
     assert refused.status_code == 403 and refused.json()["code"] == "enrolment_required"
@@ -67,7 +69,7 @@ def test_only_access_admins_reach_it_and_a_first_passkey_needs_the_enrolment_cod
     later = enrol(elsewhere, store, SoftKey(), code=code)
     assert later.status_code == 403 and later.json()["code"] == "passkey_required"
     assert enrol(ops, store, SoftKey(), code="unused").status_code == 200  # this session has checked
-    status = ops.get("/api/access/me").json()
+    status = ops.get("/api/passkeys/me").json()
     assert [p["name"] for p in status["passkeys"]] == ["Laptop", "Laptop"] and status["fresh_until"]
 
 
@@ -81,11 +83,11 @@ def test_changes_need_a_passkey_check_within_ten_minutes(bench, monkeypatch):
     assert ops.post(f"/api/access/organisations/{own}/grant", json=grant).status_code == 200
     assert owner_store.access(own)["tier"]["id"] == "pilot"
     later = workbench_store.now() + timedelta(minutes=11)
-    monkeypatch.setattr("workbench.access.now", lambda: later)
+    monkeypatch.setattr("workbench.privileged.now", lambda: later)
     stale = ops.post(f"/api/access/organisations/{own}/revoke", json={"reason": "Ended"})
     assert stale.status_code == 403 and stale.json()["code"] == "passkey_required"
     assert check(ops, key).status_code == 200
-    monkeypatch.setattr("workbench.access.now", workbench_store.now)
+    monkeypatch.setattr("workbench.privileged.now", workbench_store.now)
     assert ops.post(f"/api/access/organisations/{own}/revoke", json={"reason": "Ended"}).status_code == 200
     assert mailer.sent[-1].to == "amina@example.org"
     log = ops.get(f"/api/access/audit?organisation={own}").json()
@@ -106,16 +108,14 @@ def test_a_wrong_passkey_or_a_replayed_challenge_is_refused_and_recorded(bench):
     ops = browser(app, "ops@example.org")
     key = SoftKey()
     enrol(ops, store, key)
-    options = ops.post("/api/access/passkeys/options", json={"purpose": "verify"}).json()
+    options = ops.post("/api/passkeys/options", json={"purpose": "verify"}).json()
     answer = key.get(options)
-    assert ops.post("/api/access/passkeys/verify", json={"credential": answer}).status_code == 200
-    replay = ops.post("/api/access/passkeys/verify", json={"credential": answer})
+    assert ops.post("/api/passkeys/verify", json={"credential": answer}).status_code == 200
+    replay = ops.post("/api/passkeys/verify", json={"credential": answer})
     assert replay.status_code == 400 and replay.json()["code"] == "challenge_expired"
     stranger = SoftKey()
-    options = ops.post("/api/access/passkeys/options", json={"purpose": "verify"}).json()
-    assert (
-        ops.post("/api/access/passkeys/verify", json={"credential": stranger.get(options)}).status_code == 403
-    )
+    options = ops.post("/api/passkeys/options", json={"purpose": "verify"}).json()
+    assert ops.post("/api/passkeys/verify", json={"credential": stranger.get(options)}).status_code == 403
     assert {"passkey_added", "passkey_checked"} <= {e["action"] for e in store.events()}
 
 
