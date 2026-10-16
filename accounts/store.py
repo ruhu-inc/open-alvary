@@ -580,6 +580,25 @@ class Accounts:
                 {"h": token_hash(token or "")},
             )
 
+    def sign_in_failed(
+        self, code: str, purpose: str, person_id: str | None = None, method: str | None = None, context=None
+    ) -> None:
+        """MAC-13.7: a sign-in that failed after a real start (a live, single-use flow), so stray
+        requests cannot fill the log. The email tried is never recorded; the person is, when the
+        identity was already theirs."""
+        with self.engine.begin() as conn:
+            ref = person_id and conn.scalar(
+                text(f"SELECT id FROM {self._t(conn, 'actor')} WHERE person_id = :p"), {"p": person_id}
+            )
+            self._audit(
+                conn,
+                ("system", "sign-in"),
+                "session.sign_in_failed",
+                target=("actor", ref) if ref else None,
+                summary={"code": code[:40], "purpose": purpose, **({"method": method} if method else {})},
+                context=context,
+            )
+
     def end_all_sessions(self, person_id: str, context=None) -> None:
         with self.engine.begin() as conn:
             conn.execute(

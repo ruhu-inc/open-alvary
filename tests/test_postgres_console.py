@@ -175,6 +175,17 @@ def test_callback_needs_the_same_browser_a_live_flow_and_a_supported_method(cons
     assert client(app).get("/auth/start", params={"purpose": "second_factor"}).headers["location"] == (
         "/console/sign-in?error=signed_out"
     )
+    # Failures after a real start are audited (MAC-13.7), without the email tried; a stray callback is not.
+    with accounts.engine.connect() as conn:
+        failures = conn.execute(
+            text(
+                f"SELECT summary, client_family FROM {accounts._t(conn, 'audit_event')}"
+                " WHERE action = 'session.sign_in_failed' ORDER BY seq"
+            )
+        ).all()
+    assert [f.summary["code"] for f in failures] == ["method_not_supported", "access_denied"]
+    assert failures[0].summary == {"code": "method_not_supported", "purpose": "sign_in"}
+    assert "someone" not in str([f.summary for f in failures])
 
 
 def test_keys_need_access_a_second_factor_and_a_fresh_sign_in(console):
