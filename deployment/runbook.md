@@ -229,6 +229,11 @@ activation B, on the API's.
 - Keep the page true: a change to sign-in methods, second-factor rules, providers, retention or
   encryption updates `web/src/security.tsx` in the same commit. Its disclosure terms take effect
   with the legal pages (`APPROVED` in `web/src/legal.tsx`).
+- `.github/workflows/security.yml` checks pinned Python dependencies (pip-audit), what ships to
+  browsers (npm audit, high and above) and the whole history for secrets (gitleaks), on every push
+  and weekly. On a failure, upgrade or replace the dependency; for a secret, revoke it first, then
+  remove it. In the repository's settings, also turn on GitHub's secret scanning with push
+  protection and Dependabot alerts (owner action).
 
 ## Serving epochs and restore recovery
 
