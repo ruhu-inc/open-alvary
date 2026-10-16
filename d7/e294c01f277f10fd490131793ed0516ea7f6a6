@@ -1,0 +1,32 @@
+operations/publish.py
+  s_b82616e2476856::t_0a8cec8d8c4202 1-24,26-30,36,40-119,121-122,127-259,263-268,273-275,277,280-323,327-340,347-352,359-366
+  s_b82616e2476856::t_e96d91ee2a8419 25,31-35,37-39,120,123-126,260-262,269-272,276,278-279,324-326,341-346,353-358
+workbench/app.py
+  s_b82616e2476856::t_7c70475521c16a 31,171-172
+tests/test_publish.py
+  s_b82616e2476856::t_c2e57a7d6533b1 1-82,86-87,95-98
+  s_b82616e2476856::t_3144dcda74cacb 83-85,88-94
+tests/test_postgres_publish.py
+  s_b82616e2476856::t_19049262e321ea 1-58,62-82
+  s_b82616e2476856::t_a2402dadf0e3e8 59-61
+workbench/review.py
+  s_b82616e2476856::t_7c70475521c16a 1-96
+deployment/runbook.md
+  s_b82616e2476856::t_ccdd2c2581bd49 158-175
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d7e294c01f277f10fd490131793ed0516ea7f6a6",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
