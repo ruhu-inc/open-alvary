@@ -1,0 +1,48 @@
+web/src/console/console.css
+  s_b82616e2476856::t_3651a32a8b205f 1338-1346
+api/console.py
+  s_b82616e2476856::t_f415f65e1048a0 46,585-629
+  s_b82616e2476856::t_966e3a3f739cc3 630
+accounts/privacy.py
+  s_b82616e2476856::t_43029f12a28193 1-22,24-32,34-77,86-104,110-335,337-357,362-364,366-376,383-390,397-410,414-421
+  s_b82616e2476856::t_d778659ac1140d 23,33,78-85,105-109,336,358-361,365,377-382,391-396,411-413
+accounts/mail.py
+  s_b82616e2476856::t_f415f65e1048a0 225-241
+tests/test_postgres_privacy.py
+  s_b82616e2476856::t_a62284b7c62715 74,88
+  s_b82616e2476856::t_6a627f552b0d55 24-26,33-37,104-113,115-121,132-137,163-168
+  s_b82616e2476856::t_4f348a61414795 1-23,27-32,38-73,75-87,89-92,94-103,114,122,124-131,138-162,169-192
+  s_b82616e2476856::t_66cc0de5cd73d5 93,123
+deployment/runbook.md
+  s_b82616e2476856::t_b451698151b17e 176-186
+web/src/console/main.tsx
+  s_b82616e2476856::t_3651a32a8b205f 35,171-176,186,498-500,523-526
+  s_b82616e2476856::t_59417d9b90b627 527
+deployment/auth0/configure.py
+  s_b82616e2476856::t_b451698151b17e 16-18,36,128-156
+web/src/console/privacy.tsx
+  s_b82616e2476856::t_d2696d8842b985 1-169
+accounts/store.py
+  s_b82616e2476856::t_70db312b762f52 1868-1871,1873,1876-1877,1881-1906
+  s_b82616e2476856::t_9757982e09f43a 1864-1867
+deployment/gcp/public_service.sh
+  s_b82616e2476856::t_b451698151b17e 227-232,265-268,325
+web/src/console/api.ts
+  s_b82616e2476856::t_9349ce7d71f321 57-81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "81a48a0b3437f09f9a5914aee003af13286b6307",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
