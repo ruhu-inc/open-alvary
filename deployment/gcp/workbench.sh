@@ -159,7 +159,7 @@ deploy() {
 operator() {
   local email="${1:?email}" name="${2:?name}" roles="${3:?roles}"
   "${GC[@]}" run jobs deploy workbench-admin --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
-    --add-cloudsql-instances="${PROJECT}:${REGION}:${SQL_INSTANCE}" \
+    --set-cloudsql-instances="${PROJECT}:${REGION}:${SQL_INSTANCE}" \
     --set-secrets="ALVARY_REVIEW_DATABASE_URL=review-database-url:latest" \
     --command=python --args="-m,workbench.admin,add,${email},--name,${name},--roles,${roles}" --max-retries=0
   "${GC[@]}" run jobs execute workbench-admin --region="$REGION" --wait
@@ -189,7 +189,7 @@ enrol() {  # a one-time code (24 hours) with which an access_admin registers a f
   local email="${1:?email}" replace=""
   [[ "${2:-}" == "--replace" ]] && replace=",--replace"  # after revoking their passkeys (one was lost)
   "${GC[@]}" run jobs deploy workbench-enrol --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
-    --add-cloudsql-instances="${PROJECT}:${REGION}:${SQL_INSTANCE}" \
+    --set-cloudsql-instances="${PROJECT}:${REGION}:${SQL_INSTANCE}" \
     --set-secrets="ALVARY_REVIEW_DATABASE_URL=review-database-url:latest" \
     --command=python --args="-m,workbench.admin,enrol,${email}${replace}" --max-retries=0
   "${GC[@]}" run jobs execute workbench-enrol --region="$REGION" --wait
