@@ -21,6 +21,7 @@ import "@fontsource/dm-sans/latin-600.css";
 import "@fontsource/libre-caslon-display/latin-400.css";
 import "./style.css";
 import { AcceptableUse, Privacy, Terms } from "./legal";
+import { ErrorsPage } from "./errors";
 import { Security } from "./security";
 import {
   PageTitle,
@@ -199,6 +200,7 @@ function App() {
       ["/terms", "Terms of service"],
       ["/acceptable-use", "Acceptable use"],
       ["/security", "Security"],
+      ["/docs/errors", "Errors"],
     ].find(([url]) => url === pathname)?.[1];
     // Record pages and the not-found page name themselves.
     if (title) document.title = `${title} · Open Alvary`;
@@ -208,6 +210,9 @@ function App() {
       .querySelector('link[rel="canonical"]')
       ?.setAttribute("href", location.origin + pathname);
     document.querySelector<HTMLElement>("main")?.focus({ preventScroll: true });
+    // A page opened at an anchor (/docs/errors#gone) renders after the browser looked for it.
+    const anchor = decodeURIComponent(location.hash.slice(1));
+    if (anchor) requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView());
   }, [pathname]);
   return (
     <ProjectContext.Provider value={project.data ?? {}}>
@@ -252,6 +257,8 @@ function App() {
             <AcceptableUse />
           ) : pathname === "/security" ? (
             <Security />
+          ) : pathname === "/docs/errors" ? (
+            <ErrorsPage />
           ) : pathname === "/developers" ? (
             <Developers />
           ) : import.meta.env.DEV && pathname === "/dev/reader" ? (
