@@ -53,6 +53,14 @@ setting() {  # a value from the environment or the git-ignored .env (never print
   { grep -E "^${name}=" .env 2>/dev/null || true; } | head -1 | cut -d= -f2- | tr -d "'\""
 }
 
+deployed_image() {  # the image the service runs now: one-off jobs must match it, not the local commit
+  local image
+  image="$("${GC[@]}" run services describe "$SERVICE" --region="$REGION" \
+    --format='value(spec.template.spec.containers[0].image)' 2>/dev/null || true)"
+  [[ -n "$image" ]] || { echo "The workbench is not deployed in $PROJECT yet: run $0 setup, then deploy." >&2; exit 1; }
+  printf '%s' "$image"
+}
+
 plan() {
   cat <<EOF
 Project $PROJECT, region $REGION. Would create (if absent):
@@ -158,7 +166,9 @@ deploy() {
 
 operator() {
   local email="${1:?email}" name="${2:?name}" roles="${3:?roles}"
-  "${GC[@]}" run jobs deploy workbench-admin --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
+  local image
+  image="$(deployed_image)"
+  "${GC[@]}" run jobs deploy workbench-admin --image="$image" --region="$REGION" --service-account="$RUNNER_EMAIL" \
     --set-cloudsql-instances="${PROJECT}:${REGION}:${SQL_INSTANCE}" \
     --set-secrets="ALVARY_REVIEW_DATABASE_URL=review-database-url:latest" \
     --command=python --args="-m,workbench.admin,add,${email},--name,${name},--roles,${roles}" --max-retries=0
@@ -188,7 +198,9 @@ NEXT
 enrol() {  # a one-time code (24 hours) with which an access_admin registers a first passkey
   local email="${1:?email}" replace=""
   [[ "${2:-}" == "--replace" ]] && replace=",--replace"  # after revoking their passkeys (one was lost)
-  "${GC[@]}" run jobs deploy workbench-enrol --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
+  local image
+  image="$(deployed_image)"
+  "${GC[@]}" run jobs deploy workbench-enrol --image="$image" --region="$REGION" --service-account="$RUNNER_EMAIL" \
     --set-cloudsql-instances="${PROJECT}:${REGION}:${SQL_INSTANCE}" \
     --set-secrets="ALVARY_REVIEW_DATABASE_URL=review-database-url:latest" \
     --command=python --args="-m,workbench.admin,enrol,${email}${replace}" --max-retries=0
