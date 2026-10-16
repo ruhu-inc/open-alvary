@@ -1,0 +1,26 @@
+api/console.py
+  s_b82616e2476856::t_de50ee7f7fa68b 340-341,343-344,360,363-365
+  s_b82616e2476856::t_e176bf12eabd3d 366
+accounts/store.py
+  s_b82616e2476856::t_de50ee7f7fa68b 583-601
+tests/test_postgres_console.py
+  s_b82616e2476856::t_1cc43e90d7ab4f 178-188
+web/src/security.tsx
+  s_b82616e2476856::t_1000871339e601 81
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fd09be7807e8ebf89a1ace55d282079d5994185c",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
