@@ -6,8 +6,9 @@ import React from "react";
 import { Link, PageTitle } from "./site";
 
 export const LEGAL_VERSION = "2026-10-15";
-// Until the owner approves them, the pages say they are a draft and not in effect.
-const APPROVED = false;
+// Approved by the owner on 2026-10-16 (terms, acceptable use, privacy, and the security page's
+// disclosure terms). A new version starts as a draft again: set this to false until it is approved.
+const APPROVED = true;
 const TO_CONFIRM: string[] = [];
 const OPERATOR = "Ruhu, Inc.";
 const ADDRESS = "1111B South Governors Ave, STE 52865, Dover, DE 19904, United States";
