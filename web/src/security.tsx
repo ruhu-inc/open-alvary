@@ -78,7 +78,7 @@ export function Security() {
       <section>
         <h2>Audit log</h2>
         <p>
-          Changes to access are recorded: sign-ins and sign-in methods, organisations, invitations, members and
+          Changes to access are recorded: sign-ins, failed sign-ins and sign-in methods, organisations, invitations, members and
           roles, ownership transfers, keys, connected apps, webhooks and access decisions. Entries name people by
           an opaque reference, never by a secret. The service can add entries but not change or delete them;
           they are removed only after two years, under our <Link to="/privacy">retention schedule</Link>.

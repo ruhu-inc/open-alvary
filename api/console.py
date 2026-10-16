@@ -337,7 +337,11 @@ def create_console_app(
         if flow is None:
             return _back(request, "expired")
         if request.query_params.get("error") or not code:
+            reason = re.sub(r"[^a-z_]", "", str(request.query_params.get("error", "")).lower())[:40]
+            failed(request, flow, reason or "cancelled")
             return _back(request, "cancelled")
+        claims: dict = {}
+        method = None
         try:
             claims = provider.finish(code, flow)
             connection = claims["sub"].split("|", 1)[0]
@@ -353,7 +357,12 @@ def create_console_app(
                 request, flow, provider.config.issuer, claims["sub"], method, claims["email"], mfa
             )
         except AccountError as refused:
+            failed(request, flow, refused.code, claims.get("sub"), method)
             return _back(request, refused.code)
+
+    def failed(request, flow, code: str, subject: str | None = None, method: str | None = None) -> None:
+        person = accounts.person_for_identity(provider.config.issuer, subject) if subject else None
+        accounts.sign_in_failed(code, flow["purpose"], person, method, context(request))
 
     def _complete(request, flow, issuer, subject, method, email, mfa) -> Response:
         ctx = context(request)
