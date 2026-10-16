@@ -1335,3 +1335,12 @@ svg .chart-label {
 details.card summary {
   cursor: pointer;
 }
+
+/* Your data (MAC-14) */
+.plain-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 13.5px;
+}

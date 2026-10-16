@@ -13,7 +13,9 @@ What it keeps in line, by name, so reruns change nothing:
   - for a local trial (--local-origin, http://localhost:8022 by default): local API and MCP resources
     and the console's local callback, so the whole flow can be tried before a deploy;
   - the post-login Action (deployment/auth0/post_login.js) with its secrets, bound in place of the
-    sign-in check's.
+    sign-in check's;
+  - an account-deletion client allowed only delete:users, so a deleted account's user is removed
+    from Auth0 too (MAC-14).
 
 New secrets (the console's client secret and the hand-off secret shared with the console) are written
 to private-staging/auth0/ (git-ignored), never printed, for Secret Manager. Credentials for the
@@ -31,6 +33,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PRIVATE = ROOT / "private-staging" / "auth0"
 ACTION = "open-alvary-post-login"
 CONSOLE = "Open Alvary console"
+DELETION = "Open Alvary account deletion"  # Management API: delete:users only (MAC-14)
 TOOLS = ("Claude", "Claude Code", "ChatGPT", "Codex")
 CONNECTIONS = ("google-oauth2", "email")
 
@@ -122,6 +125,35 @@ def plan(
             return created
 
         steps.append((f"create the console application ({callbacks[0]})", create_console))
+    if not any(c["name"] == DELETION for c in clients):
+
+        def create_deletion():
+            created = m.call(
+                "POST",
+                "clients",
+                {
+                    "name": DELETION,
+                    "app_type": "non_interactive",
+                    "grant_types": ["client_credentials"],
+                    "token_endpoint_auth_method": "client_secret_post",
+                    "is_first_party": True,
+                },
+            )
+            m.call(
+                "POST",
+                "client-grants",
+                {
+                    "client_id": created["client_id"],
+                    "audience": m.issuer + "api/v2/",
+                    "scope": ["delete:users"],
+                },
+            )
+            _store("deletion-client-id", created["client_id"])
+            _store("deletion-client-secret", created["client_secret"])
+
+        steps.append(
+            ("create the account-deletion client (Management API, delete:users only)", create_deletion)
+        )
     elif sorted(console.get("callbacks") or []) != sorted(callbacks):
         steps.append(
             (

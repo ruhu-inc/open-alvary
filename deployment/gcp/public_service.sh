@@ -224,6 +224,12 @@ accounts() {  # activation B's secrets, from this machine's files and .env; neve
       | secret_put key-pepper
   printf '%s' "$(setting RESEND_API_KEY)" | secret_put resend-api-key
   local names=(console-client-secret consent-secret key-pepper resend-api-key)
+  # Deletes a closed account's Auth0 user 30 days on (MAC-14): a client allowed delete:users only.
+  if [[ -s "$AUTH0_FILES/deletion-client-secret" ]]; then
+    printf '%s' "$(cat "$AUTH0_FILES/deletion-client-id")" | secret_put auth0-deletion-client-id
+    secret_put auth0-deletion-client-secret < "$AUTH0_FILES/deletion-client-secret"
+    names+=(auth0-deletion-client-id auth0-deletion-client-secret)
+  fi
   if [[ -n "$(setting RESEND_WEBHOOK_SECRET)" ]]; then
     printf '%s' "$(setting RESEND_WEBHOOK_SECRET)" | secret_put resend-webhook-secret
     names+=(resend-webhook-secret)
@@ -255,6 +261,10 @@ accounts_secrets() {
   printf ',ALVARY_CONSOLE_CLIENT_SECRET=console-client-secret:latest,RESEND_API_KEY=resend-api-key:latest'
   if "${GC[@]}" secrets describe resend-webhook-secret >/dev/null 2>&1; then
     printf ',RESEND_WEBHOOK_SECRET=resend-webhook-secret:latest'
+  fi
+  if "${GC[@]}" secrets describe auth0-deletion-client-secret >/dev/null 2>&1; then
+    printf ',ALVARY_AUTH0_DELETION_CLIENT_ID=auth0-deletion-client-id:latest'
+    printf ',ALVARY_AUTH0_DELETION_CLIENT_SECRET=auth0-deletion-client-secret:latest'
   fi
 }
 
@@ -312,7 +322,7 @@ deploy() {
     "${GC[@]}" run jobs deploy "$DAILY_JOB" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
       --set-cloudsql-instances="$(connection)" --tasks=1 --max-retries=0 --task-timeout=600s \
       --set-env-vars="$env$keys_env" --set-secrets="$secrets" \
-      --command=sh --args=-c,"python -m changes.admin sweep && python -m changes.admin purge"
+      --command=sh --args=-c,"python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge"
   fi
   echo "Deployed $IMAGE. Next: $0 edge (once), then $0 verify"
 }
