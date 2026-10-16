@@ -25,7 +25,7 @@ import secrets
 import time
 from pathlib import Path
 
-from trials.idp_check.auth0 import Management, environment
+from trials.idp_check.auth0 import Auth0Error, Management, environment
 
 ROOT = Path(__file__).resolve().parents[2]
 PRIVATE = ROOT / "private-staging" / "auth0"
@@ -149,6 +149,7 @@ def plan(
     steps.append(("enable Google and email codes for the console (where not already)", enable_connections))
 
     steps += email_steps(m)
+    steps += branding_steps(m, site)
 
     code = (Path(__file__).parent / "post_login.js").read_text()
     actions = {a["name"]: a for a in m.call("GET", "actions/actions").get("actions", [])}
@@ -288,6 +289,57 @@ def email_steps(m: Management) -> list[tuple[str, callable]]:
                     lambda: m.call("PATCH", f"connections/{connection['id']}", {"options": options}),
                 )
             )
+    return steps
+
+
+def branding_steps(m: Management, site: str) -> list[tuple[str, callable]]:
+    """Auth0's own pages say Open Alvary, with the mark and the site's colours, not the tenant ID."""
+    steps = []
+    settings = m.call(
+        "GET",
+        "tenants/settings",
+        fields="friendly_name,picture_url,support_email,support_url",
+        include_fields="true",
+    )
+    wanted = {
+        "friendly_name": "Open Alvary",
+        "picture_url": site + "/icon-512.png",
+        "support_email": "hello@ruhu.ai",
+        "support_url": site + "/about",
+    }
+    changed = {k: v for k, v in wanted.items() if settings.get(k) != v}
+    if changed:
+        steps.append(
+            (
+                f"name the sign-in pages Open Alvary ({sorted(changed)})",
+                lambda: m.call("PATCH", "tenants/settings", changed),
+            )
+        )
+    try:
+        branding = m.call("GET", "branding")
+    except Auth0Error as error:
+        if "insufficient_scope" not in str(error):
+            raise
+        return [
+            *steps,
+            (
+                "skip the sign-in pages' mark and colours: grant read:branding and update:branding"
+                " to the management application",
+                lambda: None,
+            ),
+        ]
+    wanted_branding = {
+        "colors": {"primary": "#214b3b", "page_background": "#f4f3ec"},
+        "logo_url": site + "/icon-512.png",
+        "favicon_url": site + "/favicon-32.png",
+    }
+    if any(branding.get(k) != v for k, v in wanted_branding.items()):
+        steps.append(
+            (
+                "brand the sign-in pages with the mark and colours",
+                lambda: m.call("PATCH", "branding", wanted_branding),
+            )
+        )
     return steps
 
 
