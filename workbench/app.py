@@ -27,6 +27,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from ingestion import settings
 from schema import record as R
 from schema.jurisdictions import registry as jurisdiction_registry
+from workbench import access as access_section
 from workbench import akn, auth, content, details, record_view
 from workbench.review import Review
 from workbench.store import Conflict, Store, engine_from_environment
@@ -47,7 +48,11 @@ SECURITY_HEADERS = {
 
 
 def create_app(
-    store: Store, library: content.Library, oidc: auth.OIDC | None = None, dev_login: bool = False
+    store: Store,
+    library: content.Library,
+    oidc: auth.OIDC | None = None,
+    dev_login: bool = False,
+    access: tuple = (None, None),
 ) -> FastAPI:
     app = FastAPI(title="Open Alvary review workbench", docs_url=None, redoc_url=None, openapi_url=None)
     hosts = [h.strip() for h in os.environ.get("ALVARY_REVIEW_ALLOWED_HOSTS", "").split(",") if h.strip()]
@@ -150,6 +155,7 @@ def create_app(
             "name": person["name"],
             "roles": sorted(person["roles"]),
             "csrf": who["csrf"],
+            "access": access[0] is not None and access_section.ROLE in person["roles"],
         }
 
     # --- review ----------------------------------------------------------------------------------
@@ -902,6 +908,8 @@ def create_app(
         auth.current(request, store)
         return [{**e, "at": e["at"].isoformat()} for e in store.events(act_id=act, limit=300)]
 
+    access_section.install(app, store, *access)
+
     @app.exception_handler(HTTPException)
     async def problems(request: Request, error: HTTPException):
         detail = error.detail if isinstance(error.detail, dict) else {"message": str(error.detail)}
@@ -923,6 +931,7 @@ def from_environment() -> FastAPI:
         content.Library(),
         auth.OIDC(config) if config else None,
         dev_login=auth.dev_login_enabled(),
+        access=access_section.from_environment(auth.dev_login_enabled()),
     )
 
 

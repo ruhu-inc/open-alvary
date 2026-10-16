@@ -419,8 +419,8 @@ audited policy commands to record.
   flag decisions); approvals and an activity log are append-only.
 - Operators are added on the server only:
   `python -m workbench.admin add <email> --name "<name>" --roles reviewer,approver` (and
-  `deactivate`, `list`). Roles: reviewer edits and checks pages; approver approves Acts; one
-  person may hold both.
+  `deactivate`, `list`, `enrol`). Roles: reviewer edits and checks pages; approver approves Acts;
+  access_admin uses the Access section (below); one person may hold several.
 - Sign-in on the web is OpenID Connect (Google by default): create an OAuth client of type *Web
   application* in project `open-alvary-ingestion`, consent screen *Internal* if the operators are
   in one Workspace, redirect URI `https://<host>/auth/callback`. Set `ALVARY_REVIEW_BASE_URL`
@@ -465,6 +465,38 @@ audited policy commands to record.
   reading changed since it was checked, all check readings present, the six verification checks
   confirmed and a rights basis. Any later edit makes the approval out of date (shown in the app
   and in the export).
+
+## Operator access: the workbench's Access section (MAC-11)
+
+Operators with the `access_admin` role answer access requests, grant, change and revoke access,
+suspend and restore organisations and people, restore an owner to an organisation no active person
+owns (with the evidence checked), revoke a leaked key or a connected app by ID, and read usage and
+the whole accounts audit log, all at `#/access` in the review workbench. Every change takes a
+reason (and evidence where it rests on something checked) and is in the accounts audit log under
+the operator's email; organisations see it as "Open Alvary". The same actions are on the command
+line: `python -m accounts.operator --operator <email> …` (`--help` lists them).
+
+Every change also needs a passkey check in that session within 10 minutes, verified by the
+workbench itself. A first passkey needs a one-time enrolment code from the server, so a taken-over
+Google account cannot register one; a further passkey needs a passkey check.
+
+Setting it up (after activation B is live):
+
+1. `deployment/gcp/public_service.sh access_role` (right after a deploy, from the same commit):
+   the database role `open_alvary_access`, with a generated password in `access-role-password`. It
+   reads no key hashes, session tokens or provider subjects, and writes only what the actions
+   change.
+2. `deployment/gcp/workbench.sh access`: stores the workbench's connection (`access-database-url`)
+   and the mail key (`resend-api-key`) in the ingestion project, and prints the one IAM grant the
+   owner runs: Cloud SQL client for `workbench-runner` in `open-alvary-prod`.
+3. `ACCESS=1 deployment/gcp/workbench.sh deploy`. Every later workbench deploy keeps `ACCESS=1`.
+4. Per operator: `deployment/gcp/workbench.sh operator <email> "<name>" reviewer,access_admin`,
+   then `deployment/gcp/workbench.sh enrol <email>`, which prints a code valid for 24 hours, once.
+   Give it to the operator yourself; they register a passkey (or security key) at `#/access`.
+
+A lost passkey: the operator removes it at `#/access` after checking with another of theirs. If
+they have none left, check who is asking, then `deployment/gcp/workbench.sh enrol <email> --replace`
+revokes their passkeys and issues a new code (a code is accepted only while no passkey remains).
 
 ## Upgrade and rollback
 

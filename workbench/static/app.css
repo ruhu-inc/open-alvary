@@ -266,3 +266,18 @@ ul.plain li:first-child { border-top: 0; }
 /* The document list, one page at a time */
 .pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 12px; }
 .pager .muted { margin-right: auto; }
+
+/* Access section (MAC-11) */
+button.danger { border-color: #a23b2a; color: #a23b2a; }
+button.danger:hover { background: #fbeeeb; }
+.access-passkey .access-status { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.access-row { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+.access-form { display: grid; gap: 8px; min-width: 260px; max-width: 420px; margin: 8px 0; }
+.access-form h4 { margin: 0; }
+.access-field { display: grid; gap: 3px; font-size: 13px; }
+.access-field span { color: var(--muted); }
+.access-purpose { max-width: 36rem; white-space: pre-wrap; }
+.card > input[type=search], .access-form input[type=date] { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: .35rem .5rem; }
+.card > input[type=search] { width: min(100%, 32rem); }
+td details summary { cursor: pointer; color: var(--accent); }
+p.warn { color: #8a5a1c; }

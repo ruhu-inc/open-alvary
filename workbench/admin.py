@@ -3,6 +3,8 @@
 python -m workbench.admin add ijidai@ruhu.ai --name "Ijidai Lassa" --roles reviewer,approver
 python -m workbench.admin deactivate someone@example.org
 python -m workbench.admin list
+python -m workbench.admin enrol someone@example.org   a one-time code (24 hours) to register a passkey
+python -m workbench.admin enrol someone@example.org --replace   ...after revoking their passkeys (one lost)
 """
 
 import argparse
@@ -21,10 +23,15 @@ def main(argv=None) -> int:
     add = sub.add_parser("add")
     add.add_argument("email")
     add.add_argument("--name", required=True)
-    add.add_argument("--roles", required=True, help="comma-separated: reviewer, approver, admin")
+    add.add_argument(
+        "--roles", required=True, help="comma-separated: reviewer, approver, admin, access_admin"
+    )
     off = sub.add_parser("deactivate")
     off.add_argument("email")
     sub.add_parser("list")
+    enrol = sub.add_parser("enrol")
+    enrol.add_argument("email")
+    enrol.add_argument("--replace", action="store_true", help="Revoke the operator's passkeys first")
     args = parser.parse_args(argv)
     settings.load()
     store = Store(engine_from_environment())
@@ -32,6 +39,14 @@ def main(argv=None) -> int:
         store.add_operator(args.email, args.name, {r.strip() for r in args.roles.split(",") if r.strip()})
     elif args.action == "deactivate":
         store.deactivate(args.email)
+    elif args.action == "enrol":
+        if args.replace:
+            for key in store.passkeys(args.email.strip().lower()):
+                store.revoke_passkey(args.email.strip().lower(), key["credential_id"])
+        # Give the code to the operator yourself; it registers a passkey for the Access section.
+        print(
+            f"Passkey enrolment code for {args.email} (one use, 24 hours): {store.issue_enrolment(args.email)}"
+        )
     else:
         with store.engine.connect() as db:
             for row in db.execute(select(operator).order_by(operator.c.email)):
