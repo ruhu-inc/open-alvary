@@ -2136,7 +2136,7 @@ nav.breadcrumb a:hover {
   }
 }
 
-/* Terms, acceptable use and privacy: readable long-form text with a version note. */
+/* Terms, acceptable use, privacy and security: readable long-form text with a version note. */
 .legal section {
   max-width: 46rem;
   margin: 0 0 26px;
@@ -2144,6 +2144,12 @@ nav.breadcrumb a:hover {
 .legal section h2 {
   font-size: 22px;
   margin: 0 0 10px;
+}
+.legal section h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #22372f;
+  margin: 18px 0 4px;
 }
 .legal section p,
 .legal section li {

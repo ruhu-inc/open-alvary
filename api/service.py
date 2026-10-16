@@ -43,6 +43,7 @@ from api.credentials import CredentialGate, GateConfig, TokenVerifier
 from api.main import create_app
 from api.mcp import create_router as create_mcp_router
 from api.repositories import LegacyRepository, PublicUnavailable
+from api.security_txt import security_txt
 from api.site import create_downloads_app, create_site_app
 from api.store import ROOT, Store, check_legacy_authority, engine_for
 from api.v1 import PUBLIC_PATHS as V1_PUBLIC
@@ -96,6 +97,7 @@ def create_service(
     service.mount("/site/v1", create_site_app(store, release_root, site_admission))
     service.mount("/downloads", create_downloads_app(store, release_root, site_admission))
     accounts_on = store.engine.dialect.name == "postgresql" and os.getenv("ALVARY_ACCOUNTS") == "1"
+    api_origin = os.getenv("ALVARY_API_ORIGIN", "https://api.open.alvary.ai").rstrip("/")
     if accounts_on:
         # Activation B (MAC-15): accounts, the console, REST v1 and MCP go live together, only when
         # switched on, and need the accounts schema (PostgreSQL only).
@@ -103,7 +105,6 @@ def create_service(
             namespace = PolicyNamespace(connection.scalar(text("SELECT current_schema()")))
         accounts = Accounts(store.engine, namespace)
         config = ConsoleConfig.from_environment()
-        api_origin = os.getenv("ALVARY_API_ORIGIN", "https://api.open.alvary.ai").rstrip("/")
         resource = api_origin + "/api/v1"
         metadata = api_origin + "/.well-known/oauth-protected-resource/api/v1"
         v1 = create_v1_app(store, release_root, lambda: accounts.tiers(published_only=True))
@@ -205,7 +206,7 @@ def create_service(
         )
     anonymous = create_app(store, release_root, downloads_path="/downloads")
     if accounts_on:
-        close_anonymous(anonymous, os.getenv("ALVARY_API_ORIGIN", "https://api.open.alvary.ai").rstrip("/"))
+        close_anonymous(anonymous, api_origin)
     service.mount("/api", anonymous)
 
     @service.get("/robots.txt", include_in_schema=False)
@@ -213,6 +214,14 @@ def create_service(
         return PlainTextResponse(
             "User-agent: *\nDisallow: /site/\nDisallow: /api/\nAllow: /\n"
             f"Sitemap: {_origin(request)}/sitemap.xml\n"
+        )
+
+    @service.get("/.well-known/security.txt", include_in_schema=False)
+    def security_contact(request: Request):
+        # The API's domain reaches this same service only once activation B is live.
+        return PlainTextResponse(
+            security_txt(_origin(request), api_origin if accounts_on else None),
+            headers={"Cache-Control": "max-age=3600"},
         )
 
     @service.get("/sitemap.xml", include_in_schema=False)
@@ -247,6 +256,7 @@ STATIC_PAGES = (
     "/developers",
     "/about",
     "/privacy",
+    "/security",
 )
 
 

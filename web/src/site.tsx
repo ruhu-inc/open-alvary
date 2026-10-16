@@ -244,6 +244,7 @@ export function SiteFooter() {
         <Link to="/about">About & contribute</Link>
         <Link to="/privacy">Privacy</Link>
         <Link to="/terms">Terms</Link>
+        <Link to="/security">Security</Link>
         <ProjectRepository />
       </div>
     </footer>

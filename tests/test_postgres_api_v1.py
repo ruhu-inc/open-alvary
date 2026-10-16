@@ -99,6 +99,10 @@ def test_public_documents_need_no_credential_and_allow_any_origin(api):
     ]
     refused = client.get("/api/v1/sources")
     assert refused.status_code == 401 and "resource_metadata=" in refused.headers["www-authenticate"]
+    canonical = [
+        line for line in client.get("/.well-known/security.txt").text.splitlines() if "Canonical" in line
+    ]
+    assert canonical[-1] == "Canonical: https://api.open.alvary.ai/.well-known/security.txt"
 
 
 def test_no_access_lapse_and_revocation_answer_403_without_a_challenge(api):
