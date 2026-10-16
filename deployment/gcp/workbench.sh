@@ -47,6 +47,12 @@ secret() {  # create a secret once; later runs keep it
   "${GC[@]}" secrets add-iam-policy-binding "$name" --member="serviceAccount:$RUNNER_EMAIL" --role=roles/secretmanager.secretAccessor >/dev/null
 }
 
+setting() {  # a value from the environment or the git-ignored .env (never printed)
+  local name="$1"
+  if [[ -n "${!name:-}" ]]; then printf '%s' "${!name}"; return; fi
+  { grep -E "^${name}=" .env 2>/dev/null || true; } | head -1 | cut -d= -f2- | tr -d "'\""
+}
+
 plan() {
   cat <<EOF
 Project $PROJECT, region $REGION. Would create (if absent):
@@ -91,10 +97,12 @@ setup() {
     local connection="${PROJECT}:${REGION}:${SQL_INSTANCE}"
     secret review-database-url "postgresql+psycopg://review:${password}@/review?host=/cloudsql/${connection}"
   fi
-  if [ -n "${ALVARY_REVIEW_OIDC_CLIENT_SECRET:-}" ]; then
-    secret review-oidc-client-secret "$ALVARY_REVIEW_OIDC_CLIENT_SECRET"
+  local client_secret
+  client_secret="$(setting ALVARY_REVIEW_OIDC_CLIENT_SECRET)"
+  if [ -n "$client_secret" ]; then
+    secret review-oidc-client-secret "$client_secret"
   else
-    echo "Set ALVARY_REVIEW_OIDC_CLIENT_SECRET (from the OAuth client) and rerun setup to store it."
+    echo "Set ALVARY_REVIEW_OIDC_CLIENT_SECRET (from the OAuth client) in .env and rerun setup to store it."
   fi
 }
 
@@ -107,7 +115,11 @@ upload() {
 }
 
 deploy() {
-  : "${ALVARY_REVIEW_OIDC_CLIENT_ID:?Set ALVARY_REVIEW_OIDC_CLIENT_ID (the OAuth client of type Web application)}"
+  local client_id
+  client_id="$(setting ALVARY_REVIEW_OIDC_CLIENT_ID)"
+  [[ -n "$client_id" ]] || { echo "Set ALVARY_REVIEW_OIDC_CLIENT_ID in .env (the OAuth client of type Web application)" >&2; exit 1; }
+  "${GC[@]}" secrets describe review-oidc-client-secret >/dev/null 2>&1 \
+    || { echo "Run $0 setup first (with ALVARY_REVIEW_OIDC_CLIENT_SECRET in .env)." >&2; exit 1; }
   if ! git diff --quiet HEAD; then
     echo "Commit first: the image is tagged with the commit it is built from." >&2
     exit 1
@@ -133,7 +145,7 @@ deploy() {
     --set-cloudsql-instances="$instances" \
     --add-volume=name=collection,type=cloud-storage,bucket="$BUCKET",readonly=true \
     --add-volume-mount=volume=collection,mount-path=/data/collection \
-    --set-env-vars="^|^ALVARY_REVIEW_STAGING=/data/collection|ALVARY_REVIEW_COLLECTIONS=${CORPUS_COLLECTIONS}|ALVARY_REVIEW_BASE_URL=${url}|ALVARY_REVIEW_ALLOWED_HOSTS=${SERVICE}-${number}.${REGION}.run.app|ALVARY_REVIEW_OIDC_CLIENT_ID=${ALVARY_REVIEW_OIDC_CLIENT_ID}" \
+    --set-env-vars="^|^ALVARY_REVIEW_STAGING=/data/collection|ALVARY_REVIEW_COLLECTIONS=${CORPUS_COLLECTIONS}|ALVARY_REVIEW_BASE_URL=${url}|ALVARY_REVIEW_ALLOWED_HOSTS=${SERVICE}-${number}.${REGION}.run.app|ALVARY_REVIEW_OIDC_CLIENT_ID=${client_id}" \
     --set-secrets="$secrets" \
     --command=uvicorn --args="workbench.app:app,--host,0.0.0.0,--port,8080,--proxy-headers,--forwarded-allow-ips,*,--no-access-log"
   # Identity-Aware Proxy calls the service as Google's IAP service agent.
