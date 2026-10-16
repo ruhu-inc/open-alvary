@@ -82,7 +82,9 @@ export function Security() {
           roles, ownership transfers, keys, connected apps, webhooks and access decisions. Entries name people by
           an opaque reference, never by a secret. The service can add entries but not change or delete them;
           they are removed only after two years, under our <Link to="/privacy">retention schedule</Link>.
-          Owners and admins see and export their organisation's entries in the console.
+          Each day's entries are sealed with a hash that also covers the day before, and the seal is kept
+          outside the database too, so a change to a past entry shows in our daily check. Owners and admins
+          see and export their organisation's entries in the console.
         </p>
       </section>
       <section>

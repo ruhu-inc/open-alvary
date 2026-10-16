@@ -102,10 +102,12 @@ records 'dns' prints (certificate first; open.alvary.ai only when 'verify' passe
 Activation B adds (owner's go-ahead): secrets console-client-secret, consent-secret, key-pepper,
 resend-api-key, resend-webhook-secret ('accounts'); Cloud Run jobs $WORKER_JOB and $DAILY_JOB
 ('ACCOUNTS=1 deploy'); service account $SCHEDULER and two Cloud Scheduler jobs, every 5 minutes and
-daily ('schedule'); a certificate for $API_DOMAIN ('api_edge').
+daily ('schedule'); a certificate for $API_DOMAIN ('api_edge'); a log bucket keeping the audit seals
+800 days, with its sink ('audit_seals').
   Worker runs, ~8,600 a month of a few seconds   ~ \$1-3 (largely within Cloud Run's free tier)
   Cloud Scheduler, two jobs                        ~ \$0 (three jobs a month are free)
   Five more secrets                                ~ \$0.30
+  Audit seal log bucket, a few KB a day           ~ \$0
 PLAN
   if ((${#missing[@]})); then
     echo "Settings missing (environment or .env): ${missing[*]}"
@@ -315,14 +317,15 @@ deploy() {
     --set-env-vars="$env$keys_env##ALVARY_ADMISSION_CONFIG=/secrets/admission/config.json##ALVARY_SITE_ADMISSION_CONFIG=/secrets/site-admission/config.json" \
     --set-secrets="$secrets,/secrets/admission/config.json=admission-config:latest,/secrets/site-admission/config.json=site-admission-config:latest"
   if [[ "$ACCOUNTS" == 1 ]]; then
-    # The worker (monitors, digests, webhooks) and the daily sweep and purge run the same image.
+    # The worker (monitors, digests, webhooks) and the daily job (audit seals, sweep, purges, seal
+    # check; a failed check fails the run) use the same image.
     "${GC[@]}" run jobs deploy "$WORKER_JOB" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
       --set-cloudsql-instances="$(connection)" --tasks=1 --max-retries=0 --task-timeout=280s --memory=1Gi \
       --set-env-vars="$env$keys_env" --set-secrets="$secrets" --command=python --args=-m,changes.worker,run
     "${GC[@]}" run jobs deploy "$DAILY_JOB" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
       --set-cloudsql-instances="$(connection)" --tasks=1 --max-retries=0 --task-timeout=600s \
       --set-env-vars="$env$keys_env" --set-secrets="$secrets" \
-      --command=sh --args=-c,"python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge"
+      --command=sh --args=-c,"python -m accounts.seals seal && python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge && python -m accounts.seals verify"
   fi
   echo "Deployed $IMAGE. Next: $0 edge (once), then $0 verify"
 }
@@ -423,6 +426,18 @@ schedule() {  # once, after the first ACCOUNTS=1 deploy: the worker every 5 minu
   echo "Scheduled: $WORKER_JOB every 5 minutes, $DAILY_JOB daily at 03:15 UTC."
 }
 
+audit_seals() {  # once: the seals' copy outside the database (MAC-13.7), kept 800 days
+  "${GC[@]}" logging buckets describe audit-seals --location="$REGION" >/dev/null 2>&1 \
+    || "${GC[@]}" logging buckets create audit-seals --location="$REGION" --retention-days=800 \
+      --description="Open Alvary audit log seals (MAC-13.7)"
+  "${GC[@]}" logging sinks describe open-alvary-audit-seals >/dev/null 2>&1 \
+    || "${GC[@]}" logging sinks create open-alvary-audit-seals \
+      "logging.googleapis.com/projects/$PROJECT/locations/$REGION/buckets/audit-seals" \
+      --log-filter="resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"$DAILY_JOB\" AND jsonPayload.message=\"audit seal\""
+  echo "Seals from the next daily run are kept in audit-seals. Once the first ones are there, lock its"
+  echo "retention (irreversible): gcloud --project $PROJECT logging buckets update audit-seals --location=$REGION --locked"
+}
+
 address() { "${GC[@]}" compute addresses describe open-alvary-ip --global --format='value(address)'; }
 
 dns() {
@@ -484,4 +499,4 @@ status() {
   echo "Load balancer address: $(address 2>/dev/null || echo none)"
 }
 
-"${1:?plan, project, setup, deploy, edge, dns, verify, status; activation B: accounts, api_edge, schedule}" "${@:2}"
+"${1:?plan, project, setup, deploy, edge, dns, verify, status; activation B: accounts, api_edge, schedule, audit_seals}" "${@:2}"

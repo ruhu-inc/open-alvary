@@ -150,7 +150,9 @@ and, once Resend's webhook exists, `RESEND_WEBHOOK_SECRET`:
 5. `deployment/gcp/public_service.sh schedule` (once): the worker every 5 minutes, the daily sweep.
 6. In Resend, a webhook to `https://<domain>/console/mail-events` for `email.bounced` and
    `email.complained`; its signing secret into `.env`, then step 2 again and a deploy.
-7. `ACCOUNTS=1 deployment/gcp/public_service.sh verify`.
+7. `deployment/gcp/public_service.sh audit_seals` (once): the log bucket that keeps the audit seals
+   outside the database; lock its retention once the first seals are in it.
+8. `ACCOUNTS=1 deployment/gcp/public_service.sh verify`.
 
 Turning activation B off again is a deploy without `ACCOUNTS=1`: the anonymous API reopens and the
 console, keys and connected apps stop answering; nothing is deleted.
@@ -182,7 +184,25 @@ which first deletes the person's Auth0 user with the `Open Alvary account deleti
 (`configure.py` creates it; `accounts` stores its secrets). Without that client, closed accounts wait
 (`provider_pending` in the job's output) rather than losing the link to their Auth0 user. The same
 purge applies the rest of the privacy notice's schedule: sessions and invitations after 30 days,
-revoked keys and apps after a year, usage and audit entries after two years.
+revoked keys and apps after a year, usage and audit entries after two years (whole UTC days, by the
+database's clock).
+
+## Audit log seals (MAC-13.7)
+
+The daily job first seals every UTC day of the audit log that ended over an hour ago, and last
+verifies them all: `python -m accounts.seals seal`, then `verify`. A seal covers the day's entries
+(count, first and last sequence numbers, a SHA-256 over each entry) and the previous day's seal, so
+a changed, removed or back-dated entry, or a missing day, fails the check. Seals are kept in
+`accounts.audit_seal` (add-only, never purged) and each is logged as an `audit seal` line, which the
+`audit-seals` log bucket keeps for 800 days (`public_service.sh audit_seals`).
+
+- A failed check prints an ERROR line `audit seal check` naming the days and problems
+  (`entries_changed`, `missing_seal`, `chain_broken`, `seal_altered`, `entries_before_first_seal`,
+  `sealing_behind`), and the daily run fails. Alert on failed runs of `open-alvary-daily`.
+- On a failure: do not repair seals or entries. Compare the day's seal in the database with the copy
+  in the `audit-seals` bucket, restore the day's entries from a backup to see what changed, and treat
+  it as a security incident until explained.
+- Days older than the two-year retention have no entries left; they verify through the chain.
 
 ## Monitors and webhooks
 
