@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   BarChart3,
+  Bell,
   BookOpen,
   Check,
   ChevronsUpDown,
@@ -30,12 +31,14 @@ import { ApiError, api, go, setCsrf, signOut, type Me, type Organisation } from 
 import { Consent } from "./consent";
 import { AccessPage, Apps, Connect, Keys, MembersPage, Overview, Security, Settings as Settings_, Usage } from "./pages";
 import { Dialog, External, Loading, Mark, Problem } from "./ui";
+import { DigestSettings, Unsubscribe, WatchesPage } from "./watches";
 
 type NavItem = { to: string; label: string; icon: LucideIcon };
 const NAV: { group?: string; items: NavItem[] }[] = [
   {
     items: [
       { to: "/console", label: "Dashboard", icon: LayoutDashboard },
+      { to: "/console/monitor", label: "Monitor", icon: Bell },
       { to: "/console/keys", label: "API keys", icon: KeyRound },
       { to: "/console/apps", label: "Connected apps", icon: Plug },
       { to: "/console/usage", label: "Usage", icon: BarChart3 },
@@ -53,6 +56,8 @@ const NAV: { group?: string; items: NavItem[] }[] = [
 
 const TITLES: Record<string, string> = {
   "/console": "Dashboard",
+  "/console/monitor": "Monitor",
+  "/console/unsubscribe": "Email settings",
   "/console/keys": "API keys",
   "/console/apps": "Connected apps",
   "/console/connect": "Connect an app",
@@ -85,8 +90,10 @@ function App() {
   const [error, setError] = useState<unknown>(null);
   const [version, setVersion] = useState(0);
   const signingIn = path === "/console/sign-in" || path === "/console/oauth/consent";
+  // A digest's unsubscribe link works without signing in: the token is the credential.
+  const unsubscribing = path.startsWith("/console/unsubscribe/");
   useEffect(() => {
-    if (signingIn) return;
+    if (signingIn || unsubscribing) return;
     api<Me>("/me").then(
       (data) => {
         setCsrf(data.csrf);
@@ -100,6 +107,7 @@ function App() {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version, signingIn]);
+  if (unsubscribing) return <Unsubscribe token={decodeURIComponent(path.slice("/console/unsubscribe/".length))} />;
   if (path === "/console/oauth/consent") return <Consent />;
   if (signingIn) return <SignIn />;
   if (error) {
@@ -156,8 +164,15 @@ function Shell({ me, path, refresh }: { me: Me; path: string; refresh: () => voi
         return <AccessPage {...props} />;
       case "/console/settings":
         return <Settings_ {...props} />;
+      case "/console/monitor":
+        return <WatchesPage {...props} />;
       case "/console/security":
-        return <Security me={me} refresh={refresh} />;
+        return (
+          <>
+            <Security me={me} refresh={refresh} />
+            <DigestSettings />
+          </>
+        );
       default:
         return (
           <div className="page-head">

@@ -244,7 +244,14 @@ export function Privacy() {
           <li>the names and dates of your keys and connected apps (never a key's secret, which we store only as a keyed hash);</li>
           <li>daily totals of requests and data per key or app, with refusals and their reasons (never the content of your queries), to apply limits and show you your usage;</li>
           <li>an audit log of access changes, with a truncated network address and browser family, to protect your organisation;</li>
-          <li>a session cookie for the console only, to keep you signed in.</li>
+          <li>a session cookie for the console only, to keep you signed in;</li>
+          <li>
+            if you create monitors: their names and what they follow (countries, records, kinds of change,
+            keywords), their matches and which you have read, and your digest settings (time zone, time, day),
+            to send you what you asked for. What you follow can show what you are working on: we keep it out of
+            logs, analytics and exports, never use it to train anything, and only you (or your organisation,
+            for a monitor you share) can see it.
+          </li>
         </ul>
         <p>
           We use this to provide the services, keep them secure, apply limits and send you necessary notices,
@@ -276,6 +283,10 @@ export function Privacy() {
           <li>Access requests and decisions: while the organisation exists and two years after.</li>
           <li>Key and app records: one year after they are revoked.</li>
           <li>Usage totals and the audit log: two years.</li>
+          <li>
+            Monitors and their filters: while the monitor exists, removed at once when you delete it. Matches: 400
+            days. Records of digests sent: 30 days.
+          </li>
           <li>Backups: 35 days.</li>
         </ul>
       </section>
@@ -283,7 +294,7 @@ export function Privacy() {
         <h2>Your choices and rights</h2>
         <p>
           You can see and change your details in the console, export what we hold about you, and delete your
-          account there. You can also ask us to access, correct or delete your information, or object to how we
+          account there. Every digest email has a link that stops it in one click. You can also ask us to access, correct or delete your information, or object to how we
           use it, by writing to <Email address={PRIVACY_EMAIL} />; you may complain to your data protection
           authority. Depending on where you live, these rights come from laws such as the EU and UK General Data
           Protection Regulation, Nigeria's Data Protection Act 2023, Kenya's Data Protection Act 2019 and South

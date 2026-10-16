@@ -29,7 +29,7 @@ const MCP_URL = API_ORIGIN + "/mcp";
 const MANAGERS = new Set(["owner", "admin"]);
 const BUILDERS = new Set(["owner", "admin", "developer"]);
 
-function Heading({ title, description, action }: { title: string; org?: Organisation; description?: React.ReactNode; action?: React.ReactNode }) {
+export function Heading({ title, description, action }: { title: string; org?: Organisation; description?: React.ReactNode; action?: React.ReactNode }) {
   return (
     <div className="page-head">
       <div className="page-title">

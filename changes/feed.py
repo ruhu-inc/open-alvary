@@ -148,12 +148,43 @@ class Filters:
         return (" AND ".join(clauses) or "true"), params
 
     def keyword(self, event: dict) -> bool:
-        if not self.q:
+        # A notice that names nothing is never selected by what it no longer names.
+        if not self.q or _notice(event):
             return True
         haystack = " ".join(
             str(event["payload"].get(k) or "") for k in ("title", "citation", "summary")
         ).casefold()
         return all(re.search(r"\b" + re.escape(word) + r"\b", haystack) for word in self.q.casefold().split())
+
+    def matches(self, event: dict) -> list[str] | None:
+        """The same test as sql() and keyword(), for one event: the dimensions it matched, or None."""
+        if self.type and event["event_type"] not in self.type:
+            return None
+        if _notice(event):
+            return ["notice"]
+        matched = []
+        if self.jurisdiction:
+            place = event["jurisdiction_id"]
+            if not any(place == j or ("-" not in j and place.startswith(j + "-")) for j in self.jurisdiction):
+                return None
+            matched.append("jurisdiction")
+        for name, column in (("work", "work_id"), ("cls", "document_class"), ("language", "language")):
+            values = getattr(self, name)
+            if values:
+                if event[column] not in values:
+                    return None
+                matched.append("class" if name == "cls" else name)
+        if self.q:
+            if not self.keyword(event):
+                return None
+            matched.append("q")
+        if self.type:
+            matched.append("type")
+        return matched
+
+
+def _notice(event: dict) -> bool:
+    return event["event_type"] == "withdrawal" and event.get("version_id") is None
 
 
 # ---------- tokens ----------
