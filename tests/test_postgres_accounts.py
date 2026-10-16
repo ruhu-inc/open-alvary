@@ -572,3 +572,10 @@ def test_a_plan_with_countries_takes_the_requests_countries_and_changes_them_onc
     assert accounts.access(organisation)["scope"] == {"jurisdictions": ["ug"]}
     states = [h["state"] for h in accounts.access_details(owner, organisation)["history"]]
     assert states[:3] == ["active", "ended", "ended"]
+
+
+def test_an_organisation_can_set_its_website(accounts):
+    owner, organisation = person(accounts)
+    revision = accounts.organisation(owner, organisation)["revision"]
+    accounts.update_organisation(owner, organisation, revision, {"website": "https://law.example.org/about"})
+    assert accounts.organisation(owner, organisation)["website"] == "https://law.example.org/about"
