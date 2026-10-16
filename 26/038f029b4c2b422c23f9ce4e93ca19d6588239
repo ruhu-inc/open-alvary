@@ -1,0 +1,19 @@
+deployment/gcp/public_service.sh
+  s_b82616e2476856::t_b86be93cc1659e 131-134,136-141,143,145,253-254,257-258
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "26038f029b4c2b422c23f9ce4e93ca19d6588239",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
