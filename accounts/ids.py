@@ -4,7 +4,23 @@ import re
 import secrets
 
 ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
-PREFIXES = ("acc", "act", "idn", "org", "mem", "inv", "ent", "wrq", "grt", "evt", "wat", "inb", "dig", "whe", "whd")
+PREFIXES = (
+    "acc",
+    "act",
+    "idn",
+    "org",
+    "mem",
+    "inv",
+    "ent",
+    "wrq",
+    "grt",
+    "evt",
+    "wat",
+    "inb",
+    "dig",
+    "whe",
+    "whd",
+)
 PATTERN = re.compile(r"^(?:" + "|".join(PREFIXES) + r")_[0-9A-HJKMNP-TV-Z]{26}$")
 
 
