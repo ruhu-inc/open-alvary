@@ -316,3 +316,13 @@ p.warn { color: #8a5a1c; }
 .home-head h1 { font-size: 2rem; margin: .2rem 0 .8rem; }
 .activity li { display: grid; gap: .1rem; }
 .activity-title { color: var(--muted); font-size: 14px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+
+/* Operators */
+.role-choices { display: grid; gap: .35rem; }
+.role-choice { display: flex; gap: .5rem; align-items: baseline; font-size: 14px; }
+table.operators td { vertical-align: top; }
+table.operators tr.inactive td { opacity: .6; }
+.pill.role { background: var(--accent-soft); color: var(--ink); margin: 0 .25rem .25rem 0; display: inline-block; }
+.code-box { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 1rem; }
+.enrolment-code { display: inline-block; font-size: 1.6rem; letter-spacing: .12em; font-weight: 700; padding: .3rem .6rem; background: var(--panel); border-radius: 8px; margin: .2rem 0 .4rem; user-select: all; }
+.muted-card { background: transparent; }

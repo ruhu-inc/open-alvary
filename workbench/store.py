@@ -237,6 +237,40 @@ class Store:
             db.execute(update(session).where(session.c.email == email.lower()).values(ended_at=now()))
             self._audit(db, actor, "operator_deactivated", detail={"email": email.lower()})
 
+    def operators(self) -> list[dict]:
+        """Every operator, active or not, with their last sign-in and how many passkeys they hold."""
+        with self.engine.connect() as db:
+            people = db.execute(select(operator).order_by(operator.c.active.desc(), operator.c.name)).all()
+            last = dict(
+                db.execute(
+                    select(session.c.email, func.max(session.c.created_at)).group_by(session.c.email)
+                ).all()
+            )
+            keys = dict(
+                db.execute(
+                    select(passkey.c.email, func.count())
+                    .where(passkey.c.revoked_at.is_(None))
+                    .group_by(passkey.c.email)
+                ).all()
+            )
+        return [
+            {
+                "email": row.email,
+                "name": row.name,
+                "roles": sorted(row.roles.split(",")),
+                "active": bool(row.active),
+                "created_at": row.created_at,
+                "last_sign_in": last.get(row.email),
+                "passkeys": keys.get(row.email, 0),
+            }
+            for row in people
+        ]
+
+    def reactivate(self, email: str, actor: str = "admin-cli") -> None:
+        with self.engine.begin() as db:
+            db.execute(update(operator).where(operator.c.email == email.lower()).values(active=True))
+            self._audit(db, actor, "operator_reactivated", detail={"email": email.lower()})
+
     def names(self, emails) -> dict[str, str]:
         """Display names of operators, active or not, for crediting work already done."""
         wanted = {email.lower() for email in emails if email}

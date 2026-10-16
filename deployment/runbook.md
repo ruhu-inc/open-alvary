@@ -506,6 +506,40 @@ A lost passkey: the operator removes it at `#/access` after checking with anothe
 they have none left, check who is asking, then `deployment/gcp/workbench.sh enrol <email> --replace`
 revokes their passkeys and issues a new code (a code is accepted only while no passkey remains).
 
+## Workbench operators: who may use the workbench
+
+Administrators (role `admin`) manage operators on the workbench's **Operators** page: add a person
+by the Google account they sign in with (a Workspace address or a personal one such as Gmail), set
+their roles (reviewer, approver, admin, access_admin), deactivate or reactivate them, and issue the
+one-time code an administrator or access administrator needs to register a passkey (shown once, on
+the page). Every change needs the administrator's own passkey within the last 10 minutes and is in
+the workbench's audit log; nobody can deactivate themselves, and the last administrator keeps the
+role.
+
+The first administrator is set up from the command line:
+`deployment/gcp/workbench.sh operator <email> "<name>" reviewer,approver,admin`, then
+`deployment/gcp/workbench.sh enrol <email>` for their code.
+
+Reaching the workbench also takes Google's IAP gate. Rather than a grant per person, let one Google
+group through (set up once):
+
+1. In the Google Workspace admin console, allow groups to have members outside the organisation
+   (Apps > Google Workspace > Groups for Business > Sharing settings) if anyone uses a personal
+   account. Create the group (for example `workbench-operators@ruhu.ai`); in its settings, allow
+   members outside the organisation. A group is one address: members keep their own accounts.
+2. `deployment/gcp/workbench.sh iap_group workbench-operators@ruhu.ai`; put
+   `ALVARY_REVIEW_IAP_GROUP=workbench-operators@ruhu.ai` in `.env` and deploy again
+   (`ACCESS=1 deployment/gcp/workbench.sh deploy`), so the Operators page names the group.
+3. For accounts outside the organisation (Gmail): Google's own IAP sign-in admits only the
+   organisation's accounts. `deployment/gcp/workbench.sh iap_external` makes IAP use the workbench's
+   OAuth client instead; then, in the console (APIs & Services > Credentials and the OAuth consent
+   screen, project `open-alvary-ingestion`), add the redirect URI it prints to that client and set
+   the consent screen's audience to External (it asks only for name and email, which needs no
+   verification by Google).
+
+Adding someone is then: their account into the group, and the person on the Operators page.
+Removing them: deactivate on the page and take them out of the group.
+
 ## Upgrade and rollback
 
 Record the deployed commit and image IDs. Take and validate a backup before migration.

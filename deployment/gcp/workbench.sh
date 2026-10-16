@@ -9,6 +9,8 @@
 #   deployment/gcp/workbench.sh access     # once: the Access section's connection to the accounts database
 #   ACCESS=1 deployment/gcp/workbench.sh deploy                              # deploy with the Access section
 #   deployment/gcp/workbench.sh enrol <email> [--replace]   # a one-time code for an access_admin's passkey
+#   deployment/gcp/workbench.sh iap_group <group@domain>    # once: the operators' Google group through IAP
+#   deployment/gcp/workbench.sh iap_external   # once: IAP admits accounts outside the organisation (Gmail)
 #   deployment/gcp/workbench.sh status
 #
 # Cloud Run (scales to zero) reads a Cloud Storage bucket mounted read-only and a Cloud SQL
@@ -125,8 +127,9 @@ upload() {
 }
 
 deploy() {
-  local client_id
+  local client_id group
   client_id="$(setting ALVARY_REVIEW_OIDC_CLIENT_ID)"
+  group="$(setting ALVARY_REVIEW_IAP_GROUP)"
   [[ -n "$client_id" ]] || { echo "Set ALVARY_REVIEW_OIDC_CLIENT_ID in .env (the OAuth client of type Web application)" >&2; exit 1; }
   "${GC[@]}" secrets describe review-oidc-client-secret >/dev/null 2>&1 \
     || { echo "Run $0 setup first (with ALVARY_REVIEW_OIDC_CLIENT_SECRET in .env)." >&2; exit 1; }
@@ -155,7 +158,7 @@ deploy() {
     --set-cloudsql-instances="$instances" \
     --add-volume=name=collection,type=cloud-storage,bucket="$BUCKET",readonly=true \
     --add-volume-mount=volume=collection,mount-path=/data/collection \
-    --set-env-vars="^|^ALVARY_REVIEW_STAGING=/data/collection|ALVARY_REVIEW_COLLECTIONS=${CORPUS_COLLECTIONS}|ALVARY_REVIEW_BASE_URL=${url}|ALVARY_REVIEW_ALLOWED_HOSTS=${SERVICE}-${number}.${REGION}.run.app|ALVARY_REVIEW_OIDC_CLIENT_ID=${client_id}" \
+    --set-env-vars="^|^ALVARY_REVIEW_STAGING=/data/collection|ALVARY_REVIEW_COLLECTIONS=${CORPUS_COLLECTIONS}|ALVARY_REVIEW_BASE_URL=${url}|ALVARY_REVIEW_ALLOWED_HOSTS=${SERVICE}-${number}.${REGION}.run.app|ALVARY_REVIEW_OIDC_CLIENT_ID=${client_id}${group:+|ALVARY_REVIEW_IAP_GROUP=${group}}" \
     --set-secrets="$secrets" \
     --command=uvicorn --args="workbench.app:app,--host,0.0.0.0,--port,8080,--proxy-headers,--forwarded-allow-ips,*,--no-access-log"
   # Identity-Aware Proxy calls the service as Google's IAP service agent.
@@ -222,6 +225,32 @@ enrol() {  # a one-time code (24 hours) with which an access_admin registers a f
   echo "${line:-The code is in the log of execution $execution, which has not reached Cloud Logging yet: read it there.}"
 }
 
+iap_group() {  # once: let a Google group's members through IAP; administrators then manage people there
+  local group="${1:?the group address, e.g. workbench-operators@ruhu.ai}"
+  "${GC[@]}" iap web add-iam-policy-binding --resource-type=cloud-run --service="$SERVICE" --region="$REGION" \
+    --member="group:${group}" --role=roles/iap.httpsResourceAccessor
+  echo "Put ALVARY_REVIEW_IAP_GROUP=${group} in .env and deploy again, so the Operators page names the group."
+}
+
+iap_external() {  # once: IAP admits Google accounts outside the organisation (personal Gmail ones)
+  # Google's own OAuth client admits only the organisation's accounts; a custom one of type External
+  # admits any Google account IAP allows. The workbench's client serves, with a second redirect URI.
+  local id secret file
+  id="$(setting ALVARY_REVIEW_OIDC_CLIENT_ID)"
+  secret="$(setting ALVARY_REVIEW_OIDC_CLIENT_SECRET)"
+  [[ -n "$id" && -n "$secret" ]] || { echo "Set ALVARY_REVIEW_OIDC_CLIENT_ID and _SECRET in .env" >&2; exit 1; }
+  file="$(mktemp)"
+  chmod 600 "$file"
+  trap 'rm -f "$file"' RETURN
+  printf 'accessSettings:\n  oauthSettings:\n    clientId: %s\n    clientSecret: %s\n' "$id" "$secret" >"$file"
+  "${GC[@]}" iap settings set "$file" --resource-type=cloud-run --service="$SERVICE" --region="$REGION" >/dev/null
+  cat <<NEXT
+IAP now signs people in with the workbench's OAuth client. In the console, on that client, add the
+authorised redirect URI below, and set the consent screen's audience to External:
+  https://iap.googleapis.com/v1/oauth/clientIds/${id}:handleRedirect
+NEXT
+}
+
 status() {
   "${GC[@]}" run services describe "$SERVICE" --region="$REGION" --format='value(status.url,status.conditions[0].status)' || true
   "${GC[@]}" sql instances describe "$SQL_INSTANCE" --format='value(state,settings.tier)' || true
@@ -235,6 +264,8 @@ case "${1:-plan}" in
   operator) shift; operator "$@" ;;
   access) access ;;
   enrol) shift; enrol "$@" ;;
+  iap_group) shift; iap_group "$@" ;;
+  iap_external) iap_external ;;
   status) status ;;
-  *) echo "usage: $0 plan|setup|upload|deploy|operator <email> <name> <roles>|access|enrol <email>|status"; exit 2 ;;
+  *) echo "usage: $0 plan|setup|upload|deploy|operator <email> <name> <roles>|access|enrol <email>|iap_group <group>|iap_external|status"; exit 2 ;;
 esac
