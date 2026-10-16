@@ -216,7 +216,9 @@ class Watches:
             if "name" in data:
                 name = " ".join(str(data["name"] or "").split())
                 if not 1 <= len(name) <= 100:
-                    raise AccountError("invalid_input", 400, "Give the monitor a name of 1 to 100 characters.")
+                    raise AccountError(
+                        "invalid_input", 400, "Give the monitor a name of 1 to 100 characters."
+                    )
                 changes["name"] = name
             feed = self._feed(conn)
             if "filters" in data:
