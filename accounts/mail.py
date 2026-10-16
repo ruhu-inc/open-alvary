@@ -222,6 +222,17 @@ def watches_paused(to: str, organisation: str, count: int, base: str) -> Message
     )
 
 
+def webhook_stopped(to: str, organisation: str, url: str, state: str, why: str, base: str) -> Message:
+    action = "disabled" if state == "disabled" else "paused"
+    return Message(
+        to,
+        f"A webhook endpoint was {action} for {organisation}",
+        f"The webhook endpoint {url} {why}, so Open Alvary {action} it. Matches are kept in the console "
+        f"inbox. Fix the endpoint, then verify it again under Webhooks at {base}/console/webhooks.\n\n"
+        + SIGN_OFF,
+    )
+
+
 LABELS = {
     "catalogue_added": "Added",
     "metadata_corrected": "Corrected",

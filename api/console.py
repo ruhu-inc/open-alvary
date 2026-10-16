@@ -48,6 +48,7 @@ from accounts.store import AccountError, Accounts, Context
 from api.admission import client_address
 from changes.routes import site_origin
 from changes.watches import Watches
+from changes.webhooks import Webhooks
 
 SESSION_COOKIE = "oa_console"
 FLOW_COOKIE = "oa_console_flow"
@@ -984,6 +985,60 @@ def create_console_app(
     @app.post("/unsubscribe/{token}")
     def unsubscribe(token: str):
         return watches.unsubscribe(token)
+
+    # ---------- webhooks (SUB C3) ----------
+    hooks = Webhooks(accounts)
+    hook_path = "/api/v1/organisations/{organisation_id}/webhooks"
+
+    @app.get(hook_path)
+    def list_webhooks(request: Request, organisation_id: str):
+        return hooks.listing(guard(request)["person_id"], organisation_id)
+
+    @app.post(hook_path)
+    async def create_webhook(request: Request, organisation_id: str):
+        session = guard(request, write=True)
+        data = await body(request)
+        fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id))
+        created = hooks.create(session["person_id"], organisation_id, data, context(request))
+        return JSONResponse(jsonable_encoder(created), status_code=201, headers={"Cache-Control": "no-store"})
+
+    @app.patch(hook_path + "/{endpoint_id}")
+    async def update_webhook(request: Request, organisation_id: str, endpoint_id: str):
+        session = guard(request, write=True)
+        data = await body(request)
+        return hooks.update(session["person_id"], organisation_id, endpoint_id, data, context(request))
+
+    @app.delete(hook_path + "/{endpoint_id}")
+    def delete_webhook(request: Request, organisation_id: str, endpoint_id: str):
+        session = guard(request, write=True)
+        hooks.delete(session["person_id"], organisation_id, endpoint_id, context(request))
+        return Response(status_code=204)
+
+    @app.post(hook_path + "/{endpoint_id}/rotate")
+    def rotate_webhook(request: Request, organisation_id: str, endpoint_id: str):
+        session = guard(request, write=True)
+        fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id))
+        rotated = hooks.rotate(session["person_id"], organisation_id, endpoint_id, context(request))
+        return JSONResponse(jsonable_encoder(rotated), headers={"Cache-Control": "no-store"})
+
+    @app.post(hook_path + "/{endpoint_id}/verify")
+    def verify_webhook(request: Request, organisation_id: str, endpoint_id: str):
+        session = guard(request, write=True)
+        return hooks.verify(session["person_id"], organisation_id, endpoint_id)
+
+    @app.post(hook_path + "/{endpoint_id}/test")
+    def test_webhook(request: Request, organisation_id: str, endpoint_id: str):
+        session = guard(request, write=True)
+        return hooks.test(session["person_id"], organisation_id, endpoint_id)
+
+    @app.get(hook_path + "/{endpoint_id}/deliveries")
+    def webhook_deliveries(request: Request, organisation_id: str, endpoint_id: str):
+        return hooks.deliveries(guard(request)["person_id"], organisation_id, endpoint_id)
+
+    @app.post(hook_path + "/{endpoint_id}/deliveries/{delivery_id}/replay")
+    def replay_webhook(request: Request, organisation_id: str, endpoint_id: str, delivery_id: str):
+        session = guard(request, write=True)
+        return hooks.replay(session["person_id"], organisation_id, endpoint_id, delivery_id)
 
     # Declared last: every console API route above wins over this.
     @app.api_route("/api/{rest:path}", methods=["GET", "POST", "PATCH", "DELETE", "PUT"])

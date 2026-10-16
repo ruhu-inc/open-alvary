@@ -1099,6 +1099,15 @@ function Developers() {
           <dd>
             The <code>list_changes</code> and <code>get_change</code> tools.
           </dd>
+          <dt>Monitors and webhooks</dt>
+          <dd>
+            In the console, monitors follow countries, records and kinds of
+            change, with an inbox and daily or weekly email. On paid plans they
+            can also POST each match to your HTTPS endpoint, signed with
+            HMAC-SHA256 over <code>timestamp.body</code> (headers{" "}
+            <code>Open-Alvary-Timestamp</code> and{" "}
+            <code>Open-Alvary-Signature</code>), retried for 24 hours.
+          </dd>
           <dt>What it covers</dt>
           <dd>
             <code>/api/change-coverage</code>: when recording began and what is

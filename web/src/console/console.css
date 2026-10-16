@@ -1317,3 +1317,21 @@ svg .chart-label {
   font-size: 13px;
   width: auto;
 }
+
+/* Webhooks (SUB C3) */
+.endpoint-url {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+}
+.endpoint-url code {
+  overflow-wrap: anywhere;
+}
+.bad-text {
+  color: var(--bad-ink);
+}
+details.card summary {
+  cursor: pointer;
+}

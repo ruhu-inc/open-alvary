@@ -1,5 +1,5 @@
-"""The watch worker (SUB C2, changes-contracts.md): match new changes to watches, send digests,
-apply plan limits. Run every 5 minutes (D19) as a scheduled job; each step holds an advisory lock,
+"""The watch worker (SUB C2, C3, changes-contracts.md): match new changes to watches, send digests,
+deliver webhooks, apply plan limits. Run every 5 minutes (D19) as a scheduled job; each step holds an advisory lock,
 so overlapping runs wait instead of doubling work. At-least-once: matches collapse on their key,
 digests on (person, cadence, window start).
 
@@ -20,6 +20,7 @@ from sqlalchemy.engine import Engine
 from accounts import mail
 from accounts.ids import new_id
 from accounts.store import Accounts
+from changes import webhooks
 from changes.feed import Feed, _Visibility
 from changes.watches import MATCHER, Watches, plan_limits, stored_filters
 
@@ -63,6 +64,7 @@ def match(accounts: Accounts) -> int:
         ]
         for watch in watches:
             watch["parsed"] = stored_filters(watch["filters"])
+        endpoints = webhooks.attached(conn, accounts)  # C3: matches also go to these
         events_table = accounts.namespace.qualified(conn, "changes", "change_event")
         visible, scanned = _Visibility(conn), 0
         while scanned < PER_RUN:
@@ -87,6 +89,7 @@ def match(accounts: Accounts) -> int:
                         reasons = watch["parsed"].matches(event)
                         if reasons is None:
                             continue
+                        webhooks.enqueue(conn, accounts, watch["id"], event, endpoints)
                         matched += conn.execute(
                             text(
                                 f"INSERT INTO {accounts._t(conn, 'inbox_item')} (id, watch_id, event_id,"
@@ -290,6 +293,7 @@ def purge(accounts: Accounts) -> int:
             ("inbox_item", "matched_at < statement_timestamp() - interval '400 days'"),
             ("digest", "expires_at < statement_timestamp()"),
             ("unsubscribe_token", "expires_at < statement_timestamp()"),
+            ("webhook_delivery", "created_at < statement_timestamp() - interval '7 days'"),
         ):
             removed += conn.execute(
                 text(f"DELETE FROM {accounts._t(conn, table)} WHERE {condition}")
@@ -297,13 +301,15 @@ def purge(accounts: Accounts) -> int:
     return removed
 
 
-def run(accounts: Accounts, mailer: mail.Mailer, base: str) -> dict:
-    return {
-        "matched": match(accounts),
-        "digests": digests(accounts, mailer, base),
-        "paused": enforce_limits(accounts, mailer, base),
-        "purged": purge(accounts),
-    }
+def run(accounts: Accounts, mailer: mail.Mailer, base: str, hooks: "webhooks.Webhooks | None" = None) -> dict:
+    hooks = hooks or webhooks.Webhooks(accounts)
+    result = {"matched": match(accounts), "digests": digests(accounts, mailer, base)}
+    if webhooks.Sealer.from_environment() is not None or hooks._sealer is not None:
+        result["webhooks"] = webhooks.deliver(accounts, hooks, mailer, base)
+    else:
+        log.warning("Webhook delivery is off: ALVARY_WEBHOOK_KEYS is not set")
+    result |= {"paused": enforce_limits(accounts, mailer, base), "purged": purge(accounts)}
+    return result
 
 
 def accounts_for(engine: Engine) -> Accounts:

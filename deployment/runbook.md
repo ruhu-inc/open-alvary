@@ -135,6 +135,18 @@ a new epoch, so readers are told to resynchronise rather than refused.
 Without the secret, a persistent deployment keeps the Changes page and the feeds but answers replay
 requests with 503.
 
+## Monitors and webhooks
+
+`python -m changes.worker run` (every 5 minutes, as a scheduled job) matches new changes to
+monitors, sends digests, delivers webhooks, pauses monitors above a plan's limit and purges by
+retention. After a new feed epoch, matching stops until `python -m changes.worker confirm-epoch`.
+
+Webhook signing secrets are sealed with the `webhook-keys` secret (`{"w1": "<base64 32 bytes>"}`,
+created by `setup`, passed as `ALVARY_WEBHOOK_KEYS` with `ALVARY_WEBHOOK_KEY_ID`). Losing it makes
+every endpoint's secret unreadable: endpoints must then rotate their secrets. To rotate the sealing
+key, add a version holding both keys and deploy with `WEBHOOK_KEY_ID=<new id>`; existing secrets stay
+readable under the old key. Without the secret, webhooks are off (503) and the worker skips delivery.
+
 ## Serving epochs and restore recovery
 
 Policy-governed public serving (migration `0015`; currently the `eligible_metadata` view, not the
