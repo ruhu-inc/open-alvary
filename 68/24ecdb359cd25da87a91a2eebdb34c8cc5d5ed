@@ -1,0 +1,21 @@
+migrations/versions/0027_organisation_website.py
+  s_b82616e2476856::t_ade6ceaa5ee8d3 1-37
+tests/test_postgres_accounts.py
+  s_b82616e2476856::t_2d5f0c52d86d7b 575-581
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6824ecdb359cd25da87a91a2eebdb34c8cc5d5ed",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
