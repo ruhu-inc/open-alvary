@@ -396,10 +396,15 @@ def purge(accounts: Accounts, deleter: ProviderDeleter | None = None, now: datet
                 }
                 | params,
             ).rowcount
-        # The audit log keeps two years; only this purge may remove entries, and only older ones.
+        # The audit log keeps two years; only this purge may remove entries, and only older ones. It
+        # removes whole UTC days by the database's clock, the one the append-only trigger checks (two
+        # years is 731 days across a 29 February), so a sealed day is either all held or all gone.
         conn.execute(text("SELECT set_config('open_alvary.retention_purge', 'on', true)"))
         done["audit_entries"] = conn.execute(
-            text(f"DELETE FROM {t(conn, 'audit_event')} WHERE at < :y2"), {"y2": now - timedelta(days=730)}
+            text(
+                f"DELETE FROM {t(conn, 'audit_event')}"
+                " WHERE at < date_trunc('day', statement_timestamp() - interval '2 years', 'UTC')"
+            )
         ).rowcount
     return done
 
