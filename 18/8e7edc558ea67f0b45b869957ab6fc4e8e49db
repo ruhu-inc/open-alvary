@@ -1,0 +1,60 @@
+web/src/console/console.css
+  s_b82616e2476856::t_974d7eed8a4b76 1320-1337
+changes/webhooks.py
+  s_b82616e2476856::t_4b9938e7f80ad7 1-162,164-165,167-233,235-334,336-424,426-430,432-512,514-537,539-588,595-624,626-705,707-741,743-752,754-774,776-780,782-809,811-834,836-854,856-872,874-882,884-915
+  s_b82616e2476856::t_acd61bc66abd81 335
+  s_b82616e2476856::t_4156f8871d9fe6 589-594
+  s_165332455313a3::t_948725591885a7 163,166,234,425,431,513,538,625,706,742,753,775,781,810,835,855,873,883
+web/src/console/main.tsx
+  s_b82616e2476856::t_974d7eed8a4b76 21,36,46,66,173-174
+migrations/versions/0025_webhooks.py
+  s_b82616e2476856::t_a8cdc2de0a3180 1-101
+api/console.py
+  s_b82616e2476856::t_c05e4f32c2ab0d 51,989-1041
+  s_b82616e2476856::t_6470d07a59561a 1042
+tests/test_postgres_webhooks.py
+  s_b82616e2476856::t_d17263cbb77ebf 1-61,67-70,76-80,88-107,115-160,164-229,234-251,255-259
+  s_b82616e2476856::t_439ca24dad5ec4 62-66,71-75,81-87,108-114,161-163,230-233,252-254
+web/src/console/webhooks.tsx
+  s_b82616e2476856::t_0828bc99cc8496 1-4,6-149,151-165,167-446
+  s_b82616e2476856::t_cad55d7015b0ce 5,150,166
+web/src/main.tsx
+  s_b82616e2476856::t_e7c7aee74ae84e 1102-1110
+tests/test_webhooks.py
+  s_b82616e2476856::t_9c0ce0d4503a3b 1-102
+  s_b82616e2476856::t_19c5ace446b40c 103-116
+accounts/mail.py
+  s_b82616e2476856::t_ddf64e61d3d024 225-235
+changes/worker.py
+  s_b82616e2476856::t_95942103e27b82 1-2,23,67,92,296,304-312
+deployment/compose.yaml
+  s_b82616e2476856::t_c6553393945d60 13-15
+deployment/gcp/public_service.sh
+  s_b82616e2476856::t_88c39fcab2967d 41,183-186,188,210-214,232-233
+deployment/runbook.md
+  s_b82616e2476856::t_1f0e1886bc17c2 138-149
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "188e7edc558ea67f0b45b869957ab6fc4e8e49db",
+  "prompts": {},
+  "sessions": {
+    "s_165332455313a3": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "641d577a-f1a0-4404-86cd-ae1269afbc5f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    },
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
