@@ -1,0 +1,32 @@
+deployment/gcp/public_service.sh
+  s_b82616e2476856::t_e5ddf9da31037e 178-181,183,205-206,225
+  s_b82616e2476856::t_86aa15bc5a0cf5 40,224
+deployment/compose.yaml
+  s_b82616e2476856::t_9d2dd97706b26d 10-12
+deployment/runbook.md
+  s_b82616e2476856::t_9439be5a53652b 110-113,117-131,135-136
+  s_b82616e2476856::t_86aa15bc5a0cf5 132
+  s_b82616e2476856::t_bb013813b05c9f 133-134
+  s_b82616e2476856::t_3c098d6c05ccf3 137
+changes/feed.py
+  s_b82616e2476856::t_813e1ac1568454 20,25,29,56,234-235,354-373,376
+tests/test_postgres_changes.py
+  s_b82616e2476856::t_775cc46d9d24e9 223,257
+  s_b82616e2476856::t_32b3f7d3897f64 5,136-138,186-222,224-256,258-294
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4c29b61ccdb3b860859fd66df2386fbb1e83331a",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
