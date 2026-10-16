@@ -17,14 +17,16 @@ import unicodedata
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import get_args
 from xml.sax.saxutils import escape
 
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.engine import Connection
 
 from changes.record import current, digest, namespace
+from schema.models import Source
 
 TYPES = (
     "catalogue_added",
@@ -51,6 +53,7 @@ DIMENSIONS = {
     "language": "language",
 }
 UNSUPPORTED = ("issuer", "collection", "topic")
+DOCUMENT_CLASSES = frozenset(get_args(Source.model_fields["document_type"].annotation))
 CAP = 50  # values per filter dimension (D19)
 SCAN_BUDGET = 2000  # positions one request may scan (D19)
 CURSOR_SECONDS = 15 * 60
@@ -228,6 +231,8 @@ class Feed:
             raise FeedError(400, "invalid_input", "Send at most one of cursor, resume_token and start=now.")
         state = self.state()
         epoch = str(state["epoch"])
+        if not (cursor or resume):
+            self.validate(filters)  # a token's filters were checked when it was first issued (SUB)
         if start_now:
             high = self.high()
             return self._answer([], False, None, (high, HIGHEST, 2**31 - 1), filters, epoch, high, limit)
@@ -346,8 +351,29 @@ class Feed:
             raise FeedError(404, "unavailable", "This change is not available.")
         return shown
 
+    def validate(self, filters: Filters) -> None:
+        """Unknown or no-longer-public IDs answer one generic refusal, saying neither which value nor
+        whether it exists (SUB-03)."""
+        from api.store import tables
+
+        def known(table, values):
+            if not values:
+                return True
+            column = tables[table].c.id
+            found = self.conn.execute(select(column).where(column.in_(values))).scalars().all()
+            return set(found) == set(values)
+
+        if (
+            not known("jurisdictions", filters.jurisdiction)
+            or not known("languages", filters.language)
+            or any(c not in DOCUMENT_CLASSES for c in filters.cls)
+            or (filters.work and set(current(self.conn, filters.work)) != set(filters.work))
+        ):
+            raise FeedError(400, "invalid_filter", "The filter is not valid.")
+
     def recent(self, filters: Filters) -> list[dict]:
         """Newest first: the Atom and RSS window. Not a replay API."""
+        self.validate(filters)
         where, params = filters.sql()
         rows = (
             self.conn.execute(

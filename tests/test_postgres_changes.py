@@ -2,6 +2,7 @@
 serves it as a replayable feed, Atom/RSS windows, coverage and MCP tools (changes-contracts.md)."""
 
 import xml.etree.ElementTree as ET
+from datetime import datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -132,7 +133,9 @@ def test_filters_single_events_feeds_and_mcp(feed, cleared):
     texts = client.get("/changes", params={"type": "text_version_published"}).json()["events"]
     assert len(texts) == 1 and texts[0]["version"]["id"] == "test-version"
     assert texts[0]["work"]["url"].endswith(f"/sources/{cleared.sources[0].id}")
-    assert client.get("/changes", params={"jurisdiction": "ke"}).json()["events"] == []
+    for unknown in ({"jurisdiction": "ke"}, {"work": "no-such-work"}, {"class": "novel"}, {"language": "xx"}):
+        refused = client.get("/changes", params=unknown)
+        assert refused.status_code == 400 and refused.json()["detail"] == "The filter is not valid."
     assert len(client.get("/changes", params={"jurisdiction": "ng"}).json()["events"]) == 2
     one = client.get(f"/changes/{texts[0]['event_id']}")
     assert one.json()["event_type"] == "text_version_published"
@@ -180,3 +183,112 @@ def test_without_shared_keys_a_deployment_turns_replay_off_but_keeps_its_pages(f
         assert client.get("/change-coverage").status_code == 200
     finally:
         routes.tokens.cache_clear()
+
+
+def test_a_token_keeps_its_filters_after_the_work_they_name_is_withdrawn(feed, cleared):
+    store, client = feed
+    store.save(cleared)
+    work = cleared.sources[0].id
+    token = client.get("/changes", params={"work": work}).json()["resume_token"]
+    edit(store, lambda c: setattr(next(r for r in c.rights if r.source_id == work), "metadata_public", False))
+    # A fresh request may not name a hidden record; the reader's own token still carries on.
+    assert client.get("/changes", params={"work": work}).json()["code"] == "invalid_filter"
+    later = client.get("/changes", params={"work": work, "resume_token": token}).json()
+    assert [e["event_type"] for e in later["events"]] == ["withdrawal"] and later["events"][0]["work"] is None
+
+
+def test_a_save_still_open_cannot_appear_behind_a_readers_position(feed, cleared):
+    from api.store import tables
+    from changes.record import publish
+
+    store, client = feed
+    store.save(cleared)
+    work = cleared.sources[1].id
+    sources = tables["sources"]
+    with store.engine.connect() as writer:
+        transaction = writer.begin()
+        payload = writer.scalar(text("SELECT payload FROM sources WHERE id = :i"), {"i": work})
+        writer.execute(
+            sources.update().where(sources.c.id == work).values(payload=payload | {"summary": "In flight."})
+        )
+        assert publish(writer, [work]) == 1  # holds the publication revision, not yet committed
+        seen = client.get("/changes").json()
+        assert all(e["changed_fields"] != ["summary"] for e in seen["events"])
+        transaction.commit()
+    newer = client.get("/changes", params={"resume_token": seen["resume_token"]}).json()["events"]
+    assert [(e["event_type"], e["changed_fields"]) for e in newer] == [("metadata_corrected", ["summary"])]
+
+
+def test_anonymous_keyed_and_website_routes_answer_the_same_changes(pg_engine, cleared, monkeypatch):
+    from test_postgres_api_v1 import PEPPER, TIER, grant, key
+
+    from accounts import policies
+    from accounts.store import Accounts
+    from api.service import create_service
+    from rights.database import PolicyNamespace
+
+    monkeypatch.setenv("ALVARY_ACCOUNTS", "1")
+    monkeypatch.setenv("ALVARY_KEY_PEPPER", __import__("base64").b64encode(PEPPER).decode())
+    for name in (
+        "ALVARY_CONSOLE_CLIENT_ID",
+        "ALVARY_ADMISSION_CONFIG",
+        "ALVARY_SITE_ADMISSION_CONFIG",
+        "PUBLIC_DOMAIN",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    migrate(pg_engine)
+    store = Store(pg_engine)
+    seed(store)
+    store.save(cleared)
+    with pg_engine.connect() as conn:
+        accounts = Accounts(
+            pg_engine, PolicyNamespace(conn.scalar(text("SELECT current_schema()"))), key_pepper=PEPPER
+        )
+    accounts.set_tiers([TIER])
+    signed = accounts.sign_in(
+        issuer="https://login.example.test/",
+        subject="email|a",
+        method="email",
+        email="a@example.org",
+        label="a",
+    )
+    accounts.accept_policies(signed["id"], dict(policies.CURRENT))
+    organisation = accounts.welcome(signed["id"], "Amina", "Amina")
+    grant(accounts, organisation)
+    client = TestClient(create_service(store=store))
+
+    def ids(response):
+        assert response.status_code == 200, response.text
+        return [(e["event_id"], e["event_revision"]) for e in response.json()["events"]]
+
+    anonymous = ids(client.get("/api/changes"))
+    assert anonymous and anonymous == ids(client.get("/site/v1/changes"))
+    keyed = client.get("/api/v1/changes", headers=key(accounts, signed["id"], organisation))
+    assert ids(keyed) == anonymous
+    assert client.get("/api/v1/changes").status_code == 401  # the keyed surface still needs a key
+
+
+def test_atom_and_rss_are_well_formed_and_escape_titles(feed, cleared):
+    from email.utils import parsedate_to_datetime
+
+    store, client = feed
+    cleared.sources[0].title = 'Rights & "Duties" <Act> 2011'
+    store.save(cleared)
+    atom = ET.fromstring(client.get("/changes/feed.atom").text)
+    a = "{http://www.w3.org/2005/Atom}"
+    for name in ("id", "title", "updated", "author"):
+        assert atom.find(a + name) is not None, name
+    entries = atom.findall(a + "entry")
+    assert entries
+    for entry in entries:
+        assert entry.find(a + "id").text.startswith("urn:uuid:")
+        assert entry.find(a + "title").text and entry.find(a + "link").get("href").startswith("http")
+        datetime.fromisoformat(entry.find(a + "updated").text.replace("Z", "+00:00"))
+    assert any('Rights & "Duties" <Act> 2011' in e.find(a + "title").text for e in entries)
+
+    channel = ET.fromstring(client.get("/changes/feed.rss").text).find("channel")
+    for name in ("title", "link", "description"):
+        assert channel.find(name).text, name
+    for item in channel.findall("item"):
+        assert item.find("guid").get("isPermaLink") == "false"
+        parsedate_to_datetime(item.find("pubDate").text)
