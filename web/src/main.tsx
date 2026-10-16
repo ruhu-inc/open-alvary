@@ -22,6 +22,7 @@ import "@fontsource/libre-caslon-display/latin-400.css";
 import "./style.css";
 import { AcceptableUse, Privacy, Terms } from "./legal";
 import { ErrorsPage } from "./errors";
+import { ConsoleGuide } from "./guide";
 import { Security } from "./security";
 import {
   PageTitle,
@@ -201,6 +202,7 @@ function App() {
       ["/acceptable-use", "Acceptable use"],
       ["/security", "Security"],
       ["/docs/errors", "Errors"],
+      ["/docs/console", "Console guide"],
     ].find(([url]) => url === pathname)?.[1];
     // Record pages and the not-found page name themselves.
     if (title) document.title = `${title} · Open Alvary`;
@@ -259,6 +261,8 @@ function App() {
             <Security />
           ) : pathname === "/docs/errors" ? (
             <ErrorsPage />
+          ) : pathname === "/docs/console" ? (
+            <ConsoleGuide />
           ) : pathname === "/developers" ? (
             <Developers />
           ) : import.meta.env.DEV && pathname === "/dev/reader" ? (
@@ -1050,39 +1054,176 @@ function Releases() {
     </div>
   );
 }
+type Tier = {
+  id: string;
+  name: string;
+  allowance: { requests_per_minute: number; concurrency: number; jurisdictions?: number; watches: number; digest: string; webhook_endpoints: number };
+  listing: { order: number; price: string; action?: string; limits?: string };
+};
+
+const API_ORIGIN = "https://api.open.alvary.ai";
+
+// The plans as the API publishes them (the same list as the console's Plan and limits page).
+function Plans() {
+  const [tiers, setTiers] = useState<Tier[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/v1/tiers", { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((d: { tiers: Tier[] }) => setTiers(d.tiers.filter((t) => t.listing?.action).sort((a, b) => a.listing.order - b.listing.order)))
+      .catch((e) => e.name !== "AbortError" && setFailed(true));
+    return () => controller.abort();
+  }, []);
+  if (failed) return <p>See Plan and limits in the console for the current plans.</p>;
+  if (!tiers) return <p>Loading the plans…</p>;
+  const n = (v: number) => v.toLocaleString("en");
+  return (
+    <div className="plan-table-wrap">
+      <table className="plan-table">
+        <thead>
+          <tr>
+            <th>Plan</th>
+            <th>Price</th>
+            <th>Requests a minute</th>
+            <th>At once</th>
+            <th>Countries</th>
+            <th>Monitors</th>
+            <th>Webhooks</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tiers.map((t) => (
+            <tr key={t.id}>
+              <th scope="row">{t.name}</th>
+              <td>{t.listing.price}</td>
+              <td>{t.listing.limits ?? n(t.allowance.requests_per_minute)}</td>
+              <td>{t.listing.limits ? "" : n(t.allowance.concurrency)}</td>
+              <td>{t.allowance.jurisdictions ? `${t.allowance.jurisdictions} of your choice` : "All"}</td>
+              <td>
+                {n(t.allowance.watches)}, {t.allowance.digest} email
+              </td>
+              <td>{t.allowance.webhook_endpoints ? n(t.allowance.webhook_endpoints) : "None"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function Developers() {
   return (
-    <div className="page">
+    <div className="page developers">
       <PageTitle
         label="BUILD ON THE PUBLIC LAYER"
         title="Legal data. Without the guesswork."
       >
-        Reading this website needs no account. For software and research, take
-        the versioned releases: explicit rights states, provenance and
-        checksums.
+        Search and read the published corpus from your own code and AI tools,
+        through a REST API and an MCP server. Reading this website and
+        downloading the releases need no account.
       </PageTitle>
+
+      <section className="start-steps" aria-labelledby="start">
+        <h2 id="start">Start in three steps</h2>
+        <ol>
+          <li>
+            <b>Sign in to the console.</b> Every new organisation gets the free
+            Starter plan at once, with no card.
+          </li>
+          <li>
+            <b>Create an API key</b>, or connect Claude, ChatGPT, Claude Code or
+            Codex.
+          </li>
+          <li>
+            <b>Make your first request</b>, as below.
+          </li>
+        </ol>
+        <div className="start-actions">
+          <a className="button primary" href="/console">
+            Open the console <ArrowRight size={16} aria-hidden="true" />
+          </a>
+          <Link className="text-link" to="/docs/console">
+            The console, step by step, with pictures <ArrowRight size={16} aria-hidden="true" />
+          </Link>
+        </div>
+      </section>
+
       <div className="two-columns">
         <section>
-          <h2>Download the data</h2>
+          <h2>REST API</h2>
           <p>
-            Each release is a set of JSONL files with a SHA-256 manifest,
-            recording its scope and the rights status of every record. No
-            blanket licence is claimed over linked legal text.
+            Send your key in the Authorization header. Answers are JSON;
+            refusals are problem documents with a code.
           </p>
-          <Link className="text-link" to="/releases">
-            Go to the releases <ArrowUpRight size={16} aria-hidden="true" />
-          </Link>
+          <pre className="dev-code" dir="ltr">{`curl -G ${API_ORIGIN}/api/v1/search \\
+  -d q=land -d jurisdiction=rw \\
+  -H "Authorization: Bearer $OPEN_ALVARY_KEY"`}</pre>
+          <dl className="endpoints">
+            <dt><code>GET /api/v1/search?q=</code></dt>
+            <dd>Search titles and citations. Filter with <code>jurisdiction</code> and <code>access</code>; page with <code>limit</code> and <code>offset</code>.</dd>
+            <dt><code>GET /api/v1/sources</code></dt>
+            <dd>List records, with the same filters.</dd>
+            <dt><code>GET /api/v1/sources/{"{id}"}</code></dt>
+            <dd>One record: metadata, rights status and official links. <code>/versions</code> lists its texts; <code>/api/v1/rights/{"{id}"}</code> explains its rights decision.</dd>
+            <dt><code>GET /api/v1/citations/{"{citation}"}</code></dt>
+            <dd>The records a citation points to.</dd>
+            <dt><code>GET /api/v1/jurisdictions</code>, <code>/coverage</code></dt>
+            <dd>The countries held, and counts for each.</dd>
+            <dt><code>GET /api/v1/changes</code></dt>
+            <dd>What changed, in order (below).</dd>
+          </dl>
+          <p>
+            Every endpoint and field:{" "}
+            <a className="text-link" href={`${API_ORIGIN}/api/v1/openapi.json`}>
+              the OpenAPI description <ArrowUpRight size={16} aria-hidden="true" />
+            </a>
+          </p>
         </section>
         <section>
-          <h2>Machine access</h2>
+          <h2>MCP server</h2>
           <p>
-            A REST API and an MCP server for developers and AI tools are being
-            prepared, for organisations with a subscription or an approved
-            waiver. They are not open yet; this page will explain how to get
-            access when they are.
+            AI tools connect to <code>{API_ORIGIN}/mcp</code>. They sign you in
+            and you approve them for one organisation; no key is needed. Tools
+            that take a header can send a key instead.
           </p>
+          <dl className="endpoints">
+            <dt>Claude</dt>
+            <dd>Settings → Connectors → Add custom connector, and paste the address.</dd>
+            <dt>Claude Code</dt>
+            <dd><code>claude mcp add --transport http open-alvary {API_ORIGIN}/mcp</code>, then <code>/mcp</code> and Authenticate.</dd>
+            <dt>Codex</dt>
+            <dd><code>codex mcp add open-alvary --url {API_ORIGIN}/mcp</code>, then <code>codex mcp login open-alvary</code>.</dd>
+            <dt>ChatGPT and other tools</dt>
+            <dd>The same address, in the tool's settings for MCP connectors.</dd>
+          </dl>
+          <p>
+            Tools: <code>search_catalogue</code>, <code>get_source</code>,{" "}
+            <code>list_changes</code>, <code>get_change</code> and{" "}
+            <code>get_coverage</code>.
+          </p>
+          <Link className="text-link" to="/docs/console#apps">
+            Connecting a tool, with pictures <ArrowRight size={16} aria-hidden="true" />
+          </Link>
         </section>
       </div>
+
+      <section className="info-panel developer-plans">
+        <h2>Plans and limits</h2>
+        <p>
+          Every plan reads the same published corpus. Limits are shared by every
+          key and app in an organisation; with a plan that names countries,
+          others still answer at the Starter rate. Ask for another plan in the
+          console, under Plan and limits.
+        </p>
+        <Plans />
+        <p>
+          Past a limit, requests are refused with <code>429</code> and a{" "}
+          <code>Retry-After</code> header. Every refusal's code is explained on
+          the <Link to="/docs/errors">errors page</Link>.
+        </p>
+      </section>
+
       <section className="info-panel developer-changes">
         <h2>Follow changes</h2>
         <p>
@@ -1117,7 +1258,8 @@ function Developers() {
             can also POST each match to your HTTPS endpoint, signed with
             HMAC-SHA256 over <code>timestamp.body</code> (headers{" "}
             <code>Open-Alvary-Timestamp</code> and{" "}
-            <code>Open-Alvary-Signature</code>), retried for 24 hours.
+            <code>Open-Alvary-Signature</code>), retried for 24 hours.{" "}
+            <Link to="/docs/console#monitor">Setting up a monitor</Link>.
           </dd>
           <dt>What it covers</dt>
           <dd>
@@ -1127,6 +1269,30 @@ function Developers() {
           </dd>
         </dl>
       </section>
+
+      <div className="two-columns">
+        <section>
+          <h2>Download the data</h2>
+          <p>
+            Each release is a set of JSONL files with a SHA-256 manifest,
+            recording its scope and the rights status of every record. No
+            blanket licence is claimed over linked legal text. No account is
+            needed.
+          </p>
+          <Link className="text-link" to="/releases">
+            Go to the releases <ArrowUpRight size={16} aria-hidden="true" />
+          </Link>
+        </section>
+        <section>
+          <h2>Help</h2>
+          <p>
+            The <Link to="/docs/console">console guide</Link> shows every page
+            of the console. Each refusal from the API has a code on the{" "}
+            <Link to="/docs/errors">errors page</Link>. For anything else, write
+            to <a href="mailto:hello@ruhu.ai">hello@ruhu.ai</a>.
+          </p>
+        </section>
+      </div>
       <div className="notice">
         Search covers catalogue metadata and cleared full text only.
       </div>

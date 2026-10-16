@@ -258,6 +258,7 @@ STATIC_PAGES = (
     "/privacy",
     "/security",
     "/docs/errors",
+    "/docs/console",
 )
 
 
