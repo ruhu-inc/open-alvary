@@ -336,7 +336,8 @@ CREATE TRIGGER entitlement_event_append_only BEFORE UPDATE OR DELETE ON {{accoun
     FOR EACH ROW EXECUTE FUNCTION {{policy}}.accounts_append_only();
 
 -- The organisation's access now, computed from the stored state and the period in database time
--- (MAC-04, N13): a late job never delays a refusal.
+-- (MAC-04, N13): a late job never delays a refusal. An organisation holding nothing else has the
+-- free starter tier (D22 revised, 2026-10-15), unless the operator's latest word was a revocation.
 CREATE FUNCTION {{policy}}.accounts_access(organisation text) RETURNS jsonb
 LANGUAGE plpgsql STABLE SET search_path TO 'pg_catalog'
 AS $function$
@@ -344,6 +345,7 @@ DECLARE
     now_at timestamptz := statement_timestamp();
     current_row {{accounts}}.entitlement;
     latest {{accounts}}.entitlement;
+    has_latest boolean;
     tier_row {{accounts}}.tier;
 BEGIN
     SELECT * INTO current_row FROM {{accounts}}.entitlement
@@ -352,15 +354,25 @@ BEGIN
         ORDER BY starts_at DESC LIMIT 1;
     IF FOUND THEN
         SELECT * INTO tier_row FROM {{accounts}}.tier WHERE id = current_row.tier_id;
-        RETURN jsonb_build_object('state', 'active', 'entitlement', current_row.id,
+        RETURN jsonb_build_object('state', 'active', 'entitlement', current_row.id, 'starter', false,
             'tier', jsonb_build_object('id', tier_row.id, 'includes', to_jsonb(tier_row.includes),
                 'allowance', tier_row.allowance),
             'scope', current_row.scope, 'ends_at', current_row.ends_at);
     END IF;
     SELECT * INTO latest FROM {{accounts}}.entitlement
         WHERE organisation_id = organisation AND starts_at <= now_at
-        ORDER BY starts_at DESC LIMIT 1;
-    IF NOT FOUND THEN
+        ORDER BY starts_at DESC, created_at DESC LIMIT 1;
+    has_latest := FOUND;
+    IF NOT has_latest OR latest.state <> 'revoked' THEN
+        SELECT * INTO tier_row FROM {{accounts}}.tier WHERE id = 'starter';
+        IF FOUND THEN
+            RETURN jsonb_build_object('state', 'active', 'entitlement', NULL, 'starter', true,
+                'tier', jsonb_build_object('id', tier_row.id, 'includes', to_jsonb(tier_row.includes),
+                    'allowance', tier_row.allowance),
+                'scope', '{"all": true}'::jsonb, 'ends_at', NULL);
+        END IF;
+    END IF;
+    IF NOT has_latest THEN
         RETURN jsonb_build_object('state', 'none');
     END IF;
     RETURN jsonb_build_object('state',

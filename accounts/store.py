@@ -867,8 +867,10 @@ class Accounts:
             membership = self._membership(conn, person_id, organisation_id, lock=True)
             self._require(membership, "access.end")
             current = self.access(organisation_id, conn)
-            if current["state"] != "active":
-                raise AccountError("entitlement_inactive", 409, "There is no active access to end.")
+            if current["state"] != "active" or not current.get("entitlement"):
+                raise AccountError(
+                    "entitlement_inactive", 409, "There is no granted access to end; starter access stays."
+                )
             self._change_entitlement(
                 conn,
                 current["entitlement"],
@@ -952,7 +954,7 @@ class Accounts:
             if found is None:
                 raise AccountError("not_found", 404, "No active organisation with that ID.")
             current = self.access(organisation_id, conn)
-            if current["state"] == "active":
+            if current["state"] == "active" and current.get("entitlement"):  # starter has nothing to end
                 self._change_entitlement(
                     conn, current["entitlement"], "ended", actor, "Replaced by a new grant", context
                 )
@@ -1038,12 +1040,41 @@ class Accounts:
             )
 
     def revoke_access(self, operator, organisation_id, reason, context=None) -> None:
+        """Stop an organisation's machine access. Starter access has no grant to revoke, so a revoked
+        marker is recorded: the database's access check then gives it nothing until a new grant."""
         with self.engine.begin() as conn:
             current = self.access(organisation_id, conn)
             if current["state"] != "active":
                 raise AccountError("entitlement_inactive", 409, "There is no active access to revoke.")
-            self._change_entitlement(
-                conn, current["entitlement"], "revoked", ("operator", operator), reason, context
+            if current.get("entitlement"):
+                self._change_entitlement(
+                    conn, current["entitlement"], "revoked", ("operator", operator), reason, context
+                )
+                return
+            marker = new_id("ent")
+            conn.execute(
+                text(
+                    f"INSERT INTO {self._t(conn, 'entitlement')} (id, organisation_id, tier_id, source, scope,"
+                    " starts_at, ends_at, state, reason) VALUES (:id, :o, 'starter', 'manual', '{\"all\": true}',"
+                    " statement_timestamp(), statement_timestamp() + interval '1 microsecond', 'revoked', :reason)"
+                ),
+                {"id": marker, "o": organisation_id, "reason": reason},
+            )
+            conn.execute(
+                text(
+                    f"INSERT INTO {self._t(conn, 'entitlement_event')} (entitlement_id, actor_type, actor_ref,"
+                    " to_state, reason) VALUES (:e, 'operator', :r, 'revoked', :reason)"
+                ),
+                {"e": marker, "r": operator, "reason": reason},
+            )
+            self._audit(
+                conn,
+                ("operator", operator),
+                "entitlement.revoked",
+                organisation=organisation_id,
+                target=("entitlement", marker),
+                summary={"reason": reason, "starter": True},
+                context=context,
             )
 
     def open_requests(self) -> list[dict]:
@@ -1679,7 +1710,7 @@ class Accounts:
             self._require(membership, "organisation.delete")
             current = self.access(organisation_id, conn)
             actor = self._actor(conn, person_id)
-            if current["state"] == "active":
+            if current["state"] == "active" and current.get("entitlement"):
                 self._change_entitlement(
                     conn, current["entitlement"], "ended", actor, "Organisation deleted", context
                 )

@@ -14,7 +14,7 @@ revision = "0021"
 down_revision = "0020"
 branch_labels = None
 depends_on = None
-RESOURCE_HASH = "c676718e6fa11339c3ed702679011a5f039b740492201b915f3790e53e8813a3"
+RESOURCE_HASH = "bc77fa85656707f62dd35e4e150fcbbaf8f3f762c97141531fc7c601bcafeae8"
 GUARD_GRANTS = (
     "GRANT USAGE ON SCHEMA {{accounts}} TO {{role_guard}}",
     "GRANT SELECT ON {{accounts}}.api_key, {{accounts}}.client_grant, {{accounts}}.membership, "

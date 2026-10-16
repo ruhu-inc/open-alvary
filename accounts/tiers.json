@@ -1,5 +1,21 @@
 [
   {
+    "id": "starter",
+    "name": "Starter",
+    "description": "Free for every organisation: modest limits for trying the API and MCP and building with them. Ask for more when you need it. Limits are placeholders until tiers are set.",
+    "includes": [
+      "rest",
+      "mcp"
+    ],
+    "allowance": {
+      "requests_per_minute": 60,
+      "burst": 30,
+      "concurrency": 4,
+      "bytes_per_day": 200000000
+    },
+    "published": true
+  },
+  {
     "id": "pilot",
     "name": "Pilot access",
     "description": "Access granted by Open Alvary during the pilot, until published plans replace it. Limits are unmeasured proposals (access-defaults-2) under review.",

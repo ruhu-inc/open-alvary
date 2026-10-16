@@ -4,10 +4,10 @@
  * Console sign-in: when the console asks for a second factor (the standard multi-factor request,
  * acr_values), require one; the person enrols at that moment if they have none.
  *
- * Tools (Claude, ChatGPT, Codex, Claude Code) signing in for the API or MCP resource: require a
- * second factor, since a connection gives standing access to an organisation's corpus access; then
- * send the person to the console's approval page, which names the tool and asks which organisation
- * the connection is for. The answer comes back signed; its grant ID goes into the access token, so
+ * Tools (Claude, ChatGPT, Codex, Claude Code) signing in for the API or MCP resource: send the
+ * person to the console's approval page, which names the tool and asks which organisation the
+ * connection is for. When the page says the person's role there needs a second factor (owners and
+ * admins of organisations with approved or paid access), require one before the token is issued. The answer comes back signed; its grant ID goes into the access token, so
  * disconnecting the app in the console stops every token resting on it. Renewals cannot open a
  * page: they reuse the grant recorded for that tool, and our own check refuses it once revoked.
  *
@@ -61,7 +61,6 @@ exports.onExecutePostLogin = async (event, api) => {
     api.accessToken.setCustomClaim(GRANT, choice.grant);
     return;
   }
-  api.multifactor.enable("any", { allowRememberBrowser: false });
   const token = api.redirect.encodeToken({
     secret: event.secrets.CONSENT_SECRET,
     expiresInSeconds: 600,
@@ -87,6 +86,7 @@ exports.onContinuePostLogin = async (event, api) => {
   const connections = Object.assign({}, (event.user.app_metadata && event.user.app_metadata.oa_connections) || {});
   connections[event.client.client_id] = { org: answer.org, grant: answer.grant };
   api.user.setAppMetadata("oa_connections", connections);
+  if (answer.mfa) api.multifactor.enable("any", { allowRememberBrowser: false });
   api.accessToken.setCustomClaim(ORG, answer.org);
   api.accessToken.setCustomClaim(GRANT, answer.grant);
 };

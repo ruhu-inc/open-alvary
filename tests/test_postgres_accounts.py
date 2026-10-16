@@ -429,3 +429,48 @@ def test_deleting_an_organisation_revokes_everything(accounts):
     assert check_key(accounts, key["secret"])["code"] == "invalid_credentials"
     assert accounts.organisations(owner) == []
     assert datetime.now(UTC) - timedelta(minutes=5) < datetime.now(UTC)
+
+
+STARTER = {
+    "id": "starter",
+    "name": "Starter",
+    "description": "Free",
+    "includes": ["rest", "mcp"],
+    "allowance": {"requests_per_minute": 60, "burst": 30, "concurrency": 4},
+    "published": True,
+}
+
+
+def test_every_organisation_starts_with_free_starter_access(accounts):
+    accounts.set_tiers([TIER, STARTER])
+    owner, organisation = person(accounts)
+    access = accounts.access(organisation)
+    assert access["state"] == "active" and access["starter"] is True and access["tier"]["id"] == "starter"
+    key = accounts.create_key(owner, organisation, kind="personal", name="first")  # no request first
+    assert check_key(accounts, key["secret"])["tier"]["id"] == "starter"
+    with pytest.raises(AccountError) as cannot_end:
+        accounts.end_access(owner, organisation)
+    assert cannot_end.value.code == "entitlement_inactive"
+    # Approved access replaces starter while it lasts, then starter returns.
+    grant(accounts, organisation)
+    assert check_key(accounts, key["secret"])["tier"]["id"] == "pilot"
+    sql(
+        accounts,
+        "UPDATE {entitlement} SET starts_at = statement_timestamp() - interval '2 days',"
+        " ends_at = statement_timestamp() - interval '1 second'",
+    )
+    assert check_key(accounts, key["secret"])["tier"]["id"] == "starter"
+    # The operator's revocation stops starter access too, until a new grant.
+    accounts.revoke_access("op-test", organisation, "Abuse")
+    assert check_key(accounts, key["secret"]) == {"ok": False, "code": "entitlement_lapsed"}
+    assert accounts.access(organisation)["state"] == "revoked"
+    grant(accounts, organisation)
+    assert check_key(accounts, key["secret"])["ok"]
+
+
+def test_an_organisation_with_only_starter_access_can_be_deleted(accounts):
+    accounts.set_tiers([TIER, STARTER])
+    owner, organisation = person(accounts)
+    key = accounts.create_key(owner, organisation, kind="service", name="k")
+    accounts.delete_organisation(owner, organisation)
+    assert check_key(accounts, key["secret"])["code"] == "invalid_credentials"

@@ -316,7 +316,7 @@ function Welcome({ me, onDone }: { me: Me; onDone: () => void }) {
           {firstTime ? (
             <>
               <div className="field">
-                <label htmlFor="welcome-name">Your name</label>
+                <label htmlFor="welcome-name">Full name</label>
                 <input
                   id="welcome-name"
                   type="text"

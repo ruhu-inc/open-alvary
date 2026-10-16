@@ -464,8 +464,15 @@ def create_console_app(
             raise AccountError("reauthentication_required", 401, "Sign in again to confirm it's you.")
 
     def needs_second_factor(person_id: str, organisation_id: str) -> bool:
+        """Owners and admins of an organisation with approved or paid access (D22 revised): not the
+        free starter tier, as at OpenAI and Anthropic."""
         organisation = accounts.organisation(person_id, organisation_id)
-        return organisation["role"] in roles.MANAGERS and organisation["access"]["state"] == "active"
+        access = organisation["access"]
+        return (
+            organisation["role"] in roles.MANAGERS
+            and access["state"] == "active"
+            and not access.get("starter")
+        )
 
     async def body(request: Request) -> dict:
         try:
@@ -864,6 +871,8 @@ def create_console_app(
                 "decision": decision,
                 "org": organisation,
                 "grant": grant,
+                # The provider asks for a second factor after this page when the role needs one.
+                "mfa": bool(organisation and needs_second_factor(person_id, organisation)),
             },
             consent_secret,
         )
