@@ -107,9 +107,33 @@ Restore procedure:
 2. Start a verification stack on that volume (`CORPUS_DB_VOLUME=<restored volume>`), then run
    `python -m rights.recovery restore-grants` if roles changed, and
    `python -m rights.recovery recover --point-in-time --reason "<incident>"` (replays the whole journal).
-3. When satisfied, set `CORPUS_DB_VOLUME` to the restored volume in `deployment/.env`, restart the
+3. Before anything serves from it, start a new change-feed epoch:
+   `python -m changes.admin new-epoch --reason "<incident>"`. Readers holding resume tokens are then
+   told to resynchronise (409 `feed_reset`) instead of silently missing changes lost with the restore.
+4. When satisfied, set `CORPUS_DB_VOLUME` to the restored volume in `deployment/.env`, restart the
    stack, deliver pending denials and open a serving epoch. Keep the old volume until the incident
    is closed.
+
+## Public change log
+
+Every write to the public catalogue records its changes (`changes/record.py`, migration `0023`;
+contract in the specification's changes-contracts.md). With maintenance `DATABASE_URL` set:
+
+- `python -m changes.admin status`: the feed epoch, baseline time, events and highest revision.
+- `python -m changes.admin sweep`: records changes nobody wrote, such as an expired rights record.
+  The deploy's seed step runs it; it should also run daily.
+- `python -m changes.admin purge`: removes whole publication revisions older than 400 days.
+- `python -m changes.admin new-epoch --reason "<why>"`: after any database restore (above), or if
+  the cursor key is lost or exposed.
+
+The cursor key is the `feed-keys` secret (`{"k1": "<base64 32 bytes>"}`), created by
+`deployment/gcp/public_service.sh setup` and passed as `ALVARY_FEED_KEYS`, with
+`ALVARY_FEED_KEY_ID` naming the key that seals new tokens. To rotate: add a secret version holding
+both the old and a new key, deploy with `FEED_KEY_ID=<new id>` (it sets `ALVARY_FEED_KEY_ID`). Keep old keys:
+readers' resume tokens sealed with them stay valid. If a key must go (exposure), remove it and start
+a new epoch, so readers are told to resynchronise rather than refused.
+Without the secret, a persistent deployment keeps the Changes page and the feeds but answers replay
+requests with 503.
 
 ## Serving epochs and restore recovery
 

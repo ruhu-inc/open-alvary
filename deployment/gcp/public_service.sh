@@ -37,6 +37,7 @@ DB_USER="open_alvary"
 # visitor is second from the right. `verify` confirms it before the domain is switched over.
 TRUSTED_PROXIES="${TRUSTED_PROXIES:-2}"
 MAX_INSTANCES="${MAX_INSTANCES:-3}"
+FEED_KEY_ID="${FEED_KEY_ID:-k1}"  # the key in the feed-keys secret that seals new feed tokens
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPOSITORY}/public-service:$(git rev-parse --short HEAD)"
 GC=(gcloud --project "$PROJECT" --quiet)
 SETTINGS=(PUBLIC_REPOSITORY_URL PUBLIC_MAINTAINER PUBLIC_CONTACT_EMAIL METADATA_LICENCE)
@@ -174,8 +175,12 @@ setup() {
     || admission_json deployment/admission.example.json | secret_put admission-config
   "${GC[@]}" secrets describe site-admission-config >/dev/null 2>&1 \
     || admission_json deployment/site-admission.example.json | secret_put site-admission-config
+  # The change feed's cursor key (changes-contracts.md): one shared random key, never printed.
+  "${GC[@]}" secrets describe feed-keys >/dev/null 2>&1 \
+    || python3 -c 'import base64,json,secrets; print(json.dumps({"k1": base64.b64encode(secrets.token_bytes(32)).decode()}))' \
+      | secret_put feed-keys
   local secret
-  for secret in database-password database-url admission-config site-admission-config; do
+  for secret in database-password database-url admission-config site-admission-config feed-keys; do
     grant "${GC[@]}" secrets add-iam-policy-binding "$secret" --member="serviceAccount:$RUNNER_EMAIL" \
       --role=roles/secretmanager.secretAccessor
   done
@@ -197,6 +202,8 @@ app_env() {
 
 deploy() {
   local env context
+  "${GC[@]}" secrets describe feed-keys >/dev/null 2>&1 \
+    || { echo "The change-feed key is missing: run $0 setup first" >&2; exit 1; }
   env="$(app_env)"
   context="$(mktemp -d)"
   trap 'rm -rf "$context"' RETURN
@@ -214,8 +221,8 @@ deploy() {
     --add-cloudsql-instances="$(connection)" --ingress=internal-and-cloud-load-balancing --no-default-url \
     --no-invoker-iam-check --min-instances=1 --max-instances="$MAX_INSTANCES" --cpu=1 --memory=1Gi \
     --concurrency=80 \
-    --set-env-vars="$env##ALVARY_ADMISSION_CONFIG=/secrets/admission/config.json##ALVARY_SITE_ADMISSION_CONFIG=/secrets/site-admission/config.json" \
-    --set-secrets="DATABASE_URL=database-url:latest,/secrets/admission/config.json=admission-config:latest,/secrets/site-admission/config.json=site-admission-config:latest"
+    --set-env-vars="$env##ALVARY_ADMISSION_CONFIG=/secrets/admission/config.json##ALVARY_SITE_ADMISSION_CONFIG=/secrets/site-admission/config.json##ALVARY_FEED_KEY_ID=$FEED_KEY_ID" \
+    --set-secrets="DATABASE_URL=database-url:latest,/secrets/admission/config.json=admission-config:latest,/secrets/site-admission/config.json=site-admission-config:latest,ALVARY_FEED_KEYS=feed-keys:latest"
   echo "Deployed $IMAGE. Next: $0 edge (once), then $0 verify"
 }
 
