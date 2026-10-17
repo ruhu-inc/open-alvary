@@ -25,12 +25,23 @@ TOOLS = [
     {
         "name": "search_catalogue",
         "title": "Search the catalogue",
-        "description": "Search catalogued legal sources by title or citation. Returns metadata, rights status and official links.",
+        "description": "Search catalogued legal sources by words in their title, citation or cleared full text. "
+        "Returns metadata, rights status and official links.",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "minLength": 1, "maxLength": 200},
-                "limit": {"type": "integer", "minimum": 1, "maximum": 25},
+                "query": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "Words to find, such as a title, a citation or a phrase. Case doesn't matter.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 25,
+                    "description": "How many sources to return, 1 to 25.",
+                },
                 "jurisdiction": {
                     "type": "string",
                     "minLength": 2,
@@ -50,7 +61,14 @@ TOOLS = [
         "description": "Get one catalogued source by its ID, including rights status and access mode.",
         "inputSchema": {
             "type": "object",
-            "properties": {"source_id": {"type": "string", "minLength": 1, "maxLength": 160}},
+            "properties": {
+                "source_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "description": "The source's ID, such as ng-foi-act-2011, from a search.",
+                }
+            },
             "required": ["source_id"],
             "additionalProperties": False,
         },
@@ -66,15 +84,49 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "jurisdiction": {"type": "array", "items": {"type": "string"}, "maxItems": 50},
-                "work": {"type": "array", "items": {"type": "string"}, "maxItems": 50},
-                "type": {"type": "array", "items": {"type": "string"}, "maxItems": 9},
-                "class": {"type": "array", "items": {"type": "string"}, "maxItems": 50},
-                "language": {"type": "array", "items": {"type": "string"}, "maxItems": 50},
-                "q": {"type": "string", "maxLength": 200},
-                "resume_token": {"type": "string", "maxLength": 2000},
-                "cursor": {"type": "string", "maxLength": 2000},
-                "limit": {"type": "integer", "minimum": 1, "maximum": 25},
+                "jurisdiction": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 50,
+                    "description": "Jurisdiction IDs, such as ng or rw; a country includes its states.",
+                },
+                "work": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 50,
+                    "description": "Source IDs, to follow particular laws.",
+                },
+                "type": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 9,
+                    "description": "Kinds of change: catalogue_added, metadata_corrected, "
+                    "text_version_published, withdrawal, coverage_changed.",
+                },
+                "class": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 50,
+                    "description": "Document types, such as act or regulation.",
+                },
+                "language": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 50,
+                    "description": "Languages of the affected text, such as en.",
+                },
+                "q": {"type": "string", "maxLength": 200, "description": "Whole words in the title, citation or summary."},
+                "resume_token": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "description": "The resume_token of an earlier answer, for only newer changes.",
+                },
+                "cursor": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "description": "The next_cursor of the previous page, to continue it.",
+                },
+                "limit": {"type": "integer", "minimum": 1, "maximum": 25, "description": "Changes per page, 1 to 25."},
             },
             "additionalProperties": False,
         },
@@ -86,7 +138,14 @@ TOOLS = [
         "description": "One catalogue change by its event_id.",
         "inputSchema": {
             "type": "object",
-            "properties": {"event_id": {"type": "string", "minLength": 36, "maxLength": 36}},
+            "properties": {
+                "event_id": {
+                    "type": "string",
+                    "minLength": 36,
+                    "maxLength": 36,
+                    "description": "The change's event_id, from list_changes.",
+                }
+            },
             "required": ["event_id"],
             "additionalProperties": False,
         },

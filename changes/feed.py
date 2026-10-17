@@ -495,7 +495,7 @@ class Feed:
             "document_class": row["document_class"],
             "language": row["language"],
             "url": f"{self.origin}/sources/{row['work_id']}",
-            "api_url": f"{self.origin}/api/sources/{row['work_id']}",
+            "api_url": api_url(self.origin, row["work_id"]),
         }
 
     def coverage(self) -> dict:
@@ -555,6 +555,15 @@ class _Visibility:
             )
             self.names[jurisdiction_id] = (payload or {}).get("name", jurisdiction_id)
         return self.names[jurisdiction_id]
+
+
+def api_url(origin: str, work_id: str) -> str:
+    """The record in the API. With accounts on (activation B) the anonymous API answers 410, so
+    the link is the keyed one on the API's own domain."""
+    if os.getenv("ALVARY_ACCOUNTS") == "1":
+        api = os.getenv("ALVARY_API_ORIGIN", "https://api.open.alvary.ai").rstrip("/")
+        return f"{api}/api/v1/sources/{work_id}"
+    return f"{origin}/api/sources/{work_id}"
 
 
 def _position(wire):

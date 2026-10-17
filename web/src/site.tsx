@@ -209,7 +209,10 @@ export function SiteHeader({
           <Link
             key={url}
             to={url}
-            aria-current={pathname === url ? "page" : undefined}
+            // The documentation belongs to Developers.
+            aria-current={
+              pathname === url ? "page" : url === "/developers" && pathname.startsWith("/docs") ? "true" : undefined
+            }
           >
             {label}
           </Link>

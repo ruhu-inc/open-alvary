@@ -1,0 +1,450 @@
+{
+  "search": {
+    "path": {},
+    "query": [
+      [
+        "q",
+        "freedom of information"
+      ],
+      [
+        "jurisdiction",
+        "ng"
+      ],
+      [
+        "limit",
+        "5"
+      ]
+    ],
+    "answer": {
+      "total": 1,
+      "items": [
+        {
+          "id": "ng-foi-act-2011",
+          "jurisdiction_id": "ng",
+          "authority_id": "ng-national-assembly",
+          "title": "Freedom of Information Act 2011",
+          "document_type": "act",
+          "canonical_url": "https://www.justice.gov.ng/freedom-of-information-portal/",
+          "url_kind": "landing_page",
+          "citation": "FOI Act 2011",
+          "language": "en",
+          "legal_status": "unknown",
+          "status_evidence": null,
+          "catalogue_note": "The official link leads to the Federal Ministry of Justice's page for the Act.",
+          "summary": "Gives everyone a right of access to records and information held by public institutions in Nigeria.",
+          "year": 2011,
+          "access_mode": "metadata_link_only",
+          "rights_status": "RIGHTS_UNDER_REVIEW",
+          "has_full_text": false
+        }
+      ],
+      "scope": "Catalogue metadata and cleared full text only"
+    }
+  },
+  "list_sources": {
+    "path": {},
+    "query": [
+      [
+        "jurisdiction",
+        "ng"
+      ],
+      [
+        "limit",
+        "2"
+      ]
+    ],
+    "answer": {
+      "total": 4,
+      "items": [
+        {
+          "id": "ng-cbn-act-2007",
+          "jurisdiction_id": "ng",
+          "authority_id": "ng-national-assembly",
+          "title": "Central Bank of Nigeria Act 2007",
+          "document_type": "act",
+          "canonical_url": "https://www.cbn.gov.ng/OUT/CIRCULARS/CSD/2007/CBN%20ACT%202007.PDF",
+          "url_kind": "document",
+          "citation": "CBN Act 2007",
+          "language": "en",
+          "legal_status": "unknown",
+          "status_evidence": null,
+          "catalogue_note": "The official copy is published by the Central Bank of Nigeria. Amendments since 2007 have not yet been checked.",
+          "summary": "Establishes the Central Bank of Nigeria and sets out its objects, powers and governance.",
+          "year": 2007,
+          "access_mode": "metadata_link_only",
+          "rights_status": "RIGHTS_UNDER_REVIEW",
+          "has_full_text": false
+        },
+        {
+          "id": "ng-constitution-1999",
+          "jurisdiction_id": "ng",
+          "authority_id": "ng-federal-government",
+          "title": "Constitution of the Federal Republic of Nigeria 1999",
+          "document_type": "constitution",
+          "canonical_url": "https://www.justice.gov.ng/nigerian-constitution/",
+          "url_kind": "landing_page",
+          "citation": "Constitution of Nigeria 1999",
+          "language": "en",
+          "legal_status": "unknown",
+          "status_evidence": null,
+          "catalogue_note": "Later amendments have not yet been checked, so no consolidated text is offered here. Use the official source for the current text.",
+          "summary": "The supreme law of Nigeria: it sets up the federal government, the states and the courts, and guarantees fundamental rights.",
+          "year": 1999,
+          "access_mode": "metadata_link_only",
+          "rights_status": "RIGHTS_UNDER_REVIEW",
+          "has_full_text": false
+        }
+      ]
+    }
+  },
+  "get_source": {
+    "path": {
+      "source_id": "ng-foi-act-2011"
+    },
+    "query": [],
+    "answer": {
+      "id": "ng-foi-act-2011",
+      "jurisdiction_id": "ng",
+      "authority_id": "ng-national-assembly",
+      "title": "Freedom of Information Act 2011",
+      "document_type": "act",
+      "canonical_url": "https://www.justice.gov.ng/freedom-of-information-portal/",
+      "url_kind": "landing_page",
+      "citation": "FOI Act 2011",
+      "language": "en",
+      "legal_status": "unknown",
+      "status_evidence": null,
+      "catalogue_note": "The official link leads to the Federal Ministry of Justice's page for the Act.",
+      "summary": "Gives everyone a right of access to records and information held by public institutions in Nigeria.",
+      "year": 2011,
+      "access_mode": "metadata_link_only",
+      "rights_status": "RIGHTS_UNDER_REVIEW",
+      "has_full_text": false
+    }
+  },
+  "get_versions": {
+    "path": {
+      "source_id": "ng-foi-act-2011"
+    },
+    "query": [],
+    "answer": {
+      "items": [],
+      "rights": {
+        "id": "rights-ng-foi-act-2011",
+        "source_id": "ng-foi-act-2011",
+        "status": "RIGHTS_UNDER_REVIEW",
+        "rights_holder": null,
+        "licence": null,
+        "licence_url": null,
+        "redistribution_allowed": "unknown",
+        "commercial_reuse_allowed": "unknown",
+        "derivatives_allowed": "unknown",
+        "attribution_required": null,
+        "attribution_text": null,
+        "database_rights_notes": null,
+        "privacy_status": "pending",
+        "reviewer": null,
+        "reviewed_at": null,
+        "expires_at": null,
+        "evidence": [],
+        "legal_note": "No redistribution permission verified. Official hosting is not a licence. Named legal reviewer and source-specific evidence required.",
+        "conditions": [],
+        "conditions_satisfied": false,
+        "approved_content_hashes": [],
+        "metadata_public": true,
+        "metadata_basis": "Independently authored bibliographic catalogue entry with an official-source link; no source text, headnotes or compilation copied."
+      },
+      "structure": [],
+      "notice": "No version has passed both rights and content review."
+    }
+  },
+  "get_rights": {
+    "path": {
+      "source_id": "ng-foi-act-2011"
+    },
+    "query": [],
+    "answer": {
+      "record": {
+        "id": "rights-ng-foi-act-2011",
+        "source_id": "ng-foi-act-2011",
+        "status": "RIGHTS_UNDER_REVIEW",
+        "rights_holder": null,
+        "licence": null,
+        "licence_url": null,
+        "redistribution_allowed": "unknown",
+        "commercial_reuse_allowed": "unknown",
+        "derivatives_allowed": "unknown",
+        "attribution_required": null,
+        "attribution_text": null,
+        "database_rights_notes": null,
+        "privacy_status": "pending",
+        "reviewer": null,
+        "reviewed_at": null,
+        "expires_at": null,
+        "evidence": [],
+        "legal_note": "No redistribution permission verified. Official hosting is not a licence. Named legal reviewer and source-specific evidence required.",
+        "conditions": [],
+        "conditions_satisfied": false,
+        "approved_content_hashes": [],
+        "metadata_public": true,
+        "metadata_basis": "Independently authored bibliographic catalogue entry with an official-source link; no source text, headnotes or compilation copied."
+      },
+      "decision": {
+        "metadata": true,
+        "full_text": false,
+        "reasons": [
+          "Full-text redistribution is not approved",
+          "Redistribution permission is missing",
+          "Commercial reuse and derivatives require explicit permission",
+          "Rights evidence/reviewer/licence record is incomplete",
+          "Privacy review is incomplete",
+          "Attribution obligations are unresolved",
+          "No matching version"
+        ]
+      }
+    }
+  },
+  "resolve_citation": {
+    "path": {
+      "citation": "FOI Act 2011"
+    },
+    "query": [],
+    "answer": {
+      "status": "resolved",
+      "matches": [
+        {
+          "id": "ng-foi-act-2011",
+          "jurisdiction_id": "ng",
+          "authority_id": "ng-national-assembly",
+          "title": "Freedom of Information Act 2011",
+          "document_type": "act",
+          "canonical_url": "https://www.justice.gov.ng/freedom-of-information-portal/",
+          "url_kind": "landing_page",
+          "citation": "FOI Act 2011",
+          "language": "en",
+          "legal_status": "unknown",
+          "status_evidence": null,
+          "catalogue_note": "The official link leads to the Federal Ministry of Justice's page for the Act.",
+          "summary": "Gives everyone a right of access to records and information held by public institutions in Nigeria.",
+          "year": 2011,
+          "access_mode": "metadata_link_only",
+          "rights_status": "RIGHTS_UNDER_REVIEW",
+          "has_full_text": false
+        }
+      ]
+    }
+  },
+  "list_jurisdictions": {
+    "path": {},
+    "query": [],
+    "answer": [
+      {
+        "id": "ng",
+        "name": "Nigeria",
+        "country_code": "NG",
+        "parent_id": null,
+        "legal_systems": [
+          "common law",
+          "customary law",
+          "Islamic law"
+        ],
+        "languages": [
+          "en"
+        ]
+      }
+    ]
+  },
+  "get_coverage": {
+    "path": {},
+    "query": [],
+    "answer": {
+      "catalogued_sources": 4,
+      "open_full_text_sources": 0,
+      "metadata_only_sources": 4,
+      "published_versions": 0,
+      "jurisdictions": {
+        "ng": 4
+      },
+      "notice": "Catalogue coverage only; not a claim of complete or current law."
+    }
+  },
+  "list_releases": {
+    "path": {},
+    "query": [],
+    "answer": [
+      {
+        "coverage": {
+          "catalogued_sources": 4,
+          "jurisdictions": {
+            "ng": 4
+          },
+          "metadata_only_sources": 4,
+          "notice": "Catalogue coverage only; not a claim of complete or current law.",
+          "open_full_text_sources": 0,
+          "published_versions": 0
+        },
+        "data_licence": "Per-record; no blanket legal-text licence",
+        "files": {
+          "README.md": {
+            "sha256": "d65196bf6149a0853b38079e760b76ad843a1a666b05f8daefa86d19ce17f32b"
+          },
+          "amendments.jsonl": {
+            "records": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        "jurisdiction": "ng",
+        "mode": "metadata",
+        "release_id": "2026-10-05",
+        "schema_version": "0.1.0",
+        "download_base": "/downloads/2026-10-05/ng/metadata"
+      },
+      {
+        "coverage": {
+          "catalogued_sources": 4,
+          "jurisdictions": {
+            "ng": 4
+          },
+          "metadata_only_sources": 4,
+          "notice": "Catalogue coverage only; not a claim of complete or current law.",
+          "open_full_text_sources": 0,
+          "published_versions": 0
+        },
+        "data_licence": "Per-record; no blanket legal-text licence",
+        "files": {
+          "README.md": {
+            "sha256": "4e1b3f045af442502ab73ae65ddfd458713e7a0a4e8138a66247ffaa77fc6e6a"
+          },
+          "amendments.jsonl": {
+            "records": 0,
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        },
+        "jurisdiction": "ng",
+        "mode": "corpus",
+        "release_id": "2026-10-05",
+        "schema_version": "0.1.0",
+        "download_base": "/downloads/2026-10-05/ng/corpus"
+      }
+    ]
+  },
+  "list_plans": {
+    "path": {},
+    "query": [],
+    "answer": {
+      "tiers": [
+        {
+          "id": "starter",
+          "name": "Starter",
+          "description": "For trying the API and MCP and building with them.",
+          "includes": [
+            "rest",
+            "mcp"
+          ],
+          "allowance": {
+            "requests_per_minute": 60,
+            "burst": 30,
+            "concurrency": 4,
+            "bytes_per_day": 200000000,
+            "watches": 3,
+            "digest": "weekly",
+            "shared_watches": false,
+            "webhook_endpoints": 0
+          },
+          "published": true,
+          "listing": {
+            "order": 1,
+            "for": "Everyone, automatically",
+            "price": "Free",
+            "action": "included",
+            "note": "No card needed"
+          }
+        },
+        {
+          "id": "developer",
+          "name": "Developer",
+          "description": "For individual developers and small products in production.",
+          "includes": [
+            "rest",
+            "mcp"
+          ],
+          "allowance": {
+            "requests_per_minute": 300,
+            "burst": 150,
+            "concurrency": 10,
+            "bytes_per_day": 2000000000,
+            "jurisdictions": 2,
+            "watches": 20,
+            "digest": "daily",
+            "shared_watches": false,
+            "webhook_endpoints": 1
+          },
+          "published": true,
+          "listing": {
+            "order": 2,
+            "for": "Individuals and small products",
+            "price": "Coming soon",
+            "action": "upgrade",
+            "note": "Monthly subscription"
+          }
+        }
+      ]
+    }
+  },
+  "get_quota_policy": {
+    "path": {},
+    "query": [],
+    "answer": {
+      "enforcement": "organisation",
+      "algorithm": "token_bucket",
+      "grouping": "organisation",
+      "note": "Each organisation's access tier sets its requests a minute, burst and concurrent requests (see /tiers), shared by every key and app of the organisation across REST and MCP. One key or app may use at most half the organisation's concurrent requests. A refused request answers 429 with Retry-After."
+    }
+  },
+  "list_changes": {
+    "path": {},
+    "query": [
+      [
+        "jurisdiction",
+        "ng"
+      ],
+      [
+        "limit",
+        "10"
+      ]
+    ]
+  },
+  "list_recent_changes": {
+    "path": {},
+    "query": [
+      [
+        "jurisdiction",
+        "ng"
+      ]
+    ]
+  },
+  "get_atom_feed": {
+    "path": {},
+    "query": [
+      [
+        "jurisdiction",
+        "ng"
+      ]
+    ]
+  },
+  "get_rss_feed": {
+    "path": {},
+    "query": [
+      [
+        "jurisdiction",
+        "ng"
+      ]
+    ]
+  },
+  "mcp:search_catalogue": {
+    "arguments": {
+      "query": "freedom of information",
+      "limit": 3
+    }
+  }
+}

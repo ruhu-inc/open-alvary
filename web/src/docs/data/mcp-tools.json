@@ -1,0 +1,176 @@
+[
+  {
+    "name": "search_catalogue",
+    "title": "Search the catalogue",
+    "description": "Search catalogued legal sources by words in their title, citation or cleared full text. Returns metadata, rights status and official links.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Words to find, such as a title, a citation or a phrase. Case doesn't matter."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 25,
+          "description": "How many sources to return, 1 to 25."
+        },
+        "jurisdiction": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40,
+          "description": "One jurisdiction to search, such as rw (Rwanda) or ng (Nigeria). Without it, the search covers every jurisdiction available to you."
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "get_source",
+    "title": "Get one source",
+    "description": "Get one catalogued source by its ID, including rights status and access mode.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "The source's ID, such as ng-foi-act-2011, from a search."
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "list_changes",
+    "title": "List catalogue changes",
+    "description": "Changes to the catalogue in commit order: records added, corrected or withdrawn, and text published. Filter by jurisdiction, work, type, document class, language or keyword. Pass the returned resume_token next time to get only newer changes. Changes to what Open Alvary holds, not every change in a country's law.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "jurisdiction": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "description": "Jurisdiction IDs, such as ng or rw; a country includes its states."
+        },
+        "work": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "description": "Source IDs, to follow particular laws."
+        },
+        "type": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 9,
+          "description": "Kinds of change: catalogue_added, metadata_corrected, text_version_published, withdrawal, coverage_changed."
+        },
+        "class": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "description": "Document types, such as act or regulation."
+        },
+        "language": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 50,
+          "description": "Languages of the affected text, such as en."
+        },
+        "q": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Whole words in the title, citation or summary."
+        },
+        "resume_token": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "The resume_token of an earlier answer, for only newer changes."
+        },
+        "cursor": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "The next_cursor of the previous page, to continue it."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 25,
+          "description": "Changes per page, 1 to 25."
+        }
+      },
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "get_change",
+    "title": "Get one change",
+    "description": "One catalogue change by its event_id.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "event_id": {
+          "type": "string",
+          "minLength": 36,
+          "maxLength": 36,
+          "description": "The change's event_id, from list_changes."
+        }
+      },
+      "required": [
+        "event_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "get_coverage",
+    "title": "Catalogue coverage",
+    "description": "Counts of catalogued sources and of sources with openly redistributable full text.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  }
+]
