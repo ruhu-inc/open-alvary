@@ -121,3 +121,13 @@ def test_the_sitemap_lists_the_documentation(catalogue, store, tmp_path):
     store.save(catalogue)
     sitemap = TestClient(create_service(store, tmp_path, frontend=tmp_path)).get("/sitemap.xml").text
     assert "/docs/quickstart</loc>" in sitemap
+
+
+def test_pictures_and_markdown_are_served_as_what_they_are(store, tmp_path):
+    (tmp_path / "guide").mkdir()
+    (tmp_path / "guide" / "x.webp").write_bytes(b"RIFF....WEBPVP8 ")
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "x.md").write_text("# X\n")
+    client = TestClient(create_service(store, tmp_path, frontend=tmp_path))
+    assert client.get("/guide/x.webp").headers["content-type"] == "image/webp"
+    assert client.get("/docs/x.md").headers["content-type"].startswith("text/markdown")
