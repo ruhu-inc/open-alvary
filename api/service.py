@@ -20,6 +20,7 @@ configured too (``ALVARY_SITE_ADMISSION_CONFIG``), or the service refuses to sta
 """
 
 import json
+import mimetypes
 import os
 from contextlib import contextmanager
 from html import escape
@@ -312,6 +313,12 @@ def close_anonymous(app, api_origin: str) -> None:
 def _origin(request: Request) -> str:
     domain = os.getenv("PUBLIC_DOMAIN")
     return f"https://{domain}" if domain else str(request.base_url).rstrip("/")
+
+
+# The slim image's MIME table lacks these: without them, pictures opened on their own download
+# instead of showing, and Markdown would not be text.
+mimetypes.add_type("image/webp", ".webp")
+mimetypes.add_type("text/markdown", ".md")
 
 
 class WebsiteFiles(StaticFiles):
