@@ -6,7 +6,7 @@ import React, { createContext, useContext, useEffect, useMemo, useRef, useState 
 import { ArrowLeft, ArrowRight, Check, ChevronDown, Copy, FileText, Menu, Search, X } from "lucide-react";
 import { tokens } from "./highlight";
 import { SIZES } from "./images";
-import { type Block, type Inline, inlineText, parse, sections, TAB_LANGUAGES } from "./markdown";
+import { type Block, type Inline, inlineText, parse, parseInline, sections, TAB_LANGUAGES } from "./markdown";
 import { buildPages, type DocPage, docPath, type NavSection, type Plan, readingOrder } from "./pages";
 import type { Examples, Spec, Tool } from "./reference";
 import spec from "./data/openapi.json";
@@ -562,7 +562,11 @@ export default function DocsSite({ path }: { path: string }) {
                 </div>
               </div>
               <h1>{page.title}</h1>
-              {page.description ? <p className="docs-lede">{page.description}</p> : null}
+              {page.description ? (
+                <p className="docs-lede">
+                  <Inlines inline={parseInline(page.description)} />
+                </p>
+              ) : null}
               <Blocks blocks={blocks} />
               <div className="docs-pager" role="navigation" aria-label="Previous and next">
                 {previous ? (
