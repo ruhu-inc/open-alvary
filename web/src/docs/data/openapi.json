@@ -1,0 +1,3169 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Open Alvary API",
+    "description": "Read-only access to the published Open Alvary corpus for organisations with access. Send an API key or access token as `Authorization: Bearer <credential>`.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Open Alvary",
+      "email": "hello@ruhu.ai",
+      "url": "https://open.alvary.ai/docs"
+    }
+  },
+  "paths": {
+    "/changes": {
+      "get": {
+        "summary": "List changes",
+        "operationId": "list_changes",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter, filter, cursor or token is not valid (`invalid_input`, `invalid_filter`, `unsupported_filter`, `invalid_cursor`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The cursor expired, or the feed was reset (`stale_cursor`, `feed_reset`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Changes after this position are no longer kept (`replay_window_expired`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "Changes in the order they were made, oldest first: records added, corrected or withdrawn, texts published and coverage changes. Keep the `resume_token` and send it next time for only newer changes. Send at most one of `cursor`, `resume_token` and `start`. The same route answers without a key at https://open.alvary.ai/api/changes.",
+        "tags": [
+          "Changes"
+        ],
+        "parameters": [
+          {
+            "name": "jurisdiction",
+            "in": "query",
+            "required": false,
+            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "work",
+            "in": "query",
+            "required": false,
+            "description": "Record IDs, such as `ng-foi-act-2011`. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `withdrawal`, `coverage_changed`.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "class",
+            "in": "query",
+            "required": false,
+            "description": "Document types, such as `act` or `regulation`. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "description": "Languages of the affected text, such as `en`. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "A keyword: whole words in the title, citation or summary, ignoring case. Up to 200 characters.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Changes per page, 1 to 100. Default 25.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "The `next_cursor` of the previous page, to continue the same window (15 minutes).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "resume_token",
+            "in": "query",
+            "required": false,
+            "description": "The `resume_token` of an earlier answer: changes after it, in a new window.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "start",
+            "in": "query",
+            "required": false,
+            "description": "`now`: no changes, only a resume token at the latest position.",
+            "schema": {
+              "enum": [
+                "now"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "/changes/recent": {
+      "get": {
+        "summary": "List recent changes",
+        "description": "The latest changes of the last 90 days, newest first (up to 50), with the same filters. For showing what's new, not for keeping up: use List changes for that.",
+        "operationId": "list_recent_changes",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecentChanges"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter, filter, cursor or token is not valid (`invalid_input`, `invalid_filter`, `unsupported_filter`, `invalid_cursor`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The cursor expired, or the feed was reset (`stale_cursor`, `feed_reset`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Changes after this position are no longer kept (`replay_window_expired`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Changes"
+        ],
+        "parameters": [
+          {
+            "name": "jurisdiction",
+            "in": "query",
+            "required": false,
+            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "work",
+            "in": "query",
+            "required": false,
+            "description": "Record IDs, such as `ng-foi-act-2011`. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `withdrawal`, `coverage_changed`.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "class",
+            "in": "query",
+            "required": false,
+            "description": "Document types, such as `act` or `regulation`. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "description": "Languages of the affected text, such as `en`. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "A keyword: whole words in the title, citation or summary, ignoring case. Up to 200 characters.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/changes/feed.atom": {
+      "get": {
+        "summary": "Atom feed of changes",
+        "operationId": "get_atom_feed",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/atom+xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter, filter, cursor or token is not valid (`invalid_input`, `invalid_filter`, `unsupported_filter`, `invalid_cursor`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The cursor expired, or the feed was reset (`stale_cursor`, `feed_reset`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Changes after this position are no longer kept (`replay_window_expired`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "The latest changes of the last 90 days as an Atom feed, newest first, with the same filters. Public at https://open.alvary.ai/api/changes/feed.atom.",
+        "tags": [
+          "Changes"
+        ],
+        "parameters": [
+          {
+            "name": "jurisdiction",
+            "in": "query",
+            "required": false,
+            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "work",
+            "in": "query",
+            "required": false,
+            "description": "Record IDs, such as `ng-foi-act-2011`. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `withdrawal`, `coverage_changed`.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "class",
+            "in": "query",
+            "required": false,
+            "description": "Document types, such as `act` or `regulation`. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "description": "Languages of the affected text, such as `en`. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "A keyword: whole words in the title, citation or summary, ignoring case. Up to 200 characters.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/changes/feed.rss": {
+      "get": {
+        "summary": "RSS feed of changes",
+        "operationId": "get_rss_feed",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/rss+xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter, filter, cursor or token is not valid (`invalid_input`, `invalid_filter`, `unsupported_filter`, `invalid_cursor`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The cursor expired, or the feed was reset (`stale_cursor`, `feed_reset`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Changes after this position are no longer kept (`replay_window_expired`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "The same as the Atom feed, as RSS 2.0.",
+        "tags": [
+          "Changes"
+        ],
+        "parameters": [
+          {
+            "name": "jurisdiction",
+            "in": "query",
+            "required": false,
+            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "work",
+            "in": "query",
+            "required": false,
+            "description": "Record IDs, such as `ng-foi-act-2011`. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `withdrawal`, `coverage_changed`.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "class",
+            "in": "query",
+            "required": false,
+            "description": "Document types, such as `act` or `regulation`. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "description": "Languages of the affected text, such as `en`. Up to 50.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "style": "form",
+            "explode": true
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "description": "A keyword: whole words in the title, citation or summary, ignoring case. Up to 200 characters.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/changes/{event_id}": {
+      "get": {
+        "summary": "Get a change",
+        "operationId": "get_change",
+        "parameters": [
+          {
+            "name": "event_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Event Id"
+            },
+            "description": "The change's `event_id`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeEvent"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such record, or it is not public (`unavailable`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "One change, at its latest revision.",
+        "tags": [
+          "Changes"
+        ]
+      }
+    },
+    "/change-coverage": {
+      "get": {
+        "summary": "Get change coverage",
+        "operationId": "get_change_coverage",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeCoverage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "When recording changes began, how far back they can be replayed, and what is held for each jurisdiction. Changes cover what Open Alvary holds, not every change in a country's law.",
+        "tags": [
+          "Changes"
+        ]
+      }
+    },
+    "/quota-policy": {
+      "get": {
+        "summary": "Get the quota policy",
+        "operationId": "get_quota_policy",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotaPolicy"
+                }
+              }
+            }
+          }
+        },
+        "description": "How limits are counted. Needs no key.",
+        "tags": [
+          "Plans"
+        ],
+        "security": []
+      }
+    },
+    "/tiers": {
+      "get": {
+        "summary": "List plans",
+        "operationId": "list_plans",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlanCatalogue"
+                }
+              }
+            }
+          }
+        },
+        "description": "The plans and their limits. Needs no key.",
+        "tags": [
+          "Plans"
+        ],
+        "security": []
+      }
+    },
+    "/jurisdictions": {
+      "get": {
+        "summary": "List jurisdictions",
+        "operationId": "list_jurisdictions",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JurisdictionView"
+                  },
+                  "type": "array",
+                  "title": "Response Jurisdictions Jurisdictions Get"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "The jurisdictions the catalogue holds: countries and their states or regions, with their legal systems and languages.",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/sources": {
+      "get": {
+        "summary": "List records",
+        "operationId": "list_sources",
+        "parameters": [
+          {
+            "name": "jurisdiction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Jurisdiction"
+            },
+            "description": "One jurisdiction ID, such as `ng` or `rw`."
+          },
+          {
+            "name": "access",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "open",
+                "metadata"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Access"
+            },
+            "description": "`all` (default), `open` (records with cleared full text) or `metadata` (records without)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": "Records per page, 1 to 100. Default 50."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "How many records to skip: 0 for the first page, then the previous offset plus limit."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The answer would be larger than one response may be (`result_too_large`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "Catalogued records a page at a time, with the same filters as search. Without `jurisdiction`, the list covers your plan's countries.",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/sources/{source_id}": {
+      "get": {
+        "summary": "Get a record",
+        "operationId": "get_source",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            },
+            "description": "The record's ID, such as `ng-foi-act-2011`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such record, or it is not public (`unavailable`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "One record: its title, citation, type, legal status, official link and rights status.",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/sources/{source_id}/versions": {
+      "get": {
+        "summary": "Get a record's texts",
+        "operationId": "get_versions",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            },
+            "description": "The record's ID."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such record, or it is not public (`unavailable`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The answer would be larger than one response may be (`result_too_large`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "The record's text versions cleared for reuse, each with its full text; the parts, chapters and sections located in that text; and its rights record. A record whose text isn't cleared answers no versions and a notice saying why.",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/search": {
+      "get": {
+        "summary": "Search the catalogue",
+        "operationId": "search",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "title": "Q"
+            },
+            "description": "Words to find, 1 to 200 characters. Case and spacing don't matter."
+          },
+          {
+            "name": "jurisdiction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Jurisdiction"
+            },
+            "description": "One jurisdiction ID, such as `ng` or `rw`. A country outside your plan answers at the Starter rate."
+          },
+          {
+            "name": "access",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "all",
+                "open",
+                "metadata"
+              ],
+              "type": "string",
+              "default": "all",
+              "title": "Access"
+            },
+            "description": "`all` (default), `open` (records with cleared full text) or `metadata` (records without)."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            },
+            "description": "Records per page, 1 to 100. Default 25."
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": "How many records to skip: 0 for the first page, then the previous offset plus limit."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The answer would be larger than one response may be (`result_too_large`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "Records whose title or citation contains the words, or whose cleared full text does, a page at a time. Without `jurisdiction`, a search covers your plan's countries.",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/citations/{citation}": {
+      "get": {
+        "summary": "Resolve a citation",
+        "operationId": "resolve_citation",
+        "parameters": [
+          {
+            "name": "citation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citation"
+            },
+            "description": "The citation, such as `Act No. 4 of 2011`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CitationView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "The records a citation refers to. Case and spacing don't matter; encode the citation for a URL (spaces as `%20`, `/` stays as it is).",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/coverage": {
+      "get": {
+        "summary": "Get coverage",
+        "operationId": "get_coverage",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "How many records the catalogue holds, how many have cleared full text, and how many in each jurisdiction.",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/rights/{source_id}": {
+      "get": {
+        "summary": "Get a record's rights",
+        "operationId": "get_rights",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            },
+            "description": "The record's ID."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RightsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such record, or it is not public (`unavailable`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "The rights record behind a record (licence, permissions, evidence, review) and the decision taken from it: whether the catalogue record and the text may be shown, and why.",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/releases": {
+      "get": {
+        "summary": "List data releases",
+        "operationId": "list_releases",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Release"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "The versioned data releases still available: their scope, files and checksums. Download a file from `download_base` + `/` + its name; no key is needed for downloads.",
+        "tags": [
+          "Releases"
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CitationView": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "resolved",
+              "ambiguous",
+              "unresolved"
+            ],
+            "title": "Status",
+            "description": "`resolved` (one record), `ambiguous` (several) or `unresolved` (none)."
+          },
+          "matches": {
+            "items": {
+              "$ref": "#/components/schemas/SourceView"
+            },
+            "type": "array",
+            "title": "Matches",
+            "description": "The records the citation refers to."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "matches"
+        ],
+        "title": "CitationView"
+      },
+      "CoverageView": {
+        "properties": {
+          "catalogued_sources": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Catalogued Sources",
+            "description": "Records in the catalogue."
+          },
+          "open_full_text_sources": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Open Full Text Sources",
+            "description": "Records with a text cleared for reuse."
+          },
+          "metadata_only_sources": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Metadata Only Sources",
+            "description": "Records with only the record and the official link."
+          },
+          "published_versions": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Published Versions",
+            "description": "Text versions published."
+          },
+          "jurisdictions": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Jurisdictions",
+            "description": "Records per jurisdiction, as {ID: count}."
+          },
+          "notice": {
+            "type": "string",
+            "title": "Notice",
+            "description": "What the counts cover."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "catalogued_sources",
+          "open_full_text_sources",
+          "metadata_only_sources",
+          "published_versions",
+          "jurisdictions",
+          "notice"
+        ],
+        "title": "CoverageView"
+      },
+      "DecisionView": {
+        "properties": {
+          "metadata": {
+            "type": "boolean",
+            "title": "Metadata",
+            "description": "Whether the catalogue record may be shown."
+          },
+          "full_text": {
+            "type": "boolean",
+            "title": "Full Text",
+            "description": "Whether a text may be served."
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons",
+            "description": "Why not, in sentences, when either is false."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "metadata",
+          "full_text",
+          "reasons"
+        ],
+        "title": "DecisionView"
+      },
+      "JurisdictionView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Id",
+            "description": "The jurisdiction's ID, such as `ng`."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name",
+            "description": "Its name."
+          },
+          "country_code": {
+            "type": "string",
+            "pattern": "^[A-Z]{2}$",
+            "title": "Country Code",
+            "description": "Its ISO country code, such as `NG`."
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id",
+            "description": "The country a state or region belongs to."
+          },
+          "legal_systems": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Legal Systems",
+            "default": [],
+            "description": "Its legal systems."
+          },
+          "languages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Languages",
+            "default": [],
+            "description": "Its official languages."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "country_code"
+        ],
+        "title": "JurisdictionView"
+      },
+      "NodeViewRecord": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Id",
+            "description": "The part's ID."
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The record."
+          },
+          "version_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Version Id",
+            "description": "The text version it belongs to."
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id",
+            "description": "The part it sits in, if any."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "document",
+              "part",
+              "chapter",
+              "section",
+              "subsection",
+              "paragraph",
+              "schedule"
+            ],
+            "title": "Kind",
+            "description": "`document`, `part`, `chapter`, `section`, `subsection`, `paragraph` or `schedule`."
+          },
+          "locator": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Locator",
+            "description": "Its label, such as `Section 3`."
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Order",
+            "description": "Its position in the document."
+          },
+          "start_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Byte",
+            "description": "Where it starts: a byte offset into `canonical_text` in UTF-8."
+          },
+          "end_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End Byte",
+            "description": "Where it ends: a byte offset into `canonical_text` in UTF-8."
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page",
+            "description": "The page of the official file it starts on, when known."
+          },
+          "source_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Source Hash",
+            "description": "The `content_hash` of the text the offsets refer to."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "source_id",
+          "version_id",
+          "kind",
+          "locator",
+          "order",
+          "start_byte",
+          "end_byte",
+          "source_hash"
+        ],
+        "title": "NodeViewRecord"
+      },
+      "Permission": {
+        "type": "string",
+        "enum": [
+          "yes",
+          "no",
+          "conditional",
+          "unknown"
+        ],
+        "title": "Permission"
+      },
+      "RightsStatus": {
+        "type": "string",
+        "enum": [
+          "OPEN",
+          "OPEN_WITH_CONDITIONS",
+          "LINK_ONLY",
+          "RESTRICTED",
+          "RIGHTS_UNDER_REVIEW"
+        ],
+        "title": "RightsStatus"
+      },
+      "RightsView": {
+        "properties": {
+          "record": {
+            "$ref": "#/components/schemas/RightsViewRecord",
+            "description": "The rights record."
+          },
+          "decision": {
+            "$ref": "#/components/schemas/DecisionView",
+            "description": "What it allows here."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "record",
+          "decision"
+        ],
+        "title": "RightsView"
+      },
+      "RightsViewRecord": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Id",
+            "description": "The rights record's ID."
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The record it is for."
+          },
+          "status": {
+            "$ref": "#/components/schemas/RightsStatus",
+            "default": "RIGHTS_UNDER_REVIEW",
+            "description": "The decision: `OPEN`, `OPEN_WITH_CONDITIONS`, `LINK_ONLY`, `RESTRICTED` or `RIGHTS_UNDER_REVIEW`."
+          },
+          "rights_holder": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rights Holder",
+            "description": "Who holds the rights, when known."
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence",
+            "description": "The licence, when there is one."
+          },
+          "licence_url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence Url",
+            "description": "The licence's text."
+          },
+          "redistribution_allowed": {
+            "$ref": "#/components/schemas/Permission",
+            "default": "unknown",
+            "description": "Whether the text may be redistributed: `yes`, `no`, `conditional` or `unknown`."
+          },
+          "commercial_reuse_allowed": {
+            "$ref": "#/components/schemas/Permission",
+            "default": "unknown",
+            "description": "Whether it may be reused commercially: `yes`, `no`, `conditional` or `unknown`."
+          },
+          "derivatives_allowed": {
+            "$ref": "#/components/schemas/Permission",
+            "default": "unknown",
+            "description": "Whether it may be adapted: `yes`, `no`, `conditional` or `unknown`."
+          },
+          "attribution_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Required",
+            "description": "Whether reuse must credit the source."
+          },
+          "attribution_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Text",
+            "description": "The credit to give, when one is required."
+          },
+          "database_rights_notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database Rights Notes",
+            "description": "Notes on database rights, when relevant."
+          },
+          "privacy_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "cleared",
+              "redacted",
+              "blocked"
+            ],
+            "title": "Privacy Status",
+            "default": "pending",
+            "description": "Whether personal data was checked: `pending`, `cleared`, `redacted` or `blocked`."
+          },
+          "reviewer": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer",
+            "description": "Who reviewed the rights."
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At",
+            "description": "When."
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At",
+            "description": "When the decision must be reviewed again, if it lapses."
+          },
+          "evidence": {
+            "items": {
+              "type": "string",
+              "maxLength": 2083,
+              "minLength": 1,
+              "format": "uri"
+            },
+            "type": "array",
+            "title": "Evidence",
+            "default": [],
+            "description": "Links to the evidence for the decision."
+          },
+          "legal_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Legal Note",
+            "description": "A note on the decision."
+          },
+          "conditions": {
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "type": "array",
+            "title": "Conditions",
+            "default": [],
+            "description": "Conditions of reuse."
+          },
+          "conditions_satisfied": {
+            "type": "boolean",
+            "title": "Conditions Satisfied",
+            "default": false,
+            "description": "Whether the conditions are met here."
+          },
+          "approved_content_hashes": {
+            "items": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "type": "array",
+            "title": "Approved Content Hashes",
+            "default": [],
+            "description": "The `content_hash` of each text the decision covers."
+          },
+          "metadata_public": {
+            "type": "boolean",
+            "title": "Metadata Public",
+            "default": false,
+            "description": "Whether the catalogue record may be shown."
+          },
+          "metadata_basis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Basis",
+            "description": "Why the catalogue record may be shown."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "source_id"
+        ],
+        "title": "RightsViewRecord"
+      },
+      "SearchPage": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total",
+            "description": "Records matching, across all pages."
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SourceView"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "This page's records."
+          },
+          "scope": {
+            "type": "string",
+            "const": "Catalogue metadata and cleared full text only",
+            "title": "Scope",
+            "default": "Catalogue metadata and cleared full text only",
+            "description": "What a search covers: catalogue metadata and cleared full text only."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "total",
+          "items"
+        ],
+        "title": "SearchPage"
+      },
+      "SourcePage": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total",
+            "description": "Records matching, across all pages."
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SourceView"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "This page's records."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "total",
+          "items"
+        ],
+        "title": "SourcePage"
+      },
+      "SourceView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Id",
+            "description": "The record's ID, such as `ng-foi-act-2011`. It doesn't change."
+          },
+          "jurisdiction_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Jurisdiction Id",
+            "description": "Its jurisdiction, such as `ng` or `rw`."
+          },
+          "authority_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Authority Id",
+            "description": "The authority that issued it, such as a legislature or ministry."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title",
+            "description": "The title as published."
+          },
+          "document_type": {
+            "type": "string",
+            "enum": [
+              "constitution",
+              "act",
+              "regulation",
+              "judgment",
+              "gazette",
+              "guidance",
+              "other"
+            ],
+            "title": "Document Type",
+            "description": "`constitution`, `act`, `regulation`, `judgment`, `gazette`, `guidance` or `other`."
+          },
+          "canonical_url": {
+            "type": "string",
+            "maxLength": 2083,
+            "minLength": 1,
+            "format": "uri",
+            "title": "Canonical Url",
+            "description": "The official source (see `url_kind`)."
+          },
+          "url_kind": {
+            "type": "string",
+            "enum": [
+              "document",
+              "landing_page",
+              "discovery"
+            ],
+            "title": "Url Kind",
+            "default": "landing_page",
+            "description": "What `canonical_url` is: `document` (the file itself), `landing_page` (the official page for it) or `discovery` (an official listing where it can be found)."
+          },
+          "citation": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Citation",
+            "description": "How it is cited."
+          },
+          "language": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Language",
+            "default": "en",
+            "description": "Its language, such as `en`, `fr` or `rw`."
+          },
+          "legal_status": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "current",
+              "historical",
+              "repealed",
+              "superseded"
+            ],
+            "title": "Legal Status",
+            "default": "unknown",
+            "description": "Whether it is in force, as far as the catalogue has checked: `current`, `historical`, `repealed`, `superseded` or `unknown`."
+          },
+          "status_evidence": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2083,
+                "minLength": 1,
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Evidence",
+            "description": "An official link supporting the legal status, when there is one."
+          },
+          "catalogue_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalogue Note",
+            "description": "A public caveat about this record, when there is one."
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary",
+            "description": "One sentence on what it is."
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 2200.0,
+                "minimum": 1800.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year",
+            "description": "The year it was made, when known."
+          },
+          "access_mode": {
+            "type": "string",
+            "enum": [
+              "open_full_text",
+              "metadata_link_only"
+            ],
+            "title": "Access Mode",
+            "description": "`open_full_text` when a text is cleared for reuse here; `metadata_link_only` when only the record and the official link are."
+          },
+          "rights_status": {
+            "$ref": "#/components/schemas/RightsStatus",
+            "description": "The rights decision for its text: `OPEN`, `OPEN_WITH_CONDITIONS`, `LINK_ONLY`, `RESTRICTED` or `RIGHTS_UNDER_REVIEW`."
+          },
+          "has_full_text": {
+            "type": "boolean",
+            "title": "Has Full Text",
+            "description": "Whether Get a record's texts returns a text for it."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "jurisdiction_id",
+          "authority_id",
+          "title",
+          "document_type",
+          "canonical_url",
+          "citation",
+          "access_mode",
+          "rights_status",
+          "has_full_text"
+        ],
+        "title": "SourceView"
+      },
+      "VersionPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/VersionViewRecord"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "The text versions cleared for reuse, each with its full text."
+          },
+          "rights": {
+            "$ref": "#/components/schemas/RightsViewRecord",
+            "description": "The record's rights record."
+          },
+          "structure": {
+            "items": {
+              "$ref": "#/components/schemas/NodeViewRecord"
+            },
+            "type": "array",
+            "title": "Structure",
+            "description": "The parts, chapters and sections of these texts."
+          },
+          "notice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notice",
+            "description": "Why no text is shown, when none is."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items",
+          "rights",
+          "structure",
+          "notice"
+        ],
+        "title": "VersionPage"
+      },
+      "VersionViewRecord": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Id",
+            "description": "The version's ID."
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The record it belongs to."
+          },
+          "canonical_url": {
+            "type": "string",
+            "maxLength": 2083,
+            "minLength": 1,
+            "format": "uri",
+            "title": "Canonical Url",
+            "description": "The official file the text was read from."
+          },
+          "retrieved_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Retrieved At",
+            "description": "When the file was fetched from the official source."
+          },
+          "raw_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Raw Hash",
+            "description": "SHA-256 of the file as fetched."
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Content Hash",
+            "description": "SHA-256 of `canonical_text` in UTF-8. Check your copy against it."
+          },
+          "canonical_text": {
+            "type": "string",
+            "title": "Canonical Text",
+            "description": "The full text."
+          },
+          "parser": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Parser",
+            "description": "The software that read the file into text."
+          },
+          "language": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Language",
+            "default": "en",
+            "description": "The text's language."
+          },
+          "effective_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From",
+            "description": "The date this text applies from, when known."
+          },
+          "effective_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Until",
+            "description": "The date this text applies until, when known."
+          },
+          "verification_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "verified",
+              "rejected"
+            ],
+            "title": "Verification Status",
+            "default": "pending",
+            "description": "Whether the text was checked against the official file: `pending`, `verified` or `rejected`."
+          },
+          "content_verifier": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Verifier",
+            "description": "Who checked it."
+          },
+          "content_verified_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Verified At",
+            "description": "When it was checked."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "source_id",
+          "canonical_url",
+          "retrieved_at",
+          "raw_hash",
+          "content_hash",
+          "canonical_text",
+          "parser"
+        ],
+        "title": "VersionViewRecord"
+      },
+      "Problem": {
+        "type": "object",
+        "description": "A refusal (RFC 9457). Its `code` is explained at https://open.alvary.ai/docs/errors.",
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "A link to the code's explanation."
+          },
+          "title": {
+            "type": "string",
+            "description": "Always `Request refused`."
+          },
+          "status": {
+            "type": "integer",
+            "description": "The HTTP status."
+          },
+          "detail": {
+            "type": "string",
+            "description": "What happened and what to do, in a sentence."
+          },
+          "code": {
+            "type": "string",
+            "description": "The error code, such as `rate_limited`."
+          },
+          "retryable": {
+            "type": "boolean",
+            "description": "Whether the same request may succeed later."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Quote it when you ask us about this request."
+          },
+          "retry_after_seconds": {
+            "type": "integer",
+            "description": "When to try again, as Retry-After."
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status",
+          "detail",
+          "code"
+        ]
+      },
+      "ChangeWork": {
+        "type": "object",
+        "description": "The record a change is about.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The record's ID."
+          },
+          "title": {
+            "type": "string",
+            "description": "Its title."
+          },
+          "citation": {
+            "type": "string",
+            "description": "Its citation."
+          },
+          "jurisdiction_id": {
+            "type": "string",
+            "description": "Its jurisdiction."
+          },
+          "document_class": {
+            "type": "string",
+            "description": "Its document type, such as `act`."
+          },
+          "language": {
+            "type": "string",
+            "description": "Its language."
+          },
+          "url": {
+            "type": "string",
+            "description": "Its page on the website."
+          },
+          "api_url": {
+            "type": "string",
+            "description": "The record in this API: Get a record."
+          }
+        }
+      },
+      "ChangeEvent": {
+        "type": "object",
+        "description": "One change. Deduplicate by `feed_epoch`, `event_id` and `event_revision`.",
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "description": "The change's ID."
+          },
+          "event_revision": {
+            "type": "integer",
+            "description": "1, or higher when we corrected the change itself (see `supersedes`)."
+          },
+          "event_type": {
+            "type": "string",
+            "enum": [
+              "catalogue_added",
+              "metadata_corrected",
+              "text_version_published",
+              "withdrawal",
+              "coverage_changed"
+            ],
+            "description": "What changed: a record added (an old law newly catalogued, not a new law), its catalogue details corrected, a text published, a record or text withdrawn, or a jurisdiction's coverage."
+          },
+          "feed_epoch": {
+            "type": "string",
+            "description": "The feed's epoch; it changes only when the feed is reset."
+          },
+          "publication_revision": {
+            "type": "integer",
+            "description": "The catalogue's revision it was made in."
+          },
+          "committed_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When it was recorded."
+          },
+          "observed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the change was seen at the official source, if known."
+          },
+          "publisher_published_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the publisher published it, if known."
+          },
+          "legal_effective": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When it takes legal effect, if known."
+          },
+          "jurisdiction": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "The jurisdiction: {id, name}.",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "work": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ChangeWork"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The record, or null when it may no longer be named."
+          },
+          "version": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "For a published text: {id, content_hash, language}.",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "content_hash": {
+                "type": "string"
+              },
+              "language": {
+                "type": "string"
+              }
+            }
+          },
+          "changed_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "For a correction: the fields that changed. A correction never changes legal text."
+          },
+          "change_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why, when known: `restored`, `first_text`, `source_revision`, `extraction_correction`, `redaction`, `corrected` or `unknown`."
+          },
+          "supersedes": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "For a corrected change: the {event_id, event_revision} it replaces."
+          },
+          "summary": {
+            "type": "string",
+            "description": "One plain sentence saying what changed."
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Official links for the record."
+          },
+          "withdrawal": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "For a withdrawal: {scope_disclosure, action, reason_code}. When `scope_disclosure` is `revalidate_releases`, check your copies against a current release."
+          }
+        }
+      },
+      "ChangePage": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChangeEvent"
+            },
+            "description": "This page's changes, oldest first. A page may be short or empty."
+          },
+          "has_more": {
+            "type": "boolean",
+            "description": "Whether to ask again with `next_cursor` now."
+          },
+          "next_cursor": {
+            "type": "string",
+            "description": "Send as `cursor` for the next page (within 15 minutes)."
+          },
+          "resume_token": {
+            "type": "string",
+            "description": "Keep it; send it later for only newer changes."
+          },
+          "feed_epoch": {
+            "type": "string",
+            "description": "The feed's epoch."
+          }
+        }
+      },
+      "RecentChanges": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChangeEvent"
+            },
+            "description": "The latest changes, newest first."
+          }
+        }
+      },
+      "ChangeCoverage": {
+        "type": "object",
+        "properties": {
+          "feed_started_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When recording began."
+          },
+          "feed_epoch": {
+            "type": "string",
+            "description": "The feed's epoch."
+          },
+          "earliest_replayable_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The oldest change still kept."
+          },
+          "supported_event_types": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Kinds of change."
+          },
+          "supported_filters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Filters you can use."
+          },
+          "jurisdictions": {
+            "type": "array",
+            "description": "Per jurisdiction: {id, name, works, readable_works, last_change_at, last_checked_at, expected_cadence, known_gaps}.",
+            "items": {
+              "type": "object"
+            }
+          },
+          "notice": {
+            "type": "string",
+            "description": "What the feed covers."
+          }
+        }
+      },
+      "Plan": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The plan's ID, such as `starter`."
+          },
+          "name": {
+            "type": "string",
+            "description": "Its name."
+          },
+          "description": {
+            "type": "string",
+            "description": "Who it is for."
+          },
+          "includes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "`rest`, `mcp`."
+          },
+          "allowance": {
+            "type": "object",
+            "description": "Its limits: requests_per_minute, burst, concurrency, bytes_per_day, jurisdictions (countries of your choice, when limited), watches (monitors), digest, shared_watches, webhook_endpoints."
+          },
+          "listing": {
+            "type": "object",
+            "description": "How the console shows it: order, for, price, action, note."
+          }
+        }
+      },
+      "PlanCatalogue": {
+        "type": "object",
+        "properties": {
+          "tiers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Plan"
+            },
+            "description": "The plans."
+          }
+        }
+      },
+      "QuotaPolicy": {
+        "type": "object",
+        "properties": {
+          "enforcement": {
+            "type": "string",
+            "description": "`organisation`: limits are per organisation."
+          },
+          "algorithm": {
+            "type": "string",
+            "description": "`token_bucket`."
+          },
+          "grouping": {
+            "type": "string",
+            "description": "What shares a limit."
+          },
+          "note": {
+            "type": "string",
+            "description": "The policy, in words."
+          }
+        }
+      },
+      "Release": {
+        "type": "object",
+        "description": "A release's manifest.",
+        "properties": {
+          "download_base": {
+            "type": "string",
+            "description": "Where its files are; append `/` and a file name."
+          },
+          "files": {
+            "type": "object",
+            "description": "Its files, with their SHA-256 checksums."
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "securitySchemes": {
+      "bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "An API key (`oa_live_…`) from the console, or an access token from a connected app."
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "Catalogue",
+      "description": "Records, their texts and rights, citations and coverage."
+    },
+    {
+      "name": "Changes",
+      "description": "What changed in the catalogue, in order, and feeds."
+    },
+    {
+      "name": "Plans",
+      "description": "Plans, limits and how limits are counted."
+    },
+    {
+      "name": "Releases",
+      "description": "Versioned data releases to download."
+    }
+  ],
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "https://api.open.alvary.ai/api/v1"
+    }
+  ],
+  "externalDocs": {
+    "description": "Documentation",
+    "url": "https://open.alvary.ai/docs"
+  },
+  "security": [
+    {
+      "bearer": []
+    }
+  ]
+}

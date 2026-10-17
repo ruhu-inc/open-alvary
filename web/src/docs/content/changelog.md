@@ -1,0 +1,22 @@
+---
+title: Changelog
+description: Changes to the API, the MCP server and these docs.
+---
+
+Changes that affect how you use the API and the MCP server, newest first.
+
+## 17 October 2026
+
+- These docs: guides, a reference for every route generated from the API's own description, and every page also as Markdown (add `.md` to its address) and in [`/llms.txt`](/llms.txt).
+- Every refusal from `/api/v1` is now a problem document with a code, including a malformed parameter (`400 invalid_input`), an unknown record (`404 unavailable`) and an answer too large (`413 result_too_large`).
+- The OpenAPI document describes every route, parameter, field and error.
+- The MCP tools describe their arguments.
+- A change's `work.api_url` links the record at `https://api.open.alvary.ai/api/v1/sources/<id>`.
+- `/api/v1/releases` gives each release's files at `/downloads/…`, where they download.
+
+## 16 October 2026
+
+- The REST API at `https://api.open.alvary.ai/api/v1` and the MCP server at `https://api.open.alvary.ai/mcp` open, with API keys and sign-in for AI tools, in the console at `https://open.alvary.ai/console`.
+- The free Starter plan for everyone; other plans on request.
+- Monitors with an inbox and email digests; webhooks on paid plans.
+- The anonymous API at `https://open.alvary.ai/api` closes and answers `410 gone`, except the change feed, which stays open.

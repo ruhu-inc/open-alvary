@@ -21,7 +21,7 @@ web/dist
 .ruff_cache
 **/*.egg-info
 .claude
-docs/
+/docs/
 scripts/planning_contracts.py
 scripts/spec_models.py
 scripts/verify_spec.py

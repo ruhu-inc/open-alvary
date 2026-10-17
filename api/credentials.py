@@ -36,6 +36,8 @@ SCOPE = "corpus:read"
 GRANT_CLAIM = "https://open.alvary.ai/grant"
 STATUS = {
     "invalid_input": 400,
+    "unavailable": 404,
+    "result_too_large": 413,
     "credential_not_accepted": 400,
     "credential_required": 401,
     "invalid_credentials": 401,
@@ -62,6 +64,8 @@ DETAIL = {
     "rate_limited": "Too many requests. Wait for the time in Retry-After.",
     "temporarily_unavailable": "Access cannot be checked right now. Try again shortly.",
     "credential_not_accepted": "Send the key in the Authorization header, never in the address.",
+    "unavailable": "There is no such record, or it is not public.",
+    "result_too_large": "The answer would be larger than one response may be.",
 }
 
 

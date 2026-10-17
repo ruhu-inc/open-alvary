@@ -172,7 +172,7 @@ def create_service(
                 "authorization_servers": [config.issuer.rstrip("/")] if config else [],
                 "scopes_supported": ["corpus:read"],
                 "bearer_methods_supported": ["header"],
-                "resource_documentation": "https://open.alvary.ai/developers",
+                "resource_documentation": "https://open.alvary.ai/docs",
             }
             return JSONResponse(
                 body, headers={"Access-Control-Allow-Origin": "*", "Cache-Control": "max-age=300"}
@@ -228,7 +228,7 @@ def create_service(
     def sitemap(request: Request):
         # Every public page a reader can open, so search engines find each source's record.
         origin = _origin(request)
-        paths = list(STATIC_PAGES)
+        paths = list(STATIC_PAGES) + docs_pages(frontend)
         with store.engine.begin() as connection:
             check_legacy_authority(connection, write=False)
             catalogue = LegacyCatalogue(LegacyRepository(connection))
@@ -246,6 +246,14 @@ def create_service(
     return service
 
 
+def docs_pages(frontend: Path | None) -> list[str]:
+    """The documentation's pages, as the website's build lists them (web/docs-files.ts)."""
+    listed = frontend / "docs" / "index.json" if frontend is not None else None
+    if listed is None or not listed.is_file():
+        return []
+    return [p for p in json.loads(listed.read_text()) if isinstance(p, str) and p.startswith("/docs")]
+
+
 STATIC_PAGES = (
     "/",
     "/browse",
@@ -257,8 +265,6 @@ STATIC_PAGES = (
     "/about",
     "/privacy",
     "/security",
-    "/docs/errors",
-    "/docs/console",
 )
 
 
@@ -295,7 +301,7 @@ def close_anonymous(app, api_origin: str) -> None:
                 " pages, or follow the change feed, which stays open at /api/changes.",
                 "code": "gone",
                 "successor": target,
-                "developers": "https://open.alvary.ai/developers",
+                "developers": "https://open.alvary.ai/docs",
             },
             status_code=410,
             media_type="application/problem+json",

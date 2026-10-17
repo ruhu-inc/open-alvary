@@ -21,8 +21,6 @@ import "@fontsource/dm-sans/latin-600.css";
 import "@fontsource/libre-caslon-display/latin-400.css";
 import "./style.css";
 import { AcceptableUse, Privacy, Terms } from "./legal";
-import { ErrorsPage } from "./errors";
-import { ConsoleGuide } from "./guide";
 import { Security } from "./security";
 import {
   PageTitle,
@@ -43,6 +41,9 @@ import {
   type RightsRecord,
   type Source,
 } from "./site";
+
+// The documentation loads only when a /docs page is opened.
+const DocsSite = React.lazy(() => import("./docs/DocsSite"));
 
 type Coverage = {
   catalogued_sources: number;
@@ -201,8 +202,6 @@ function App() {
       ["/terms", "Terms of service"],
       ["/acceptable-use", "Acceptable use"],
       ["/security", "Security"],
-      ["/docs/errors", "Errors"],
-      ["/docs/console", "Console guide"],
     ].find(([url]) => url === pathname)?.[1];
     // Record pages and the not-found page name themselves.
     if (title) document.title = `${title} · Open Alvary`;
@@ -259,10 +258,10 @@ function App() {
             <AcceptableUse />
           ) : pathname === "/security" ? (
             <Security />
-          ) : pathname === "/docs/errors" ? (
-            <ErrorsPage />
-          ) : pathname === "/docs/console" ? (
-            <ConsoleGuide />
+          ) : pathname === "/docs" || pathname.startsWith("/docs/") ? (
+            <React.Suspense fallback={<p className="page">Loading the documentation…</p>}>
+              <DocsSite path={pathname} />
+            </React.Suspense>
           ) : pathname === "/developers" ? (
             <Developers />
           ) : import.meta.env.DEV && pathname === "/dev/reader" ? (
@@ -1143,6 +1142,9 @@ function Developers() {
           <a className="button primary" href="/console">
             Open the console <ArrowRight size={16} aria-hidden="true" />
           </a>
+          <Link className="text-link" to="/docs">
+            Read the documentation <ArrowRight size={16} aria-hidden="true" />
+          </Link>
           <Link className="text-link" to="/docs/console">
             The console, step by step, with pictures <ArrowRight size={16} aria-hidden="true" />
           </Link>
@@ -1174,10 +1176,10 @@ function Developers() {
             <dd>What changed, in order (below).</dd>
           </dl>
           <p>
-            Every endpoint and field:{" "}
-            <a className="text-link" href={`${API_ORIGIN}/api/v1/openapi.json`}>
-              the OpenAPI description <ArrowUpRight size={16} aria-hidden="true" />
-            </a>
+            Every endpoint and field, with examples:{" "}
+            <Link className="text-link" to="/docs/api">
+              the API reference <ArrowRight size={16} aria-hidden="true" />
+            </Link>
           </p>
         </section>
         <section>
@@ -1286,8 +1288,9 @@ function Developers() {
         <section>
           <h2>Help</h2>
           <p>
-            The <Link to="/docs/console">console guide</Link> shows every page
-            of the console. Each refusal from the API has a code on the{" "}
+            The <Link to="/docs">documentation</Link> has guides, the API
+            reference and a <Link to="/docs/console">console guide</Link> with
+            pictures. Each refusal from the API has a code on the{" "}
             <Link to="/docs/errors">errors page</Link>. For anything else, write
             to <a href="mailto:hello@ruhu.ai">hello@ruhu.ai</a>.
           </p>

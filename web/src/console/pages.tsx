@@ -99,7 +99,7 @@ export function Overview({ me, org }: PageProps) {
             <b>Connect Claude or Codex</b>
             <span>Ask questions over the corpus from your AI tools.</span>
           </button>
-          <External className="quick-card" href="/developers" icon={false}>
+          <External className="quick-card" href="/docs" icon={false}>
             <BookOpen size={18} strokeWidth={1.7} aria-hidden="true" />
             <b>
               Read the docs <ExternalLink size={13} strokeWidth={1.8} aria-hidden="true" className="ext-icon" />
@@ -950,10 +950,10 @@ export function Keys({ org }: PageProps) {
         <div className="card">
           <h3>First request</h3>
           <div className="code" dir="ltr">
-            {`curl ${API_ORIGIN}/api/v1/search?q=land \\\n  -H "Authorization: Bearer $OPEN_ALVARY_KEY"`}
+            {`curl ${API_ORIGIN}/api/v1/search?q=constitution \\\n  -H "Authorization: Bearer $OPEN_ALVARY_KEY"`}
           </div>
           <p className="fine">
-            <External href="/developers">API reference, limits and errors</External>
+            <External href="/docs/api">API reference, limits and errors</External>
           </p>
         </div>
       ) : null}
@@ -1085,7 +1085,7 @@ function RevealKey({ created, onClose }: { created: NewKey; onClose: () => void 
       <div className="field">
         <span>Try it</span>
         <div className="code" dir="ltr">
-          {`export OPEN_ALVARY_KEY=${created.secret.slice(0, 14)}…\ncurl ${API_ORIGIN}/api/v1/search?q=land \\\n  -H "Authorization: Bearer $OPEN_ALVARY_KEY"`}
+          {`export OPEN_ALVARY_KEY=${created.secret.slice(0, 14)}…\ncurl ${API_ORIGIN}/api/v1/search?q=constitution \\\n  -H "Authorization: Bearer $OPEN_ALVARY_KEY"`}
         </div>
       </div>
       {warn ? (

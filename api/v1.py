@@ -13,13 +13,15 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.openapi.utils import get_openapi
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 from api.admission import AdmissionUnavailable
 from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable
 from api.credentials import problem
+from api.openapi_docs import describe
 from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
 from api.release_adapter import LegacyReleases
 from api.repositories import LegacyRepository, PublicUnavailable, ResultTooLarge
@@ -70,9 +72,18 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
             "rate_limited", request_id(request), retry_after=exception.retry_after, detail=str(exception)
         )
 
+    # Every refusal is a problem document with a code from the errors page.
+    @app.exception_handler(RequestValidationError)
+    async def invalid(request, exception):
+        first = exception.errors()[0] if exception.errors() else {}
+        where = ".".join(str(part) for part in first.get("loc", ())[1:]) or "request"
+        return problem(
+            "invalid_input", request_id(request), detail=f"{where}: {first.get('msg', 'not valid')}."
+        )
+
     @app.exception_handler(SourceUnavailable)
     async def missing(request, exception):
-        return JSONResponse({"detail": "Source not available", "code": "unavailable"}, status_code=404)
+        return problem("unavailable", request_id(request))
 
     @app.exception_handler(InvalidSearch)
     async def invalid_search(request, exception):
@@ -80,9 +91,7 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
 
     @app.exception_handler(ResultTooLarge)
     async def too_large(request, exception):
-        return JSONResponse(
-            {"detail": "Result exceeds the bounded interface", "code": "result_too_large"}, status_code=413
-        )
+        return problem("result_too_large", request_id(request))
 
     @app.exception_handler(SQLAlchemyError)
     @app.exception_handler(ValidationError)
@@ -209,6 +218,19 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
 
     @app.get("/releases")
     def release_listing(request: Request):
-        return LegacyReleases(store, releases).listing()
+        # Files download from /downloads on either domain (as the website's listing says), keyless.
+        listing = LegacyReleases(store, releases).listing()
+        for manifest in listing:
+            manifest["download_base"] = "/downloads" + manifest["download_base"].removeprefix("/releases")
+        return listing
 
+    def openapi():
+        if app.openapi_schema is None:
+            generated = get_openapi(
+                title=app.title, version=app.version, description=app.description, routes=app.routes
+            )
+            app.openapi_schema = describe(generated)
+        return app.openapi_schema
+
+    app.openapi = openapi
     return app

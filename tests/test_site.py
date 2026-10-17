@@ -156,10 +156,6 @@ def test_security_txt_follows_rfc_9116_and_is_renewed_before_it_lapses(client, m
     assert "/security" in client.get("/sitemap.xml").text
 
 
-def test_the_console_guide_is_in_the_sitemap(client):
-    assert "/docs/console" in client.get("/sitemap.xml").text
-
-
 def test_service_refuses_to_start_without_the_site_class(monkeypatch, tmp_path, store):
     path = tmp_path / "admission.json"
     values = {

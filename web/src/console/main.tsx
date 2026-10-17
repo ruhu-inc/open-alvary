@@ -247,7 +247,7 @@ function Shell({ me, path, refresh }: { me: Me; path: string; refresh: () => voi
             ))}
           </nav>
           <div className="side-foot">
-            <External href="/developers" className="foot-link">
+            <External href="/docs" className="foot-link">
               <BookOpen size={17} strokeWidth={1.8} aria-hidden="true" />
               Documentation
             </External>
@@ -267,8 +267,8 @@ function Shell({ me, path, refresh }: { me: Me; path: string; refresh: () => voi
             <b>{TITLES[path] ?? "Console"}</b>
           </nav>
           <div className="topbar-links">
-            <External href="/developers">Docs</External>
-            <External href="/about">Help</External>
+            <External href="/docs">Docs</External>
+            <External href="/docs/help">Help</External>
           </div>
         </header>
         <main id="main" tabIndex={-1} className="content">
