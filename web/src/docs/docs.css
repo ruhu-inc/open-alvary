@@ -1,13 +1,13 @@
-/* The developer documentation (/docs): sidebar, page and "On this page", in the site's colours.
+/* The developer documentation (/docs): sidebar, page and "On this page", in the site's colours (near-black, neutral greys, a bronze accent).
    The orange step numbers match the ones drawn in the console pictures. */
 .docs {
-  --docs-ink: #22372f;
-  --docs-text: #33463d;
-  --docs-muted: #646f68;
-  --docs-line: #dfe3d9;
-  --docs-soft: #f4f5ef;
-  --docs-code: #f6f7f2;
-  --docs-accent: #214b3b;
+  --docs-ink: #1a1a1a;
+  --docs-text: #3a3a3a;
+  --docs-muted: #6b6b6b;
+  --docs-line: #e5e5e5;
+  --docs-soft: #f5f5f5;
+  --docs-code: #fafafa;
+  --docs-accent: #1a1a1a;
   --docs-step: #e8590c;
   max-width: 1440px;
   margin: 0 auto;
@@ -37,14 +37,14 @@
   align-items: center;
   gap: 8px;
   border: 1px solid var(--docs-line);
-  background: #fffefa;
+  background: #ffffff;
   border-radius: 8px;
   padding: 0 10px;
   color: var(--docs-muted);
 }
 .docs-search:focus-within {
   border-color: var(--docs-accent);
-  box-shadow: 0 0 0 3px rgba(33, 75, 59, 0.12);
+  box-shadow: 0 0 0 3px rgba(26, 26, 26, 0.12);
 }
 .docs-search input {
   flex: 1;
@@ -73,10 +73,10 @@
   width: min(440px, 86vw);
   max-height: 70vh;
   overflow-y: auto;
-  background: #fffefa;
+  background: #ffffff;
   border: 1px solid var(--docs-line);
   border-radius: 8px;
-  box-shadow: 0 12px 32px rgba(34, 55, 47, 0.16);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
   padding: 6px;
 }
 .docs-hits a {
@@ -151,7 +151,7 @@
   background: var(--docs-soft);
 }
 .docs-nav-section a[aria-current="page"] {
-  background: #e6ede5;
+  background: #e8e8e8;
   color: var(--docs-accent);
   font-weight: 600;
 }
@@ -195,7 +195,7 @@
   align-items: center;
   gap: 6px;
   border: 1px solid var(--docs-line);
-  background: #fffefa;
+  background: #ffffff;
   color: var(--docs-text);
   border-radius: 6px;
   padding: 4px 9px;
@@ -205,7 +205,7 @@
   cursor: pointer;
 }
 .docs-copy:hover {
-  border-color: #b9c3b4;
+  border-color: #c4c4c4;
   color: var(--docs-ink);
 }
 .docs-page h1 {
@@ -241,7 +241,7 @@
 }
 .docs-anchor {
   margin-left: 8px;
-  color: #b9c3b4;
+  color: #c4c4c4;
   font-weight: 400;
   opacity: 0;
 }
@@ -268,7 +268,7 @@
 .docs-page a:not(.docs-card):not(.docs-copy):not(.docs-anchor):not(.docs-shot a):not(.docs-pager a) {
   color: var(--docs-accent);
   text-decoration: underline;
-  text-decoration-color: #9fb3a6;
+  text-decoration-color: #b0b0b0;
   text-underline-offset: 3px;
 }
 .docs-page :not(pre) > code {
@@ -277,16 +277,16 @@
     SFMono-Regular,
     Menlo,
     monospace;
-  background: #ecefe6;
+  background: #f0f0f0;
   padding: 1px 5px;
   border-radius: 4px;
   overflow-wrap: anywhere;
-  color: #263b33;
+  color: #1a1a1a;
 }
 .docs-page a > code {
   color: var(--docs-accent);
   text-decoration: underline;
-  text-decoration-color: #9fb3a6;
+  text-decoration-color: #b0b0b0;
   text-underline-offset: 3px;
 }
 .docs-steps {
@@ -331,7 +331,7 @@
   gap: 8px;
   padding: 6px 8px 6px 12px;
   border-bottom: 1px solid var(--docs-line);
-  background: #eef0e8;
+  background: #f3f3f3;
   min-height: 40px;
 }
 .docs-code-lang {
@@ -359,9 +359,9 @@
   color: var(--docs-ink);
 }
 .docs-tabs button.on {
-  background: #fffefa;
+  background: #ffffff;
   color: var(--docs-ink);
-  box-shadow: 0 1px 2px rgba(34, 55, 47, 0.12);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 .docs-pre {
   margin: 0;
@@ -372,7 +372,7 @@
     SFMono-Regular,
     Menlo,
     monospace;
-  color: #24302b;
+  color: #1a1a1a;
   tab-size: 2;
 }
 .docs-pre:focus-visible {
@@ -380,22 +380,22 @@
   outline-offset: -2px;
 }
 .tok-string {
-  color: #1f6b3a;
+  color: #2f6b4f;
 }
 .tok-key {
-  color: #1f4f8a;
+  color: #245b78;
 }
 .tok-number {
-  color: #a3550b;
+  color: #85571a;
 }
 .tok-keyword {
-  color: #8b2f8f;
+  color: #8a5a2b;
 }
 .tok-flag {
-  color: #1f4f8a;
+  color: #245b78;
 }
 .tok-comment {
-  color: #7c857e;
+  color: #737373;
   font-style: italic;
 }
 
@@ -447,8 +447,8 @@
   margin: 18px 0;
   padding: 12px 16px;
   border-radius: 8px;
-  border: 1px solid #cfdccf;
-  background: #eef4ee;
+  border: 1px solid #e5e5e5;
+  background: #f5f5f5;
   font-size: 15px;
   line-height: 1.6;
 }
@@ -457,11 +457,11 @@
   color: var(--docs-accent);
 }
 .docs-callout.warning {
-  border-color: #ecd3b5;
-  background: #f8eee3;
+  border-color: #e8d3ad;
+  background: #f4e8cf;
 }
 .docs-callout.warning strong {
-  color: #8a5a1c;
+  color: #85571a;
 }
 .docs-shot {
   margin: 18px 0 26px;
@@ -478,8 +478,8 @@
   border: 1px solid var(--docs-line);
   border-radius: 8px;
   box-shadow:
-    0 1px 2px rgba(34, 55, 47, 0.06),
-    0 8px 24px rgba(34, 55, 47, 0.08);
+    0 1px 2px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.08);
 }
 .docs-cards {
   display: grid;
@@ -494,15 +494,15 @@
   padding: 16px;
   border: 1px solid var(--docs-line);
   border-radius: 8px;
-  background: #fffefa;
+  background: #ffffff;
   color: var(--docs-text);
   transition:
     border-color 0.15s,
     box-shadow 0.15s;
 }
 .docs-card:hover {
-  border-color: #9fb3a6;
-  box-shadow: 0 4px 14px rgba(34, 55, 47, 0.08);
+  border-color: #b0b0b0;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
 }
 .docs-card strong {
   color: var(--docs-accent);
@@ -529,7 +529,7 @@
   font-weight: 600;
 }
 .docs-pager a:hover {
-  border-color: #9fb3a6;
+  border-color: #b0b0b0;
 }
 .docs-pager .next {
   text-align: right;
@@ -616,7 +616,7 @@
     padding: 10px 12px;
     border: 1px solid var(--docs-line);
     border-radius: 8px;
-    background: #fffefa;
+    background: #ffffff;
     font:
       600 14px "DM Sans",
       sans-serif;
