@@ -1,43 +1,80 @@
-/* The developer console: the website's palette and type, laid out as a working tool. */
+/* The developer console: a working tool in a monochrome palette with one bronze accent (the
+   logo and highlights), neutral greys and IBM Plex type, as professional legal software is. */
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/ibm-plex-sans-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/ibm-plex-sans-latin-500-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-weight: 600;
+  font-display: swap;
+  src: url("./fonts/ibm-plex-sans-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/ibm-plex-sans-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+}
 :root {
-  --page: #f4f3ec;
-  --surface: #fcfbf7;
-  --panel: #f1f0e8;
-  --ink: #22372f;
-  --muted: #5b665f;
-  --line: #dfe3d9;
-  --accent: #214b3b;
+  --page: #fafafa;
+  --surface: #ffffff;
+  --panel: #f5f5f5;
+  --ink: #1a1a1a;
+  --muted: #6b6b6b;
+  --line: #e5e5e5;
+  --accent: #1a1a1a;
   --on-accent: #ffffff;
-  --accent-soft: #e4ede6;
-  --accent-text: #214b3b;
-  --warn-bg: #f8eee3;
-  --warn-ink: #774716;
-  --bad-bg: #f8e6e2;
-  --bad-ink: #8a2c22;
-  --good-ink: #1f6a45;
-  --code-bg: #ebede6;
-  --serif: "Libre Caslon Display", Georgia, serif;
-  --sans: "DM Sans", system-ui, sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --accent-soft: #e8e8e8;
+  --accent-text: #1a1a1a;
+  --brand: #8a5a2b;
+  --focus: #737373;
+  --warn-bg: #f4e8cf;
+  --warn-ink: #85571a;
+  --bad-bg: #f2dada;
+  --bad-ink: #a13f3f;
+  --good-ink: #2f6b4f;
+  --code-bg: #f3f3f3;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --overlay: rgba(10, 10, 10, 0.42);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --page: #101513;
-    --surface: #161d1a;
-    --panel: #1c2521;
-    --ink: #e3e9e4;
-    --muted: #a3afa8;
-    --line: #2d3833;
-    --accent: #3f7d62;
-    --accent-soft: #1f3129;
-    --accent-text: #9fd0b6;
-    --warn-bg: #33281a;
-    --warn-ink: #f0c48d;
-    --bad-bg: #3a2220;
-    --bad-ink: #f3aea5;
-    --good-ink: #8fd3ad;
-    --code-bg: #212b27;
+    --page: #131311;
+    --surface: #1c1c19;
+    --panel: #232320;
+    --ink: #ececea;
+    --muted: #9a9a92;
+    --line: #333330;
+    --accent: #e0e0e0;
+    --on-accent: #131311;
+    --accent-soft: #2a2a28;
+    --accent-text: #ececea;
+    --brand: #cda06b;
+    --focus: #8a8a82;
+    --warn-bg: #3a2a14;
+    --warn-ink: #d6a352;
+    --bad-bg: #3a1f1f;
+    --bad-ink: #e09797;
+    --good-ink: #84c4a0;
+    --code-bg: #232320;
+    --overlay: rgba(0, 0, 0, 0.6);
     color-scheme: dark;
   }
 }
@@ -62,6 +99,7 @@ p {
 }
 a {
   color: var(--accent-text);
+  text-underline-offset: 2px;
 }
 button,
 input,
@@ -74,7 +112,7 @@ button {
   cursor: pointer;
 }
 :focus-visible {
-  outline: 2px solid var(--accent-text);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 main:focus {
@@ -149,7 +187,7 @@ code,
 }
 .brand .mark,
 .solo-card .mark {
-  color: var(--accent-text);
+  color: var(--brand);
   flex: none;
 }
 .brand small {
@@ -923,7 +961,7 @@ svg .chart-label {
 .scrim {
   position: fixed;
   inset: 0;
-  background: rgba(16, 24, 20, 0.45);
+  background: var(--overlay);
   display: grid;
   place-items: start center;
   padding: 8vh 16px 16px;
@@ -971,10 +1009,10 @@ svg .chart-label {
   width: min(540px, 100%);
 }
 .solo-card h1 {
-  font-family: var(--serif);
-  font-weight: 400;
-  font-size: 27px;
-  line-height: 1.15;
+  font-weight: 600;
+  font-size: 24px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
 }
 .provider {
   min-height: 42px;

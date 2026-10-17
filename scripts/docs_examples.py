@@ -1,12 +1,17 @@
 """The API reference's example requests and answers (web/src/docs/data/examples.json): each request
 is sent to the real REST v1 routes, in memory, over the Nigerian catalogue (ingestion/catalogue),
-the records the live catalogue holds, and the answer is recorded, shortened where a list is long. Change-feed routes
-need PostgreSQL, so their requests are listed without answers.
+the records the live catalogue holds, and the answer is recorded, shortened where a list is long.
 
-    python -m scripts.docs_examples
+The change feed needs PostgreSQL. Given a migrated, seeded scratch database, the script makes one
+illustrative correction there and records the feed's answers, labelled as examples; never give it a
+real database.
+
+    python -m scripts.docs_examples [--changes postgresql+psycopg://.../scratch]
 """
 
 import json
+import os
+import sys
 from urllib.parse import quote, urlencode
 
 from fastapi.testclient import TestClient
@@ -55,6 +60,49 @@ def shorten(operation: str, answer):
     return answer
 
 
+CHANGE_NOTE = (
+    "An example: one catalogue correction, recorded in a scratch copy of the catalogue. Your answers "
+    "carry the changes recorded since you started following."
+)
+
+
+def short_token(value):
+    return value[:20] + "…" if isinstance(value, str) and len(value) > 24 else value
+
+
+def change_examples(url: str) -> dict[str, dict]:
+    """The feed's answers after one correction, in a scratch PostgreSQL copy (the name must say so)."""
+    assert "scratch" in url or "example" in url or "guide" in url, "a scratch database only"
+    os.environ |= {"PUBLIC_DOMAIN": "open.alvary.ai", "ALVARY_ACCOUNTS": "1"}
+    os.environ.setdefault("ALVARY_API_ORIGIN", "https://api.open.alvary.ai")
+    engine = create_engine(url)
+    store = Store(engine)
+    corpus = store.load()
+    record = next(s for s in corpus.sources if s.id == "ng-foi-act-2011")
+    summary = (record.summary or "").replace("Gives everyone", "Gives every person")
+    if summary == record.summary:
+        summary = summary.replace("Gives every person", "Gives everyone")
+    corpus.sources[corpus.sources.index(record)] = record.model_copy(update={"summary": summary})
+    store.save(corpus)
+    client = TestClient(create_v1_app(store, ROOT / "releases", lambda: []))
+    page = client.get("/changes?jurisdiction=ng&limit=10")
+    page.raise_for_status()
+    events = page.json()["events"][-1:]
+    answer = page.json() | {"events": events}
+    for key in ("resume_token", "next_cursor"):
+        if key in answer:
+            answer[key] = short_token(answer[key])
+    recent = client.get("/changes/recent?jurisdiction=ng").json()
+    coverage = client.get("/change-coverage").json()
+    engine.dispose()
+    return {
+        "list_changes": {"answer": answer, "note": CHANGE_NOTE},
+        "get_change": {"answer": events[0], "note": CHANGE_NOTE},
+        "list_recent_changes": {"answer": {"events": recent["events"][:1]}, "note": CHANGE_NOTE},
+        "get_change_coverage": {"answer": coverage},
+    }
+
+
 def main() -> None:
     corpus = Corpus.model_validate(json.loads(CATALOGUE.read_text()))
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
@@ -76,6 +124,9 @@ def main() -> None:
             response.raise_for_status()
             example["answer"] = shorten(operation, response.json())
         examples[operation] = example
+    if "--changes" in sys.argv:
+        for operation, recorded in change_examples(sys.argv[sys.argv.index("--changes") + 1]).items():
+            examples[operation] = examples.get(operation, {"path": {}, "query": []}) | recorded
     examples["mcp:search_catalogue"] = {"arguments": {"query": "freedom of information", "limit": 3}}
     assert {t["name"] for t in TOOLS} >= {"search_catalogue"}
     (DATA / "examples.json").write_text(json.dumps(examples, indent=2, ensure_ascii=False) + "\n")

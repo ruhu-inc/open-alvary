@@ -71,7 +71,12 @@ export function buildPages(
     const slug = name === "index" ? "" : name;
     const markdown = body
       .replace(/^\{\{example:(\w+)\}\}$/gm, (_, id) =>
-        examples[id]?.answer === undefined ? "" : "```json\n" + JSON.stringify(examples[id].answer, null, 2) + "\n```",
+        examples[id]?.answer === undefined
+          ? ""
+          : "```json\n" +
+            JSON.stringify(examples[id].answer, null, 2) +
+            "\n```" +
+            (examples[id].note ? `\n\n${examples[id].note}` : ""),
       )
       .replace(/^\{\{([\w-]+)\}\}$/gm, (m, key) => includes[key] ?? m)
       .trim();

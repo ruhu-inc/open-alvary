@@ -155,7 +155,7 @@ A monitor watches for changes to the records you care about: laws added, catalog
 
 A monitor tells you about changes after it starts. To check your choices first, **Preview recent changes** shows what it would have matched recently.
 
-![Preview recent changes listing corrected catalogue records](/guide/monitor-preview.webp)
+![Preview recent changes listing a corrected catalogue record](/guide/monitor-preview.webp)
 
 Matches arrive in the **Inbox**, newest first, with the kind of change, the date and the monitor that matched. Each links to the record. **Mark all read** clears the count; **Your monitors** lists your monitors to edit or delete. The page also shows how many monitors your plan allows.
 
