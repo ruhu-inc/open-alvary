@@ -1,0 +1,37 @@
+web/src/docs/content/console.md
+  s_b82616e2476856::t_122e4217bd025d 158
+THIRD_PARTY_NOTICES.md
+  s_b82616e2476856::t_6a2beec6eeb52e 12-14
+scripts/docs_examples.py
+  s_b82616e2476856::t_621286c1dc356f 3,5-9,13-14,63-105,127-129
+web/src/docs/pages.ts
+  s_b82616e2476856::t_c9fc71512e121d 74-79
+changes/feed.py
+  s_b82616e2476856::t_dfdba4bd794785 469-471
+web/src/docs/data/examples.json
+  s_b82616e2476856::t_c9bd2db652262c 415-418,420-422,425-456,458-459,468-471,473-475,478-509,529-532,534-536,539-597,599-606
+  s_b82616e2476856::t_b3e26f241e3bf5 419,423-424,457,472,476-477,533,537-538,598
+web/src/console/console.css
+  s_b82616e2476856::t_8f72bb364a0cd5 1-32,34-40,43-54,59-77,102,115,190,964,1012-1015
+  s_b82616e2476856::t_332aeebec10110 42
+web/public/font-licenses/ibm-plex.txt
+  s_b82616e2476856::t_35fbf2f360ad0d 1-93
+web/src/docs/images.ts
+  s_b82616e2476856::t_133c27489f1c74 4-5,17,21,23
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a913021233e53535b44c7fda7c8602a242eb420c",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
