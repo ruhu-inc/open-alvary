@@ -466,8 +466,9 @@ class Feed:
             "event_type": kind,
             "feed_epoch": str(row["feed_epoch"]),
             "publication_revision": row["publication_revision"],
-            "committed_at": row["committed_at"].isoformat().replace("+00:00", "Z"),
-            "observed_at": row["observed_at"] and row["observed_at"].isoformat().replace("+00:00", "Z"),
+            # In UTC whatever the database session's time zone.
+            "committed_at": _time(row["committed_at"]),
+            "observed_at": row["observed_at"] and _time(row["observed_at"]),
             "publisher_published_at": row["publisher_published_at"],
             "legal_effective": row["legal_effective"],
             "jurisdiction": jurisdiction,

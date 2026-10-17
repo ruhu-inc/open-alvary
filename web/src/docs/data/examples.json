@@ -412,7 +412,51 @@
         "limit",
         "10"
       ]
-    ]
+    ],
+    "answer": {
+      "events": [
+        {
+          "event_id": "d4d1a6ac-13cf-4704-9073-485f3aa42773",
+          "event_revision": 1,
+          "event_type": "metadata_corrected",
+          "feed_epoch": "71a6d585-8ff5-4618-a791-83c821f1fc23",
+          "publication_revision": 2,
+          "committed_at": "2026-10-17T04:52:06.729358Z",
+          "observed_at": null,
+          "publisher_published_at": null,
+          "legal_effective": null,
+          "jurisdiction": {
+            "id": "ng",
+            "name": "Nigeria"
+          },
+          "work": {
+            "id": "ng-foi-act-2011",
+            "title": "Freedom of Information Act 2011",
+            "citation": "FOI Act 2011",
+            "jurisdiction_id": "ng",
+            "document_class": "act",
+            "language": "en",
+            "url": "https://open.alvary.ai/sources/ng-foi-act-2011",
+            "api_url": "https://api.open.alvary.ai/api/v1/sources/ng-foi-act-2011"
+          },
+          "version": null,
+          "changed_fields": [
+            "summary"
+          ],
+          "change_reason": null,
+          "supersedes": null,
+          "summary": "The catalogue record for Freedom of Information Act 2011 was corrected (summary).",
+          "sources": [
+            "https://www.justice.gov.ng/freedom-of-information-portal/"
+          ],
+          "withdrawal": null
+        }
+      ],
+      "has_more": false,
+      "feed_epoch": "71a6d585-8ff5-4618-a791-83c821f1fc23",
+      "resume_token": "r1.CWVwaGVtZXJhbIKXr…"
+    },
+    "note": "An example: one catalogue correction, recorded in a scratch copy of the catalogue. Your answers carry the changes recorded since you started following."
   },
   "list_recent_changes": {
     "path": {},
@@ -421,7 +465,48 @@
         "jurisdiction",
         "ng"
       ]
-    ]
+    ],
+    "answer": {
+      "events": [
+        {
+          "event_id": "d4d1a6ac-13cf-4704-9073-485f3aa42773",
+          "event_revision": 1,
+          "event_type": "metadata_corrected",
+          "feed_epoch": "71a6d585-8ff5-4618-a791-83c821f1fc23",
+          "publication_revision": 2,
+          "committed_at": "2026-10-17T04:52:06.729358Z",
+          "observed_at": null,
+          "publisher_published_at": null,
+          "legal_effective": null,
+          "jurisdiction": {
+            "id": "ng",
+            "name": "Nigeria"
+          },
+          "work": {
+            "id": "ng-foi-act-2011",
+            "title": "Freedom of Information Act 2011",
+            "citation": "FOI Act 2011",
+            "jurisdiction_id": "ng",
+            "document_class": "act",
+            "language": "en",
+            "url": "https://open.alvary.ai/sources/ng-foi-act-2011",
+            "api_url": "https://api.open.alvary.ai/api/v1/sources/ng-foi-act-2011"
+          },
+          "version": null,
+          "changed_fields": [
+            "summary"
+          ],
+          "change_reason": null,
+          "supersedes": null,
+          "summary": "The catalogue record for Freedom of Information Act 2011 was corrected (summary).",
+          "sources": [
+            "https://www.justice.gov.ng/freedom-of-information-portal/"
+          ],
+          "withdrawal": null
+        }
+      ]
+    },
+    "note": "An example: one catalogue correction, recorded in a scratch copy of the catalogue. Your answers carry the changes recorded since you started following."
   },
   "get_atom_feed": {
     "path": {},
@@ -440,6 +525,84 @@
         "ng"
       ]
     ]
+  },
+  "get_change": {
+    "path": {},
+    "query": [],
+    "answer": {
+      "event_id": "d4d1a6ac-13cf-4704-9073-485f3aa42773",
+      "event_revision": 1,
+      "event_type": "metadata_corrected",
+      "feed_epoch": "71a6d585-8ff5-4618-a791-83c821f1fc23",
+      "publication_revision": 2,
+      "committed_at": "2026-10-17T04:52:06.729358Z",
+      "observed_at": null,
+      "publisher_published_at": null,
+      "legal_effective": null,
+      "jurisdiction": {
+        "id": "ng",
+        "name": "Nigeria"
+      },
+      "work": {
+        "id": "ng-foi-act-2011",
+        "title": "Freedom of Information Act 2011",
+        "citation": "FOI Act 2011",
+        "jurisdiction_id": "ng",
+        "document_class": "act",
+        "language": "en",
+        "url": "https://open.alvary.ai/sources/ng-foi-act-2011",
+        "api_url": "https://api.open.alvary.ai/api/v1/sources/ng-foi-act-2011"
+      },
+      "version": null,
+      "changed_fields": [
+        "summary"
+      ],
+      "change_reason": null,
+      "supersedes": null,
+      "summary": "The catalogue record for Freedom of Information Act 2011 was corrected (summary).",
+      "sources": [
+        "https://www.justice.gov.ng/freedom-of-information-portal/"
+      ],
+      "withdrawal": null
+    },
+    "note": "An example: one catalogue correction, recorded in a scratch copy of the catalogue. Your answers carry the changes recorded since you started following."
+  },
+  "get_change_coverage": {
+    "path": {},
+    "query": [],
+    "answer": {
+      "feed_started_at": "2026-10-17T04:51:46.197471Z",
+      "feed_epoch": "71a6d585-8ff5-4618-a791-83c821f1fc23",
+      "earliest_replayable_at": "2026-10-17T04:51:46.696206Z",
+      "supported_event_types": [
+        "catalogue_added",
+        "metadata_corrected",
+        "text_version_published",
+        "withdrawal",
+        "coverage_changed"
+      ],
+      "supported_filters": [
+        "jurisdiction",
+        "work",
+        "type",
+        "class",
+        "language",
+        "q"
+      ],
+      "jurisdictions": [
+        {
+          "id": "ng",
+          "name": "Nigeria",
+          "works": 4,
+          "readable_works": 0,
+          "last_change_at": "2026-10-17T04:52:06.729358Z",
+          "last_checked_at": null,
+          "expected_cadence": null,
+          "known_gaps": null
+        }
+      ],
+      "notice": "Changes to what Open Alvary holds, not every change in a country's law."
+    }
   },
   "mcp:search_catalogue": {
     "arguments": {

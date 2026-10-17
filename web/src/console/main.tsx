@@ -23,10 +23,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { createRoot } from "react-dom/client";
-import "@fontsource/dm-sans/latin-400.css";
-import "@fontsource/dm-sans/latin-500.css";
-import "@fontsource/dm-sans/latin-600.css";
-import "@fontsource/libre-caslon-display/latin-400.css";
 import "./console.css";
 import { ApiError, api, go, setCsrf, signOut, type Me, type Organisation } from "./api";
 import { Consent } from "./consent";

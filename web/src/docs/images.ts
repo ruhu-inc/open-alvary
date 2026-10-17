@@ -1,8 +1,8 @@
 // Each guide picture's size in CSS pixels (they are saved at twice that), so pages don't jump as
 // they load. tests/test_docs.py checks them against the files in web/public/guide.
 export const SIZES: Record<string, [number, number]> = {
-  "sign-in": [488, 517],
-  welcome: [588, 616],
+  "sign-in": [488, 516],
+  welcome: [588, 615],
   dashboard: [1280, 800],
   plans: [1280, 800],
   "plan-request": [608, 756],
@@ -14,13 +14,13 @@ export const SIZES: Record<string, [number, number]> = {
   apps: [1280, 800],
   "connect-claude": [1280, 800],
   "connect-code": [1024, 239],
-  consent: [588, 579],
+  consent: [588, 578],
   "apps-list": [1280, 800],
   "monitor-empty": [1280, 800],
   "monitor-new": [608, 826],
-  "monitor-preview": [558, 231],
+  "monitor-preview": [558, 145],
   "monitor-inbox": [1280, 800],
-  "record-monitor": [417, 397],
+  "record-monitor": [417, 280],
   "monitor-digest": [1024, 355],
   "webhooks-empty": [1280, 800],
   "webhooks-add": [608, 457],
