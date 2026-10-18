@@ -326,3 +326,19 @@ table.operators tr.inactive td { opacity: .6; }
 .code-box { background: var(--accent-soft); border: 1px solid var(--accent); border-radius: 10px; padding: 1rem 1.2rem; margin-bottom: 1rem; }
 .enrolment-code { display: inline-block; font-size: 1.6rem; letter-spacing: .12em; font-weight: 700; padding: .3rem .6rem; background: var(--panel); border-radius: 8px; margin: .2rem 0 .4rem; user-select: all; }
 .muted-card { background: transparent; }
+
+/* The steps to approval at the top of a document. */
+.checklist { list-style: none; margin: .8rem 0 1rem; padding: 0; display: grid; gap: .35rem; }
+.checklist li { display: flex; align-items: baseline; gap: .55rem; }
+.checklist .tick { flex: none; width: 1.15rem; height: 1.15rem; border-radius: 50%; border: 1.5px solid var(--line); display: inline-grid; place-items: center; font-size: 12px; font-weight: 700; transform: translateY(.15rem); }
+.checklist li.done .tick { background: var(--ok); border-color: var(--ok); color: #fff; }
+.checklist li.warn .tick { background: var(--warn-bg); border-color: var(--medium); color: var(--medium); }
+.checklist li.done > span:last-child { color: var(--muted); }
+
+/* The editing toolbar in labelled groups; restoring the machine reading sits apart at the end. */
+.toolbar .tool-group { display: inline-flex; gap: .15rem; align-items: center; padding: .15rem; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); }
+.toolbar .tool-group button { border-color: transparent; background: transparent; }
+.toolbar .tool-group button:hover:not(:disabled) { border-color: var(--line); background: var(--bg); }
+.toolbar .restore { margin-left: auto; }
+.toolbar .tool-group button.on { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); border-color: var(--accent); }
+#approval { scroll-margin-top: 4rem; }

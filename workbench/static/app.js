@@ -377,11 +377,7 @@ async function actView(actId) {
     el("div", { class: "card" },
       el("h2", { text: act.title }),
       el("p", { class: "muted", text: readingDescription(data) }),
-      el("p", {},
-        pill(ready.unchecked_pages.length ? "medium" : "ok", `${ready.pages - ready.unchecked_pages.length} of ${ready.pages} pages checked`), " ",
-        pill(ready.open_high_flags.length ? "high" : "ok", `${ready.open_high_flags.length} high flags open`), " ",
-        ready.stale_pages.length ? pill("warn", `${ready.stale_pages.length} pages to recheck`) : "", " ",
-        current ? pill("ok", "approved") : head && head.decision === "approved" ? pill("warn", "approval out of date") : ""),
+      approvalChecklist(actId, data, current, head),
       el("p", {},
         nextTodo ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${nextTodo.page}` }, el("button", { class: "primary", text: `Continue reviewing at page ${nextTodo.page}` })) : null, " ",
         el("a", { href: `#/doc/${encodeURIComponent(actId)}/read` }, el("button", { text: "Read the whole document" })), " ",
@@ -395,6 +391,34 @@ async function actView(actId) {
     findReplaceCard(actId),
     approvalPanel(actId, data, current),
   );
+}
+
+// The steps to approval, each done or with what is left and a link to it.
+function approvalChecklist(actId, data, current, head) {
+  const ready = data.readiness;
+  const page = (n) => el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${n}`, text: `page ${n}` });
+  const step = (done, label, action, tone = "") =>
+    el("li", { class: done ? "done" : tone || "todo" },
+      el("span", { class: "tick", "aria-hidden": "true", text: done ? "✓" : tone === "warn" ? "!" : "" }),
+      el("span", {}, label, action ? el("span", { class: "muted" }, " · ", action) : null));
+  const checked = ready.pages - ready.unchecked_pages.length;
+  const highPages = unique(ready.open_high_flags.map((f) => f.page));
+  const toApproval = el("button", { class: "small", text: "Go to approval", on: { click: () => document.getElementById("approval")?.scrollIntoView({ block: "start" }) } });
+  const steps = [
+    step(!ready.unchecked_pages.length, `${checked} of ${ready.pages} pages checked`,
+      ready.unchecked_pages.length ? el("span", {}, "next: ", page(ready.unchecked_pages[0])) : null),
+    step(!highPages.length, highPages.length ? `High flags open on ${highPages.length} page${highPages.length === 1 ? "" : "s"}` : "No high flags open",
+      highPages.length ? el("span", {}, "first: ", page(highPages[0])) : null),
+    step(!ready.stale_pages.length, ready.stale_pages.length ? `${ready.stale_pages.length} page${ready.stale_pages.length === 1 ? "" : "s"} to recheck: the reading changed` : "No page needs rechecking",
+      ready.stale_pages.length ? el("span", {}, "first: ", page(ready.stale_pages[0])) : null, ready.stale_pages.length ? "warn" : ""),
+    ready.missing_checks.length ? step(false, `Check readings missing: ${ready.missing_checks.join(", ")}`, "rerun the batch", "warn") : null,
+    step(ready.details.confirmed, ready.details.confirmed ? "Details confirmed" : ready.details.status ? "Details not yet confirmed" : "Details not yet reviewed",
+      ready.details.confirmed ? null : el("a", { href: `#/doc/${encodeURIComponent(actId)}/details`, text: "review the details" })),
+    current ? step(true, "Approved", null)
+      : head && head.decision === "approved" ? step(false, "Approval out of date: the text or details changed after it was approved", toApproval, "warn")
+      : step(false, ready.ready ? "Ready for approval" : "Approval", ready.ready ? toApproval : el("span", { text: "after the steps above" })),
+  ];
+  return el("ol", { class: "checklist", "aria-label": "Steps to approval" }, steps);
 }
 
 function findReplaceCard(actId) {
@@ -600,7 +624,7 @@ function previewLink(actId, page, cls) {
 function approvalPanel(actId, data, current) {
   const ready = data.readiness;
   const canApprove = app.me.roles.includes("approver");
-  const panel = el("div", { class: "card" }, el("h3", { text: "Approval" }));
+  const panel = el("div", { class: "card", id: "approval" }, el("h3", { text: "Approval" }));
   const blockers = el("ul", { class: "ready" });
   if (ready.unchecked_pages.length) blockers.append(el("li", { text: `Pages not yet checked: ${summarise(ready.unchecked_pages)}` }));
   if (ready.open_high_flags.length) blockers.append(el("li", {}, "High flags open on pages ", ...unique(ready.open_high_flags.map((f) => f.page)).flatMap((p, i) => [i ? ", " : "", el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${p}`, text: String(p) })])));
@@ -1219,33 +1243,35 @@ function editTab(view) {
   view.surface = surface;
   const C = window.ReviewEditor.commands;
   const run = (command) => () => surface.run(command);
-  const toolbar = el("div", { class: "toolbar" },
-    el("button", { class: "small", title: "Heading (Ctrl/Cmd+Alt+1)", text: "Heading", on: { click: run(C.kind("heading")) } }),
-    el("button", { class: "small", title: "Paragraph (Ctrl/Cmd+Alt+2)", text: "Paragraph", on: { click: run(C.kind("paragraph")) } }),
-    el("button", { class: "small", title: "List item (Ctrl/Cmd+Alt+3)", text: "List item", on: { click: run(C.kind("list_item")) } }),
-    el("span", { class: "sep" }),
-    markButton(surface, "strong", "B", "Bold (Ctrl/Cmd+B)"),
-    markButton(surface, "em", "I", "Italic (Ctrl/Cmd+I)"),
-    markButton(surface, "underline", "U", "Underline (Ctrl/Cmd+U)"),
-    markButton(surface, "sup", "x²", "Superscript (Ctrl/Cmd+.)"),
-    markButton(surface, "sub", "x₂", "Subscript (Ctrl/Cmd+,)"),
-    el("span", { class: "sep" }),
-    el("button", { class: "small icon", title: "Align left (Ctrl/Cmd+Alt+L)", "aria-label": "Align left", on: { click: run(C.align("left")) } }, alignIcon("left")),
-    el("button", { class: "small icon", title: "Centre (Ctrl/Cmd+Alt+E)", "aria-label": "Centre", on: { click: run(C.align("center")) } }, alignIcon("center")),
-    el("button", { class: "small icon", title: "Align right (Ctrl/Cmd+Alt+R)", "aria-label": "Align right", on: { click: run(C.align("right")) } }, alignIcon("right")),
-    el("button", { class: "small icon", title: "Justify (Ctrl/Cmd+Alt+J). Select several paragraphs, or Ctrl/Cmd+A, to change them all.", "aria-label": "Justify", on: { click: run(C.align("justify")) } }, alignIcon("justify")),
-    el("span", { class: "sep" }),
-    el("button", { class: "small", title: "Outdent (Shift+Tab)", text: "⇤", on: { click: run(C.level(-1)) } }),
-    el("button", { class: "small", title: "Indent (Tab)", text: "⇥", on: { click: run(C.level(1)) } }),
-    el("button", { class: "small", title: "Add a margin note (Ctrl/Cmd+Alt+N)", text: "+ Margin note", on: { click: run(C.addNote) } }),
-    el("button", { class: "small note-move", title: "Move this margin note to the previous paragraph (Alt+Shift+↑)", text: "Note ↑", disabled: true, on: { click: run(C.moveNote(-1)) } }),
-    el("button", { class: "small note-move", title: "Move this margin note to the next paragraph (Alt+Shift+↓)", text: "Note ↓", disabled: true, on: { click: run(C.moveNote(1)) } }),
-    el("button", { class: "small", title: "Insert a table after this unit", text: "+ Table", on: { click: run(C.insertTable) } }),
-    el("button", { class: "small", title: "Add a row below (in a table)", text: "+ Row", on: { click: run(C.addRow) } }),
-    el("button", { class: "small", title: "Add a column (in a table)", text: "+ Column", on: { click: run(C.addColumn) } }),
-    el("span", { class: "sep" }),
-    el("button", { class: "small", title: "Undo (Ctrl/Cmd+Z)", text: "↶", on: { click: run(C.undo) } }),
-    el("button", { class: "small", title: "Redo (Ctrl/Cmd+Shift+Z)", text: "↷", on: { click: run(C.redo) } }),
+  const group = (label, ...buttons) => el("div", { class: "tool-group", role: "group", "aria-label": label, title: label }, buttons);
+  const toolbar = el("div", { class: "toolbar", role: "toolbar", "aria-label": "Editing" },
+    group("Structure",
+      el("button", { class: "small", title: "Heading (Ctrl/Cmd+Alt+1)", text: "Heading", on: { click: run(C.kind("heading")) } }),
+      el("button", { class: "small", title: "Paragraph (Ctrl/Cmd+Alt+2)", text: "Paragraph", on: { click: run(C.kind("paragraph")) } }),
+      el("button", { class: "small", title: "List item (Ctrl/Cmd+Alt+3)", text: "List item", on: { click: run(C.kind("list_item")) } }),
+      el("button", { class: "small", title: "Outdent (Shift+Tab)", "aria-label": "Outdent", text: "⇤", on: { click: run(C.level(-1)) } }),
+      el("button", { class: "small", title: "Indent (Tab)", "aria-label": "Indent", text: "⇥", on: { click: run(C.level(1)) } })),
+    group("Text",
+      markButton(surface, "strong", "B", "Bold (Ctrl/Cmd+B)"),
+      markButton(surface, "em", "I", "Italic (Ctrl/Cmd+I)"),
+      markButton(surface, "underline", "U", "Underline (Ctrl/Cmd+U)"),
+      markButton(surface, "sup", "x²", "Superscript (Ctrl/Cmd+.)"),
+      markButton(surface, "sub", "x₂", "Subscript (Ctrl/Cmd+,)")),
+    group("Alignment",
+      el("button", { class: "small icon", title: "Align left (Ctrl/Cmd+Alt+L)", "aria-label": "Align left", on: { click: run(C.align("left")) } }, alignIcon("left")),
+      el("button", { class: "small icon", title: "Centre (Ctrl/Cmd+Alt+E)", "aria-label": "Centre", on: { click: run(C.align("center")) } }, alignIcon("center")),
+      el("button", { class: "small icon", title: "Align right (Ctrl/Cmd+Alt+R)", "aria-label": "Align right", on: { click: run(C.align("right")) } }, alignIcon("right")),
+      el("button", { class: "small icon", title: "Justify (Ctrl/Cmd+Alt+J). Select several paragraphs, or Ctrl/Cmd+A, to change them all.", "aria-label": "Justify", on: { click: run(C.align("justify")) } }, alignIcon("justify"))),
+    group("Insert",
+      el("button", { class: "small", title: "Add a margin note (Ctrl/Cmd+Alt+N)", text: "+ Margin note", on: { click: run(C.addNote) } }),
+      el("button", { class: "small note-move", title: "Move this margin note to the previous paragraph (Alt+Shift+↑)", text: "Note ↑", disabled: true, on: { click: run(C.moveNote(-1)) } }),
+      el("button", { class: "small note-move", title: "Move this margin note to the next paragraph (Alt+Shift+↓)", text: "Note ↓", disabled: true, on: { click: run(C.moveNote(1)) } }),
+      el("button", { class: "small", title: "Insert a table after this unit", text: "+ Table", on: { click: run(C.insertTable) } }),
+      el("button", { class: "small", title: "Add a row below (in a table)", text: "+ Row", on: { click: run(C.addRow) } }),
+      el("button", { class: "small", title: "Add a column (in a table)", text: "+ Column", on: { click: run(C.addColumn) } })),
+    group("History",
+      el("button", { class: "small", title: "Undo (Ctrl/Cmd+Z)", "aria-label": "Undo", text: "↶", on: { click: run(C.undo) } }),
+      el("button", { class: "small", title: "Redo (Ctrl/Cmd+Shift+Z)", "aria-label": "Redo", text: "↷", on: { click: run(C.redo) } })),
     el("label", { class: "muted small", title: "Numbers the main reading missed and the check readings supplied" },
       el("input", { type: "checkbox", checked: remember("restored") === "1", on: { change: (e) => { remember("restored", e.target.checked ? "1" : "0"); mount.classList.toggle("show-restored", e.target.checked); } } }),
       " mark restored numbers"),
@@ -1254,7 +1280,9 @@ function editTab(view) {
         el("p", { text: "Type to correct words. Enter splits a paragraph; Backspace at its start joins it to the one above. Tab / Shift+Tab change the level. Ctrl/Cmd+Alt+L, E, R, J align left, centre, right or justify; with several paragraphs selected (or Ctrl/Cmd+A) they all change. Double-click a section number to change it." }),
         el("p", { text: "Margin notes: click into a note, then Note ↑ / Note ↓ (Alt+Shift+↑ / ↓) moves it to the paragraph it belongs beside." }),
         el("p", { text: "Flags: Alt+N next, Alt+P previous; then Alt+1 / Alt+2 use that reading, Alt+K keep as read, Alt+E I corrected it, Alt+D dismiss. Alt+L keeps all punctuation-only differences." }),
-        el("p", { text: "Ctrl/Cmd+S save as checked; Ctrl/Cmd+Enter save as checked and go to the next page. Ctrl/Cmd + scroll zooms the page image." }))));
+        el("p", { text: "Ctrl/Cmd+S save as checked; Ctrl/Cmd+Enter save as checked and go to the next page. Ctrl/Cmd + scroll zooms the page image." }))),
+    // Far from the save buttons: it discards this page's corrections (after asking; nothing is saved).
+    canEdit ? el("button", { class: "small danger restore", title: "Replace the text with the machine reading. Nothing is saved until you save.", text: "Restore machine reading…", on: { click: () => restoreMachineReading(view) } }) : null);
   const list = flagList(view);
   return [list, toolbar, mount, saveBar(view)];
 }
@@ -1387,6 +1415,13 @@ function changesView(view) {
 
 // --- saving -------------------------------------------------------------------------------------------
 
+function restoreMachineReading(view) {
+  if (!confirm("Replace this page's text with the machine reading? Your unsaved corrections and flag decisions on this page are discarded; nothing is saved until you save.")) return;
+  view.units = structuredClone(view.machineUnits);
+  view.resolutions = {};
+  changed(view); view.showTab("edit");
+}
+
 function saveBar(view) {
   const comment = el("textarea", { rows: 1, value: view.comment, placeholder: "Comment for this revision (optional)", on: { input: (e) => { view.comment = e.target.value; changed(view); } } });
   const save = async (status, thenNext = false) => {
@@ -1406,19 +1441,12 @@ function saveBar(view) {
     if (thenNext && next) location.hash = `#/doc/${encodeURIComponent(view.actId)}/page/${next}`;
     else pageView(view.actId, view.pageNumber);
   };
-  const restore = () => {
-    if (!confirm("Replace the text with the machine reading? (Nothing is saved until you save.)")) return;
-    view.units = structuredClone(view.machineUnits);
-    view.resolutions = {};
-    changed(view); view.showTab("edit");
-  };
   const canEdit = app.me.roles.includes("reviewer");
   return el("div", { class: "savebar" },
     comment,
     el("button", { class: "primary", text: "Save as checked", disabled: !canEdit, on: { click: () => save("checked") } }),
     el("button", { text: "Checked → next page", disabled: !canEdit, on: { click: () => save("checked", true) } }),
     el("button", { text: "Save: needs attention", disabled: !canEdit, on: { click: () => save("attention") } }),
-    el("button", { class: "small", text: "Restore machine reading", on: { click: restore } }),
     canEdit ? null : el("span", { class: "muted", text: "Editing needs the reviewer role." }));
 }
 
