@@ -273,6 +273,12 @@ ul.plain li:first-child { border-top: 0; }
 .small { font-size: 12px; }
 .relations .relation { display: grid; grid-template-columns: 9rem minmax(0, 1fr) 9rem 9rem auto; gap: .35rem; margin-bottom: .35rem; }
 .relations .relation input { width: 100%; box-sizing: border-box; }
+.standing { border: 1px solid var(--line); border-radius: 8px; padding: .25rem 1rem .5rem; margin: .75rem 0; }
+.standing h3 { margin: .6rem 0 .3rem; font-size: 1rem; }
+.standing p { margin: .35rem 0; }
+.standing .warn { color: var(--medium); }
+.standing .enables summary { cursor: pointer; margin: .35rem 0; }
+.standing .enables ul { margin: .25rem 0 .5rem 1.2rem; padding: 0; }
 .relations .relation-actions { display: flex; gap: .5rem; align-items: center; white-space: nowrap; }
 .details-head textarea { width: 100%; box-sizing: border-box; }
 @media (max-width: 900px) {

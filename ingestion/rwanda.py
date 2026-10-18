@@ -679,19 +679,41 @@ def work_key(work: str) -> str:
 REVERSE = {"repeals": "repealed_by", "amends": "amended_by"}
 
 
+def _latest(work: str, repealed_by: dict[str, list[str]], years: dict[str, int]) -> str:
+    """The law in force at the end of a line of repeals: what repealed it, what repealed that, …"""
+    seen = {work}
+    while repealed_by.get(work):
+        later = max(repealed_by[work], key=lambda w: (years.get(w) or 0, w))
+        if later in seen:
+            break
+        seen.add(later)
+        work = later
+    return work
+
+
 def link_works(documents: list[dict]) -> list[dict]:
-    """Each document with its links ("relations") to the earlier instruments it repeals or amends,
-    found in the collection by their citations, and to the later ones that repeal or amend it. A
-    citation of an instrument the collection lacks stays as printed, without a target."""
+    """Each document with its links ("relations") to the earlier instruments it repeals, amends or is
+    made under, found in the collection by their citations, and to the later ones that repeal or
+    amend it; the instruments made under it ("enables"); and whether it is current ("currency"):
+    repealed by a later text in the collection, else as RLRC's listing files it, else unknown, with
+    the latest law in its line, what has amended it, and any law it was made under that is since
+    repealed. A citation of an instrument the collection lacks stays as printed, without a target."""
     whole = [{**d, "work": d.get("work") or d["id"]} for d in documents if not d.get("part")]
     by_key: dict[str, str] = {}
     titles: dict[str, str] = {}
+    years: dict[str, int] = {}
+    listed: dict[str, str] = {}
     for d in whole:
         by_key.setdefault(work_key(d["work"]), d["work"])
         if d.get("language") == "en" or d["work"] not in titles:
             titles[d["work"]] = d.get("title") or d["work"]
+        if d.get("year"):
+            years[d["work"]] = d["year"]
+        if d.get("listed"):
+            listed[d["work"]] = d["listed"]
     forward: dict[str, list[dict]] = {}
     backward: dict[str, list[dict]] = {}
+    enables: dict[str, set[str]] = {}
     for d in whole:
         if d["work"] in forward or not d.get("cites"):
             continue
@@ -709,7 +731,9 @@ def link_works(documents: list[dict]) -> list[dict]:
                     **note,
                 }
             )
-            if target:
+            if target and cite["kind"] == "made_under":
+                enables.setdefault(target, set()).add(d["work"])  # listed apart: a law may enable hundreds
+            elif target:
                 backward.setdefault(target, []).append(
                     {
                         "kind": REVERSE[cite["kind"]],
@@ -719,12 +743,49 @@ def link_works(documents: list[dict]) -> list[dict]:
                     }
                 )
         forward[d["work"]] = links
+    repealed_by = {
+        work: [link["target_id"] for link in links if link["kind"] == "repealed_by"]
+        for work, links in backward.items()
+    }
+
+    def named(work: str) -> dict:
+        return {"work": work, "title": titles.get(work, work)}
+
+    def currency(work: str) -> dict:
+        by = repealed_by.get(work) or []
+        out: dict = {
+            "status": "repealed" if by else listed.get(work, "unknown"),
+            "basis": "text" if by else "listing" if work in listed else None,
+        }
+        if by:
+            out["repealed_by"] = [named(w) for w in by]
+            latest = _latest(work, repealed_by, years)
+            if latest not in by:  # repealed in turn: the law in force now is further down the line
+                out["latest"] = named(latest)
+            if listed.get(work) == "in_force":
+                out["disagrees"] = "RLRC's listing files it among the laws in force"
+        amended = [link["target_id"] for link in backward.get(work, []) if link["kind"] == "amended_by"]
+        if amended:
+            out["amended_by"] = [named(w) for w in amended]
+        parents = [
+            {**named(link["target_id"]), "repealed_by": [named(w) for w in repealed_by[link["target_id"]]]}
+            for link in forward.get(work, [])
+            if link["kind"] == "made_under" and repealed_by.get(link.get("target_id", ""))
+        ]
+        if parents:
+            out["parents_repealed"] = parents
+        return {k: v for k, v in out.items() if v is not None}
+
     out = []
     for d in documents:
-        d = {k: v for k, v in d.items() if k != "relations"}
+        d = {k: v for k, v in d.items() if k not in ("relations", "enables", "currency")}
         work = d.get("work") or d["id"]
-        links = [] if d.get("part") else forward.get(work, []) + backward.get(work, [])
-        out.append({**d, "relations": links} if links else d)
+        if not d.get("part"):
+            links = forward.get(work, []) + backward.get(work, [])
+            d |= {"relations": links} if links else {}
+            d |= {"enables": sorted(enables[work])} if work in enables else {}
+            d["currency"] = currency(work)
+        out.append(d)
     return out
 
 
@@ -1056,13 +1117,10 @@ def prepare_selection(
             # The earlier instruments it repeals or amends; linked across the collection when the
             # manifest is assembled (link_works).
             cites = rw_gazette.cited(lines, entry)
-            values |= {
-                k: v
-                for k, v in rlrc_status(
-                    rlrc, rlrc_checked, entry["kind"], entry["number"], (entry.get("date") or "")[:4] or None
-                ).items()
-                if v
-            }
+            listing = rlrc_status(
+                rlrc, rlrc_checked, entry["kind"], entry["number"], (entry.get("date") or "")[:4] or None
+            )
+            values |= {k: v for k, v in listing.items() if v}
             # A law the Senate did not sit on (its preamble names only the Chamber of Deputies).
             absent = (
                 {"step:adopted:senate.date": "not_applicable"}
@@ -1112,6 +1170,8 @@ def prepare_selection(
                     ),
                     "also_printed_as": entry.get("also_printed_as"),
                     **({"cites": cites} if cites else {}),
+                    # Where RLRC's listing files it (in force, repealed), for its currency (link_works).
+                    **({"listed": listing["status.legal"]} if listing.get("status.legal") else {}),
                     "suggested_absent": absent,
                     "suggested": {
                         **values,

@@ -1086,22 +1086,35 @@ def base_values(document: dict, manifest: dict) -> dict:
         and suggested.get("identity.type") in R.FAMILIES[suggested["identity.family"]][1]
     ):
         values.update(suggested)
-    # Its links to the earlier documents of the collection it repeals or amends, and from the later
-    # ones that repeal or amend it (found when the collection was prepared).
+    # Its links to the earlier documents of the collection it repeals, amends or is made under, and
+    # from the later ones that repeal or amend it; and whether it is current (found when the
+    # collection was prepared).
     links = [dict(link) for link in document.get("relations") or []]
     if links:
         values["relations"] = links
-    repealed_by = "; ".join(link["target"] for link in links if link["kind"] == "repealed_by")
-    if repealed_by and values.get("status.legal") in (None, "", "unknown"):
-        values["status.legal"] = "repealed"
-        values["status.note"] = f"Repealed by {repealed_by}, as its text says."
-    elif repealed_by and values.get("status.legal") != "repealed":
-        values["status.note"] = " ".join(
-            filter(
-                None,
-                [values.get("status.note"), f"But {repealed_by} says it repeals this: check which is right."],
+    current = document.get("currency") or {}
+    repealers = current.get("repealed_by") or [
+        {"title": link["target"]} for link in links if link["kind"] == "repealed_by"
+    ]
+    notes = []
+    if repealers:
+        names = "; ".join(r["title"] for r in repealers)
+        if values.get("status.legal") in (None, "", "unknown"):
+            values["status.legal"] = "repealed"
+            values["status.note"] = f"Repealed by {names}, as its text says."
+        elif values.get("status.legal") != "repealed":
+            notes.append(f"But {names} says it repeals this: check which is right.")
+        if current.get("latest"):
+            notes.append(
+                f"That law was repealed in turn; the law in force now is {current['latest']['title']}."
             )
+    for parent in current.get("parents_repealed") or []:
+        names = "; ".join(r["title"] for r in parent["repealed_by"])
+        notes.append(
+            f"Made under {parent['title']}, which {names} has since repealed: check it is still in force."
         )
+    if notes:
+        values["status.note"] = " ".join(filter(None, [values.get("status.note"), *notes]))
     if document.get("language") and isinstance(values.get("expressions"), list):
         values["expressions"] = [
             {**row, "this_text": "yes" if row.get("language") == document["language"] else "no"}

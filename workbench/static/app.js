@@ -377,6 +377,7 @@ async function actView(actId) {
     el("div", { class: "card" },
       el("h2", { text: act.title }),
       el("p", { class: "muted", text: readingDescription(data) }),
+      standingPanel(data.standing),
       approvalChecklist(actId, data, current, head),
       el("p", {},
         nextTodo ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${nextTodo.page}` }, el("button", { class: "primary", text: `Continue reviewing at page ${nextTodo.page}` })) : null, " ",
@@ -391,6 +392,39 @@ async function actView(actId) {
     findReplaceCard(actId),
     approvalPanel(actId, data, current),
   );
+}
+
+// Whether the document is current, as the collection's texts and RLRC's listing tell: repealed (and by
+// what, and the law in force now), in force, or not yet known; what amends it; a law it was made under
+// that is since repealed; the instruments made under it. Each other document opens from its name.
+function standingPanel(standing) {
+  if (!standing) return null;
+  const doc = (item) => (item.id ? el("a", { href: `#/doc/${encodeURIComponent(item.id)}`, text: item.title }) : el("span", { text: item.title }));
+  const list = (items) => items.flatMap((item, i) => [i ? "; " : "", doc(item)]);
+  const lines = [];
+  if (standing.status === "repealed" && standing.repealed_by) {
+    lines.push(el("p", {}, el("strong", { text: "Repealed" }), " by ", ...list(standing.repealed_by), "."));
+    if (standing.latest) lines.push(el("p", {}, "That law was repealed in turn. The law in force now: ", doc(standing.latest), "."));
+    if (standing.disagrees) lines.push(el("p", { class: "warn", text: `But ${standing.disagrees}: check which is right before confirming the status.` }));
+  } else if (standing.status === "repealed") {
+    lines.push(el("p", {}, el("strong", { text: "Repealed" }), ", as RLRC's listing files it. No later text in the collection names it as repealed."));
+  } else if (standing.status === "in_force") {
+    lines.push(el("p", {}, el("strong", { text: "In force" }), ", as RLRC's listing files it; no later text in the collection repeals it."));
+  } else {
+    lines.push(el("p", {}, el("strong", { text: "Not yet known" }), " whether it is in force: no later text in the collection repeals it, and RLRC's listing does not file it."));
+  }
+  if (standing.amended_by) lines.push(el("p", {}, "Amended by ", ...list(standing.amended_by), ". The text here is as published, before those amendments."));
+  for (const parent of standing.parents_repealed || []) {
+    lines.push(el("p", { class: "warn" }, "Made under ", doc(parent), ", which ", ...list(parent.repealed_by), " has since repealed: check it is still in force."));
+  }
+  if (standing.enables) {
+    const more = standing.enables.total - standing.enables.shown.length;
+    lines.push(el("details", { class: "enables" },
+      el("summary", { text: `${standing.enables.total} instrument${standing.enables.total === 1 ? " is" : "s are"} made under it` }),
+      el("ul", {}, standing.enables.shown.map((item) => el("li", {}, doc(item)))),
+      more > 0 ? el("p", { class: "muted", text: `and ${more} more` }) : null));
+  }
+  return el("div", { class: "standing" }, el("h3", { text: "Where it stands" }), ...lines);
 }
 
 // The steps to approval, each done or with what is left and a link to it.

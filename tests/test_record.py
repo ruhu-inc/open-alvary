@@ -250,6 +250,18 @@ def test_a_rwandan_organic_law_follows_rwandas_procedure_into_a_complete_record(
         "status.legal": "in_force",
         "status.note": "Listed in force.",
     }
+    line = {
+        "status": "repealed",
+        "repealed_by": [{"work": "rw-law-1-2027", "title": "Law n° 1/2027 of 01/01/2027"}],
+        "latest": {"work": "rw-law-3-2030", "title": "Law n° 3/2030 of 01/01/2030"},
+        "parents_repealed": [{"work": "rw-law-5-2020", "title": "Law n° 5/2020", "repealed_by": [{"work": "rw-law-9-2025", "title": "Law n° 9/2025"}]}],
+    }  # fmt: skip
+    chain = V.base_values({**document, "relations": [repealer], "currency": line}, {})
+    assert chain["status.note"] == (
+        "Repealed by Law n° 1/2027 of 01/01/2027, as its text says. That law was repealed in turn; the law in "
+        "force now is Law n° 3/2030 of 01/01/2030. Made under Law n° 5/2020, which Law n° 9/2025 has since "
+        "repealed: check it is still in force."
+    )
     disagree = V.base_values({**document, "suggested": listed, "relations": [repealer]}, {})
     assert disagree["status.legal"] == "in_force"
     assert (

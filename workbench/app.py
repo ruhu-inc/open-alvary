@@ -419,6 +419,7 @@ def create_app(
             )
         return {
             "act": {**act, "rights_basis": library.manifest_for(act_id).get("rights_basis", "")},
+            "standing": standing(act),
             "readers": {"primary": reading["primary"], "checks": reading["checks"]},
             "pages": pages,
             "readiness": now["readiness"],
@@ -684,6 +685,51 @@ def create_app(
         """The public site's page for a document, built from web/ (data comes from the API below)."""
         return FileResponse(STATIC / "public-preview" / "preview.html")
 
+    def document_of(work: str, language: str | None) -> str | None:
+        """The workbench's document for a work: in this language if it has it, else another."""
+        return next(
+            (
+                f"{work}-{lang}"
+                for lang in (language, "en", "fr", "rw")
+                if lang and library.has(f"{work}-{lang}")
+            ),
+            None,
+        )
+
+    def standing(act: dict) -> dict | None:
+        """Whether the document is current, as its collection was prepared to tell: repealed by a later
+        text (and the law in force now), as RLRC's listing files it, or not yet known; what amends
+        it; a law it was made under that is since repealed; and the instruments made under it."""
+        current = act.get("currency")
+        if not current:
+            return None
+        language = act.get("language")
+
+        def named(item: dict) -> dict:
+            return {"title": item["title"], "id": document_of(item["work"], language)}
+
+        out = {k: current[k] for k in ("status", "basis", "disagrees") if k in current}
+        for key in ("repealed_by", "amended_by"):
+            if current.get(key):
+                out[key] = [named(item) for item in current[key]]
+        if current.get("latest"):
+            out["latest"] = named(current["latest"])
+        if current.get("parents_repealed"):
+            out["parents_repealed"] = [
+                {**named(p), "repealed_by": [named(r) for r in p["repealed_by"]]}
+                for p in current["parents_repealed"]
+            ]
+        enabled = [d for d in (document_of(w, language) for w in act.get("enables") or []) if d]
+        if enabled:
+            listed = sorted(
+                (library.listed(d) for d in enabled), key=lambda d: (-(d.get("year") or 0), d["title"])
+            )
+            out["enables"] = {
+                "total": len(listed),
+                "shown": [{"id": d["id"], "title": d["title"]} for d in listed[:50]],
+            }
+        return out
+
     def current_details(record: dict | None, view: dict) -> dict:
         """The saved details record, or a first draft from the document when none is saved yet."""
         out = {"details": view["values"], "absent": view["absent"]}
@@ -756,13 +802,8 @@ def create_app(
         related = {}
         for link in [*(view["values"].get("relations") or []), *links]:
             work = link.get("target_id")
-            if work and work not in related:
-                languages = (act.get("language"), "en", "fr", "rw")
-                found = next(
-                    (f"{work}-{lang}" for lang in languages if lang and library.has(f"{work}-{lang}")), None
-                )
-                if found:
-                    related[work] = found
+            if work and work not in related and document_of(work, act.get("language")):
+                related[work] = document_of(work, act.get("language"))
         return {
             "standard": view_schema(view),
             "document_type": view["kind"],

@@ -783,3 +783,64 @@ def test_a_bis_number_is_its_own_law_not_the_law_with_the_plain_number():
         {"kind": "law", "number": "1/2022", "versions": {}},
     )
     assert (link["number"], RG.number_key(link["number"])) == ("001 bis /2021", "1-bis-2021")
+
+
+def test_kinyarwanda_texts_and_preambles_give_what_a_text_repeals_amends_and_is_made_under():
+    rw = [
+        {"text": text}
+        for text in [
+            "Ashingiye ku Itegeko nº 20/2000 ryo kuwa 26 Nyakanga 2000 ryerekeye imiryango idaharanira",
+            "inyungu, cyane cyane mu ngingo yaryo ya 8, iya 9 n’iya 10;",
+            "Ishingiye ku masezerano yemejwe n’Iteka rya Perezida nº 47/01 ryo ku wa 14/04/2002;",
+            "Ingingo ya 3: Ingingo ya 44 y’Itegeko n° 66/2018 ryo ku wa 30/08/2018 rigenga umurimo mu",
+            "Rwanda ivanyweho.",
+            "Ingingo ya 75: Ingingo ivanaho Itegeko nº 028/2023 ryo ku wa 19/05/2023 ryerekeye gukumira",
+            "iyezandonke rivanyweho. Ingingo ya 76: Ingingo izigama",
+        ]
+    ]
+    entry = {
+        "kind": "ministerial_order",
+        "number": "114/11",
+        "versions": {"rw": {"title": "ITEKA RYA MINISITIRI"}},
+    }
+    found = {(c["kind"], c["instrument"], c["number"], c["year"]): c for c in RG.cited({"rw": rw}, entry)}
+    assert set(found) == {
+        ("made_under", "law", "20/2000", "2000"),  # not the order a treaty was ratified by
+        ("amends", "law", "66/2018", "2018"),
+        ("repeals", "law", "028/2023", "2023"),
+    }
+    assert found["made_under", "law", "20/2000", "2000"]["note"] == "Articles 8, 9 and 10"
+    assert found["made_under", "law", "20/2000", "2000"]["target"] == (
+        "Itegeko nº 20/2000 ryo kuwa 26 Nyakanga 2000 ryerekeye imiryango idaharanira inyungu"
+    )
+    assert found["amends", "law", "66/2018", "2018"]["note"] == "Article 44"
+
+
+def test_an_order_is_made_under_the_laws_its_preamble_names_first_in_each_language():
+    en = [{"text": "Pursuant to Law n° 70/2019 of 10/01/2020 governing metrology, especially in Articles 4 and 9;"},
+          {"text": "Pursuant to the Presidential Order N°27/01 of 18/07/2004, determining certain orders,"},
+          {"text": "especially in Article One; Reviewing Prime Minister’s Order nº 96/03 of 25/08/2011;"}]  # fmt: skip
+    fr = [
+        {
+            "text": "Vu la Loi n° 10/2011 du 13/05/2011 déterminant les missions, spécialement en son article 12 ;"
+        }
+    ]
+    entry = {"kind": "ministerial_order", "number": "002/MINICOM/23", "versions": {}}
+    made = [(c["instrument"], c["number"], c.get("note")) for c in RG.cited({"en": en}, entry)]
+    assert made == [("law", "70/2019", "Articles 4 and 9"), ("presidential_order", "27/01", "Article 1")]
+    [french] = RG.cited({"fr": fr}, entry)
+    assert (french["kind"], french["number"], french["note"]) == ("made_under", "10/2011", "Article 12")
+    assert french["target"] == "Loi n° 10/2011 du 13/05/2011 déterminant les missions"
+
+
+def test_a_law_named_in_the_title_of_a_repealed_order_is_not_itself_repealed():
+    lines = [{"text": "Article 60: Repealing provision Ministerial Order nº 005/12/10/TC of 22/06/2012 determining the"},
+             {"text": "modalities for the implementation of Law nº 59/2011 of 31/12/2011 establishing revenue and all"},
+             {"text": "prior provisions contrary to this Order are repealed."}]  # fmt: skip
+    entry = {"kind": "ministerial_order", "number": "008/19/10/TC", "versions": {}}
+    [link] = RG.cited({"en": lines}, entry)
+    assert (link["kind"], link["instrument"], link["number"]) == (
+        "repeals",
+        "ministerial_order",
+        "005/12/10/TC",
+    )
