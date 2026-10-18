@@ -1,0 +1,54 @@
+api/openapi_docs.py
+  s_d665c62e07d76f::t_165d3f383ec128 709-723
+  s_d665c62e07d76f::t_b724c9103a265f 190-200
+  s_d665c62e07d76f::t_c87e407a53bf92 405-409
+changes/feed.py
+  s_d665c62e07d76f::t_33995e701fe652 480-481
+schema/public.py
+  s_d665c62e07d76f::t_a3cf7c6ac7cf04 83-96
+  s_d665c62e07d76f::t_effb284015367b 237
+  s_d665c62e07d76f::t_1c3390250677d7 80-82
+schema/public.schema.json
+  s_d665c62e07d76f::t_17e563fa4c3fa7 639-693,713-724,1566-1572
+  s_d665c62e07d76f::t_4c2d2ce9cc7703 1573
+web/src/docs/data/openapi.json
+  s_d665c62e07d76f::t_17e563fa4c3fa7 2164-2247,3000-3060,3081-3092,4083-4089
+changes/record.py
+  s_d665c62e07d76f::t_477955d96d6b27 247-249
+  s_d665c62e07d76f::t_c00c7b0c3a228c 105,109,147-148,191,199,204,206,228-246,250-269
+  s_d665c62e07d76f::t_fb4776cb3a47d7 270-271
+api/v1.py
+  s_d665c62e07d76f::t_bf4c5af0d59168 38
+  s_d665c62e07d76f::t_e83c9d452c8712 320-326
+api/catalogue.py
+  s_d665c62e07d76f::t_62f95d7141bad6 9-10
+  s_d665c62e07d76f::t_85489e8a7bd96a 22,35-36,38
+  s_d665c62e07d76f::t_bbcccea5a95146 402,404-424,427-445
+  s_d665c62e07d76f::t_bc2c3527705143 446
+web/src/docs/content/changes.md
+  s_d665c62e07d76f::t_5df7468f675967 95-115
+tests/test_postgres_changes.py
+  s_d665c62e07d76f::t_99358a4ec22313 344-359,363-367
+  s_d665c62e07d76f::t_20d98157a05ac3 360-362
+  s_d665c62e07d76f::t_5a8acdba786ac9 368-386
+migrations/versions/0029_rights_history.py
+  s_d665c62e07d76f::t_4eab3082feef2f 1-58,63-64
+  s_d665c62e07d76f::t_922b3659e307ee 60-62
+  s_d665c62e07d76f::t_a8bad3eca7ceb9 59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "77a0f89263abd45408e7eea45a6783ac316e7c07",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
