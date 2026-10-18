@@ -273,6 +273,7 @@ ul.plain li:first-child { border-top: 0; }
 .small { font-size: 12px; }
 .relations .relation { display: grid; grid-template-columns: 9rem minmax(0, 1fr) 9rem 9rem auto; gap: .35rem; margin-bottom: .35rem; }
 .relations .relation input { width: 100%; box-sizing: border-box; }
+.relations .relation-actions { display: flex; gap: .5rem; align-items: center; white-space: nowrap; }
 .details-head textarea { width: 100%; box-sizing: border-box; }
 @media (max-width: 900px) {
   .details-group .detail-row { grid-template-columns: 1fr; }

@@ -949,3 +949,93 @@ def test_each_source_files_documents_are_kept_in_its_own_folder():
     } <= set(store.objects)
     index = json.loads(store.objects["collections/rw/issues/abc.json"])
     assert index["documents"][0]["objects"] == "files/abc/"
+
+
+def test_a_law_links_to_the_laws_it_repeals_and_amends_and_they_link_back():
+    def doc(work, language="en", **more):
+        return {
+            "id": f"{work}-{language}",
+            "work": work,
+            "language": language,
+            "title": f"Title of {work}",
+            **more,
+        }
+
+    cites = [
+        {
+            "kind": "repeals",
+            "target": "Law nº 028/2023 of 19/05/2023 on examples",
+            "instrument": "law",
+            "number": "028/2023",
+            "year": "2023",
+        },
+        {
+            "kind": "amends",
+            "target": "Law n° 66/2018 of 30/08/2018 regulating labour",
+            "instrument": "law",
+            "number": "066/2018",
+            "year": "2018",
+            "note": "Article 44",
+        },
+        {
+            "kind": "repeals",
+            "target": "Law n° 08/99 of 18/06/1999 on banks",
+            "instrument": "law",
+            "number": "08/99",
+            "year": "1999",
+        },
+        {
+            "kind": "repeals",
+            "target": "Presidential Order n° 046/01 of 29/05/2019",
+            "instrument": "presidential_order",
+            "number": "046/01",
+            "year": "2019",
+        },
+    ]
+    documents = [
+        doc("rw-law-001-2025", cites=cites),
+        doc("rw-law-001-2025", "fr", cites=cites),
+        doc("rw-law-28-2023"),
+        doc("rw-law-66-2018", "rw"),
+        doc("rw-presidential-order-46-01-2019"),
+        doc("rw-law-28-2023", part="annex-1", id="rw-law-28-2023-annex-1-en"),
+    ]
+    linked = {d["id"]: d.get("relations") for d in rwanda.link_works(documents)}
+    assert (
+        linked["rw-law-001-2025-en"]
+        == linked["rw-law-001-2025-fr"]
+        == [
+            {
+                "kind": "repeals",
+                "target": "Law nº 028/2023 of 19/05/2023 on examples",
+                "target_id": "rw-law-28-2023",
+            },
+            {
+                "kind": "amends",
+                "target": "Law n° 66/2018 of 30/08/2018 regulating labour",
+                "target_id": "rw-law-66-2018",
+                "note": "Article 44",
+            },
+            {"kind": "repeals", "target": "Law n° 08/99 of 18/06/1999 on banks"},  # not in the collection
+            {
+                "kind": "repeals",
+                "target": "Presidential Order n° 046/01 of 29/05/2019",
+                "target_id": "rw-presidential-order-46-01-2019",
+            },
+        ]
+    )
+    assert linked["rw-law-28-2023-en"] == [
+        {"kind": "repealed_by", "target": "Title of rw-law-001-2025", "target_id": "rw-law-001-2025"}
+    ]
+    assert linked["rw-law-66-2018-rw"] == [
+        {
+            "kind": "amended_by",
+            "target": "Title of rw-law-001-2025",
+            "target_id": "rw-law-001-2025",
+            "note": "Article 44",
+        }
+    ]
+    assert linked["rw-law-28-2023-annex-1-en"] is None  # an annex is not the law
+    assert (
+        rwanda.work_key("rw-law-53bis-2013") == rwanda.work_key("rw-law-053-bis-2013") == "rw-law-53-bis-2013"
+    )

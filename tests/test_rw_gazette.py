@@ -696,3 +696,90 @@ def test_older_french_articles_abbreviated_art_are_articles_and_a_reference_is_n
     )
     nodes = RG.structure(lines, "fr")
     assert [n["article"] for n in nodes if n.get("article")] == ["1", "2", "3"]
+
+
+def test_a_repealed_article_amends_its_law_and_a_repealed_law_is_repealed():
+    lines = [
+        {"text": text}
+        for text in [
+            "Having reviewed Law n° 5/2001 of 01/02/2001 governing examples;",
+            "Article One: Working hours",
+            "Article 43 of the Law n° 066/2018 of 30/08/2018 regulating labour in Rwanda is amended as follows:",
+            "“The working hours are determined by an Order.”",
+            "Article 2: Weekly rest",
+            "Article 44 of Law n° 66/2018 of 30/08/2018 regulating labour in Rwanda is repealed.",
+            "Article 3: Repealing provision",
+            "Law nº 028/2023 of 19/05/2023 on the prevention of money laundering, as amended by Law",
+            "n° 9/2024 of 02/03/2024, and Presidential Order n° 046/01 of 29/05/2019 determining examples",
+            "are hereby repealed. All prior legal provisions contrary to this Law are repealed.",
+            "Article 4: Saving and repealing provisions",
+            "Save Article 163 of Law n° 13/2009 of 27/05/2009 regulating labour in Rwanda, its other",
+            "provisions as well as other prior legal provisions contrary to this Law are repealed.",
+        ]
+    ]
+    entry = {
+        "kind": "law",
+        "number": "027/2026",
+        "versions": {
+            "en": {"title": "LAW N° 027/2026 OF 18/05/2026 AMENDING THE LAW N° 66/2018 OF 30/08/2018"}
+        },
+    }
+    found = {(c["kind"], c["instrument"], c["number"], c["year"]): c for c in RG.cited({"en": lines}, entry)}
+    assert set(found) == {
+        ("amends", "law", "066/2018", "2018"),
+        ("repeals", "law", "028/2023", "2023"),
+        ("repeals", "presidential_order", "046/01", "2019"),
+        ("repeals", "law", "13/2009", "2009"),
+    }  # not the law it was made under, nor the one that only amended the law it repeals
+    labour = found["amends", "law", "066/2018", "2018"]
+    assert labour["target"] == "Law n° 066/2018 of 30/08/2018 regulating labour in Rwanda"
+    assert labour["note"] == "Articles 43 and 44"
+    assert found["repeals", "law", "028/2023", "2023"]["target"] == (
+        "Law nº 028/2023 of 19/05/2023 on the prevention of money laundering"
+    )
+    assert "note" not in found["repeals", "presidential_order", "046/01", "2019"]
+    saved = found["repeals", "law", "13/2009", "2009"]  # all but one article
+    assert (saved["target"], saved["note"]) == (
+        "Law n° 13/2009 of 27/05/2009 regulating labour in Rwanda",
+        "Except Article 163",
+    )
+
+
+def test_a_title_names_the_law_it_amends_and_a_french_text_is_read_where_there_is_no_english():
+    entry = {
+        "kind": "law",
+        "number": "43/2018",
+        "versions": {
+            "fr": {
+                "title": "LOI N° 43/2018 DU 13/08/2018 MODIFIANT LA LOI N° 19/2008 DU 14/07/2008 RELATIVE À L’HYMNE"
+            }
+        },
+    }
+    lines = [
+        {
+            "text": "Article 2 : L’article 7 ter de la Loi n° 19/2008 du 14/07/2008 relative à l’hymne est abrogé."
+        }
+    ]
+    [link] = RG.cited({"fr": lines, "rw": [{"text": "Ingingo ya 2"}]}, entry)
+    assert (link["kind"], link["number"], link["note"]) == ("amends", "19/2008", "Article 7 ter")
+    assert link["target"] == "Loi n° 19/2008 du 14/07/2008 relative à l’hymne"
+    [title] = RG.cited({"fr": [{"text": ""}]}, entry)  # only the title: the law it amends, itself left out
+    assert (title["kind"], title["number"]) == ("amends", "19/2008")
+    assert title["target"].startswith("Loi n° 19/2008 du 14/07/2008")
+
+
+def test_a_bis_number_is_its_own_law_not_the_law_with_the_plain_number():
+    def number(text, language="en"):
+        return RG.openings([{"text": text, "page": 1}], language)[0]["number"]
+
+    assert number("LAW N° 001 BIS /2021 OF 04/02/2021 APPROVING RATIFICATION") == "001bis/2021"
+    assert number("LOI N° 001 bis/2021 DU 04/02/2021 APPROUVANT", "fr") == "001bis/2021"
+    assert number("LAW N°53BIS/2013 OF 01/01/2013 GOVERNING EXAMPLES") == "53bis/2013"
+    assert number("LAW N° 001/2021 OF 04/02/2021 GOVERNING EXAMPLES") == "001/2021"
+    assert number("LAW N° 12 OF 2001 GOVERNING EXAMPLES") == "12"
+    assert number("MINISTERIAL ORDER N° 001/19/10/TC OF 15/03/2019 X") == "001/19/10/TC"
+    [link] = RG.cited(
+        {"en": [{"text": "Law n° 001 bis /2021 of 04/02/2021 approving examples is repealed."}]},
+        {"kind": "law", "number": "1/2022", "versions": {}},
+    )
+    assert (link["number"], RG.number_key(link["number"])) == ("001 bis /2021", "1-bis-2021")

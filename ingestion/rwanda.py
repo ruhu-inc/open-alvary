@@ -670,6 +670,64 @@ def work_id(kind: str, number: str, year: str | None) -> str:
     return f"rw-{kind.replace('_', '-')}-{_slug(number)}"
 
 
+def work_key(work: str) -> str:
+    """A work id as a citation finds it, however the number was printed: "rw-law-028-2023" and
+    "rw-law-28-2023" alike, "rw-law-53bis-2013" and "rw-law-53-bis-2013" alike."""
+    return re.sub(r"(?<![0-9a-z])0+(?=\d)", "", re.sub(r"(\d)(bis|ter)\b", r"\1-\2", work))
+
+
+REVERSE = {"repeals": "repealed_by", "amends": "amended_by"}
+
+
+def link_works(documents: list[dict]) -> list[dict]:
+    """Each document with its links ("relations") to the earlier instruments it repeals or amends,
+    found in the collection by their citations, and to the later ones that repeal or amend it. A
+    citation of an instrument the collection lacks stays as printed, without a target."""
+    whole = [{**d, "work": d.get("work") or d["id"]} for d in documents if not d.get("part")]
+    by_key: dict[str, str] = {}
+    titles: dict[str, str] = {}
+    for d in whole:
+        by_key.setdefault(work_key(d["work"]), d["work"])
+        if d.get("language") == "en" or d["work"] not in titles:
+            titles[d["work"]] = d.get("title") or d["work"]
+    forward: dict[str, list[dict]] = {}
+    backward: dict[str, list[dict]] = {}
+    for d in whole:
+        if d["work"] in forward or not d.get("cites"):
+            continue
+        links = []
+        for cite in d["cites"]:
+            target = by_key.get(work_key(work_id(cite["instrument"], cite["number"], cite["year"])))
+            if target == d["work"]:
+                continue
+            note = {"note": cite["note"]} if cite.get("note") else {}
+            links.append(
+                {
+                    "kind": cite["kind"],
+                    "target": cite["target"],
+                    **({"target_id": target} if target else {}),
+                    **note,
+                }
+            )
+            if target:
+                backward.setdefault(target, []).append(
+                    {
+                        "kind": REVERSE[cite["kind"]],
+                        "target": titles[d["work"]],
+                        "target_id": d["work"],
+                        **note,
+                    }
+                )
+        forward[d["work"]] = links
+    out = []
+    for d in documents:
+        d = {k: v for k, v in d.items() if k != "relations"}
+        work = d.get("work") or d["id"]
+        links = [] if d.get("part") else forward.get(work, []) + backward.get(work, [])
+        out.append({**d, "relations": links} if links else d)
+    return out
+
+
 # Where the same document comes from several files, the one reviewed: the Official Gazette's
 # printing before a copy, then the copy with fewer scanned pages and fewer high flags.
 SOURCE_RANK = {"minijust-gazette": 0, "rlrc-laws": 1}
@@ -742,7 +800,7 @@ class LocalCollection:
 
     def save_manifest(self, manifest: dict) -> None:
         light = []
-        for document in manifest["documents"]:
+        for document in link_works(manifest["documents"]):
             entry, details = split_entry(document)
             if details:
                 (self.folder / f"{document['id']}.document.json").write_text(
@@ -824,7 +882,7 @@ class BucketCollection:
         for name in self.store.list(f"{self.prefix}issues/"):
             index = json.loads(self.store.get(name))
             documents += index["documents"] if isinstance(index, dict) else index  # older: a bare list
-        manifest["documents"] = one_per_id(documents)
+        manifest["documents"] = link_works(one_per_id(documents))
         self.store.put(
             f"{self.prefix}manifest.json",
             json.dumps(manifest, ensure_ascii=False).encode(),
@@ -995,6 +1053,9 @@ def prepare_selection(
                             }
                         )
             values = rw_gazette.suggest(lines, entry, issue)
+            # The earlier instruments it repeals or amends; linked across the collection when the
+            # manifest is assembled (link_works).
+            cites = rw_gazette.cited(lines, entry)
             values |= {
                 k: v
                 for k, v in rlrc_status(
@@ -1050,6 +1111,7 @@ def prepare_selection(
                         <= entry["versions"][language]["pages"][1]
                     ),
                     "also_printed_as": entry.get("also_printed_as"),
+                    **({"cites": cites} if cites else {}),
                     "suggested_absent": absent,
                     "suggested": {
                         **values,

@@ -239,6 +239,23 @@ def test_a_rwandan_organic_law_follows_rwandas_procedure_into_a_complete_record(
     values = V.base_values(document, {})
     assert (values["identity.family"], values["identity.type"]) == ("legislation", "organic_law")
     assert V.base_values({"type": "presidential_order"}, {})["identity.family"] == "executive_instrument"
+    # A later law in the collection repeals it: suggested as repealed, or noted where its listing disagrees.
+    repealer = {"kind": "repealed_by", "target": "Law n° 1/2027 of 01/01/2027", "target_id": "rw-law-1-2027"}
+    later = V.base_values({**document, "relations": [repealer]}, {})
+    assert later["relations"] == [repealer] and later["status.legal"] == "repealed"
+    assert later["status.note"] == "Repealed by Law n° 1/2027 of 01/01/2027, as its text says."
+    listed = {
+        "identity.family": "legislation",
+        "identity.type": "organic_law",
+        "status.legal": "in_force",
+        "status.note": "Listed in force.",
+    }
+    disagree = V.base_values({**document, "suggested": listed, "relations": [repealer]}, {})
+    assert disagree["status.legal"] == "in_force"
+    assert (
+        disagree["status.note"]
+        == "Listed in force. But Law n° 1/2027 of 01/01/2027 says it repeals this: check which is right."
+    )
     specs = V.fields("legislation", "organic_law", rwanda)
     keys = {s.key for s in specs}
     assert {"step:adopted:senate.date", "step:countersigned.person", "step:sealed.person"} <= keys

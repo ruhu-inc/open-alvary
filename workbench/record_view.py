@@ -1086,6 +1086,22 @@ def base_values(document: dict, manifest: dict) -> dict:
         and suggested.get("identity.type") in R.FAMILIES[suggested["identity.family"]][1]
     ):
         values.update(suggested)
+    # Its links to the earlier documents of the collection it repeals or amends, and from the later
+    # ones that repeal or amend it (found when the collection was prepared).
+    links = [dict(link) for link in document.get("relations") or []]
+    if links:
+        values["relations"] = links
+    repealed_by = "; ".join(link["target"] for link in links if link["kind"] == "repealed_by")
+    if repealed_by and values.get("status.legal") in (None, "", "unknown"):
+        values["status.legal"] = "repealed"
+        values["status.note"] = f"Repealed by {repealed_by}, as its text says."
+    elif repealed_by and values.get("status.legal") != "repealed":
+        values["status.note"] = " ".join(
+            filter(
+                None,
+                [values.get("status.note"), f"But {repealed_by} says it repeals this: check which is right."],
+            )
+        )
     if document.get("language") and isinstance(values.get("expressions"), list):
         values["expressions"] = [
             {**row, "this_text": "yes" if row.get("language") == document["language"] else "no"}
