@@ -2169,6 +2169,19 @@
           ],
           "default": null,
           "title": "Prior Version Id"
+        },
+        "expression_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expression Id"
         }
       },
       "required": [

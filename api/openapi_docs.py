@@ -125,8 +125,20 @@ OPERATIONS: dict[str, dict] = {
             "source_id": "The record's ID.",
             "as_of": "A date, such as `2024-01-01`: the text in force on it, from each text's effective dates.",
             "language": "A language, such as `en`; `en` also matches `en-NG`.",
+            "expression_id": "One language edition, such as `ng-foi-act-2011:en`, from Get a record's editions.",
         },
         "errors": MISSING | BAD | TOO_LARGE,
+    },
+    "/sources/{source_id}/expressions": {
+        "operationId": "get_expressions",
+        "tag": "Catalogue",
+        "summary": "Get a record's editions",
+        "description": "The record's language editions with a public text: for each, its texts and the one to "
+        "read when no date is given (`preferred_version_id`), with the reason. A preferred text is a reading "
+        "default, not a claim that the edition is authoritative. An edition's ID is `{source_id}:{language}`; "
+        "pass it as `expression_id` to Get a record's texts.",
+        "parameters": {"source_id": "The record's ID."},
+        "errors": MISSING,
     },
     "/versions/{version_id}/text": {
         "operationId": "get_version_text",
@@ -738,6 +750,18 @@ FIELDS: dict[str, dict[str, str]] = {
         "serialization_profile": "How the text was built from the reviewed pages, such as "
         "`oa-text-1/workbench-units-1`, when recorded.",
         "prior_version_id": "The earlier version of the same record this one corrects or replaces, if any.",
+        "expression_id": "The language edition the text belongs to: `{source_id}:{language}`.",
+    },
+    "ExpressionPage": {"source_id": "The record.", "items": "Its language editions with a public text."},
+    "ExpressionView": {
+        "expression_id": "The edition's ID: `{source_id}:{language}`.",
+        "source_id": "The record.",
+        "language": "The edition's language.",
+        "authority": "Whether the edition is authentic or authoritative: `unknown` until the catalogue records it.",
+        "version_ids": "The edition's public texts.",
+        "preferred_version_id": "The text to read when no date is given, when one can be named; else absent.",
+        "preferred_reason": "Why: `only_text`, `in_force_today` (the one text in force today, every text "
+        "dated), or, when none is preferred, `several_texts` or `dates_unknown`.",
     },
     "NodeViewRecord": {
         "id": "The part's ID.",

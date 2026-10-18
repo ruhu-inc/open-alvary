@@ -100,6 +100,27 @@ def test_a_validated_record_maps_to_a_catalogue_entry_and_never_to_text(decision
         publish.catalogue_entries(without_link, decision)
 
 
+def test_every_form_a_work_is_cited_by_becomes_an_alias(decisions):
+    decision = publish.decide("rw", "Ijidai Lassa", 12, [], "", "")
+    identity = rwanda_law().identity.model_copy(
+        update={
+            "citations": (
+                RecordCitation(kind="official", text="Law n° 055/2024"),
+                RecordCitation(kind="popular", text="IP Law 2024"),
+                RecordCitation(kind="other", text="LAW N° 055/2024"),  # the same form, written apart
+            ),
+            "alternative_titles": ("Intellectual Property Law",),
+        }
+    )
+    item = publish.Approved("rw-law-055-2024", rwanda_law(identity=identity), ["en"], "A", datetime.now(UTC))
+    found = publish.catalogue_entries(item, decision)["citations"]
+    assert [(c.id, c.value) for c in found] == [
+        ("citation-rw-law-055-2024", "Law n° 055/2024"),  # the ID the first alias always had
+        ("citation-rw-law-055-2024-ip-law-2024", "IP Law 2024"),
+        ("citation-rw-law-055-2024-intellectual-property-law", "Intellectual Property Law"),
+    ]
+
+
 def test_reviewed_links_between_published_works_become_checked_catalogue_links(decisions):
     decision = publish.decide("rw", "Ijidai Lassa", 12, [], "", "")
 

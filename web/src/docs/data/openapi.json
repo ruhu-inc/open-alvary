@@ -1380,6 +1380,90 @@
         ]
       }
     },
+    "/sources/{source_id}/expressions": {
+      "get": {
+        "summary": "Get a record's editions",
+        "operationId": "get_expressions",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            },
+            "description": "The record's ID."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExpressionPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such record, or it is not public (`unavailable`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "The record's language editions with a public text: for each, its texts and the one to read when no date is given (`preferred_version_id`), with the reason. A preferred text is a reading default, not a claim that the edition is authoritative. An edition's ID is `{source_id}:{language}`; pass it as `expression_id` to Get a record's texts.",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
     "/sources/{source_id}/versions": {
       "get": {
         "summary": "Get a record's texts",
@@ -1432,6 +1516,25 @@
               "title": "Language"
             },
             "description": "A language, such as `en`; `en` also matches `en-NG`."
+          },
+          {
+            "name": "expression_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 3,
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expression Id"
+            },
+            "description": "One language edition, such as `ng-foi-act-2011:en`, from Get a record's editions."
           }
         ],
         "responses": {
@@ -3044,6 +3147,104 @@
           "reasons"
         ],
         "title": "DecisionView"
+      },
+      "ExpressionPage": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The record."
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ExpressionView"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "Its language editions with a public text."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "items"
+        ],
+        "title": "ExpressionPage"
+      },
+      "ExpressionView": {
+        "properties": {
+          "expression_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Expression Id",
+            "description": "The edition's ID: `{source_id}:{language}`."
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The record."
+          },
+          "language": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Language",
+            "description": "The edition's language."
+          },
+          "authority": {
+            "type": "string",
+            "const": "unknown",
+            "title": "Authority",
+            "default": "unknown",
+            "description": "Whether the edition is authentic or authoritative: `unknown` until the catalogue records it."
+          },
+          "version_ids": {
+            "items": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+            },
+            "type": "array",
+            "title": "Version Ids",
+            "description": "The edition's public texts."
+          },
+          "preferred_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preferred Version Id",
+            "description": "The text to read when no date is given, when one can be named; else absent."
+          },
+          "preferred_reason": {
+            "type": "string",
+            "enum": [
+              "only_text",
+              "in_force_today",
+              "several_texts",
+              "dates_unknown"
+            ],
+            "title": "Preferred Reason",
+            "description": "Why: `only_text`, `in_force_today` (the one text in force today, every text dated), or, when none is preferred, `several_texts` or `dates_unknown`."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "expression_id",
+          "source_id",
+          "language",
+          "version_ids",
+          "preferred_reason"
+        ],
+        "title": "ExpressionView",
+        "description": "One language edition of a record (API-02 expressions): its public texts and the one to read when\nno date is given. A preferred text is a reading default, not a claim that the edition is\nauthoritative; the catalogue does not yet record which editions are."
       },
       "JurisdictionView": {
         "properties": {
@@ -5030,6 +5231,19 @@
             ],
             "title": "Prior Version Id",
             "description": "The earlier version of the same record this one corrects or replaces, if any."
+          },
+          "expression_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expression Id",
+            "description": "The language edition the text belongs to: `{source_id}:{language}`."
           }
         },
         "additionalProperties": false,

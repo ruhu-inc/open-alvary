@@ -11,8 +11,9 @@ Ranking (oa-rank-1) is PostgreSQL's cover density, ts_rank_cd with normalisation
 headings (weight 1.0), its words (0.4), its work's title (0.2) and identifiers (0.1): its citation and
 pinpoint. A text no longer in force (its record is repealed, superseded or historical, or a later
 published text of the same record replaces it) scores 0.8 of that. Ties go to the version, then the
-earlier unit. English texts are analysed in English; every other language word for word (simple: no
-stemming, no stop words) until it passes the language tests.
+earlier unit. English texts are analysed in English and French texts in French (stemming and common
+words; tests/test_postgres_search.py); every other language word for word (simple) until it passes
+the language tests.
 """
 
 import hashlib
@@ -29,9 +30,10 @@ from api import pinpoint
 from api.store import tables
 from schema.public import NodeViewRecord, VersionViewRecord
 
-ANALYZER = "oa-search-1"  # a new value rebuilds every unit at the next publication
+ANALYZER = "oa-search-2"  # a new value rebuilds every unit at the next publication
 RANKING = "oa-rank-1"
-CONFIGS = {"en": "english"}  # every other language: simple (MIN-02)
+CONFIGS = {"en": "english", "fr": "french"}  # every other language: simple (MIN-02)
+ANALYSES = ("english", "french", "simple")  # the configs a unit may have (migration 0033)
 WEIGHTS = "{0.1, 0.2, 0.4, 1.0}"  # D identifiers, C the work's title, B words, A headings
 NOT_IN_FORCE = 0.8
 MAX_UNIT_BYTES = 64 * 1024
@@ -401,8 +403,7 @@ _COLUMNS = ", ".join(
               "heading", "language", "config", "content_hash")
 )  # fmt: skip
 _MATCH = " OR ".join(
-    f"(u.config = '{c}' AND (u.document || u.context) @@ websearch_to_tsquery('{c}', :q))"
-    for c in ("english", "simple")
+    f"(u.config = '{c}' AND (u.document || u.context) @@ websearch_to_tsquery('{c}', :q))" for c in ANALYSES
 )
 _SCORE = (
     f"ts_rank_cd(CAST('{WEIGHTS}' AS float4[]), u.document || u.context,"
@@ -449,7 +450,7 @@ def search(
                 "SELECT c, numnode(websearch_to_tsquery(CAST(c AS regconfig), :q)) > 0"
                 " FROM unnest(CAST(:configs AS text[])) AS c"
             ),
-            {"q": query, "configs": ["english", "simple"]},
+            {"q": query, "configs": list(ANALYSES)},
         ).all()
     )
     common_only = tuple(c for c, found in sorted(terms.items()) if not found)

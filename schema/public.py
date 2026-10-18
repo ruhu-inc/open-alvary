@@ -38,6 +38,9 @@ class RightsViewRecord(RightsRecord):
 
 class VersionViewRecord(SourceVersion):
     model_config = ConfigDict(extra="forbid", frozen=True)
+    # The language edition the text belongs to (API-02), `{source_id}:{language}`; the keyed API
+    # answers it, and it is absent elsewhere, so the pilot's answer is unchanged.
+    expression_id: ID | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class NodeViewRecord(StructureNode):
@@ -65,6 +68,25 @@ class SearchPage(SourcePage):
     scope: Literal["Catalogue metadata and cleared full text only"] = (
         "Catalogue metadata and cleared full text only"
     )
+
+
+class ExpressionView(WireModel):
+    """One language edition of a record (API-02 expressions): its public texts and the one to read when
+    no date is given. A preferred text is a reading default, not a claim that the edition is
+    authoritative; the catalogue does not yet record which editions are."""
+
+    expression_id: ID
+    source_id: ID
+    language: ID
+    authority: Literal["unknown"] = "unknown"
+    version_ids: tuple[ID, ...]
+    preferred_version_id: ID | None = None
+    preferred_reason: Literal["only_text", "in_force_today", "several_texts", "dates_unknown"]
+
+
+class ExpressionPage(WireModel):
+    source_id: ID
+    items: tuple[ExpressionView, ...]
 
 
 class VersionSelection(WireModel):

@@ -184,15 +184,29 @@ def test_the_final_schedule_of_a_long_statute_ranks_first_with_an_exact_excerpt(
     assert busy["total"] == 999 and busy["next_cursor"] and elapsed < 3
 
 
-def test_a_french_text_is_searched_word_for_word(store, client):
+def test_a_french_text_is_searched_in_french_and_other_languages_word_for_word(store, client):
+    # The French search tests (MIN-02, LNG-01): verb and plural forms find each other, common words
+    # alone find nothing, and accents are kept as written.
     publish_act(store, UNITS)
-    french = [{"kind": "paragraph", "text": "1. Le Fonds prête aux étudiants."}]
+    french = [
+        {"kind": "paragraph", "text": "1. Le Fonds prête aux étudiants inscrits dans les universités."},
+        {"kind": "paragraph", "text": "2. Les données personnelles sont traitées loyalement."},
+    ]
     publish_act(store, french, work="ng-loi-exemple-2023", title="Loi exemple, 2023", language="fr")
-    page = search(client, "prête")
-    assert page["items"][0]["language"] == "fr" and page["analysis"] == {"en": "english", "fr": "simple"}
-    assert any("Texts in fr are matched word for word" in n for n in page["notices"])
-    assert search(client, "prêter")["status"] == "no_result"  # no French stemming until it is tested
-    assert {h["language"] for h in search(client, "1", language="fr")["items"]} == {"fr"}
+    page = search(client, "prêter")
+    assert page["items"][0]["language"] == "fr" and page["analysis"] == {"en": "english", "fr": "french"}
+    assert not any("Texts in fr" in n for n in page["notices"])  # French is no longer word for word
+    assert search(client, "étudiant inscrit")["total"] == 1  # singular finds plural
+    assert search(client, "donnée personnelle traiter")["items"][0]["citation"] == "Loi exemple, 2023, s. 2"
+    common = search(client, "le la des du", language="fr")
+    assert common["status"] == "no_result" and "common words" in common["notices"][0]
+    assert search(client, "etudiants", language="fr")["status"] == "no_result"  # accents are kept
+    kinyarwanda = [{"kind": "paragraph", "text": "1. Ikigega gitanga inguzanyo ku banyeshuri."}]
+    publish_act(store, kinyarwanda, work="ng-itegeko-2023", title="Itegeko, 2023", language="rw")
+    other = search(client, "inguzanyo")
+    assert other["analysis"]["rw"] == "simple" and any(
+        "Texts in rw are matched word for word" in n for n in other["notices"]
+    )
 
 
 def test_a_date_searches_only_texts_in_force_on_it(store, client):
@@ -242,3 +256,17 @@ def test_the_mcp_tools_search_texts_and_resolve_a_pinpoint(store, tmp_path):
     invalid = {"name": "search_text", "arguments": {"query": "salary", "as_of": "yesterday"}}
     answer = client.post("/mcp", json={"jsonrpc": "2.0", "method": "tools/call", "id": 2, "params": invalid})
     assert answer.json()["error"]["code"] == -32602
+
+
+def test_the_integration_acceptance_checks_pass_on_a_published_text(store, client, capsys):
+    from operations import acceptance
+
+    publish_act(store, UNITS)
+    golden = [
+        {"query": "salary", "expect": ["s. 1"]},
+        {"query": "Lagos office", "expect": ["First Schedule, para. 1"]},
+    ]
+    report = acceptance.run(client, "Example Act, 2023, s. 1(2)(b)", golden)
+    assert not report.failed and [r[1] for r in report.results].count("PASS") == 10
+    missing = acceptance.run(client, "Example Act, 2023, s. 9", golden)
+    assert missing.failed and missing.results[0][:2] == ("OA-S2 provision lookup", "FAIL")
