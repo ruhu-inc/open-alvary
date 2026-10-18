@@ -1,0 +1,28 @@
+tests/test_rw_gazette.py
+  s_b82616e2476856::t_4310e60cfbac96 640-666,670,673,675-679
+  s_b82616e2476856::t_8eafa4eec1959a 680-687,689-692,695-697
+  s_b82616e2476856::t_9944ee4aef0b98 688,693-694,698
+  s_b82616e2476856::t_8ed292bb8d5a96 667-669,671-672,674
+ingestion/rw_gazette.py
+  s_b82616e2476856::t_41f0f9b6761cf3 24
+  s_b82616e2476856::t_9944ee4aef0b98 131-133
+  s_b82616e2476856::t_347c2bf1e1daaa 215-219,221-229,238-248,251-252,254,344,346,349-350
+  s_b82616e2476856::t_98b6a76f4995d3 18,220,234-235
+  s_b82616e2476856::t_3338e9f3aed578 230-233,236-237,253
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e2b88f8c4210f87ddc5730ce20acb319b2906604",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
