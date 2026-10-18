@@ -641,6 +641,11 @@ def _coverage(rec: _Recorder, *, record_events: bool) -> None:
             name = names.get(jurisdiction, jurisdiction)
             rec.events.append(
                 {
+                    "event_id": uuid.uuid4(),
+                    "event_revision": 1,
+                    "supersedes_event_id": None,
+                    "supersedes_revision": None,
+                    "legal_effective": None,
                     "event_type": "coverage_changed",
                     "logical_event_key": f"{jurisdiction}:{digest(snapshot)[:16]}",
                     "reviewed_revision": rec.next_revision(
@@ -653,6 +658,7 @@ def _coverage(rec: _Recorder, *, record_events: bool) -> None:
                     "language": None,
                     "change_reason": None,
                     "payload": {
+                        "schema_version": SCHEMA_VERSION,
                         "title": name,
                         "citation": None,
                         "summary": f"{name} now has records in the catalogue."

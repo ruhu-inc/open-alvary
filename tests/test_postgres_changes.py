@@ -502,3 +502,27 @@ def test_a_text_that_replaces_another_names_the_provisions_it_adds_removes_and_c
         "changed": ["section/1"],
         "truncated": False,
     }
+
+
+def test_a_country_losing_its_last_record_or_gaining_its_first_is_a_coverage_change(feed):
+    store, client = feed
+
+    def every_record(public):
+        def change(corpus):
+            for rights in corpus.rights:
+                rights.metadata_public = public
+
+        return change
+
+    edit(store, every_record(False))
+    [lost] = [e for e in events(store) if e["event_type"] == "coverage_changed"]
+    assert lost["event_revision"] == 1 and lost["supersedes_event_id"] is None
+    assert lost["payload"]["schema_version"] == "change-event-1"
+    assert lost["payload"]["coverage"] == {"has_public_records": False}
+
+    edit(store, every_record(True))
+    gained = [e for e in events(store) if e["event_type"] == "coverage_changed"][-1]
+    assert gained["event_id"] != lost["event_id"]
+    assert gained["payload"]["coverage"] == {"has_public_records": True}
+    served = of_type(client, "coverage_changed")
+    assert served and all(e["schema_version"] == "change-event-1" for e in served)
