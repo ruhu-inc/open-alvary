@@ -1,0 +1,55 @@
+workbench/review.py
+  s_d665c62e07d76f::t_8de7be8a4bc578 66,68-70
+  s_d665c62e07d76f::t_a5bcbe2fd26ec6 86-90,102-103
+  s_d665c62e07d76f::t_e5863c1e63b69b 5
+workbench/store.py
+  s_d665c62e07d76f::t_03eade7f59d762 145-149
+  s_d665c62e07d76f::t_fee5ee38761689 204-210
+  s_d665c62e07d76f::t_fc1ab73f04c456 644-648
+workbench/publication.py
+  s_d665c62e07d76f::t_140fef2619adfa 1-52,54-62,66-119
+  s_d665c62e07d76f::t_e1d65ff89c9801 53,63-65
+workbench/app.py
+  s_d665c62e07d76f::t_e1d65ff89c9801 31
+  s_d665c62e07d76f::t_7ff952dcf20927 567-570
+  s_d665c62e07d76f::t_ceb34fc57d445d 426,437-441
+  s_d665c62e07d76f::t_e409f66d0ca1ae 396
+  s_d665c62e07d76f::t_944a68898dd660 544
+  s_d665c62e07d76f::t_6fd4351c0d156f 442
+workbench/content.py
+  s_d665c62e07d76f::t_508e6f0989dd75 615-625
+workbench/serialize.py
+  s_d665c62e07d76f::t_c75f9520f60f6a 21
+  s_d665c62e07d76f::t_ff33d6c28599b0 159
+  s_d665c62e07d76f::t_0091c70245529f 14
+workbench/static/app.js
+  s_d665c62e07d76f::t_70407d55264a28 452-454
+  s_d665c62e07d76f::t_34823c4f3053db 466,471-474,477-480,482
+  s_d665c62e07d76f::t_0d7ecb11d1098a 722
+  s_d665c62e07d76f::t_aaa251dbea5e37 442-443
+  s_d665c62e07d76f::t_eb2b4014d58bf4 392
+  s_d665c62e07d76f::t_4b451681668cd0 464-465,467-470,475-476,481,483-494,498-511
+  s_d665c62e07d76f::t_dc2a66a9dc1797 495-497
+workbench/static/app.css
+  s_d665c62e07d76f::t_37193ad6500167 339
+  s_d665c62e07d76f::t_b5bc16a627eebc 340-344
+tests/test_workbench.py
+  s_d665c62e07d76f::t_d570b1332e3bba 1184-1187
+  s_d665c62e07d76f::t_28aa9e05241887 1171-1183,1188-1220
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6afb9e4ea4cdb6d8cedacd12b65ddc35ff5ea0f3",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
