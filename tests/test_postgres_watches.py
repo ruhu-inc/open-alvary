@@ -162,6 +162,7 @@ def test_a_digest_groups_matches_carries_one_click_unsubscribe_and_never_repeats
     assert headers["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
     assert "Nigeria" in message.text and "/console/monitor" in message.text
     assert worker.digests(accounts, mailer, BASE, now=later) == 0 and len(mailer.sent) == 1
+    # Whatever the weekday, the first digest held both matches: none fell before its window.
     # The one-click link: describing changes nothing, posting unsubscribes, a bad token never succeeds.
     token = headers["List-Unsubscribe"].strip("<>").rsplit("/", 1)[1]
     assert watches.describe_unsubscribe(token)["scope"] == "all"
@@ -321,3 +322,20 @@ def test_bounces_and_complaints_from_the_mail_provider_stop_digests(world, monke
     assert not watches.preferences(owner)["bounced"]
     assert post({"type": "email.complained", "data": {"to": ["amina@example.org"]}}).status_code == 204
     assert watches.preferences(owner)["email_on"] is False
+
+
+def test_a_first_digest_after_missed_sends_gathers_every_match_since_the_watch_began(world):
+    store, accounts, watches = world
+    owner, organisation = person(accounts, "kwame")
+    watches.set_preferences(owner, {"timezone": "Africa/Kigali", "daily_time": "07:00", "weekly_day": 1})
+    watches.create(owner, organisation, {"name": "Nigeria", "filters": NIGERIA, "email": "weekly"})
+    worker.match(accounts)
+    change(store, "One.")
+    assert worker.match(accounts) == 1
+    mailer = Mailer()
+    # The worker missed two weekly sends: the third still carries the match, once.
+    weeks_later = datetime.now(UTC) + timedelta(days=22)
+    assert (
+        worker.digests(accounts, mailer, BASE, now=weeks_later) == 1 and "1 change" in mailer.sent[0].subject
+    )
+    assert worker.digests(accounts, mailer, BASE, now=weeks_later + timedelta(days=7)) == 0
