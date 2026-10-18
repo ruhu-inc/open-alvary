@@ -34,7 +34,7 @@ def test_pg_legacy_page_is_bounded_and_never_loads_whole_corpus(pg_engine, monke
     try:
         result = TestClient(create_app(store)).get("/sources?limit=2&offset=1")
         assert result.status_code == 200
-        assert result.json()["total"] == 4 and len(result.json()["items"]) == 2
+        assert result.json()["total"] == 5 and len(result.json()["items"]) == 2
         assert len(statements) == 4  # authority lookup/check, count, bounded joined page
         assert "LIMIT" in statements[-1] and "OFFSET" in statements[-1]
         assert not any("versions" in statement or "staging" in statement for statement in statements)

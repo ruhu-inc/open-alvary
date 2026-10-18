@@ -16,10 +16,17 @@ from schema.models import Citation, Corpus
 
 def test_seed_has_no_cleared_text(catalogue):
     public = public_corpus(catalogue)
-    assert len(public.sources) == 4
+    assert len(public.sources) == 5
     assert public.versions == []
     assert all(r.status == "RIGHTS_UNDER_REVIEW" for r in public.rights)
     assert next(s for s in public.sources if s.id == "ng-isa-2007").legal_status == "repealed"
+    [repeal] = catalogue.amendments  # what repealed it: public once a reviewer checks it
+    assert (repeal.source_id, repeal.kind, repeal.target_source_id) == (
+        "ng-isa-2025",
+        "repeals",
+        "ng-isa-2007",
+    )
+    assert not repeal.verified and public.amendments == []
 
 
 def test_reseed_refreshes_catalogue_text_and_keeps_later_decisions(store, catalogue):
@@ -125,7 +132,7 @@ def test_restricted_records_absent_from_every_public_surface(cleared, store, tmp
     sid = cleared.sources[0].id
     for path in [f"/sources/{sid}", f"/sources/{sid}/versions", f"/rights/{sid}"]:
         assert client.get(path).status_code == 404
-    assert client.get("/sources").json()["total"] == 3
+    assert client.get("/sources").json()["total"] == 4
     assert client.get("/citations/" + quote(cleared.sources[0].citation)).json()["status"] == "unresolved"
     assert sid not in public_corpus(cleared).model_dump_json()
 

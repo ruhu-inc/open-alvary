@@ -16,6 +16,8 @@ from schema.record import (
     Number,
     Place,
     Publication,
+    Reference,
+    Relation,
     Status,
     TextInfo,
     Version,
@@ -96,3 +98,30 @@ def test_a_validated_record_maps_to_a_catalogue_entry_and_never_to_text(decision
     without_link = publish.Approved("rw-x", rwanda_law(publications=()), ["rw"], "A", datetime.now(UTC))
     with pytest.raises(publish.Refused, match="no official publication link"):
         publish.catalogue_entries(without_link, decision)
+
+
+def test_reviewed_links_between_published_works_become_checked_catalogue_links(decisions):
+    decision = publish.decide("rw", "Ijidai Lassa", 12, [], "", "")
+
+    def item(work, *relations):
+        return publish.Approved(
+            work, rwanda_law(relations=relations), ["en"], "Ijidai Lassa", datetime.now(UTC)
+        )
+
+    def link(kind, work):
+        return Relation(kind=kind, target=Reference(citation=f"Law of {work}", work_uri=work))
+
+    approved = [
+        item(
+            "rw-law-055-2024", link("repeals", "rw-law-31-2009"), link("made_under", "rw-law-not-published")
+        ),
+        item("rw-law-31-2009", link("repealed_by", "rw-law-055-2024"), link("amended_by", "rw-law-5-2015")),
+        item("rw-law-5-2015", link("cites", "rw-law-31-2009")),
+    ]
+    sources = {a.work: publish.catalogue_entries(a, decision)["source"] for a in approved}
+    links = publish.catalogue_links(approved, sources)
+    assert [(a.source_id, a.kind, a.target_source_id, a.verified) for a in links] == [
+        ("rw-law-055-2024", "repeals", "rw-law-31-2009", True),  # said by both: one link
+        ("rw-law-5-2015", "amends", "rw-law-31-2009", True),
+    ]
+    assert all(str(a.evidence_url) == "https://www.minijust.gov.rw/official-gazette" for a in links)

@@ -77,11 +77,11 @@ def test_a_key_reads_the_corpus_and_its_use_is_counted(api):
     grant(accounts, organisation)
     headers = key(accounts, person, organisation)
     page = client.get("/api/v1/sources", headers=headers)
-    assert page.status_code == 200 and page.json()["total"] == 4
+    assert page.status_code == 200 and page.json()["total"] == 5
     assert "access-control-allow-origin" not in page.headers and page.headers["cache-control"] == "no-store"
     record = client.get("/api/v1/sources/ng-foi-act-2011", headers=headers)
     assert record.json()["title"] == "Freedom of Information Act 2011"
-    assert client.get("/api/v1/search", params={"q": "act"}, headers=headers).json()["total"] == 3
+    assert client.get("/api/v1/search", params={"q": "act"}, headers=headers).json()["total"] == 4
     [day] = accounts.usage(person, organisation)
     assert day["requests"] == 3 and day["bytes"] > 0 and day["class"] == "rest"
     assert accounts.list_keys(person, organisation)[0]["last_used_at"] is not None
@@ -186,6 +186,7 @@ def test_mcp_needs_a_credential_and_answers_tools_within_the_access(api):
     assert {t["name"] for t in tools} == {
         "search_catalogue",
         "get_source",
+        "get_relationships",
         "get_coverage",
         "list_changes",
         "get_change",
@@ -243,3 +244,26 @@ def test_activation_b_closes_the_anonymous_api_but_not_the_change_feed(api):
     assert client.get("/api/changes").status_code == 200  # the change feed stays anonymous (SUB C1)
     assert client.get("/api/change-coverage").status_code == 200
     assert client.get("/healthz").status_code == 200
+
+
+def test_a_records_history_comes_from_checked_links_a_page_at_a_time(api):
+    client, accounts, person, organisation = api
+    grant(accounts, organisation)
+    headers = key(accounts, person, organisation)
+    path = "/api/v1/sources/ng-isa-2007/relationships"
+    unchecked = client.get(path, headers=headers).json()
+    assert unchecked["total"] == 0 and unchecked["current"] is None  # the repeal is not yet checked
+    store = Store(accounts.engine)  # the same database
+    corpus = store.load()
+    corpus.amendments = [a.model_copy(update={"verified": True}) for a in corpus.amendments]
+    store.save(corpus)
+    checked = client.get(path, headers=headers).json()
+    assert checked["current"]["source_id"] == "ng-isa-2025" and checked["total"] == 1
+    assert [(i["kind"], i["source_id"]) for i in checked["items"]] == [("repealed_by", "ng-isa-2025")]
+    later = client.get(
+        "/api/v1/sources/ng-isa-2025/relationships", params={"kind": "repeals"}, headers=headers
+    )
+    assert [i["source_id"] for i in later.json()["items"]] == ["ng-isa-2007"]
+    for bad in ({"kind": "parent_of"}, {"limit": 0}, {"cursor": "nonsense"}):
+        refused = client.get(path, params=bad, headers=headers)
+        assert refused.status_code == 400 and refused.json()["code"] == "invalid_input", bad

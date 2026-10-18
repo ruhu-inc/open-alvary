@@ -30,7 +30,7 @@ from api.catalogue import FACETS, SORTS, InvalidSearch, LegacyCatalogue, SourceU
 from api.emission import CheckedFileResponse, CheckedResponse
 from api.project import project_info
 from api.release_adapter import LegacyReleases, ReleaseMissing, ReleaseWithdrawn
-from api.repositories import LegacyRepository, PublicUnavailable, ResultTooLarge
+from api.repositories import EDGE_ORDER, LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import Store, check_legacy_authority
 from changes.routes import create_router as create_changes_router
 from rights.bytes import ByteLedger, Scope
@@ -311,6 +311,20 @@ def create_site_app(store: Store, release_root: Path, admission: AdmissionConfig
             lease_seconds=limits.emission_lease_seconds if limits is not None else None,
             charged=admission is not None and bool(page.items),
         )
+
+    @app.get("/sources/{source_id}/relationships")
+    def relationships(source_id: str, request: Request):
+        """The record page's history: its links (a page), and apart from them the first page of the
+        instruments made under it, which may be many."""
+        _only(request)
+        with catalogue() as service:
+            links = service.relationships(source_id, kinds=set(EDGE_ORDER) - {"enables"}, limit=PAGE_SIZE)
+            enabled = service.relationships(source_id, kinds={"enables"}, limit=PAGE_SIZE, current=False)
+        return {
+            **links.model_dump(mode="json", exclude={"next_cursor"}),
+            "enables": [item.model_dump(mode="json") for item in enabled.items],
+            "enables_total": enabled.total,
+        }
 
     @app.get("/rights/{source_id}")
     def rights(source_id: str, request: Request):

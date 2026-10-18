@@ -31,9 +31,11 @@ from schema.public import (
     CitationView,
     CoverageView,
     JurisdictionView,
+    RelationKind,
     RightsView,
     SearchPage,
     SourcePage,
+    SourceRelationships,
     SourceView,
     VersionPage,
 )
@@ -177,6 +179,18 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
     @app.get("/sources/{source_id}")
     def source(request: Request, source_id: str, service: LegacyCatalogue = Depends(catalogue)) -> SourceView:
         return check_source(request, service, source_id)
+
+    @app.get("/sources/{source_id}/relationships")
+    def relationships(
+        request: Request,
+        source_id: str,
+        kind: RelationKind | None = None,
+        limit: int = Query(25, ge=1, le=100),
+        cursor: str | None = Query(None, max_length=200),
+        service: LegacyCatalogue = Depends(catalogue),
+    ) -> SourceRelationships:
+        check_source(request, service, source_id)
+        return service.relationships(source_id, kinds=[kind] if kind else None, limit=limit, cursor=cursor)
 
     @app.get("/sources/{source_id}/versions")
     def versions(

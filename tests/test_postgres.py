@@ -36,7 +36,7 @@ def test_fresh_migrations_and_idempotent_seed(pg_engine):
     before = store.load().model_dump(mode="json")
     seed(store)
     assert store.load().model_dump(mode="json") == before
-    assert len(public_corpus(store.load()).sources) == 4
+    assert len(public_corpus(store.load()).sources) == 5
     assert not public_corpus(store.load()).versions
 
 

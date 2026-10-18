@@ -156,7 +156,7 @@ class Amendment(Model):
     id: ID
     source_id: ID
     target_source_id: ID
-    kind: Literal["amends", "repeals", "supersedes", "cross_reference"]
+    kind: Literal["amends", "repeals", "supersedes", "made_under", "cross_reference"]
     effective_date: date | None = None
     evidence_url: HttpUrl
     verified: bool = False

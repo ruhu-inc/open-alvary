@@ -6,15 +6,53 @@ canonical bodies; the shared policy runs on gate fields before an individual bod
 
 from collections.abc import Iterator
 
-from sqlalchemy import LargeBinary, Text, and_, cast, false, func, literal, or_, select, text, true
+from sqlalchemy import (
+    LargeBinary,
+    Text,
+    and_,
+    case,
+    cast,
+    false,
+    func,
+    literal,
+    or_,
+    select,
+    text,
+    true,
+    union_all,
+)
 from sqlalchemy.engine import Connection
 
 from api.search import literal_pattern
 from api.store import RELATIONS, tables
-from schema.models import Source
+from schema.models import Amendment, Source
 from schema.public import RightsViewRecord, VersionGate, VersionViewRecord
 
 BATCH_SIZE = 100
+# A stored link (newer → older) as each side sees it, and the order a reader asks about them in.
+EDGE_KINDS = {
+    ("in", "repeals"): "repealed_by",
+    ("in", "supersedes"): "superseded_by",
+    ("in", "amends"): "amended_by",
+    ("out", "made_under"): "made_under",
+    ("out", "repeals"): "repeals",
+    ("out", "supersedes"): "supersedes",
+    ("out", "amends"): "amends",
+    ("out", "cross_reference"): "cross_reference",
+    ("in", "cross_reference"): "cross_reference",
+    ("in", "made_under"): "enables",
+}
+EDGE_ORDER = [
+    "repealed_by",
+    "superseded_by",
+    "amended_by",
+    "made_under",
+    "repeals",
+    "supersedes",
+    "amends",
+    "cross_reference",
+    "enables",
+]
 MAX_UNPAGED_ROWS = 1000
 MAX_BUFFER_BYTES = 10 * 1024 * 1024
 
@@ -205,6 +243,69 @@ class LegacyRepository:
         if len(rows) > MAX_UNPAGED_ROWS:
             raise ResultTooLarge("Pilot unpaged response exceeds row bound")
         return rows
+
+    def edges(self, source_id: str, kinds, *, limit: int, offset: int):
+        """One page of a source's checked links to public sources, each as seen from its side
+        (EDGE_KINDS), in EDGE_ORDER then by the other source; and how many there are. The database
+        filters, counts and pages, so a law with hundreds of orders made under it costs one page."""
+        table, sources, rights = tables["amendments"], self._sources, self._rights
+        stored = table.c.payload["kind"].as_string()
+        parts = []
+        for direction, mine, other in (
+            ("out", table.c.source_id, table.c.target_source_id),
+            ("in", table.c.target_source_id, table.c.source_id),
+        ):
+            wanted = [(k, seen) for (d, k), seen in EDGE_KINDS.items() if d == direction and seen in kinds]
+            if not wanted:
+                continue
+            parts.append(
+                select(
+                    table.c.payload.label("payload"),
+                    case(*[(stored == k, EDGE_ORDER.index(seen)) for k, seen in wanted]).label("rank"),
+                    other.label("other"),
+                    table.c.id.label("edge"),
+                )
+                .select_from(
+                    table.join(sources, sources.c.id == other).join(rights, rights.c.source_id == other)
+                )
+                .where(
+                    self._identity_matches(table),
+                    # Only links a reviewer has checked are public, as in the releases (rights.policy).
+                    table.c.payload["verified"].as_boolean().is_(True),
+                    mine == source_id,
+                    stored.in_([k for k, _ in wanted]),
+                    self._visible(),
+                )
+            )
+        if not parts:
+            return 0, []
+        edges = union_all(*parts).subquery()
+        total = self.connection.scalar(select(func.count()).select_from(edges))
+        rows = self.connection.execute(
+            select(edges).order_by(edges.c.rank, edges.c.other, edges.c.edge).limit(limit).offset(offset)
+        ).all()
+        return total, [
+            (EDGE_ORDER[row.rank], row.other, Amendment.model_validate(row.payload)) for row in rows
+        ]
+
+    def replaced(self, source_id: str):
+        """What repealed or replaced a source (checked links only; at most a page of them)."""
+        table = tables["amendments"]
+        kind = table.c.payload["kind"].as_string()
+        statement = select(table.c.payload).where(
+            self._identity_matches(table),
+            table.c.payload["verified"].as_boolean().is_(True),
+            table.c.target_source_id == source_id,
+            kind.in_(("repeals", "supersedes")),
+        )
+        return [Amendment.model_validate(row) for row in self.connection.scalars(statement.limit(BATCH_SIZE))]
+
+    def visible(self, ids) -> dict:
+        """The sources among these that the public may see, with their rights records."""
+        if not ids:
+            return {}
+        rows = self.connection.execute(self._select_sources().where(self._sources.c.id.in_(sorted(ids))))
+        return {pair[0].id: pair for pair in map(self._pair, rows)}
 
     def aliases(self, source_id: str):
         return self.rows("citations", source_id=source_id)

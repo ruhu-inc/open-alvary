@@ -2390,3 +2390,62 @@ nav.breadcrumb a:hover {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* A record's history: the law in force in its place, and its links to other records. */
+.current-law {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  background: #ffffff;
+  border-radius: 4px;
+  padding: 14px 18px;
+  margin: -6px 0 24px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.current-law a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  text-decoration: underline;
+}
+.record-history {
+  margin-top: 20px;
+  padding: 20px;
+}
+.record-history p,
+.record-history li {
+  font-size: 14px;
+  line-height: 1.6;
+}
+.record-history h4 {
+  margin: 16px 0 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b6b6b;
+}
+.record-history ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.record-history li + li {
+  margin-top: 6px;
+}
+.record-history .history-meta {
+  color: #6b6b6b;
+}
+.record-history .history-meta a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.record-history details {
+  margin-top: 14px;
+}
+.record-history summary {
+  cursor: pointer;
+  font-size: 14px;
+}
+.history-none {
+  color: #6b6b6b;
+}

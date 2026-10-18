@@ -106,7 +106,7 @@ def test_private_unapproved_bodies_are_never_selected(cleared, store, tmp_path):
 
 def test_permission_filter_precedes_pagination_and_search_crosses_batches(catalogue, store, tmp_path):
     source = catalogue.sources[0]
-    catalogue = catalogue.model_copy(update={"sources": [], "rights": [], "citations": []})
+    catalogue = catalogue.model_copy(update={"sources": [], "rights": [], "citations": [], "amendments": []})
     for index in range(230):
         key = f"synthetic-{index:04d}"
         catalogue.sources.append(

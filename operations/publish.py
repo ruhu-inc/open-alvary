@@ -33,7 +33,7 @@ from sqlalchemy import create_engine
 from api.store import Store, engine_for
 from ingestion import settings
 from schema.jurisdictions import registry
-from schema.models import Authority, Citation, Corpus, Jurisdiction, Language, RightsRecord, Source
+from schema.models import Amendment, Authority, Citation, Corpus, Jurisdiction, Language, RightsRecord, Source
 from workbench.content import Library
 from workbench.review import Review
 from workbench.store import Store as ReviewStore
@@ -257,6 +257,40 @@ def catalogue_entries(item: Approved, decision: dict) -> dict:
     }
 
 
+# A reviewed link, as the catalogue keeps it: from the newer instrument to the older.
+FORWARD = {"repeals": "repeals", "amends": "amends", "supersedes": "supersedes", "made_under": "made_under"}
+BACKWARD = {"repealed_by": "repeals", "amended_by": "amends", "superseded_by": "supersedes"}
+
+
+def catalogue_links(approved: list[Approved], sources: dict[str, Source]) -> list[Amendment]:
+    """The links between catalogued works from their reviewed details: what each repeals, amends,
+    supersedes or is made under, and what repealed or amended it. Each is checked (a reviewer
+    confirmed the details) and cites the newer instrument's official link; a link to a work the
+    catalogue does not hold is left out."""
+    links: dict[str, Amendment] = {}
+    for item in approved:
+        for relation in item.record.relations:
+            other = relation.target.work_uri
+            if not other or other == item.work or other not in sources or item.work not in sources:
+                continue
+            if relation.kind in FORWARD:
+                newer, older, kind = item.work, other, FORWARD[relation.kind]
+            elif relation.kind in BACKWARD:
+                newer, older, kind = other, item.work, BACKWARD[relation.kind]
+            else:
+                continue
+            link_id = f"link-{newer}-{kind}-{older}"
+            links[link_id] = Amendment(
+                id=link_id,
+                source_id=newer,
+                target_source_id=older,
+                kind=kind,
+                evidence_url=sources[newer].canonical_url,
+                verified=True,
+            )
+    return sorted(links.values(), key=lambda link: link.id)
+
+
 def publish_records(
     store, jurisdiction: str, approved: list[Approved], waiting: set[str], decision: dict, dry_run=False
 ) -> dict:
@@ -301,6 +335,15 @@ def publish_records(
             entry["rights"] = existing.model_copy(update={"metadata_public": True})
         _put(corpus, "rights", entry["rights"])
         report["updated" if item.work in by_id["sources"] else "published"].append(item.work)
+    # The reviewed links of the works published now replace the links they had.
+    works = {item.work for item in approved}
+    links = catalogue_links(approved, {s.id: s for s in corpus.sources})
+    corpus.amendments = [
+        a
+        for a in corpus.amendments
+        if not (a.id.startswith("link-") and (a.source_id in works or a.target_source_id in works))
+    ] + links
+    report["links"] = len(links)
     for work in sorted(waiting):
         rights = by_id["rights"].get(f"rights-{work}")
         if work in by_id["sources"] and rights is not None and rights.metadata_public:

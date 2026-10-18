@@ -54,7 +54,7 @@
       ]
     ],
     "answer": {
-      "total": 4,
+      "total": 5,
       "items": [
         {
           "id": "ng-cbn-act-2007",
@@ -204,6 +204,37 @@
       }
     }
   },
+  "get_relationships": {
+    "path": {
+      "source_id": "ng-isa-2007"
+    },
+    "query": [],
+    "answer": {
+      "source_id": "ng-isa-2007",
+      "legal_status": "repealed",
+      "current": {
+        "source_id": "ng-isa-2025",
+        "title": "Investments and Securities Act 2025",
+        "citation": "ISA 2025"
+      },
+      "total": 1,
+      "items": [
+        {
+          "kind": "repealed_by",
+          "source_id": "ng-isa-2025",
+          "title": "Investments and Securities Act 2025",
+          "citation": "ISA 2025",
+          "legal_status": "current",
+          "year": 2025,
+          "effective_date": "2025-03-25",
+          "evidence_url": "https://www.sec.gov.ng/documents/1319/Investments_and_Securities_Act_2025_x9rSXtI.pdf",
+          "verified": true
+        }
+      ],
+      "next_cursor": null
+    },
+    "note": "An example, with the repeal marked as checked by a reviewer: a link is listed once a reviewer has checked it against the official text."
+  },
   "resolve_citation": {
     "path": {
       "citation": "FOI Act 2011"
@@ -258,12 +289,12 @@
     "path": {},
     "query": [],
     "answer": {
-      "catalogued_sources": 4,
+      "catalogued_sources": 5,
       "open_full_text_sources": 0,
-      "metadata_only_sources": 4,
+      "metadata_only_sources": 5,
       "published_versions": 0,
       "jurisdictions": {
-        "ng": 4
+        "ng": 5
       },
       "notice": "Catalogue coverage only; not a claim of complete or current law."
     }

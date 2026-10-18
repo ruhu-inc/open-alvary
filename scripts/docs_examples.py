@@ -4,7 +4,7 @@ the records the live catalogue holds, and the answer is recorded, shortened wher
 
 The change feed needs PostgreSQL. Given a migrated, seeded scratch database, the script makes one
 illustrative correction there and records the feed's answers, labelled as examples; never give it a
-real database.
+real database. Without one, the feed's answers recorded before are kept.
 
     python -m scripts.docs_examples [--changes postgresql+psycopg://.../scratch]
 """
@@ -34,6 +34,7 @@ REQUESTS: dict[str, tuple[dict[str, str], list[tuple[str, str]]]] = {
     "get_source": ({"source_id": "ng-foi-act-2011"}, []),
     "get_versions": ({"source_id": "ng-foi-act-2011"}, []),
     "get_rights": ({"source_id": "ng-foi-act-2011"}, []),
+    "get_relationships": ({"source_id": "ng-isa-2007"}, []),
     "resolve_citation": ({"citation": "FOI Act 2011"}, []),
     "list_jurisdictions": ({}, []),
     "get_coverage": ({}, []),
@@ -45,8 +46,9 @@ REQUESTS: dict[str, tuple[dict[str, str], list[tuple[str, str]]]] = {
     "get_atom_feed": ({}, [("jurisdiction", "ng")]),
     "get_rss_feed": ({}, [("jurisdiction", "ng")]),
 }
-RECORDED = {"search", "list_sources", "get_source", "get_versions", "get_rights", "resolve_citation",
-            "list_jurisdictions", "get_coverage", "list_releases", "list_plans", "get_quota_policy"}  # fmt: skip
+RECORDED = {"search", "list_sources", "get_source", "get_versions", "get_rights", "get_relationships",
+            "resolve_citation", "list_jurisdictions", "get_coverage", "list_releases", "list_plans",
+            "get_quota_policy"}  # fmt: skip
 
 
 def shorten(operation: str, answer):
@@ -103,8 +105,17 @@ def change_examples(url: str) -> dict[str, dict]:
     }
 
 
+RELATIONS_NOTE = (
+    "An example, with the repeal marked as checked by a reviewer: a link is listed once a reviewer has "
+    "checked it against the official text."
+)
+
+
 def main() -> None:
     corpus = Corpus.model_validate(json.loads(CATALOGUE.read_text()))
+    # The history example shows a checked link: a link is public only once a reviewer checks it.
+    unchecked = any(not a.verified for a in corpus.amendments)
+    corpus.amendments = [a.model_copy(update={"verified": True}) for a in corpus.amendments]
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     metadata.create_all(engine)
     store = Store(engine)
@@ -123,10 +134,17 @@ def main() -> None:
             response = client.get(path + ("?" + urlencode(query) if query else ""))
             response.raise_for_status()
             example["answer"] = shorten(operation, response.json())
+            if operation == "get_relationships" and unchecked:
+                example["note"] = RELATIONS_NOTE
         examples[operation] = example
     if "--changes" in sys.argv:
         for operation, recorded in change_examples(sys.argv[sys.argv.index("--changes") + 1]).items():
             examples[operation] = examples.get(operation, {"path": {}, "query": []}) | recorded
+    elif (DATA / "examples.json").exists():  # the feed's answers recorded before are kept
+        before = json.loads((DATA / "examples.json").read_text())
+        for operation, recorded in before.items():
+            if operation in paths and operation not in RECORDED and "answer" in recorded:
+                examples[operation] = recorded
     examples["mcp:search_catalogue"] = {"arguments": {"query": "freedom of information", "limit": 3}}
     assert {t["name"] for t in TOOLS} >= {"search_catalogue"}
     (DATA / "examples.json").write_text(json.dumps(examples, indent=2, ensure_ascii=False) + "\n")

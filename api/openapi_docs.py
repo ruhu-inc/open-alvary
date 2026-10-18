@@ -122,6 +122,23 @@ OPERATIONS: dict[str, dict] = {
         "parameters": {"source_id": "The record's ID."},
         "errors": MISSING | TOO_LARGE,
     },
+    "/sources/{source_id}/relationships": {
+        "operationId": "get_relationships",
+        "tag": "Catalogue",
+        "summary": "Get a record's history",
+        "description": "Whether the record is current, and how it relates to other records, a page at a "
+        "time: the laws it repeals or amends and the law it is made under; the later laws that repealed or "
+        "amended it; the instruments made under it; and, when it has been repealed or replaced, the record "
+        "in force in its place now. Links one step away only (depth 1), between public records that a "
+        "reviewer has checked against the official text.",
+        "parameters": {
+            "source_id": "The record's ID.",
+            "kind": "Only links of this kind, such as `repealed_by` or `enables`.",
+            "limit": "Links per page, 1 to 100. The default is 25.",
+            "cursor": "The `next_cursor` of the previous page, to continue it.",
+        },
+        "errors": MISSING | BAD,
+    },
     "/rights/{source_id}": {
         "operationId": "get_rights",
         "tag": "Catalogue",
@@ -489,6 +506,35 @@ FIELDS: dict[str, dict[str, str]] = {
         "has_full_text": "Whether Get a record's texts returns a text for it.",
     },
     "SourcePage": {"total": "Records matching, across all pages.", "items": "This page's records."},
+    "SourceRelationships": {
+        "source_id": "The record asked about.",
+        "legal_status": "Whether it is in force, as far as the catalogue has checked (as on the record).",
+        "current": "When it has been repealed or replaced: the record in force in its place now, at the "
+        "end of its line of repeals (up to three steps). Absent when nothing in the catalogue repealed it.",
+        "total": "Links matching, across all pages.",
+        "items": "This page's links, from the record's side: it `repeals`, `amends` or `supersedes` an "
+        "earlier record, is `repealed_by`, `amended_by` or `superseded_by` a later one, is `made_under` a "
+        "parent law, or `enables` an instrument made under it. Ordered by kind in that order, then by ID.",
+        "next_cursor": "Pass it as `cursor` for the next page; absent on the last.",
+    },
+    "RelatedSource": {
+        "kind": "How the other record relates to this one, from this one's side: `repeals`, "
+        "`repealed_by`, `amends`, `amended_by`, `supersedes`, `superseded_by`, `made_under`, `enables` "
+        "or `cross_reference`.",
+        "source_id": "The other record's ID.",
+        "title": "The other record's title.",
+        "citation": "How the other record is cited.",
+        "legal_status": "The other record's legal status.",
+        "year": "The year the other record was made, when known.",
+        "effective_date": "When the repeal or amendment took effect, when known.",
+        "evidence_url": "The official text that makes the link (the repealing or amending law).",
+        "verified": "Whether a reviewer checked the link against that text.",
+    },
+    "CurrentSource": {
+        "source_id": "The record in force now.",
+        "title": "Its title.",
+        "citation": "How it is cited.",
+    },
     "SearchPage": {
         "total": "Records matching, across all pages.",
         "items": "This page's records.",

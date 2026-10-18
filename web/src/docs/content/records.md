@@ -47,6 +47,45 @@ What to look at:
 
 Every field is listed in the [reference](/docs/api/get-source).
 
+## Find what replaced a law
+
+[Get a record's history](/docs/api/get-relationships) tells you whether a record is current and how it relates to other records: the laws it repeals or amends and the law it is made under, the later laws that repealed or amended it, and the instruments made under it. When the record has been repealed or replaced, `current` names the record in force in its place now, at the end of its line of repeals.
+
+```curl
+curl https://api.open.alvary.ai/api/v1/sources/ng-isa-2007/relationships \
+  -H "Authorization: Bearer $OPEN_ALVARY_KEY"
+```
+
+```python
+import os
+
+import requests
+
+history = requests.get(
+    "https://api.open.alvary.ai/api/v1/sources/ng-isa-2007/relationships",
+    headers={"Authorization": f"Bearer {os.environ['OPEN_ALVARY_KEY']}"},
+    timeout=30,
+).json()
+if history["current"]:
+    print("Read instead:", history["current"]["title"])
+for link in history["items"]:
+    print(link["kind"], link["title"], link["evidence_url"])
+```
+
+```javascript
+const history = await (
+  await fetch("https://api.open.alvary.ai/api/v1/sources/ng-isa-2007/relationships", {
+    headers: { Authorization: `Bearer ${process.env.OPEN_ALVARY_KEY}` },
+  })
+).json();
+if (history.current) console.log("Read instead:", history.current.title);
+for (const link of history.items) console.log(link.kind, link.title, link.evidence_url);
+```
+
+{{example:get_relationships}}
+
+Each link is seen from this record's side (`repeals`, `repealed_by`, `amends`, `amended_by`, `made_under`, `enables`, …) and cites the official text that makes it, usually the repealing or amending law. Links come 25 to a page (`limit` up to 100); pass `next_cursor` as `cursor` for the next, or ask for one `kind` only, such as `enables` for the instruments made under a law. Only links one step away are listed (depth 1), and only between public records that a reviewer has checked against that text, so a record may be repealed before its history shows by what.
+
 ## Read the text
 
 [Get a record's texts](/docs/api/get-versions) returns the record's cleared text versions, in full:

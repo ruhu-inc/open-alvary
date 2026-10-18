@@ -190,7 +190,9 @@ def reconcile(conn: Connection, *, expected_epoch: int) -> str:
         raise IdentityConflict("Reconciliation requires a committed maintenance fence")
     records, corpus = _capture(conn)
     shadow = {}
-    for row in conn.execute(text("SELECT * FROM identity_legacy_snapshots")).mappings():
+    # In the legacy capture's order (by ID), so the public projections below compare like for like.
+    snapshots = text("SELECT * FROM identity_legacy_snapshots ORDER BY entity_type, legacy_id")
+    for row in conn.execute(snapshots).mappings():
         if digest(row["payload"]) != row["digest"]:
             raise IdentityConflict("Shadow snapshot digest differs")
         shadow[(row["entity_type"], row["legacy_id"])] = row["payload"]

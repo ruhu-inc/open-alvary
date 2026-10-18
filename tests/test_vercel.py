@@ -12,7 +12,7 @@ def test_vercel_snapshot_serves_prefixed_api_and_verified_downloads(tmp_path):
     client = TestClient(create_vercel_app(frontend=tmp_path))
     assert client.get("/").text == "<h1>Open Alvary</h1>"
     assert client.get("/api/healthz").json() == {"status": "ok"}
-    assert client.get("/api/coverage").json()["catalogued_sources"] == 4
+    assert client.get("/api/coverage").json()["catalogued_sources"] == 5
     assert client.get("/api/coverage").json()["open_full_text_sources"] == 0
     result = client.get("/api/search?q=freedom").json()
     assert result["total"] == 1

@@ -60,6 +60,56 @@
     }
   },
   {
+    "name": "get_relationships",
+    "title": "Get a source's history",
+    "description": "Whether a source is current and how it relates to other public sources, one step away: what it repeals or amends and the law it is made under, what repealed or amended it, the instruments made under it, and the source in force in its place now when it has been repealed. Only links a reviewer has checked against the official text. A page at a time.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "The source's ID, such as ng-isa-2007, from a search."
+        },
+        "relation_type": {
+          "type": "string",
+          "enum": [
+            "repealed_by",
+            "superseded_by",
+            "amended_by",
+            "made_under",
+            "repeals",
+            "supersedes",
+            "amends",
+            "cross_reference",
+            "enables"
+          ],
+          "description": "Only links of this kind, such as repealed_by or enables."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Links per page, 1 to 100. The default is 25."
+        },
+        "cursor": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "The next_cursor of the previous page, to continue it."
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "list_changes",
     "title": "List catalogue changes",
     "description": "Changes to the catalogue in commit order: records added, corrected or withdrawn, and text published. Filter by jurisdiction, work, type, document class, language or keyword. Pass the returned resume_token next time to get only newer changes. Changes to what Open Alvary holds, not every change in a country's law.",

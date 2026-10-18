@@ -30,6 +30,7 @@ def test_initialize_negotiates_protocol_and_declares_read_only_tools(client):
     assert {t["name"] for t in tools} == {
         "search_catalogue",
         "get_source",
+        "get_relationships",
         "get_coverage",
         "list_changes",
         "get_change",

@@ -1227,6 +1227,159 @@
         ]
       }
     },
+    "/sources/{source_id}/relationships": {
+      "get": {
+        "summary": "Get a record's history",
+        "operationId": "get_relationships",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            },
+            "description": "The record's ID."
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "repeals",
+                    "repealed_by",
+                    "amends",
+                    "amended_by",
+                    "supersedes",
+                    "superseded_by",
+                    "made_under",
+                    "enables",
+                    "cross_reference"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            },
+            "description": "Only links of this kind, such as `repealed_by` or `enables`."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            },
+            "description": "Links per page, 1 to 100. The default is 25."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "description": "The `next_cursor` of the previous page, to continue it."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourceRelationships"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such record, or it is not public (`unavailable`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "Whether the record is current, and how it relates to other records, a page at a time: the laws it repeals or amends and the law it is made under; the later laws that repealed or amended it; the instruments made under it; and, when it has been repealed or replaced, the record in force in its place now. Links one step away only (depth 1), between public records that a reviewer has checked against the official text.",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
     "/sources/{source_id}/versions": {
       "get": {
         "summary": "Get a record's texts",
@@ -1844,6 +1997,36 @@
         ],
         "title": "CoverageView"
       },
+      "CurrentSource": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The record in force now."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title",
+            "description": "Its title."
+          },
+          "citation": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Citation",
+            "description": "How it is cited."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "title",
+          "citation"
+        ],
+        "title": "CurrentSource"
+      },
       "DecisionView": {
         "properties": {
           "metadata": {
@@ -2050,6 +2233,106 @@
           "unknown"
         ],
         "title": "Permission"
+      },
+      "RelatedSource": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "repeals",
+              "repealed_by",
+              "amends",
+              "amended_by",
+              "supersedes",
+              "superseded_by",
+              "made_under",
+              "enables",
+              "cross_reference"
+            ],
+            "title": "Kind",
+            "description": "How the other record relates to this one, from this one's side: `repeals`, `repealed_by`, `amends`, `amended_by`, `supersedes`, `superseded_by`, `made_under`, `enables` or `cross_reference`."
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The other record's ID."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Title",
+            "description": "The other record's title."
+          },
+          "citation": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Citation",
+            "description": "How the other record is cited."
+          },
+          "legal_status": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "current",
+              "historical",
+              "repealed",
+              "superseded"
+            ],
+            "title": "Legal Status",
+            "description": "The other record's legal status."
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year",
+            "description": "The year the other record was made, when known."
+          },
+          "effective_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Date",
+            "description": "When the repeal or amendment took effect, when known."
+          },
+          "evidence_url": {
+            "type": "string",
+            "maxLength": 2083,
+            "minLength": 1,
+            "format": "uri",
+            "title": "Evidence Url",
+            "description": "The official text that makes the link (the repealing or amending law)."
+          },
+          "verified": {
+            "type": "boolean",
+            "title": "Verified",
+            "description": "Whether a reviewer checked the link against that text."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "source_id",
+          "title",
+          "citation",
+          "legal_status",
+          "evidence_url",
+          "verified"
+        ],
+        "title": "RelatedSource"
       },
       "RightsStatus": {
         "type": "string",
@@ -2375,6 +2658,74 @@
           "items"
         ],
         "title": "SourcePage"
+      },
+      "SourceRelationships": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The record asked about."
+          },
+          "legal_status": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "current",
+              "historical",
+              "repealed",
+              "superseded"
+            ],
+            "title": "Legal Status",
+            "description": "Whether it is in force, as far as the catalogue has checked (as on the record)."
+          },
+          "current": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CurrentSource"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it has been repealed or replaced: the record in force in its place now, at the end of its line of repeals (up to three steps). Absent when nothing in the catalogue repealed it."
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total",
+            "description": "Links matching, across all pages."
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RelatedSource"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "This page's links, from the record's side: it `repeals`, `amends` or `supersedes` an earlier record, is `repealed_by`, `amended_by` or `superseded_by` a later one, is `made_under` a parent law, or `enables` an instrument made under it. Ordered by kind in that order, then by ID."
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor",
+            "description": "Pass it as `cursor` for the next page; absent on the last."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "legal_status",
+          "total",
+          "items"
+        ],
+        "title": "SourceRelationships"
       },
       "SourceView": {
         "properties": {

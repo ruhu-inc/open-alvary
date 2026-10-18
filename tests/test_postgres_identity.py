@@ -67,7 +67,7 @@ def test_upgrade_preserves_public_ids_and_backfill_is_repeatable(pg_engine):
             list(conn.execute(text("SELECT * FROM identity_legacy_sources ORDER BY source_id")).mappings())
             == mappings
         )
-        assert len({row["work_id"] for row in mappings}) == 4
+        assert len({row["work_id"] for row in mappings}) == 5
         for table in (
             "identity_expressions",
             "identity_manifestations",
@@ -207,7 +207,7 @@ def test_interrupted_backfill_rolls_back_and_retry_mints_only_once(identity_db):
         assert conn.scalar(text("SELECT count(*) FROM identity_works")) == 0
         assert conn.scalar(text("SELECT source_checkpoint FROM identity_migration_state")) is None
     copy_shadow(identity_db)
-    assert len(Store(identity_db).load().sources) == 4
+    assert len(Store(identity_db).load().sources) == 5
 
 
 def test_uuid_collision_retry_does_not_overwrite_another_work(identity_db, monkeypatch):
@@ -235,7 +235,7 @@ def test_uuid_collision_retry_does_not_overwrite_another_work(identity_db, monke
             .one()
         )
         assert after["title"] == before["title"]
-        assert conn.scalar(text("SELECT count(*) FROM identity_works")) == 5
+        assert conn.scalar(text("SELECT count(*) FROM identity_works")) == 6
 
 
 @pytest.mark.parametrize(
@@ -289,7 +289,7 @@ def test_stale_epoch_and_rehearsal_never_fall_back_to_legacy(identity_db):
         assert end_rehearsal(conn, expected_epoch=2) == 3
         assert resume_legacy(conn, expected_epoch=3) == 4
     seed(Store(identity_db))
-    assert len(Store(identity_db).load().sources) == 4
+    assert len(Store(identity_db).load().sources) == 5
 
 
 @pytest.fixture
