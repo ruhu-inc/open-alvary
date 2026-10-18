@@ -4,6 +4,7 @@ Legacy JSON remains authoritative. SQL limits row windows and never selects unap
 canonical bodies; the shared policy runs on gate fields before an individual body fetch.
 """
 
+import unicodedata
 from collections.abc import Iterator
 
 from sqlalchemy import (
@@ -15,6 +16,7 @@ from sqlalchemy import (
     false,
     func,
     literal,
+    literal_column,
     or_,
     select,
     text,
@@ -29,6 +31,15 @@ from schema.models import Amendment, Source
 from schema.public import RightsViewRecord, VersionGate, VersionViewRecord
 
 BATCH_SIZE = 100
+# The website's catalogue reads at most this many public sources' compact rows in one request.
+BROWSE_BOUND = 25000
+# Letters whose case folding is not their lower case (ß → ss, final ς → σ): the database lowers them
+# differently from normalize_citation, so a source holding one is matched in Python.
+_FOLDED_APART = "".join(
+    c
+    for c in map(chr, range(0x80, 0x10000))
+    if unicodedata.normalize("NFKC", c).casefold() != unicodedata.normalize("NFKC", c).lower()
+)
 # A stored link (newer → older) as each side sees it, and the order a reader asks about them in.
 EDGE_KINDS = {
     ("in", "repeals"): "repealed_by",
@@ -178,6 +189,94 @@ class LegacyRepository:
             confirmed = metadata
             fallback = and_(~confirmed, self.potential_text())
         return confirmed, fallback
+
+    def _unicode_lower(self) -> bool:
+        """Whether this PostgreSQL lowers letters beyond ASCII (a UTF-8 ctype), as Python does."""
+        if getattr(self, "_lowers_unicode", None) is None:
+            self._lowers_unicode = bool(self.connection.scalar(text("SELECT lower('ÉΣ') = 'éσ'")))
+        return self._lowers_unicode
+
+    def browse_rows(self, term: str | None):
+        """Every public source as a compact row for the website's catalogue: its id, title, year,
+        filter values and, given a search term (normalize_citation's), its rank (3 title, 2
+        citation, 1 summary) where the database matches as normalize_citation does; `python` marks
+        a source to match in Python (one with text to read, or a letter the database folds apart).
+        Without a term every source comes back. Ordered by id; at most BROWSE_BOUND."""
+        payload = self._sources.c.payload
+        if self.connection.dialect.name == "postgresql":
+            field = lambda name: payload.op("->>", return_type=Text)(name)  # noqa: E731
+        else:
+            field = lambda name: payload[name].as_string()  # noqa: E731
+        title, citation, summary = field("title"), field("citation"), field("summary")
+        exact = self.connection.dialect.name != "postgresql"  # SQLite runs normalize_citation itself
+        if exact or not self._unicode_lower():
+            normal = lambda value: func.legacy_metadata_normalize(func.coalesce(value, ""))  # noqa: E731
+        else:
+            normal = lambda value: func.btrim(  # noqa: E731
+                func.regexp_replace(
+                    func.lower(func.normalize(func.coalesce(value, ""), literal_column("NFKC"))),
+                    r"\s+",
+                    " ",
+                    "g",
+                )
+            )
+        python = self.potential_text()
+        if not exact:
+            everything = (
+                func.coalesce(title, "")
+                + " "
+                + func.coalesce(citation, "")
+                + " "
+                + func.coalesce(summary, "")
+            )
+            if self._unicode_lower():
+                python = or_(python, everything.op("~")(f"[{_FOLDED_APART}]"))
+            else:
+                python = or_(python, func.octet_length(everything) != func.length(everything))
+        if term is None:
+            rank = literal(0)
+        else:
+            pattern = literal_pattern(term)
+            rank = case(
+                (normal(title).like(pattern, escape="\\"), 3),
+                (normal(citation).like(pattern, escape="\\"), 2),
+                (normal(summary).like(pattern, escape="\\"), 1),
+                else_=0,
+            )
+        statement = (
+            select(
+                self._sources.c.id,
+                title.label("title"),
+                payload["year"].as_integer().label("year"),
+                self._sources.c.jurisdiction_id,
+                field("document_type").label("type"),
+                field("language").label("language"),
+                field("legal_status").label("status"),
+                rank.label("rank"),
+                python.label("python"),
+            )
+            .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
+            .where(self._visible())
+            .order_by(self._sources.c.id)
+            .limit(BROWSE_BOUND + 1)
+        )
+        if term is not None:
+            statement = statement.where(or_(rank > 0, python))
+        rows = self.connection.execute(statement).all()
+        if len(rows) > BROWSE_BOUND:
+            raise ResultTooLarge("Pilot catalogue browsing exceeds declared bound")
+        return rows
+
+    def public_counts(self) -> dict[str, int]:
+        """How many public sources each jurisdiction has, in order of each one's first source id."""
+        statement = (
+            select(self._sources.c.jurisdiction_id, func.count())
+            .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
+            .where(self._visible())
+            .group_by(self._sources.c.jurisdiction_id)
+            .order_by(func.min(self._sources.c.id))
+        )
+        return dict(self.connection.execute(statement).all())
 
     def search_page(self, term, matched_ids, *, jurisdiction, limit, offset, access_where=None):
         confirmed, _ = self.search_predicates(term)

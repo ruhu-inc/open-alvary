@@ -475,10 +475,18 @@ class LegacyCatalogue:
         )
         return SearchPage(total=total, items=tuple(self._view(pair) for pair in pairs))
 
+    def _open(self, pairs) -> set[str]:
+        """Which of these sources have a text cleared for reuse now."""
+        return {
+            source.id for source, rights in pairs if next(self._approved(source, rights), None) is not None
+        }
+
     def browse(self, *, query=None, filters=None, sort="relevance", limit=20, offset=0):
         """The website's catalogue (MAC-01): an optional search, filters and sorting, with a count per
         filter value. Each count applies every other selected filter, so choosing a value never hides
-        the alternatives. Bounded like the pilot search: at most 10,000 sources are examined."""
+        the alternatives. The database matches and ranks each public source (title 3, citation 2,
+        summary 1, a cleared text 1) and returns a compact row for each; only the page's sources are
+        read in full. Bounded: at most BROWSE_BOUND public sources."""
         filters = {k: v for k, v in (filters or {}).items() if v is not None}
         unknown = set(filters) - set(FACETS)
         if unknown or sort not in SORTS:
@@ -488,41 +496,45 @@ class LegacyCatalogue:
             term = normalize_citation(query)
             if not term:
                 raise InvalidSearch("Search term must not be blank")
-        candidates = []
-        for source, rights in self.repository.sources():
-            if len(candidates) >= 10000:
-                raise ResultTooLarge("Pilot catalogue browsing exceeds declared bound")
-            if not decide(rights, now=self.now).metadata:
-                continue
-            rank = 0
-            if term is not None:
+        rows = self.repository.browse_rows(term)
+        # Sources the database leaves to Python: a text to search or read for access, or a letter it
+        # folds apart. Read in full (few), matched as before, and checked for a cleared text.
+        apart = self.repository.visible([row.id for row in rows if row.python])
+        opened = self._open(apart.values())
+        ranks = {}
+        if term is not None:
+            for source_id, (source, rights) in apart.items():
                 if term in normalize_citation(source.title):
-                    rank = 3
+                    ranks[source_id] = 3
                 elif term in normalize_citation(source.citation):
-                    rank = 2
+                    ranks[source_id] = 2
                 elif term in normalize_citation(source.summary or ""):
-                    rank = 1
+                    ranks[source_id] = 1
                 elif any(term in v.canonical_text.casefold() for v in self._approved(source, rights)):
-                    rank = 1
+                    ranks[source_id] = 1
                 else:
-                    continue
-            has_text = next(self._approved(source, rights), None) is not None
+                    ranks[source_id] = 0
+        candidates = []
+        for row in rows:
+            rank = ranks.get(row.id, row.rank) if term is not None else 0
+            if term is not None and not rank:
+                continue
             values = {
-                "jurisdiction": source.jurisdiction_id,
-                "type": source.document_type,
-                "language": source.language,
-                "status": source.legal_status,
-                "year": str(source.year) if source.year else None,
-                "access": "open" if has_text else "metadata",
+                "jurisdiction": row.jurisdiction_id,
+                "type": row.type,
+                "language": row.language,
+                "status": row.status,
+                "year": str(row.year) if row.year else None,
+                "access": "open" if row.id in opened else "metadata",
             }
-            candidates.append((rank, source, rights, values))
+            candidates.append((rank, row, values))
 
         def selected(values, skip=None):
             return all(values[k] == v for k, v in filters.items() if k != skip)
 
-        results = [c for c in candidates if selected(c[3])]
+        results = [c for c in candidates if selected(c[2])]
         facets = {
-            name: Counter(c[3][name] for c in candidates if selected(c[3], skip=name) and c[3][name])
+            name: Counter(c[2][name] for c in candidates if selected(c[2], skip=name) and c[2][name])
             for name in FACETS
         }
         by_title = lambda c: c[1].title.casefold()  # noqa: E731
@@ -535,9 +547,11 @@ class LegacyCatalogue:
             results = sorted(
                 dated, key=lambda c: (c[1].year, by_title(c)), reverse=sort == "newest"
             ) + sorted((c for c in results if not c[1].year), key=by_title)
-        page = results[offset : offset + limit]
+        page = [c[1].id for c in results[offset : offset + limit]]
+        pairs = self.repository.visible(page)
         return (
-            SearchPage(total=len(results), items=tuple(self._view((s, r)) for _, s, r, _ in page)),
+            # A source withdrawn since its row was read is left out of the page.
+            SearchPage(total=len(results), items=tuple(self._view(pairs[i]) for i in page if i in pairs)),
             {name: dict(counts.most_common()) for name, counts in facets.items()},
         )
 
@@ -590,11 +604,12 @@ class LegacyCatalogue:
         return sorted(found.values(), key=lambda c: c["name"])
 
     def coverage(self):
-        total, open_sources, published = 0, 0, 0
-        scopes = Counter()
-        for source, rights in self.repository.sources():
-            total += 1
-            scopes[source.jurisdiction_id] += 1
+        """Counts of public sources, by jurisdiction from the database, and of those with a cleared
+        text and its versions, from the few sources that have any approved."""
+        scopes = Counter(self.repository.public_counts())
+        total = sum(scopes.values())
+        open_sources, published = 0, 0
+        for source, rights in self.repository.sources(where=self.repository.potential_text()):
             versions = sum(1 for _ in self._approved(source, rights))
             published += versions
             open_sources += bool(versions)
