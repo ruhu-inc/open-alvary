@@ -435,6 +435,21 @@ schedule() {  # once, after the first ACCOUNTS=1 deploy: the worker every 5 minu
   echo "Scheduled: $WORKER_JOB every 5 minutes, $DAILY_JOB daily at 03:15 UTC."
 }
 
+request_logs() {  # once: no request logs for the API and MCP, so their queries are never kept (OA-A2)
+  # The app writes no access log (--no-access-log), but Cloud Run and the load balancer each log every
+  # request with its full address, query included. This drops those entries for REST v1 and MCP
+  # before they are stored; what stays is the daily usage totals in the database (privacy notice).
+  local name=open-alvary-api-request-urls
+  local filter="(log_id(\"run.googleapis.com/requests\") OR resource.type=\"http_load_balancer\")"
+  filter+=" AND (httpRequest.requestUrl:\"/api/v1\" OR httpRequest.requestUrl:\"/mcp\""
+  filter+=" OR httpRequest.requestUrl:\"//$API_DOMAIN/\")"
+  local verb=--add-exclusion
+  "${GC[@]}" logging sinks describe _Default --format='value(exclusions[].name)' | tr ';' '\n' \
+    | grep -qx "$name" && verb=--update-exclusion
+  "${GC[@]}" logging sinks update _Default "$verb=name=$name,filter=$filter"
+  echo "Request logs for REST v1 and MCP are no longer stored. Check: "$0 status" lists it under log exclusions."
+}
+
 audit_seals() {  # once: the seals' copy outside the database (MAC-13.7), kept 800 days
   "${GC[@]}" logging buckets describe audit-seals --location="$REGION" >/dev/null 2>&1 \
     || "${GC[@]}" logging buckets create audit-seals --location="$REGION" --retention-days=800 \
@@ -566,6 +581,7 @@ status() {
   "${GC[@]}" sql instances describe "$SQL_INSTANCE" --format='value(state,settings.tier)' || true
   "${GC[@]}" certificate-manager certificates describe open-alvary-cert --format='value(managed.state)' || true
   echo "Load balancer address: $(address 2>/dev/null || echo none)"
+  echo "Log exclusions: $("${GC[@]}" logging sinks describe _Default --format='value(exclusions[].name)' 2>/dev/null || echo none)"
 }
 
 # A gcloud whose sign-in has lapsed fails every call, which the checks below would read as a missing
@@ -576,4 +592,4 @@ signed_in() {
 }
 
 [[ -z "${1:-}" || "$1" == plan ]] || signed_in
-"${1:?plan, project, setup, deploy, edge, dns, verify, status; activation B: accounts, api_edge, schedule, audit_seals, alerts, access_role}" "${@:2}"
+"${1:?plan, project, setup, deploy, edge, dns, verify, status; activation B: accounts, api_edge, request_logs, schedule, audit_seals, alerts, access_role}" "${@:2}"

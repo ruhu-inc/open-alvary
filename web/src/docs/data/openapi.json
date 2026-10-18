@@ -5444,6 +5444,13 @@
             "type": "string",
             "description": "What shares a limit."
           },
+          "bytes": {
+            "type": "object",
+            "description": "How data a day is counted: a token bucket holding one day's `bytes_per_day`, refilled evenly over 24 hours, charged with each response body's bytes as sent.",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
           "note": {
             "type": "string",
             "description": "The policy, in words."

@@ -591,6 +591,12 @@ SCHEMAS: dict[str, dict] = {
             "enforcement": {"type": S, "description": "`organisation`: limits are per organisation."},
             "algorithm": {"type": S, "description": "`token_bucket`."},
             "grouping": {"type": S, "description": "What shares a limit."},
+            "bytes": {
+                "type": "object",
+                "description": "How data a day is counted: a token bucket holding one day's `bytes_per_day`, "
+                "refilled evenly over 24 hours, charged with each response body's bytes as sent.",
+                "additionalProperties": {"type": S},
+            },
             "note": {"type": S, "description": "The policy, in words."},
         },
     },
