@@ -14,6 +14,7 @@ reviews.
 
 import re
 import statistics
+import unicodedata
 from collections import Counter
 from itertools import pairwise
 
@@ -21,7 +22,7 @@ from ingestion import gazette_layout
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-18.1"  # short bilingual pages keep their columns; French "Art. 2." articles
+PIPELINE = "2026-10-18.2"  # repeals told apart from amendments and linked; "N° 001 BIS" read whole
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -40,8 +41,9 @@ FURNITURE = re.compile(
 
 # The heading that opens an instrument, as printed in capitals in each language: its kind, then its
 # number ("N° 11/2001"), or on older laws only its date ("LOI DU 19 FÉVRIER 1964", "ITEGEKO RYO KUWA
-# 19 GASHYANTARE 1964"). Older kinds: decree-laws, ordinances, decrees, royal orders.
-_NUMBER = r"\s+N\s?[°ºO0]\.?\s*(\S+)"
+# 19 GASHYANTARE 1964"). Older kinds: decree-laws, ordinances, decrees, royal orders. A number
+# printed "N° 001 BIS /2021" is the whole of it, not "001" (which is another law).
+_NUMBER = r"\s+N\s?[°ºO0]\.?\s*(\S+?(?:\s*(?i:BIS|TER)\b)?(?:\s*/\s*\S+)?)(?=\s|$)"
 OPENING = {
     "rw": re.compile(
         r"^(ITEGEKO NGENGA|ITEGEKO-TEKA|ITEGEKO|ITEKA RYA PEREZIDA|ITEKA RYA MINISITIRI W[’']INTEBE"
@@ -444,6 +446,12 @@ def _plain_date(text: str) -> str | None:
     return None
 
 
+def _instrument_number(printed: str) -> str:
+    """A number as printed in a heading, in one spelling: "001 BIS /2021" -> "001bis/2021"."""
+    number = re.sub(r"\s*/\s*", "/", printed).rstrip(".,;:")
+    return re.sub(r"(\d)\s*(bis|ter)\b", lambda m: m.group(1) + m.group(2).lower(), number, flags=re.I)
+
+
 def openings(lines: list[dict], language: str) -> list[dict]:
     """Where each instrument begins in one language: its heading, kind, number, date and title."""
     found = []
@@ -478,7 +486,7 @@ def openings(lines: list[dict], language: str) -> list[dict]:
             .replace("LEGISLATIVE", "LÉGISLATIVE")
         )
         date = _plain_date(title) or spoken_date(title)
-        number = (match.group(2) or "").rstrip(".,;:") if match else "constitution"
+        number = _instrument_number(match.group(2) or "") if match else "constitution"
         if not number:
             # An older law known by its date: the date is its key across the languages.
             if not date:
@@ -1118,13 +1126,179 @@ KIGALI = re.compile(r"Kigali\s*,\s*(?:on\s+)?(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*((?
 IN_FORCE_ON_PUBLICATION = re.compile(
     r"(?:comes|shall come|enters) into force on the date of its publication", re.I
 )
-# "Law n° 31/2009 of 26/10/2009 on the protection of intellectual property as amended to date is
-# repealed": the law it repeals, by its citation as printed.
-REPEALS = re.compile(
-    r"((?:Organic\s+)?Law\s+n\s?[°ºo]\s*[\w/.]+\s+of\s+\d{1,2}/\d{1,2}/\d{4}[^.;]{0,200}?)"
-    r"\s+(?:as\s+amended\s+to\s+date\s+)?(?:is|are)\s+(?:hereby\s+)?repealed",
+# --- what an instrument does to the earlier ones it names --------------------------------------------
+# "Law nº 028/2023 of 19/05/2023 on … is repealed" repeals that law. "Article 44 of Law n° 66/2018 of
+# 30/08/2018 … is repealed" and "Article 65 of Law nº 32/2016 … is amended as follows" amend it, and so
+# does a title "… amending Law n° 66/2018 …". Read in English, or in French where there is no English.
+CITED = re.compile(
+    r"\b(Organic\s+Law|Decree[-\s]Law|Law|Presidential\s+Order|Prime\s+Minister[’']s\s+Order"
+    r"|Ministerial\s+Order|Loi\s+organique|D[ée]cret[-\s]loi|Loi|Arr[êe]t[ée]\s+pr[ée]sidentiel"
+    r"|Arr[êe]t[ée]\s+du\s+Premier\s+Ministre|Arr[êe]t[ée]\s+minist[ée]riel)"
+    r"\s+n\s?[°ºᵒo]\.?\s*(\d[\w./]*(?:\s*(?:bis|ter)\b)?(?:\s*/\s*[\w./]+)?)"
+    r"\s+(?:of|du)\s+\d{1,2}[/.]\d{1,2}[/.]((?:19|20)\d\d)\b",
     re.I,
 )
+CITED_KIND = {
+    "organic law": "organic_law",
+    "loi organique": "organic_law",
+    "decree law": "decree_law",
+    "decret loi": "decree_law",
+    "law": "law",
+    "loi": "law",
+    "presidential order": "presidential_order",
+    "arrete presidentiel": "presidential_order",
+    "prime minister's order": "prime_ministers_order",
+    "arrete du premier ministre": "prime_ministers_order",
+    "ministerial order": "ministerial_order",
+    "arrete ministeriel": "ministerial_order",
+}
+# What is done to the instrument named before it: "is repealed", "are hereby repealed", "is amended
+# as follows", "est abrogée", "sont modifiés".
+ACTION = re.compile(
+    r"\b(?:is|are)\s+(?:hereby\s+)?(repealed|amended|modified|complemented|replaced)\b"
+    r"|\b(?:est|sont)\s+(abrog|modifi|compl[ée]t|remplac)\w*",
+    re.I,
+)
+# Where a sentence or an article's heading ends ("No. 5" and "n°." do not end one).
+SUBJECT_START = re.compile(r"(?<![Nn][Oo°º])[.;:»”]\s+(?=[A-ZÀ-Ý«“\"])")
+_PART = (
+    r"articles?|paragraphs?|sub-?paragraphs?|items?|points?|chapters?|sections?|annex(?:es)?|schedules?"
+    r"|provisions?|alin[ée]as?|paragraphes?|chapitres?|annexes?|dispositions?"
+)
+# A part of the instrument named after it: "Article 44 of", "Paragraph 2 of Article 5 of the",
+# "L’article 44 de la".
+PART_OF = re.compile(rf"\b(?:{_PART})\b[^.;]{{0,80}}?\b(?:of|de|du)\s+(?:the\s+|la\s+|l[’']\s?)?$", re.I)
+# A law named only as what changed the one being acted on: "Law n° 5/2001, as amended by Law n° 9/2005".
+CHANGED_BY = re.compile(r"\b(?:by|par)\s+(?:the\s+|la\s+|l[’']\s?)?$", re.I)
+TITLE_ENDS = re.compile(
+    r",?\s+(?:as\s+(?:amended|modified|complemented)|telle?s?\s+que)\b"
+    rf"|\s*(?:,|\band\b|\bet\b)\s+(?=(?:the\s+|la\s+|l[’']\s?)?(?:{_PART})\b)"
+    r"|,?\s+(?:and\s+)?(?:all|any)\s+(?:other\s+)?prior\b|,\s+(?:its|their)\s+other\b|,?\s+as\s+well\s+as\b|,\s+confirmed\s+by\b",
+    re.I,
+)
+# "Save Article 163 of Law n° 13/2009 …, its other provisions … are repealed": repealed but for a part.
+SAVING = re.compile(
+    r"\b(?:save|except|with\s+the\s+exception\s+of|sauf|hormis|[àa]\s+l[’']exception\s+de)\b", re.I
+)
+ARTICLE_REF = re.compile(r"\barticles?\s+(\d+(?:\s?(?:bis|ter|quater))?|one|premier)\b", re.I)
+AMENDING = re.compile(r"\b(?:amending|modifying|complementing|modifiant|compl[ée]tant)\b", re.I)
+REPEALING = re.compile(r"\b(?:repealing|abrogeant)\b", re.I)
+
+
+def _plain_words(words: str) -> str:
+    """'Arrêté  Présidentiel' -> 'arrete presidentiel', for CITED_KIND."""
+    plain = unicodedata.normalize("NFKD", words.replace("’", "'")).encode("ascii", "ignore").decode()
+    return " ".join(plain.lower().replace("-", " ").split())
+
+
+def number_key(number: str) -> str:
+    """A number as compared: "043/2016" and "43/2016" alike, "53bis/2013" and "53 bis/2013" alike."""
+    tokens = re.findall(r"\d+|[a-z]+", number.lower())
+    return "-".join(t.lstrip("0") or "0" if t.isdigit() else t for t in tokens)
+
+
+def _article(ref: str) -> str:
+    """'One' and 'premier' are Article 1; '7 TER' is '7 ter'."""
+    ref = " ".join(ref.lower().split())
+    return "1" if ref in ("one", "premier") else re.sub(r"(\d)(bis|ter|quater)", r"\1 \2", ref)
+
+
+def _articles(refs: list[str]) -> str | None:
+    """'Article 44' or 'Articles 43, 44 and 57' (the first ten, then how many more)."""
+    refs = list(dict.fromkeys(refs))
+    if not refs:
+        return None
+    if len(refs) == 1:
+        return f"Article {refs[0]}"
+    shown, more = refs[:10], len(refs) - 10
+    if more > 0:
+        return f"Articles {', '.join(shown)} and {more} more"
+    return f"Articles {', '.join(shown[:-1])} and {shown[-1]}"
+
+
+def _printed(text: str) -> str:
+    """A citation as printed, its title cut where the sentence goes on to something else."""
+    end = TITLE_ENDS.search(text)
+    text = re.sub(r"\s+", " ", text[: end.start()] if end else text).strip(" ,;:")
+    text = re.sub(r"\s+(?:and|et)$", "", text)
+    return (text[:1].upper() + text[1:])[:300]
+
+
+def cited(versions: dict[str, list[dict]], entry: dict) -> list[dict]:
+    """The earlier instruments this one repeals or amends, each by its citation as printed, with the
+    kind, number and year it is found by and, where only some articles change, which."""
+    language = "en" if versions.get("en") else "fr" if versions.get("fr") else None
+    if language is None:
+        return []
+    own = (entry["kind"], number_key(entry["number"]))
+    found: dict[tuple, dict] = {}
+
+    def add(match, kind, target, refs=(), only_new=False, saved=False):
+        instrument = CITED_KIND.get(_plain_words(match.group(1)))
+        number, year = match.group(2).rstrip("./"), match.group(3)
+        key = (instrument, number_key(number), year)
+        if instrument is None or key[:2] == own or (only_new and key in found):
+            return
+        link = found.setdefault(
+            key,
+            {
+                "kind": kind,
+                "target": target,
+                "instrument": instrument,
+                "number": number,
+                "year": year,
+                "refs": [],
+                "saved": [],
+            },
+        )
+        if kind == "repeals":
+            link["kind"] = "repeals"  # the whole instrument, though some sentence amends a part first
+        link["saved" if saved else "refs"] += list(refs)
+
+    text = " ".join(line["text"] for line in versions[language])
+    for action in ACTION.finditer(text):
+        window = text[max(0, action.start() - 600) : action.start()]
+        starts = list(SUBJECT_START.finditer(window))
+        subject = window[starts[-1].end() :] if starts else window
+        citations = list(CITED.finditer(subject))
+        verb = (action.group(1) or action.group(2)).lower()
+        for i, match in enumerate(citations):
+            before = subject[citations[i - 1].end() if i else 0 : match.start()]
+            if CHANGED_BY.search(before):
+                continue
+            part = PART_OF.search(before)
+            saved = bool(part and SAVING.search(before))
+            if verb.startswith(("repeal", "abrog")) and (saved or not part):
+                kind = "repeals"
+            elif part:
+                kind = "amends"
+            elif verb.startswith("replac") or verb.startswith("remplac"):
+                continue  # "Law n° … is replaced by this Law": left for the reviewer
+            else:
+                kind = "amends"
+            end = citations[i + 1].start() if i + 1 < len(citations) else len(subject)
+            refs = [_article(m.group(1)) for m in ARTICLE_REF.finditer(before)] if part else []
+            add(match, kind, _printed(subject[match.start() : end]), refs, saved=saved)
+    # The title: "Law n° 027/2023 of 18/05/2023 amending the Law n° 66/2018 of 30/08/2018 …".
+    title = sentence_case((entry["versions"].get(language) or {}).get("title") or "")
+    citations = list(CITED.finditer(title))
+    for i, match in enumerate(citations):
+        before = title[citations[i - 1].end() if i else 0 : match.start()]
+        kind = "repeals" if REPEALING.search(before) else "amends" if AMENDING.search(before) else None
+        if kind:  # what the text says comes first: its citation is printed in full
+            end = citations[i + 1].start() if i + 1 < len(citations) else len(title)
+            add(match, kind, _printed(title[match.start() : end]), only_new=True)
+    out = []
+    for link in found.values():
+        refs, saved = link.pop("refs"), link.pop("saved")
+        if link["kind"] == "amends":
+            note = _articles(refs)
+        else:
+            note = f"Except {_articles(saved)}" if saved else None
+        out.append({**link, **({"note": note} if note else {})})
+    return out
+
+
 ADOPTED_IN = re.compile(r"adopted in (Ikinyarwanda|Kinyarwanda|English|French)", re.I)
 ROLES = (
     ("promulgated", re.compile(r"^(?:The\s+)?President of the Republic$", re.I)),
@@ -1238,12 +1412,6 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> dict:
             values["step:commenced.date"] = issue["date"]
             if values["identity.family"] in ("legislation", "constitution"):
                 values["profile.commencement"] = "on_publication"
-    repealed = [
-        {"kind": "repeals", "target": re.sub(r"\s+", " ", match.group(1)).strip()}
-        for match in REPEALS.finditer(text)
-    ]
-    if repealed:
-        values["relations"] = repealed
     values["publication.kind"] = "gazette"
     values["publication.name"] = "Official Gazette of the Republic of Rwanda"
     edition = "Special" if issue.get("special") else str(issue.get("number") or "")

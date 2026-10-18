@@ -746,12 +746,30 @@ def create_app(
             if view["place"].code == "ng"
             else {}
         )
+        links = act.get("relations") or []
+        if links:  # what the collection's texts say, beside details saved before they were linked
+            suggestions["relations"] = {
+                "value": links,
+                "evidence": "the laws this text repeals or amends, and the later ones that repeal or amend it",
+            }
+        # The related documents the workbench holds, each opened in this document's language if it can.
+        related = {}
+        for link in [*(view["values"].get("relations") or []), *links]:
+            work = link.get("target_id")
+            if work and work not in related:
+                languages = (act.get("language"), "en", "fr", "rw")
+                found = next(
+                    (f"{work}-{lang}" for lang in languages if lang and library.has(f"{work}-{lang}")), None
+                )
+                if found:
+                    related[work] = found
         return {
             "standard": view_schema(view),
             "document_type": view["kind"],
             "place": view["place"].model_dump(),
             "record": current_details(record, view),
             "suggestions": suggestions,
+            "related": related,
             "missing": view["missing"],
             "history": [
                 {

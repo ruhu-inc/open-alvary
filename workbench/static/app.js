@@ -694,7 +694,7 @@ async function detailsView(actId) {
   const doc = await api(`/api/documents/${encodeURIComponent(actId)}`);
   const title = doc.data.act.title;
   setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: title }), "Details");
-  const { standard, record, suggestions } = data;
+  const { standard, record, suggestions, related = {} } = data;
   const canEdit = app.me.roles.includes("reviewer");
   const values = structuredClone(record.details);
   const absent = { ...record.absent };
@@ -741,7 +741,7 @@ async function detailsView(actId) {
       input = el("input", { type: "text", placeholder: "Separate with commas", on: { input: () => set(input.value.split(",").map((x) => x.trim()).filter(Boolean)) } });
       input.value = (value || []).join(", ");
     } else if (field.kind === "relations") {
-      input = relationsEditor(standard, value || [], (links) => set(links));
+      input = relationsEditor(standard, value || [], (links) => set(links), related);
     } else if (field.kind === "rows") {
       input = rowsEditor(field.columns, structuredClone(value || []), (rows) => set(rows));
     } else {
@@ -815,7 +815,7 @@ async function detailsView(actId) {
   refresh();
 }
 
-function relationsEditor(standard, links, onChange) {
+function relationsEditor(standard, links, onChange, related = {}) {
   const box = el("div", { class: "relations" });
   const draw = () => {
     box.replaceChildren(
@@ -825,8 +825,11 @@ function relationsEditor(standard, links, onChange) {
         const target = el("input", { type: "text", placeholder: "Title or citation of the other law", value: link.target || "", on: { input: () => { link.target = target.value; onChange(links); } } });
         const id = el("input", { type: "text", class: "narrow", placeholder: "catalogue id (if any)", value: link.target_id || "", on: { input: () => { if (id.value) link.target_id = id.value; else delete link.target_id; onChange(links); } } });
         const note = el("input", { type: "text", class: "narrow", placeholder: "note", value: link.note || "", on: { input: () => { if (note.value) link.note = note.value; else delete link.note; onChange(links); } } });
+        const other = related[link.target_id];  // the other law, if the workbench holds it
         return el("div", { class: "relation" }, kind, target, id, note,
-          el("button", { class: "small", text: "Remove", on: { click: () => { links.splice(i, 1); onChange(links); draw(); } } }));
+          el("span", { class: "relation-actions" },
+            other ? el("a", { href: `#/doc/${encodeURIComponent(other)}/details`, text: "Open", title: "Open the other law's details" }) : null,
+            el("button", { class: "small", text: "Remove", on: { click: () => { links.splice(i, 1); onChange(links); draw(); } } })));
       }),
       el("button", { class: "small", text: "+ Add a related law", on: { click: () => { links.push({ kind: "amends", target: "" }); onChange(links); draw(); } } }));
   };
