@@ -343,21 +343,27 @@ in tests; it is not Nigerian law and is never part of the seed release.
 
 ## Implemented, limited and deferred
 
-Implemented: schemas and reference checks; rights/publication gate; Nigeria
-catalogue; manual/HTML/text-PDF parsing; OCR callback with explicit failure when
-unconfigured; persistence and migrations; nine requested read-only endpoints;
-search/citation resolution; responsive public pages; deterministic releases and tests.
+Implemented: schemas and reference checks; the rights and publication gate; the Nigeria catalogue
+(five federal instruments, with checked repeal links); immutable releases; the change feed (JSON,
+Atom and RSS), watches with digests, and webhooks; the public website and its own admission-limited
+data path; accounts, the developer console, API keys and OAuth for connected apps; the keyed REST
+API (`/api/v1`) and MCP, with no anonymous tier (D22), and the developer documentation at `/docs`;
+a record's history (`/sources/{id}/relationships`: what it repeals, amends or is made under, what
+repealed or amended it, and the record in force in its place). The review workbench and the Rwanda
+collection: Gazette and RLRC acquisition, OCR, reading into articles in three languages, links
+between instruments, reviewer approval and sealed audit logs. The text-publication path (owner text
+decisions, `operations.publish texts`), the text, structure and anchor routes, the append-only rights
+history (`/api/v1/rights/{id}/history`) and withdrawals that name the version withdrawn.
 
-Limited: generic root-only structure, operator-only ingestion, in-memory substring
-search over database rows, one active rights record per source, hash-based version
-deduplication. PostgreSQL is supported, while SQLite powers the lightweight preview.
+Limited: the website's search, browse and coverage read every public record on each request; the
+S1 benchmark (`scripts/benchmark_catalogue.py`: 10,000 records, 10 clients) misses its two-second
+p95 there, while the API meets it. A record's history goes one link deep. Section and article
+structure has rules for two collections only (`ng-federal-act-1`, `rw-law-1`). No legal text has
+been cleared, so no text is published, and no Rwandan record is public yet.
 
-Deferred: live source crawling, concrete OCR service, legal section parsers,
-reviewer/admin workflow, append-only rights audit, incremental search indexes,
-embeddings/pgvector, MCP, hosted tiers, signed releases, authentication and per-client quotas,
-a persistent full-text deployment and exercised incident/withdrawal operations.
-The metadata site is live on Vercel; contact is ijidai@ruhu.ai. Docker traffic controls
-are available for that alternative profile, not the live Vercel deployment.
+Deferred: the S1 monitoring exercise (alert delivery, a recorded outage and recovery), signed
+releases, semantic retrieval and embeddings, and further jurisdictions. The public site and API run
+on Google Cloud Run with PostgreSQL (`deployment/gcp/public_service.sh`); contact is hello@ruhu.ai.
 
 ## Before full-text publication
 
