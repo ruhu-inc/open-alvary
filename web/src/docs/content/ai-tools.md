@@ -56,9 +56,11 @@ On a paid or approved plan, owners and admins also confirm a second factor here.
 
 ## What to ask
 
-The tool has six [tools](/docs/api/mcp) and picks them itself. For example:
+The tool has nine [tools](/docs/api/mcp) and picks them itself. For example:
 
 - "Find Nigeria's Freedom of Information Act. What is its official source, and may its text be reused?"
+- "Which published Nigerian texts say who may apply for information? Quote the sections."
+- "What does section 1(2) of the FOI Act 2011 say, exactly?"
 - "Is Nigeria's Investments and Securities Act 2007 still in force? If not, what replaced it?"
 - "List the Nigerian acts in the Open Alvary catalogue, with their citations."
 - "What changed in the Open Alvary catalogue for Nigeria recently?"

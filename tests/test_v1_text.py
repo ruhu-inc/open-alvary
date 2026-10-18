@@ -34,33 +34,41 @@ def published(store):
     return publish_act(store, UNITS)
 
 
-def publish_act(store, units):
-    """A catalogue record and a reviewed text published through operations.publish."""
+def catalogue(store, work, title, language):
     store.save(
         Corpus(
-            jurisdictions=[Jurisdiction(id="ng", name="Nigeria", country_code="NG", languages=["en"])],
+            jurisdictions=[Jurisdiction(id="ng", name="Nigeria", country_code="NG", languages=["en", "fr"])],
             authorities=[
                 Authority(
                     id="ng-nass", jurisdiction_id="ng", name="National Assembly", kind="legislature",
                     official_url="https://nass.gov.ng/",
                 )
             ],
-            languages=[Language(id="en", name="English", tag="en")],
+            languages=[Language(id="en", name="English", tag="en"), Language(id="fr", name="French", tag="fr")],
             sources=[
                 Source(
-                    id=WORK, jurisdiction_id="ng", authority_id="ng-nass", title="Example Act, 2023",
+                    id=work, jurisdiction_id="ng", authority_id="ng-nass", title=title,
                     document_type="act", canonical_url="https://www.nass.gov.ng/example-act.pdf",
-                    citation="Example Act, 2023",
+                    citation=title, language=language,
                 )
             ],
             rights=[
                 RightsRecord(
-                    id=f"rights-{WORK}", source_id=WORK, metadata_public=True,
+                    id=f"rights-{work}", source_id=work, metadata_public=True,
                     metadata_basis="Independently authored catalogue entry",
                 )
             ],
         )
     )  # fmt: skip
+
+
+def publish_act(
+    store, units, *, work=WORK, title="Example Act, 2023", language="en", effective_from=None, record=True
+):
+    """A catalogue record and a reviewed text published through operations.publish; ``record=False``
+    publishes another text of a record already catalogued."""
+    if record:
+        catalogue(store, work, title, language)
     now = datetime.now(UTC).replace(microsecond=0)
     decision = {
         "document_types": ["act"],
@@ -77,10 +85,10 @@ def publish_act(store, units):
         "decided_at": (now - timedelta(minutes=1)).isoformat(),
         "expires_at": (now + timedelta(days=365)).isoformat(),
     }
-    text = publication.build({"id": WORK, "jurisdiction": "ng"}, [{"page": 1, "units": units}])
+    text = publication.build({"id": work, "jurisdiction": "ng"}, [{"page": 1, "units": units}])
     item = publish.ApprovedText(
-        document_id=WORK, work=WORK, language="en", document_type="act", text=text,
-        approver="Ijidai Lassa", approved_at=now - timedelta(minutes=5),
+        document_id=work, work=work, language=language, document_type="act", text=text,
+        approver="Ijidai Lassa", approved_at=now - timedelta(minutes=5), effective_from=effective_from,
         provenance={
             "url": "https://www.nass.gov.ng/example-act.pdf",
             "retrieved_at": "2026-10-09T06:41:17+00:00",
@@ -89,7 +97,9 @@ def publish_act(store, units):
     )  # fmt: skip
     publish.publish_texts(store, "ng", publish.Texts(approved=[item]), decision)
     corpus = store.load()
-    return store, corpus.versions[0], {n.locator: n for n in corpus.structure}
+    digest = hashlib.sha256(text.serialized.text.encode()).hexdigest()
+    version = next(v for v in corpus.versions if v.source_id == work and v.content_hash == digest)
+    return store, version, {n.locator: n for n in corpus.structure if n.version_id == version.id}
 
 
 def test_a_long_act_is_served_whole_with_its_structure(store, tmp_path):
@@ -185,11 +195,11 @@ def test_texts_are_rechecked_immediately_before_they_are_sent(cleared, store, tm
     read = LegacyCatalogue.versions
     calls = []
 
-    def withdrawn_after_reading(self, source_id):
+    def withdrawn_after_reading(self, source_id, **selection):
         calls.append(source_id)
         if len(calls) > 1:  # the recheck: the record stopped being public after it was read
             raise SourceUnavailable(source_id)
-        return read(self, source_id)
+        return read(self, source_id, **selection)
 
     monkeypatch.setattr(LegacyCatalogue, "versions", withdrawn_after_reading)
     refused = client.get(f"/sources/{source}/versions")
@@ -219,3 +229,115 @@ def test_the_mcp_tool_answers_the_same_anchor_and_refuses_one_too_large(publishe
     refused = call(nodes["sec_1"].id).json()["result"]
     assert refused["isError"] and refused["content"][0]["text"].startswith("result_too_large")
     assert call("nod_unknown").json()["result"]["isError"]
+
+
+def test_a_citation_of_a_part_resolves_to_its_anchor_and_says_why_when_it_cannot(published, tmp_path):
+    from urllib.parse import quote
+
+    store, version, nodes = published
+    client = TestClient(create_v1_app(store, tmp_path, lambda: []))
+
+    def provision(citation, **params):
+        answer = client.get(f"/citations/{quote(citation)}", params=params)
+        assert answer.status_code == 200, answer.text
+        return answer.json()
+
+    found = provision("Example Act, 2023, s. 1(2)(b)")
+    assert found["status"] == "resolved" and [m["id"] for m in found["matches"]] == [WORK]
+    [part] = found["provision"]["candidates"]
+    assert (
+        found["provision"]["status"] == "resolved"
+        and part["anchor_id"] == nodes["sec_1__subsec_2__para_b"].id
+    )
+    raw = version.canonical_text.encode()
+    assert raw[part["start_byte"] : part["end_byte"]].decode() == "(b) from salary — café, naïve, 中文."
+    assert part["span_hash"] == hashlib.sha256(raw[part["start_byte"] : part["end_byte"]]).hexdigest()
+    assert (
+        part["citation"] == "Example Act, 2023, s. 1(2)(b)" and part["locator"] == "sec_1__subsec_2__para_b"
+    )
+    for other in ("section 1(2)(b) of the Example Act, 2023", "EXAMPLE ACT, 2023  S.1 (2) (b)"):
+        assert provision(other)["provision"]["candidates"][0]["anchor_id"] == part["anchor_id"]
+    assert provision("Example Act, 2023 s. 2 “Fund”")["provision"]["candidates"][0]["kind"] == "definition"
+    assert provision("Example Act, 2023, First Schedule, para. 1")["provision"]["status"] == "resolved"
+
+    # Every numbered part resolves back to itself from the citation its anchor gives; parts cited by
+    # their heading (the preamble) have no pinpoint.
+    from api import pinpoint
+
+    numbered = 0
+    for node in nodes.values():
+        cited = client.get(f"/anchors/{node.id}").json()["citation"]
+        if pinpoint.read(cited.removeprefix("Example Act, 2023, ")):
+            numbered += 1
+            assert provision(cited)["provision"]["candidates"][0]["anchor_id"] == node.id, cited
+    assert numbered >= 8
+
+    missing = provision("Example Act, 2023, s. 1(2)(z)")["provision"]
+    assert missing["status"] == "unresolved" and missing["reason"] == "not_found"
+    assert missing["nearest"]["pinpoint"] == "s. 1(2)" and missing["candidates"] == []
+    assert provision("Example Act, 2023, s. 9")["provision"]["nearest"] is None
+    assert provision("Example Act, 2023, s. 1", language="fr")["provision"]["reason"] == "no_text_in_scope"
+    assert (
+        provision("Example Act, 2023, s. 1", as_of="2024-01-01")["provision"]["reason"] == "no_text_in_scope"
+    )
+    assert "provision" not in provision("Example Act, 2023")  # the pilot's answer, unchanged
+    assert provision("Unknown Act s. 1") == {"status": "unresolved", "matches": []}
+    withdraw(store)
+    assert provision("Example Act, 2023, s. 1")["provision"]["reason"] == "no_public_text"
+
+
+def test_a_part_in_two_languages_is_two_alternatives_until_a_language_is_given(store, tmp_path):
+    _, english, _ = publish_act(store, UNITS)
+    french_units = [{**u, "text": u["text"].replace("The Fund shall lend", "Le Fonds prête")} for u in UNITS]
+    _, french, _ = publish_act(store, french_units, language="fr", record=False)
+    client = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    both = client.get("/citations/Example Act, 2023, s. 1(1)").json()["provision"]
+    assert both["status"] == "ambiguous" and both["reason"] == "several_texts"
+    assert {c["language"] for c in both["candidates"]} == {"en", "fr"}
+    one = client.get("/citations/Example Act, 2023, s. 1(1)", params={"language": "fr"}).json()["provision"]
+    assert one["status"] == "resolved" and one["candidates"][0]["version_id"] == french.id
+
+    page = client.get(f"/sources/{WORK}/versions", params={"language": "en"}).json()
+    assert page["selection"] == {
+        "status": "selected", "as_of": None, "language": "en", "version_id": english.id,
+        "alternatives": [], "reason": None,
+    }  # fmt: skip
+    assert [v["id"] for v in page["items"]] == [english.id]
+    assert {n["version_id"] for n in page["structure"]} == {english.id}
+    either = client.get(f"/sources/{WORK}/versions", params={"as_of": "2024-01-01"}).json()["selection"]
+    assert either["status"] == "ambiguous" and either["reason"] == "effective_dates_unknown"
+    none = client.get(f"/sources/{WORK}/versions", params={"language": "rw"}).json()
+    assert none["selection"]["reason"] == "none_in_language" and none["items"] == []
+    assert "selection" not in client.get(f"/sources/{WORK}/versions").json()  # the pilot's answer, unchanged
+    assert client.get(f"/sources/{WORK}/versions", params={"language": "not a tag"}).status_code == 400
+
+
+def test_a_date_selects_the_text_in_force_and_never_one_without_a_date():
+    from datetime import date
+    from types import SimpleNamespace
+
+    from api.catalogue import select_versions
+
+    def text(id_, language="en", start=None, until=None, prior=None, raw="a"):
+        return SimpleNamespace(
+            id=id_, language=language, effective_from=start, effective_until=until, prior_version_id=prior,
+            raw_hash=raw,
+        )  # fmt: skip
+
+    old = text("ver_old", start=date(2010, 1, 1), until=date(2020, 1, 1))
+    new = text("ver_new", start=date(2020, 1, 1), prior="ver_old", raw="b")
+    picked, chosen = select_versions([old, new], date(2015, 6, 1))
+    assert picked.status == "selected" and picked.version_id == "ver_old" and chosen == [old]
+    assert select_versions([old, new], date(2020, 1, 1))[0].version_id == "ver_new"  # the day it starts
+    assert select_versions([old, new], date(2009, 1, 1))[0].reason == "none_in_force"
+    assert select_versions([old, new])[0].reason == "several_texts"  # no date: never "the latest"
+    undated = text("ver_undated")
+    assert select_versions([old, undated], date(2015, 6, 1))[0].alternatives == ("ver_old", "ver_undated")
+    french = text("ver_fr", language="fr", start=date(2010, 1, 1))
+    assert select_versions([old, french], date(2015, 6, 1))[0].reason == "several_languages"
+    assert select_versions([old, french], date(2015, 6, 1), "en-NG")[0].reason == "none_in_language"
+    regional = text("ver_ng", language="en-NG", start=date(2010, 1, 1))
+    assert select_versions([regional], date(2015, 6, 1), "en")[0].version_id == "ver_ng"
+    # A later reading of the same official file corrects the earlier one: one text, not two.
+    reread = text("ver_reread", start=date(2010, 1, 1), until=date(2020, 1, 1), prior="ver_old")
+    assert select_versions([old, reread], date(2015, 6, 1))[0].version_id == "ver_reread"

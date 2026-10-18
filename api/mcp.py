@@ -7,13 +7,16 @@ or account data. Responses are single JSON bodies (no server-initiated streams).
 
 import json
 import os
+import re
 from collections.abc import Callable
+from datetime import date
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
+from api import text_index
 from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
 from api.repositories import EDGE_ORDER
 from changes.feed import Feed, FeedError, Filters
@@ -144,6 +147,93 @@ TOOLS = [
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
     },
     {
+        "name": "search_text",
+        "title": "Search published texts",
+        "description": "Search the words of published legal texts. Returns matching passages (sections, articles, "
+        "schedule paragraphs), best first, each with an exact snippet, a citation such as s. 23(1)(a), the "
+        "part's anchor_id for get_anchor and the record's legal status. Only published texts are searched: "
+        "coverage says how many records in scope have one, and status tells no_result apart from a scope "
+        "with no published text (unsupported_scope) and a search that could not run (degraded).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "description": 'Words to find. "exact phrase" in quotes, -word to leave out, OR between '
+                    "alternatives. A citation of a part, such as NDPA s. 23(1)(a), puts that part first.",
+                },
+                "jurisdiction": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 40,
+                    "description": "One jurisdiction to search, such as ng (Nigeria). Without it, every "
+                    "jurisdiction available to you.",
+                },
+                "language": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 35,
+                    "description": "Only texts in this language, such as en or fr.",
+                },
+                "as_of": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Only texts in force on this date, YYYY-MM-DD. Texts with no effective "
+                    "date are left out.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10,
+                    "description": "How many passages, 1 to 10. The default is 5.",
+                },
+                "cursor": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "The next_cursor of the previous answer, for more passages.",
+                },
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
+        "name": "resolve_citation",
+        "title": "Resolve a citation",
+        "description": "The records a citation names and, for a citation of a part such as NDPA s. 23(1)(a), "
+        "art. 12 or First Schedule, para. 3, the part in the record's public text: its anchor_id for "
+        "get_anchor and its exact span. Alternatives (two languages, two texts, two records) are listed with "
+        "the reason, never chosen between.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "citation": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300,
+                    "description": "The citation, such as FOI Act 2011, s. 1(1).",
+                },
+                "as_of": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Look for the part only in texts in force on this date, YYYY-MM-DD.",
+                },
+                "language": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 35,
+                    "description": "Look for the part only in texts in this language, such as en.",
+                },
+            },
+            "required": ["citation"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
         "name": "list_changes",
         "title": "List catalogue changes",
         "description": "Changes to the catalogue in commit order: records added, corrected or withdrawn, and text "
@@ -267,6 +357,31 @@ def changes_tool(conn, name, arguments):
     )
 
 
+LANGUAGE = re.compile(r"^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$")
+
+
+def _date(value) -> date | None | bool:
+    """A YYYY-MM-DD argument as a date; None when absent; False when not a date."""
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(value) if isinstance(value, str) and len(value) == 10 else False
+    except ValueError:
+        return False
+
+
+def _language(value) -> str | None | bool:
+    if value is None:
+        return None
+    return value if isinstance(value, str) and LANGUAGE.match(value) and len(value) <= 35 else False
+
+
+def _bounded(payload: dict) -> dict:
+    if len(json.dumps(payload, ensure_ascii=False).encode()) > MAX_TOOL_BYTES:
+        raise TooLarge("result_too_large: ask for fewer passages")
+    return payload
+
+
 def _error(id_, code, message):
     return {"jsonrpc": "2.0", "id": id_, "error": {"code": code, "message": message}}
 
@@ -349,6 +464,56 @@ def create_router(
                         f"{view.start_byte} to {view.end_byte} of /api/v1/versions/{view.version_id}/text"
                     )
                 return payload
+            if name == "search_text" and {"query"} <= set(arguments) <= {
+                "query",
+                "jurisdiction",
+                "language",
+                "as_of",
+                "limit",
+                "cursor",
+            }:
+                query, limit, cursor = arguments["query"], arguments.get("limit", 5), arguments.get("cursor")
+                as_of, language = _date(arguments.get("as_of")), _language(arguments.get("language"))
+                jurisdiction = arguments.get("jurisdiction")
+                if (
+                    not isinstance(query, str)
+                    or not 1 <= len(query) <= 2000
+                    or as_of is False
+                    or language is False
+                ):
+                    return None
+                if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 10:
+                    return None
+                if cursor is not None and (not isinstance(cursor, str) or len(cursor) > 200):
+                    return None
+                if jurisdiction is not None:
+                    if not isinstance(jurisdiction, str) or not 2 <= len(jurisdiction) <= 40:
+                        return None
+                    plan.admit(jurisdiction.lower())
+                    jurisdictions = (jurisdiction.lower(),)
+                else:
+                    scope = plan.within(j.id for j in service.jurisdictions())
+                    jurisdictions = None if scope is None else tuple(sorted(scope))
+                filters = text_index.Filters(jurisdictions=jurisdictions, language=language, as_of=as_of)
+                page = service.search_text(query, filters, limit=limit, cursor=cursor)
+                return _bounded(page.model_dump(mode="json"))
+            if name == "resolve_citation" and {"citation"} <= set(arguments) <= {
+                "citation",
+                "as_of",
+                "language",
+            }:
+                citation = arguments["citation"]
+                as_of, language = _date(arguments.get("as_of")), _language(arguments.get("language"))
+                if (
+                    not isinstance(citation, str)
+                    or not 1 <= len(citation) <= 300
+                    or as_of is False
+                    or language is False
+                ):
+                    return None
+                view = service.citations(citation, as_of=as_of, language=language)
+                plan.admit(*(m.jurisdiction_id for m in view.matches))
+                return _bounded(view.model_dump(mode="json"))
             if name in ("list_changes", "get_change"):
                 return changes_tool(service.repository.connection, name, arguments)
             if name == "get_coverage" and not arguments:

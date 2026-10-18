@@ -134,6 +134,93 @@
     }
   },
   {
+    "name": "search_text",
+    "title": "Search published texts",
+    "description": "Search the words of published legal texts. Returns matching passages (sections, articles, schedule paragraphs), best first, each with an exact snippet, a citation such as s. 23(1)(a), the part's anchor_id for get_anchor and the record's legal status. Only published texts are searched: coverage says how many records in scope have one, and status tells no_result apart from a scope with no published text (unsupported_scope) and a search that could not run (degraded).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "Words to find. \"exact phrase\" in quotes, -word to leave out, OR between alternatives. A citation of a part, such as NDPA s. 23(1)(a), puts that part first."
+        },
+        "jurisdiction": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 40,
+          "description": "One jurisdiction to search, such as ng (Nigeria). Without it, every jurisdiction available to you."
+        },
+        "language": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 35,
+          "description": "Only texts in this language, such as en or fr."
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date",
+          "description": "Only texts in force on this date, YYYY-MM-DD. Texts with no effective date are left out."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10,
+          "description": "How many passages, 1 to 10. The default is 5."
+        },
+        "cursor": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "The next_cursor of the previous answer, for more passages."
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
+    "name": "resolve_citation",
+    "title": "Resolve a citation",
+    "description": "The records a citation names and, for a citation of a part such as NDPA s. 23(1)(a), art. 12 or First Schedule, para. 3, the part in the record's public text: its anchor_id for get_anchor and its exact span. Alternatives (two languages, two texts, two records) are listed with the reason, never chosen between.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "citation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "The citation, such as FOI Act 2011, s. 1(1)."
+        },
+        "as_of": {
+          "type": "string",
+          "format": "date",
+          "description": "Look for the part only in texts in force on this date, YYYY-MM-DD."
+        },
+        "language": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 35,
+          "description": "Look for the part only in texts in this language, such as en."
+        }
+      },
+      "required": [
+        "citation"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "list_changes",
     "title": "List catalogue changes",
     "description": "Changes to the catalogue in commit order: records added, corrected or withdrawn, and text published. Filter by jurisdiction, work, type, document class, language or keyword. Pass the returned resume_token next time to get only newer changes. Changes to what Open Alvary holds, not every change in a country's law.",

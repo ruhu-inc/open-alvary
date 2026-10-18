@@ -10,6 +10,7 @@ the tier catalogue. Data routes send no CORS headers: keys never belong in a bro
 import hashlib
 from collections.abc import Callable
 from contextlib import contextmanager
+from datetime import date
 from pathlib import Path
 from typing import Literal
 
@@ -19,6 +20,7 @@ from fastapi.openapi.utils import get_openapi
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
+from api import text_index
 from api.admission import AdmissionUnavailable
 from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable
 from api.credentials import problem
@@ -30,6 +32,7 @@ from api.repositories import LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import Store, check_legacy_authority
 from changes.routes import create_router as create_changes_router
 from schema.public import (
+    LEGAL_STATUS,
     AnchorView,
     CitationView,
     CoverageView,
@@ -42,10 +45,14 @@ from schema.public import (
     SourceRelationships,
     SourceView,
     StructurePage,
+    TextSearchPage,
     VersionPage,
 )
 
 PUBLIC_PATHS = frozenset({"/openapi.json", "/quota-policy", "/tiers"})
+DocumentType = Literal["constitution", "act", "regulation", "judgment", "gazette", "guidance", "other"]
+# A BCP 47 language tag, such as en, fr or en-NG.
+LANGUAGE = Query(None, min_length=2, max_length=35, pattern=r"^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$")
 
 
 def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]]) -> FastAPI:
@@ -199,10 +206,14 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
 
     @app.get("/sources/{source_id}/versions")
     def versions(
-        request: Request, source_id: str, service: LegacyCatalogue = Depends(catalogue)
+        request: Request,
+        source_id: str,
+        as_of: date | None = None,
+        language: str | None = LANGUAGE,
+        service: LegacyCatalogue = Depends(catalogue),
     ) -> VersionPage:
         check_source(request, service, source_id)
-        page = service.versions(source_id)
+        page = service.versions(source_id, as_of=as_of, language=language)
         payload = page.model_dump_json().encode()
         if len(payload) > MAX_SINGLE_RESPONSE_BYTES:
             raise ResultTooLarge("This record's texts are larger than one response may be")
@@ -300,11 +311,59 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
             q, jurisdiction=within(request, service, jurisdiction), limit=limit, offset=offset, access=access
         )
 
+    @app.get("/search/text")
+    def search_text(
+        request: Request,
+        q: str = Query(min_length=1, max_length=2000),
+        jurisdiction: str | None = None,
+        language: str | None = LANGUAGE,
+        kinds: list[DocumentType] = Query([], alias="type"),
+        statuses: list[LEGAL_STATUS] = Query([], alias="status"),
+        as_of: date | None = None,
+        year_from: int | None = Query(None, ge=1800, le=2200),
+        year_to: int | None = Query(None, ge=1800, le=2200),
+        source_id: str | None = Query(None, min_length=1, max_length=160),
+        version_id: str | None = Query(None, min_length=1, max_length=160),
+        limit: int = Query(25, ge=1, le=100),
+        cursor: str | None = Query(None, max_length=200),
+        service: LegacyCatalogue = Depends(catalogue),
+    ) -> TextSearchPage:
+        scope = within(request, service, jurisdiction)
+        filters = text_index.Filters(
+            jurisdictions=None
+            if scope is None
+            else (scope,)
+            if isinstance(scope, str)
+            else tuple(sorted(scope)),
+            language=language,
+            types=tuple(kinds),
+            statuses=tuple(statuses),
+            as_of=as_of,
+            year_from=year_from,
+            year_to=year_to,
+            source_id=source_id,
+            version_id=version_id,
+        )
+        page = service.search_text(q, filters, limit=limit, cursor=cursor)
+        payload = page.model_dump_json().encode()
+        served = {(hit.version_id, hit.content_hash) for hit in page.items}
+
+        def recheck() -> bool:
+            """Immediately before the first byte: every text quoted is still public."""
+            with session() as fresh:
+                return all(fresh.readable(version_id) == content_hash for version_id, content_hash in served)
+
+        return checked(request, payload, recheck, f'"{hashlib.sha256(payload).hexdigest()}"')
+
     @app.get("/citations/{citation:path}")
     def citations(
-        request: Request, citation: str, service: LegacyCatalogue = Depends(catalogue)
+        request: Request,
+        citation: str,
+        as_of: date | None = None,
+        language: str | None = LANGUAGE,
+        service: LegacyCatalogue = Depends(catalogue),
     ) -> CitationView:
-        view = service.citations(citation)
+        view = service.citations(citation, as_of=as_of, language=language)
         reach(request).admit(*(m.jurisdiction_id for m in view.matches))
         return view
 

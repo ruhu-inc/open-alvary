@@ -8,6 +8,7 @@ from typing import Protocol
 
 from sqlalchemy import text
 
+from api import pinpoint, text_index
 from api.reach import country
 from api.repositories import (
     EDGE_ORDER,
@@ -31,17 +32,23 @@ from schema.public import (
     DecisionView,
     JurisdictionView,
     NodeViewRecord,
+    ProvisionLookup,
+    ProvisionMatch,
     RelatedSource,
     RightsHistory,
     RightsRevision,
     RightsView,
     RightsViewRecord,
+    SearchCoverage,
     SearchPage,
     SourcePage,
     SourceRelationships,
     SourceView,
     StructurePage,
+    TextHit,
+    TextSearchPage,
     VersionPage,
+    VersionSelection,
     VersionViewRecord,
 )
 
@@ -72,6 +79,73 @@ def _offset(cursor: str | None, expected: str = "edges") -> int:
 EDGES_PER_PAGE, MAX_EDGES_PER_PAGE, EDGE_BUDGET, MAX_SUCCESSION = 25, 100, 300, 3
 # An anchor answers with its whole span, never silently shortened (BUD-01), inside the 1 MiB JSON cap.
 MAX_ANCHOR_BYTES = 900 * 1024
+# A text search serves its first 1,000 hits, 25 a page by default and 100 at most (API-03).
+MAX_HIT_OFFSET = 1000
+
+
+def _speaks(version, language: str | None) -> bool:
+    """RFC 4647 basic filtering: "en" matches a text in "en" or "en-NG"."""
+    if language is None:
+        return True
+    tag, wanted = version.language.casefold(), language.casefold()
+    return tag == wanted or tag.startswith(wanted + "-")
+
+
+def _in_force(version, as_of) -> bool:
+    return bool(
+        version.effective_from
+        and version.effective_from <= as_of
+        and (version.effective_until is None or as_of < version.effective_until)
+    )
+
+
+def _latest_readings(versions: list) -> list:
+    """Without the texts a later reading of the same official file corrects (TXP-04): they are the
+    same text read again, not alternatives."""
+    corrected = {
+        v.prior_version_id
+        for v in versions
+        if v.prior_version_id
+        and any(
+            w.id == v.prior_version_id and w.raw_hash == v.raw_hash and w.language == v.language
+            for w in versions
+        )
+    }
+    return [v for v in versions if v.id not in corrected]
+
+
+def select_versions(versions: list, as_of=None, language=None) -> tuple[VersionSelection, list]:
+    """The text a date and a language select among public ones (API-02, OA-T3), or the alternatives and
+    why. A text with no effective date is never taken to be in force on a date: it stays an alternative."""
+    asked = {"as_of": as_of, "language": language}
+    candidates = _latest_readings([v for v in versions if _speaks(v, language)])
+    if not candidates:
+        return VersionSelection(status="none", reason="none_in_language", **asked), []
+    if as_of is None:
+        chosen, unknown = candidates, []
+    else:
+        chosen = [v for v in candidates if _in_force(v, as_of)]
+        unknown = [
+            v
+            for v in candidates
+            if v.effective_from is None and not (v.effective_until and v.effective_until <= as_of)
+        ]
+    if len(chosen) == 1 and not unknown:
+        return VersionSelection(status="selected", version_id=chosen[0].id, **asked), chosen
+    if not chosen and not unknown:
+        return VersionSelection(status="none", reason="none_in_force", **asked), []
+    alternatives = chosen + unknown
+    reason = (
+        "effective_dates_unknown"
+        if unknown
+        else "several_languages"
+        if len({v.language for v in chosen}) > 1
+        else "several_texts"
+    )
+    selection = VersionSelection(
+        status="ambiguous", alternatives=tuple(v.id for v in alternatives), reason=reason, **asked
+    )
+    return selection, alternatives
 
 
 # The website's filters (MAC-01): each is a source field, except access, which follows the rights
@@ -223,7 +297,9 @@ class LegacyCatalogue:
             next_cursor=_cursor(offset + limit) if offset + limit < total else None,
         )
 
-    def versions(self, source_id):
+    def versions(self, source_id, *, as_of=None, language=None):
+        """A source's public texts with their structure; given a date or a language, only the text they
+        select, or the alternatives and why (``selection``)."""
         source, rights = self._require(source_id)
         versions = []
         size = 0
@@ -232,6 +308,9 @@ class LegacyCatalogue:
             if len(versions) == MAX_UNPAGED_ROWS or size > MAX_BUFFER_BYTES:
                 raise ResultTooLarge("Pilot unpaged text result exceeds bound")
             versions.append(version)
+        selection = None
+        if as_of is not None or language is not None:
+            selection, versions = select_versions(versions, as_of, language)
         nodes = tuple(
             NodeViewRecord.model_validate(row)
             for row in self.repository.rows(
@@ -269,11 +348,15 @@ class LegacyCatalogue:
                     languages=self.repository.rows("languages", ids=languages),
                 )
             )
+        notice = None
+        if not versions:
+            notice = (
+                "No version has passed both rights and content review."
+                if selection is None
+                else "No public text matches that date and language."
+            )
         return VersionPage(
-            items=tuple(versions),
-            rights=rights,
-            structure=nodes,
-            notice=None if versions else "No version has passed both rights and content review.",
+            items=tuple(versions), rights=rights, structure=nodes, notice=notice, selection=selection
         )
 
     # --- one version, its structure and its anchors (API-02), each rechecked for eligibility ---------
@@ -318,43 +401,43 @@ class LegacyCatalogue:
             next_cursor=_cursor(offset + limit, "nodes") if offset + limit < len(nodes) else None,
         )
 
-    def _pinpoint(self, node: NodeViewRecord) -> str:
-        """How a part is cited within its text, from its printed numbers: "s. 23(1)(a)", "art. 12",
-        "First Schedule, para. 3", a definition with its section; else its heading or label."""
+    def _chain(self, node: NodeViewRecord, by_id: dict | None = None) -> list[NodeViewRecord]:
+        """A part and the parts enclosing it, outermost first: from ``by_id`` when the version's parts
+        are already read, else one lookup each."""
         chain, at = [node], node
-        while at.parent_id and len(chain) < 16:
-            row = self.repository.node(at.parent_id)
-            if row is None:
+        while at.parent_id and len(chain) < 64:
+            if by_id is not None:
+                parent = by_id.get(at.parent_id)
+            else:
+                row = self.repository.node(at.parent_id)
+                parent = NodeViewRecord.model_validate(row) if row is not None else None
+            if parent is None:
                 break
-            at = NodeViewRecord.model_validate(row)
-            chain.append(at)
-        chain.reverse()  # outermost first
+            chain.append(parent)
+            at = parent
+        return chain[::-1]
 
-        def number(label):
-            return (label or "").strip().rstrip(".")
-
-        lead = {"section": "s. ", "article": "art. "}
-        top = next((i for i, n in enumerate(chain) if n.kind in lead and n.label), None)
-        if top is not None:
-            cited = lead[chain[top].kind] + number(chain[top].label)
-            for part in chain[top + 1 :]:
-                if part.kind == "definition":
-                    cited += f", “{part.label}”"
-                elif part.label:
-                    cited += number(part.label) if part.label.startswith("(") else f"({number(part.label)})"
-            return cited
-        schedule = next((n for n in chain if n.kind == "schedule"), None)
-        if schedule is not None:
-            numbered = [n for n in chain if n.kind in ("paragraph", "subparagraph") and n.label]
-            if not numbered:
-                return schedule.label or schedule.heading or schedule.locator
-            head, *rest = numbered
-            return f"{schedule.label or schedule.locator}, para. {number(head.label)}" + "".join(
-                number(n.label) if n.label.startswith("(") else f"({number(n.label)})" for n in rest
-            )
+    def _pinpoint(
+        self, node: NodeViewRecord, document_type: str | None = None, by_id: dict | None = None
+    ) -> str:
+        """How a part is cited within its text, from its printed numbers (api.pinpoint): "s. 23(1)(a)",
+        "art. 12", "First Schedule, para. 3", a definition with its section; else its heading or label."""
+        cited = pinpoint.cite(self._chain(node, by_id), document_type)
+        if cited is not None:
+            return cited[1]
         if node.kind == "document":
             return ""
         return node.heading or node.label or node.locator
+
+    def _span(self, node: NodeViewRecord, version: VersionViewRecord) -> tuple[bytes, str]:
+        """A part's exact bytes and their hash, checked against the hash it was published with."""
+        if node.source_id != version.source_id or node.source_hash != version.content_hash:
+            raise PublicUnavailable("Invalid anchor provenance")
+        span = version.canonical_text.encode()[node.start_byte : node.end_byte]
+        span_hash = hashlib.sha256(span).hexdigest()
+        if node.span_hash and node.span_hash != span_hash:
+            raise PublicUnavailable("Anchor span hash mismatch")
+        return span, span_hash
 
     def anchor(self, anchor_id: str) -> AnchorView:
         """One part of a public text exactly. Each node of a published version is an anchor (DAT-06)."""
@@ -363,15 +446,10 @@ class LegacyCatalogue:
             raise SourceUnavailable("Anchor not available")
         node = NodeViewRecord.model_validate(row)
         version, source, rights = self.version(node.version_id)
-        if node.source_id != version.source_id or node.source_hash != version.content_hash:
-            raise PublicUnavailable("Invalid anchor provenance")
-        span = version.canonical_text.encode()[node.start_byte : node.end_byte]
+        span, span_hash = self._span(node, version)
         if len(span) > MAX_ANCHOR_BYTES:
             raise ResultTooLarge("This part is larger than one response may be; read it from the text")
-        span_hash = hashlib.sha256(span).hexdigest()
-        if node.span_hash and node.span_hash != span_hash:
-            raise PublicUnavailable("Anchor span hash mismatch")
-        pinpoint = self._pinpoint(node)
+        cited = self._pinpoint(node, source.document_type)
         return AnchorView(
             anchor_id=node.id,
             source_id=node.source_id,
@@ -387,7 +465,7 @@ class LegacyCatalogue:
             serialization_profile=version.serialization_profile,
             page=node.page,
             page_end=node.page_end,
-            citation=f"{source.citation}, {pinpoint}" if pinpoint else source.citation,
+            citation=f"{source.citation}, {cited}" if cited else source.citation,
             official_url=str(version.canonical_url),
             licence=rights.licence,
             attribution_required=rights.attribution_required,
@@ -555,33 +633,373 @@ class LegacyCatalogue:
             {name: dict(counts.most_common()) for name, counts in facets.items()},
         )
 
-    def citations(self, value):
+    def _named(self, value: str) -> list[tuple[tuple, NodeViewRecord | None, VersionViewRecord | None]]:
+        """The public sources a citation names exactly, by an alias, their citation or their title, each
+        with the part and text an alias names (None when it names the whole source)."""
         term = normalize_citation(value)
-        matches = []
-        for source, rights in self.repository.sources():
-            for row in self.repository.aliases(source.id):
-                alias = Citation.model_validate(row)
-                if normalize_citation(alias.value) != term:
+        if not term:
+            return []
+        candidates = self.repository.citation_candidates(term)
+        pairs = self._public({source_id for source_id, _ in candidates})
+        found: dict[str, tuple] = {}
+        for source_id, row in candidates:
+            if source_id not in pairs or source_id in found and found[source_id][1] is not None:
+                continue
+            source, rights = pairs[source_id]
+            if row is None:
+                if term in (normalize_citation(source.citation), normalize_citation(source.title)):
+                    found.setdefault(source_id, (pairs[source_id], None, None))
+                continue
+            alias = Citation.model_validate(row)
+            if normalize_citation(alias.value) != term:
+                continue
+            if alias.node_id and not alias.version_id:
+                raise PublicUnavailable("Invalid citation provenance")
+            if not alias.version_id:
+                found.setdefault(source_id, (pairs[source_id], None, None))
+                continue
+            version = next((v for v in self._approved(source, rights) if v.id == alias.version_id), None)
+            if version is None:
+                continue
+            node = None
+            if alias.node_id:
+                row = self.repository.node(alias.node_id)
+                if row is None:
                     continue
-                if alias.node_id and not alias.version_id:
+                node = NodeViewRecord.model_validate(row)
+                if node.version_id != alias.version_id:
                     raise PublicUnavailable("Invalid citation provenance")
-                if alias.version_id:
-                    approved = {v.id for v in self._approved(source, rights)}
-                    if alias.version_id not in approved:
-                        continue
-                    if alias.node_id:
-                        nodes = {n.id: n for n in self.versions(source.id).structure}
-                        if alias.node_id not in nodes:
-                            continue
-                        if nodes[alias.node_id].version_id != alias.version_id:
-                            raise PublicUnavailable("Invalid citation provenance")
-                if len(matches) == MAX_UNPAGED_ROWS:
-                    raise ResultTooLarge("Citation alternatives exceed pilot bound")
-                matches.append(self._view((source, rights)))
-                break
+            found[source_id] = (pairs[source_id], node, version if node else None)
+        if len(found) > MAX_UNPAGED_ROWS:
+            raise ResultTooLarge("Citation alternatives exceed pilot bound")
+        return [found[i] for i in sorted(found)]
+
+    def _match(self, node, version, source, by_id=None) -> ProvisionMatch:
+        _, span_hash = self._span(node, version)
+        cited = self._pinpoint(node, source.document_type, by_id)
+        return ProvisionMatch(
+            anchor_id=node.id,
+            source_id=source.id,
+            version_id=version.id,
+            language=version.language,
+            kind=node.kind,
+            locator=node.locator,
+            label=node.label,
+            heading=node.heading,
+            pinpoint=cited,
+            citation=f"{source.citation}, {cited}" if cited else source.citation,
+            start_byte=node.start_byte,
+            end_byte=node.end_byte,
+            span_hash=span_hash,
+            content_hash=version.content_hash,
+            effective_from=version.effective_from,
+            effective_until=version.effective_until,
+        )
+
+    def _provision(self, pairs, shown: str, key: tuple, *, as_of=None, language=None) -> ProvisionLookup:
+        """The parts ``key`` names in the public texts of these sources: chosen by date and language when
+        asked, a later reading of the same official file in place of the one it corrects."""
+        candidates, nearest, texts, in_scope = [], [], 0, 0
+        for source, rights in pairs:
+            versions = list(self._approved(source, rights))
+            texts += len(versions)
+            versions = _latest_readings([v for v in versions if _speaks(v, language)])
+            if as_of is not None:
+                versions = [v for v in versions if _in_force(v, as_of)]
+            in_scope += len(versions)
+            for version in versions:
+                nodes = self._ordered_nodes(version)
+                by_id = {n.id: n for n in nodes}
+                keyed: dict[tuple, list] = {}
+                for node in nodes:
+                    cited = pinpoint.cite(self._chain(node, by_id), source.document_type)
+                    if cited is not None:
+                        keyed.setdefault(cited[0], []).append(node)
+                found = keyed.get(key, [])
+                if not found and key[-1].startswith("def:"):  # "s. 2, “Fund”" for a definition in s. 2(1)
+                    found = [n for k, ns in keyed.items() if k[0] == key[0] and k[-1] == key[-1] for n in ns]
+                candidates += [(source, version, self._match(n, version, source, by_id)) for n in found]
+                if not found:
+                    for size in range(len(key) - 1, 0, -1):
+                        enclosing = keyed.get(key[:size], [])
+                        if len(enclosing) == 1:
+                            nearest.append(self._match(enclosing[0], version, source, by_id))
+                            break
+        if len(candidates) == 1:
+            return ProvisionLookup(pinpoint=shown, status="resolved", candidates=(candidates[0][2],))
+        if candidates:
+            reason = (
+                "several_works"
+                if len({s.id for s, _, _ in candidates}) > 1
+                else "several_texts"
+                if len({v.id for _, v, _ in candidates}) > 1
+                else "repeated_number"
+            )
+            return ProvisionLookup(
+                pinpoint=shown,
+                status="ambiguous",
+                reason=reason,
+                candidates=tuple(c for _, _, c in candidates),
+            )
+        reason = "no_public_text" if not texts else "no_text_in_scope" if not in_scope else "not_found"
+        return ProvisionLookup(
+            pinpoint=shown,
+            status="unresolved",
+            reason=reason,
+            nearest=nearest[0] if len(nearest) == 1 else None,
+        )
+
+    def citations(self, value, *, as_of=None, language=None):
+        """A citation resolved to the public sources it names (API-04): exactly, by an alias, citation
+        or title; or as a source and a pinpoint within it ("NDPA s. 23(1)(a)"), when ``provision`` says
+        which part of which public text it names. Alternatives are listed, never chosen between."""
+        named = self._named(value)
+        provision = None
+        if named:
+            parts = [(pair, node, version) for pair, node, version in named if node is not None]
+            if parts:
+                matches = [self._match(node, version, pair[0]) for pair, node, version in parts]
+                provision = ProvisionLookup(
+                    pinpoint=matches[0].pinpoint if len(matches) == 1 else " ".join(value.split()),
+                    status="resolved" if len(matches) == 1 else "ambiguous",
+                    reason=None if len(matches) == 1 else "several_works",
+                    candidates=tuple(matches),
+                )
+        else:
+            for work, shown, key in pinpoint.split(value):
+                named = self._named(work)
+                if named:
+                    pairs = [pair for pair, _, _ in named]
+                    provision = self._provision(pairs, shown, key, as_of=as_of, language=language)
+                    break
+        matches = tuple(self._view(pair) for pair, _, _ in named)
         return CitationView(
             status="resolved" if len(matches) == 1 else "ambiguous" if matches else "unresolved",
-            matches=tuple(matches),
+            matches=matches,
+            provision=provision,
+        )
+
+    def readable(self, version_id: str) -> str | None:
+        """A public version's content hash, checked on its rights gate without reading its text; None
+        when it is not public now."""
+        source_id = self.repository.version_owner(version_id)
+        if source_id is None:
+            return None
+        try:
+            source, rights = self._require(source_id)
+        except SourceUnavailable:
+            return None
+        for gate in self.repository.version_gates(source.id, rights.approved_content_hashes):
+            if gate.id == version_id and decide(rights, gate, now=self.now).full_text:
+                return gate.content_hash
+        return None
+
+    # --- the text search (OA-S1, RET-02, API-04) ------------------------------------------------------
+
+    def _scope_records(self, filters: text_index.Filters) -> int:
+        if filters.source_id or filters.version_id:
+            source_id = filters.source_id or self.repository.version_owner(filters.version_id)
+            return len(self._public({source_id})) if source_id else 0
+        return self.repository.count_public(
+            jurisdictions=filters.jurisdictions,
+            types=filters.types,
+            statuses=filters.statuses,
+            language=filters.language,
+            years=(filters.year_from, filters.year_to),
+        )
+
+    @staticmethod
+    def _within(source, version, filters: text_index.Filters) -> bool:
+        return (
+            (filters.jurisdictions is None or source.jurisdiction_id in filters.jurisdictions)
+            and (not filters.types or source.document_type in filters.types)
+            and (not filters.statuses or source.legal_status in filters.statuses)
+            and (filters.year_from is None or (source.year or 0) >= filters.year_from)
+            and (filters.year_to is None or (source.year is not None and source.year <= filters.year_to))
+            and (not filters.source_id or source.id == filters.source_id)
+            and (not filters.version_id or version.id == filters.version_id)
+            and _speaks(version, filters.language)
+            and (filters.as_of is None or _in_force(version, filters.as_of))
+        )
+
+    def _hit(self, version, source, rights, *, unit, snippet, matched_by, score) -> TextHit:
+        text_, start, end, marks = snippet
+        return TextHit(
+            anchor_id=unit["node_id"],
+            source_id=source.id,
+            version_id=version.id,
+            title=source.title,
+            citation=f"{source.citation}, {unit['pinpoint']}" if unit["pinpoint"] else source.citation,
+            pinpoint=unit["pinpoint"],
+            kind=unit["kind"],
+            locator=unit["locator"],
+            heading=unit["heading"],
+            language=version.language,
+            jurisdiction_id=source.jurisdiction_id,
+            document_type=source.document_type,
+            legal_status=source.legal_status,
+            year=source.year,
+            effective_from=version.effective_from,
+            effective_until=version.effective_until,
+            start_byte=unit["start_byte"],
+            end_byte=unit["end_byte"],
+            snippet=text_,
+            snippet_start_byte=start,
+            snippet_end_byte=end,
+            highlights=marks,
+            content_hash=version.content_hash,
+            matched_by=matched_by,
+            score=score,
+            official_url=str(version.canonical_url),
+            licence=rights.licence,
+            attribution_required=rights.attribution_required,
+            attribution_text=rights.attribution_text,
+        )
+
+    def search_text(self, query: str, filters: text_index.Filters, *, limit: int = 25, cursor=None):
+        """A page of the passages of published texts that match ``query`` (OA-S1), best first by the
+        documented ranking (api.text_index). A query that reads as a citation of a part is resolved, not
+        searched: the part comes first (RET-02). Every hit's text is rechecked before its words are used;
+        ``status`` says whether nothing matched, the scope has no published text, or the search could
+        not run, and ``coverage`` what was searched."""
+        query = " ".join(query.split())
+        if not query:
+            raise InvalidSearch("Search term must not be blank")
+        if not 1 <= limit <= 100:
+            raise InvalidSearch("Invalid page bounds")
+        offset = _offset(cursor, "hits")
+        if offset > MAX_HIT_OFFSET:
+            raise InvalidSearch("Invalid cursor")
+        conn, notices = self.repository.connection, []
+        citation = self.citations(query, as_of=filters.as_of, language=filters.language)
+        if not citation.matches or any(
+            filters.jurisdictions is not None and m.jurisdiction_id not in filters.jurisdictions
+            for m in citation.matches
+        ):
+            citation = None
+        first = []
+        if citation and citation.provision and citation.provision.status == "resolved":
+            match = citation.provision.candidates[0]
+            version, source, rights = self.version(match.version_id)
+            if self._within(source, version, filters):
+                first.append((version, source, rights, match))
+        exclude = (first[0][3].version_id, first[0][3].start_byte, first[0][3].end_byte) if first else None
+        lead = first if offset == 0 else []
+        found = text_index.search(
+            conn,
+            query,
+            filters,
+            limit=limit - len(lead),
+            offset=max(0, offset - len(first)),
+            exclude=exclude,
+        )
+        loaded: dict[str, tuple | None] = {}
+
+        def public(version_id):
+            if version_id not in loaded:
+                try:
+                    loaded[version_id] = self.version(version_id)
+                except SourceUnavailable:
+                    loaded[version_id] = None
+            return loaded[version_id]
+
+        rows = [
+            row
+            for row in found.rows
+            if public(row.version_id) and public(row.version_id)[0].content_hash == row.content_hash
+        ]
+        if len(rows) < len(found.rows):
+            notices.append(
+                f"{len(found.rows) - len(rows)} passages were left out: their text stopped being public while "
+                "this search ran."
+            )
+        units = [dict(row._mapping) for row in rows]
+        words = [
+            public(u["version_id"])[0].canonical_text.encode()[u["start_byte"] : u["end_byte"]].decode()
+            for u in units
+        ]
+        heads = text_index.headlines(
+            conn, query, [(u["config"], w) for u, w in zip(units, words, strict=True)]
+        )
+        items = []
+        for version, source, rights, match in lead:
+            span = version.canonical_text.encode()[match.start_byte : match.end_byte].decode()
+            unit = match.model_dump() | {"node_id": match.anchor_id}
+            items.append(
+                self._hit(
+                    version, source, rights, unit=unit,
+                    snippet=text_index.place(span, "", match.start_byte), matched_by="citation", score=None,
+                )
+            )  # fmt: skip
+        for unit, words_, head in zip(units, words, heads, strict=True):
+            version, source, rights = public(unit["version_id"])
+            items.append(
+                self._hit(
+                    version, source, rights, unit=unit,
+                    snippet=text_index.place(words_, head, unit["start_byte"]), matched_by="text",
+                    score=round(float(unit["score"]), 6),
+                )
+            )  # fmt: skip
+        searched = (
+            text_index.scope(conn, filters) if text_index.available(conn) else text_index.Scope(0, 0, ())
+        )
+        records = self._scope_records(filters)
+        total = found.total + len(first)
+        if found.state in ("unavailable", "building", "timeout"):
+            status = "degraded"
+            notices.append(
+                {
+                    "unavailable": "Text search needs the section index, which this deployment does not have.",
+                    "building": "The section index is being built. Try again in a few minutes.",
+                    "timeout": "The search took longer than ten seconds. Add words or narrow it with filters.",
+                }[found.state]
+            )
+        elif searched.texts == 0:
+            status = "unsupported_scope"
+        elif not items:
+            status = "no_result"
+            if any(text_index.config_for(language) in found.common_only for language in searched.languages):
+                notices.append(
+                    "The search has only common words, which are not indexed. Add a distinctive word."
+                )
+        else:
+            status = "results"
+        analysis = {language: text_index.config_for(language) for language in searched.languages}
+        notices += [
+            f"Texts in {language} are matched word for word (no stemming or common words) until the language "
+            "passes the search tests."
+            for language, config in analysis.items()
+            if config == "simple"
+        ]
+        next_offset = offset + limit
+        if next_offset < total and next_offset > MAX_HIT_OFFSET:
+            notices.append(
+                f"Only the first {MAX_HIT_OFFSET:,} passages are served. Narrow the search to see others."
+            )
+        return TextSearchPage(
+            status=status,
+            query=query,
+            total=total,
+            total_exact=found.exact,
+            items=tuple(items),
+            next_cursor=_cursor(next_offset, "hits")
+            if next_offset < total and next_offset <= MAX_HIT_OFFSET
+            else None,
+            citation=citation,
+            coverage=SearchCoverage(
+                records_in_scope=records,
+                records_with_text=searched.records,
+                texts_searched=searched.texts,
+                notice=(
+                    f"Only published texts are searched: {searched.records:,} of the {records:,} records in this "
+                    "scope have one. Find records without a published text with /search."
+                ),
+            ),
+            analysis=analysis,
+            analyzer=text_index.ANALYZER,
+            ranking=text_index.RANKING,
+            index_built_at=searched.built_at,
+            notices=tuple(notices),
         )
 
     def jurisdictions(self):

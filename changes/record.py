@@ -236,6 +236,10 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
             _compare(rec, work_id, now.get(work_id), previous.get(work_id))
     for work_id in sorted(scope):
         _remember(rec, work_id, now.get(work_id), previous.get(work_id))
+    # The section index follows the same public state, in the same transaction (migration 0031).
+    from api import text_index
+
+    text_index.sync(conn, now, None if work_ids is None else set(work_ids))
     _coverage(rec, record_events=state["baselined"])
     links = []
     if keeps_links:

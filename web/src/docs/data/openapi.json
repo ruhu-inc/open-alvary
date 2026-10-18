@@ -1394,6 +1394,44 @@
               "title": "Source Id"
             },
             "description": "The record's ID."
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            },
+            "description": "A date, such as `2024-01-01`: the text in force on it, from each text's effective dates."
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 35,
+                  "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Language"
+            },
+            "description": "A language, such as `en`; `en` also matches `en-NG`."
           }
         ],
         "responses": {
@@ -1403,6 +1441,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/VersionPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1468,7 +1516,7 @@
             }
           }
         },
-        "description": "The record's text versions cleared for reuse, each with its full text; the parts, chapters and sections located in that text; and its rights record. A record whose text isn't cleared answers no versions and a notice saying why.",
+        "description": "The record's text versions cleared for reuse, each with its full text; the parts, chapters and sections located in that text; and its rights record. A record whose text isn't cleared answers no versions and a notice saying why. With `as_of` or `language`, only the text they select, or the alternatives and why (`selection`): a text with no effective date is never taken to be in force on a date.",
         "tags": [
           "Catalogue"
         ]
@@ -1941,20 +1989,228 @@
         ]
       }
     },
-    "/citations/{citation}": {
+    "/search/text": {
       "get": {
-        "summary": "Resolve a citation",
-        "operationId": "resolve_citation",
+        "summary": "Search published texts",
+        "operationId": "search_text",
         "parameters": [
           {
-            "name": "citation",
-            "in": "path",
+            "name": "q",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string",
-              "title": "Citation"
+              "minLength": 1,
+              "maxLength": 2000,
+              "title": "Q"
             },
-            "description": "The citation, such as `Act No. 4 of 2011`."
+            "description": "Words to find, 1 to 2,000 characters: `\"exact phrase\"`, `-without`, `this OR that`."
+          },
+          {
+            "name": "jurisdiction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Jurisdiction"
+            },
+            "description": "One jurisdiction ID, such as `ng` or `rw`. A country outside your plan answers at the Starter rate."
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 35,
+                  "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Language"
+            },
+            "description": "Texts in this language, such as `en`; `en` also matches `en-NG`."
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "constitution",
+                  "act",
+                  "regulation",
+                  "judgment",
+                  "gazette",
+                  "guidance",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "default": [],
+              "title": "Type"
+            },
+            "description": "Document types, such as `act` or `regulation`. Repeat for several."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "unknown",
+                  "current",
+                  "historical",
+                  "repealed",
+                  "superseded"
+                ],
+                "type": "string"
+              },
+              "default": [],
+              "title": "Status"
+            },
+            "description": "Legal statuses: `current`, `historical`, `repealed`, `superseded` or `unknown`. Repeat for several."
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            },
+            "description": "A date, such as `2024-01-01`: only texts in force on it, from their effective dates. A text with no effective date is left out."
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2200,
+                  "minimum": 1800
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year From"
+            },
+            "description": "Only laws made in this year or later."
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2200,
+                  "minimum": 1800
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year To"
+            },
+            "description": "Only laws made in this year or earlier."
+          },
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Id"
+            },
+            "description": "Only this record's texts."
+          },
+          {
+            "name": "version_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version Id"
+            },
+            "description": "Only this text version."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            },
+            "description": "Passages per page, 1 to 100. Default 25."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "description": "The `next_cursor` of the previous page, to continue it."
           }
         ],
         "responses": {
@@ -1963,7 +2219,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CitationView"
+                  "$ref": "#/components/schemas/TextSearchPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2009,7 +2275,129 @@
             }
           }
         },
-        "description": "The records a citation refers to. Case and spacing don't matter; encode the citation for a URL (spaces as `%20`, `/` stays as it is).",
+        "description": "Passages of published texts that match the words, best first: each hit is a section, article or schedule paragraph, with a snippet of the exact text, its byte span and the anchor to get it whole. Only published texts are searched; `coverage` says how many records in the scope have one, and `status` tells no result (`no_result`) apart from a scope with no published text (`unsupported_scope`) and a search that could not run (`degraded`). A query that reads as a citation of a part, such as `NDPA s. 23(1)(a)`, puts that part first. Without `jurisdiction`, a search covers your plan's countries.",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/citations/{citation}": {
+      "get": {
+        "summary": "Resolve a citation",
+        "operationId": "resolve_citation",
+        "parameters": [
+          {
+            "name": "citation",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Citation"
+            },
+            "description": "The citation, such as `Act No. 4 of 2011` or `FOI Act 2011, s. 1(1)`."
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            },
+            "description": "A date, such as `2024-01-01`: look for the part only in texts in force on it."
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 35,
+                  "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Language"
+            },
+            "description": "Look for the part only in texts in this language, such as `en`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CitationView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "The records a citation refers to. Case and spacing don't matter; encode the citation for a URL (spaces as `%20`, `/` stays as it is). A citation of a part, such as `NDPA s. 23(1)(a)`, `art. 12` or `First Schedule, para. 3` after the record's citation, also answers `provision`: the part in the record's public text, with its anchor and exact span, or the alternatives and why. Nothing is chosen between alternatives.",
         "tags": [
           "Catalogue"
         ]
@@ -2524,6 +2912,17 @@
             "type": "array",
             "title": "Matches",
             "description": "The records the citation refers to."
+          },
+          "provision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProvisionLookup"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the citation names a part, such as `s. 23(1)(a)`: what it names in the records' public texts."
           }
         },
         "additionalProperties": false,
@@ -2896,6 +3295,220 @@
           "unknown"
         ],
         "title": "Permission"
+      },
+      "ProvisionLookup": {
+        "properties": {
+          "pinpoint": {
+            "type": "string",
+            "title": "Pinpoint",
+            "description": "The part the citation names, as read, such as `s. 23(1)(a)`."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "resolved",
+              "ambiguous",
+              "unresolved"
+            ],
+            "title": "Status",
+            "description": "`resolved` (one part), `ambiguous` (several: see `candidates`) or `unresolved` (none)."
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "several_works",
+                  "several_texts",
+                  "repeated_number",
+                  "not_found",
+                  "no_public_text",
+                  "no_text_in_scope"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "Why not one part: `several_works`, `several_texts` (the part is in several texts, such as two languages: give `language` or `as_of`), `repeated_number` (the text prints the number twice), `not_found`, `no_public_text` or `no_text_in_scope` (no public text matches `as_of` or `language`)."
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ProvisionMatch"
+            },
+            "type": "array",
+            "title": "Candidates",
+            "default": [],
+            "description": "The part, or the parts that could each be the one."
+          },
+          "nearest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProvisionMatch"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the part is not found: the nearest part enclosing it that is, such as the section of a paragraph the text doesn't divide."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pinpoint",
+          "status"
+        ],
+        "title": "ProvisionLookup",
+        "description": "What a citation's pinpoint names in the works it resolves to: one part, alternatives (never a\nguess) or none, with the reason, and when none, the nearest enclosing part that exists."
+      },
+      "ProvisionMatch": {
+        "properties": {
+          "anchor_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Anchor Id",
+            "description": "The part's ID: `/anchors/{anchor_id}` gives its words."
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The record."
+          },
+          "version_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Version Id",
+            "description": "The text version it is in."
+          },
+          "language": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Language",
+            "description": "The text's language."
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "What it is, such as `section`, `paragraph` or `definition`."
+          },
+          "locator": {
+            "type": "string",
+            "title": "Locator",
+            "description": "Its stable key within the text, such as `sec_23__subsec_1__para_a`."
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "Its printed number, such as `(a)`, when it has one."
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading",
+            "description": "Its printed heading, when it has one."
+          },
+          "pinpoint": {
+            "type": "string",
+            "title": "Pinpoint",
+            "description": "How it is cited within the text, such as `s. 23(1)(a)`."
+          },
+          "citation": {
+            "type": "string",
+            "title": "Citation",
+            "description": "The record's citation and the pinpoint."
+          },
+          "start_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Byte",
+            "description": "Where it starts: a byte offset into the text in UTF-8."
+          },
+          "end_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End Byte",
+            "description": "Where it ends: a byte offset into the text in UTF-8."
+          },
+          "offset_unit": {
+            "type": "string",
+            "const": "utf-8-bytes",
+            "title": "Offset Unit",
+            "default": "utf-8-bytes",
+            "description": "The unit of the offsets: `utf-8-bytes`."
+          },
+          "span_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Span Hash",
+            "description": "SHA-256 of the text's bytes from `start_byte` to `end_byte`."
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Content Hash",
+            "description": "The `content_hash` of the whole text."
+          },
+          "effective_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From",
+            "description": "The date the text applies from, when known."
+          },
+          "effective_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Until",
+            "description": "The date the text applies until, when known."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "anchor_id",
+          "source_id",
+          "version_id",
+          "language",
+          "kind",
+          "locator",
+          "pinpoint",
+          "citation",
+          "start_byte",
+          "end_byte",
+          "span_hash",
+          "content_hash"
+        ],
+        "title": "ProvisionMatch",
+        "description": "One part of a public text that a pinpoint names (API-04 provision lookup): its anchor, locator and\nexact span. /anchors/{anchor_id} gives its words."
       },
       "RelatedSource": {
         "properties": {
@@ -3338,6 +3951,43 @@
         ],
         "title": "RightsViewRecord"
       },
+      "SearchCoverage": {
+        "properties": {
+          "records_in_scope": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Records In Scope",
+            "description": "Public records in the search's scope."
+          },
+          "records_with_text": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Records With Text",
+            "description": "Of those, records with a published text, which is all that is searched."
+          },
+          "texts_searched": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Texts Searched",
+            "description": "Published text versions searched."
+          },
+          "notice": {
+            "type": "string",
+            "title": "Notice",
+            "description": "What the search covered, in a sentence."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "records_in_scope",
+          "records_with_text",
+          "texts_searched",
+          "notice"
+        ],
+        "title": "SearchCoverage",
+        "description": "What a text search covered: only published texts are searched, never a record's metadata alone."
+      },
       "SearchPage": {
         "properties": {
           "total": {
@@ -3689,6 +4339,407 @@
         "title": "StructurePage",
         "description": "A page of one text version's structure in document order (API-02 /versions/{id}/structure)."
       },
+      "TextHit": {
+        "properties": {
+          "anchor_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Anchor Id",
+            "description": "The part the passage is in: `/anchors/{anchor_id}` gives it whole."
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The record."
+          },
+          "version_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Version Id",
+            "description": "The text version."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "The record's title."
+          },
+          "citation": {
+            "type": "string",
+            "title": "Citation",
+            "description": "The record's citation and the part's pinpoint."
+          },
+          "pinpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinpoint",
+            "description": "How the part is cited within the text, such as `s. 23`, when it has a number."
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "What the part is, such as `section` or `article`."
+          },
+          "locator": {
+            "type": "string",
+            "title": "Locator",
+            "description": "The part's stable key within the text."
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading",
+            "description": "The part's printed heading, when it has one."
+          },
+          "language": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Language",
+            "description": "The text's language."
+          },
+          "jurisdiction_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Jurisdiction Id",
+            "description": "The record's jurisdiction."
+          },
+          "document_type": {
+            "type": "string",
+            "title": "Document Type",
+            "description": "The record's document type."
+          },
+          "legal_status": {
+            "type": "string",
+            "enum": [
+              "unknown",
+              "current",
+              "historical",
+              "repealed",
+              "superseded"
+            ],
+            "title": "Legal Status",
+            "description": "The record's legal status."
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year",
+            "description": "The year the law was made, when known."
+          },
+          "effective_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective From",
+            "description": "The date the text applies from, when known."
+          },
+          "effective_until": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Until",
+            "description": "The date the text applies until, when known."
+          },
+          "start_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Byte",
+            "description": "Where the searched passage starts: a byte offset into the text in UTF-8."
+          },
+          "end_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End Byte",
+            "description": "Where the searched passage ends."
+          },
+          "snippet": {
+            "type": "string",
+            "title": "Snippet",
+            "description": "Words from the passage, exactly as in the text: its bytes from `snippet_start_byte` to `snippet_end_byte`."
+          },
+          "snippet_start_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Snippet Start Byte",
+            "description": "Where the snippet starts in the text."
+          },
+          "snippet_end_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Snippet End Byte",
+            "description": "Where the snippet ends in the text."
+          },
+          "highlights": {
+            "items": {
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array",
+              "maxItems": 2,
+              "minItems": 2
+            },
+            "type": "array",
+            "title": "Highlights",
+            "default": [],
+            "description": "The matching words, as [start, end] byte offsets into the text."
+          },
+          "offset_unit": {
+            "type": "string",
+            "const": "utf-8-bytes",
+            "title": "Offset Unit",
+            "default": "utf-8-bytes",
+            "description": "The unit of the offsets: `utf-8-bytes`."
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Content Hash",
+            "description": "The `content_hash` of the whole text."
+          },
+          "matched_by": {
+            "type": "string",
+            "enum": [
+              "citation",
+              "text"
+            ],
+            "title": "Matched By",
+            "description": "`citation` (the words cite this part) or `text` (its words match)."
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score",
+            "description": "Its relevance under `ranking`, from 0 to 1; absent for a citation match."
+          },
+          "official_url": {
+            "type": "string",
+            "title": "Official Url",
+            "description": "The official file the text was read from."
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence",
+            "description": "The terms the text is published under."
+          },
+          "attribution_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Required",
+            "description": "Whether quoting it must credit the source."
+          },
+          "attribution_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Text",
+            "description": "The credit to give, when one is required."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "anchor_id",
+          "source_id",
+          "version_id",
+          "title",
+          "citation",
+          "kind",
+          "locator",
+          "language",
+          "jurisdiction_id",
+          "document_type",
+          "legal_status",
+          "start_byte",
+          "end_byte",
+          "snippet",
+          "snippet_start_byte",
+          "snippet_end_byte",
+          "content_hash",
+          "matched_by",
+          "official_url"
+        ],
+        "title": "TextHit",
+        "description": "One passage of a published text that matches a search (OA-S1, RET-03): the part it is in, a\nsnippet of exact canonical bytes with its terms marked, and what quoting it asks for."
+      },
+      "TextSearchPage": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "results",
+              "no_result",
+              "unsupported_scope",
+              "degraded"
+            ],
+            "title": "Status",
+            "description": "`results`; `no_result` (published texts were searched and none matched); `unsupported_scope` (no published text in this scope); or `degraded` (the search could not run: see `notices`)."
+          },
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "The words searched for."
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total",
+            "description": "Passages matching, across all pages (see `total_exact`)."
+          },
+          "total_exact": {
+            "type": "boolean",
+            "title": "Total Exact",
+            "description": "Whether `total` is exact; counting stops at 10,000."
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TextHit"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "This page's passages, best first."
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor",
+            "description": "Pass as `cursor` for the next page; absent on the last. The first 1,000 passages are served."
+          },
+          "citation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CitationView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the words read as a citation of a public record: what it resolves to."
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/SearchCoverage",
+            "description": "What was searched."
+          },
+          "analysis": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Analysis",
+            "description": "How each language's texts are matched: `english` (stemming and common words) or `simple` (word for word)."
+          },
+          "analyzer": {
+            "type": "string",
+            "title": "Analyzer",
+            "description": "The version of the index's analysis."
+          },
+          "ranking": {
+            "type": "string",
+            "title": "Ranking",
+            "description": "The ranking used: `oa-rank-1`, as the search guide describes."
+          },
+          "index_built_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Built At",
+            "description": "When the index was built."
+          },
+          "notices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notices",
+            "default": [],
+            "description": "Anything that limits these results, in sentences."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "query",
+          "total",
+          "total_exact",
+          "items",
+          "coverage",
+          "analyzer",
+          "ranking"
+        ],
+        "title": "TextSearchPage",
+        "description": "A page of a search over published texts' provisions (OA-S1). ``status`` tells no result apart from\na scope with no published text and from a search that could not run."
+      },
       "VersionPage": {
         "properties": {
           "items": {
@@ -3722,6 +4773,17 @@
             ],
             "title": "Notice",
             "description": "Why no text is shown, when none is."
+          },
+          "selection": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VersionSelection"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When `as_of` or `language` was given: which text they select, or the alternatives and why."
           }
         },
         "additionalProperties": false,
@@ -3733,6 +4795,94 @@
           "notice"
         ],
         "title": "VersionPage"
+      },
+      "VersionSelection": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "selected",
+              "ambiguous",
+              "none"
+            ],
+            "title": "Status",
+            "description": "`selected` (one text), `ambiguous` (several: see `alternatives`) or `none`."
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of",
+            "description": "The date asked about."
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language",
+            "description": "The language asked about."
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id",
+            "description": "The selected text, when there is one."
+          },
+          "alternatives": {
+            "items": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+            },
+            "type": "array",
+            "title": "Alternatives",
+            "default": [],
+            "description": "The texts that could each be the one, when several could."
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "several_languages",
+                  "several_texts",
+                  "effective_dates_unknown",
+                  "none_in_language",
+                  "none_in_force"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "description": "Why there is not one text: `several_languages`, `several_texts`, `effective_dates_unknown` (a text has no effective date, so whether it is in force can't be said), `none_in_language` or `none_in_force`."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "VersionSelection",
+        "description": "Which text a date and a language select (API-02, OA-T3): one, alternatives with the reason, or\nnone. Never an arbitrary preference: a text with no effective date is never taken to be in force."
       },
       "VersionViewRecord": {
         "properties": {
