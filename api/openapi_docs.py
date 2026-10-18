@@ -562,19 +562,30 @@ FIELDS: dict[str, dict[str, str]] = {
         "`verified` or `rejected`.",
         "content_verifier": "Who checked it.",
         "content_verified_at": "When it was checked.",
+        "serialization_profile": "How the text was built from the reviewed pages, such as "
+        "`oa-text-1/workbench-units-1`, when recorded.",
+        "prior_version_id": "The earlier version of the same record this one corrects or replaces, if any.",
     },
     "NodeViewRecord": {
         "id": "The part's ID.",
         "source_id": "The record.",
         "version_id": "The text version it belongs to.",
         "parent_id": "The part it sits in, if any.",
-        "kind": "`document`, `part`, `chapter`, `section`, `subsection`, `paragraph` or `schedule`.",
-        "locator": "Its label, such as `Section 3`.",
-        "order": "Its position in the document.",
+        "kind": "What it is: `document`, `preamble`, `contents`, `contents_entry`, `notice`, `title`, `part`, "
+        "`chapter`, `division`, `article`, `section`, `subsection`, `definition`, `paragraph`, "
+        "`subparagraph`, `schedule`, `annex` or `table`.",
+        "locator": "A stable key for it within the text, such as `sec_23__subsec_1`. The same provision keeps "
+        "its locator in later versions of the text.",
+        "order": "Its position among the parts of the same parent.",
         "start_byte": "Where it starts: a byte offset into `canonical_text` in UTF-8.",
         "end_byte": "Where it ends: a byte offset into `canonical_text` in UTF-8.",
         "page": "The page of the official file it starts on, when known.",
         "source_hash": "The `content_hash` of the text the offsets refer to.",
+        "label": "Its printed number, such as `23.` or `(1)`, when it has one.",
+        "heading": "Its printed heading, such as a section's margin note, when it has one.",
+        "page_end": "The last page of the official file it reaches, when known.",
+        "span_hash": "SHA-256 of its own bytes from `start_byte` to `end_byte`, to check an exact quotation.",
+        "target_node_id": "For a contents entry, the part of the text it lists, when found.",
     },
     "RightsViewRecord": {
         "id": "The rights record's ID.",

@@ -744,6 +744,32 @@
           ],
           "default": null,
           "title": "Content Verified At"
+        },
+        "serialization_profile": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Serialization Profile"
+        },
+        "prior_version_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prior Version Id"
         }
       },
       "required": [
@@ -793,12 +819,23 @@
         "kind": {
           "enum": [
             "document",
+            "preamble",
+            "contents",
+            "contents_entry",
+            "notice",
+            "title",
             "part",
             "chapter",
+            "division",
+            "article",
             "section",
             "subsection",
+            "definition",
             "paragraph",
-            "schedule"
+            "subparagraph",
+            "schedule",
+            "annex",
+            "table"
           ],
           "title": "Kind",
           "type": "string"
@@ -840,6 +877,69 @@
           "pattern": "^[a-f0-9]{64}$",
           "title": "Source Hash",
           "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "heading": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Heading"
+        },
+        "page_end": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page End"
+        },
+        "span_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Span Hash"
+        },
+        "target_node_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Node Id"
         }
       },
       "required": [

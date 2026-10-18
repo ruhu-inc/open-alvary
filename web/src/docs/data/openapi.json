@@ -2155,27 +2155,38 @@
             "type": "string",
             "enum": [
               "document",
+              "preamble",
+              "contents",
+              "contents_entry",
+              "notice",
+              "title",
               "part",
               "chapter",
+              "division",
+              "article",
               "section",
               "subsection",
+              "definition",
               "paragraph",
-              "schedule"
+              "subparagraph",
+              "schedule",
+              "annex",
+              "table"
             ],
             "title": "Kind",
-            "description": "`document`, `part`, `chapter`, `section`, `subsection`, `paragraph` or `schedule`."
+            "description": "What it is: `document`, `preamble`, `contents`, `contents_entry`, `notice`, `title`, `part`, `chapter`, `division`, `article`, `section`, `subsection`, `definition`, `paragraph`, `subparagraph`, `schedule`, `annex` or `table`."
           },
           "locator": {
             "type": "string",
             "minLength": 1,
             "title": "Locator",
-            "description": "Its label, such as `Section 3`."
+            "description": "A stable key for it within the text, such as `sec_23__subsec_1`. The same provision keeps its locator in later versions of the text."
           },
           "order": {
             "type": "integer",
             "minimum": 0.0,
             "title": "Order",
-            "description": "Its position in the document."
+            "description": "Its position among the parts of the same parent."
           },
           "start_byte": {
             "type": "integer",
@@ -2207,6 +2218,69 @@
             "pattern": "^[a-f0-9]{64}$",
             "title": "Source Hash",
             "description": "The `content_hash` of the text the offsets refer to."
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "Its printed number, such as `23.` or `(1)`, when it has one."
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading",
+            "description": "Its printed heading, such as a section's margin note, when it has one."
+          },
+          "page_end": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page End",
+            "description": "The last page of the official file it reaches, when known."
+          },
+          "span_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Hash",
+            "description": "SHA-256 of its own bytes from `start_byte` to `end_byte`, to check an exact quotation."
+          },
+          "target_node_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Node Id",
+            "description": "For a contents entry, the part of the text it lists, when found."
           }
         },
         "additionalProperties": false,
@@ -3066,6 +3140,32 @@
             ],
             "title": "Content Verified At",
             "description": "When it was checked."
+          },
+          "serialization_profile": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serialization Profile",
+            "description": "How the text was built from the reviewed pages, such as `oa-text-1/workbench-units-1`, when recorded."
+          },
+          "prior_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prior Version Id",
+            "description": "The earlier version of the same record this one corrects or replaces, if any."
           }
         },
         "additionalProperties": false,
