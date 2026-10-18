@@ -292,3 +292,52 @@ def test_atom_and_rss_are_well_formed_and_escape_titles(feed, cleared):
     for item in channel.findall("item"):
         assert item.find("guid").get("isPermaLink") == "false"
         parsedate_to_datetime(item.find("pubDate").text)
+
+
+def withdrawals(client):
+    return [e for e in client.get("/changes").json()["events"] if e["event_type"] == "withdrawal"]
+
+
+def test_a_withdrawn_text_version_is_named_with_what_to_do_and_why(feed, cleared):
+    store, client = feed
+    store.save(cleared)
+    work = cleared.sources[0].id
+    # The text's approval is withdrawn while the record stays public: a correction, named.
+    edit(
+        store,
+        lambda c: setattr(next(r for r in c.rights if r.source_id == work), "approved_content_hashes", []),
+    )
+    [withdrawn] = withdrawals(client)
+    assert withdrawn["work"]["id"] == work and withdrawn["version"]["id"] == "test-version"
+    assert withdrawn["version"]["content_hash"] == cleared.versions[0].content_hash
+    assert withdrawn["withdrawal"] == {
+        "scope_disclosure": "named",
+        "action": "stop_serving",
+        "reason_code": "correction",
+    }
+    assert [e["version_id"] for e in events(store) if e["event_type"] == "withdrawal"] == ["test-version"]
+
+
+def test_an_expired_rights_review_withdraws_its_text_within_one_worker_run(feed, cleared):
+    from sqlalchemy import select, update
+
+    from api.store import tables
+    from changes.record import expired
+
+    store, client = feed
+    store.save(cleared)
+    work = cleared.sources[0].id
+    rights = tables["rights"]
+    with store.engine.begin() as conn:  # time passes: nothing is written to the catalogue
+        payload = conn.scalar(select(rights.c.payload).where(rights.c.source_id == work))
+        payload["expires_at"] = "2020-01-01T00:00:00+00:00"
+        conn.execute(update(rights).where(rights.c.source_id == work).values(payload=payload))
+    assert withdrawals(client) == []  # unseen until something compares the work
+    with store.engine.begin() as conn:
+        assert expired(conn) == 1
+    [withdrawn] = withdrawals(client)
+    assert withdrawn["version"]["id"] == "test-version"
+    assert withdrawn["withdrawal"]["action"] == "stop_serving"
+    assert withdrawn["withdrawal"]["reason_code"] == "rights_changed"
+    with store.engine.begin() as conn:
+        assert expired(conn) == 0  # already compared: nothing new

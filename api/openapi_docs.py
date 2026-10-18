@@ -388,7 +388,7 @@ SCHEMAS: dict[str, dict] = {
             },
             "version": {
                 "type": ["object", "null"],
-                "description": "For a published text: {id, content_hash, language}.",
+                "description": "For a published or withdrawn text: {id, content_hash, language}.",
                 "properties": {"id": {"type": S}, "content_hash": {"type": S}, "language": {"type": S}},
             },
             "changed_fields": {
@@ -413,7 +413,10 @@ SCHEMAS: dict[str, dict] = {
             },
             "withdrawal": {
                 "type": ["object", "null"],
-                "description": "For a withdrawal: {scope_disclosure, action, reason_code}. When "
+                "description": "For a withdrawal: {scope_disclosure, action, reason_code}. A text version "
+                "withdrawn from a record that stays public is `named`, with the version in `version`, `action` "
+                "`stop_serving` (stop serving copies of that text) and `reason_code` `rights_changed` (its "
+                "rights record changed or lapsed) or `correction` (its approval was withdrawn). When "
                 "`scope_disclosure` is `revalidate_releases`, check your copies against a current release.",
             },
         },

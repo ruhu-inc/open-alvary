@@ -120,7 +120,19 @@ class _Recorder:
         )
         return stored + planned + 1
 
-    def add(self, event_type, key, work_id, facts, *, summary, version=None, reason=None, changed=()):
+    def add(
+        self,
+        event_type,
+        key,
+        work_id,
+        facts,
+        *,
+        summary,
+        version=None,
+        reason=None,
+        changed=(),
+        withdrawal=None,
+    ):
         projection = facts["projection"]
         payload = {
             "title": projection.get("title"),
@@ -129,6 +141,7 @@ class _Recorder:
             "changed_fields": list(changed),
             "sources": [projection["canonical_url"]] if projection.get("canonical_url") else [],
             "version": version,
+            **({"withdrawal": withdrawal} if withdrawal else {}),
         }
         self.events.append(
             {
@@ -211,6 +224,34 @@ def sweep(conn: Connection) -> int:
     return publish(conn, None)
 
 
+def expired(conn: Connection, now: datetime | None = None) -> int:
+    """Compare the works whose rights review has expired, so what an expiry took out of public view
+    is in the change log within one worker run (every five minutes), not at the next daily sweep.
+    Works already compared since they expired add nothing."""
+    if conn.dialect.name != "postgresql":
+        return 0
+    rights, now = tables["rights"], now or datetime.now(UTC)
+    rows = conn.execute(select(rights.c.source_id, rights.c.payload["expires_at"].as_string().label("until")))
+    ids = [row.source_id for row in rows if row.until and datetime.fromisoformat(row.until) <= now]
+    return publish(conn, ids) if ids else 0
+
+
+def _withdrawn_because(conn: Connection, work_id: str, version_id: str) -> str:
+    """The withdrawal notice's reason (access-contracts.md): the rights record lapsed or changed, or the
+    text's own approval was withdrawn (a correction) while the rights record still stands."""
+    rights, versions = tables["rights"], tables["versions"]
+    record = conn.scalar(select(rights.c.payload).where(rights.c.source_id == work_id)) or {}
+    version = conn.scalar(select(versions.c.payload).where(versions.c.id == version_id)) or {}
+    until = record.get("expires_at")
+    if until and datetime.fromisoformat(until) <= datetime.now(UTC):
+        return "rights_changed"
+    if record.get("status") in ("OPEN", "OPEN_WITH_CONDITIONS") and version.get("content_hash") not in (
+        record.get("approved_content_hashes") or []
+    ):
+        return "correction"
+    return "rights_changed"
+
+
 def _compare(rec: _Recorder, work_id: str, now: dict | None, before) -> None:
     was_visible = before is not None and before["visible"]
     if now and not was_visible:
@@ -257,13 +298,21 @@ def _compare(rec: _Recorder, work_id: str, now: dict | None, before) -> None:
     for version_id, facts in sorted(now["versions"].items()):
         if version_id not in had:
             _text(rec, work_id, now, version_id, facts, first=not had)
-    for version_id in sorted(had - set(now["versions"])):
+    gone = sorted(had - set(now["versions"]))
+    facts = _version_facts(rec.conn, gone)
+    for version_id in gone:
+        # The record stays public: name the version and say why, so copies of it can be taken down.
         rec.add(
             "withdrawal",
             f"{version_id}:w",
             work_id,
             now,
-            summary=f"A text version of {title} was withdrawn. Revalidate any copies you keep.",
+            version={"id": version_id, **facts.get(version_id, {})},
+            summary=f"A text version of {title} was withdrawn. Stop serving copies of it.",
+            withdrawal={
+                "action": "stop_serving",
+                "reason_code": _withdrawn_because(rec.conn, work_id, version_id),
+            },
         )
 
 
