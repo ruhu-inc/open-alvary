@@ -389,6 +389,7 @@ async function actView(actId) {
       grid,
     ),
     detailsSummary(actId, ready),
+    textCheckCard(actId, data.text_check),
     findReplaceCard(actId),
     approvalPanel(actId, data, current),
   );
@@ -438,6 +439,8 @@ function approvalChecklist(actId, data, current, head) {
   const checked = ready.pages - ready.unchecked_pages.length;
   const highPages = unique(ready.open_high_flags.map((f) => f.page));
   const toApproval = el("button", { class: "small", text: "Go to approval", on: { click: () => document.getElementById("approval")?.scrollIntoView({ block: "start" }) } });
+  const text = data.text_check;
+  const toText = (label) => el("button", { class: "small", text: label, on: { click: () => document.getElementById("text-check")?.scrollIntoView({ block: "start" }) } });
   const steps = [
     step(!ready.unchecked_pages.length, `${checked} of ${ready.pages} pages checked`,
       ready.unchecked_pages.length ? el("span", {}, "next: ", page(ready.unchecked_pages[0])) : null),
@@ -446,6 +449,9 @@ function approvalChecklist(actId, data, current, head) {
     step(!ready.stale_pages.length, ready.stale_pages.length ? `${ready.stale_pages.length} page${ready.stale_pages.length === 1 ? "" : "s"} to recheck: the reading changed` : "No page needs rechecking",
       ready.stale_pages.length ? el("span", {}, "first: ", page(ready.stale_pages[0])) : null, ready.stale_pages.length ? "warn" : ""),
     ready.missing_checks.length ? step(false, `Check readings missing: ${ready.missing_checks.join(", ")}`, "rerun the batch", "warn") : null,
+    text ? step(!text.errors.length,
+      text.errors.length ? `${text.errors.length} problem${text.errors.length === 1 ? "" : "s"} in the text's structure to fix` : `Text and structure: ${describeCounts(text.counts)}`,
+      text.errors.length ? toText("See them") : text.warnings.length ? toText(`${text.warnings.length} to look at`) : null) : null,
     step(ready.details.confirmed, ready.details.confirmed ? "Details confirmed" : ready.details.status ? "Details not yet confirmed" : "Details not yet reviewed",
       ready.details.confirmed ? null : el("a", { href: `#/doc/${encodeURIComponent(actId)}/details`, text: "review the details" })),
     current ? step(true, "Approved", null)
@@ -453,6 +459,54 @@ function approvalChecklist(actId, data, current, head) {
       : step(false, ready.ready ? "Ready for approval" : "Approval", ready.ready ? toApproval : el("span", { text: "after the steps above" })),
   ];
   return el("ol", { class: "checklist", "aria-label": "Steps to approval" }, steps);
+}
+
+// What publishing will write: the parts, sections and schedules found in the text as it now stands, and
+// what to fix (errors block approval) or look at (warnings) first, each with its page.
+const ISSUES = { // most consequential first
+  join: "Page-break joins refused",
+  note_without_words: "Margin notes beside no words",
+  two_numbers: "Two numbers in a row",
+  contents_unmatched: "Contents entries with no provision",
+  repeated_locator: "Numbers that repeat",
+  section_order: "Sections out of order",
+  doubled_word: "Words doubled in editing",
+  covered_cell_text: "Words in a merged cell's covered position",
+  outside_section: "Numbered outside any section",
+  outside_schedule: "Text before the first schedule",
+  contents_unclosed: "Contents without enacting words after them",
+  running_head: "Running heads left in the text",
+  empty_table: "Tables with no words",
+  empty_unit: "Empty units left out",
+};
+const ISSUE_ORDER = Object.keys(ISSUES);
+
+function describeCounts(counts) {
+  const parts = Object.entries(counts || {}).map(([kind, n]) => `${n} ${kind}${n === 1 ? "" : "s"}`);
+  return parts.length ? parts.join(", ") : "no structure found";
+}
+
+function textCheckCard(actId, text) {
+  if (!text) return null;
+  const page = (n) => (n ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${n}`, text: `page ${n}` }) : null);
+  const grouped = (issues, tone) => {
+    const byCode = new Map();
+    for (const issue of issues) byCode.set(issue.code, [...(byCode.get(issue.code) || []), issue]);
+    const rank = (code) => (ISSUE_ORDER.includes(code) ? ISSUE_ORDER.indexOf(code) : ISSUE_ORDER.length);
+    const ordered = [...byCode].sort(([a], [b]) => rank(a) - rank(b));
+    return el("ul", { class: "issues" }, ordered.map(([code, list]) => el("li", { class: tone },
+      el("details", { open: tone === "high" || undefined },
+        el("summary", { text: `${ISSUES[code] || code} (${list.length})` }),
+        el("ul", {}, list.slice(0, 25).map((issue) => el("li", {}, page(issue.page), page(issue.page) ? " · " : "", issue.message))),
+        list.length > 25 ? el("p", { class: "muted", text: `and ${list.length - 25} more` }) : null))));
+  };
+  return el("div", { class: "card", id: "text-check" },
+    el("h3", { text: "Text and structure" }),
+    el("p", { class: "muted", text: "What publishing will write from the pages as they now stand. Errors must be fixed before approval; warnings are worth a look, because nobody reads the whole text." }),
+    el("p", {}, `${describeCounts(text.counts)} · ${Math.max(1, Math.round(text.bytes / 1024))} KB of text · rules ${text.rules}`),
+    text.errors.length ? el("div", {}, el("h4", { text: "To fix before approval" }), grouped(text.errors, "high")) : null,
+    text.warnings.length ? el("div", {}, el("h4", { text: "To look at" }), grouped(text.warnings, "warn")) : el("p", {}, pill("ok", "Nothing to look at")),
+    el("p", {}, el("a", { href: `/api/documents/${encodeURIComponent(actId)}/canonical`, target: "_blank", rel: "noopener", text: "The text and structure as they would be published (JSON)" })));
 }
 
 function findReplaceCard(actId) {
@@ -665,6 +719,7 @@ function approvalPanel(actId, data, current) {
   if (ready.stale_pages.length) blockers.append(el("li", { text: `Pages to recheck because the reading changed: ${summarise(ready.stale_pages)}` }));
   if (ready.missing_checks.length) blockers.append(el("li", { text: `Check readings missing: ${ready.missing_checks.join(", ")} — rerun the batch` }));
   if (!ready.details.confirmed) blockers.append(el("li", {}, "Document details ", el("a", { href: `#/doc/${encodeURIComponent(actId)}/details`, text: ready.details.status ? "not yet confirmed" : "not yet reviewed" })));
+  if (ready.text && ready.text.errors) blockers.append(el("li", { text: `${ready.text.errors} problem${ready.text.errors === 1 ? "" : "s"} in the text's structure: see Text and structure above` }));
   panel.append(ready.ready ? el("p", {}, pill("ok", "Ready for approval")) : el("div", {}, el("p", { text: "Before approval:" }), blockers));
   if (canApprove) {
     const basis = el("textarea", { rows: 3, value: (data.approvals[0] && data.approvals[0].rights_basis) || data.act.rights_basis || "" });

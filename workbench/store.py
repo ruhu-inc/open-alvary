@@ -142,6 +142,11 @@ approval = Table(
     Column("decision", String(20), nullable=False),  # approved | revoked
     Column("content_sha256", String(64), nullable=False),
     Column("details_sha256", String(64)),  # the confirmed details approved with the text
+    # What publishing will write (TXP-01): the canonical text and structure, and the rules that made them.
+    Column("text_sha256", String(64)),
+    Column("structure_sha256", String(64)),
+    Column("serialization_profile", String(60)),
+    Column("structure_rules", String(60)),
     Column("rights_basis", Text, nullable=False),
     Column("materials", JSON, nullable=False),
     Column("note", Text, nullable=False, default=""),
@@ -196,7 +201,13 @@ def connect(url: str) -> Engine:
 def _upgrade(engine: Engine) -> None:
     """Columns added after a database was first created (create_all adds only missing tables)."""
     added = {
-        "approval": {"details_sha256": "VARCHAR(64)"},
+        "approval": {
+            "details_sha256": "VARCHAR(64)",
+            "text_sha256": "VARCHAR(64)",
+            "structure_sha256": "VARCHAR(64)",
+            "serialization_profile": "VARCHAR(60)",
+            "structure_rules": "VARCHAR(60)",
+        },
         "session": {
             "passkey_at": "TIMESTAMP WITH TIME ZONE",
             "challenge": "VARCHAR(64)",
@@ -630,7 +641,11 @@ class Store:
                 f"act_{values['decision']}",
                 act_id,
                 None,
-                {"revision": expected + 1, "content_sha256": values["content_sha256"]},
+                {
+                    "revision": expected + 1,
+                    "content_sha256": values["content_sha256"],
+                    "text_sha256": values.get("text_sha256"),
+                },
             )
         return expected + 1
 

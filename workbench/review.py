@@ -2,7 +2,7 @@
 (operations.publish): its pages, its details (shared by a work's language versions) and whether
 the latest approval still covers both exactly."""
 
-from workbench import content, details, record_view
+from workbench import content, details, publication, record_view
 
 
 class Review:
@@ -63,9 +63,11 @@ class Review:
         except (ValueError, KeyError):
             return None
 
-    def state(self, document: dict) -> dict:
+    def state(self, document: dict, text: bool = False) -> dict:
         """Everything that decides a document's review status, read once: its pages, its details,
-        and whether the latest approval still covers both exactly."""
+        and whether the latest approval still covers both exactly. With text, also the canonical
+        text and structure (workbench.publication), whose errors block approval; lists of many
+        documents leave it out."""
         reading, latest = self.library.reading(document["id"]), self.store.latest_pages(document["id"])
         final = content.final_pages(reading, latest)
         record = self.store.latest_details(self.details_key(document))
@@ -81,6 +83,11 @@ class Review:
             and record
             and record["status"] == "confirmed"
         )
+        readiness = content.readiness(reading, latest, content.details_state(record, view["missing"]))
+        built = publication.build(document, final, reading) if text else None
+        if built is not None:
+            readiness["text"] = {"errors": len(built.errors), "warnings": len(built.warnings)}
+            readiness["ready"] = readiness["ready"] and not built.errors
         return {
             "reading": reading,
             "latest": latest,
@@ -92,5 +99,6 @@ class Review:
             "head": head,
             "approved": approved,
             "view": view,
-            "readiness": content.readiness(reading, latest, content.details_state(record, view["missing"])),
+            "readiness": readiness,
+            "text": built,
         }

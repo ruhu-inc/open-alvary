@@ -1168,3 +1168,53 @@ def test_a_document_says_where_it_stands_and_opens_the_laws_that_repealed_or_wer
     assert details["related"] == {later["work"]: "rw-law-010-2027-en"}
     assert details["suggestions"]["relations"]["value"][0]["kind"] == "repealed_by"
     assert reviewer.get("/api/documents/rw-law-010-2027-en").json()["standing"] is None  # not linked yet
+
+
+# --- the text publishing will write (TXP-01) ----------------------------------------------------------
+
+
+def test_the_document_shows_its_text_and_structure_and_the_approval_binds_them(world):
+    approver = signed_in(world, "approver@example.org")
+    save(approver, resolutions={flag_id(): {"decision": "use_check", "reader": "mineru"}})
+    save(approver, page=2, units=[{"kind": "paragraph", "text": "2. Citation."}])
+    check = approver.get(f"/api/documents/{ACT}").json()["text_check"]
+    assert check["profile"] == "oa-text-1/workbench-units-1" and check["rules"] == "ng-federal-act-1"
+    assert check["counts"] == {"section": 2} and check["errors"] == []
+    published = approver.get(f"/api/documents/{ACT}/canonical").json()
+    assert (
+        published["text"]
+        == "Accounts\n\n1. Accounts prepared under section 199 of this Act.\n\n2. Citation.\n"
+    )
+    sections = [n for n in published["nodes"] if n["kind"] == "section"]
+    assert [(n["locator"], n["heading"]) for n in sections] == [("sec_1", "Accounts"), ("sec_2", "")]
+    confirm_details(approver)
+    assert approve(approver).json() == {"revision": 1}
+    record = approver.get(f"/api/documents/{ACT}").json()["approvals"][0]
+    assert record["text_sha256"] == published["text_sha256"] == check["text_sha256"]
+    assert record["structure_sha256"] == published["structure_sha256"]
+    assert (record["serialization_profile"], record["structure_rules"]) == (check["profile"], check["rules"])
+
+
+def test_a_refused_page_break_join_blocks_approval(world):
+    approver = signed_in(world, "approver@example.org")
+    save(approver, resolutions={flag_id(): {"decision": "use_check", "reader": "mineru"}})
+    joined = [{"kind": "paragraph", "text": "2. Citation.", "continues_previous": True}]
+    assert save(approver, page=2, units=joined).status_code == 200  # numbered: the join is refused
+    confirm_details(approver)
+    refused = approve(approver)
+    assert refused.status_code == 409 and refused.json()["readiness"]["text"]["errors"] == 1
+    errors = approver.get(f"/api/documents/{ACT}").json()["text_check"]["errors"]
+    assert [(e["code"], e["page"]) for e in errors] == [("join", 2)]
+    save(approver, page=2, expected=1, units=[{"kind": "paragraph", "text": "2. Citation."}])
+    assert approve(approver).json() == {"revision": 1}
+
+
+def test_join_marks_are_validated_and_words_doubled_in_editing_are_reported(world):
+    reviewer = signed_in(world, "reviewer@example.org")
+    hyphen_only = [{"kind": "paragraph", "text": "x", "dehyphenate": True}]
+    assert save(reviewer, page=2, units=hyphen_only).status_code == 422
+    not_boolean = [{"kind": "paragraph", "text": "x", "continues_previous": "yes"}]
+    assert save(reviewer, page=2, units=not_boolean).status_code == 422
+    save(reviewer, units=[{"kind": "paragraph", "text": "1. Accounts prepared prepared under section 199."}])
+    warnings = reviewer.get(f"/api/documents/{ACT}").json()["text_check"]["warnings"]
+    assert [(w["code"], w["page"]) for w in warnings] == [("doubled_word", 1)]

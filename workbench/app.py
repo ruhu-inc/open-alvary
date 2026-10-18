@@ -28,7 +28,7 @@ from ingestion import settings
 from schema import record as R
 from schema.jurisdictions import registry as jurisdiction_registry
 from workbench import access as access_section
-from workbench import akn, auth, content, details, privileged, record_view
+from workbench import akn, auth, content, details, privileged, publication, record_view
 from workbench import operators as operators_section
 from workbench.review import Review
 from workbench.store import Conflict, Store, engine_from_environment
@@ -393,7 +393,7 @@ def create_app(
     def act_detail(request: Request, act_id: str):
         auth.current(request, store)
         act = act_or_404(act_id)
-        now = state(act)
+        now = state(act, text=True)
         reading, latest = now["reading"], now["latest"]
         pages = []
         for page in reading["pages"]:
@@ -423,6 +423,7 @@ def create_app(
             "readers": {"primary": reading["primary"], "checks": reading["checks"]},
             "pages": pages,
             "readiness": now["readiness"],
+            "text_check": publication.summary(now["text"]),
             "content_sha256": now["content_sha256"],
             "details_sha256": now["details_sha256"],
             "approved": now["approved"],
@@ -432,6 +433,12 @@ def create_app(
             ],
             "materials": content.MATERIALS,
         }
+
+    @app.get("/api/documents/{act_id}/canonical")
+    def canonical(request: Request, act_id: str):
+        """The exact text and nodes publishing would write from the pages as they now stand."""
+        auth.current(request, store)
+        return publication.canonical(state(act_or_404(act_id), text=True)["text"])
 
     @app.get("/api/documents/{act_id}/pages/{page}")
     def page_detail(request: Request, act_id: str, page: int):
@@ -534,7 +541,7 @@ def create_app(
     @app.post("/api/documents/{act_id}/approval")
     def approve(request: Request, act_id: str, body: dict = JSON_BODY):
         who = auth.current(request, store, write=True, role="approver")
-        now = state(act_or_404(act_id))
+        now = state(act_or_404(act_id), text=True)
         decision = body.get("decision")
         if decision not in {"approved", "revoked"}:
             raise HTTPException(422, "decision must be approved or revoked")
@@ -557,6 +564,10 @@ def create_app(
                 decision=decision,
                 content_sha256=now["content_sha256"],
                 details_sha256=now["details_sha256"],
+                text_sha256=now["text"].text_sha256,
+                structure_sha256=now["text"].structure_sha256,
+                serialization_profile=now["text"].profile_id,
+                structure_rules=now["text"].rules_id,
                 rights_basis=basis,
                 materials={k: bool(v) for k, v in materials.items() if k in content.MATERIALS},
                 note=note,
