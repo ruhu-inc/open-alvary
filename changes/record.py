@@ -102,10 +102,11 @@ class _Recorder:
         ns = namespace(conn)
         self.t = {
             name: ns.qualified(conn, "changes", name)
-            for name in ("change_event", "feed_state", "published_state", "coverage_state")
+            for name in ("change_event", "feed_state", "published_state", "coverage_state", "rights_revision")
         }
         self.allocate = ns.qualified(conn, "policy", "allocate_publication_revision") + "()"
         self.events: list[dict] = []
+        self.rights_revision: dict[str, int] = {}  # work -> the rights revision in force after this write
 
     def next_revision(self, event_type, key):
         planned = sum(
@@ -143,6 +144,8 @@ class _Recorder:
             "version": version,
             **({"withdrawal": withdrawal} if withdrawal else {}),
         }
+        if event_type in ("text_version_published", "withdrawal") and work_id in self.rights_revision:
+            payload["rights_revision"] = self.rights_revision[work_id]
         self.events.append(
             {
                 "event_type": event_type,
@@ -185,6 +188,7 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
         ).mappings()
     }
     scope = set(now) | set(previous) if work_ids is None else set(work_ids)
+    revisions = _rights_revisions(rec, scope)
     if state["baselined"]:
         for work_id in sorted(scope):
             _compare(rec, work_id, now.get(work_id), previous.get(work_id))
@@ -192,12 +196,14 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
         _remember(rec, work_id, now.get(work_id), previous.get(work_id))
     _coverage(rec, record_events=state["baselined"])
     if not state["baselined"]:
+        _record_rights(rec, revisions, 0)
         conn.execute(
             text(f"UPDATE {rec.t['feed_state']} SET baselined = true, baseline_at = statement_timestamp()")
         )
         return 0
-    if rec.events:
+    if rec.events or revisions:
         revision = conn.scalar(text(f"SELECT {rec.allocate}"))
+        _record_rights(rec, revisions, revision)
         for event in rec.events:
             conn.execute(
                 text(
@@ -217,6 +223,50 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
                 },
             )
     return len(rec.events)
+
+
+def _rights_revisions(rec: _Recorder, scope) -> list[dict]:
+    """The works whose rights record differs from its last recorded revision, each with its next
+    revision; and, in rec.rights_revision, the revision in force for every work in scope (OA-R1)."""
+    table = rec.t["rights_revision"]
+    if not scope or rec.conn.scalar(text("SELECT to_regclass(:t)"), {"t": table}) is None:
+        return []  # a database before migration 0029 keeps no rights history
+    ids = sorted(scope)
+    latest = {
+        row.work_id: (row.revision, row.record_hash)
+        for row in rec.conn.execute(
+            text(
+                f"SELECT DISTINCT ON (work_id) work_id, revision, record_hash FROM {table}"
+                " WHERE work_id = ANY(:ids) ORDER BY work_id, revision DESC"
+            ),
+            {"ids": ids},
+        )
+    }
+    rights = tables["rights"]
+    changed = []
+    for row in rec.conn.execute(
+        select(rights.c.source_id, rights.c.payload).where(rights.c.source_id.in_(ids))
+    ):
+        record_hash, (number, held) = digest(row.payload), latest.get(row.source_id, (0, None))
+        if held == record_hash:
+            rec.rights_revision[row.source_id] = number
+            continue
+        rec.rights_revision[row.source_id] = number + 1
+        changed.append(
+            {"work_id": row.source_id, "revision": number + 1, "record": row.payload, "hash": record_hash}
+        )
+    return changed
+
+
+def _record_rights(rec: _Recorder, revisions: list[dict], publication_revision: int) -> None:
+    for item in revisions:
+        rec.conn.execute(
+            text(
+                f"INSERT INTO {rec.t['rights_revision']} (work_id, revision, publication_revision, record,"
+                " record_hash) VALUES (:work_id, :revision, :at, CAST(:record AS jsonb), :hash)"
+            ),
+            item | {"at": publication_revision, "record": json.dumps(item["record"], ensure_ascii=False)},
+        )
 
 
 def sweep(conn: Connection) -> int:

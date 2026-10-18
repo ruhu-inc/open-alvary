@@ -92,6 +92,27 @@ for (;;) {
 writeFileSync("resume_token.txt", page.resume_token); // only after the changes are applied
 ```
 
+### When a text is published or withdrawn
+
+**A text is published** (`text_version_published`): the change names the `version` (its `id`, `content_hash` and `language`) and the `rights_revision` in force. With a key:
+
+1. Get the text from `https://api.open.alvary.ai/api/v1/versions/{id}/text` and check that its SHA-256 equals `content_hash`.
+2. Get its parts, a page at a time, from `/api/v1/versions/{id}/structure`. Offsets are UTF-8 bytes into that exact text. Each part's `id` is an anchor: `/api/v1/anchors/{id}` gives its words, a citation and the attribution to show.
+3. Keep the `rights_revision` with your copy. `/api/v1/rights/{source_id}/history` lists every revision of the record's rights record.
+
+A later text of the same record names the one it replaces in `prior_version_id`, and `change_reason` says why: `extraction_correction` (read again from the same official file) or `source_revision` (a new official file). The same provision keeps the same `locator` across versions.
+
+**To check a text you hold**, send its `ETag` back as `If-None-Match`. `304` means it is unchanged and still public. `404` means it is no longer public. A `304` costs a request but no bytes.
+
+**A text is withdrawn** (`withdrawal`):
+
+| `scope_disclosure` | `action` | What to do |
+|---|---|---|
+| `named` | `stop_serving` | Stop serving the text in `version` now. `reason_code` says why: `rights_changed` (its rights record changed or lapsed) or `correction` (its approval was withdrawn). A corrected text, if there is one, arrives as a new `text_version_published`. |
+| `revalidate_releases` | `revalidate` | A record stopped being public, and which one is not said. Check each record you hold: one that answers `404` is no longer public; stop serving it. |
+
+When a rights review expires, its withdrawal is in the feed within minutes. Nothing already sent can be recalled, so poll at least daily if you serve texts to others.
+
 ### Filters
 
 Narrow the feed with any of these; repeat a parameter for several values. Values within one filter are alternatives; different filters must all match.

@@ -35,6 +35,7 @@ from schema.public import (
     CoverageView,
     JurisdictionView,
     RelationKind,
+    RightsHistory,
     RightsView,
     SearchPage,
     SourcePage,
@@ -315,6 +316,13 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
     def rights(request: Request, source_id: str, service: LegacyCatalogue = Depends(catalogue)) -> RightsView:
         check_source(request, service, source_id)
         return service.rights(source_id)
+
+    @app.get("/rights/{source_id}/history")
+    def rights_history(
+        request: Request, source_id: str, service: LegacyCatalogue = Depends(catalogue)
+    ) -> RightsHistory:
+        check_source(request, service, source_id)
+        return service.rights_history(source_id)
 
     @app.get("/releases")
     def release_listing(request: Request):

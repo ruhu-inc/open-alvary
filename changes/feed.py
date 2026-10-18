@@ -477,6 +477,8 @@ class Feed:
             "jurisdiction": jurisdiction,
             "work": self._work(row, payload) if named else None,
             "version": version,
+            # The rights record revision in force for a text published or withdrawn (OA-R1).
+            "rights_revision": payload.get("rights_revision") if version is not None else None,
             "changed_fields": payload.get("changed_fields", []) if named else [],
             "change_reason": row["change_reason"],
             "supersedes": {

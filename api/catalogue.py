@@ -6,6 +6,8 @@ from collections import Counter
 from datetime import UTC, datetime
 from typing import Protocol
 
+from sqlalchemy import text
+
 from api.reach import country
 from api.repositories import (
     EDGE_ORDER,
@@ -17,6 +19,7 @@ from api.repositories import (
     ResultTooLarge,
 )
 from api.search import normalize_citation as normalize_citation
+from changes.record import namespace
 from rights.policy import decide
 from schema.models import Citation, Corpus
 from schema.policy import MetadataPage, PublicMetadata
@@ -29,7 +32,10 @@ from schema.public import (
     JurisdictionView,
     NodeViewRecord,
     RelatedSource,
+    RightsHistory,
+    RightsRevision,
     RightsView,
+    RightsViewRecord,
     SearchPage,
     SourcePage,
     SourceRelationships,
@@ -393,9 +399,50 @@ class LegacyCatalogue:
         source, rights = self._require(source_id)
         version = next(self._approved(source, rights), None)
         decision = decide(rights, version, now=self.now)
+        latest = self._rights_revisions(source_id, limit=1)
         return RightsView(
-            record=rights, decision=DecisionView.model_validate(decision.model_dump(mode="json"))
+            record=rights,
+            decision=DecisionView.model_validate(decision.model_dump(mode="json")),
+            revision=latest[0]["revision"] if latest else None,
         )
+
+    def rights_history(self, source_id) -> RightsHistory:
+        """Every revision of a public record's rights record, newest first (OA-R1). A hidden record
+        and one that does not exist are the same answer: unavailable."""
+        self._require(source_id)
+        rows = self._rights_revisions(source_id, limit=MAX_UNPAGED_ROWS)
+        return RightsHistory(
+            source_id=source_id,
+            revisions=tuple(
+                RightsRevision(
+                    revision=row["revision"],
+                    recorded_at=row["committed_at"],
+                    publication_revision=row["publication_revision"],
+                    record=RightsViewRecord.model_validate(row["record"]),
+                )
+                for row in rows
+            ),
+        )
+
+    def _rights_revisions(self, source_id: str, *, limit: int) -> list[dict]:
+        """The recorded revisions, newest first; none where no history is kept (SQLite, or a database
+        before migration 0029)."""
+        conn = self.repository.connection
+        if conn.dialect.name != "postgresql":
+            return []
+        table = namespace(conn).qualified(conn, "changes", "rights_revision")
+        if conn.scalar(text("SELECT to_regclass(:t)"), {"t": table}) is None:
+            return []
+        return [
+            dict(row)
+            for row in conn.execute(
+                text(
+                    f"SELECT revision, committed_at, publication_revision, record FROM {table}"
+                    " WHERE work_id = :w ORDER BY revision DESC LIMIT :n"
+                ),
+                {"w": source_id, "n": limit},
+            ).mappings()
+        ]
 
     def search(self, query, *, jurisdiction=None, limit=25, offset=0, access="all"):
         term = normalize_citation(query)
