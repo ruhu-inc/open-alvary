@@ -1,0 +1,21 @@
+tests/test_postgres_changes.py
+  s_d665c62e07d76f::t_dd92ea767bba02 505-528
+changes/record.py
+  s_d665c62e07d76f::t_b842e57fb0b325 644-648,661
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "79e2dcbcc056a0b202ae37ea1d01a642f690797d",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
