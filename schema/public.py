@@ -168,6 +168,43 @@ class SourceRelationships(WireModel):
     next_cursor: str | None = None
 
 
+class StructurePage(WireModel):
+    """A page of one text version's structure in document order (API-02 /versions/{id}/structure)."""
+
+    version_id: ID
+    content_hash: Hash
+    total: int = Field(ge=0)
+    items: tuple[NodeViewRecord, ...]
+    next_cursor: str | None = None
+
+
+class AnchorView(WireModel):
+    """One part of a text exactly (API-02 /anchors/{id}, DAT-06): its span, locator, hashes, offset unit,
+    citation and attribution, and the words of the span themselves."""
+
+    anchor_id: ID
+    source_id: ID
+    version_id: ID
+    kind: str
+    locator: str
+    label: str | None = None
+    heading: str | None = None
+    start_byte: int = Field(ge=0)
+    end_byte: int = Field(ge=0)
+    offset_unit: Literal["utf-8-bytes"] = "utf-8-bytes"
+    span_hash: Hash
+    content_hash: Hash
+    serialization_profile: str | None = None
+    page: int | None = None
+    page_end: int | None = None
+    citation: str
+    official_url: str
+    licence: str | None = None
+    attribution_required: bool | None = None
+    attribution_text: str | None = None
+    text: str
+
+
 class PublicContracts(WireModel):
     schema_version: Literal["pilot-public-1"] = "pilot-public-1"
     sources: tuple[SourcePage, ...] = ()
@@ -178,3 +215,5 @@ class PublicContracts(WireModel):
     jurisdictions: tuple[JurisdictionView, ...] = ()
     coverage: tuple[CoverageView, ...] = ()
     relationships: tuple[SourceRelationships, ...] = ()
+    structures: tuple[StructurePage, ...] = ()
+    anchors: tuple[AnchorView, ...] = ()

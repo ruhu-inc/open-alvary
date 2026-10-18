@@ -1,5 +1,184 @@
 {
   "$defs": {
+    "AnchorView": {
+      "additionalProperties": false,
+      "description": "One part of a text exactly (API-02 /anchors/{id}, DAT-06): its span, locator, hashes, offset unit,\ncitation and attribution, and the words of the span themselves.",
+      "properties": {
+        "anchor_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Anchor Id",
+          "type": "string"
+        },
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "version_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Version Id",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "locator": {
+          "title": "Locator",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "heading": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Heading"
+        },
+        "start_byte": {
+          "minimum": 0,
+          "title": "Start Byte",
+          "type": "integer"
+        },
+        "end_byte": {
+          "minimum": 0,
+          "title": "End Byte",
+          "type": "integer"
+        },
+        "offset_unit": {
+          "const": "utf-8-bytes",
+          "default": "utf-8-bytes",
+          "title": "Offset Unit",
+          "type": "string"
+        },
+        "span_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Span Hash",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "serialization_profile": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Serialization Profile"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "page_end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page End"
+        },
+        "citation": {
+          "title": "Citation",
+          "type": "string"
+        },
+        "official_url": {
+          "title": "Official Url",
+          "type": "string"
+        },
+        "licence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Licence"
+        },
+        "attribution_required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribution Required"
+        },
+        "attribution_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribution Text"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "anchor_id",
+        "source_id",
+        "version_id",
+        "kind",
+        "locator",
+        "start_byte",
+        "end_byte",
+        "span_hash",
+        "content_hash",
+        "citation",
+        "official_url",
+        "text"
+      ],
+      "title": "AnchorView",
+      "type": "object"
+    },
     "CitationView": {
       "additionalProperties": false,
       "properties": {
@@ -988,6 +1167,54 @@
       "title": "SourceView",
       "type": "object"
     },
+    "StructurePage": {
+      "additionalProperties": false,
+      "description": "A page of one text version's structure in document order (API-02 /versions/{id}/structure).",
+      "properties": {
+        "version_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Version Id",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "total": {
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/NodeViewRecord"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Cursor"
+        }
+      },
+      "required": [
+        "version_id",
+        "content_hash",
+        "total",
+        "items"
+      ],
+      "title": "StructurePage",
+      "type": "object"
+    },
     "VersionPage": {
       "additionalProperties": false,
       "properties": {
@@ -1252,6 +1479,22 @@
         "$ref": "#/$defs/SourceRelationships"
       },
       "title": "Relationships",
+      "type": "array"
+    },
+    "structures": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/StructurePage"
+      },
+      "title": "Structures",
+      "type": "array"
+    },
+    "anchors": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/AnchorView"
+      },
+      "title": "Anchors",
       "type": "array"
     }
   },

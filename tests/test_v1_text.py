@@ -1,9 +1,178 @@
-"""The keyed API rechecks a record's texts immediately before sending them (API-02)."""
+"""The keyed API's text routes (API-02): versions, a text, its structure and its anchors, each rechecked
+for eligibility immediately before it is sent, with conditional requests."""
 
+import hashlib
+from datetime import UTC, datetime, timedelta
+
+import pytest
 from fastapi.testclient import TestClient
 
 from api.catalogue import LegacyCatalogue, SourceUnavailable
 from api.v1 import create_v1_app
+from operations import publish
+from schema.models import Authority, Corpus, Jurisdiction, Language, RightsRecord, Source
+from workbench import publication
+
+WORK = "ng-example-act-2023"
+UNITS = [
+    {"kind": "heading", "text": "EXAMPLE ACT, 2023"},
+    {"kind": "paragraph", "text": "ENACTED by the National Assembly —"},
+    {"kind": "paragraph", "text": "1. (1) The Fund shall lend to students.", "notes": ["Loans"]},
+    {"kind": "paragraph", "text": "(2) A loan is repaid —"},
+    {"kind": "list_item", "text": "(a) after study; and"},
+    {"kind": "list_item", "text": "(b) from salary — café, naïve, 中文."},
+    {"kind": "paragraph", "text": "2. In this Act —", "notes": ["Interpretation"]},
+    {"kind": "paragraph", "text": "“Fund” means the Students Loans Fund."},
+    {"kind": "heading", "text": "SCHEDULES"},
+    {"kind": "heading", "text": "First Schedule"},
+    {"kind": "list_item", "marker": "1.", "text": "Lagos office"},
+]
+
+
+@pytest.fixture
+def published(store):
+    return publish_act(store, UNITS)
+
+
+def publish_act(store, units):
+    """A catalogue record and a reviewed text published through operations.publish."""
+    store.save(
+        Corpus(
+            jurisdictions=[Jurisdiction(id="ng", name="Nigeria", country_code="NG", languages=["en"])],
+            authorities=[
+                Authority(
+                    id="ng-nass", jurisdiction_id="ng", name="National Assembly", kind="legislature",
+                    official_url="https://nass.gov.ng/",
+                )
+            ],
+            languages=[Language(id="en", name="English", tag="en")],
+            sources=[
+                Source(
+                    id=WORK, jurisdiction_id="ng", authority_id="ng-nass", title="Example Act, 2023",
+                    document_type="act", canonical_url="https://www.nass.gov.ng/example-act.pdf",
+                    citation="Example Act, 2023",
+                )
+            ],
+            rights=[
+                RightsRecord(
+                    id=f"rights-{WORK}", source_id=WORK, metadata_public=True,
+                    metadata_basis="Independently authored catalogue entry",
+                )
+            ],
+        )
+    )  # fmt: skip
+    now = datetime.now(UTC).replace(microsecond=0)
+    decision = {
+        "document_types": ["act"],
+        "rights_holder": "Federal Republic of Nigeria",
+        "licence": "Not eligible for copyright (Copyright Act 2022, s. 3(b))",
+        "licence_url": None,
+        "attribution_required": False,
+        "attribution_text": None,
+        "database_rights_notes": "No database right is claimed in the texts.",
+        "privacy_status": "cleared",
+        "basis": "Official legislative texts are not eligible for copyright in Nigeria.",
+        "evidence": ["https://www.copyright.gov.ng/copyright-act-2022"],
+        "decided_by": "Ijidai Lassa",
+        "decided_at": (now - timedelta(minutes=1)).isoformat(),
+        "expires_at": (now + timedelta(days=365)).isoformat(),
+    }
+    text = publication.build({"id": WORK, "jurisdiction": "ng"}, [{"page": 1, "units": units}])
+    item = publish.ApprovedText(
+        document_id=WORK, work=WORK, language="en", document_type="act", text=text,
+        approver="Ijidai Lassa", approved_at=now - timedelta(minutes=5),
+        provenance={
+            "url": "https://www.nass.gov.ng/example-act.pdf",
+            "retrieved_at": "2026-10-09T06:41:17+00:00",
+            "sha256": "7" * 64,
+        },
+    )  # fmt: skip
+    publish.publish_texts(store, "ng", publish.Texts(approved=[item]), decision)
+    corpus = store.load()
+    return store, corpus.versions[0], {n.locator: n for n in corpus.structure}
+
+
+def test_a_long_act_is_served_whole_with_its_structure(store, tmp_path):
+    # More parts than the pilot's 1,000-row bound: the Electricity Act 2023 has 2,144.
+    units = [
+        {"kind": "paragraph", "text": text}
+        for n in range(1, 501)
+        for text in (f"{n}. (1) Section {n} applies.", "(2) It applies everywhere.")
+    ]
+    store, version, nodes = publish_act(store, units)
+    page = TestClient(create_v1_app(store, tmp_path, lambda: [])).get(f"/sources/{WORK}/versions")
+    assert page.status_code == 200 and len(page.json()["structure"]) == len(nodes) > 1500
+
+
+def withdraw(store):
+    corpus = store.load()
+    corpus.rights[0].status = "RIGHTS_UNDER_REVIEW"
+    store.save(corpus)
+
+
+def test_a_text_is_its_exact_bytes_with_its_hash_as_etag(published, tmp_path):
+    store, version, _ = published
+    client = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    text = client.get(f"/versions/{version.id}/text")
+    assert text.status_code == 200 and text.headers["content-type"] == "text/plain; charset=utf-8"
+    assert text.content == version.canonical_text.encode() and text.content.endswith(b"office\n")
+    assert hashlib.sha256(text.content).hexdigest() == version.content_hash
+    assert text.headers["etag"] == f'"{version.content_hash}"' and text.headers["cache-control"] == "no-store"
+    unchanged = client.get(f"/versions/{version.id}/text", headers={"If-None-Match": text.headers["etag"]})
+    assert unchanged.status_code == 304 and unchanged.content == b""
+    withdraw(store)
+    for headers in ({}, {"If-None-Match": text.headers["etag"]}):  # a 304 is never given for a withdrawn text
+        gone = client.get(f"/versions/{version.id}/text", headers=headers)
+        assert gone.status_code == 404 and gone.json()["code"] == "unavailable"
+    unknown = client.get("/versions/ver_no-such-version/text")
+    assert unknown.status_code == 404 and unknown.json()["detail"] == gone.json()["detail"]
+
+
+def test_a_structure_is_paged_in_document_order(published, tmp_path):
+    store, version, nodes = published
+    client = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    first = client.get(f"/versions/{version.id}/structure?limit=3").json()
+    assert first["total"] == len(nodes) and first["content_hash"] == version.content_hash
+    assert [n["locator"] for n in first["items"]] == ["document", "preamble", "sec_1"]
+    rest = client.get(f"/versions/{version.id}/structure?limit=500&cursor={first['next_cursor']}").json()
+    assert rest["next_cursor"] is None and len(first["items"]) + len(rest["items"]) == len(nodes)
+    assert [n["locator"] for n in rest["items"]][:3] == [
+        "sec_1__subsec_1",
+        "sec_1__subsec_2",
+        "sec_1__subsec_2__para_a",
+    ]
+    assert client.get(f"/versions/{version.id}/structure?cursor=bogus").json()["code"] == "invalid_input"
+    page = client.get(f"/versions/{version.id}/structure")
+    again = client.get(f"/versions/{version.id}/structure", headers={"If-None-Match": page.headers["etag"]})
+    assert again.status_code == 304
+
+
+def test_an_anchor_is_one_part_exactly_with_a_pinpoint_citation(published, tmp_path):
+    store, version, nodes = published
+    client = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    paragraph = client.get(f"/anchors/{nodes['sec_1__subsec_2__para_b'].id}").json()
+    raw = version.canonical_text.encode()
+    assert paragraph["text"] == "(b) from salary — café, naïve, 中文."
+    assert raw[paragraph["start_byte"] : paragraph["end_byte"]].decode() == paragraph["text"]
+    assert paragraph["span_hash"] == hashlib.sha256(paragraph["text"].encode()).hexdigest()
+    assert paragraph["offset_unit"] == "utf-8-bytes" and paragraph["content_hash"] == version.content_hash
+    assert paragraph["citation"] == "Example Act, 2023, s. 1(2)(b)"
+    assert paragraph["official_url"] == "https://www.nass.gov.ng/example-act.pdf"
+    assert paragraph["attribution_required"] is False and paragraph["licence"].startswith("Not eligible")
+    section = client.get(f"/anchors/{nodes['sec_1'].id}").json()
+    assert section["citation"] == "Example Act, 2023, s. 1" and section["heading"] == "Loans"
+    assert section["text"].startswith("Loans\n\n1. (1) The Fund")
+    definition = client.get(f"/anchors/{nodes['sec_2__def_fund'].id}").json()
+    assert definition["citation"] == "Example Act, 2023, s. 2, “Fund”"
+    schedule = client.get(f"/anchors/{nodes['sch_1__para_1'].id}").json()
+    assert schedule["citation"] == "Example Act, 2023, First Schedule, para. 1"
+    assert client.get(f"/anchors/{nodes['document'].id}").json()["citation"] == "Example Act, 2023"
+    withdraw(store)
+    gone = client.get(f"/anchors/{nodes['sec_1'].id}")
+    assert (
+        gone.status_code == 404
+        and client.get("/anchors/nod_unknown").json()["detail"] == gone.json()["detail"]
+    )
 
 
 def test_texts_are_rechecked_immediately_before_they_are_sent(cleared, store, tmp_path, monkeypatch):
@@ -28,3 +197,25 @@ def test_texts_are_rechecked_immediately_before_they_are_sent(cleared, store, tm
     assert refused.status_code == 503 and refused.headers["content-type"] == "application/problem+json"
     assert refused.json()["code"] == "temporarily_unavailable" and refused.json()["retryable"] is True
     assert "Synthetic" not in refused.text and refused.headers["cache-control"] == "no-store"
+
+
+def test_the_mcp_tool_answers_the_same_anchor_and_refuses_one_too_large(published, tmp_path, monkeypatch):
+    from api import mcp
+    from api.main import create_app
+
+    store, _, nodes = published
+    client = TestClient(create_app(store, tmp_path))
+
+    def call(anchor_id):
+        body = {"name": "get_anchor", "arguments": {"anchor_id": anchor_id}}
+        return client.post("/mcp", json={"jsonrpc": "2.0", "method": "tools/call", "id": 1, "params": body})
+
+    result = call(nodes["sec_1__subsec_2__para_a"].id).json()["result"]
+    assert (
+        not result["isError"]
+        and '"citation": "Example Act, 2023, s. 1(2)(a)"' in result["content"][0]["text"]
+    )
+    monkeypatch.setattr(mcp, "MAX_TOOL_BYTES", 100)
+    refused = call(nodes["sec_1"].id).json()["result"]
+    assert refused["isError"] and refused["content"][0]["text"].startswith("result_too_large")
+    assert call("nod_unknown").json()["result"]["isError"]

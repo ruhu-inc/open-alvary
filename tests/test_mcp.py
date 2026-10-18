@@ -31,6 +31,7 @@ def test_initialize_negotiates_protocol_and_declares_read_only_tools(client):
         "search_catalogue",
         "get_source",
         "get_relationships",
+        "get_anchor",
         "get_coverage",
         "list_changes",
         "get_change",

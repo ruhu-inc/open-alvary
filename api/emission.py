@@ -125,6 +125,12 @@ class CheckedResponse(Response):
                 pass  # remains emitting; reconciliation settles conservatively
 
 
+class CheckedText(CheckedResponse):
+    """A canonical text as text/plain; charset=utf-8, rechecked the same way (API-02 /versions/{id}/text)."""
+
+    media_type = "text/plain; charset=utf-8"
+
+
 class CheckedFileResponse(FileResponse):
     """Bulk release file (outside interactive byte buckets): recheck availability before sending."""
 
