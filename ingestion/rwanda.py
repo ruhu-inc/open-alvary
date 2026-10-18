@@ -794,6 +794,30 @@ def link_works(documents: list[dict]) -> list[dict]:
 SOURCE_RANK = {"minijust-gazette": 0, "rlrc-laws": 1}
 
 
+def one_per_file(ledger: dict, items: list[str]) -> list[str]:
+    """One listing entry for each stored file: RLRC lists some files twice, under two names in two
+    folders, and preparing both let whichever finished last name the file's documents (their
+    title, link and sometimes id changed between runs). The entry kept is the Official Gazette's
+    before RLRC's, then the first by address; entries not stored are kept as they are."""
+    chosen: dict[str, str] = {}
+    for item in items:
+        record = ledger[item]
+        sha = record.get("sha256")
+        if not sha:
+            chosen[item] = item
+            continue
+        rank = (SOURCE_RANK.get(record.get("source"), 9), record.get("url") or "", item)
+        held = chosen.get(sha)
+        if held is None or rank < (
+            SOURCE_RANK.get(ledger[held].get("source"), 9),
+            ledger[held].get("url") or "",
+            held,
+        ):
+            chosen[sha] = item
+    kept = set(chosen.values())
+    return [item for item in items if item in kept]
+
+
 def one_per_id(documents: list[dict]) -> list[dict]:
     """The manifest's documents, one per id, the others it was found in recorded on it."""
     groups: dict[str, list[dict]] = {}
@@ -977,7 +1001,7 @@ def prepare_selection(
     scratch = tempfile.TemporaryDirectory(dir=STAGING)
     documents = {d["id"]: d for d in manifest["documents"]}
     summary = []
-    for item_id in selection["items"]:
+    for item_id in one_per_file(ledger.data["items"], list(selection["items"])):
         record = ledger.data["items"][item_id]
         if record["source"] not in ("minijust-gazette", "rlrc-laws") or not record.get("sha256"):
             continue

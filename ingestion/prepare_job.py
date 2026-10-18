@@ -44,7 +44,9 @@ def main() -> int:
         rwanda.STAGING = Path(scratch)
         fetch_state(store, rwanda.STAGING)
         ledger = json.loads((rwanda.STAGING / "sync-ledger.json").read_text())["items"]
-        items = sorted(i for i, record in ledger.items() if record.get("stored"))
+        # Each stored file once, before the files are shared out: a file listed twice must not be
+        # prepared by two tasks at once (rwanda.one_per_file).
+        items = rwanda.one_per_file(ledger, sorted(i for i, record in ledger.items() if record.get("stored")))
         mine = share(items, task, tasks)
         if os.environ.get("PREPARE_LIMIT"):  # a trial: the first few of this task's share
             mine = mine[: int(os.environ["PREPARE_LIMIT"])]
