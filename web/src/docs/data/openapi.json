@@ -2161,6 +2161,90 @@
         ]
       }
     },
+    "/rights/{source_id}/history": {
+      "get": {
+        "summary": "Get a record's rights history",
+        "operationId": "get_rights_history",
+        "parameters": [
+          {
+            "name": "source_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Source Id"
+            },
+            "description": "The record's ID."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RightsHistory"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such record, or it is not public (`unavailable`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "Every revision of the record's rights record, newest first, as recorded when the catalogue changed; revisions are never edited. Text and withdrawal events name the revision in force (`rights_revision`), so a copy of a text can say which rights record it was published under.",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
     "/releases": {
       "get": {
         "summary": "List data releases",
@@ -2913,6 +2997,67 @@
         ],
         "title": "RelatedSource"
       },
+      "RightsHistory": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The record."
+          },
+          "revisions": {
+            "items": {
+              "$ref": "#/components/schemas/RightsRevision"
+            },
+            "type": "array",
+            "title": "Revisions",
+            "description": "Every revision of its rights record, newest first."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "revisions"
+        ],
+        "title": "RightsHistory",
+        "description": "Every revision of a record's rights record, newest first, never edited (OA-R1)."
+      },
+      "RightsRevision": {
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Revision",
+            "description": "The revision's number, from 1."
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Recorded At",
+            "description": "When the revision was recorded."
+          },
+          "publication_revision": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Publication Revision",
+            "description": "The catalogue publication it was recorded with (0: the first baseline)."
+          },
+          "record": {
+            "$ref": "#/components/schemas/RightsViewRecord",
+            "description": "The rights record as it was."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "revision",
+          "recorded_at",
+          "publication_revision",
+          "record"
+        ],
+        "title": "RightsRevision"
+      },
       "RightsStatus": {
         "type": "string",
         "enum": [
@@ -2933,6 +3078,18 @@
           "decision": {
             "$ref": "#/components/schemas/DecisionView",
             "description": "What it allows here."
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision",
+            "description": "The rights record's revision in its history, where a history is kept."
           }
         },
         "additionalProperties": false,
@@ -3922,6 +4079,13 @@
                 "type": "string"
               }
             }
+          },
+          "rights_revision": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "For a published or withdrawn text: the revision of the record's rights record in force (see `/rights/{source_id}/history`)."
           },
           "changed_fields": {
             "type": "array",

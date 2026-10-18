@@ -187,6 +187,17 @@ OPERATIONS: dict[str, dict] = {
         "parameters": {"source_id": "The record's ID."},
         "errors": MISSING,
     },
+    "/rights/{source_id}/history": {
+        "operationId": "get_rights_history",
+        "tag": "Catalogue",
+        "summary": "Get a record's rights history",
+        "description": "Every revision of the record's rights record, newest first, as recorded when the "
+        "catalogue changed; revisions are never edited. Text and withdrawal events name the revision in "
+        "force (`rights_revision`), so a copy of a text can say which rights record it was published "
+        "under.",
+        "parameters": {"source_id": "The record's ID."},
+        "errors": MISSING,
+    },
     "/citations/{citation}": {
         "operationId": "resolve_citation",
         "tag": "Catalogue",
@@ -390,6 +401,11 @@ SCHEMAS: dict[str, dict] = {
                 "type": ["object", "null"],
                 "description": "For a published or withdrawn text: {id, content_hash, language}.",
                 "properties": {"id": {"type": S}, "content_hash": {"type": S}, "language": {"type": S}},
+            },
+            "rights_revision": {
+                "type": ["integer", "null"],
+                "description": "For a published or withdrawn text: the revision of the record's rights record "
+                "in force (see `/rights/{source_id}/history`).",
             },
             "changed_fields": {
                 "type": "array",
@@ -690,7 +706,21 @@ FIELDS: dict[str, dict[str, str]] = {
         "full_text": "Whether a text may be served.",
         "reasons": "Why not, in sentences, when either is false.",
     },
-    "RightsView": {"record": "The rights record.", "decision": "What it allows here."},
+    "RightsView": {
+        "record": "The rights record.",
+        "decision": "What it allows here.",
+        "revision": "The rights record's revision in its history, where a history is kept.",
+    },
+    "RightsHistory": {
+        "source_id": "The record.",
+        "revisions": "Every revision of its rights record, newest first.",
+    },
+    "RightsRevision": {
+        "revision": "The revision's number, from 1.",
+        "recorded_at": "When the revision was recorded.",
+        "publication_revision": "The catalogue publication it was recorded with (0: the first baseline).",
+        "record": "The rights record as it was.",
+    },
     "CitationView": {
         "status": "`resolved` (one record), `ambiguous` (several) or `unresolved` (none).",
         "matches": "The records the citation refers to.",

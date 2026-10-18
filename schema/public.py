@@ -77,6 +77,23 @@ class VersionPage(WireModel):
 class RightsView(WireModel):
     record: RightsViewRecord
     decision: DecisionView
+    # The record's revision in the rights history, where one is kept; absent otherwise, so the pilot's
+    # answer is unchanged.
+    revision: int | None = Field(default=None, exclude_if=lambda value: value is None)
+
+
+class RightsRevision(WireModel):
+    revision: int = Field(ge=1)
+    recorded_at: AwareDatetime
+    publication_revision: int = Field(ge=0)
+    record: RightsViewRecord
+
+
+class RightsHistory(WireModel):
+    """Every revision of a record's rights record, newest first, never edited (OA-R1)."""
+
+    source_id: ID
+    revisions: tuple[RightsRevision, ...]
 
 
 class CitationView(WireModel):
@@ -217,3 +234,4 @@ class PublicContracts(WireModel):
     relationships: tuple[SourceRelationships, ...] = ()
     structures: tuple[StructurePage, ...] = ()
     anchors: tuple[AnchorView, ...] = ()
+    rights_histories: tuple[RightsHistory, ...] = ()

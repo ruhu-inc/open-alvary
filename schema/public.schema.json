@@ -636,6 +636,61 @@
       "title": "RelatedSource",
       "type": "object"
     },
+    "RightsHistory": {
+      "additionalProperties": false,
+      "description": "Every revision of a record's rights record, newest first, never edited (OA-R1).",
+      "properties": {
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "revisions": {
+          "items": {
+            "$ref": "#/$defs/RightsRevision"
+          },
+          "title": "Revisions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "source_id",
+        "revisions"
+      ],
+      "title": "RightsHistory",
+      "type": "object"
+    },
+    "RightsRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "recorded_at": {
+          "format": "date-time",
+          "title": "Recorded At",
+          "type": "string"
+        },
+        "publication_revision": {
+          "minimum": 0,
+          "title": "Publication Revision",
+          "type": "integer"
+        },
+        "record": {
+          "$ref": "#/$defs/RightsViewRecord"
+        }
+      },
+      "required": [
+        "revision",
+        "recorded_at",
+        "publication_revision",
+        "record"
+      ],
+      "title": "RightsRevision",
+      "type": "object"
+    },
     "RightsStatus": {
       "enum": [
         "OPEN",
@@ -655,6 +710,18 @@
         },
         "decision": {
           "$ref": "#/$defs/DecisionView"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision"
         }
       },
       "required": [
@@ -1495,6 +1562,14 @@
         "$ref": "#/$defs/AnchorView"
       },
       "title": "Anchors",
+      "type": "array"
+    },
+    "rights_histories": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/RightsHistory"
+      },
+      "title": "Rights Histories",
       "type": "array"
     }
   },

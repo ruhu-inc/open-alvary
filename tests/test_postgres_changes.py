@@ -341,3 +341,46 @@ def test_an_expired_rights_review_withdraws_its_text_within_one_worker_run(feed,
     assert withdrawn["withdrawal"]["reason_code"] == "rights_changed"
     with store.engine.begin() as conn:
         assert expired(conn) == 0  # already compared: nothing new
+
+
+def test_each_change_to_a_rights_record_is_a_revision_the_text_events_name(feed, cleared, tmp_path):
+    from api.v1 import create_v1_app
+
+    store, client = feed
+    v1 = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    work = cleared.sources[0].id
+    baseline = v1.get(f"/rights/{work}/history").json()["revisions"]
+    assert [(r["revision"], r["publication_revision"]) for r in baseline] == [(1, 0)]  # the seed's baseline
+    store.save(cleared)  # opens the first work's text: its rights record changes
+    history = v1.get(f"/rights/{work}/history").json()["revisions"]
+    assert [r["revision"] for r in history] == [2, 1] and history[0]["publication_revision"] > 0
+    assert history[0]["record"]["approved_content_hashes"] == [cleared.versions[0].content_hash]
+    assert history[1]["record"]["approved_content_hashes"] == []
+    assert v1.get(f"/rights/{work}").json()["revision"] == 2
+    [published] = [
+        e for e in client.get("/changes").json()["events"] if e["event_type"] == "text_version_published"
+    ]
+    assert published["rights_revision"] == 2
+    store.save(cleared)  # nothing changed: no new revision
+    assert len(v1.get(f"/rights/{work}/history").json()["revisions"]) == 2
+    edit(store, lambda c: setattr(next(r for r in c.rights if r.source_id == work), "metadata_public", False))
+    assert v1.get(f"/rights/{work}/history").json()["code"] == "unavailable"  # hidden: as if absent
+
+
+def test_the_rights_history_downgrade_drops_a_baseline_but_never_history(feed, cleared):
+    from alembic import command
+    from alembic.config import Config
+
+    store, _ = feed  # seeded: each work's rights record is its baseline revision only
+    config = Config("alembic.ini")
+
+    def run(step, revision):
+        with store.engine.begin() as conn:
+            config.attributes["connection"] = conn
+            step(config, revision)
+
+    run(command.downgrade, "0028")
+    run(command.upgrade, "head")
+    store.save(cleared)  # a real revision: now history
+    with pytest.raises(RuntimeError, match="public rights history"):
+        run(command.downgrade, "0028")
