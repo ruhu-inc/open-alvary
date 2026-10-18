@@ -5,7 +5,7 @@ from enum import StrEnum
 from hashlib import sha256
 from typing import Annotated, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, StringConstraints, model_validator
 
 ID = Annotated[str, Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$")]
 Hash = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
@@ -106,7 +106,8 @@ class SourceVersion(Model):
     retrieved_at: AwareDatetime
     raw_hash: Hash
     content_hash: Hash
-    canonical_text: str
+    # Exactly as built: OA-text-1 texts end with one line feed, which stripping would remove (TXP-02).
+    canonical_text: Annotated[str, StringConstraints(strip_whitespace=False)]
     parser: Nonempty
     language: ID = "en"
     effective_from: date | None = None

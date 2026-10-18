@@ -13,27 +13,50 @@ Nothing is published without the owner's collection decision for the jurisdictio
 (ingestion/decisions/<jurisdiction>-catalogue.json, REV-01: once per collection, with evidence and
 an expiry). One person may record it and approve the works (single-reviewer rule, migration 0019).
 
+Texts follow their records under a separate decision (ingestion/decisions/<jurisdiction>-text.json,
+TXP-07): the reviewed text of each approved language version, its legal structure and its rights,
+exactly as its approval bound them, or nothing.
+
   python -m operations.publish decide --jurisdiction rw --by "Full Name" [--months 12] [--evidence URL]...
   python -m operations.publish records --jurisdiction rw [--dry-run]
+  python -m operations.publish decide-text --jurisdiction ng --by "Full Name" --rights-holder … --licence …
+      --basis … --evidence URL --privacy-checked [--types act constitution] [--attribution TEXT]
+  python -m operations.publish texts --jurisdiction ng [--dry-run]
 
-`records` reads the review database (ALVARY_REVIEW_DATABASE_URL, read only), the collections
-(ALVARY_REVIEW_COLLECTIONS) and writes the public catalogue (DATABASE_URL).
+`records` and `texts` read the review database (ALVARY_REVIEW_DATABASE_URL, read only), the
+collections (ALVARY_REVIEW_COLLECTIONS) and write the public catalogue (DATABASE_URL).
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
-from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+import uuid
+from dataclasses import dataclass, field
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import create_engine
 
 from api.store import Store, engine_for
 from ingestion import settings
+from rights.policy import decide as rights_decision
 from schema.jurisdictions import registry
-from schema.models import Amendment, Authority, Citation, Corpus, Jurisdiction, Language, RightsRecord, Source
+from schema.models import (
+    Amendment,
+    Authority,
+    Citation,
+    Corpus,
+    Jurisdiction,
+    Language,
+    Permission,
+    RightsRecord,
+    RightsStatus,
+    Source,
+    SourceVersion,
+    StructureNode,
+)
 from workbench.content import Library
 from workbench.review import Review
 from workbench.store import Store as ReviewStore
@@ -331,8 +354,12 @@ def publish_records(
         _put(corpus, "citations", entry["citation"])
         existing = by_id["rights"].get(entry["rights"].id)
         if existing is not None and existing.approved_content_hashes:
-            # A later text decision owns this rights record; the records step never narrows it.
+            # A later text decision owns this rights record and the note on what text there is; the
+            # records step never narrows either.
             entry["rights"] = existing.model_copy(update={"metadata_public": True})
+            held = by_id["sources"].get(item.work)
+            if held is not None:
+                entry["source"] = entry["source"].model_copy(update={"catalogue_note": held.catalogue_note})
         _put(corpus, "rights", entry["rights"])
         report["updated" if item.work in by_id["sources"] else "published"].append(item.work)
     # The reviewed links of the works published now replace the links they had.
@@ -363,6 +390,328 @@ def _put(corpus, name, model):
     rows.append(model)
 
 
+# ---------- the owner's text decision (TXP-07) ----------
+TEXT_TYPES = ("constitution", "act", "regulation", "judgment", "gazette", "guidance", "other")
+
+
+def text_decision_path(jurisdiction: str) -> Path:
+    return decision_path(jurisdiction).with_name(f"{jurisdiction}-text.json")
+
+
+def decide_text(
+    jurisdiction: str,
+    by: str,
+    months: int,
+    evidence: list[str],
+    *,
+    types: list[str],
+    rights_holder: str,
+    licence: str,
+    licence_url: str | None,
+    attribution: str | None,
+    database_rights: str,
+    basis: str,
+    privacy_checked: bool,
+) -> dict:
+    """Record the owner's decision to publish this collection's reviewed texts: what the texts are,
+    whose they are, under what terms, why they may be republished, and that the kind of document
+    was screened for personal data. One decision for the collection (REV-01), with an expiry."""
+    if not by.strip() or "@" in by:
+        raise Refused("Name the person deciding (a name, not an email address).")
+    missing = [
+        name
+        for name, value in (("--rights-holder", rights_holder), ("--licence", licence), ("--basis", basis))
+        if not value.strip()
+    ]
+    if missing or not evidence:
+        raise Refused(f"A text decision needs {', '.join(missing + ([] if evidence else ['--evidence']))}.")
+    if not privacy_checked:
+        raise Refused("Say that this kind of document was screened for personal data (--privacy-checked).")
+    unknown = sorted(set(types) - set(TEXT_TYPES))
+    if not types or unknown:
+        raise Refused(f"Name the kinds of document the decision covers, among {', '.join(TEXT_TYPES)}.")
+    now = datetime.now(UTC).replace(microsecond=0)
+    path = text_decision_path(jurisdiction)
+    previous = json.loads(path.read_text()) if path.exists() else None
+    decision = {
+        "decision": "full-text-1",
+        "jurisdiction": jurisdiction,
+        "operation": "publish_full_text",
+        "document_types": sorted(set(types)),
+        "rights_holder": rights_holder.strip(),
+        "licence": licence.strip(),
+        "licence_url": licence_url or None,
+        "attribution_required": bool(attribution),
+        "attribution_text": attribution or None,
+        "database_rights_notes": database_rights.strip() or "No database right is claimed in the texts.",
+        "privacy_status": "cleared",
+        "basis": basis.strip(),
+        "evidence": evidence,
+        "decided_by": by.strip(),
+        "decided_at": now.isoformat(),
+        "expires_at": (now + timedelta(days=round(months * 30.44))).isoformat(),
+        "revision": (previous or {}).get("revision", 0) + 1,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(decision, indent=2, ensure_ascii=False) + "\n")
+    return decision
+
+
+def current_text_decision(jurisdiction: str, now: datetime | None = None) -> dict:
+    path = text_decision_path(jurisdiction)
+    if not path.exists():
+        raise Refused(
+            f"No text decision for {jurisdiction}: no text is published. The owner records one with"
+            f' `python -m operations.publish decide-text --jurisdiction {jurisdiction} --by "Full Name" …`.'
+        )
+    decision = json.loads(path.read_text())
+    if decision.get("operation") != "publish_full_text" or decision.get("jurisdiction") != jurisdiction:
+        raise Refused(f"{path.name} is not a text decision for {jurisdiction}.")
+    if datetime.fromisoformat(decision["expires_at"]) <= (now or datetime.now(UTC)):
+        raise Refused(f"The text decision for {jurisdiction} expired: the owner records it again.")
+    return decision
+
+
+# ---------- approved texts, exactly as their approval bound them ----------
+@dataclass
+class ApprovedText:
+    document_id: str
+    work: str
+    language: str
+    document_type: str
+    text: object  # workbench.publication.Text
+    approver: str
+    approved_at: datetime
+    provenance: dict
+    effective_from: date | None = None
+
+
+@dataclass
+class Texts:
+    approved: list[ApprovedText] = field(default_factory=list)
+    revoked: set[tuple[str, str]] = field(default_factory=set)  # (work, language) whose approval was revoked
+    skipped: dict[str, str] = field(default_factory=dict)
+
+
+def texts_from_workbench(review, library, store, jurisdiction: str) -> Texts:
+    """Each language version whose latest approval covers its current pages, details and text, built
+    again from those pages; refused when the text or structure differ from what the approval bound."""
+    found = Texts()
+    for listed in library.documents():
+        if listed.get("jurisdiction") != jurisdiction or listed.get("part"):
+            continue
+        act = library.act(listed["id"])
+        now = review.state(act, text=True)
+        head, built = now["head"], now["text"]
+        work = act.get("work") or act["id"]
+        language = act.get("language") or "en"
+        if head and head["decision"] == "revoked":
+            found.revoked.add((work, language))
+        if not now["approved"]:
+            continue
+        bound = (head.get("text_sha256"), head.get("structure_sha256"))
+        made = (head.get("serialization_profile"), head.get("structure_rules"))
+        if bound != (built.text_sha256, built.structure_sha256) or made != (built.profile_id, built.rules_id):
+            found.skipped[act["id"]] = (
+                "its approval does not cover this text and structure (approved before they were bound, "
+                "or the rules changed): approve it again"
+            )
+            continue
+        if built.errors:
+            found.skipped[act["id"]] = f"{len(built.errors)} problem(s) in its text's structure"
+            continue
+        record = review.built(act, now["view"])
+        provenance = library.provenance(act["id"])
+        if record is None or not provenance.get("sha256") or not provenance.get("retrieved_at"):
+            found.skipped[act["id"]] = "no record of where and when its original file was retrieved"
+            continue
+        author = head["author"]
+        when = head["created_at"]
+        when = when if isinstance(when, datetime) else datetime.fromisoformat(str(when))
+        found.approved.append(
+            ApprovedText(
+                document_id=act["id"],
+                work=work,
+                language=language,
+                document_type=_document_type(record),
+                text=built,
+                approver=store.names([author]).get(author.lower(), "Open Alvary reviewer"),
+                approved_at=when if when.tzinfo else when.replace(tzinfo=UTC),
+                provenance=provenance,
+            )
+        )
+    return found
+
+
+def version_from(item: ApprovedText, source: Source, prior: SourceVersion | None) -> tuple:
+    """A new text version of the work and its structure nodes, with IDs minted now (IDT-01)."""
+    text, built = item.text.serialized.text, item.text
+    version = SourceVersion(
+        id=f"ver_{uuid.uuid4()}",
+        source_id=item.work,
+        canonical_url=item.provenance.get("url") or source.canonical_url,
+        retrieved_at=datetime.fromisoformat(item.provenance["retrieved_at"]),
+        raw_hash=item.provenance["sha256"],
+        content_hash=built.text_sha256,
+        canonical_text=text,
+        parser=f"Open Alvary review workbench ({built.rules_id})",
+        language=item.language,
+        effective_from=item.effective_from,
+        verification_status="verified",
+        content_verifier=item.approver,
+        content_verified_at=item.approved_at,
+        serialization_profile=built.profile_id,
+        prior_version_id=prior.id if prior else None,
+    )
+    raw = text.encode()
+    nodes = built.structure.nodes
+    ids = {id(node): f"nod_{uuid.uuid4()}" for node in nodes}
+    by_locator = {node.locator: ids[id(node)] for node in nodes}
+    rows = [
+        StructureNode(
+            id=ids[id(node)],
+            source_id=item.work,
+            version_id=version.id,
+            parent_id=ids[id(node.parent)] if node.parent else None,
+            kind=node.kind,
+            locator=node.locator,
+            order=node.order,
+            start_byte=node.start,
+            end_byte=node.end,
+            page=node.page_start,
+            page_end=node.page_end,
+            source_hash=built.text_sha256,
+            label=node.label or None,
+            heading=node.heading or None,
+            span_hash=hashlib.sha256(raw[node.start : node.end]).hexdigest(),
+            target_node_id=by_locator.get(node.target) if node.target else None,
+        )
+        for node in nodes
+    ]
+    return version, rows
+
+
+def text_rights(rights: RightsRecord, decision: dict, hashes: list[str]) -> RightsRecord:
+    """The work's rights record under the text decision: open, for any reuse, these exact texts."""
+    return RightsRecord.model_validate(  # validated: a malformed evidence link fails here, not later
+        rights.model_dump()
+        | {
+            "status": RightsStatus.OPEN,
+            "rights_holder": decision["rights_holder"],
+            "licence": decision["licence"],
+            "licence_url": decision["licence_url"],
+            "redistribution_allowed": Permission.YES,
+            "commercial_reuse_allowed": Permission.YES,
+            "derivatives_allowed": Permission.YES,
+            "attribution_required": decision["attribution_required"],
+            "attribution_text": decision["attribution_text"],
+            "database_rights_notes": decision["database_rights_notes"],
+            "privacy_status": decision["privacy_status"],
+            "reviewer": decision["decided_by"],
+            "reviewed_at": datetime.fromisoformat(decision["decided_at"]),
+            "expires_at": datetime.fromisoformat(decision["expires_at"]),
+            "evidence": decision["evidence"],
+            "legal_note": decision["basis"],
+            "approved_content_hashes": sorted(set(hashes)),
+        }
+    )
+
+
+def publish_texts(store, jurisdiction: str, texts: Texts, decision: dict, dry_run=False) -> dict:
+    """Write each approved text not yet published, with its structure and rights, and withdraw the
+    texts whose approval was revoked, in one write (the change log records what changed). A text
+    already published with the same bytes and structure is left as it is. Returns what was done."""
+    corpus = store.load()
+    sources = {s.id: s for s in corpus.sources}
+    rights = {r.source_id: r for r in corpus.rights}
+    report = {"published": [], "unchanged": [], "withdrawn": [], "skipped": dict(texts.skipped)}
+    for item in texts.approved:
+        if item.document_type not in decision["document_types"]:
+            report["skipped"][item.document_id] = f"the text decision does not cover {item.document_type}s"
+            continue
+        if item.work not in sources or item.work not in rights:
+            report["skipped"][item.document_id] = "its catalogue record is not published: run `records` first"
+            continue
+        mine = [v for v in corpus.versions if v.source_id == item.work and v.language == item.language]
+        same = next(
+            (
+                v
+                for v in mine
+                if v.content_hash == item.text.text_sha256
+                and v.serialization_profile == item.text.profile_id
+                and _structure_of(corpus, v) == _canonical_nodes(item.text)
+            ),
+            None,
+        )
+        record = rights[item.work]
+        if same is not None:
+            rights[item.work] = text_rights(
+                record, decision, [*record.approved_content_hashes, same.content_hash]
+            )
+            report["unchanged"].append(item.document_id)
+            continue
+        prior = max(mine, key=lambda v: v.content_verified_at or v.retrieved_at, default=None)
+        version, nodes = version_from(item, sources[item.work], prior)
+        corpus.versions.append(version)
+        corpus.structure.extend(nodes)
+        rights[item.work] = text_rights(
+            record, decision, [*record.approved_content_hashes, version.content_hash]
+        )
+        names = sorted({v.language for v in corpus.versions if v.source_id == item.work})
+        _put(
+            corpus,
+            "sources",
+            sources[item.work].model_copy(
+                update={
+                    "catalogue_note": f"Text published from the official file after review "
+                    f"({', '.join(LANGUAGES.get(code, code) for code in names)}). {decision['basis']}"
+                }
+            ),
+        )
+        report["published"].append({"document": item.document_id, "version": version.id, "nodes": len(nodes)})
+    for work, language in sorted(texts.revoked):
+        record = rights.get(work)
+        withdrawn = {
+            v.content_hash
+            for v in corpus.versions
+            if v.source_id == work and v.language == language and v.serialization_profile
+        }
+        if record is not None and withdrawn & set(record.approved_content_hashes):
+            kept = [h for h in record.approved_content_hashes if h not in withdrawn]
+            rights[work] = record.model_copy(update={"approved_content_hashes": kept})
+            report["withdrawn"].append(f"{work} ({language})")
+    for record in rights.values():
+        _put(corpus, "rights", record)
+    corpus = Corpus.model_validate(corpus.model_dump(mode="json"))  # every span, hash and link checked
+    for entry in report["published"]:
+        version = next(v for v in corpus.versions if v.id == entry["version"])
+        if not rights_decision(rights[version.source_id], version).full_text:
+            raise Refused(f"{entry['document']}: the rights record would not serve this text")
+    if not dry_run:
+        store.save(corpus)
+    return report
+
+
+def _canonical_nodes(text) -> list[tuple]:
+    return [
+        (n.kind, n.locator, n.label or None, n.heading or None, n.start, n.end) for n in text.structure.nodes
+    ]
+
+
+def _structure_of(corpus: Corpus, version: SourceVersion) -> list[tuple]:
+    rows = [n for n in corpus.structure if n.version_id == version.id]
+    by_id = {n.id: n for n in rows}
+
+    def depth_first(node):
+        yield node
+        for child in sorted((n for n in rows if n.parent_id == node.id), key=lambda n: n.order):
+            yield from depth_first(child)
+
+    roots = [n for n in rows if n.parent_id not in by_id]
+    ordered = [n for root in sorted(roots, key=lambda n: n.order) for n in depth_first(root)]
+    return [(n.kind, n.locator, n.label, n.heading, n.start_byte, n.end_byte) for n in ordered]
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -378,8 +727,56 @@ def main(argv=None) -> int:
     records = commands.add_parser("records")
     records.add_argument("--jurisdiction", required=True)
     records.add_argument("--dry-run", action="store_true")
+    decide_text_cmd = commands.add_parser("decide-text")
+    decide_text_cmd.add_argument("--jurisdiction", required=True)
+    decide_text_cmd.add_argument("--by", required=True, help="Who decides: a full name")
+    decide_text_cmd.add_argument("--months", type=int, default=12)
+    decide_text_cmd.add_argument("--evidence", action="append", default=[])
+    decide_text_cmd.add_argument("--types", nargs="+", default=["act", "constitution"])
+    decide_text_cmd.add_argument("--rights-holder", required=True)
+    decide_text_cmd.add_argument("--licence", required=True, help="The terms, or why none are needed")
+    decide_text_cmd.add_argument("--licence-url")
+    decide_text_cmd.add_argument("--attribution", help="Attribution readers must give, if any")
+    decide_text_cmd.add_argument("--database-rights", default="")
+    decide_text_cmd.add_argument("--basis", required=True, help="Why these texts may be republished")
+    decide_text_cmd.add_argument("--privacy-checked", action="store_true")
+    texts_cmd = commands.add_parser("texts")
+    texts_cmd.add_argument("--jurisdiction", required=True)
+    texts_cmd.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     try:
+        if args.command == "decide-text":
+            decision = decide_text(
+                args.jurisdiction,
+                args.by,
+                args.months,
+                args.evidence,
+                types=args.types,
+                rights_holder=args.rights_holder,
+                licence=args.licence,
+                licence_url=args.licence_url,
+                attribution=args.attribution,
+                database_rights=args.database_rights,
+                basis=args.basis,
+                privacy_checked=args.privacy_checked,
+            )
+            print(
+                f"Recorded {text_decision_path(args.jurisdiction).name}, revision {decision['revision']}, "
+                f"until {decision['expires_at'][:10]}. Commit it with the texts it publishes."
+            )
+            return 0
+        if args.command == "texts":
+            decision = current_text_decision(args.jurisdiction)
+            current_decision(args.jurisdiction)  # a text is published only beside its catalogue record
+            settings.load()
+            review_store = ReviewStore(create_engine(os.environ["ALVARY_REVIEW_DATABASE_URL"]))  # read only
+            library = Library()
+            texts = texts_from_workbench(
+                Review(review_store, library, registry()), library, review_store, args.jurisdiction
+            )
+            report = publish_texts(Store(engine_for()), args.jurisdiction, texts, decision, args.dry_run)
+            print(json.dumps(report, indent=2))
+            return 0
         if args.command == "decide":
             decision = decide(
                 args.jurisdiction, args.by, args.months, args.evidence, args.basis, args.legal_note

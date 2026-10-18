@@ -119,12 +119,14 @@ class Store:
                         if name == "versions"
                         else set()
                     )
+                    # A field added to the contract later reads as unset on rows stored before it (DAT-08).
                     if (
                         name in {"versions", "structure"}
                         and old is not None
-                        and (
-                            {k: v for k, v in old.items() if k not in review_fields}
-                            != {k: v for k, v in payload.items() if k not in review_fields}
+                        and any(
+                            old.get(key) != payload.get(key)
+                            for key in set(old) | set(payload)
+                            if key not in review_fields
                         )
                     ):
                         raise ValueError(f"{name} are immutable; create a new version")
