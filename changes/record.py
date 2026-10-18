@@ -14,7 +14,7 @@ import uuid
 from collections.abc import Iterable
 from datetime import UTC, datetime
 
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.engine import Connection
 
 from api.repositories import LegacyRepository
@@ -39,6 +39,20 @@ PUBLIC_FIELDS = (
     "year",
     "rights_status",
 )
+# Public events say which version of their shape they are; new event types and fields may be added
+# within a version, and consumers ignore what they do not know (SUB-02).
+SCHEMA_VERSION = "change-event-1"
+# A correction may show a field's previous value only where it can never have been withheld (SUB C1).
+SAFE_PREVIOUS = ("legal_status", "rights_status", "document_type", "year")
+# Checked links between works that change the law of the affected work (legal_effect_recorded).
+EFFECTS = {
+    "repeals": ("repeal", "repealed"),
+    "amends": ("amendment", "amended"),
+    "supersedes": ("supersession", "superseded"),
+}
+# A version diff names provisions, not the containers around a text (TXP-04); each list is capped.
+DIFF_SKIPPED = frozenset({"document", "contents", "contents_entry", "notice"})
+DIFF_CAP = 200
 
 
 def digest(value) -> str:
@@ -102,7 +116,14 @@ class _Recorder:
         ns = namespace(conn)
         self.t = {
             name: ns.qualified(conn, "changes", name)
-            for name in ("change_event", "feed_state", "published_state", "coverage_state", "rights_revision")
+            for name in (
+                "change_event",
+                "feed_state",
+                "published_state",
+                "coverage_state",
+                "rights_revision",
+                "link_state",
+            )
         }
         self.allocate = ns.qualified(conn, "policy", "allocate_publication_revision") + "()"
         self.events: list[dict] = []
@@ -133,9 +154,15 @@ class _Recorder:
         reason=None,
         changed=(),
         withdrawal=None,
+        extra=None,
+        corrects=None,
+        legal_effective=None,
     ):
+        """Plan one event; ``corrects`` (event_id, event_revision) makes it the next revision of that
+        event (SUB C1). Returns the planned event."""
         projection = facts["projection"]
         payload = {
+            "schema_version": SCHEMA_VERSION,
             "title": projection.get("title"),
             "citation": projection.get("citation"),
             "summary": summary,
@@ -143,23 +170,29 @@ class _Recorder:
             "sources": [projection["canonical_url"]] if projection.get("canonical_url") else [],
             "version": version,
             **({"withdrawal": withdrawal} if withdrawal else {}),
+            **(extra or {}),
         }
         if event_type in ("text_version_published", "withdrawal") and work_id in self.rights_revision:
             payload["rights_revision"] = self.rights_revision[work_id]
-        self.events.append(
-            {
-                "event_type": event_type,
-                "logical_event_key": key[:300],
-                "reviewed_revision": self.next_revision(event_type, key[:300]),
-                "jurisdiction_id": projection.get("jurisdiction_id") or "unknown",
-                "work_id": work_id,
-                "version_id": version and version["id"],
-                "document_class": projection.get("document_type"),
-                "language": (version or {}).get("language") or projection.get("language"),
-                "change_reason": reason,
-                "payload": payload,
-            }
-        )
+        event = {
+            "event_id": corrects[0] if corrects else uuid.uuid4(),
+            "event_revision": corrects[1] + 1 if corrects else 1,
+            "supersedes_event_id": corrects[0] if corrects else None,
+            "supersedes_revision": corrects[1] if corrects else None,
+            "legal_effective": json.dumps(legal_effective) if legal_effective else None,
+            "event_type": event_type,
+            "logical_event_key": key[:300],
+            "reviewed_revision": self.next_revision(event_type, key[:300]),
+            "jurisdiction_id": projection.get("jurisdiction_id") or "unknown",
+            "work_id": work_id,
+            "version_id": version and version["id"],
+            "document_class": projection.get("document_type"),
+            "language": (version or {}).get("language") or projection.get("language"),
+            "change_reason": "corrected" if corrects else reason,
+            "payload": payload,
+        }
+        self.events.append(event)
+        return event
 
 
 def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
@@ -170,8 +203,17 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
     rec = _Recorder(conn)
     if conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["feed_state"]}) is None:
         return 0  # a database before migration 0023 has no change log
+    keeps_links = conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["link_state"]}) is not None
     state = (
-        conn.execute(text(f"SELECT epoch, baselined FROM {rec.t['feed_state']} FOR UPDATE")).mappings().one()
+        conn.execute(
+            text(
+                "SELECT epoch, baselined"
+                + (", links_baselined" if keeps_links else "")
+                + f" FROM {rec.t['feed_state']} FOR UPDATE"
+            )
+        )
+        .mappings()
+        .one()
     )
     if not state["baselined"]:
         work_ids = None  # the baseline covers everything
@@ -195,12 +237,19 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
     for work_id in sorted(scope):
         _remember(rec, work_id, now.get(work_id), previous.get(work_id))
     _coverage(rec, record_events=state["baselined"])
+    links = []
+    if keeps_links:
+        announce = bool(state["baselined"] and state["links_baselined"])
+        links = _links(rec, scope if announce else None, announce=announce)
     if not state["baselined"]:
         _record_rights(rec, revisions, 0)
+        _record_links(rec, links, baseline=True)
         conn.execute(
             text(f"UPDATE {rec.t['feed_state']} SET baselined = true, baseline_at = statement_timestamp()")
         )
         return 0
+    if keeps_links:
+        _record_links(rec, links, baseline=not state["links_baselined"])
     if rec.events or revisions:
         revision = conn.scalar(text(f"SELECT {rec.allocate}"))
         _record_rights(rec, revisions, revision)
@@ -208,14 +257,15 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
             conn.execute(
                 text(
                     f"INSERT INTO {rec.t['change_event']} (event_id, event_revision, event_type, logical_event_key,"
-                    " reviewed_revision, publication_revision, feed_epoch, jurisdiction_id, work_id, version_id,"
-                    " document_class, language, change_reason, payload, payload_hash) VALUES (:id, 1, :event_type,"
-                    " :logical_event_key, :reviewed_revision, :revision, :epoch, :jurisdiction_id, :work_id,"
-                    " :version_id, :document_class, :language, :change_reason, CAST(:payload AS jsonb), :hash)"
+                    " reviewed_revision, publication_revision, feed_epoch, legal_effective, jurisdiction_id,"
+                    " work_id, version_id, document_class, language, change_reason, supersedes_event_id,"
+                    " supersedes_revision, payload, payload_hash) VALUES (:event_id, :event_revision, :event_type,"
+                    " :logical_event_key, :reviewed_revision, :revision, :epoch, CAST(:legal_effective AS jsonb),"
+                    " :jurisdiction_id, :work_id, :version_id, :document_class, :language, :change_reason,"
+                    " :supersedes_event_id, :supersedes_revision, CAST(:payload AS jsonb), :hash)"
                 ),
                 event
                 | {
-                    "id": uuid.uuid4(),
                     "revision": revision,
                     "epoch": state["epoch"],
                     "payload": json.dumps(event["payload"], ensure_ascii=False),
@@ -267,6 +317,148 @@ def _record_rights(rec: _Recorder, revisions: list[dict], publication_revision: 
             ),
             item | {"at": publication_revision, "record": json.dumps(item["record"], ensure_ascii=False)},
         )
+
+
+def _links(rec: _Recorder, scope, *, announce: bool) -> list[tuple]:
+    """The checked repeals, amendments and supersessions between two public works that concern these
+    works (all when None), compared with the last recorded state: a new one is a legal_effect_recorded
+    event on the affected work, a changed one a correction of its event (SUB C1; OA-R2). Returns the
+    state to record. Without ``announce`` (the first comparison) nothing is announced."""
+    amendments = tables["amendments"]
+    query = select(
+        amendments.c.id, amendments.c.source_id, amendments.c.target_source_id, amendments.c.payload
+    )
+    if scope is not None:
+        ids = sorted(scope)
+        query = query.where(or_(amendments.c.source_id.in_(ids), amendments.c.target_source_id.in_(ids)))
+    rows = [
+        r for r in rec.conn.execute(query) if r.payload.get("kind") in EFFECTS and r.payload.get("verified")
+    ]
+    works = sorted({w for r in rows for w in (r.source_id, r.target_source_id)})
+    visible = current(rec.conn, works) if works else {}
+    public = {
+        r.id: {
+            "kind": r.payload["kind"],
+            "affected": r.target_source_id,
+            "by": r.source_id,
+            "effective_date": r.payload.get("effective_date"),
+            "evidence_url": r.payload.get("evidence_url"),
+        }
+        for r in rows
+        if r.source_id in visible and r.target_source_id in visible
+    }
+    table = rec.t["link_state"]
+    held_query = f"SELECT link_id, projection_hash, event_id, event_revision FROM {table}"
+    params = {}
+    if scope is not None:
+        held_query += " WHERE link_id = ANY(:links) OR work_id = ANY(:ids) OR projection->>'by' = ANY(:ids)"
+        params = {"links": sorted(public), "ids": sorted(scope)}
+    held = {row.link_id: row for row in rec.conn.execute(text(held_query), params)}
+    states = []
+    for link_id, link in sorted(public.items()):
+        link_hash, was = digest(link), held.get(link_id)
+        if was is not None and was.projection_hash == link_hash:
+            continue
+        event = None
+        if announce:
+            affected, by = visible[link["affected"]], visible[link["by"]]["projection"]
+            noun, verb = EFFECTS[link["kind"]]
+            corrects = (was.event_id, was.event_revision) if was is not None and was.event_id else None
+            title = affected["projection"].get("title")
+            event = rec.add(
+                "legal_effect_recorded",
+                link_id,
+                link["affected"],
+                affected,
+                summary=f"The record of how {by.get('title')} {verb} {title} was corrected."
+                if corrects
+                else f"{title} was {verb} by {by.get('title')}.",
+                extra={
+                    "legal_effect": {
+                        "kind": noun,
+                        "by": {"id": link["by"], "title": by.get("title"), "citation": by.get("citation")},
+                        "effective_date": link["effective_date"],
+                        "evidence_url": link["evidence_url"],
+                    }
+                },
+                corrects=corrects,
+                legal_effective={"from": link["effective_date"], "precision": "day"}
+                if link["effective_date"]
+                else None,
+            )
+        states.append(("put", link_id, link, link_hash, event))
+    for link_id in sorted(held.keys() - public.keys()):
+        states.append(("drop", link_id, None, None, None))
+    return states
+
+
+def _record_links(rec: _Recorder, states: list[tuple], *, baseline: bool) -> None:
+    table = rec.t["link_state"]
+    for action, link_id, link, link_hash, event in states:
+        if action == "drop":
+            rec.conn.execute(text(f"DELETE FROM {table} WHERE link_id = :l"), {"l": link_id})
+            continue
+        rec.conn.execute(
+            text(
+                f"INSERT INTO {table} (link_id, work_id, projection, projection_hash, event_id, event_revision)"
+                " VALUES (:l, :w, CAST(:p AS jsonb), :h, :e, :r) ON CONFLICT (link_id) DO UPDATE SET"
+                " work_id = EXCLUDED.work_id, projection = EXCLUDED.projection,"
+                " projection_hash = EXCLUDED.projection_hash,"
+                f" event_id = coalesce(EXCLUDED.event_id, {table}.event_id),"
+                f" event_revision = coalesce(EXCLUDED.event_revision, {table}.event_revision),"
+                " updated_at = statement_timestamp()"
+            ),
+            {
+                "l": link_id,
+                "w": link["affected"],
+                "p": json.dumps(link, ensure_ascii=False),
+                "h": link_hash,
+                "e": event and event["event_id"],
+                "r": event and event["event_revision"],
+            },
+        )
+    if baseline:
+        rec.conn.execute(text(f"UPDATE {rec.t['feed_state']} SET links_baselined = true"))
+
+
+def _version_diff(conn: Connection, version_id: str) -> dict | None:
+    """The provisions a version adds, removes or changes against the version it names as prior, by
+    locator, in document order; changed means the provision's bytes differ (TXP-04)."""
+    versions, structure = tables["versions"], tables["structure"]
+    new = conn.scalar(select(versions.c.payload).where(versions.c.id == version_id)) or {}
+    prior_id = new.get("prior_version_id")
+    prior = conn.scalar(select(versions.c.payload).where(versions.c.id == prior_id)) if prior_id else None
+    if not prior:
+        return None
+
+    def provisions(version):
+        raw = version["canonical_text"].encode()
+        found = {}
+        for node in conn.scalars(select(structure.c.payload).where(structure.c.version_id == version["id"])):
+            if node.get("kind") in DIFF_SKIPPED:
+                continue
+            span = (
+                node.get("span_hash")
+                or hashlib.sha256(raw[node["start_byte"] : node["end_byte"]]).hexdigest()
+            )
+            found[node["locator"]] = (node["start_byte"], span)
+        return found
+
+    now, before = provisions(new), provisions(prior)
+
+    def ordered(keys, where):
+        return [k for k in sorted(keys, key=lambda k: (where[k][0], k))]
+
+    added = ordered(now.keys() - before.keys(), now)
+    removed = ordered(before.keys() - now.keys(), before)
+    changed = ordered({k for k in now.keys() & before.keys() if now[k][1] != before[k][1]}, now)
+    return {
+        "prior_version_id": prior_id,
+        "added": added[:DIFF_CAP],
+        "removed": removed[:DIFF_CAP],
+        "changed": changed[:DIFF_CAP],
+        "truncated": any(len(found) > DIFF_CAP for found in (added, removed, changed)),
+    }
 
 
 def sweep(conn: Connection) -> int:
@@ -343,6 +535,7 @@ def _compare(rec: _Recorder, work_id: str, now: dict | None, before) -> None:
             now,
             changed=changed,
             summary=f"The catalogue record for {title} was corrected ({', '.join(f.replace('_', ' ') for f in changed)}).",
+            extra={"previous": {f: before["projection"].get(f) for f in changed if f in SAFE_PREVIOUS}},
         )
     had = set(before["readable_versions"])
     for version_id, facts in sorted(now["versions"].items()):
@@ -375,6 +568,7 @@ def _text(rec, work_id, now, version_id, facts, *, first):
         now,
         version={"id": version_id, **facts},
         reason="first_text" if first else _reason(rec, version_id),
+        extra={"version_diff": diff} if (diff := _version_diff(rec.conn, version_id)) else None,
         summary=f"The text of {title} is now available."
         if first
         else f"A new text version of {title} was published.",

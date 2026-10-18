@@ -384,3 +384,120 @@ def test_the_rights_history_downgrade_drops_a_baseline_but_never_history(feed, c
     store.save(cleared)  # a real revision: now history
     with pytest.raises(RuntimeError, match="public rights history"):
         run(command.downgrade, "0028")
+
+
+def of_type(client, kind):
+    return [e for e in client.get("/changes").json()["events"] if e["event_type"] == kind]
+
+
+def test_a_checked_repeal_or_amendment_is_a_legal_effect_and_its_correction_keeps_its_id(feed):
+    from datetime import date
+
+    from schema.models import Amendment
+
+    store, client = feed
+    assert of_type(client, "legal_effect_recorded") == []  # the seeded ISA repeal: a baseline, not news
+    link = Amendment(
+        id="link-ng-foi-act-2011-amends-ng-constitution-1999",
+        source_id="ng-foi-act-2011",
+        target_source_id="ng-constitution-1999",
+        kind="amends",
+        effective_date=date(2011, 5, 28),
+        evidence_url="https://example.org/synthetic-amendment",
+        verified=True,
+    )
+    edit(store, lambda c: c.amendments.append(link))
+    [effect] = of_type(client, "legal_effect_recorded")
+    assert effect["work"]["id"] == "ng-constitution-1999" and effect["schema_version"] == "change-event-1"
+    assert (
+        effect["legal_effect"]["kind"] == "amendment"
+        and effect["legal_effect"]["by"]["id"] == "ng-foi-act-2011"
+    )
+    assert effect["legal_effect"]["effective_date"] == "2011-05-28"
+    assert effect["legal_effective"] == {"from": "2011-05-28", "precision": "day"}
+    assert effect["event_revision"] == 1 and effect["supersedes"] is None
+    # A correction of the link is the same event's next revision, superseding the first.
+    edit(
+        store,
+        lambda c: setattr(
+            next(a for a in c.amendments if a.id == link.id), "effective_date", date(2011, 6, 1)
+        ),
+    )
+    [first, corrected] = of_type(client, "legal_effect_recorded")
+    assert corrected["event_id"] == first["event_id"] and corrected["event_revision"] == 2
+    assert corrected["change_reason"] == "corrected"
+    assert corrected["supersedes"] == {"event_id": first["event_id"], "event_revision": 1}
+    assert corrected["legal_effect"]["effective_date"] == "2011-06-01"
+    # An unchecked link is not news; nothing is said of a record that is no longer public.
+    unchecked = link.model_copy(
+        update={"id": "link-unchecked", "source_id": "ng-cbn-act-2007", "verified": False}
+    )
+    edit(store, lambda c: c.amendments.append(unchecked))
+    assert len(of_type(client, "legal_effect_recorded")) == 2
+    edit(
+        store,
+        lambda c: setattr(
+            next(r for r in c.rights if r.source_id == "ng-foi-act-2011"), "metadata_public", False
+        ),
+    )
+    assert of_type(client, "legal_effect_recorded") == []
+
+
+def test_a_status_correction_says_what_it_was_and_only_for_fields_never_withheld(feed):
+    store, client = feed
+    work = "ng-foi-act-2011"
+    edit(store, lambda c: setattr(next(s for s in c.sources if s.id == work), "legal_status", "current"))
+    [status] = of_type(client, "metadata_corrected")
+    assert status["changed_fields"] == ["legal_status"] and status["previous"] == {"legal_status": "unknown"}
+    edit(store, lambda c: setattr(next(s for s in c.sources if s.id == work), "summary", "A new summary."))
+    summary = of_type(client, "metadata_corrected")[-1]
+    assert summary["changed_fields"] == ["summary"] and summary["previous"] == {}
+
+
+def test_a_text_that_replaces_another_names_the_provisions_it_adds_removes_and_changes(feed, cleared):
+    from hashlib import sha256
+
+    from schema.models import StructureNode
+
+    store, client = feed
+    store.save(cleared)  # the first text: one provision, "section/1"
+    work = cleared.sources[0].id
+    head = "Synthetic fixture — not legislation.\nSection 1. Test changed."
+    text_ = head + "\nSection 2. Added.\n"
+    digest = sha256(text_.encode()).hexdigest()
+    replacement = cleared.versions[0].model_copy(
+        update={
+            "id": "test-version-2",
+            "canonical_text": text_,
+            "content_hash": digest,
+            "prior_version_id": "test-version",
+        }
+    )
+
+    def node(id_, locator, start, end):
+        return StructureNode(
+            id=id_, source_id=work, version_id="test-version-2", kind="section", locator=locator,
+            order=0, start_byte=start, end_byte=end, source_hash=digest,
+        )  # fmt: skip
+
+    nodes = [
+        node("test-node-2-1", "section/1", 0, len(head.encode())),
+        node("test-node-2-2", "section/2", len(head.encode()) + 1, len(text_.encode()) - 1),
+    ]
+
+    def publish_replacement(corpus):
+        corpus.versions.append(replacement)
+        corpus.structure.extend(nodes)
+        rights = next(r for r in corpus.rights if r.source_id == work)
+        rights.approved_content_hashes = [*rights.approved_content_hashes, digest]
+
+    edit(store, publish_replacement)
+    [event] = [e for e in of_type(client, "text_version_published") if e["version"]["id"] == "test-version-2"]
+    assert event["change_reason"] == "extraction_correction"  # read again from the same original file
+    assert event["version_diff"] == {
+        "prior_version_id": "test-version",
+        "added": ["section/2"],
+        "removed": [],
+        "changed": ["section/1"],
+        "truncated": False,
+    }

@@ -19,15 +19,18 @@ Changes cover what Open Alvary holds, not every change in a country's law. [Chan
 |---|---|
 | `catalogue_added` | A record became public: an existing law newly catalogued (not necessarily a new law), or one restored after a withdrawal. |
 | `metadata_corrected` | A record's catalogue details were corrected; `changed_fields` lists which. A correction never changes legal text. |
-| `text_version_published` | A text was cleared and published; `change_reason` says whether it is the first text, a revision at the source, or a correction. |
+| `text_version_published` | A text was cleared and published; `change_reason` says whether it is the first text, a revision at the source, or a correction. A text that replaces another lists in `version_diff` the provisions it adds, removes and changes. |
+| `legal_effect_recorded` | A reviewer checked, against the official text, that another public record repeals, amends or supersedes this one. `legal_effect` names the record that had the effect and the date it took effect, when known. It may describe a past effect recorded late. |
 | `withdrawal` | A record or a text stopped being public. |
 | `coverage_changed` | A country's coverage changed, for example its first record. |
 
-Each change has a plain `summary` sentence, the `work` it concerns (ID, title, citation, and its links on the website and in the API) and, for a text, the `version`. Every field is listed in the [reference](/docs/api/list-changes).
+Each change has a plain `summary` sentence, the `work` it concerns (ID, title, citation, and its links on the website and in the API) and, for a text, the `version`. A correction of a record's legal status, rights status, type or year gives the old value in `previous`. Every field is listed in the [reference](/docs/api/list-changes).
+
+Each change carries `schema_version` (`change-event-1`). New kinds of change and new fields can appear within a version, so ignore the ones you don't know. [Change coverage](/docs/api/get-change-coverage) lists the kinds recorded.
 
 {{example:list_changes}}
 
-If we correct a change itself, it keeps its `event_id`, its `event_revision` goes up, and `supersedes` names the revision it replaces. So store changes by **(`feed_epoch`, `event_id`, `event_revision`)**, and never apply the same one twice.
+If we correct a change itself, for example the date of a legal effect, it keeps its `event_id`, its `event_revision` goes up, `change_reason` is `corrected`, and `supersedes` names the revision it replaces. So store changes by **(`feed_epoch`, `event_id`, `event_revision`)**, keep the highest revision of each change, and never apply the same one twice.
 
 ## Keep a copy current
 
