@@ -1,0 +1,57 @@
+web/src/docs/data/openapi.json
+  s_d665c62e07d76f::t_1df13bbad0ba38 5447-5453
+tests/test_postgres_byte_allowance.py
+  s_d665c62e07d76f::t_9b5f4b3578941d 1-56,60-63
+  s_d665c62e07d76f::t_1df13bbad0ba38 57-59
+web/src/docs/errors.ts
+  s_d665c62e07d76f::t_525486ede9dec5 66
+api/credentials.py
+  s_d665c62e07d76f::t_99b4fca05c524f 40,42
+  s_d665c62e07d76f::t_58849008068dc6 445-446
+  s_d665c62e07d76f::t_1df13bbad0ba38 398-400
+  s_d665c62e07d76f::t_c80893c7255ce9 476-489
+  s_d665c62e07d76f::t_8cc0467e1869f8 86-101
+  s_d665c62e07d76f::t_d165111531d565 245,254
+  s_d665c62e07d76f::t_9ff64c87508e31 74-75
+  s_d665c62e07d76f::t_9ab45a391a0bdd 377-397,401-417,427-429
+  s_d665c62e07d76f::t_f9f0a391d7fbbe 8-15
+api/v1.py
+  s_d665c62e07d76f::t_9c6dfb0487dd11 160-166,168-172
+api/store.py
+  s_d665c62e07d76f::t_7bc505a8a73f60 70-72
+deployment/gcp/public_service.sh
+  s_d665c62e07d76f::t_ec1d2c32c2e12b 438-449,451-452
+  s_d665c62e07d76f::t_28a1e7d60b6810 450,584,595
+api/openapi_docs.py
+  s_d665c62e07d76f::t_4e698f25877f5c 594-599
+web/src/docs/content/plans.md
+  s_d665c62e07d76f::t_01f96971b1d86a 18
+  s_d665c62e07d76f::t_dcdefe90024e86 22
+api/service.py
+  s_d665c62e07d76f::t_2f46efd7804b03 52,127,161
+deployment/runbook.md
+  s_d665c62e07d76f::t_5915d4681d738c 150-151
+  s_d665c62e07d76f::t_1ac3904662bcfb 152-154
+tests/test_credentials.py
+  s_d665c62e07d76f::t_a5d519c259584d 5,7,13,18
+  s_d665c62e07d76f::t_c5977bf92628cc 44-47,51,63,69-99
+  s_d665c62e07d76f::t_1df13bbad0ba38 197-200,207-209
+  s_d665c62e07d76f::t_8e88b674fd990d 169-196,201-206,210-213
+  s_d665c62e07d76f::t_e626b1aaaf1cdc 100-101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d7ac65a1714b063d18630878d668af991934c4b9",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
