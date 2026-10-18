@@ -114,6 +114,10 @@ class SourceVersion(Model):
     verification_status: Literal["pending", "verified", "rejected"] = "pending"
     content_verifier: Nonempty | None = None
     content_verified_at: AwareDatetime | None = None
+    # How the text was built from reviewed pages (TXP-02), and the version of the same work it
+    # corrects or replaces (TXP-04); absent for texts published before either existed.
+    serialization_profile: Nonempty | None = None
+    prior_version_id: ID | None = None
 
     @model_validator(mode="after")
     def verify_hash(self):
@@ -124,23 +128,55 @@ class SourceVersion(Model):
         return self
 
 
+NodeKind = Literal[
+    "document",
+    "preamble",
+    "contents",
+    "contents_entry",
+    "notice",
+    "title",
+    "part",
+    "chapter",
+    "division",
+    "article",
+    "section",
+    "subsection",
+    "definition",
+    "paragraph",
+    "subparagraph",
+    "schedule",
+    "annex",
+    "table",
+]
+
+
 class StructureNode(Model):
     id: ID
     source_id: ID
     version_id: ID
     parent_id: ID | None = None
-    kind: Literal["document", "part", "chapter", "section", "subsection", "paragraph", "schedule"]
+    kind: NodeKind
     locator: Nonempty
     order: int = Field(ge=0)
     start_byte: int = Field(ge=0)
     end_byte: int = Field(ge=0)
-    page: int | None = Field(default=None, ge=1)
-    source_hash: Hash
+    page: int | None = Field(default=None, ge=1)  # the page the node starts on
+    source_hash: Hash  # the content_hash of the whole text the node is in
+    # Reading and quotation aids (TXP-03, DAT-05/06): the printed number and heading, kept apart from
+    # the locator; the last page the node reaches; SHA-256 of the node's own bytes [start, end); and,
+    # for a contents entry, the node it lists.
+    label: str | None = None
+    heading: str | None = None
+    page_end: int | None = Field(default=None, ge=1)
+    span_hash: Hash | None = None
+    target_node_id: ID | None = None
 
     @model_validator(mode="after")
     def ordered(self):
         if self.end_byte < self.start_byte:
             raise ValueError("end_byte precedes start_byte")
+        if self.page and self.page_end and self.page_end < self.page:
+            raise ValueError("page_end precedes page")
         return self
 
 
@@ -219,15 +255,24 @@ class Corpus(Model):
         for v in self.versions:
             require("sources", v.source_id)
             require("languages", v.language)
+            if v.prior_version_id:
+                prior = require("versions", v.prior_version_id)
+                if prior.id == v.id or prior.source_id != v.source_id:
+                    raise ValueError("prior version must be another version of the same source")
+        encoded: dict[str, bytes] = {}
         for n in self.structure:
             v = require("versions", n.version_id)
             if n.source_id != v.source_id or n.source_hash != v.content_hash:
                 raise ValueError("structure provenance mismatch")
-            raw = v.canonical_text.encode()
+            raw = encoded.setdefault(v.id, v.canonical_text.encode())
             if n.end_byte > len(raw):
                 raise ValueError("offset outside canonical text")
             raw[: n.start_byte].decode("utf-8")
             raw[: n.end_byte].decode("utf-8")
+            if n.span_hash and sha256(raw[n.start_byte : n.end_byte]).hexdigest() != n.span_hash:
+                raise ValueError("span hash mismatch")
+            if n.target_node_id and require("structure", n.target_node_id).version_id != n.version_id:
+                raise ValueError("a contents entry must point into its own version")
             if n.parent_id:
                 parent = require("structure", n.parent_id)
                 if parent.version_id != n.version_id or not (
