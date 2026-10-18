@@ -637,3 +637,62 @@ def test_a_title_never_runs_on_to_another_page():
     assert nodes[0]["kind"] == "heading" and nodes[0]["page"] == 2 and "Ingingo" not in nodes[0]["text"]
     assert [n["article"] for n in nodes if n.get("article")] == ["1"]
     assert all(n["page"] == 3 for n in nodes[1:])
+
+
+def _two_columns(left: list[str], right: list[str], centred: list[str] = ()) -> dict:
+    """A portrait page with French on the left and Kinyarwanda on the right, as the older Gazette
+    printed them, and lines centred across both (a signature, a date)."""
+    width, height, words = 595.0, 842.0, []
+
+    def put(text, x, y):
+        for word in text.split():
+            w = 5.0 * len(word)
+            words.append({"xmin": x, "ymin": y, "xmax": x + w, "ymax": y + 10, "text": word})
+            x += w + 4
+
+    y = 60.0
+    for a, b in zip(left, right, strict=False):
+        put(a, 40.0, y)
+        put(b, 310.0, y)
+        y += 14
+    for line in centred:
+        put(line, 297.0 - 2.5 * len(line), y)
+        y += 14
+    return {"width": width, "height": height, "words": words}
+
+
+def test_a_short_bilingual_page_keeps_its_columns_though_its_signature_crosses_the_gutter():
+    # rw-decree-law-20-76: a page of a few side-by-side lines under a centred signature measured as one
+    # column, so its Kinyarwanda was read into the French. The issue's earlier page shows the gutter.
+    # Lines of up to 40 characters: each column's half of the page, as printed.
+    fr = ["Le présent décret-loi sort ses effets", "à la date de sa signature et de la loi"]
+    rw = ["Iri tegeko-teka ritangira gukurikizwa", "ku munsi ryashyiriweho umukono na ya"]
+    first = _two_columns(
+        ["Décret-loi n° 20/76 du 20 avril 1976", *fr * 8],
+        ["Itegeko-teka nº 20/76 ryo kuwa 20 mata", *rw * 8],
+    )
+    second = _two_columns(fr, rw, centred=["Kigali, le 20 avril 1976.", "HABYARIMANA J."])
+    pages = RG.split_issue([first, second])
+    assert [c["language"] for c in pages[1]["columns"]] == ["fr", "rw"]
+    left, right = (" ".join(line["text"] for line in c["lines"]) for c in pages[1]["columns"])
+    assert "ritangira gukurikizwa" in right and "ritangira" not in left
+    assert "décret-loi sort ses effets" in left and "décret-loi" not in right
+
+
+def test_older_french_articles_abbreviated_art_are_articles_and_a_reference_is_not():
+    # The 1970s Gazette heads French articles "Art. 2." (rw-decree-law-20-76 counted 1 article in
+    # French against 4 in Kinyarwanda); "Art. 3 de la loi …" opening a wrapped line is a reference.
+    lines = _lines(
+        ["Décret-loi n° 20/76 du 20 avril 1976 octroyant une prime.", "Nous, HABYARIMANA Juvénal,"],
+        [
+            "Art. 1er.",
+            "Toute personne qui aura découvert un gisement bénéficiera d'une prime.",
+            "Art. 2.",
+            "L'importance d'un gisement est appréciée.",
+            "Art. 3 de la loi du 27 avril 1971 reste applicable.",
+            "Art. 3.",
+            "Le présent décret-loi sort ses effets à la date de sa signature.",
+        ],
+    )
+    nodes = RG.structure(lines, "fr")
+    assert [n["article"] for n in nodes if n.get("article")] == ["1", "2", "3"]
