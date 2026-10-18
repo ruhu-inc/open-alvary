@@ -22,7 +22,7 @@ from ingestion import gazette_layout
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-18.2"  # repeals told apart from amendments and linked; "N° 001 BIS" read whole
+PIPELINE = "2026-10-18.3"  # Kinyarwanda texts, the law each order is made under, and currency
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
