@@ -980,6 +980,7 @@ async function pageView(actId, pageNumber) {
     resolutions: structuredClone(latest ? latest.resolutions : {}),
     comment: latest ? latest.comment : "",
     expected: latest ? latest.revision : 0,
+    join: joinOf(latest ? latest.units : page.machine_units),
     tab: "edit",
     showLow: false,
     surface: null,
@@ -995,7 +996,47 @@ function changed(view) { app.dirty = true; if (view.dirtyBadge) view.dirtyBadge.
 // The working units: from the surface while it is open, otherwise the last snapshot.
 function currentUnits(view) {
   if (view.surface) view.units = view.surface.units();
+  view.units = withJoin(view.units, view.join);
   return view.units;
+}
+
+// A paragraph running over from the previous page is joined in the published text only where the
+// reviewer says so (TXP-02 rule 8). The page view keeps the mark; the page's first paragraph carries it.
+const firstWords = (units) => (units || []).findIndex((u) => u.kind !== "table" && ((u.text || "").trim() || u.marker));
+
+function joinOf(units) {
+  const first = (units || [])[firstWords(units)];
+  return first && first.continues_previous ? (first.dehyphenate ? "dehyphenate" : "space") : null;
+}
+
+function withJoin(units, join) {
+  const at = firstWords(units);
+  return (units || []).map((unit, i) => {
+    const { continues_previous: _joined, dehyphenate: _hyphen, ...rest } = unit;
+    if (i !== at || !join) return rest;
+    return { ...rest, continues_previous: true, ...(join === "dehyphenate" ? { dehyphenate: true } : {}) };
+  });
+}
+
+function refreshJoin(view) {
+  if (!view.joinSlot) return;
+  const before = view.page.previous_end;
+  const first = (view.units || [])[firstWords(view.units)];
+  const set = (join) => { view.join = join; currentUnits(view); changed(view); refreshJoin(view); };
+  if (!before || !first) return view.joinSlot.replaceChildren();
+  const tail = `“…${before.text.slice(-60)}”`;
+  if (view.join) {
+    return view.joinSlot.replaceChildren(el("div", { class: "joinbar on" },
+      el("span", { text: `Joined to page ${before.page}'s last paragraph ${view.join === "dehyphenate" ? "(its hyphen removed)" : "(with a space)"}: ${tail}` }),
+      el("button", { class: "small", text: "Keep separate", on: { click: () => set(null) } })));
+  }
+  const lower = !first.marker && /^[a-z]/.test((first.text || "").trim());
+  if (!lower || before.ends_sentence || view.joinDismissed) return view.joinSlot.replaceChildren();
+  view.joinSlot.replaceChildren(el("div", { class: "joinbar" },
+    el("span", { text: `Page ${before.page} ends mid-sentence (${tail}) and this page starts in lower case. The same paragraph?` }),
+    el("button", { class: "small primary", text: "Join with a space", on: { click: () => set("space") } }),
+    before.hyphen ? el("button", { class: "small", text: "Join, removing the hyphen", on: { click: () => set("dehyphenate") } }) : null,
+    el("button", { class: "small", text: "Keep separate", on: { click: () => { view.joinDismissed = true; refreshJoin(view); } } })));
 }
 
 function renderPage(view) {
@@ -1036,7 +1077,9 @@ function renderPage(view) {
     if (name === "history") body.replaceChildren(page.history.length ? el("ul", {}, page.history.map((h) => el("li", { text: `Revision ${h.revision} · ${h.status} · ${h.author} · ${h.created_at.slice(0, 16).replace("T", " ")}${h.comment ? ` — ${h.comment}` : ""}` }))) : el("p", { class: "muted", text: "Not reviewed yet." }));
   };
   view.showTab = show;
-  right.append(pagebar, tabs, body);
+  view.joinSlot = el("div");
+  right.append(pagebar, view.joinSlot, tabs, body);
+  refreshJoin(view);
   main(el("div", { class: "review" }, viewer, right));
   show(view.tab);
 }
@@ -1177,8 +1220,9 @@ function draftBanner(view, draft) {
     " ",
     el("button", { class: "small primary", text: "Restore my changes", on: { click: () => {
       view.units = draft.units; view.resolutions = draft.resolutions || {}; view.comment = draft.comment || "";
+      view.join = joinOf(draft.units);
       view.draftHandled = true; app.dirty = true;
-      banner.remove(); view.showTab("edit"); view.dirtyBadge.hidden = false;
+      banner.remove(); view.showTab("edit"); view.dirtyBadge.hidden = false; refreshJoin(view);
     } } }), " ",
     el("button", { class: "small", text: "Discard them", on: { click: () => { clearDraft(view); view.draftHandled = true; banner.remove(); } } }));
   return banner;
