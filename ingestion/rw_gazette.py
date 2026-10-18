@@ -15,12 +15,13 @@ reviews.
 import re
 import statistics
 from collections import Counter
+from itertools import pairwise
 
 from ingestion import gazette_layout
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-16.1"  # titles end at a page; treaty preambles; Roman-numeral articles
+PIPELINE = "2026-10-18.1"  # short bilingual pages keep their columns; French "Art. 2." articles
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -127,8 +128,9 @@ ROMAN = r"(?=[IVXL])(?:XL|L?X{0,3})(?:IX|IV|V?I{0,3})(?![A-Za-z])"
 _TAIL = r"\s*(?:[:.]\s*(.*)|\s+([A-ZÀ-Ý].*)|$)"
 ARTICLE = {
     "rw": re.compile(rf"^(?:[Ii]?ngingo\s*(?:ya\s*)?|INGINGO\s+YA\s+|Article\s*)({ONE}|\d+|{ROMAN}){_TAIL}"),
-    "en": re.compile(rf"^(?:Article|ARTICLE)\s*({ONE}|\d+|{ROMAN}){_TAIL}"),
-    "fr": re.compile(rf"^(?:Article|ARTICLE)\s*({ONE}|\d+|{ROMAN}){_TAIL}"),
+    # Older pages abbreviate it: "Art. 2.", "Art. 1er." (the 1970s Gazette).
+    "en": re.compile(rf"^(?:Article|ARTICLE|Art\.)\s*({ONE}|\d+|{ROMAN}){_TAIL}"),
+    "fr": re.compile(rf"^(?:Article|ARTICLE|Art\.)\s*({ONE}|\d+|{ROMAN})(?:er|ère)?{_TAIL}"),
 }
 STANDARD_ARTICLE = {
     "rw": re.compile(rf"^Ingingo ya ({ONE}|\d+|{ROMAN})\s?:"),
@@ -210,11 +212,46 @@ def doubtful(word: dict) -> bool:
     return word.get("confidence", 1.0) < SURE or bool(STRANGE.search(word["text"]))
 
 
-def split_page(page: dict, number: int, carried: str | None = None, tables: list[dict] | None = None) -> dict:
-    """A page's columns, each with its language and lines; running headers set apart as furniture."""
+def held_gutters(words: list[dict], spans: list[tuple[float, float]]) -> bool:
+    """Whether a page keeps another page's columns: words on each side of every gutter, and few
+    crossing it (a centred date or signature), where its own measure may have found none."""
+    if len(spans) < 2 or not words:
+        return False
+    for (_, end), (start, _) in pairwise(spans):
+        gutter = (end + start) / 2
+        crossing = sum(1 for w in words if w["xmin"] < gutter < w["xmax"])
+        left = sum(1 for w in words if (w["xmin"] + w["xmax"]) / 2 < gutter)
+        right = len(words) - left
+        if crossing > max(3, 0.08 * len(words)) or min(left, right) < 3:
+            return False
+    return True
+
+
+def same_gutters(spans, other, width: float) -> bool:
+    """The same columns, give or take a few points: each gutter within 3% of the page's width."""
+    if len(spans) != len(other):
+        return False
+    mids = lambda s: [(a[1] + b[0]) / 2 for a, b in pairwise(s)]  # noqa: E731
+    return all(abs(x - y) <= 0.03 * width for x, y in zip(mids(spans), mids(other), strict=True))
+
+
+def split_page(
+    page: dict,
+    number: int,
+    carried: str | None = None,
+    tables: list[dict] | None = None,
+    previous: list[tuple[float, float]] | None = None,
+) -> dict:
+    """A page's columns, each with its language and lines; running headers set apart as furniture.
+    `previous` is the column spans of the issue's last page that had columns: a short page, a few
+    side-by-side lines under a signature centred across the gutter, keeps them (rw-decree-law-20-76),
+    where measured alone it seems one column and its languages would be read as one."""
     # Columns are measured without the tables' words: a table's amount columns are not languages.
     in_tables = {id(w) for table in tables or [] for w in table["words"]}
-    spans = gazette_layout.columns({**page, "words": [w for w in page["words"] if id(w) not in in_tables]})
+    text_words = [w for w in page["words"] if id(w) not in in_tables]
+    spans = gazette_layout.columns({**page, "words": text_words})
+    if previous and held_gutters(text_words, previous) and not same_gutters(spans, previous, page["width"]):
+        spans = list(previous)
     furniture, columns = [], []
     three = len(spans) == 3
     # Each word to the column it lies in, or the nearest: a word alone at a column's edge (an
@@ -304,11 +341,13 @@ def split_page(page: dict, number: int, carried: str | None = None, tables: list
 def split_issue(pages: list[dict], tables: dict[int, list[dict]] | None = None) -> list[dict]:
     """Every page split; `tables` are the ruled tables found on each page (ruled_tables), whose
     words then come out as tables and not as lines of text."""
-    out, carried = [], None
+    out, carried, previous = [], None, None
     for number, page in enumerate(pages, 1):
-        split = split_page(page, number, carried, (tables or {}).get(number))
+        split = split_page(page, number, carried, (tables or {}).get(number), previous)
         languages = [c["language"] for c in split["columns"] if c["language"]]
         carried = languages[-1] if languages else carried
+        if len(split["columns"]) > 1:
+            previous = [(c["x0"], c["x1"]) for c in split["columns"]]
         out.append(split)
     return out
 
