@@ -491,7 +491,7 @@ class Feed:
             "publisher_published_at": row["publisher_published_at"],
             "legal_effective": row["legal_effective"],
             "jurisdiction": jurisdiction,
-            "work": self._work(row, payload) if named else None,
+            "work": self._work(row, payload, work) if named else None,
             "version": version,
             # The rights record revision in force for a text published or withdrawn (OA-R1).
             "rights_revision": payload.get("rights_revision") if version is not None else None,
@@ -512,11 +512,13 @@ class Feed:
             "version_diff": payload.get("version_diff") if kind == "text_version_published" else None,
         }
 
-    def _work(self, row, payload):
+    def _work(self, row, payload, current=None):
         return {
             "id": row["work_id"],
             "title": payload.get("title"),
             "citation": payload.get("citation"),
+            # Whether it is in force now, as the catalogue has it (not as it was when the change was made).
+            "legal_status": ((current or {}).get("projection") or {}).get("legal_status"),
             "jurisdiction_id": row["jurisdiction_id"],
             "document_class": row["document_class"],
             "language": row["language"],

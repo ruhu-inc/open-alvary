@@ -494,6 +494,7 @@ def test_a_text_that_replaces_another_names_the_provisions_it_adds_removes_and_c
     edit(store, publish_replacement)
     [event] = [e for e in of_type(client, "text_version_published") if e["version"]["id"] == "test-version-2"]
     assert event["change_reason"] == "extraction_correction"  # read again from the same original file
+    assert event["work"]["legal_status"] == "unknown"  # as the catalogue has it now
     assert event["version_diff"] == {
         "prior_version_id": "test-version",
         "added": ["section/2"],
