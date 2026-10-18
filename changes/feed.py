@@ -439,10 +439,13 @@ class Feed:
         summary = payload.get("summary")
         withdrawal = None
         if kind == "withdrawal":
+            # A text version withdrawn from a record still public is named, with what to do and why;
+            # anything else says only to revalidate, never that a hidden record exists.
+            told = (payload.get("withdrawal") or {}) if named else {}
             withdrawal = {
                 "scope_disclosure": "named" if named else "revalidate_releases",
-                "action": "revalidate",
-                "reason_code": None,
+                "action": told.get("action", "revalidate"),
+                "reason_code": told.get("reason_code"),
             }
             if not named:
                 summary = "A previously public record was withdrawn. Revalidate any copies you keep."
@@ -453,7 +456,7 @@ class Feed:
                 "name": visible.jurisdiction(row["jurisdiction_id"]),
             }
         version = None
-        if kind == "text_version_published":
+        if kind == "text_version_published" or (kind == "withdrawal" and named and row["version_id"]):
             facts = payload.get("version") or {}
             version = {
                 "id": row["version_id"],

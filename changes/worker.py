@@ -301,9 +301,21 @@ def purge(accounts: Accounts) -> int:
     return removed
 
 
+def expire(accounts: Accounts) -> int:
+    """Record withdrawals caused by expired rights reviews (changes.record.expired), before matching,
+    so watches and webhooks hear of them in the same run."""
+    from api.store import check_legacy_authority
+    from changes.record import expired
+
+    with accounts.engine.begin() as conn:
+        check_legacy_authority(conn, write=False)
+        return expired(conn)
+
+
 def run(accounts: Accounts, mailer: mail.Mailer, base: str, hooks: "webhooks.Webhooks | None" = None) -> dict:
     hooks = hooks or webhooks.Webhooks(accounts)
-    result = {"matched": match(accounts), "digests": digests(accounts, mailer, base)}
+    result = {"expired": expire(accounts)}
+    result |= {"matched": match(accounts), "digests": digests(accounts, mailer, base)}
     if webhooks.Sealer.from_environment() is not None or hooks._sealer is not None:
         result["webhooks"] = webhooks.deliver(accounts, hooks, mailer, base)
     else:
