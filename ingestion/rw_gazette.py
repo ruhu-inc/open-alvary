@@ -16,13 +16,12 @@ import re
 import statistics
 import unicodedata
 from collections import Counter
-from itertools import pairwise
 
 from ingestion import gazette_layout
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-18.3"  # Kinyarwanda texts, the law each order is made under, and currency
+PIPELINE = "2026-10-18.4"  # each page keeps its own columns again (.1 to .3 borrowed others' and lost orders)
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -214,46 +213,11 @@ def doubtful(word: dict) -> bool:
     return word.get("confidence", 1.0) < SURE or bool(STRANGE.search(word["text"]))
 
 
-def held_gutters(words: list[dict], spans: list[tuple[float, float]]) -> bool:
-    """Whether a page keeps another page's columns: words on each side of every gutter, and few
-    crossing it (a centred date or signature), where its own measure may have found none."""
-    if len(spans) < 2 or not words:
-        return False
-    for (_, end), (start, _) in pairwise(spans):
-        gutter = (end + start) / 2
-        crossing = sum(1 for w in words if w["xmin"] < gutter < w["xmax"])
-        left = sum(1 for w in words if (w["xmin"] + w["xmax"]) / 2 < gutter)
-        right = len(words) - left
-        if crossing > max(3, 0.08 * len(words)) or min(left, right) < 3:
-            return False
-    return True
-
-
-def same_gutters(spans, other, width: float) -> bool:
-    """The same columns, give or take a few points: each gutter within 3% of the page's width."""
-    if len(spans) != len(other):
-        return False
-    mids = lambda s: [(a[1] + b[0]) / 2 for a, b in pairwise(s)]  # noqa: E731
-    return all(abs(x - y) <= 0.03 * width for x, y in zip(mids(spans), mids(other), strict=True))
-
-
-def split_page(
-    page: dict,
-    number: int,
-    carried: str | None = None,
-    tables: list[dict] | None = None,
-    previous: list[tuple[float, float]] | None = None,
-) -> dict:
-    """A page's columns, each with its language and lines; running headers set apart as furniture.
-    `previous` is the column spans of the issue's last page that had columns: a short page, a few
-    side-by-side lines under a signature centred across the gutter, keeps them (rw-decree-law-20-76),
-    where measured alone it seems one column and its languages would be read as one."""
+def split_page(page: dict, number: int, carried: str | None = None, tables: list[dict] | None = None) -> dict:
+    """A page's columns, each with its language and lines; running headers set apart as furniture."""
     # Columns are measured without the tables' words: a table's amount columns are not languages.
     in_tables = {id(w) for table in tables or [] for w in table["words"]}
-    text_words = [w for w in page["words"] if id(w) not in in_tables]
-    spans = gazette_layout.columns({**page, "words": text_words})
-    if previous and held_gutters(text_words, previous) and not same_gutters(spans, previous, page["width"]):
-        spans = list(previous)
+    spans = gazette_layout.columns({**page, "words": [w for w in page["words"] if id(w) not in in_tables]})
     furniture, columns = [], []
     three = len(spans) == 3
     # Each word to the column it lies in, or the nearest: a word alone at a column's edge (an
@@ -343,13 +307,11 @@ def split_page(
 def split_issue(pages: list[dict], tables: dict[int, list[dict]] | None = None) -> list[dict]:
     """Every page split; `tables` are the ruled tables found on each page (ruled_tables), whose
     words then come out as tables and not as lines of text."""
-    out, carried, previous = [], None, None
+    out, carried = [], None
     for number, page in enumerate(pages, 1):
-        split = split_page(page, number, carried, (tables or {}).get(number), previous)
+        split = split_page(page, number, carried, (tables or {}).get(number))
         languages = [c["language"] for c in split["columns"] if c["language"]]
         carried = languages[-1] if languages else carried
-        if len(split["columns"]) > 1:
-            previous = [(c["x0"], c["x1"]) for c in split["columns"]]
         out.append(split)
     return out
 
