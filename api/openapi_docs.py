@@ -346,6 +346,11 @@ SCHEMAS: dict[str, dict] = {
             "id": {"type": S, "description": "The record's ID."},
             "title": {"type": S, "description": "Its title."},
             "citation": {"type": S, "description": "Its citation."},
+            "legal_status": {
+                "type": S,
+                "description": "Whether it is in force now, as the catalogue has it: `current`, `historical`, "
+                "`repealed`, `superseded` or `unknown`.",
+            },
             "jurisdiction_id": {"type": S, "description": "Its jurisdiction."},
             "document_class": {"type": S, "description": "Its document type, such as `act`."},
             "language": {"type": S, "description": "Its language."},

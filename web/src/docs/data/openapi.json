@@ -3957,6 +3957,10 @@
             "type": "string",
             "description": "Its citation."
           },
+          "legal_status": {
+            "type": "string",
+            "description": "Whether it is in force now, as the catalogue has it: `current`, `historical`, `repealed`, `superseded` or `unknown`."
+          },
           "jurisdiction_id": {
             "type": "string",
             "description": "Its jurisdiction."
