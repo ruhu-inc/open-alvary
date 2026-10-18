@@ -11,12 +11,14 @@ leaves belong to which provision, is the structure's business (workbench.structu
 """
 
 import hashlib
+import re
 import unicodedata
 from dataclasses import dataclass, field
 
 PROFILE_ID = "oa-text-1/workbench-units-1"
 SEPARATOR = "\n\n"
 _EDGE = " \t"  # outer horizontal whitespace is trimmed from every leaf; interior whitespace stays
+_NUMBERED = re.compile(r"^(?:\d{1,3}[A-Z]{0,2}\.|\(\w{1,5}\))(?=\s|$)")  # "23.", "(1)", "(a)", "(iv)"
 
 
 @dataclass(frozen=True)
@@ -154,7 +156,7 @@ def serialize(pages: list[dict]) -> Serialized:
 def _join_problem(unit: dict, words: str, notes: list[str], previous: Leaf | None, page: int) -> str:
     if previous is None or previous.last_page >= page:
         return "Marked as continuing the previous page, but the previous page does not end in a paragraph"
-    if unit.get("marker"):
+    if unit.get("marker") or _NUMBERED.match(words):
         return "A paragraph continuing from the previous page cannot have its own number"
     if notes:
         return "A paragraph continuing from the previous page cannot carry margin notes; move them"

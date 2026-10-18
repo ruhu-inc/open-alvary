@@ -336,6 +336,12 @@ table.operators tr.inactive td { opacity: .6; }
 
 /* The steps to approval at the top of a document. */
 .checklist { list-style: none; margin: .8rem 0 1rem; padding: 0; display: grid; gap: .35rem; }
+#text-check, #approval { scroll-margin-top: 4.5rem; } /* clear of the sticky header after "Go to …" */
+.issues { list-style: none; padding: 0; margin: .3rem 0 .8rem; display: grid; gap: .3rem; }
+.issues > li { border-left: 3px solid var(--line); padding-left: .6rem; }
+.issues > li.high { border-left-color: var(--high); } .issues > li.warn { border-left-color: var(--medium); }
+.issues summary { cursor: pointer; font-weight: 600; }
+.issues ul { margin: .3rem 0; padding-left: 1.1rem; }
 .checklist li { display: flex; align-items: baseline; gap: .55rem; }
 .checklist .tick { flex: none; width: 1.15rem; height: 1.15rem; border-radius: 50%; border: 1.5px solid var(--line); display: inline-grid; place-items: center; font-size: 12px; font-weight: 700; transform: translateY(.15rem); }
 .checklist li.done .tick { background: var(--ok); border-color: var(--ok); color: #fff; }

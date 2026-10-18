@@ -612,6 +612,17 @@ def validate_units(units) -> list[dict]:
             raise ValueError("notes must be at most 10 short texts")
         if notes:
             item["notes"] = notes
+        # A paragraph the reviewer marked as continuing the previous page, joined in the published
+        # text with a space, or with the previous page's final hyphen removed (TXP-02 rule 8).
+        for key in ("continues_previous", "dehyphenate"):
+            if unit.get(key) not in (None, False, True):
+                raise ValueError(f"{key} must be true or false")
+        if unit.get("continues_previous"):
+            item["continues_previous"] = True
+            if unit.get("dehyphenate"):
+                item["dehyphenate"] = True
+        elif unit.get("dehyphenate"):
+            raise ValueError("dehyphenate applies only to a paragraph continuing the previous page")
         clean.append(item)
     return clean
 
