@@ -23,6 +23,7 @@
             "amends",
             "repeals",
             "supersedes",
+            "made_under",
             "cross_reference"
           ],
           "title": "Kind",

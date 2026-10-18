@@ -1,5 +1,6 @@
 """Immutable pilot-compatible wire DTOs; no target authority or private policy fields."""
 
+from datetime import date
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, field_serializer, model_validator
@@ -124,6 +125,49 @@ class VersionGate(WireModel):
     content_verified_at: AwareDatetime | None
 
 
+LEGAL_STATUS = Literal["unknown", "current", "historical", "repealed", "superseded"]
+# How another source relates to this one, from this one's side: it "repeals" an earlier law, it is
+# "repealed_by" a later one, it is "made_under" its parent law, which "enables" it.
+RelationKind = Literal[
+    "repeals",
+    "repealed_by",
+    "amends",
+    "amended_by",
+    "supersedes",
+    "superseded_by",
+    "made_under",
+    "enables",
+    "cross_reference",
+]
+
+
+class RelatedSource(WireModel):
+    kind: RelationKind
+    source_id: ID
+    title: Nonempty
+    citation: Nonempty
+    legal_status: LEGAL_STATUS
+    year: int | None = None
+    effective_date: date | None = None
+    evidence_url: HttpUrl
+    verified: bool
+
+
+class CurrentSource(WireModel):
+    source_id: ID
+    title: Nonempty
+    citation: Nonempty
+
+
+class SourceRelationships(WireModel):
+    source_id: ID
+    legal_status: LEGAL_STATUS
+    current: CurrentSource | None = None
+    total: int = Field(ge=0)
+    items: tuple[RelatedSource, ...]
+    next_cursor: str | None = None
+
+
 class PublicContracts(WireModel):
     schema_version: Literal["pilot-public-1"] = "pilot-public-1"
     sources: tuple[SourcePage, ...] = ()
@@ -133,3 +177,4 @@ class PublicContracts(WireModel):
     citations: tuple[CitationView, ...] = ()
     jurisdictions: tuple[JurisdictionView, ...] = ()
     coverage: tuple[CoverageView, ...] = ()
+    relationships: tuple[SourceRelationships, ...] = ()

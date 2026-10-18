@@ -229,11 +229,11 @@ def test_the_built_website_is_served_beside_the_data(catalogue, store, tmp_path)
 def test_filters_counts_and_sorting(client):
     listing = client.get("/site/v1/sources").json()
     facets = {name: {f["value"]: f for f in values} for name, values in listing["facets"].items()}
-    assert facets["jurisdiction"]["ng"]["label"] == "Nigeria" and facets["jurisdiction"]["ng"]["count"] == 4
+    assert facets["jurisdiction"]["ng"]["label"] == "Nigeria" and facets["jurisdiction"]["ng"]["count"] == 5
     assert facets["language"]["en"]["label"] == "English"
-    assert facets["type"]["act"]["count"] == 3 and facets["type"]["constitution"]["count"] == 1
+    assert facets["type"]["act"]["count"] == 4 and facets["type"]["constitution"]["count"] == 1
     acts = client.get("/site/v1/sources?type=act").json()
-    assert acts["total"] == 3 and all(s["document_type"] == "act" for s in acts["items"])
+    assert acts["total"] == 4 and all(s["document_type"] == "act" for s in acts["items"])
     # A selected filter still shows its alternatives with their counts.
     assert {f["value"] for f in acts["facets"]["type"]} == {"act", "constitution"}
     newest = [s["year"] for s in client.get("/site/v1/sources?sort=newest").json()["items"]]
@@ -254,3 +254,115 @@ def test_source_record_carries_plain_names(client):
     record = client.get(f"/site/v1/sources/{SOURCE}").json()
     assert record["jurisdiction_name"] == "Nigeria" and record["language_name"] == "English"
     assert record["authority_name"] and record["summary"] and record["year"] == 2011
+
+
+def test_a_records_history_lists_checked_links_both_ways_and_the_law_in_force_now(catalogue, store, tmp_path):
+    from schema.models import Amendment
+
+    later = next(s for s in catalogue.sources if s.id == "ng-isa-2025")
+    newest = later.model_copy(
+        update={"id": "ng-isa-2030", "title": "Investments and Securities Act 2030", "year": 2030}
+    )
+    rights = next(r for r in catalogue.rights if r.source_id == later.id)
+    catalogue.sources.append(newest)
+    catalogue.rights.append(rights.model_copy(update={"id": "rights-ng-isa-2030", "source_id": newest.id}))
+    evidence = "https://www.sec.gov.ng/documents/1319/Investments_and_Securities_Act_2025_x9rSXtI.pdf"
+
+    def link(source, kind, target, verified=True):
+        return Amendment(id=f"{source}-{kind}-{target}", source_id=source, target_source_id=target, kind=kind,
+                         evidence_url=evidence, verified=verified)  # fmt: skip
+
+    catalogue.amendments = [
+        link("ng-isa-2025", "repeals", "ng-isa-2007"),
+        link("ng-isa-2030", "repeals", "ng-isa-2025"),
+        link("ng-cbn-act-2007", "made_under", "ng-constitution-1999"),
+        link("ng-foi-act-2011", "amends", "ng-isa-2007", verified=False),  # not checked: not shown
+    ]
+    store.save(catalogue)
+    client = TestClient(create_service(store, tmp_path))
+    first = client.get("/site/v1/sources/ng-isa-2007/relationships").json()
+    assert first["legal_status"] == "repealed"
+    assert first["current"] == {
+        "source_id": "ng-isa-2030",
+        "title": newest.title,
+        "citation": newest.citation,
+    }
+    assert [(r["kind"], r["source_id"], r["verified"]) for r in first["items"]] == [
+        ("repealed_by", "ng-isa-2025", True)
+    ]
+    middle = client.get("/site/v1/sources/ng-isa-2025/relationships").json()
+    assert {(r["kind"], r["source_id"]) for r in middle["items"]} == {
+        ("repeals", "ng-isa-2007"),
+        ("repealed_by", "ng-isa-2030"),
+    }
+    assert middle["current"]["source_id"] == "ng-isa-2030"
+    constitution = client.get("/site/v1/sources/ng-constitution-1999/relationships").json()
+    assert (
+        constitution["items"] == []
+        and constitution["enables_total"] == 1
+        and "next_cursor" not in constitution
+    )
+    assert constitution["enables"][0]["kind"] == "enables" and constitution["current"] is None
+    # A record withdrawn from public view drops out of the others' history.
+    store.save(catalogue.model_copy(update={"rights": [
+        r.model_copy(update={"metadata_public": False}) if r.source_id == "ng-isa-2030" else r for r in catalogue.rights
+    ]}))  # fmt: skip
+    assert (
+        client.get("/site/v1/sources/ng-isa-2007/relationships").json()["current"]["source_id"]
+        == "ng-isa-2025"
+    )
+    assert client.get("/site/v1/sources/ng-isa-2030/relationships").json()["code"] == "unavailable"
+
+
+def test_a_laws_many_instruments_come_a_page_at_a_time_and_agents_get_the_same(catalogue, store, tmp_path):
+    from api.catalogue import InvalidSearch, LegacyCatalogue
+    from api.main import create_app
+    from api.repositories import LegacyRepository
+    from schema.models import Amendment
+
+    law = next(s for s in catalogue.sources if s.id == "ng-isa-2025")
+    rights = next(r for r in catalogue.rights if r.source_id == law.id)
+    for n in range(30):
+        order = law.model_copy(update={"id": f"ng-order-{n:02d}", "title": f"Order {n}", "year": 2026})
+        catalogue.sources.append(order)
+        catalogue.rights.append(rights.model_copy(update={"id": f"rights-{order.id}", "source_id": order.id}))
+        catalogue.amendments.append(
+            Amendment(
+                id=f"made-{n:02d}",
+                source_id=order.id,
+                target_source_id=law.id,
+                kind="made_under",
+                evidence_url="https://example.org/order",
+                verified=True,
+            )  # fmt: skip
+        )
+    catalogue.amendments = [a.model_copy(update={"verified": True}) for a in catalogue.amendments]
+    store.save(catalogue)
+    with store.engine.connect() as connection:
+        service = LegacyCatalogue(LegacyRepository(connection))
+        first = service.relationships(law.id)
+        assert first.total == 31 and len(first.items) == 25  # its repeal first, then the orders
+        assert [i.kind for i in first.items[:2]] == ["repeals", "enables"] and first.next_cursor
+        second = service.relationships(law.id, cursor=first.next_cursor)
+        assert [i.source_id for i in second.items] == [f"ng-order-{n:02d}" for n in range(24, 30)]
+        assert second.next_cursor is None
+        orders = service.relationships(law.id, kinds=["enables"], limit=100)
+        assert orders.total == 30 and {i.kind for i in orders.items} == {"enables"}
+        for bad in ({"cursor": "not-a-cursor"}, {"limit": 101}, {"kinds": ["parent_of"]}):
+            with pytest.raises(InvalidSearch):
+                service.relationships(law.id, **bad)
+    agent = TestClient(create_app(store, tmp_path))
+    call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call"}
+    listed = agent.post("/mcp", json={"jsonrpc": "2.0", "id": 0, "method": "tools/list"}).json()
+    assert "get_relationships" in {t["name"] for t in listed["result"]["tools"]}
+    answer = agent.post(
+        "/mcp",
+        json=call | {"params": {"name": "get_relationships", "arguments": {"source_id": "ng-isa-2007"}}},
+    ).json()["result"]
+    history = json.loads(answer["content"][0]["text"])
+    assert history["current"]["source_id"] == "ng-isa-2025" and history["items"][0]["kind"] == "repealed_by"
+    refused = agent.post(
+        "/mcp",
+        json=call | {"params": {"name": "get_relationships", "arguments": {"source_id": law.id, "limit": 0}}},
+    ).json()
+    assert refused["error"]["code"] == -32602

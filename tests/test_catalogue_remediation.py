@@ -120,7 +120,7 @@ def test_two_same_day_releases_and_legacy_links_keep_bytes_and_current_withdrawa
     assert all(
         s["id"] != source.id for s in client.get("/search", params={"q": source.title}).json()["items"]
     )
-    assert client.get("/coverage").json()["catalogued_sources"] == 3
+    assert client.get("/coverage").json()["catalogued_sources"] == 4
     assert client.get("/releases").json() == []
     for day in ["2026-10-07", "2026-10-07.1", "2026-10-07.2"]:
         assert client.get(f"/releases/{day}/ng/metadata/manifest.json").status_code == 410

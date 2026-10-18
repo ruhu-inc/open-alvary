@@ -73,6 +73,33 @@
       "title": "CoverageView",
       "type": "object"
     },
+    "CurrentSource": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "citation": {
+          "minLength": 1,
+          "title": "Citation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_id",
+        "title",
+        "citation"
+      ],
+      "title": "CurrentSource",
+      "type": "object"
+    },
     "DecisionView": {
       "additionalProperties": false,
       "properties": {
@@ -262,6 +289,99 @@
       ],
       "title": "Permission",
       "type": "string"
+    },
+    "RelatedSource": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "repeals",
+            "repealed_by",
+            "amends",
+            "amended_by",
+            "supersedes",
+            "superseded_by",
+            "made_under",
+            "enables",
+            "cross_reference"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "citation": {
+          "minLength": 1,
+          "title": "Citation",
+          "type": "string"
+        },
+        "legal_status": {
+          "enum": [
+            "unknown",
+            "current",
+            "historical",
+            "repealed",
+            "superseded"
+          ],
+          "title": "Legal Status",
+          "type": "string"
+        },
+        "year": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Year"
+        },
+        "effective_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective Date"
+        },
+        "evidence_url": {
+          "format": "uri",
+          "maxLength": 2083,
+          "minLength": 1,
+          "title": "Evidence Url",
+          "type": "string"
+        },
+        "verified": {
+          "title": "Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "source_id",
+        "title",
+        "citation",
+        "legal_status",
+        "evidence_url",
+        "verified"
+      ],
+      "title": "RelatedSource",
+      "type": "object"
     },
     "RightsStatus": {
       "enum": [
@@ -567,6 +687,70 @@
         "items"
       ],
       "title": "SourcePage",
+      "type": "object"
+    },
+    "SourceRelationships": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "legal_status": {
+          "enum": [
+            "unknown",
+            "current",
+            "historical",
+            "repealed",
+            "superseded"
+          ],
+          "title": "Legal Status",
+          "type": "string"
+        },
+        "current": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CurrentSource"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "total": {
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/RelatedSource"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Cursor"
+        }
+      },
+      "required": [
+        "source_id",
+        "legal_status",
+        "total",
+        "items"
+      ],
+      "title": "SourceRelationships",
       "type": "object"
     },
     "SourceView": {
@@ -960,6 +1144,14 @@
         "$ref": "#/$defs/CoverageView"
       },
       "title": "Coverage",
+      "type": "array"
+    },
+    "relationships": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/SourceRelationships"
+      },
+      "title": "Relationships",
       "type": "array"
     }
   },

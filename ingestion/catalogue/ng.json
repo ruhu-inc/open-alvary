@@ -94,10 +94,26 @@
       "jurisdiction_id": "ng",
       "language": "en",
       "legal_status": "repealed",
-      "catalogue_note": "Repealed: the Securities and Exchange Commission reports that the Investments and Securities Act 2025 replaced it. Kept for historical reference.",
-      "status_evidence": "https://www.sec.gov.ng/our-mandate/regulation/acts/",
+      "catalogue_note": "Repealed by section 356 of the Investments and Securities Act 2025, in force from 25 March 2025. Kept for historical reference.",
+      "status_evidence": "https://www.sec.gov.ng/documents/1319/Investments_and_Securities_Act_2025_x9rSXtI.pdf",
       "year": 2007,
       "summary": "Regulated Nigeria's capital market and the Securities and Exchange Commission until it was replaced."
+    },
+    {
+      "id": "ng-isa-2025",
+      "title": "Investments and Securities Act 2025",
+      "document_type": "act",
+      "canonical_url": "https://www.sec.gov.ng/documents/1319/Investments_and_Securities_Act_2025_x9rSXtI.pdf",
+      "url_kind": "document",
+      "citation": "ISA 2025",
+      "authority_id": "ng-national-assembly",
+      "jurisdiction_id": "ng",
+      "language": "en",
+      "legal_status": "current",
+      "status_evidence": "https://www.sec.gov.ng/documents/1319/Investments_and_Securities_Act_2025_x9rSXtI.pdf",
+      "catalogue_note": "The official link is the Act as printed in the Federal Republic of Nigeria Official Gazette (No. 19, Vol. 112, 2 May 2025), published by the Securities and Exchange Commission. In force from 25 March 2025; later amendments have not yet been checked.",
+      "year": 2025,
+      "summary": "Regulates Nigeria's capital market and establishes the Securities and Exchange Commission as its apex regulator, replacing the Investments and Securities Act 2007."
     }
   ],
   "rights": [
@@ -132,6 +148,14 @@
       "metadata_public": true,
       "metadata_basis": "Independently authored bibliographic catalogue entry with an official-source link; no source text, headnotes or compilation copied.",
       "legal_note": "No redistribution permission verified. Official hosting is not a licence. Named legal reviewer and source-specific evidence required."
+    },
+    {
+      "id": "rights-ng-isa-2025",
+      "source_id": "ng-isa-2025",
+      "status": "RIGHTS_UNDER_REVIEW",
+      "metadata_public": true,
+      "metadata_basis": "Independently authored bibliographic catalogue entry with an official-source link; no source text, headnotes or compilation copied.",
+      "legal_note": "No redistribution permission verified. Official hosting is not a licence. Named legal reviewer and source-specific evidence required."
     }
   ],
   "citations": [
@@ -154,6 +178,27 @@
       "id": "citation-ng-isa-2007",
       "source_id": "ng-isa-2007",
       "value": "ISA 2007"
+    },
+    {
+      "id": "citation-ng-isa-2025",
+      "source_id": "ng-isa-2025",
+      "value": "ISA 2025"
+    },
+    {
+      "id": "citation-ng-isa-2025-act-no",
+      "source_id": "ng-isa-2025",
+      "value": "Act No. 2 of 2025"
+    }
+  ],
+  "amendments": [
+    {
+      "id": "amendment-ng-isa-2025-repeals-ng-isa-2007",
+      "source_id": "ng-isa-2025",
+      "target_source_id": "ng-isa-2007",
+      "kind": "repeals",
+      "effective_date": "2025-03-25",
+      "evidence_url": "https://www.sec.gov.ng/documents/1319/Investments_and_Securities_Act_2025_x9rSXtI.pdf",
+      "verified": false
     }
   ]
 }

@@ -1,11 +1,13 @@
 """Catalogue domain services; injected repositories own no commits or HTTP behaviour."""
 
+import base64
 from collections import Counter
 from datetime import UTC, datetime
 from typing import Protocol
 
 from api.reach import country
 from api.repositories import (
+    EDGE_ORDER,
     MAX_BUFFER_BYTES,
     MAX_UNPAGED_ROWS,
     LegacyRepository,
@@ -19,12 +21,15 @@ from schema.policy import MetadataPage, PublicMetadata
 from schema.public import (
     CitationView,
     CoverageView,
+    CurrentSource,
     DecisionView,
     JurisdictionView,
     NodeViewRecord,
+    RelatedSource,
     RightsView,
     SearchPage,
     SourcePage,
+    SourceRelationships,
     SourceView,
     VersionPage,
 )
@@ -32,6 +37,28 @@ from schema.public import (
 
 class SourceUnavailable(LookupError):
     pass
+
+
+def _cursor(offset: int) -> str:
+    return base64.urlsafe_b64encode(f"edges:{offset}".encode()).decode().rstrip("=")
+
+
+def _offset(cursor: str | None) -> int:
+    """Where a page of links starts: an opaque cursor from the page before."""
+    if cursor is None:
+        return 0
+    try:
+        kind, _, offset = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)).decode().partition(":")
+        if kind == "edges" and offset.isdigit() and int(offset) <= 100_000:
+            return int(offset)
+    except (ValueError, UnicodeDecodeError):
+        pass
+    raise InvalidSearch("Invalid cursor")
+
+
+# Graph bounds (API-04, BUD-01): links one step away, a page of 25 by default and 100 at most, and
+# at most 300 links examined in a request (the walk to the source in force now, three steps at most).
+EDGES_PER_PAGE, MAX_EDGES_PER_PAGE, EDGE_BUDGET, MAX_SUCCESSION = 25, 100, 300, 3
 
 
 # The website's filters (MAC-01): each is a source field, except access, which follows the rights
@@ -121,6 +148,67 @@ class LegacyCatalogue:
             limit=limit, offset=offset, jurisdiction=jurisdiction, where=self._access(access, jurisdiction)
         )
         return SourcePage(total=total, items=tuple(self._view(pair) for pair in pairs))
+
+    def _public(self, ids) -> dict:
+        return {
+            source_id: pair
+            for source_id, pair in self.repository.visible(ids).items()
+            if decide(pair[1], now=self.now).metadata
+        }
+
+    def _current(self, source):
+        """The source in force at the end of this one's line of repeals and replacements, if any
+        within three steps and the request's budget of examined links."""
+        seen, at, found, examined = {source.id}, source.id, None, 0
+        for _ in range(MAX_SUCCESSION):
+            replacing = self.repository.replaced(at)
+            examined += len(replacing)
+            later = self._public({a.source_id for a in replacing})
+            if not later or examined > EDGE_BUDGET:
+                break
+            successor = max((pair[0] for pair in later.values()), key=lambda s: (s.year or 0, s.id))
+            if successor.id in seen:
+                break
+            seen.add(successor.id)
+            at, found = successor.id, successor
+        return (
+            CurrentSource(source_id=found.id, title=found.title, citation=found.citation) if found else None
+        )
+
+    def relationships(self, source_id, *, kinds=None, limit=EDGES_PER_PAGE, cursor=None, current=True):
+        """A page of a source's checked links to other public sources, as seen from its side: what it
+        repeals or amends and is made under, what repealed or amended it, the instruments made under
+        it; and, when it has been repealed or replaced, the source in force in its place now."""
+        source, _ = self._require(source_id)
+        kinds = set(EDGE_ORDER) if kinds is None else set(kinds)
+        if not kinds <= set(EDGE_ORDER) or not 1 <= limit <= MAX_EDGES_PER_PAGE:
+            raise InvalidSearch("Invalid relationship filter or page size")
+        offset = _offset(cursor)
+        total, edges = self.repository.edges(source_id, kinds, limit=limit, offset=offset)
+        public = self._public({other for _, other, _ in edges})
+        items = tuple(
+            RelatedSource(
+                kind=seen,
+                source_id=other,
+                title=public[other][0].title,
+                citation=public[other][0].citation,
+                legal_status=public[other][0].legal_status,
+                year=public[other][0].year,
+                effective_date=link.effective_date,
+                evidence_url=link.evidence_url,
+                verified=link.verified,
+            )
+            for seen, other, link in edges
+            if other in public
+        )
+        return SourceRelationships(
+            source_id=source.id,
+            legal_status=source.legal_status,
+            current=self._current(source) if current else None,
+            total=total,
+            items=items,
+            next_cursor=_cursor(offset + limit) if offset + limit < total else None,
+        )
 
     def versions(self, source_id):
         source, rights = self._require(source_id)

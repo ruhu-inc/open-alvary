@@ -15,6 +15,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse, Response
 
 from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
+from api.repositories import EDGE_ORDER
 from changes.feed import Feed, FeedError, Filters
 from changes.routes import tokens
 
@@ -75,6 +76,44 @@ TOOLS = [
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
     },
     {
+        "name": "get_relationships",
+        "title": "Get a source's history",
+        "description": "Whether a source is current and how it relates to other public sources, one step "
+        "away: what it repeals or amends and the law it is made under, what repealed or amended it, the "
+        "instruments made under it, and the source in force in its place now when it has been repealed. "
+        "Only links a reviewer has checked against the official text. A page at a time.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "source_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "description": "The source's ID, such as ng-isa-2007, from a search.",
+                },
+                "relation_type": {
+                    "type": "string",
+                    "enum": list(EDGE_ORDER),
+                    "description": "Only links of this kind, such as repealed_by or enables.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "description": "Links per page, 1 to 100. The default is 25.",
+                },
+                "cursor": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "The next_cursor of the previous page, to continue it.",
+                },
+            },
+            "required": ["source_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
         "name": "list_changes",
         "title": "List catalogue changes",
         "description": "Changes to the catalogue in commit order: records added, corrected or withdrawn, and text "
@@ -115,7 +154,11 @@ TOOLS = [
                     "maxItems": 50,
                     "description": "Languages of the affected text, such as en.",
                 },
-                "q": {"type": "string", "maxLength": 200, "description": "Whole words in the title, citation or summary."},
+                "q": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "Whole words in the title, citation or summary.",
+                },
                 "resume_token": {
                     "type": "string",
                     "maxLength": 2000,
@@ -126,7 +169,12 @@ TOOLS = [
                     "maxLength": 2000,
                     "description": "The next_cursor of the previous page, to continue it.",
                 },
-                "limit": {"type": "integer", "minimum": 1, "maximum": 25, "description": "Changes per page, 1 to 25."},
+                "limit": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 25,
+                    "description": "Changes per page, 1 to 25.",
+                },
             },
             "additionalProperties": False,
         },
@@ -238,6 +286,26 @@ def create_router(
                 view = service.source(arguments["source_id"])
                 plan.admit(view.jurisdiction_id)
                 return view.model_dump(mode="json")
+            if name == "get_relationships" and {"source_id"} <= set(arguments) <= {
+                "source_id",
+                "relation_type",
+                "limit",
+                "cursor",
+            }:
+                source_id, kind = arguments["source_id"], arguments.get("relation_type")
+                limit, cursor = arguments.get("limit", 25), arguments.get("cursor")
+                if not isinstance(source_id, str) or not 1 <= len(source_id) <= 160:
+                    return None
+                if kind is not None and kind not in EDGE_ORDER:
+                    return None
+                if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 100:
+                    return None
+                if cursor is not None and (not isinstance(cursor, str) or len(cursor) > 200):
+                    return None
+                plan.admit(service.source(source_id).jurisdiction_id)
+                return service.relationships(
+                    source_id, kinds=[kind] if kind else None, limit=limit, cursor=cursor
+                ).model_dump(mode="json")
             if name in ("list_changes", "get_change"):
                 return changes_tool(service.repository.connection, name, arguments)
             if name == "get_coverage" and not arguments:

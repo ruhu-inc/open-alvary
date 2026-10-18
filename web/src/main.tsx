@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { ChangesPage, RecordChanges } from "./changes";
+import { CurrentLaw, type History, RecordHistory } from "./history";
 import { createRoot } from "react-dom/client";
 import {
   ArrowUpRight,
@@ -738,6 +739,7 @@ function Reader({ id }: { id: string }) {
     record: RightsRecord;
     decision: { reasons: string[] };
   }>("/rights/" + encodeURIComponent(id));
+  const history = useData<History>("/sources/" + encodeURIComponent(id) + "/relationships");
   if (!source.data)
     return (
       <div className="page">
@@ -758,6 +760,7 @@ function Reader({ id }: { id: string }) {
       <PageTitle label={typeLabel(s.document_type) + " · " + s.citation} title={s.title}>
         {s.summary || s.citation}
       </PageTitle>
+      <CurrentLaw history={history.data} />
       <div className="reader-grid">
         <article className="reader">
           <div className="reader-bar">
@@ -799,6 +802,7 @@ function Reader({ id }: { id: string }) {
         </article>
         <aside>
           <SourceRecord source={s} rights={rights.data?.record} />
+          <RecordHistory history={history.data} />
           <RecordChanges id={s.id} />
         </aside>
       </div>
@@ -808,8 +812,8 @@ function Reader({ id }: { id: string }) {
 // What each jurisdiction's coverage does and does not include.
 const JURISDICTION_NOTES: Record<string, string[]> = {
   ng: [
-    "Four federal instruments, with details and official links. Not yet covered: state law, judgments, regulations, translations and later amendments.",
-    "The Investments and Securities Act 2007 is kept for historical reference: its official publisher reports a 2025 replacement.",
+    "Five federal instruments, with details and official links. Not yet covered: state law, judgments, regulations, translations and later amendments.",
+    "The Investments and Securities Act 2007 is kept for historical reference: the Investments and Securities Act 2025 repealed it.",
   ],
 };
 function CoveragePage() {
@@ -1201,8 +1205,8 @@ function Developers() {
           </dl>
           <p>
             Tools: <code>search_catalogue</code>, <code>get_source</code>,{" "}
-            <code>list_changes</code>, <code>get_change</code> and{" "}
-            <code>get_coverage</code>.
+            <code>get_relationships</code>, <code>list_changes</code>,{" "}
+            <code>get_change</code> and <code>get_coverage</code>.
           </p>
           <Link className="text-link" to="/docs/console#apps">
             Connecting a tool, with pictures <ArrowRight size={16} aria-hidden="true" />
