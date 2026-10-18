@@ -55,6 +55,9 @@ EDGE_ORDER = [
 ]
 MAX_UNPAGED_ROWS = 1000
 MAX_BUFFER_BYTES = 10 * 1024 * 1024
+# A version's structure: an Act of a few hundred pages has a few thousand nodes (the Electricity Act
+# 2023: 2,144), each a few hundred bytes; the response byte caps still apply.
+MAX_STRUCTURE_ROWS = 20_000
 
 
 class PublicUnavailable(ValueError):
@@ -230,7 +233,7 @@ class LegacyRepository:
         payload = self.connection.scalar(select(table.c.payload).where(*where))
         return VersionViewRecord.model_validate(payload)
 
-    def rows(self, name: str, *, ids=None, source_id=None, version_ids=None):
+    def rows(self, name: str, *, ids=None, source_id=None, version_ids=None, bound: int = MAX_UNPAGED_ROWS):
         table = tables[name]
         statement = select(table.c.payload).where(self._identity_matches(table)).order_by(table.c.id)
         if ids is not None:
@@ -239,10 +242,23 @@ class LegacyRepository:
             statement = statement.where(table.c.source_id == source_id)
         if version_ids is not None:
             statement = statement.where(table.c.version_id.in_(version_ids))
-        rows = list(self.connection.scalars(statement.limit(MAX_UNPAGED_ROWS + 1)))
-        if len(rows) > MAX_UNPAGED_ROWS:
+        rows = list(self.connection.scalars(statement.limit(bound + 1)))
+        if len(rows) > bound:
             raise ResultTooLarge("Pilot unpaged response exceeds row bound")
         return rows
+
+    def version_owner(self, version_id: str) -> str | None:
+        """The source a version belongs to, or None; nothing about whether it is public."""
+        table = tables["versions"]
+        return self.connection.scalar(
+            select(table.c.source_id).where(table.c.id == version_id, self._identity_matches(table))
+        )
+
+    def node(self, node_id: str) -> dict | None:
+        table = tables["structure"]
+        return self.connection.scalar(
+            select(table.c.payload).where(table.c.id == node_id, self._identity_matches(table))
+        )
 
     def edges(self, source_id: str, kinds, *, limit: int, offset: int):
         """One page of a source's checked links to public sources, each as seen from its side

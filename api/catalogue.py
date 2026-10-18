@@ -1,6 +1,7 @@
 """Catalogue domain services; injected repositories own no commits or HTTP behaviour."""
 
 import base64
+import hashlib
 from collections import Counter
 from datetime import UTC, datetime
 from typing import Protocol
@@ -9,6 +10,7 @@ from api.reach import country
 from api.repositories import (
     EDGE_ORDER,
     MAX_BUFFER_BYTES,
+    MAX_STRUCTURE_ROWS,
     MAX_UNPAGED_ROWS,
     LegacyRepository,
     PublicUnavailable,
@@ -19,6 +21,7 @@ from rights.policy import decide
 from schema.models import Citation, Corpus
 from schema.policy import MetadataPage, PublicMetadata
 from schema.public import (
+    AnchorView,
     CitationView,
     CoverageView,
     CurrentSource,
@@ -31,7 +34,9 @@ from schema.public import (
     SourcePage,
     SourceRelationships,
     SourceView,
+    StructurePage,
     VersionPage,
+    VersionViewRecord,
 )
 
 
@@ -39,17 +44,17 @@ class SourceUnavailable(LookupError):
     pass
 
 
-def _cursor(offset: int) -> str:
-    return base64.urlsafe_b64encode(f"edges:{offset}".encode()).decode().rstrip("=")
+def _cursor(offset: int, kind: str = "edges") -> str:
+    return base64.urlsafe_b64encode(f"{kind}:{offset}".encode()).decode().rstrip("=")
 
 
-def _offset(cursor: str | None) -> int:
-    """Where a page of links starts: an opaque cursor from the page before."""
+def _offset(cursor: str | None, expected: str = "edges") -> int:
+    """Where a page starts: an opaque cursor from the page before (links or nodes)."""
     if cursor is None:
         return 0
     try:
         kind, _, offset = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)).decode().partition(":")
-        if kind == "edges" and offset.isdigit() and int(offset) <= 100_000:
+        if kind == expected and offset.isdigit() and int(offset) <= 100_000:
             return int(offset)
     except (ValueError, UnicodeDecodeError):
         pass
@@ -59,6 +64,8 @@ def _offset(cursor: str | None) -> int:
 # Graph bounds (API-04, BUD-01): links one step away, a page of 25 by default and 100 at most, and
 # at most 300 links examined in a request (the walk to the source in force now, three steps at most).
 EDGES_PER_PAGE, MAX_EDGES_PER_PAGE, EDGE_BUDGET, MAX_SUCCESSION = 25, 100, 300, 3
+# An anchor answers with its whole span, never silently shortened (BUD-01), inside the 1 MiB JSON cap.
+MAX_ANCHOR_BYTES = 900 * 1024
 
 
 # The website's filters (MAC-01): each is a source field, except access, which follows the rights
@@ -221,7 +228,9 @@ class LegacyCatalogue:
             versions.append(version)
         nodes = tuple(
             NodeViewRecord.model_validate(row)
-            for row in self.repository.rows("structure", version_ids=[v.id for v in versions])
+            for row in self.repository.rows(
+                "structure", version_ids=[v.id for v in versions], bound=MAX_STRUCTURE_ROWS
+            )
         )
         # Reuse the canonical multibyte/hash/hierarchy validator on one approved source.
         # Reference context is scoped and bounded; unrelated private corpus is never read.
@@ -259,6 +268,125 @@ class LegacyCatalogue:
             rights=rights,
             structure=nodes,
             notice=None if versions else "No version has passed both rights and content review.",
+        )
+
+    # --- one version, its structure and its anchors (API-02), each rechecked for eligibility ---------
+
+    def version(self, version_id: str) -> tuple[VersionViewRecord, object, object]:
+        """A version that is public now, with its source and rights record. A hidden version and one
+        that does not exist are the same answer: unavailable."""
+        source_id = self.repository.version_owner(version_id)
+        if source_id is None:
+            raise SourceUnavailable("Version not available")
+        source, rights = self._require(source_id)
+        for version in self._approved(source, rights):
+            if version.id == version_id:
+                return version, source, rights
+        raise SourceUnavailable("Version not available")
+
+    def _ordered_nodes(self, version: VersionViewRecord) -> list[NodeViewRecord]:
+        """A version's nodes in document order: by where they start, the enclosing node first."""
+        nodes = [
+            NodeViewRecord.model_validate(row)
+            for row in self.repository.rows("structure", version_ids=[version.id], bound=MAX_STRUCTURE_ROWS)
+        ]
+        parents = {n.id: n.parent_id for n in nodes}
+
+        def depth(node):
+            steps, at = 0, node.parent_id
+            while at is not None and steps < 64:
+                steps, at = steps + 1, parents.get(at)
+            return steps
+
+        return sorted(nodes, key=lambda n: (n.start_byte, -n.end_byte, depth(n), n.order))
+
+    def structure(self, version_id: str, *, limit: int = 100, cursor: str | None = None) -> StructurePage:
+        version, _, _ = self.version(version_id)
+        nodes = self._ordered_nodes(version)
+        offset = _offset(cursor, "nodes")
+        return StructurePage(
+            version_id=version.id,
+            content_hash=version.content_hash,
+            total=len(nodes),
+            items=tuple(nodes[offset : offset + limit]),
+            next_cursor=_cursor(offset + limit, "nodes") if offset + limit < len(nodes) else None,
+        )
+
+    def _pinpoint(self, node: NodeViewRecord) -> str:
+        """How a part is cited within its text, from its printed numbers: "s. 23(1)(a)", "art. 12",
+        "First Schedule, para. 3", a definition with its section; else its heading or label."""
+        chain, at = [node], node
+        while at.parent_id and len(chain) < 16:
+            row = self.repository.node(at.parent_id)
+            if row is None:
+                break
+            at = NodeViewRecord.model_validate(row)
+            chain.append(at)
+        chain.reverse()  # outermost first
+
+        def number(label):
+            return (label or "").strip().rstrip(".")
+
+        lead = {"section": "s. ", "article": "art. "}
+        top = next((i for i, n in enumerate(chain) if n.kind in lead and n.label), None)
+        if top is not None:
+            cited = lead[chain[top].kind] + number(chain[top].label)
+            for part in chain[top + 1 :]:
+                if part.kind == "definition":
+                    cited += f", “{part.label}”"
+                elif part.label:
+                    cited += number(part.label) if part.label.startswith("(") else f"({number(part.label)})"
+            return cited
+        schedule = next((n for n in chain if n.kind == "schedule"), None)
+        if schedule is not None:
+            numbered = [n for n in chain if n.kind in ("paragraph", "subparagraph") and n.label]
+            if not numbered:
+                return schedule.label or schedule.heading or schedule.locator
+            head, *rest = numbered
+            return f"{schedule.label or schedule.locator}, para. {number(head.label)}" + "".join(
+                number(n.label) if n.label.startswith("(") else f"({number(n.label)})" for n in rest
+            )
+        if node.kind == "document":
+            return ""
+        return node.heading or node.label or node.locator
+
+    def anchor(self, anchor_id: str) -> AnchorView:
+        """One part of a public text exactly. Each node of a published version is an anchor (DAT-06)."""
+        row = self.repository.node(anchor_id)
+        if row is None:
+            raise SourceUnavailable("Anchor not available")
+        node = NodeViewRecord.model_validate(row)
+        version, source, rights = self.version(node.version_id)
+        if node.source_id != version.source_id or node.source_hash != version.content_hash:
+            raise PublicUnavailable("Invalid anchor provenance")
+        span = version.canonical_text.encode()[node.start_byte : node.end_byte]
+        if len(span) > MAX_ANCHOR_BYTES:
+            raise ResultTooLarge("This part is larger than one response may be; read it from the text")
+        span_hash = hashlib.sha256(span).hexdigest()
+        if node.span_hash and node.span_hash != span_hash:
+            raise PublicUnavailable("Anchor span hash mismatch")
+        pinpoint = self._pinpoint(node)
+        return AnchorView(
+            anchor_id=node.id,
+            source_id=node.source_id,
+            version_id=node.version_id,
+            kind=node.kind,
+            locator=node.locator,
+            label=node.label,
+            heading=node.heading,
+            start_byte=node.start_byte,
+            end_byte=node.end_byte,
+            span_hash=span_hash,
+            content_hash=version.content_hash,
+            serialization_profile=version.serialization_profile,
+            page=node.page,
+            page_end=node.page_end,
+            citation=f"{source.citation}, {pinpoint}" if pinpoint else source.citation,
+            official_url=str(version.canonical_url),
+            licence=rights.licence,
+            attribution_required=rights.attribution_required,
+            attribution_text=rights.attribution_text,
+            text=span.decode("utf-8"),
         )
 
     def rights(self, source_id):

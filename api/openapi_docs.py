@@ -122,6 +122,45 @@ OPERATIONS: dict[str, dict] = {
         "parameters": {"source_id": "The record's ID."},
         "errors": MISSING | TOO_LARGE,
     },
+    "/versions/{version_id}/text": {
+        "operationId": "get_version_text",
+        "tag": "Catalogue",
+        "summary": "Get a text",
+        "description": "One text version's full text, exactly: `text/plain; charset=utf-8`, the bytes whose "
+        "SHA-256 is the version's `content_hash` and which structure offsets refer to. The `ETag` is that "
+        "hash: send it back as `If-None-Match` and an unchanged text answers `304` with no body, after the "
+        "same check that it is still public. A version that is not public answers like one that does "
+        "not exist.",
+        "path": {"version_id": "The version's ID, from a record's texts."},
+        "answer": ("text/plain", {"type": "string"}),
+        "errors": MISSING | TOO_LARGE,
+    },
+    "/versions/{version_id}/structure": {
+        "operationId": "get_version_structure",
+        "tag": "Catalogue",
+        "summary": "Get a text's structure",
+        "description": "The parts, sections, articles and other parts of one text version, in document "
+        "order, a page at a time, each with its span in the text and its locator. Each part's `id` is "
+        "also an anchor: get it at `/anchors/{anchor_id}`. Answers carry an `ETag` for `If-None-Match`.",
+        "path": {"version_id": "The version's ID, from a record's texts."},
+        "parameters": {
+            "limit": "Parts per page, 1 to 500. The default is 100.",
+            "cursor": "The `next_cursor` of the previous page, to continue it.",
+        },
+        "errors": MISSING | BAD,
+    },
+    "/anchors/{anchor_id}": {
+        "operationId": "get_anchor",
+        "tag": "Catalogue",
+        "summary": "Get one part of a text exactly",
+        "description": "One part of a text, such as a section: its words, its span in the text and the "
+        "unit of the offsets, its locator and printed number, the hash of its own bytes for checking a "
+        "quotation, a citation, the official file and the attribution the rights record asks for. The "
+        "words are never shortened. A part of a text that is not public answers like one that does "
+        "not exist.",
+        "path": {"anchor_id": "The part's ID, from a text's structure."},
+        "errors": MISSING | TOO_LARGE,
+    },
     "/sources/{source_id}/relationships": {
         "operationId": "get_relationships",
         "tag": "Catalogue",
@@ -506,6 +545,36 @@ FIELDS: dict[str, dict[str, str]] = {
         "has_full_text": "Whether Get a record's texts returns a text for it.",
     },
     "SourcePage": {"total": "Records matching, across all pages.", "items": "This page's records."},
+    "StructurePage": {
+        "version_id": "The text version.",
+        "content_hash": "The `content_hash` of the text the offsets refer to.",
+        "total": "How many parts the text has.",
+        "items": "This page's parts, in document order.",
+        "next_cursor": "Pass as `cursor` for the next page; absent on the last page.",
+    },
+    "AnchorView": {
+        "anchor_id": "The part's ID.",
+        "source_id": "The record.",
+        "version_id": "The text version it is in.",
+        "kind": "What it is, such as `section` or `article`.",
+        "locator": "Its stable key within the text, such as `sec_23__subsec_1`.",
+        "label": "Its printed number, such as `23.` or `(1)`, when it has one.",
+        "heading": "Its printed heading, when it has one.",
+        "start_byte": "Where it starts: a byte offset into the text in UTF-8.",
+        "end_byte": "Where it ends: a byte offset into the text in UTF-8.",
+        "offset_unit": "The unit of the offsets: `utf-8-bytes`. Convert explicitly for other units.",
+        "span_hash": "SHA-256 of the text's bytes from `start_byte` to `end_byte`.",
+        "content_hash": "The `content_hash` of the whole text.",
+        "serialization_profile": "How the text was built from the reviewed pages, when recorded.",
+        "page": "The page of the official file it starts on, when known.",
+        "page_end": "The last page of the official file it reaches, when known.",
+        "citation": "A citation for it: the record's citation and its number or heading.",
+        "official_url": "The official file the text was read from.",
+        "licence": "The terms the text is published under, from the rights record.",
+        "attribution_required": "Whether reuse must credit the source, from the rights record.",
+        "attribution_text": "The credit to give, when one is required.",
+        "text": "Its words, exactly: the text's bytes from `start_byte` to `end_byte`.",
+    },
     "SourceRelationships": {
         "source_id": "The record asked about.",
         "legal_status": "Whether it is in force, as far as the catalogue has checked (as on the record).",

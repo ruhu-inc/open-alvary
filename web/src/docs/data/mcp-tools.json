@@ -110,6 +110,30 @@
     }
   },
   {
+    "name": "get_anchor",
+    "title": "Get one part of a text exactly",
+    "description": "One part of a published text, such as a section or article, exactly: its words, its span as UTF-8 byte offsets, the hash of its bytes for checking a quotation, a citation such as s. 23(1)(a), the official file and the attribution its rights record asks for. Never shortened: a part too large for one answer is refused; read it from the REST text route with its offsets.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "anchor_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "The part's ID, from a text's structure."
+        }
+      },
+      "required": [
+        "anchor_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "list_changes",
     "title": "List catalogue changes",
     "description": "Changes to the catalogue in commit order: records added, corrected or withdrawn, and text published. Filter by jurisdiction, work, type, document class, language or keyword. Pass the returned resume_token next time to get only newer changes. Changes to what Open Alvary holds, not every change in a country's law.",

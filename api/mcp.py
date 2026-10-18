@@ -20,6 +20,14 @@ from changes.feed import Feed, FeedError, Filters
 from changes.routes import tokens
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26")
+# Tool answers stay inside the MCP payload budget (BUD-01: 64 KiB), never shortened.
+MAX_TOOL_BYTES = 60 * 1024
+
+
+class TooLarge(Exception):
+    pass
+
+
 SERVER_INFO = {"name": "open-alvary", "title": "Open Alvary public legal catalogue", "version": "0.1.0"}
 
 TOOLS = [
@@ -109,6 +117,28 @@ TOOLS = [
                 },
             },
             "required": ["source_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
+        "name": "get_anchor",
+        "title": "Get one part of a text exactly",
+        "description": "One part of a published text, such as a section or article, exactly: its words, its "
+        "span as UTF-8 byte offsets, the hash of its bytes for checking a quotation, a citation such as "
+        "s. 23(1)(a), the official file and the attribution its rights record asks for. Never shortened: a "
+        "part too large for one answer is refused; read it from the REST text route with its offsets.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "anchor_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "description": "The part's ID, from a text's structure.",
+                }
+            },
+            "required": ["anchor_id"],
             "additionalProperties": False,
         },
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
@@ -306,6 +336,19 @@ def create_router(
                 return service.relationships(
                     source_id, kinds=[kind] if kind else None, limit=limit, cursor=cursor
                 ).model_dump(mode="json")
+            if name == "get_anchor" and set(arguments) == {"anchor_id"}:
+                anchor_id = arguments["anchor_id"]
+                if not isinstance(anchor_id, str) or not 1 <= len(anchor_id) <= 160:
+                    return None
+                view = service.anchor(anchor_id)
+                plan.admit(service.source(view.source_id).jurisdiction_id)
+                payload = view.model_dump(mode="json")
+                if len(json.dumps(payload, ensure_ascii=False).encode()) > MAX_TOOL_BYTES:
+                    raise TooLarge(
+                        "result_too_large: this part is larger than one answer may be; read bytes "
+                        f"{view.start_byte} to {view.end_byte} of /api/v1/versions/{view.version_id}/text"
+                    )
+                return payload
             if name in ("list_changes", "get_change"):
                 return changes_tool(service.repository.connection, name, arguments)
             if name == "get_coverage" and not arguments:
@@ -354,6 +397,8 @@ def create_router(
                 payload = await run_in_threadpool(
                     call_tool, params["name"], params.get("arguments", {}), reach(request)
                 )
+            except TooLarge as refused:
+                return _result(id_, _tool_result(str(refused), is_error=True))
             except unavailable:
                 return _result(id_, _tool_result("Catalogue authority unavailable", is_error=True))
             except FeedError as refused:

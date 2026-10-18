@@ -7,12 +7,13 @@ credential, and open to any origin without credentials: the OpenAPI document, th
 the tier catalogue. Data routes send no CORS headers: keys never belong in a browser (N18).
 """
 
+import hashlib
 from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
 
-from fastapi import Depends, FastAPI, Query, Request
+from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from pydantic import ValidationError
@@ -21,7 +22,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from api.admission import AdmissionUnavailable
 from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable
 from api.credentials import problem
-from api.emission import MAX_SINGLE_RESPONSE_BYTES, CheckedResponse
+from api.emission import MAX_SINGLE_RESPONSE_BYTES, CheckedResponse, CheckedText
 from api.openapi_docs import describe
 from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
 from api.release_adapter import LegacyReleases
@@ -29,6 +30,7 @@ from api.repositories import LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import Store, check_legacy_authority
 from changes.routes import create_router as create_changes_router
 from schema.public import (
+    AnchorView,
     CitationView,
     CoverageView,
     JurisdictionView,
@@ -38,6 +40,7 @@ from schema.public import (
     SourcePage,
     SourceRelationships,
     SourceView,
+    StructurePage,
     VersionPage,
 )
 
@@ -214,11 +217,73 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
                 return False
             return served <= {(v.id, v.content_hash) for v in current.items}
 
+        # The tag covers the whole answer: the texts, their structure and the rights record.
+        return checked(request, payload, recheck, f'"{hashlib.sha256(payload).hexdigest()}"')
+
+    # Conditional requests (BUD-01): a matching If-None-Match answers 304 with no body, after the same
+    # eligibility check as a full answer; nothing is cacheable by intermediaries (no-store).
+    def unchanged(request: Request, tag: str) -> bool:
+        offered = {t.strip().removeprefix("W/") for t in request.headers.get("if-none-match", "").split(",")}
+        return "*" in offered or tag in offered
+
+    def checked(request: Request, payload: bytes, recheck, tag: str, kind=CheckedResponse) -> Response:
+        if unchanged(request, tag):
+            if not recheck():
+                raise SourceUnavailable("No longer public")
+            return Response(status_code=304, headers={"ETag": tag})
+
         def refusal(status: int, detail: str):
             changed = "The record changed while this answer was being sent. Request it again."
             return problem("temporarily_unavailable", request_id(request), detail=changed)
 
-        return CheckedResponse(payload, recheck, refusal=refusal)
+        response = kind(payload, recheck, refusal=refusal)
+        response.headers["ETag"] = tag
+        return response
+
+    def still_public(version_id: str, content_hash: str):
+        def recheck() -> bool:
+            try:
+                with session() as fresh:
+                    version, _, _ = fresh.version(version_id)
+            except SourceUnavailable:
+                return False
+            return version.content_hash == content_hash
+
+        return recheck
+
+    @app.get("/versions/{version_id}/text")
+    def version_text(request: Request, version_id: str, service: LegacyCatalogue = Depends(catalogue)):
+        version, source, _ = service.version(version_id)
+        reach(request).admit(source.jurisdiction_id)
+        payload = version.canonical_text.encode()
+        if len(payload) > MAX_SINGLE_RESPONSE_BYTES:
+            raise ResultTooLarge("This text is larger than one response may be")
+        recheck = still_public(version.id, version.content_hash)
+        return checked(request, payload, recheck, f'"{version.content_hash}"', kind=CheckedText)
+
+    @app.get("/versions/{version_id}/structure")
+    def version_structure(
+        request: Request,
+        version_id: str,
+        limit: int = Query(100, ge=1, le=500),
+        cursor: str | None = Query(None, max_length=200),
+        service: LegacyCatalogue = Depends(catalogue),
+    ) -> StructurePage:
+        page = service.structure(version_id, limit=limit, cursor=cursor)
+        _, source, _ = service.version(version_id)
+        reach(request).admit(source.jurisdiction_id)
+        payload = page.model_dump_json().encode()
+        tag = f'"{hashlib.sha256(payload).hexdigest()}"'
+        return checked(request, payload, still_public(page.version_id, page.content_hash), tag)
+
+    @app.get("/anchors/{anchor_id}")
+    def anchor(request: Request, anchor_id: str, service: LegacyCatalogue = Depends(catalogue)) -> AnchorView:
+        view = service.anchor(anchor_id)
+        _, source, _ = service.version(view.version_id)
+        reach(request).admit(source.jurisdiction_id)
+        payload = view.model_dump_json().encode()
+        tag = f'"{hashlib.sha256(payload).hexdigest()}"'
+        return checked(request, payload, still_public(view.version_id, view.content_hash), tag)
 
     @app.get("/search")
     def search(

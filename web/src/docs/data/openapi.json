@@ -1474,6 +1474,319 @@
         ]
       }
     },
+    "/versions/{version_id}/text": {
+      "get": {
+        "summary": "Get a text",
+        "operationId": "get_version_text",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version Id"
+            },
+            "description": "The version's ID, from a record's texts."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such record, or it is not public (`unavailable`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The answer would be larger than one response may be (`result_too_large`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "One text version's full text, exactly: `text/plain; charset=utf-8`, the bytes whose SHA-256 is the version's `content_hash` and which structure offsets refer to. The `ETag` is that hash: send it back as `If-None-Match` and an unchanged text answers `304` with no body, after the same check that it is still public. A version that is not public answers like one that does not exist.",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/versions/{version_id}/structure": {
+      "get": {
+        "summary": "Get a text's structure",
+        "operationId": "get_version_structure",
+        "parameters": [
+          {
+            "name": "version_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Version Id"
+            },
+            "description": "The version's ID, from a record's texts."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            },
+            "description": "Parts per page, 1 to 500. The default is 100."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "description": "The `next_cursor` of the previous page, to continue it."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructurePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such record, or it is not public (`unavailable`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "The parts, sections, articles and other parts of one text version, in document order, a page at a time, each with its span in the text and its locator. Each part's `id` is also an anchor: get it at `/anchors/{anchor_id}`. Answers carry an `ETag` for `If-None-Match`.",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/anchors/{anchor_id}": {
+      "get": {
+        "summary": "Get one part of a text exactly",
+        "operationId": "get_anchor",
+        "parameters": [
+          {
+            "name": "anchor_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Anchor Id"
+            },
+            "description": "The part's ID, from a text's structure."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnchorView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such record, or it is not public (`unavailable`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The answer would be larger than one response may be (`result_too_large`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "One part of a text, such as a section: its words, its span in the text and the unit of the offsets, its locator and printed number, the hash of its own bytes for checking a quotation, a citation, the official file and the attribution the rights record asks for. The words are never shortened. A part of a text that is not public answers like one that does not exist.",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
     "/search": {
       "get": {
         "summary": "Search the catalogue",
@@ -1916,6 +2229,198 @@
   },
   "components": {
     "schemas": {
+      "AnchorView": {
+        "properties": {
+          "anchor_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Anchor Id",
+            "description": "The part's ID."
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The record."
+          },
+          "version_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Version Id",
+            "description": "The text version it is in."
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "What it is, such as `section` or `article`."
+          },
+          "locator": {
+            "type": "string",
+            "title": "Locator",
+            "description": "Its stable key within the text, such as `sec_23__subsec_1`."
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label",
+            "description": "Its printed number, such as `23.` or `(1)`, when it has one."
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading",
+            "description": "Its printed heading, when it has one."
+          },
+          "start_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Byte",
+            "description": "Where it starts: a byte offset into the text in UTF-8."
+          },
+          "end_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End Byte",
+            "description": "Where it ends: a byte offset into the text in UTF-8."
+          },
+          "offset_unit": {
+            "type": "string",
+            "const": "utf-8-bytes",
+            "title": "Offset Unit",
+            "default": "utf-8-bytes",
+            "description": "The unit of the offsets: `utf-8-bytes`. Convert explicitly for other units."
+          },
+          "span_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Span Hash",
+            "description": "SHA-256 of the text's bytes from `start_byte` to `end_byte`."
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Content Hash",
+            "description": "The `content_hash` of the whole text."
+          },
+          "serialization_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serialization Profile",
+            "description": "How the text was built from the reviewed pages, when recorded."
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page",
+            "description": "The page of the official file it starts on, when known."
+          },
+          "page_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page End",
+            "description": "The last page of the official file it reaches, when known."
+          },
+          "citation": {
+            "type": "string",
+            "title": "Citation",
+            "description": "A citation for it: the record's citation and its number or heading."
+          },
+          "official_url": {
+            "type": "string",
+            "title": "Official Url",
+            "description": "The official file the text was read from."
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence",
+            "description": "The terms the text is published under, from the rights record."
+          },
+          "attribution_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Required",
+            "description": "Whether reuse must credit the source, from the rights record."
+          },
+          "attribution_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Text",
+            "description": "The credit to give, when one is required."
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "Its words, exactly: the text's bytes from `start_byte` to `end_byte`."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "anchor_id",
+          "source_id",
+          "version_id",
+          "kind",
+          "locator",
+          "start_byte",
+          "end_byte",
+          "span_hash",
+          "content_hash",
+          "citation",
+          "official_url",
+          "text"
+        ],
+        "title": "AnchorView",
+        "description": "One part of a text exactly (API-02 /anchors/{id}, DAT-06): its span, locator, hashes, offset unit,\ncitation and attribution, and the words of the span themselves."
+      },
       "CitationView": {
         "properties": {
           "status": {
@@ -2974,6 +3479,58 @@
           "has_full_text"
         ],
         "title": "SourceView"
+      },
+      "StructurePage": {
+        "properties": {
+          "version_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Version Id",
+            "description": "The text version."
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Content Hash",
+            "description": "The `content_hash` of the text the offsets refer to."
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total",
+            "description": "How many parts the text has."
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/NodeViewRecord"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "This page's parts, in document order."
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor",
+            "description": "Pass as `cursor` for the next page; absent on the last page."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version_id",
+          "content_hash",
+          "total",
+          "items"
+        ],
+        "title": "StructurePage",
+        "description": "A page of one text version's structure in document order (API-02 /versions/{id}/structure)."
       },
       "VersionPage": {
         "properties": {
