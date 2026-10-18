@@ -8,13 +8,13 @@ from sqlalchemy import text
 from rights.sql_resources import bundle_hash, render
 
 # Reviewed grant bundles; any edit to rights/sql/provision must update this pin deliberately.
-PROVISION_HASH = "efcb9a4d40be1f6d0cd734428ec127801c4e3b3df618175ec061fac21c02a1b7"
+PROVISION_HASH = "8c59c2ff5a19b5bd423bcfe74ae1573b31cd20d9aea3a0da5ef8594ab008e3cf"
 
 
 def selected_grants(conn, namespace):
     if bundle_hash("provision") != PROVISION_HASH:
         raise ValueError("Capability grant bundles changed; review and update the provision pin")
-    names = [namespace.base, *(namespace.schema(k) for k in ("policy", "staging", "corpus"))]
+    names = [namespace.base, *(namespace.schema(k) for k in ("policy", "staging", "corpus", "changes"))]
     rows = conn.execute(
         text("""
         SELECT n.nspname,c.relname,NULL::text signature FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname=ANY(:names)
@@ -22,7 +22,7 @@ def selected_grants(conn, namespace):
     """),
         {"names": names},
     ).all()
-    kinds = dict(zip(names, ("base", "policy", "staging", "corpus"), strict=True))
+    kinds = dict(zip(names, ("base", "policy", "staging", "corpus", "changes"), strict=True))
     inventory = {kinds[schema] + "." + name for schema, name, _ in rows}
     root = files("rights").joinpath("sql", "provision")
     bundles = json.loads(root.joinpath("manifest.json").read_text())
