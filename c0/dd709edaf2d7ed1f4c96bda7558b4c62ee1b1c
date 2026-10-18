@@ -1,0 +1,27 @@
+api/store.py
+  s_b82616e2476856::t_8e24c5889cfa78 166-169
+tests/test_publication.py
+  s_b82616e2476856::t_a2a46184d2cf57 23,29,52-58
+web/src/docs/data/examples.json
+  s_b82616e2476856::t_a2a46184d2cf57 235
+tests/test_postgres_api_v1.py
+  s_b82616e2476856::t_a2a46184d2cf57 254
+ingestion/catalogue/ng.json
+  s_b82616e2476856::t_8e24c5889cfa78 201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c0dd709edaf2d7ed1f4c96bda7558b4c62ee1b1c",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
