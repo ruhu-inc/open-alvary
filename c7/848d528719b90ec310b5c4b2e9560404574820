@@ -1,0 +1,22 @@
+scripts/benchmark_catalogue.py
+  s_b82616e2476856::t_90628b2af91348 1-70,74-142,146-328,332-353,357-365,370-382,388-403
+  s_b82616e2476856::t_639a6fceefd184 71-73,143-145,329-331,354-356,366-369,383-387
+tests/test_benchmark_catalogue.py
+  s_b82616e2476856::t_b81607eabf758d 1-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c7848d528719b90ec310b5c4b2e9560404574820",
+  "prompts": {},
+  "sessions": {
+    "s_b82616e2476856": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "73d2b2ac-6484-4019-bcb8-47e3626760b2",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
