@@ -1,0 +1,23 @@
+operations/publish.py
+  s_d665c62e07d76f::t_552a3d2683a593 114-148,463
+  s_d665c62e07d76f::t_97fcadb0f85f60 39,149-152,155,182,190,459-462,488,503-504,509
+tests/test_publish.py
+  s_d665c62e07d76f::t_d08298e29ef89d 142
+  s_d665c62e07d76f::t_80e3b5b4641279 165-182
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d5e8c1dac7df43615c5c8f9b4412fd78bf2d0a81",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
