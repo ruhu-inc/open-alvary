@@ -21,6 +21,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from api.admission import AdmissionUnavailable
 from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable
 from api.credentials import problem
+from api.emission import MAX_SINGLE_RESPONSE_BYTES, CheckedResponse
 from api.openapi_docs import describe
 from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
 from api.release_adapter import LegacyReleases
@@ -197,7 +198,27 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
         request: Request, source_id: str, service: LegacyCatalogue = Depends(catalogue)
     ) -> VersionPage:
         check_source(request, service, source_id)
-        return service.versions(source_id)
+        page = service.versions(source_id)
+        payload = page.model_dump_json().encode()
+        if len(payload) > MAX_SINGLE_RESPONSE_BYTES:
+            raise ResultTooLarge("This record's texts are larger than one response may be")
+        served = {(v.id, v.content_hash) for v in page.items}
+
+        def recheck() -> bool:
+            """Immediately before the first byte: every text read is still public (its rights record
+            may have changed since it was read)."""
+            try:
+                with session() as fresh:
+                    current = fresh.versions(source_id)
+            except SourceUnavailable:
+                return False
+            return served <= {(v.id, v.content_hash) for v in current.items}
+
+        def refusal(status: int, detail: str):
+            changed = "The record changed while this answer was being sent. Request it again."
+            return problem("temporarily_unavailable", request_id(request), detail=changed)
+
+        return CheckedResponse(payload, recheck, refusal=refusal)
 
     @app.get("/search")
     def search(

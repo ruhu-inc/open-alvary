@@ -109,16 +109,28 @@ def test_old_download_links_redirect_permanently(client):
 
 def test_downloads_recheck_and_refuse_withdrawn_or_unknown_files(cleared, store, tmp_path):
     store.save(cleared)
-    write_release(cleared, tmp_path, "2026-10-05", "ng")
+    write_release(cleared, tmp_path, "2026-10-05", "ng", metadata_only=True)
     client = TestClient(create_service(store, tmp_path))
-    url = "/downloads/2026-10-05/ng/corpus/versions.jsonl"
+    url = "/downloads/2026-10-05/ng/metadata/sources.jsonl"
     assert client.get(url).status_code == 200
-    assert client.get("/downloads/2026-10-05/ng/corpus/ng.json").json()["code"] == "unavailable"
+    assert client.get("/downloads/2026-10-05/ng/metadata/ng.json").json()["code"] == "unavailable"
     cleared.rights[0].status = "RIGHTS_UNDER_REVIEW"
     store.save(cleared)
     withdrawn = client.get(url)
     assert withdrawn.status_code == 410 and withdrawn.json()["code"] == "withdrawn"
     assert client.get("/site/v1/releases").json() == []
+
+
+def test_a_release_holding_full_text_is_never_listed_or_served(cleared, store, tmp_path):
+    store.save(cleared)
+    write_release(cleared, tmp_path, "2026-10-05", "ng")  # corpus mode: holds the cleared text
+    write_release(cleared, tmp_path, "2026-10-05", "ng", metadata_only=True)
+    client = TestClient(create_service(store, tmp_path))
+    assert [manifest["mode"] for manifest in client.get("/site/v1/releases").json()] == ["metadata"]
+    for name in ("versions.jsonl", "manifest.json"):
+        refused = client.get(f"/downloads/2026-10-05/ng/corpus/{name}")
+        assert refused.status_code == 404 and refused.json()["code"] == "unavailable"
+    assert client.get("/downloads/2026-10-05/ng/metadata/manifest.json").status_code == 200
 
 
 def test_withdrawal_takes_effect_on_the_next_request(cleared, store, tmp_path):

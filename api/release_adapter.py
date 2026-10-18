@@ -41,17 +41,30 @@ def _published(root: Path):
     return [path for _, path in sorted(found, reverse=True)]
 
 
+def holds_text(manifest: dict) -> bool:
+    """Whether a release carries any full text (its versions file has records)."""
+    versions = (manifest.get("files") or {}).get("versions.jsonl") or {}
+    return bool(versions.get("records") or (manifest.get("coverage") or {}).get("published_versions"))
+
+
 class LegacyReleases:
-    def __init__(self, store: Store, root: Path):
+    """Release listing and files. A release holding full text is neither listed nor served unless
+    bulk_text is set: a full-text download cannot be taken back, and who may take bulk text is the
+    owner's decision when the first texts are cleared (D25(5)). Metadata releases stay public."""
+
+    def __init__(self, store: Store, root: Path, bulk_text: bool = False):
         self.store = store
         self.root = root
+        self.bulk_text = bulk_text
 
     def listing(self):
         current = self.store.load()
         result = []
         for path in _published(self.root):
+            manifest = json.loads(path.read_text())
+            if holds_text(manifest) and not self.bulk_text:
+                continue
             if release_available(path.parent, current):
-                manifest = json.loads(path.read_text())
                 manifest["download_base"] = "/releases/" + path.parent.relative_to(self.root).as_posix()
                 result.append(manifest)
         return result
@@ -69,6 +82,8 @@ class LegacyReleases:
         manifest = directory / "manifest.json"
         if not manifest.is_file():
             raise ReleaseMissing()
+        if holds_text(json.loads(manifest.read_text())) and not self.bulk_text:
+            raise ReleaseMissing()  # as if absent: bulk text is not offered (D25(5))
         if not release_available(directory, self.store.load()):
             raise ReleaseWithdrawn("Release withdrawn or invalid; consult the latest release")
         allowed = set(json.loads(manifest.read_text())["files"]) | {"manifest.json"}

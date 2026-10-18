@@ -234,8 +234,11 @@ def test_download_paths_allowlisted(catalogue, store, tmp_path):
 def test_old_release_withdrawn_after_rights_change(cleared, store, tmp_path):
     store.save(cleared)
     write_release(cleared, tmp_path, "2026-10-05", "ng")
+    write_release(cleared, tmp_path, "2026-10-05", "ng", metadata_only=True)
     client = TestClient(create_app(store, tmp_path))
-    url = "/releases/2026-10-05/ng/corpus/versions.jsonl"
+    # Bulk full text is not offered here either (D25(5)): the corpus release, holding text, is absent.
+    assert client.get("/releases/2026-10-05/ng/corpus/versions.jsonl").status_code == 404
+    url = "/releases/2026-10-05/ng/metadata/sources.jsonl"
     assert client.get(url).status_code == 200
     cleared.rights[0].status = "RIGHTS_UNDER_REVIEW"
     store.save(cleared)
