@@ -1209,6 +1209,21 @@ def test_a_refused_page_break_join_blocks_approval(world):
     assert approve(approver).json() == {"revision": 1}
 
 
+def test_a_page_says_how_the_page_before_it_ends(world):
+    reviewer = signed_in(world, "reviewer@example.org")
+    assert reviewer.get(f"/api/documents/{ACT}/pages/1").json()["previous_end"] is None
+    before = reviewer.get(f"/api/documents/{ACT}/pages/2").json()["previous_end"]
+    assert before == {
+        "page": 1,
+        "text": "1. Accounts prepared under section 198 of this Act.",
+        "hyphen": False,
+        "ends_sentence": True,
+    }
+    save(reviewer, units=[{"kind": "paragraph", "text": "1. Accounts prepared under sec-"}])
+    before = reviewer.get(f"/api/documents/{ACT}/pages/2").json()["previous_end"]
+    assert before["hyphen"] and not before["ends_sentence"]
+
+
 def test_join_marks_are_validated_and_words_doubled_in_editing_are_reported(world):
     reviewer = signed_in(world, "reviewer@example.org")
     hyphen_only = [{"kind": "paragraph", "text": "x", "dehyphenate": True}]

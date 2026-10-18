@@ -9,6 +9,7 @@ https address and an OpenID Connect client configured; see the runbook.
 import hmac
 import html
 import os
+import re
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
@@ -28,13 +29,14 @@ from ingestion import settings
 from schema import record as R
 from schema.jurisdictions import registry as jurisdiction_registry
 from workbench import access as access_section
-from workbench import akn, auth, content, details, privileged, publication, record_view
+from workbench import akn, auth, content, details, privileged, publication, record_view, serialize
 from workbench import operators as operators_section
 from workbench.review import Review
 from workbench.store import Conflict, Store, engine_from_environment
 
 STATIC = Path(__file__).with_name("static")
 DECISIONS = {"keep", "use_check", "edited", "dismissed"}
+SENTENCE_END = re.compile(r"[.;:!?—–]['’”\")\]]*$")  # a page ending here finishes its paragraph
 JSON_BODY = Body(...)
 SECURITY_HEADERS = {
     "Content-Security-Policy": (
@@ -196,6 +198,27 @@ def create_app(
         if not found:
             raise HTTPException(404, "No such page")
         return reading, found
+
+    def previous_end(act_id: str, reading: dict, page: int) -> dict | None:
+        """How the page before ends, as now reviewed: whether this page's first paragraph may
+        continue it (TXP-02 rule 8)."""
+        numbers = [p["page"] for p in reading["pages"]]
+        if page not in numbers or numbers.index(page) == 0:
+            return None
+        before = reading["pages"][numbers.index(page) - 1]
+        revision = store.latest_pages(act_id).get(before["page"])
+        units = revision["units"] if revision else content.units_from(before)
+        words = next(
+            (w for u in reversed(units) if u.get("kind") != "table" and (w := serialize.unit_words(u))), ""
+        )
+        if not words:
+            return None
+        return {
+            "page": before["page"],
+            "text": words[-160:],
+            "hyphen": words.endswith("-"),
+            "ends_sentence": bool(SENTENCE_END.search(words)),
+        }
 
     profiles = jurisdiction_registry()
     review = Review(store, library, profiles)
@@ -444,11 +467,12 @@ def create_app(
     def page_detail(request: Request, act_id: str, page: int):
         auth.current(request, store)
         act_or_404(act_id)
-        _, found = reading_page(act_id, page)
+        reading, found = reading_page(act_id, page)
         history = store.page_history(act_id, page)
         latest = history[0] if history else None
         return {
             "page": page,
+            "previous_end": previous_end(act_id, reading, page),
             "machine_units": content.units_from(found),
             "machine_html": content.machine_html(found),
             "flags": content.page_flags(found),
