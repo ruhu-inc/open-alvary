@@ -100,10 +100,10 @@ def verify_authority(conn, ns, installed):
         JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
         WHERE NOT g.tgisinternal AND g.tgenabled='D' AND n.nspname = ANY(:schemas)
         """),
-        {"schemas": [ns.base, *(ns.schema(k) for k in ("policy", "staging", "corpus"))]},
+        {"schemas": [ns.base, *(ns.schema(k) for k in ("policy", "staging", "corpus", "changes"))]},
     )
     if disabled:
-        raise ValueError("A policy, journal or fence trigger is disabled")
+        raise ValueError("A policy, journal, fence or append-only trigger is disabled")
     if provisioned:
         verify_capability_grants(conn, ns, roles, rows)
 

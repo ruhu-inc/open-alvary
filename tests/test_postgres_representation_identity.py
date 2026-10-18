@@ -347,6 +347,9 @@ def fingerprint_of(conn, ns, signature):
         "GRANT INSERT ON {corpus}.metadata_projection TO {release}",
         "GRANT UPDATE ON {policy}.denial_delivery TO {release}",
         "ALTER TABLE {policy}.collection_decision DISABLE TRIGGER journal_permission_denial",
+        "GRANT UPDATE ON {changes}.rights_revision TO {release}",
+        "ALTER TABLE {changes}.change_event DISABLE TRIGGER change_event_append_only",
+        "ALTER TABLE {changes}.rights_revision DISABLE TRIGGER rights_revision_append_only",
     ],
 )
 def test_verifier_rejects_unreviewed_grants_and_disabled_triggers(foundation, tamper):
@@ -358,6 +361,7 @@ def test_verifier_rejects_unreviewed_grants_and_disabled_triggers(foundation, ta
         names = {
             "policy": quote(f.ns.schema("policy")),
             "corpus": quote(f.ns.schema("corpus")),
+            "changes": quote(f.ns.schema("changes")),
             "serving": quote(f.roles["serving"]),
             "release": quote(f.roles["release"]),
         }
