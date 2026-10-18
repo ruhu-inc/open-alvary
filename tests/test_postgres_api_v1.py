@@ -188,6 +188,8 @@ def test_mcp_needs_a_credential_and_answers_tools_within_the_access(api):
         "get_source",
         "get_relationships",
         "get_anchor",
+        "search_text",
+        "resolve_citation",
         "get_coverage",
         "list_changes",
         "get_change",

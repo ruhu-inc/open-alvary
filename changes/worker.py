@@ -312,11 +312,13 @@ def purge(accounts: Accounts) -> int:
 def expire(accounts: Accounts) -> int:
     """Record withdrawals caused by expired rights reviews (changes.record.expired), before matching,
     so watches and webhooks hear of them in the same run."""
+    from api import text_index
     from api.store import check_legacy_authority
     from changes.record import expired
 
     with accounts.engine.begin() as conn:
         check_legacy_authority(conn, write=False)
+        text_index.ensure(conn)  # a deployment's first run builds the section index if no write has
         return expired(conn)
 
 

@@ -197,6 +197,17 @@
           },
           "title": "Matches",
           "type": "array"
+        },
+        "provision": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProvisionLookup"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -542,6 +553,204 @@
       ],
       "title": "Permission",
       "type": "string"
+    },
+    "ProvisionLookup": {
+      "additionalProperties": false,
+      "description": "What a citation's pinpoint names in the works it resolves to: one part, alternatives (never a\nguess) or none, with the reason, and when none, the nearest enclosing part that exists.",
+      "properties": {
+        "pinpoint": {
+          "title": "Pinpoint",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "resolved",
+            "ambiguous",
+            "unresolved"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "several_works",
+                "several_texts",
+                "repeated_number",
+                "not_found",
+                "no_public_text",
+                "no_text_in_scope"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "candidates": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/ProvisionMatch"
+          },
+          "title": "Candidates",
+          "type": "array"
+        },
+        "nearest": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProvisionMatch"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "pinpoint",
+        "status"
+      ],
+      "title": "ProvisionLookup",
+      "type": "object"
+    },
+    "ProvisionMatch": {
+      "additionalProperties": false,
+      "description": "One part of a public text that a pinpoint names (API-04 provision lookup): its anchor, locator and\nexact span. /anchors/{anchor_id} gives its words.",
+      "properties": {
+        "anchor_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Anchor Id",
+          "type": "string"
+        },
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "version_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Version Id",
+          "type": "string"
+        },
+        "language": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Language",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "locator": {
+          "title": "Locator",
+          "type": "string"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "heading": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Heading"
+        },
+        "pinpoint": {
+          "title": "Pinpoint",
+          "type": "string"
+        },
+        "citation": {
+          "title": "Citation",
+          "type": "string"
+        },
+        "start_byte": {
+          "minimum": 0,
+          "title": "Start Byte",
+          "type": "integer"
+        },
+        "end_byte": {
+          "minimum": 0,
+          "title": "End Byte",
+          "type": "integer"
+        },
+        "offset_unit": {
+          "const": "utf-8-bytes",
+          "default": "utf-8-bytes",
+          "title": "Offset Unit",
+          "type": "string"
+        },
+        "span_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Span Hash",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "effective_until": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective Until"
+        }
+      },
+      "required": [
+        "anchor_id",
+        "source_id",
+        "version_id",
+        "language",
+        "kind",
+        "locator",
+        "pinpoint",
+        "citation",
+        "start_byte",
+        "end_byte",
+        "span_hash",
+        "content_hash"
+      ],
+      "title": "ProvisionMatch",
+      "type": "object"
     },
     "RelatedSource": {
       "additionalProperties": false,
@@ -957,6 +1166,39 @@
       "title": "RightsViewRecord",
       "type": "object"
     },
+    "SearchCoverage": {
+      "additionalProperties": false,
+      "description": "What a text search covered: only published texts are searched, never a record's metadata alone.",
+      "properties": {
+        "records_in_scope": {
+          "minimum": 0,
+          "title": "Records In Scope",
+          "type": "integer"
+        },
+        "records_with_text": {
+          "minimum": 0,
+          "title": "Records With Text",
+          "type": "integer"
+        },
+        "texts_searched": {
+          "minimum": 0,
+          "title": "Texts Searched",
+          "type": "integer"
+        },
+        "notice": {
+          "title": "Notice",
+          "type": "string"
+        }
+      },
+      "required": [
+        "records_in_scope",
+        "records_with_text",
+        "texts_searched",
+        "notice"
+      ],
+      "title": "SearchCoverage",
+      "type": "object"
+    },
     "SearchPage": {
       "additionalProperties": false,
       "properties": {
@@ -1282,6 +1524,376 @@
       "title": "StructurePage",
       "type": "object"
     },
+    "TextHit": {
+      "additionalProperties": false,
+      "description": "One passage of a published text that matches a search (OA-S1, RET-03): the part it is in, a\nsnippet of exact canonical bytes with its terms marked, and what quoting it asks for.",
+      "properties": {
+        "anchor_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Anchor Id",
+          "type": "string"
+        },
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "version_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Version Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "citation": {
+          "title": "Citation",
+          "type": "string"
+        },
+        "pinpoint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pinpoint"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "locator": {
+          "title": "Locator",
+          "type": "string"
+        },
+        "heading": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Heading"
+        },
+        "language": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Language",
+          "type": "string"
+        },
+        "jurisdiction_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Jurisdiction Id",
+          "type": "string"
+        },
+        "document_type": {
+          "title": "Document Type",
+          "type": "string"
+        },
+        "legal_status": {
+          "enum": [
+            "unknown",
+            "current",
+            "historical",
+            "repealed",
+            "superseded"
+          ],
+          "title": "Legal Status",
+          "type": "string"
+        },
+        "year": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Year"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "effective_until": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective Until"
+        },
+        "start_byte": {
+          "minimum": 0,
+          "title": "Start Byte",
+          "type": "integer"
+        },
+        "end_byte": {
+          "minimum": 0,
+          "title": "End Byte",
+          "type": "integer"
+        },
+        "snippet": {
+          "title": "Snippet",
+          "type": "string"
+        },
+        "snippet_start_byte": {
+          "minimum": 0,
+          "title": "Snippet Start Byte",
+          "type": "integer"
+        },
+        "snippet_end_byte": {
+          "minimum": 0,
+          "title": "Snippet End Byte",
+          "type": "integer"
+        },
+        "highlights": {
+          "default": [],
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "type": "array"
+          },
+          "title": "Highlights",
+          "type": "array"
+        },
+        "offset_unit": {
+          "const": "utf-8-bytes",
+          "default": "utf-8-bytes",
+          "title": "Offset Unit",
+          "type": "string"
+        },
+        "content_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Content Hash",
+          "type": "string"
+        },
+        "matched_by": {
+          "enum": [
+            "citation",
+            "text"
+          ],
+          "title": "Matched By",
+          "type": "string"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score"
+        },
+        "official_url": {
+          "title": "Official Url",
+          "type": "string"
+        },
+        "licence": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Licence"
+        },
+        "attribution_required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribution Required"
+        },
+        "attribution_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attribution Text"
+        }
+      },
+      "required": [
+        "anchor_id",
+        "source_id",
+        "version_id",
+        "title",
+        "citation",
+        "kind",
+        "locator",
+        "language",
+        "jurisdiction_id",
+        "document_type",
+        "legal_status",
+        "start_byte",
+        "end_byte",
+        "snippet",
+        "snippet_start_byte",
+        "snippet_end_byte",
+        "content_hash",
+        "matched_by",
+        "official_url"
+      ],
+      "title": "TextHit",
+      "type": "object"
+    },
+    "TextSearchPage": {
+      "additionalProperties": false,
+      "description": "A page of a search over published texts' provisions (OA-S1). ``status`` tells no result apart from\na scope with no published text and from a search that could not run.",
+      "properties": {
+        "status": {
+          "enum": [
+            "results",
+            "no_result",
+            "unsupported_scope",
+            "degraded"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "query": {
+          "title": "Query",
+          "type": "string"
+        },
+        "total": {
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        },
+        "total_exact": {
+          "title": "Total Exact",
+          "type": "boolean"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/TextHit"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Cursor"
+        },
+        "citation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CitationView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "coverage": {
+          "$ref": "#/$defs/SearchCoverage"
+        },
+        "analysis": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Analysis",
+          "type": "object"
+        },
+        "analyzer": {
+          "title": "Analyzer",
+          "type": "string"
+        },
+        "ranking": {
+          "title": "Ranking",
+          "type": "string"
+        },
+        "index_built_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Index Built At"
+        },
+        "notices": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Notices",
+          "type": "array"
+        }
+      },
+      "required": [
+        "status",
+        "query",
+        "total",
+        "total_exact",
+        "items",
+        "coverage",
+        "analyzer",
+        "ranking"
+      ],
+      "title": "TextSearchPage",
+      "type": "object"
+    },
     "VersionPage": {
       "additionalProperties": false,
       "properties": {
@@ -1312,6 +1924,17 @@
             }
           ],
           "title": "Notice"
+        },
+        "selection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionSelection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -1321,6 +1944,92 @@
         "notice"
       ],
       "title": "VersionPage",
+      "type": "object"
+    },
+    "VersionSelection": {
+      "additionalProperties": false,
+      "description": "Which text a date and a language select (API-02, OA-T3): one, alternatives with the reason, or\nnone. Never an arbitrary preference: a text with no effective date is never taken to be in force.",
+      "properties": {
+        "status": {
+          "enum": [
+            "selected",
+            "ambiguous",
+            "none"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "as_of": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "As Of"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language"
+        },
+        "version_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version Id"
+        },
+        "alternatives": {
+          "default": [],
+          "items": {
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "type": "string"
+          },
+          "title": "Alternatives",
+          "type": "array"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "several_languages",
+                "several_texts",
+                "effective_dates_unknown",
+                "none_in_language",
+                "none_in_force"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "VersionSelection",
       "type": "object"
     },
     "VersionViewRecord": {
@@ -1570,6 +2279,14 @@
         "$ref": "#/$defs/RightsHistory"
       },
       "title": "Rights Histories",
+      "type": "array"
+    },
+    "text_searches": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/TextSearchPage"
+      },
+      "title": "Text Searches",
       "type": "array"
     }
   },

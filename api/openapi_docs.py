@@ -118,9 +118,15 @@ OPERATIONS: dict[str, dict] = {
         "summary": "Get a record's texts",
         "description": "The record's text versions cleared for reuse, each with its full text; the "
         "parts, chapters and sections located in that text; and its rights record. A record whose text "
-        "isn't cleared answers no versions and a notice saying why.",
-        "parameters": {"source_id": "The record's ID."},
-        "errors": MISSING | TOO_LARGE,
+        "isn't cleared answers no versions and a notice saying why. With `as_of` or `language`, only the "
+        "text they select, or the alternatives and why (`selection`): a text with no effective date is "
+        "never taken to be in force on a date.",
+        "parameters": {
+            "source_id": "The record's ID.",
+            "as_of": "A date, such as `2024-01-01`: the text in force on it, from each text's effective dates.",
+            "language": "A language, such as `en`; `en` also matches `en-NG`.",
+        },
+        "errors": MISSING | BAD | TOO_LARGE,
     },
     "/versions/{version_id}/text": {
         "operationId": "get_version_text",
@@ -198,14 +204,51 @@ OPERATIONS: dict[str, dict] = {
         "parameters": {"source_id": "The record's ID."},
         "errors": MISSING,
     },
+    "/search/text": {
+        "operationId": "search_text",
+        "tag": "Catalogue",
+        "summary": "Search published texts",
+        "description": "Passages of published texts that match the words, best first: each hit is a section, "
+        "article or schedule paragraph, with a snippet of the exact text, its byte span and the anchor to "
+        "get it whole. Only published texts are searched; `coverage` says how many records in the scope "
+        "have one, and `status` tells no result (`no_result`) apart from a scope with no published text "
+        "(`unsupported_scope`) and a search that could not run (`degraded`). A query that reads as a "
+        "citation of a part, such as `NDPA s. 23(1)(a)`, puts that part first. Without `jurisdiction`, "
+        "a search covers your plan's countries.",
+        "parameters": {
+            "q": 'Words to find, 1 to 2,000 characters: `"exact phrase"`, `-without`, `this OR that`.',
+            "jurisdiction": "One jurisdiction ID, such as `ng` or `rw`. A country outside your plan "
+            "answers at the Starter rate.",
+            "language": "Texts in this language, such as `en`; `en` also matches `en-NG`.",
+            "type": "Document types, such as `act` or `regulation`. Repeat for several.",
+            "status": "Legal statuses: `current`, `historical`, `repealed`, `superseded` or `unknown`. "
+            "Repeat for several.",
+            "as_of": "A date, such as `2024-01-01`: only texts in force on it, from their effective dates. "
+            "A text with no effective date is left out.",
+            "year_from": "Only laws made in this year or later.",
+            "year_to": "Only laws made in this year or earlier.",
+            "source_id": "Only this record's texts.",
+            "version_id": "Only this text version.",
+            "limit": "Passages per page, 1 to 100. Default 25.",
+            "cursor": "The `next_cursor` of the previous page, to continue it.",
+        },
+        "errors": BAD,
+    },
     "/citations/{citation}": {
         "operationId": "resolve_citation",
         "tag": "Catalogue",
         "summary": "Resolve a citation",
         "description": "The records a citation refers to. Case and spacing don't matter; encode the "
-        "citation for a URL (spaces as `%20`, `/` stays as it is).",
-        "parameters": {"citation": "The citation, such as `Act No. 4 of 2011`."},
-        "errors": {},
+        "citation for a URL (spaces as `%20`, `/` stays as it is). A citation of a part, such as "
+        "`NDPA s. 23(1)(a)`, `art. 12` or `First Schedule, para. 3` after the record's citation, also "
+        "answers `provision`: the part in the record's public text, with its anchor and exact span, or "
+        "the alternatives and why. Nothing is chosen between alternatives.",
+        "parameters": {
+            "citation": "The citation, such as `Act No. 4 of 2011` or `FOI Act 2011, s. 1(1)`.",
+            "as_of": "A date, such as `2024-01-01`: look for the part only in texts in force on it.",
+            "language": "Look for the part only in texts in this language, such as `en`.",
+        },
+        "errors": BAD,
     },
     "/jurisdictions": {
         "operationId": "list_jurisdictions",
@@ -657,6 +700,18 @@ FIELDS: dict[str, dict[str, str]] = {
         "rights": "The record's rights record.",
         "structure": "The parts, chapters and sections of these texts.",
         "notice": "Why no text is shown, when none is.",
+        "selection": "When `as_of` or `language` was given: which text they select, or the alternatives "
+        "and why.",
+    },
+    "VersionSelection": {
+        "status": "`selected` (one text), `ambiguous` (several: see `alternatives`) or `none`.",
+        "as_of": "The date asked about.",
+        "language": "The language asked about.",
+        "version_id": "The selected text, when there is one.",
+        "alternatives": "The texts that could each be the one, when several could.",
+        "reason": "Why there is not one text: `several_languages`, `several_texts`, `effective_dates_unknown` "
+        "(a text has no effective date, so whether it is in force can't be said), `none_in_language` or "
+        "`none_in_force`.",
     },
     "VersionViewRecord": {
         "id": "The version's ID.",
@@ -748,6 +803,95 @@ FIELDS: dict[str, dict[str, str]] = {
     "CitationView": {
         "status": "`resolved` (one record), `ambiguous` (several) or `unresolved` (none).",
         "matches": "The records the citation refers to.",
+        "provision": "When the citation names a part, such as `s. 23(1)(a)`: what it names in the records' "
+        "public texts.",
+    },
+    "ProvisionLookup": {
+        "pinpoint": "The part the citation names, as read, such as `s. 23(1)(a)`.",
+        "status": "`resolved` (one part), `ambiguous` (several: see `candidates`) or `unresolved` (none).",
+        "reason": "Why not one part: `several_works`, `several_texts` (the part is in several texts, such as "
+        "two languages: give `language` or `as_of`), `repeated_number` (the text prints the number twice), "
+        "`not_found`, `no_public_text` or `no_text_in_scope` (no public text matches `as_of` or `language`).",
+        "candidates": "The part, or the parts that could each be the one.",
+        "nearest": "When the part is not found: the nearest part enclosing it that is, such as the section "
+        "of a paragraph the text doesn't divide.",
+    },
+    "ProvisionMatch": {
+        "anchor_id": "The part's ID: `/anchors/{anchor_id}` gives its words.",
+        "source_id": "The record.",
+        "version_id": "The text version it is in.",
+        "language": "The text's language.",
+        "kind": "What it is, such as `section`, `paragraph` or `definition`.",
+        "locator": "Its stable key within the text, such as `sec_23__subsec_1__para_a`.",
+        "label": "Its printed number, such as `(a)`, when it has one.",
+        "heading": "Its printed heading, when it has one.",
+        "pinpoint": "How it is cited within the text, such as `s. 23(1)(a)`.",
+        "citation": "The record's citation and the pinpoint.",
+        "start_byte": "Where it starts: a byte offset into the text in UTF-8.",
+        "end_byte": "Where it ends: a byte offset into the text in UTF-8.",
+        "offset_unit": "The unit of the offsets: `utf-8-bytes`.",
+        "span_hash": "SHA-256 of the text's bytes from `start_byte` to `end_byte`.",
+        "content_hash": "The `content_hash` of the whole text.",
+        "effective_from": "The date the text applies from, when known.",
+        "effective_until": "The date the text applies until, when known.",
+    },
+    "TextSearchPage": {
+        "status": "`results`; `no_result` (published texts were searched and none matched); "
+        "`unsupported_scope` (no published text in this scope); or `degraded` (the search could not run: "
+        "see `notices`).",
+        "query": "The words searched for.",
+        "total": "Passages matching, across all pages (see `total_exact`).",
+        "total_exact": "Whether `total` is exact; counting stops at 10,000.",
+        "items": "This page's passages, best first.",
+        "next_cursor": "Pass as `cursor` for the next page; absent on the last. The first 1,000 passages "
+        "are served.",
+        "citation": "When the words read as a citation of a public record: what it resolves to.",
+        "coverage": "What was searched.",
+        "analysis": "How each language's texts are matched: `english` (stemming and common words) or "
+        "`simple` (word for word).",
+        "analyzer": "The version of the index's analysis.",
+        "ranking": "The ranking used: `oa-rank-1`, as the search guide describes.",
+        "index_built_at": "When the index was built.",
+        "notices": "Anything that limits these results, in sentences.",
+    },
+    "TextHit": {
+        "anchor_id": "The part the passage is in: `/anchors/{anchor_id}` gives it whole.",
+        "source_id": "The record.",
+        "version_id": "The text version.",
+        "title": "The record's title.",
+        "citation": "The record's citation and the part's pinpoint.",
+        "pinpoint": "How the part is cited within the text, such as `s. 23`, when it has a number.",
+        "kind": "What the part is, such as `section` or `article`.",
+        "locator": "The part's stable key within the text.",
+        "heading": "The part's printed heading, when it has one.",
+        "language": "The text's language.",
+        "jurisdiction_id": "The record's jurisdiction.",
+        "document_type": "The record's document type.",
+        "legal_status": "The record's legal status.",
+        "year": "The year the law was made, when known.",
+        "effective_from": "The date the text applies from, when known.",
+        "effective_until": "The date the text applies until, when known.",
+        "start_byte": "Where the searched passage starts: a byte offset into the text in UTF-8.",
+        "end_byte": "Where the searched passage ends.",
+        "snippet": "Words from the passage, exactly as in the text: its bytes from `snippet_start_byte` to "
+        "`snippet_end_byte`.",
+        "snippet_start_byte": "Where the snippet starts in the text.",
+        "snippet_end_byte": "Where the snippet ends in the text.",
+        "highlights": "The matching words, as [start, end] byte offsets into the text.",
+        "offset_unit": "The unit of the offsets: `utf-8-bytes`.",
+        "content_hash": "The `content_hash` of the whole text.",
+        "matched_by": "`citation` (the words cite this part) or `text` (its words match).",
+        "score": "Its relevance under `ranking`, from 0 to 1; absent for a citation match.",
+        "official_url": "The official file the text was read from.",
+        "licence": "The terms the text is published under.",
+        "attribution_required": "Whether quoting it must credit the source.",
+        "attribution_text": "The credit to give, when one is required.",
+    },
+    "SearchCoverage": {
+        "records_in_scope": "Public records in the search's scope.",
+        "records_with_text": "Of those, records with a published text, which is all that is searched.",
+        "texts_searched": "Published text versions searched.",
+        "notice": "What the search covered, in a sentence.",
     },
     "CoverageView": {
         "catalogued_sources": "Records in the catalogue.",

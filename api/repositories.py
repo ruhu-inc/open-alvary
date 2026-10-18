@@ -424,3 +424,65 @@ class LegacyRepository:
 
     def aliases(self, source_id: str):
         return self.rows("citations", source_id=source_id)
+
+    def _field(self, table, name):
+        if self.connection.dialect.name == "postgresql":
+            return table.c.payload.op("->>", return_type=Text)(name)
+        return table.c.payload[name].as_string()
+
+    def citation_candidates(self, term: str) -> list[tuple[str, dict | None]]:
+        """Every catalogued value that may read as ``term`` (normalize_citation's), as (source id, the
+        alias, or None for the source's own citation or title). One query each for aliases and sources;
+        the caller confirms each value, so a value the database folds differently is never matched."""
+        self.search_predicates(term)  # learns whether the indexed normaliser exists
+        citations, sources = tables["citations"], self._sources
+
+        def may_be(value):
+            if not self._indexed_metadata:
+                return true()
+            normal = func.legacy_metadata_normalize(func.coalesce(value, "")) == term
+            if self.connection.dialect.name != "postgresql":
+                return normal
+            return or_(normal, func.octet_length(value) != func.length(value))
+
+        aliases = self.connection.execute(
+            select(citations.c.source_id, citations.c.payload)
+            .where(self._identity_matches(citations), may_be(self._field(citations, "value")))
+            .limit(MAX_UNPAGED_ROWS + 1)
+        ).all()
+        own = self.connection.execute(
+            select(sources.c.id)
+            .where(
+                self._identity_matches(sources),
+                or_(may_be(self._field(sources, "citation")), may_be(self._field(sources, "title"))),
+            )
+            .limit(MAX_UNPAGED_ROWS + 1)
+        ).all()
+        if len(aliases) > MAX_UNPAGED_ROWS or len(own) > MAX_UNPAGED_ROWS:
+            raise ResultTooLarge("Citation candidates exceed pilot bound")
+        return [(row.source_id, row.payload) for row in aliases] + [(row.id, None) for row in own]
+
+    def count_public(self, *, jurisdictions=None, types=(), statuses=(), language=None, years=(None, None)):
+        """How many public sources match a text search's record filters."""
+        statement = (
+            select(func.count())
+            .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
+            .where(self._visible())
+        )
+        if jurisdictions is not None:
+            statement = statement.where(self._sources.c.jurisdiction_id.in_(sorted(jurisdictions)))
+        if types:
+            statement = statement.where(self._field(self._sources, "document_type").in_(sorted(types)))
+        if statuses:
+            statement = statement.where(self._field(self._sources, "legal_status").in_(sorted(statuses)))
+        if language:
+            lang = func.lower(self._field(self._sources, "language"))
+            statement = statement.where(
+                or_(lang == language.casefold(), lang.like(language.casefold() + "-%"))
+            )
+        year = self._sources.c.payload["year"].as_integer()
+        if years[0] is not None:
+            statement = statement.where(year >= years[0])
+        if years[1] is not None:
+            statement = statement.where(year <= years[1])
+        return self.connection.scalar(statement)
