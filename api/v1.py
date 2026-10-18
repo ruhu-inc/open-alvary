@@ -36,6 +36,7 @@ from schema.public import (
     AnchorView,
     CitationView,
     CoverageView,
+    ExpressionPage,
     JurisdictionView,
     RelationKind,
     RightsHistory,
@@ -212,16 +213,26 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
         check_source(request, service, source_id)
         return service.relationships(source_id, kinds=[kind] if kind else None, limit=limit, cursor=cursor)
 
+    @app.get("/sources/{source_id}/expressions")
+    def expressions(
+        request: Request, source_id: str, service: LegacyCatalogue = Depends(catalogue)
+    ) -> ExpressionPage:
+        check_source(request, service, source_id)
+        return service.expressions(source_id)
+
     @app.get("/sources/{source_id}/versions")
     def versions(
         request: Request,
         source_id: str,
         as_of: date | None = None,
         language: str | None = LANGUAGE,
+        expression_id: str | None = Query(None, min_length=3, max_length=200),
         service: LegacyCatalogue = Depends(catalogue),
     ) -> VersionPage:
         check_source(request, service, source_id)
-        page = service.versions(source_id, as_of=as_of, language=language)
+        page = service.versions(
+            source_id, as_of=as_of, language=language, expression=expression_id, editions=True
+        )
         payload = page.model_dump_json().encode()
         if len(payload) > MAX_SINGLE_RESPONSE_BYTES:
             raise ResultTooLarge("This record's texts are larger than one response may be")

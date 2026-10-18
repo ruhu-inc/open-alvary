@@ -279,6 +279,35 @@ def test_every_leaf_held_once_and_spans_nest():
     assert codes(text, result) == ["running_head"]
 
 
+def test_a_part_heading_listed_in_the_contents_is_not_a_running_head():
+    # The NDPA's PART headings repeat their contents lines; only a later copy at a page's top is one.
+    pages = [
+        [
+            {"kind": "heading", "text": "EXAMPLE ACT, 2023"},
+            {"kind": "heading", "text": "ARRANGEMENT OF SECTIONS"},
+            {"kind": "heading", "text": "PART I — PRELIMINARY"},  # read as a heading, as in the NDPA
+            {"kind": "list_item", "text": "1. Short title."},
+            {"kind": "list_item", "text": "2. Application."},
+        ],
+        [
+            {
+                "kind": "paragraph",
+                "text": "ENACTED by the National Assembly of the Federal Republic of Nigeria —",
+            },
+            {"kind": "heading", "text": "PART I — PRELIMINARY"},
+            {"kind": "paragraph", "text": "1. This Act may be cited as the Example Act, 2023."},
+        ],
+        [
+            {"kind": "heading", "text": "PART I — PRELIMINARY"},
+            {"kind": "paragraph", "text": "2. It applies everywhere."},
+        ],
+    ]
+    _, result = build(pages)
+    running = [i for i in result.issues if i.code == "running_head"]
+    assert [(i.page, i.message.split("”")[0]) for i in running] == [(3, "“PART I — PRELIMINARY")]
+    assert "repeats the heading on page 2" in running[0].message
+
+
 def test_structure_hash_follows_structure_not_formatting():
     _, base = build(ACT)
     restyled = [

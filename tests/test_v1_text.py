@@ -44,7 +44,10 @@ def catalogue(store, work, title, language):
                     official_url="https://nass.gov.ng/",
                 )
             ],
-            languages=[Language(id="en", name="English", tag="en"), Language(id="fr", name="French", tag="fr")],
+            languages=[
+                Language(id=code, name=name, tag=code)
+                for code, name in (("en", "English"), ("fr", "French"), ("rw", "Kinyarwanda"))
+            ],
             sources=[
                 Source(
                     id=work, jurisdiction_id="ng", authority_id="ng-nass", title=title,
@@ -310,6 +313,26 @@ def test_a_part_in_two_languages_is_two_alternatives_until_a_language_is_given(s
     assert none["selection"]["reason"] == "none_in_language" and none["items"] == []
     assert "selection" not in client.get(f"/sources/{WORK}/versions").json()  # the pilot's answer, unchanged
     assert client.get(f"/sources/{WORK}/versions", params={"language": "not a tag"}).status_code == 400
+
+    # Language editions (API-02 expressions): one per language, each text labelled with its edition.
+    editions = client.get(f"/sources/{WORK}/expressions").json()
+    assert [(e["expression_id"], e["version_ids"], e["preferred_version_id"], e["preferred_reason"])
+            for e in editions["items"]] == [
+        (f"{WORK}:en", [english.id], english.id, "only_text"),
+        (f"{WORK}:fr", [french.id], french.id, "only_text"),
+    ]  # fmt: skip
+    assert all(e["authority"] == "unknown" for e in editions["items"])
+    edition = client.get(f"/sources/{WORK}/versions", params={"expression_id": f"{WORK}:fr"}).json()
+    assert [v["id"] for v in edition["items"]] == [french.id] and edition["items"][0][
+        "expression_id"
+    ] == f"{WORK}:fr"
+    assert (
+        client.get(f"/sources/{WORK}/versions", params={"expression_id": "other-act:fr"}).status_code == 400
+    )
+    assert {v["expression_id"] for v in client.get(f"/sources/{WORK}/versions").json()["items"]} == {
+        f"{WORK}:en",
+        f"{WORK}:fr",
+    }
 
 
 def test_a_date_selects_the_text_in_force_and_never_one_without_a_date():

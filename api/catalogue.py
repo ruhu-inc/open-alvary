@@ -30,6 +30,8 @@ from schema.public import (
     CoverageView,
     CurrentSource,
     DecisionView,
+    ExpressionPage,
+    ExpressionView,
     JurisdictionView,
     NodeViewRecord,
     ProvisionLookup,
@@ -81,6 +83,11 @@ EDGES_PER_PAGE, MAX_EDGES_PER_PAGE, EDGE_BUDGET, MAX_SUCCESSION = 25, 100, 300, 
 MAX_ANCHOR_BYTES = 900 * 1024
 # A text search serves its first 1,000 hits, 25 a page by default and 100 at most (API-03).
 MAX_HIT_OFFSET = 1000
+
+
+def expression_id(version) -> str:
+    """A text's language edition (API-02): its record and language, `{source_id}:{language}`."""
+    return f"{version.source_id}:{version.language}"
 
 
 def _speaks(version, language: str | None) -> bool:
@@ -297,10 +304,16 @@ class LegacyCatalogue:
             next_cursor=_cursor(offset + limit) if offset + limit < total else None,
         )
 
-    def versions(self, source_id, *, as_of=None, language=None):
-        """A source's public texts with their structure; given a date or a language, only the text they
-        select, or the alternatives and why (``selection``)."""
+    def versions(self, source_id, *, as_of=None, language=None, expression=None, editions=False):
+        """A source's public texts with their structure; given a date, a language or an edition
+        (``expression``, `{source_id}:{language}`), only the text they select, or the alternatives and
+        why (``selection``). ``editions`` labels each text with its edition's ID."""
         source, rights = self._require(source_id)
+        if expression is not None:
+            owner, _, edition = expression.rpartition(":")
+            if owner != source.id or not edition or (language is not None and language != edition):
+                raise InvalidSearch("That expression_id is not an edition of this record")
+            language = edition
         versions = []
         size = 0
         for version in self._approved(source, rights):
@@ -355,9 +368,42 @@ class LegacyCatalogue:
                 if selection is None
                 else "No public text matches that date and language."
             )
+        if editions:
+            versions = [v.model_copy(update={"expression_id": expression_id(v)}) for v in versions]
         return VersionPage(
             items=tuple(versions), rights=rights, structure=nodes, notice=notice, selection=selection
         )
+
+    def expressions(self, source_id) -> ExpressionPage:
+        """A source's language editions with public texts (API-02): each edition's texts and the one to
+        read when no date is given, when one can be named without guessing."""
+        source, rights = self._require(source_id)
+        editions: dict[str, list] = {}
+        for version in self._approved(source, rights):
+            editions.setdefault(version.language, []).append(version)
+        today = datetime.now(UTC).date()
+        items = []
+        for language, versions in sorted(editions.items()):
+            readings = _latest_readings(versions)
+            in_force = [v for v in readings if _in_force(v, today)]
+            if len(readings) == 1:
+                preferred, reason = readings[0].id, "only_text"
+            elif len(in_force) == 1 and all(v.effective_from for v in readings):
+                preferred, reason = in_force[0].id, "in_force_today"
+            else:
+                undated = any(v.effective_from is None for v in readings)
+                preferred, reason = None, "dates_unknown" if undated else "several_texts"
+            items.append(
+                ExpressionView(
+                    expression_id=f"{source.id}:{language}",
+                    source_id=source.id,
+                    language=language,
+                    version_ids=tuple(v.id for v in versions),
+                    preferred_version_id=preferred,
+                    preferred_reason=reason,
+                )
+            )
+        return ExpressionPage(source_id=source.id, items=tuple(items))
 
     # --- one version, its structure and its anchors (API-02), each rechecked for eligibility ---------
 

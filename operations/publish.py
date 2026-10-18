@@ -40,6 +40,7 @@ from urllib.parse import urlsplit
 
 from sqlalchemy import create_engine
 
+from api.search import normalize_citation
 from api.store import Store, engine_for
 from ingestion import settings
 from rights.policy import decide as rights_decision
@@ -314,10 +315,26 @@ def catalogue_entries(item: Approved, decision: dict) -> dict:
     return {
         "source": source,
         "rights": rights,
-        "citation": Citation(id=f"citation-{item.work}", source_id=item.work, value=citation),
+        "citations": aliases(item.work, citation, record.identity),
         "authority": authority,
         "languages": languages,
     }
+
+
+def aliases(work: str, citation: str, identity) -> list[Citation]:
+    """Every form a work is cited by in its reviewed details, each a citation alias (API-04): the
+    citation the record shows first (with the ID it always had), then every other citation, such as
+    a popular one ("NDPA"), and every alternative title. One per form, compared as citations are."""
+    forms = [citation, *(c.text for c in identity.citations), *identity.alternative_titles]
+    found, seen = [], set()
+    for form in forms:
+        key = normalize_citation(form)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        suffix = "" if not found else f"-{_slug(form)}"
+        found.append(Citation(id=f"citation-{work}{suffix}"[:160], source_id=work, value=form))
+    return found
 
 
 # A reviewed link, as the catalogue keeps it: from the newer instrument to the older.
@@ -391,7 +408,8 @@ def publish_records(
             corpus.authorities.append(entry["authority"])
             by_id["authorities"][entry["authority"].id] = entry["authority"]
         _put(corpus, "sources", entry["source"])
-        _put(corpus, "citations", entry["citation"])
+        for alias in entry["citations"]:
+            _put(corpus, "citations", alias)
         existing = by_id["rights"].get(entry["rights"].id)
         if existing is not None and existing.approved_content_hashes:
             # A later text decision owns this rights record and the note on what text there is; the

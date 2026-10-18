@@ -190,9 +190,14 @@ class Builder:
         self.check_running_heads()
 
     def check_running_heads(self) -> None:
+        # A contents list repeats the headings it lists: its lines are neither running heads nor the
+        # first occurrence a later heading repeats (a Part's own heading is not a running head).
+        listed = {
+            i for node in self.root.walk() if node.kind in ("contents", "contents_entry") for i in node.leaves
+        }
         seen: dict[str, Leaf] = {}
-        for leaf in self.leaves:
-            if leaf.role != "text" or self.unit(leaf).get("kind") != "heading":
+        for index, leaf in enumerate(self.leaves):
+            if leaf.role != "text" or self.unit(leaf).get("kind") != "heading" or index in listed:
                 continue
             first = seen.setdefault(leaf.text.casefold(), leaf)
             if first is not leaf and first.page != leaf.page:
