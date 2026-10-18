@@ -1,0 +1,43 @@
+workbench/structure.py
+  s_d665c62e07d76f::t_1f76e4a8f5e116 1-47,53-129,134-162,166-272,276-363,365-367,369-401,403-425,429-432,444-445,479-482,490-529,531-533,535-566,568-627,629-630,632-679
+  s_d665c62e07d76f::t_b645781d5d451d 130-133
+  s_d665c62e07d76f::t_21716bb0f2fd81 434-443,446-461,467-476,478
+  s_d665c62e07d76f::t_3ecfce68f5cfad 477
+  s_d665c62e07d76f::t_f4b469751f58af 462-466
+  s_d665c62e07d76f::t_479e4ce29c04ae 163-165
+  s_d665c62e07d76f::t_fe6ef0bd5e797b 483-489
+  s_d665c62e07d76f::t_f08fbc686535c9 273-275
+  s_d665c62e07d76f::t_c72326d8f62a04 426-428,433
+  s_d665c62e07d76f::t_0d0f2bed4145e0 48-52
+  s_fa12c52425abab::t_118f81fff97d8f 364,368,402,530,534,567,628,631
+workbench/serialize.py
+  s_d665c62e07d76f::t_cda7baf9d44b4e 1-172
+tests/test_text_publication.py
+  s_d665c62e07d76f::t_788064866245b1 101-103,185-190,220-225,284-287
+  s_d665c62e07d76f::t_43550b58faf282 302
+  s_d665c62e07d76f::t_515e39eaf8cc8c 1-100,104-184,191-219,226-283,288-301,303-360
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e5b9c24a3633fefac0476b536268950fc4d77064",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    },
+    "s_fa12c52425abab": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a148ac-66f5-76b1-85a7-162e3e001a80",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
