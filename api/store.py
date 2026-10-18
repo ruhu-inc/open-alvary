@@ -163,4 +163,8 @@ def seed(store: Store) -> None:
         s.model_copy(update={f: getattr(written[s.id], f) for f in CATALOGUE_TEXT}) if s.id in written else s
         for s in current.sources
     ]
+    # A link between records written in the file is reviewed there (whether it has been checked
+    # against the official text), so it follows the file; links made by publishing are left alone.
+    links = {a.id: a for a in catalogue.amendments}
+    current.amendments = [links.get(a.id, a) for a in current.amendments]
     store.save(current)

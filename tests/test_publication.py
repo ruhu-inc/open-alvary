@@ -20,13 +20,13 @@ def test_seed_has_no_cleared_text(catalogue):
     assert public.versions == []
     assert all(r.status == "RIGHTS_UNDER_REVIEW" for r in public.rights)
     assert next(s for s in public.sources if s.id == "ng-isa-2007").legal_status == "repealed"
-    [repeal] = catalogue.amendments  # what repealed it: public once a reviewer checks it
+    [repeal] = public.amendments  # and what repealed it, checked against section 356(1)
     assert (repeal.source_id, repeal.kind, repeal.target_source_id) == (
         "ng-isa-2025",
         "repeals",
         "ng-isa-2007",
     )
-    assert not repeal.verified and public.amendments == []
+    assert repeal.verified
 
 
 def test_reseed_refreshes_catalogue_text_and_keeps_later_decisions(store, catalogue):
@@ -49,6 +49,13 @@ def test_reseed_refreshes_catalogue_text_and_keeps_later_decisions(store, catalo
         written.catalogue_note,
     )
     assert after.legal_status == "historical"  # a maintainer's later decision stays
+    # A link written in the file follows it: checked there, checked here.
+    unchecked = [a.model_copy(update={"verified": False}) for a in catalogue.amendments]
+    store.save(store.load().model_copy(update={"amendments": unchecked}))
+    seed(store)
+    assert (
+        [a.verified for a in store.load().amendments] == [a.verified for a in catalogue.amendments] == [True]
+    )
 
 
 def test_cleared_exact_version_is_published(cleared):
