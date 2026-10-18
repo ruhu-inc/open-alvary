@@ -179,7 +179,7 @@ def verify_capability_grants(conn, ns, roles, functions):
             CROSS JOIN LATERAL aclexplode(c.relacl) a
             WHERE n.nspname = ANY(:schemas) AND c.relacl IS NOT NULL
             """),
-            {"schemas": [ns.base, *(ns.schema(k) for k in ("policy", "staging", "corpus"))]},
+            {"schemas": [ns.base, *(ns.schema(k) for k in ("policy", "staging", "corpus", "changes"))]},
         )
         if row.grantee in runtime
     }

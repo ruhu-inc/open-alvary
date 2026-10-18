@@ -208,5 +208,30 @@
       "policy.allocate_publication_revision",
       "policy.changes_append_only"
     ]
+  },
+  {
+    "revision": "0029",
+    "anchor": "changes.rights_revision",
+    "file": "v0029.sql",
+    "requires": [
+      "changes.rights_revision"
+    ]
+  },
+  {
+    "revision": "0030",
+    "anchor": "changes.link_state",
+    "file": "v0030.sql",
+    "requires": [
+      "changes.link_state"
+    ]
+  },
+  {
+    "revision": "0031",
+    "anchor": "changes.text_unit",
+    "file": "v0031.sql",
+    "requires": [
+      "changes.text_index_state",
+      "changes.text_unit"
+    ]
   }
 ]

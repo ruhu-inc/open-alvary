@@ -14,6 +14,7 @@ from api.main import create_app
 from api.store import Store, seed
 from changes import admin
 from changes.record import namespace, sweep
+from rights.database import PolicyNamespace, provision_roles
 
 pytestmark = pytest.mark.postgres
 
@@ -526,3 +527,61 @@ def test_a_country_losing_its_last_record_or_gaining_its_first_is_a_coverage_cha
     assert gained["payload"]["coverage"] == {"has_public_records": True}
     served = of_type(client, "coverage_changed")
     assert served and all(e["schema_version"] == "change-event-1" for e in served)
+
+
+# Migrations 0029-0031 grant their tables only to capability roles that already exist; the provision
+# bundles v0029-v0031 grant the same to roles created afterwards.
+LATER_TABLES = {
+    "rights_revision": {"release": {"SELECT", "INSERT"}, "serving": {"SELECT"}},
+    "link_state": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
+    "text_unit": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
+    "text_index_state": {"release": {"SELECT", "UPDATE"}, "serving": {"SELECT"}},
+}
+
+
+@pytest.mark.fresh_migrations
+def test_roles_provisioned_after_migrating_get_exactly_the_later_change_log_grants(pg_engine):
+    migrate(pg_engine)
+    with pg_engine.begin() as conn:
+        ns = PolicyNamespace(conn.scalar(text("SELECT current_schema()")))
+        roles = provision_roles(conn, ns)
+    try:
+        with pg_engine.connect() as conn:
+            privileges = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "REFERENCES", "TRIGGER"]
+            if conn.scalar(text("SELECT current_setting('server_version_num')::int")) >= 170000:
+                privileges.append("MAINTAIN")
+            held = {
+                table: {
+                    kind: {
+                        privilege
+                        for privilege in privileges
+                        if conn.scalar(
+                            text("SELECT has_table_privilege(:role, :table, :privilege)"),
+                            {
+                                "role": role,
+                                "table": ns.qualified(conn, "changes", table),
+                                "privilege": privilege,
+                            },
+                        )
+                    }
+                    for kind, role in roles.items()
+                }
+                for table in LATER_TABLES
+            }
+            for kind in ("release", "serving"):
+                assert conn.scalar(
+                    text("SELECT has_schema_privilege(:role, :schema, 'USAGE')"),
+                    {"role": roles[kind], "schema": ns.schema("changes")},
+                )
+        assert held == {
+            table: {kind: expected.get(kind, set()) for kind in roles}
+            for table, expected in LATER_TABLES.items()
+        }
+    finally:
+        with pg_engine.begin() as conn:
+            quote = conn.dialect.identifier_preparer.quote_identifier
+            for kind in ("policy", "staging", "corpus"):
+                conn.execute(text(f"DROP SCHEMA {quote(ns.schema(kind))} CASCADE"))
+            for role in roles.values():
+                conn.execute(text(f"DROP OWNED BY {quote(role)}"))
+                conn.execute(text(f"DROP ROLE {quote(role)}"))
