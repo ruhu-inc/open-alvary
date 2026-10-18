@@ -49,6 +49,7 @@ from api.site import create_downloads_app, create_site_app
 from api.store import ROOT, Store, check_legacy_authority, engine_for
 from api.v1 import PUBLIC_PATHS as V1_PUBLIC
 from api.v1 import create_v1_app
+from rights.bytes import ByteLedger
 from rights.database import PolicyNamespace
 from rights.policy import decide
 
@@ -123,6 +124,7 @@ def create_service(
                 check=accounts.check_credential,
                 record_usage=accounts.record_usage,
                 admission=AdmissionStore(store.engine, namespace),
+                ledger=ByteLedger(store.engine, namespace),
                 verifier=TokenVerifier(config.issuer) if config else None,
             ),
         )
@@ -156,6 +158,7 @@ def create_service(
                     check=accounts.check_credential,
                     record_usage=accounts.record_usage,
                     admission=AdmissionStore(store.engine, namespace),
+                    ledger=ByteLedger(store.engine, namespace),
                     verifier=TokenVerifier(config.issuer) if config else None,
                 ),
                 methods=["GET", "POST", "DELETE"],

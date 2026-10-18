@@ -157,11 +157,19 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
             "enforcement": "organisation",
             "algorithm": "token_bucket",
             "grouping": "organisation",
+            "bytes": {
+                "allowance": "bytes_per_day",
+                "algorithm": "token_bucket",
+                "capacity": "one day's bytes_per_day",
+                "refill": "bytes_per_day spread evenly over 24 hours",
+                "counted": "response body bytes as sent, before compression",
+            },
             "note": (
-                "Each organisation's access tier sets its requests a minute, burst and concurrent requests "
-                "(see /tiers), shared by every key and app of the organisation across REST and MCP. "
-                "One key or app may use at most half the organisation's concurrent requests. A refused "
-                "request answers 429 with Retry-After."
+                "Each organisation's access tier sets its requests a minute, burst, concurrent requests and "
+                "data a day (bytes_per_day; see /tiers), shared by every key and app of the organisation "
+                "across REST and MCP. One key or app may use at most half the organisation's concurrent "
+                "requests. Data a day refills continuously: a response that would go over it is refused. "
+                "A refused request answers 429 with Retry-After."
             ),
         }
 

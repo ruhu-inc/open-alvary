@@ -2,17 +2,20 @@
 
 import base64
 import json
+import math
 import time
+from uuid import uuid4
 
 import httpx
 import pytest
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.testclient import TestClient
 
 from accounts import keys
 from api.credentials import GRANT_CLAIM, CredentialGate, GateConfig, TokenVerifier
+from rights.bytes import LedgerUnavailable, Reservation
 
 ISSUER = "https://login.example.test/"
 RESOURCE = "https://api.example.test/api/v1"
@@ -38,10 +41,14 @@ def app():
     def tiers():
         return {"tiers": []}
 
+    @inner.get("/unchanged")
+    def unchanged():
+        return Response(status_code=304)
+
     return inner
 
 
-def gate(check, verifier=None, usage=None):
+def gate(check, verifier=None, usage=None, ledger=None):
     parent = FastAPI()
     parent.mount(
         "/api/v1",
@@ -53,9 +60,43 @@ def gate(check, verifier=None, usage=None):
             admission=None,
             verifier=verifier,
             key_pepper=PEPPER,
+            ledger=ledger,
         ),
     )
     return TestClient(parent)
+
+
+class Ledger:
+    """rights.bytes.ByteLedger's steps in memory: reserve (charged at once), begin, settle or release."""
+
+    def __init__(self, down=False):
+        self.down, self.spent, self.open, self.steps = down, {}, {}, []
+
+    def reserve(self, admission_id, nbytes, scopes, lease_seconds):
+        if self.down:
+            raise LedgerUnavailable("down")
+        [scope] = scopes
+        self.steps.append(("reserve", scope, nbytes))
+        used = self.spent.get(scope.key, 0) + sum(n for k, n in self.open.values() if k == scope.key)
+        if used + nbytes > scope.capacity:
+            wait = math.ceil((used + nbytes - scope.capacity) * 60 / scope.refill_per_minute)
+            return Reservation(False, blocked=(scope.key,), retry_after=wait)
+        reservation = uuid4()
+        self.open[reservation] = (scope.key, nbytes)
+        return Reservation(True, reservation)
+
+    def begin_emission(self, reservation):
+        self.steps.append(("begin", reservation in self.open))
+        return True
+
+    def settle(self, reservation, sent, receipt):
+        key, _ = self.open.pop(reservation)
+        self.spent[key] = self.spent.get(key, 0) + sent
+        self.steps.append(("settle", sent, receipt))
+
+    def release(self, reservation):
+        self.open.pop(reservation)
+        self.steps.append(("release",))
 
 
 def test_missing_malformed_and_address_credentials_are_refused_with_the_right_challenge():
@@ -123,6 +164,51 @@ def test_a_tier_without_rest_is_refused():
         "/api/v1/sources", headers={"Authorization": f"Bearer {keys.generate().secret}"}
     )
     assert response.status_code == 403 and response.json()["code"] == "entitlement_required"
+
+
+def with_bytes(per_day):
+    return {**OK, "tier": {**OK["tier"], "allowance": {"requests_per_minute": 60, "bytes_per_day": per_day}}}
+
+
+def test_each_answer_is_charged_to_the_organisations_data_a_day_and_refused_when_it_is_used_up():
+    ledger, usage = Ledger(), []
+    client = gate(lambda r: with_bytes(200), usage=usage, ledger=ledger)
+    headers = {"Authorization": f"Bearer {keys.generate().secret}"}
+    first = client.get("/api/v1/sources", headers=headers)
+    size = len(first.content)
+    assert first.status_code == 200 and 0 < size < 100
+    reserve, begin, settle = ledger.steps
+    assert reserve[0] == "reserve" and reserve[2] == size  # its Content-Length, before the first byte
+    assert reserve[1].key == "org:00000000000000000000000000" and reserve[1].capacity == 200
+    assert reserve[1].refill_per_minute == pytest.approx(200 / 1440)  # a day's bytes over 24 hours
+    assert begin == ("begin", True) and settle == ("settle", size, f"sent:{size}")
+    while (answer := client.get("/api/v1/sources", headers=headers)).status_code == 200:
+        pass
+    assert answer.status_code == 429 and answer.json()["code"] == "rate_limited"
+    assert "data a day" in answer.json()["detail"] and int(answer.headers["retry-after"]) >= 1
+    assert "org_" not in answer.text  # the answer that would have gone over was never sent
+    assert ledger.spent["org:00000000000000000000000000"] <= 200 and not ledger.open
+    assert usage[-1]["refusal"] == "rate_limited" and all("bytes" in u for u in usage[:-1])
+
+
+def test_an_answer_without_a_body_costs_nothing_and_a_tier_without_a_byte_allowance_is_not_charged():
+    ledger = Ledger()
+    headers = {"Authorization": f"Bearer {keys.generate().secret}"}
+    assert (
+        gate(lambda r: with_bytes(200), ledger=ledger).get("/api/v1/unchanged", headers=headers).status_code
+        == 304
+    )
+    assert gate(lambda r: OK, ledger=ledger).get("/api/v1/sources", headers=headers).status_code == 200
+    assert ledger.steps == []
+
+
+def test_a_byte_ledger_that_cannot_be_reached_refuses_rather_than_lets_the_answer_through():
+    headers = {"Authorization": f"Bearer {keys.generate().secret}"}
+    refused = gate(lambda r: with_bytes(200), ledger=Ledger(down=True)).get(
+        "/api/v1/sources", headers=headers
+    )
+    assert refused.status_code == 503 and refused.json()["code"] == "temporarily_unavailable"
+    assert "org_" not in refused.text
 
 
 def _b64(data: bytes) -> str:

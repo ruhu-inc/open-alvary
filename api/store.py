@@ -67,6 +67,9 @@ def engine_for(url: str | None = None, pool_size: int | None = None) -> Engine:
     # A connection the database or its proxy closed while idle (Cloud SQL does) must never reach a
     # request: each is checked before use and replaced after 30 minutes.
     live = {} if url.startswith("sqlite") else {"pool_pre_ping": True, "pool_recycle": 1800}
+    # An error's text never carries its statement's values (a search's words, a citation), so nothing a
+    # caller sent reaches a log through an exception (OA-A2).
+    live["hide_parameters"] = True
     if pool_size is not None and not url.startswith("sqlite"):
         # A fixed, budgeted pool: no overflow beyond the share approved for this replica.
         engine = create_engine(url, pool_size=pool_size, max_overflow=0, pool_timeout=5, **live)

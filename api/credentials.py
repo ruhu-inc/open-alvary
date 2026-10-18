@@ -5,7 +5,14 @@ Every request carries one bearer credential in the Authorization header: an API 
 resource. The gate checks it, and the organisation's access, through the accounts schema's narrow
 check; admits the request against the organisation's allowance; checks the credential again just
 before the response starts, so a change committed meanwhile (a revoked key, a removed member, a
-lapsed or narrowed access) stops it; and counts the request and its bytes for the organisation.
+lapsed or narrowed access) stops it; reserves the response's bytes against the organisation's data a
+day; and counts the request and its bytes for the organisation.
+
+Data a day (MAC F11) is a byte bucket in the BUD ledger (rights.bytes, migration 0017): it holds one
+day's bytes_per_day and refills continuously over 24 hours, shared by every key and app across REST
+and MCP. A response's bytes (its Content-Length, or the single-response maximum when it has none) are
+reserved before its first byte and settled with what was sent; a response that would go over is
+refused with 429 and the seconds until enough has refilled.
 
 Refusals use MAC-06's codes at the HTTP boundary, as RFC 9457 problem details. Only a missing or
 invalid credential carries a WWW-Authenticate challenge (and insufficient_scope); a 403 never sends
@@ -30,7 +37,9 @@ from fastapi.responses import JSONResponse
 
 from accounts import keys
 from api.admission import AdmissionStore, AdmissionUnavailable
+from api.emission import MAX_SINGLE_RESPONSE_BYTES
 from api.reach import OutsidePlanLimited, Reach
+from rights.bytes import ByteLedger, LedgerConflict, LedgerUnavailable, Scope
 
 SCOPE = "corpus:read"
 GRANT_CLAIM = "https://open.alvary.ai/grant"
@@ -62,6 +71,8 @@ DETAIL = {
     "account_inactive": "This account is suspended or closed.",
     "organisation_suspended": "This organisation is suspended.",
     "rate_limited": "Too many requests. Wait for the time in Retry-After.",
+    "bytes_per_day": "Your organisation's data a day is used up for now. Wait for the time in Retry-After, "
+    "or keep a local copy and refresh it from the change feed.",
     "temporarily_unavailable": "Access cannot be checked right now. Try again shortly.",
     "credential_not_accepted": "Send the key in the Authorization header, never in the address.",
     "unavailable": "There is no such record, or it is not public.",
@@ -72,6 +83,22 @@ DETAIL = {
 # MCP carries the same codes as a JSON-RPC error (agent-access application numbers), at the same
 # HTTP status, so a host starts sign-in on the 401 exactly as for REST.
 MCP_NUMBERS = {400: -32600, 401: 10001, 403: 10002, 429: 10003, 503: 10004}
+DAY_MINUTES = 24 * 60
+
+
+def _length(message: dict) -> int | None:
+    """A response's size from its start message: 0 for one without a body, its Content-Length when it
+    has one, else None."""
+    status = message.get("status", 200)
+    if status < 200 or status in (204, 304):
+        return 0
+    for name, value in message.get("headers", []):
+        if name.lower() == b"content-length":
+            try:
+                return max(0, int(value))
+            except ValueError:
+                return None
+    return None
 
 
 def jsonrpc_problem(
@@ -215,6 +242,7 @@ class CredentialGate:
         admission: AdmissionStore | None,
         verifier: TokenVerifier | None,
         key_pepper: bytes | None = None,
+        ledger: ByteLedger | None = None,
     ):
         self.app, self.config = app, config
         self.check, self.record_usage, self.admission, self.verifier = (
@@ -223,6 +251,7 @@ class CredentialGate:
             admission,
             verifier,
         )
+        self.ledger = ledger
         self.pepper = key_pepper
         self.challenge = f'Bearer resource_metadata="{config.metadata_url}", scope="{SCOPE}"'
 
@@ -345,7 +374,47 @@ class CredentialGate:
             "tier": result.get("tier"),
             "reach": Reach.of(result.get("scope"), lambda: self._outside(organisation)),
         }
-        sent = {"bytes": 0, "refused": None, "status": 0}
+        sent = {"bytes": 0, "refused": None, "status": 0, "reservation": None, "reserved": 0}
+        daily = int(((result.get("tier") or {}).get("allowance") or {}).get("bytes_per_day") or 0)
+        # A tier without bytes_per_day has no data a day to enforce; every published tier has one.
+        bytes_scope = (
+            Scope("org:" + organisation.removeprefix("org_"), daily, daily / DAY_MINUTES)
+            if self.ledger is not None and daily > 0
+            else None
+        )
+
+        async def refuse_inside(code: str, **kwargs):
+            sent["refused"] = code
+            await self._refuse(code, request_id, **kwargs)(scope, receive, send)
+
+        async def reserve(message) -> bool:
+            """Reserve the response's bytes before its first byte; False when it was refused instead."""
+            amount = _length(message)
+            amount = MAX_SINGLE_RESPONSE_BYTES if amount is None else amount
+            if bytes_scope is None or amount == 0:
+                return True
+            try:
+                held = await to_thread.run_sync(
+                    lambda: self.ledger.reserve(
+                        uuid.uuid4(), amount, [bytes_scope], self.config.lease_seconds
+                    )
+                )
+            except (LedgerUnavailable, LedgerConflict):
+                await refuse_inside("temporarily_unavailable")
+                return False
+            if not held.reserved:
+                retry = max(1, int(held.retry_after or 1))
+                await refuse_inside("rate_limited", retry_after=retry, detail=DETAIL["bytes_per_day"])
+                return False
+            sent["reservation"], sent["reserved"] = held.reservation_id, amount
+            try:
+                started = await to_thread.run_sync(self.ledger.begin_emission, held.reservation_id)
+            except (LedgerUnavailable, LedgerConflict):
+                started = False
+            if not started:
+                await refuse_inside("temporarily_unavailable")
+                return False
+            return True
 
         async def guarded(message):
             if message["type"] == "http.response.start":
@@ -355,9 +424,9 @@ class CredentialGate:
                 except Exception:
                     again = {"ok": False, "code": "temporarily_unavailable"}
                 if not again.get("ok"):
-                    sent["refused"] = again.get("code", "invalid_credentials")
-                    refusal = self._refuse(sent["refused"], request_id)
-                    await refusal(scope, receive, send)
+                    await refuse_inside(again.get("code", "invalid_credentials"))
+                    return
+                if not await reserve(message):
                     return
                 sent["status"] = message["status"]
                 message = {
@@ -373,6 +442,8 @@ class CredentialGate:
         try:
             await self.app(scope, receive, guarded)
         finally:
+            if sent["reservation"] is not None:
+                await self._settle(sent)
             if lease is not None:
                 try:
                     await to_thread.run_sync(self.admission.release, lease)
@@ -401,6 +472,20 @@ class CredentialGate:
         )
         if not decision["admitted"]:
             raise OutsidePlanLimited(int(decision["retry_after"]))
+
+    async def _settle(self, sent: dict) -> None:
+        """Settle a reservation with the bytes handed to transport. A reservation refused before its
+        first byte (begin_emission failed) is unsent and released."""
+        reservation = sent["reservation"]
+        try:
+            if sent["refused"] and not sent["bytes"]:
+                await to_thread.run_sync(self.ledger.release, reservation)
+                return
+            used = min(sent["bytes"], sent["reserved"])
+            await to_thread.run_sync(self.ledger.settle, reservation, used, f"sent:{used}")
+        except (LedgerUnavailable, LedgerConflict):
+            # The reservation stays charged; the maintenance reconciler settles it conservatively.
+            logging.getLogger("open_alvary.credentials").warning("byte reservation not settled")
 
     async def _count(self, entry: dict) -> None:
         try:

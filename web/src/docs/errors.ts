@@ -63,7 +63,7 @@ export const CODES: [number, string, string][] = [
   [
     429,
     "rate_limited",
-    "An allowance is used up for now; Retry-After says when to try again. Outside your plan's countries, requests run at the Starter rate.",
+    "An allowance is used up for now: requests a minute, requests at once, or data a day. Retry-After says when to try again. Outside your plan's countries, requests run at the Starter rate.",
   ],
   [
     503,
