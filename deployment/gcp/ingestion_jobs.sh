@@ -135,6 +135,14 @@ status() {
   done
 }
 
+# A gcloud whose sign-in has lapsed fails every call, which the checks below would read as a missing
+# secret or resource: say so first. ("plan" only prints.)
+signed_in() {
+  gcloud auth print-access-token >/dev/null 2>&1 \
+    || { echo "gcloud isn't signed in, or its sign-in expired: run gcloud auth login, then try again." >&2; exit 1; }
+}
+
+[[ "${1:-plan}" == plan ]] || signed_in
 case "${1:-plan}" in
   plan) plan ;;
   setup) setup ;;
