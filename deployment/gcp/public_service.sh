@@ -470,6 +470,7 @@ alerts() {  # once: email whoever answers when a scheduled job fails (a broken a
     --format='value(name)' | head -1)"
   [[ -n "$channel" ]] || channel="$("${GC[@]}" beta monitoring channels create --display-name="Open Alvary operator" \
     --type=email --channel-labels=email_address="$email" --format='value(name)')"
+  uptime_alert "$channel" "$email"
   if "${GC[@]}" alpha monitoring policies list --filter="displayName=\"$policy\"" --format='value(name)' | grep -q .; then
     echo "Alert policy already there: $policy"
     return
@@ -502,6 +503,48 @@ alerts() {  # once: email whoever answers when a scheduled job fails (a broken a
 POLICY
   "${GC[@]}" alpha monitoring policies create --policy-from-file="$file" --format='value(name)'
   echo "Alerts on failed runs of $DAILY_JOB and $WORKER_JOB go to $email."
+}
+
+uptime_alert() {  # the website itself (CAT.4): /healthz every 5 minutes; an email when it fails twice
+  local channel="$1" email="$2" check name="Open Alvary website (/healthz)" policy="Open Alvary: the website is down"
+  check="$("${GC[@]}" monitoring uptime list-configs --filter="displayName=\"$name\"" --format='value(name)' | head -1)"
+  [[ -n "$check" ]] || check="$("${GC[@]}" monitoring uptime create "$name" --resource-type=uptime-url \
+    --resource-labels=host="$DOMAIN",project_id="$PROJECT" --path=/healthz --protocol=https --period=5 \
+    --timeout=10 --format='value(name)')"
+  if "${GC[@]}" alpha monitoring policies list --filter="displayName=\"$policy\"" --format='value(name)' | grep -q .; then
+    echo "Alert policy already there: $policy"
+    return
+  fi
+  local file
+  file="$(mktemp)"
+  # Down from two or more of the checking regions for two checks running (interface budgets: 5 min, 2
+  # failures), so one region's network blip pages no one.
+  cat >"$file" <<POLICY
+{
+  "displayName": "$policy",
+  "combiner": "OR",
+  "conditions": [{
+    "displayName": "https://$DOMAIN/healthz failing from two or more regions",
+    "conditionThreshold": {
+      "filter": "metric.type = \"monitoring.googleapis.com/uptime_check/check_passed\" AND metric.label.check_id = \"${check##*/}\" AND resource.type = \"uptime_url\"",
+      "aggregations": [{"alignmentPeriod": "1200s", "perSeriesAligner": "ALIGN_NEXT_OLDER", "crossSeriesReducer": "REDUCE_COUNT_FALSE", "groupByFields": ["resource.label.host"]}],
+      "comparison": "COMPARISON_GT",
+      "thresholdValue": 1,
+      "duration": "600s",
+      "trigger": {"count": 1}
+    }
+  }],
+  "notificationChannels": ["$channel"],
+  "alertStrategy": {"autoClose": "86400s"},
+  "documentation": {
+    "mimeType": "text/markdown",
+    "content": "https://$DOMAIN/healthz has failed for ten minutes from two or more regions. See deployment/runbook.md, Monitoring and alerts: check the service's revisions and logs, then the database."
+  }
+}
+POLICY
+  "${GC[@]}" alpha monitoring policies create --policy-from-file="$file" --format='value(name)'
+  rm -f "$file"
+  echo "Alerts when https://$DOMAIN/healthz is down go to $email."
 }
 
 access_role() {  # once, after an ACCOUNTS=1 deploy: the role the workbench's Access section signs in as (MAC-11)

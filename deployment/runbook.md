@@ -323,9 +323,19 @@ Supabase instance. Set it up once as its administrator:
    and encryption at rest provided by the host. The table is append-only even for its owner.
 3. The `--journal <dir>` file journal remains a reference backend for drills only.
 
-## Monitoring and alerts (owner decision, 2026-10-07)
+## Monitoring and alerts (owner decision, 2026-10-07; Cloud Monitoring, 2026-10-18)
 
-Alerts reach the maintainer (ijidai@ruhu.ai) by email through GitHub issues, so no mail server is
+On Google Cloud, `ALERT_EMAIL=hello@ruhu.ai deployment/gcp/public_service.sh alerts` (once; safe to
+run again) sets up Cloud Monitoring email alerts to that address:
+
+- **The website is down:** an uptime check fetches `https://open.alvary.ai/healthz` every 5 minutes
+  from several regions; an email goes out when two or more regions see it fail for ten minutes. Then
+  check the service's revisions and logs (`public_service.sh status`), then the database.
+- **A scheduled job failed:** a failed run of the daily job or the worker. For the daily job look
+  first for an `audit seal check` error (Audit log seals); for the worker, see Monitors and webhooks.
+
+The GitHub workflows below are a second channel once the repository is on GitHub. Until then they do
+not run. Alerts there reach the maintainer by email through GitHub issues, so no mail server is
 needed. Keep GitHub notifications for this repository enabled.
 
 - `.github/workflows/monitor.yml` probes `https://open.alvary.ai` (homepage identity and
