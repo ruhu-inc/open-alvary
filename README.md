@@ -603,9 +603,13 @@ functions first records its DDL with `python -m scripts.sql_bundle new v0014 jou
 is retained for reproducible older installs. New grant capabilities belong in the declarative
 `rights/sql/provision` inventory; provisioning validates the installed objects before creating roles.
 Those grant files are hash-pinned by `rights.capabilities.PROVISION_HASH`, so a grant edit needs a
-deliberate, reviewed pin update. `scripts.verify_sql_resources` also requires every policy function
-to belong to the reviewed inventory, share one owner (the guard once provisioned), and grant
-EXECUTE only to that owner or the namespace capability groups, never PUBLIC.
+deliberate, reviewed pin update. A migration that grants only to roles that already exist needs a
+matching grant file: `tests/test_postgres_provision_order.py` provisions roles at every revision since
+`0003` and requires the same privileges as provisioning after migrating to head. Migration `0032`
+revoked the grants that once differed: superseded command functions and the guard's read of
+`policy.recovery_record`. `scripts.verify_sql_resources` also requires every policy function to belong
+to the reviewed inventory, share one owner (the guard once provisioned), and grant EXECUTE only to that
+owner or the namespace capability groups, never PUBLIC.
 `schema/vocabularies/v1.json` supplies permission/material vocabulary, with mandatory drift checks
 against contracts and frozen migrations. Independent Python/SQL OA-text-1 algorithms stay separate;
 frozen, hand-calculated UTF-8 vectors test both without changing the canonical profile.

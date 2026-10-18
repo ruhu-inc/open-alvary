@@ -156,6 +156,17 @@
     ]
   },
   {
+    "revision": "0015",
+    "anchor": "policy.recovery_record",
+    "file": "v0015.sql",
+    "requires": [
+      "policy.instance_binding",
+      "policy.recovery_floor",
+      "policy.recovery_record",
+      "policy.serving_epoch"
+    ]
+  },
+  {
     "revision": "0016",
     "anchor": "policy.admission_bucket",
     "file": "v0016.sql",
@@ -205,6 +216,10 @@
     "anchor": "policy.allocate_publication_revision",
     "file": "v0023.sql",
     "requires": [
+      "changes.change_event",
+      "changes.coverage_state",
+      "changes.feed_state",
+      "changes.published_state",
       "policy.allocate_publication_revision",
       "policy.changes_append_only"
     ]
