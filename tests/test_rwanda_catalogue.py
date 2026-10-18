@@ -1095,3 +1095,20 @@ def test_a_works_currency_follows_its_line_of_repeals_and_the_listing_and_its_pa
     ]  # fmt: skip
     assert out["rw-law-6-2005"]["currency"] == {"status": "repealed", "basis": "listing"}
     assert out["rw-law-7-2006"]["currency"] == {"status": "unknown"}
+
+
+def test_a_file_listed_twice_is_prepared_once_under_the_same_entry_every_time():
+    def entry(source, url, sha):
+        return {"source": source, "url": url, "sha256": sha, "stored": bool(sha)}
+
+    ledger = {
+        "rlrc-b": entry("rlrc-laws", "https://www.rlrc.gov.rw/b/LAW_N0_53_2011_OF_23_JAN.pdf", "aaa"),
+        "rlrc-a": entry("rlrc-laws", "https://www.rlrc.gov.rw/a/LAW_N0_53_2011__OF23_JAN.pdf", "aaa"),
+        "gazette": entry("minijust-gazette", "https://www.minijust.gov.rw/og/x.pdf", "bbb"),
+        "rlrc-copy": entry("rlrc-laws", "https://www.rlrc.gov.rw/c/copy.pdf", "bbb"),
+        "pending": entry("rlrc-laws", "https://www.rlrc.gov.rw/d/not-yet.pdf", None),
+    }
+    items = sorted(ledger)
+    kept = rwanda.one_per_file(ledger, items)
+    assert kept == ["gazette", "pending", "rlrc-a"]  # the Gazette's copy; then the first address
+    assert rwanda.one_per_file(ledger, list(reversed(items))) == ["rlrc-a", "pending", "gazette"]
