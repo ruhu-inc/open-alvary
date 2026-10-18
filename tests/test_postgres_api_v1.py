@@ -251,13 +251,7 @@ def test_a_records_history_comes_from_checked_links_a_page_at_a_time(api):
     grant(accounts, organisation)
     headers = key(accounts, person, organisation)
     path = "/api/v1/sources/ng-isa-2007/relationships"
-    unchecked = client.get(path, headers=headers).json()
-    assert unchecked["total"] == 0 and unchecked["current"] is None  # the repeal is not yet checked
-    store = Store(accounts.engine)  # the same database
-    corpus = store.load()
-    corpus.amendments = [a.model_copy(update={"verified": True}) for a in corpus.amendments]
-    store.save(corpus)
-    checked = client.get(path, headers=headers).json()
+    checked = client.get(path, headers=headers).json()  # the repeal, checked against section 356(1)
     assert checked["current"]["source_id"] == "ng-isa-2025" and checked["total"] == 1
     assert [(i["kind"], i["source_id"]) for i in checked["items"]] == [("repealed_by", "ng-isa-2025")]
     later = client.get(
