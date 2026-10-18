@@ -139,7 +139,7 @@ TEXT_DECISION = dict(
     basis="Official legislative texts are not eligible for copyright in Nigeria.",
     privacy_checked=True,
 )
-EVIDENCE = ["https://example.org/copyright-act-2022"]
+EVIDENCE = ["https://www.copyright.gov.ng/copyright-act-2022"]
 
 
 def test_no_text_is_published_without_a_complete_current_text_decision(decisions):
@@ -160,6 +160,24 @@ def test_no_text_is_published_without_a_complete_current_text_decision(decisions
     assert publish.current_text_decision("ng")["decided_by"] == "Ijidai Lassa"
     with pytest.raises(publish.Refused, match="expired"):
         publish.current_text_decision("ng", now=datetime.now(UTC) + timedelta(days=400))
+
+
+def test_a_decision_with_placeholders_is_refused_when_recorded_and_when_read(decisions):
+    with pytest.raises(publish.Refused, match="placeholder"):
+        publish.decide_text("ng", "Your Full Name", 12, EVIDENCE, **TEXT_DECISION)
+    for link in ("https://LINK-TO-THE-COPYRIGHT-ACT", "https://example.org/act", "http://www.gov.ng/act"):
+        with pytest.raises(publish.Refused, match="real https address"):
+            publish.decide_text("ng", "Ijidai Lassa", 12, [link], **TEXT_DECISION)
+    with pytest.raises(publish.Refused, match="--licence"):
+        publish.decide_text("ng", "Ijidai Lassa", 12, EVIDENCE, **(TEXT_DECISION | {"licence": "<licence>"}))
+    with pytest.raises(publish.Refused, match="placeholder"):
+        publish.decide("ng", "Full Name", 12, [], "", "")
+    # A decision written before these checks, or edited by hand, is refused when publishing reads it.
+    publish.decide_text("ng", "Ijidai Lassa", 12, EVIDENCE, **TEXT_DECISION)
+    path = publish.text_decision_path("ng")
+    path.write_text(path.read_text().replace("Ijidai Lassa", "Your Full Name"))
+    with pytest.raises(publish.Refused, match="not a usable decision"):
+        publish.current_text_decision("ng")
 
 
 def catalogue_with_record(store):

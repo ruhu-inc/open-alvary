@@ -36,6 +36,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from sqlalchemy import create_engine
 
@@ -110,10 +111,48 @@ def decision_path(jurisdiction: str) -> Path:
     return DECISIONS / f"{jurisdiction}-catalogue.json"
 
 
+# Words that mark a value someone forgot to fill in ("Your Full Name", "https://LINK-TO-…").
+PLACEHOLDER = re.compile(
+    r"\b(?:your|full)[\s_-]+name\b|[<>…{}]|\bplaceholder\b|\btodo\b|\blink[\s_-]+to\b", re.I
+)
+RESERVED_HOSTS = re.compile(r"(?:^|\.)(?:example|test|invalid|localhost)(?:\.[a-z]+)?$")  # RFC 2606
+
+
+def decider(by: str) -> str:
+    """The person deciding: a name, not an email address or a placeholder."""
+    name = (by or "").strip()
+    if not name or "@" in name or PLACEHOLDER.search(name):
+        raise Refused("Name the person deciding (a name, not an email address or a placeholder).")
+    return name
+
+
+def evidence_links(links: list[str]) -> list[str]:
+    """Evidence is real web addresses: https, a public host name, no placeholder."""
+    for link in links:
+        parts = urlsplit(link or "")
+        host = parts.hostname or ""
+        if (
+            parts.scheme != "https"
+            or "." not in host
+            or RESERVED_HOSTS.search(host)
+            or PLACEHOLDER.search(link)
+        ):
+            raise Refused(f"Evidence must be a real https address, not {link!r}.")
+    return list(links)
+
+
+def check_decision(decision: dict, path: Path) -> None:
+    """A recorded decision is real: named, with real evidence (a file edited by hand included)."""
+    try:
+        decider(decision.get("decided_by", ""))
+        evidence_links(decision.get("evidence") or [])
+    except Refused as error:
+        raise Refused(f"{path.name} is not a usable decision: {error} The owner records it again.") from None
+
+
 def decide(jurisdiction: str, by: str, months: int, evidence: list[str], basis: str, note: str) -> dict:
     """Record the owner's decision to publish this collection's catalogue records (not texts)."""
-    if not by.strip() or "@" in by:
-        raise Refused("Name the person deciding (a name, not an email address).")
+    by, evidence = decider(by), evidence_links(evidence)
     now = datetime.now(UTC).replace(microsecond=0)
     path = decision_path(jurisdiction)
     previous = json.loads(path.read_text()) if path.exists() else None
@@ -140,7 +179,7 @@ def current_decision(jurisdiction: str, now: datetime | None = None) -> dict:
     if not path.exists():
         raise Refused(
             f"No catalogue decision for {jurisdiction}: nothing is published. The owner records one with"
-            f' `python -m operations.publish decide --jurisdiction {jurisdiction} --by "Full Name"`.'
+            f" `python -m operations.publish decide --jurisdiction {jurisdiction} --by` and their own name."
         )
     decision = json.loads(path.read_text())
     if (
@@ -148,6 +187,7 @@ def current_decision(jurisdiction: str, now: datetime | None = None) -> dict:
         or decision.get("jurisdiction") != jurisdiction
     ):
         raise Refused(f"{path.name} is not a catalogue decision for {jurisdiction}.")
+    check_decision(decision, path)
     if datetime.fromisoformat(decision["expires_at"]) <= (now or datetime.now(UTC)):
         raise Refused(f"The catalogue decision for {jurisdiction} expired: the owner records it again.")
     return decision
@@ -416,13 +456,11 @@ def decide_text(
     """Record the owner's decision to publish this collection's reviewed texts: what the texts are,
     whose they are, under what terms, why they may be republished, and that the kind of document
     was screened for personal data. One decision for the collection (REV-01), with an expiry."""
-    if not by.strip() or "@" in by:
-        raise Refused("Name the person deciding (a name, not an email address).")
-    missing = [
-        name
-        for name, value in (("--rights-holder", rights_holder), ("--licence", licence), ("--basis", basis))
-        if not value.strip()
-    ]
+    by, evidence = decider(by), evidence_links(evidence)
+    if licence_url:
+        evidence_links([licence_url])
+    stated = (("--rights-holder", rights_holder), ("--licence", licence), ("--basis", basis))
+    missing = [name for name, value in stated if not value.strip() or PLACEHOLDER.search(value)]
     if missing or not evidence:
         raise Refused(f"A text decision needs {', '.join(missing + ([] if evidence else ['--evidence']))}.")
     if not privacy_checked:
@@ -447,7 +485,7 @@ def decide_text(
         "privacy_status": "cleared",
         "basis": basis.strip(),
         "evidence": evidence,
-        "decided_by": by.strip(),
+        "decided_by": by,
         "decided_at": now.isoformat(),
         "expires_at": (now + timedelta(days=round(months * 30.44))).isoformat(),
         "revision": (previous or {}).get("revision", 0) + 1,
@@ -462,11 +500,13 @@ def current_text_decision(jurisdiction: str, now: datetime | None = None) -> dic
     if not path.exists():
         raise Refused(
             f"No text decision for {jurisdiction}: no text is published. The owner records one with"
-            f' `python -m operations.publish decide-text --jurisdiction {jurisdiction} --by "Full Name" …`.'
+            f" `python -m operations.publish decide-text --jurisdiction {jurisdiction}` and their own name,"
+            " evidence and terms."
         )
     decision = json.loads(path.read_text())
     if decision.get("operation") != "publish_full_text" or decision.get("jurisdiction") != jurisdiction:
         raise Refused(f"{path.name} is not a text decision for {jurisdiction}.")
+    check_decision(decision, path)
     if datetime.fromisoformat(decision["expires_at"]) <= (now or datetime.now(UTC)):
         raise Refused(f"The text decision for {jurisdiction} expired: the owner records it again.")
     return decision
