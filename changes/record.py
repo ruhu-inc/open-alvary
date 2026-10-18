@@ -275,11 +275,31 @@ def _text(rec, work_id, now, version_id, facts, *, first):
         work_id,
         now,
         version={"id": version_id, **facts},
-        reason="first_text" if first else "unknown",
+        reason="first_text" if first else _reason(rec, version_id),
         summary=f"The text of {title} is now available."
         if first
         else f"A new text version of {title} was published.",
     )
+
+
+def _reason(rec: _Recorder, version_id: str) -> str:
+    """Why a later text version exists (TXP-04): a correction read from the same original file, or a
+    new original file; unknown when the version names no earlier one."""
+    versions = tables["versions"]
+    row = rec.conn.execute(select(versions.c.payload).where(versions.c.id == version_id)).first()
+    prior_id = row.payload.get("prior_version_id") if row else None
+    prior = (
+        rec.conn.execute(select(versions.c.payload).where(versions.c.id == prior_id)).first()
+        if prior_id
+        else None
+    )
+    return change_reason(row.payload if row else None, prior.payload if prior else None)
+
+
+def change_reason(version: dict | None, prior: dict | None) -> str:
+    if not version or not prior:
+        return "unknown"
+    return "extraction_correction" if prior.get("raw_hash") == version.get("raw_hash") else "source_revision"
 
 
 def _remember(rec: _Recorder, work_id: str, now: dict | None, before) -> None:
