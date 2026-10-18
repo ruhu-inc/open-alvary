@@ -357,6 +357,11 @@ SCHEMAS: dict[str, dict] = {
         "type": "object",
         "description": "One change. Deduplicate by `feed_epoch`, `event_id` and `event_revision`.",
         "properties": {
+            "schema_version": {
+                "type": S,
+                "description": "The version of this shape, `change-event-1`. New event types and fields may "
+                "appear within a version: ignore the ones you do not know.",
+            },
             "event_id": {"type": S, "description": "The change's ID."},
             "event_revision": {
                 "type": "integer",
@@ -364,16 +369,12 @@ SCHEMAS: dict[str, dict] = {
             },
             "event_type": {
                 "type": S,
-                "enum": [
-                    "catalogue_added",
-                    "metadata_corrected",
-                    "text_version_published",
-                    "withdrawal",
-                    "coverage_changed",
-                ],
-                "description": "What changed: a record added (an old law newly catalogued, not a new law), "
-                "its catalogue details corrected, a text published, a record or text withdrawn, or a "
-                "jurisdiction's coverage.",
+                "description": "What changed: `catalogue_added` (a record added: an old law newly catalogued, "
+                "not a new law), `metadata_corrected` (its catalogue details corrected), "
+                "`text_version_published`, `legal_effect_recorded` (a checked repeal, amendment or "
+                "supersession of the record by another public record), `withdrawal` (a record or text) or "
+                "`coverage_changed` (a jurisdiction's coverage). More types may be added: ignore those you "
+                "do not know; `/change-coverage` lists the ones recorded.",
             },
             "feed_epoch": {
                 "type": S,
@@ -434,6 +435,24 @@ SCHEMAS: dict[str, dict] = {
                 "`stop_serving` (stop serving copies of that text) and `reason_code` `rights_changed` (its "
                 "rights record changed or lapsed) or `correction` (its approval was withdrawn). When "
                 "`scope_disclosure` is `revalidate_releases`, check your copies against a current release.",
+            },
+            "legal_effect": {
+                "type": ["object", "null"],
+                "description": "For a legal effect: {kind, by, effective_date, evidence_url}. `kind` is `repeal`, "
+                "`amendment` or `supersession` of the record in `work`; `by` is the record that had the effect "
+                "{id, title, citation}; the date is when it took effect, when known. A reviewer checked it "
+                "against the official text. A later correction of it has the same `event_id`.",
+            },
+            "previous": {
+                "type": "object",
+                "description": "For a correction: the previous values of the fields that changed, among "
+                "`legal_status`, `rights_status`, `document_type` and `year`.",
+            },
+            "version_diff": {
+                "type": ["object", "null"],
+                "description": "For a text that replaces an earlier one: {prior_version_id, added, removed, "
+                "changed, truncated}, the locators of the provisions added, removed and changed (their words "
+                "differ), in document order, at most 200 each.",
             },
         },
     },

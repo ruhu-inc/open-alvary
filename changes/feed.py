@@ -43,6 +43,7 @@ SUPPORTED = (
     "catalogue_added",
     "metadata_corrected",
     "text_version_published",
+    "legal_effect_recorded",
     "withdrawal",
     "coverage_changed",
 )
@@ -432,8 +433,22 @@ class Feed:
         kind = row["event_type"]
         work = visible.work(row["work_id"]) if kind != "coverage_changed" else None
         named = work is not None
-        if kind in ("catalogue_added", "metadata_corrected") and not named:
+        if kind in ("catalogue_added", "metadata_corrected", "legal_effect_recorded") and not named:
             return None
+        legal_effect = None
+        if kind == "legal_effect_recorded":
+            told = payload.get("legal_effect") or {}
+            by = visible.work((told.get("by") or {}).get("id"))
+            if by is None:  # the law that had the effect is not public: say nothing of it
+                return None
+            legal_effect = {
+                **told,
+                "by": {
+                    "id": told["by"]["id"],
+                    "title": by["projection"].get("title"),
+                    "citation": by["projection"].get("citation"),
+                },
+            }
         if kind == "text_version_published" and (not named or row["version_id"] not in work["versions"]):
             return None
         summary = payload.get("summary")
@@ -464,6 +479,7 @@ class Feed:
                 "language": facts.get("language"),
             }
         return {
+            "schema_version": payload.get("schema_version", "change-event-1"),
             "event_id": str(row["event_id"]),
             "event_revision": row["event_revision"],
             "event_type": kind,
@@ -490,6 +506,10 @@ class Feed:
             "summary": summary,
             "sources": payload.get("sources", []) if named else [],
             "withdrawal": withdrawal,
+            "legal_effect": legal_effect,
+            # A correction's previous values, only for fields that can never have been withheld.
+            "previous": payload.get("previous", {}) if named and kind == "metadata_corrected" else {},
+            "version_diff": payload.get("version_diff") if kind == "text_version_published" else None,
         }
 
     def _work(self, row, payload):
