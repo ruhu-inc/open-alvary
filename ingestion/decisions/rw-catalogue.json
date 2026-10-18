@@ -1,0 +1,16 @@
+{
+  "decision": "catalogue-records-1",
+  "jurisdiction": "rw",
+  "operation": "publish_catalogue_records",
+  "text": "not_included",
+  "basis": "Independently written catalogue entries (title, number, dates, status, links between laws) with a link to the official text. No text, headnote or compilation is copied.",
+  "legal_note": "Text publication waits for the copyright check of official texts under Law n° 055/2024.",
+  "evidence": [
+    "https://www.minijust.gov.rw/official-gazette",
+    "https://www.rlrc.gov.rw/mandate/laws-of-rwanda"
+  ],
+  "decided_by": "Ijidai Lassa",
+  "decided_at": "2026-10-18T20:29:28+00:00",
+  "expires_at": "2027-10-18T20:29:28+00:00",
+  "revision": 1
+}
