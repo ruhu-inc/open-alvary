@@ -1,0 +1,49 @@
+tests/test_workbench.py
+  s_d665c62e07d76f::t_dd17bc608dcdbe 1212-1226
+workbench/static/app.js
+  s_d665c62e07d76f::t_06570d58d84e6e 999,1003-1040
+  s_d665c62e07d76f::t_982b2ea5fb9bfc 983
+  s_d665c62e07d76f::t_b13653434d38e2 1080-1082
+  s_d665c62e07d76f::t_4fe07ab5aab9b2 1223,1225
+  s_7936d1cd23c5b8::t_fc89bc78f7f504 1041
+workbench/static/app.css
+  s_d665c62e07d76f::t_0589a35ae9befc 340-342
+workbench/app.py
+  s_d665c62e07d76f::t_8f7e41d01cc17d 202-222
+  s_d665c62e07d76f::t_cba4c2a6fe8369 470,475
+  s_d665c62e07d76f::t_61fee91f9b0921 12
+  s_d665c62e07d76f::t_acacb02664e04d 39
+  s_fa12c52425abab::t_77484f52e29892 32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "445efa1f4032b2386e6a861623c9b160e5081c30",
+  "prompts": {},
+  "sessions": {
+    "s_7936d1cd23c5b8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a14c2b-824a-7022-bb86-0bc2c1b99e22",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    },
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    },
+    "s_fa12c52425abab": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a148ac-66f5-76b1-85a7-162e3e001a80",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
