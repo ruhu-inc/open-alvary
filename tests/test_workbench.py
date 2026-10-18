@@ -1125,3 +1125,46 @@ def test_reading_a_whole_document_counts_its_pages_from_one_whatever_their_print
     reviewer = signed_in((store, content.Library(tmp_path)), "reviewer@example.org")
     first = reviewer.get("/api/documents/rw-law-009-2026-fr/stream?start=1&count=6").json()
     assert [p["page"] for p in first["pages"]] == [3] and first["total"] == 1  # printed as page 3
+
+
+def test_a_document_says_where_it_stands_and_opens_the_laws_that_repealed_or_were_made_under_it(
+    tmp_path, monkeypatch
+):
+    folder = tmp_path / "rw"
+    rwanda_collection(folder, monkeypatch)
+    manifest = json.loads((folder / "manifest.json").read_text())
+    later = {"work": "rw-law-010-2027", "title": "Law n° 010/2027 of 01/02/2027 governing examples"}
+    order = {"work": "rw-presidential-order-001-01-2026", "title": "Presidential Order n° 001/01 of 2026"}
+    for work in (later, order):
+        (folder / f"{work['work']}-en.reading.json").write_text(
+            (folder / "rw-law-009-2026-en.reading.json").read_text()
+        )
+        manifest["documents"].append(
+            {"id": f"{work['work']}-en", "type": "law", "title": work["title"], "year": 2027, "jurisdiction": "rw",
+             "language": "en", "work": work["work"]}
+        )  # fmt: skip
+    for document in manifest["documents"][:2]:
+        document["relations"] = [
+            {"kind": "repealed_by", "target": later["title"], "target_id": later["work"]}
+        ]
+        document["currency"] = {"status": "repealed", "basis": "text", "repealed_by": [later],
+                                "disagrees": "RLRC's listing files it among the laws in force"}  # fmt: skip
+        document["enables"] = [order["work"]]
+    (folder / "manifest.json").write_text(json.dumps(manifest))
+    store = Store(connect(f"sqlite:///{tmp_path / 'workbench.db'}"))
+    store.add_operator("reviewer@example.org", "Rev", {"reviewer"})
+    reviewer = signed_in((store, content.Library(tmp_path)), "reviewer@example.org")
+    standing = reviewer.get("/api/documents/rw-law-009-2026-fr").json()["standing"]
+    assert standing["status"] == "repealed" and standing["disagrees"].startswith("RLRC")
+    assert standing["repealed_by"] == [
+        {"title": later["title"], "id": "rw-law-010-2027-en"}
+    ]  # no French text
+    assert standing["enables"] == {
+        "total": 1,
+        "shown": [{"id": f"{order['work']}-en", "title": order["title"]}],
+    }
+    details = reviewer.get("/api/documents/rw-law-009-2026-en/details").json()
+    assert details["record"]["details"]["status.legal"] == "repealed"
+    assert details["related"] == {later["work"]: "rw-law-010-2027-en"}
+    assert details["suggestions"]["relations"]["value"][0]["kind"] == "repealed_by"
+    assert reviewer.get("/api/documents/rw-law-010-2027-en").json()["standing"] is None  # not linked yet

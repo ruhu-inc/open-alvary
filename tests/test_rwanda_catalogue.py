@@ -1039,3 +1039,59 @@ def test_a_law_links_to_the_laws_it_repeals_and_amends_and_they_link_back():
     assert (
         rwanda.work_key("rw-law-53bis-2013") == rwanda.work_key("rw-law-053-bis-2013") == "rw-law-53-bis-2013"
     )
+
+
+def test_a_works_currency_follows_its_line_of_repeals_and_the_listing_and_its_parent_law():
+    def doc(work, year, **more):
+        return {
+            "id": f"{work}-en",
+            "work": work,
+            "language": "en",
+            "title": f"Title of {work}",
+            "year": year,
+            **more,
+        }
+
+    def cite(kind, number, year, instrument="law"):
+        return {
+            "kind": kind,
+            "target": f"Law n° {number}",
+            "instrument": instrument,
+            "number": number,
+            "year": year,
+        }
+
+    documents = [
+        doc("rw-law-1-2001", 2001, listed="in_force"),
+        doc("rw-law-2-2010", 2010, cites=[cite("repeals", "1/2001", "2001")]),
+        doc("rw-law-3-2020", 2020, cites=[cite("repeals", "2/2010", "2010")]),
+        doc("rw-law-4-2021", 2021, cites=[cite("amends", "3/2020", "2020")]),
+        doc("rw-presidential-order-5-01-2012", 2012, cites=[cite("made_under", "2/2010", "2010")]),
+        doc("rw-law-6-2005", 2005, listed="repealed"),
+        doc("rw-law-7-2006", 2006),
+    ]
+    out = {d["work"]: d for d in rwanda.link_works(documents)}
+    first = out["rw-law-1-2001"]["currency"]
+    assert first["status"] == "repealed" and first["basis"] == "text"
+    assert first["repealed_by"] == [{"work": "rw-law-2-2010", "title": "Title of rw-law-2-2010"}]
+    assert first["latest"] == {"work": "rw-law-3-2020", "title": "Title of rw-law-3-2020"}
+    assert first["disagrees"] == "RLRC's listing files it among the laws in force"
+    assert "latest" not in out["rw-law-2-2010"]["currency"]  # what repealed it is in force
+    assert out["rw-law-3-2020"]["currency"] == {
+        "status": "unknown",
+        "amended_by": [{"work": "rw-law-4-2021", "title": "Title of rw-law-4-2021"}],
+    }
+    assert out["rw-law-2-2010"]["enables"] == ["rw-presidential-order-5-01-2012"]
+    assert "relations" not in out["rw-law-2-2010"] or all(
+        link["kind"] != "enables" for link in out["rw-law-2-2010"]["relations"]
+    )  # instruments made under a law are listed apart, not as its links
+    order = out["rw-presidential-order-5-01-2012"]
+    assert order["relations"] == [
+        {"kind": "made_under", "target": "Law n° 2/2010", "target_id": "rw-law-2-2010"}
+    ]
+    assert order["currency"]["parents_repealed"] == [
+        {"work": "rw-law-2-2010", "title": "Title of rw-law-2-2010",
+         "repealed_by": [{"work": "rw-law-3-2020", "title": "Title of rw-law-3-2020"}]}
+    ]  # fmt: skip
+    assert out["rw-law-6-2005"]["currency"] == {"status": "repealed", "basis": "listing"}
+    assert out["rw-law-7-2006"]["currency"] == {"status": "unknown"}
