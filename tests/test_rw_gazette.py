@@ -872,3 +872,31 @@ def test_each_page_is_split_on_its_own_columns_not_an_earlier_pages():
         (c["x0"], c["x1"]) for c in pages[0]["columns"]
     ]
     assert len(pages[1]["columns"]) == 3
+
+
+def test_a_page_whose_measure_leaves_a_column_empty_takes_the_page_befores_languages_side_by_side(
+    monkeypatch,
+):
+    # rw-decree-law-20-76, page 2: the signature centred across the gutter moved the measured gutter to
+    # the margin, leaving the Kinyarwanda column empty and the Kinyarwanda in the French.
+    fr = ["Le présent décret-loi sort ses effets", "à la date de sa signature et de la loi"]
+    rw = ["Iri tegeko-teka ritangira gukurikizwa", "ku munsi ryashyiriweho umukono na ya"]
+    first = _two_columns(
+        ["Décret-loi n° 20/76 du 20 avril 1976", *fr * 8], ["Itegeko-teka nº 20/76", *rw * 8]
+    )
+    second = _two_columns(fr * 2, rw * 2, centred=["Kigali, le 20 avril 1976.", "HABYARIMANA J."])
+    measured = RG.gazette_layout.columns
+    margin = [(38.0, 560.0), (565.0, 595.0)]  # the measure's gutter at the margin: one column nearly empty
+    monkeypatch.setattr(
+        RG.gazette_layout,
+        "columns",
+        lambda page: margin if page["words"] == second["words"] else measured(page),
+    )
+    pages = RG.split_issue([first, second])
+    assert [c["language"] for c in pages[1]["columns"]] == ["fr", "rw"]
+    left, right = (" ".join(line["text"] for line in c["lines"]) for c in pages[1]["columns"])
+    assert "ritangira gukurikizwa" in right and "ritangira" not in left
+    # After a page of one column, or of a table's columns, nothing is taken: the page keeps its own.
+    table = _two_columns(["Administrative Unit"] * 12, ["Job Title Director of Unit"] * 12)
+    lone = RG.split_issue([table, second])[1]
+    assert [(c["x0"], c["x1"]) for c in lone["columns"]] == margin

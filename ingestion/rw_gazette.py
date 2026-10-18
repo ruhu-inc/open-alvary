@@ -16,12 +16,13 @@ import re
 import statistics
 import unicodedata
 from collections import Counter
+from itertools import pairwise
 
 from ingestion import gazette_layout
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-18.4"  # each page keeps its own columns again (.1 to .3 borrowed others' and lost orders)
+PIPELINE = "2026-10-18.5"  # a page whose own columns leave one empty takes the page before's
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -213,11 +214,57 @@ def doubtful(word: dict) -> bool:
     return word.get("confidence", 1.0) < SURE or bool(STRANGE.search(word["text"]))
 
 
-def split_page(page: dict, number: int, carried: str | None = None, tables: list[dict] | None = None) -> dict:
-    """A page's columns, each with its language and lines; running headers set apart as furniture."""
+def held_gutters(words: list[dict], spans: list[tuple[float, float]]) -> bool:
+    """Whether another page's columns hold on this one: words on each side of every gutter, and few
+    crossing it (a centred date or signature)."""
+    if len(spans) < 2 or not words:
+        return False
+    for (_, end), (start, _) in pairwise(spans):
+        gutter = (end + start) / 2
+        crossing = sum(1 for w in words if w["xmin"] < gutter < w["xmax"])
+        left = sum(1 for w in words if (w["xmin"] + w["xmax"]) / 2 < gutter)
+        if crossing > max(3, 0.08 * len(words)) or min(left, len(words) - left) < 3:
+            return False
+    return True
+
+
+def lopsided(words: list[dict], spans: list[tuple[float, float]]) -> bool:
+    """Whether a page's own columns leave one nearly empty (under 15% of its words; a language column
+    holds nearer half): the measure put a gutter where there is none, as a signature centred across
+    the real one can make it do."""
+    if len(spans) < 2 or not words:
+        return False
+    counts = [0] * len(spans)
+    for w in words:
+        centre = (w["xmin"] + w["xmax"]) / 2
+        counts[
+            min(
+                range(len(spans)),
+                key=lambda i: (
+                    0
+                    if spans[i][0] <= centre < spans[i][1]
+                    else min(abs(centre - spans[i][0]), abs(centre - spans[i][1]))
+                ),
+            )
+        ] += 1
+    return min(counts) < 0.15 * len(words)
+
+
+def split_page(
+    page: dict,
+    number: int,
+    carried: str | None = None,
+    tables: list[dict] | None = None,
+    spans: list[tuple[float, float]] | None = None,
+) -> dict:
+    """A page's columns, each with its language and lines; running headers set apart as furniture.
+    `spans` gives the columns instead of measuring them (split_issue: the page before's)."""
     # Columns are measured without the tables' words: a table's amount columns are not languages.
     in_tables = {id(w) for table in tables or [] for w in table["words"]}
-    spans = gazette_layout.columns({**page, "words": [w for w in page["words"] if id(w) not in in_tables]})
+    if spans is None:
+        spans = gazette_layout.columns(
+            {**page, "words": [w for w in page["words"] if id(w) not in in_tables]}
+        )
     furniture, columns = [], []
     three = len(spans) == 3
     # Each word to the column it lies in, or the nearest: a word alone at a column's edge (an
@@ -306,12 +353,36 @@ def split_page(page: dict, number: int, carried: str | None = None, tables: list
 
 def split_issue(pages: list[dict], tables: dict[int, list[dict]] | None = None) -> list[dict]:
     """Every page split; `tables` are the ruled tables found on each page (ruled_tables), whose
-    words then come out as tables and not as lines of text."""
-    out, carried = [], None
+    words then come out as tables and not as lines of text. A page keeps its own columns unless they
+    leave one nearly empty while the page before's languages side by side hold on it and read there
+    as the same languages, in the same order (rw-decree-law-20-76, page 2: a signature centred across
+    the gutter moved the measured gutter to the margin and read the Kinyarwanda into the French).
+    Pipelines .1 to .3 took an earlier page's columns whenever they held, and lost 3,588 orders."""
+    out, carried, previous = [], None, None
     for number, page in enumerate(pages, 1):
-        split = split_page(page, number, carried, (tables or {}).get(number))
+        found = (tables or {}).get(number)
+        split = split_page(page, number, carried, found)
+        if previous:
+            in_tables = {id(w) for table in found or [] for w in table["words"]}
+            words = [w for w in page["words"] if id(w) not in in_tables]
+            own = [(c["x0"], c["x1"]) for c in split["columns"]]
+            if len(own) == len(previous[0]) and lopsided(words, own) and held_gutters(words, previous[0]):
+                kept = split_page(page, number, carried, found, spans=previous[0])
+                if [c["language"] for c in kept["columns"]] == previous[1]:
+                    split = kept
         languages = [c["language"] for c in split["columns"] if c["language"]]
         carried = languages[-1] if languages else carried
+        # The page's columns, for the next page, when they are languages side by side: each a different
+        # language, about as wide as the others (a table's columns are neither).
+        sides = [c["language"] for c in split["columns"]]
+        widths = [c["x1"] - c["x0"] for c in split["columns"]]
+        distinct = (
+            len(sides) > 1
+            and None not in sides
+            and len(set(sides)) == len(sides)
+            and max(widths) <= 1.5 * min(widths)
+        )
+        previous = ([(c["x0"], c["x1"]) for c in split["columns"]], sides) if distinct else None
         out.append(split)
     return out
 
