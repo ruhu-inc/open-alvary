@@ -1,0 +1,80 @@
+migrations/versions/0033_french_search.py
+  s_d665c62e07d76f::t_ab64f288c8154f 1-44
+api/text_index.py
+  s_d665c62e07d76f::t_29b3c07b3b371c 406
+  s_d665c62e07d76f::t_f1ee708d197b0c 15-16
+  s_d665c62e07d76f::t_ab64f288c8154f 36
+  s_d665c62e07d76f::t_e8e7a636eb9419 14,33,35,453
+operations/publish.py
+  s_d665c62e07d76f::t_675b74046ea236 411-412
+  s_d665c62e07d76f::t_d02988e5b22a94 318,324-337
+  s_d665c62e07d76f::t_325e47895b7fc1 43
+  s_7936d1cd23c5b8::t_f53f54a757b41d 338-339
+schema/public.py
+  s_d665c62e07d76f::t_34b7e7d89c1416 73-91
+  s_d665c62e07d76f::t_82959eb3d671c8 41-43
+tests/test_postgres_search.py
+  s_d665c62e07d76f::t_e5289fa961e5f7 270
+  s_d665c62e07d76f::t_08e424c5dc1fdf 201
+  s_d665c62e07d76f::t_b6d80759df5ff5 187-189,191-194,196-200,202-206
+  s_d665c62e07d76f::t_d268b8e8b89c7d 265-268
+  s_d665c62e07d76f::t_29b3c07b3b371c 207-209
+  s_d665c62e07d76f::t_c235d0a4d65fed 259-264,269,271-272
+schema/public.schema.json
+  s_d665c62e07d76f::t_29b3c07b3b371c 2172-2184
+tests/test_publish.py
+  s_d665c62e07d76f::t_a3d098bca69ca0 103-123
+tests/test_text_publication.py
+  s_d665c62e07d76f::t_7d9cb21fa6d305 288
+  s_d665c62e07d76f::t_76529ea44fcc8e 282-287,289-292,297-310
+  s_d665c62e07d76f::t_29b3c07b3b371c 293-296
+api/openapi_docs.py
+  s_d665c62e07d76f::t_0a6719e9e58f07 128,132-141
+  s_d665c62e07d76f::t_d6b744681bdf3a 142,753-764
+tests/test_v1_text.py
+  s_d665c62e07d76f::t_45ce50ac39b113 317-325,332-336
+  s_d665c62e07d76f::t_bbc0af46643c4d 47-50
+  s_d665c62e07d76f::t_29b3c07b3b371c 326-331
+api/v1.py
+  s_d665c62e07d76f::t_072d060e694b2b 39
+  s_d665c62e07d76f::t_211f396775cfd6 216-222,229,233-235
+web/src/docs/data/openapi.json
+  s_d665c62e07d76f::t_d6cb32bd893831 1383-1466,1519-1537,3151-3248,5234-5246
+api/catalogue.py
+  s_d665c62e07d76f::t_eddb6253506188 371-372,377-406
+  s_d665c62e07d76f::t_f4e35ba80c8818 88-92
+  s_d665c62e07d76f::t_31aec79da9893a 307-310,312-316
+  s_d665c62e07d76f::t_f71414eef80fae 33-34,407
+workbench/structure.py
+  s_d665c62e07d76f::t_9ce8d07607b565 193-194,199-200
+  s_d665c62e07d76f::t_29b3c07b3b371c 195-197
+web/src/docs/content/search.md
+  s_d665c62e07d76f::t_83694c00703d0a 102
+operations/acceptance.py
+  s_d665c62e07d76f::t_29b3c07b3b371c 78-80,144-146,158-160
+  s_d665c62e07d76f::t_fa45e72fa6a56f 1-77,81-143,147-157,161-166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ac1cb8d079ee69cc3dd2c19a52a1267f217498ff",
+  "prompts": {},
+  "sessions": {
+    "s_7936d1cd23c5b8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a14c2b-824a-7022-bb86-0bc2c1b99e22",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    },
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": null
+    }
+  }
+}
