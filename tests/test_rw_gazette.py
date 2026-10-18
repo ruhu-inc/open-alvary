@@ -661,9 +661,10 @@ def _two_columns(left: list[str], right: list[str], centred: list[str] = ()) -> 
     return {"width": width, "height": height, "words": words}
 
 
-def test_a_short_bilingual_page_keeps_its_columns_though_its_signature_crosses_the_gutter():
-    # rw-decree-law-20-76: a page of a few side-by-side lines under a centred signature measured as one
-    # column, so its Kinyarwanda was read into the French. The issue's earlier page shows the gutter.
+def test_a_short_bilingual_page_under_a_centred_signature_keeps_its_two_languages():
+    # A page of a few side-by-side lines under a centred signature (rw-decree-law-20-76) is split on
+    # its own columns. (On the printed page its gutter is measured off-centre; borrowing the earlier
+    # page's columns for it lost thousands of orders elsewhere, so that page is left to the reviewer.)
     # Lines of up to 40 characters: each column's half of the page, as printed.
     fr = ["Le présent décret-loi sort ses effets", "à la date de sa signature et de la loi"]
     rw = ["Iri tegeko-teka ritangira gukurikizwa", "ku munsi ryashyiriweho umukono na ya"]
@@ -844,3 +845,30 @@ def test_a_law_named_in_the_title_of_a_repealed_order_is_not_itself_repealed():
         "ministerial_order",
         "005/12/10/TC",
     )
+
+
+def test_each_page_is_split_on_its_own_columns_not_an_earlier_pages():
+    # Pipelines 2026-10-18.1 to .3 laid an earlier page's columns over a page whose own sat elsewhere
+    # when the earlier gutters seemed to hold: lines were cut across languages, 3,588 orders lost.
+    def three(spans):
+        """A landscape page of the three languages, in columns at these places."""
+        words = []
+        for (x0, _), lines in zip(spans, (RW * 3, EN * 3, FR * 3), strict=True):
+            y = 70.0
+            for line in lines:
+                x = x0
+                for word in line.split():
+                    words.append(
+                        {"xmin": x, "ymin": y, "xmax": x + 5.0 * len(word), "ymax": y + 10, "text": word}
+                    )
+                    x += 5.0 * len(word) + 4
+                y += 14
+        return {"width": 842.0, "height": 595.0, "words": words}
+
+    first = three([(70, 290), (300, 520), (530, 770)])
+    second = three([(40, 250), (320, 520), (590, 800)])  # its own three columns, elsewhere
+    pages = RG.split_issue([first, second])
+    assert [(c["x0"], c["x1"]) for c in pages[1]["columns"]] != [
+        (c["x0"], c["x1"]) for c in pages[0]["columns"]
+    ]
+    assert len(pages[1]["columns"]) == 3
