@@ -5,9 +5,11 @@
 import React from "react";
 import { Link, PageTitle } from "./site";
 
-export const LEGAL_VERSION = "2026-10-15";
+export const LEGAL_VERSION = "2026-10-18";
 // Approved by the owner on 2026-10-16 (terms, acceptable use, privacy, and the security page's
-// disclosure terms). A new version starts as a draft again: set this to false until it is approved.
+// disclosure terms); version 2026-10-18 (data a day in the terms, no request logs for the API and MCP
+// in the privacy notice) approved on 2026-10-18. A new version starts as a draft again: set this to
+// false until it is approved.
 const APPROVED = true;
 const TO_CONFIRM: string[] = [];
 const OPERATOR = "Ruhu, Inc.";
@@ -77,8 +79,8 @@ export function Terms() {
         <p>
           The API and MCP are for organisations with access. We grant access, including any
           free or reduced access for public-interest work, at our discretion, for the jurisdictions and
-          period we state. Each plan has limits on requests; we publish them and may change them with notice,
-          or at once to protect the service.
+          period we state. Each plan has limits on requests and on how much data you receive each day; we
+          publish them and may change them with notice, or at once to protect the service.
         </p>
         <p>
           There are no charges while Open Alvary is in its pilot. Before any paid plan applies to you, we will
@@ -244,6 +246,10 @@ export function Privacy() {
           <li>the versions of these documents you accepted, and when;</li>
           <li>the names and dates of your keys and connected apps (never a key's secret, which we store only as a keyed hash);</li>
           <li>daily totals of requests and data per key or app, with refusals and their reasons (never the content of your queries), to apply limits and show you your usage;</li>
+          <li>
+            what you send the API and MCP (search words, citations, the records you ask for), only to answer
+            that request. We don't keep it: the API and MCP keep no request logs, and an error never records it;
+          </li>
           <li>an audit log of access changes, with a truncated network address and browser family, to protect your organisation;</li>
           <li>a session cookie for the console only, to keep you signed in;</li>
           <li>
