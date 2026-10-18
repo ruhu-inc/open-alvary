@@ -198,7 +198,15 @@ def _digest(accounts, watches, conn, mailer, base, person_id, cadence, now) -> i
         text(f"SELECT max(window_end) FROM {table} WHERE person_id = :p AND cadence = :c"),
         {"p": person_id, "c": cadence},
     )
-    start = last_end or previous
+    # A first digest gathers every match since the person joined (or the window before, if later
+    # joined): matches made before a missed send never disappear (changes-and-subscriptions SUB-05).
+    joined = conn.scalar(
+        text(
+            f"SELECT min(created_at) FROM {accounts._t(conn, 'watch_member')} WHERE person_id = :p AND email = :c"
+        ),
+        {"p": person_id, "c": cadence},
+    )
+    start = last_end or min(filter(None, (joined, previous)))
     if start >= end:
         return 0
     rows = conn.execute(
