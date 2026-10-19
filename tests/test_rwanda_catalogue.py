@@ -882,7 +882,7 @@ def test_a_prepare_task_notes_a_file_it_cannot_prepare_and_goes_on(monkeypatch, 
 
     prepared, saved = [], []
     monkeypatch.setattr(rwanda, "STAGING", rwanda.STAGING)  # the job points it at its own folder
-    monkeypatch.setattr(prepare_job.corpus_store, "CorpusStore", Store)
+    monkeypatch.setattr(prepare_job.corpus_store, "open_store", Store)
     monkeypatch.setattr(rwanda.BucketCollection, "save_manifest", lambda self, manifest: saved.append(1))
 
     def prepare(selection, **kwargs):

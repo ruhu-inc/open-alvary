@@ -1012,6 +1012,60 @@ def test_a_collection_in_the_corpus_bucket_is_read_from_it_and_cached(tmp_path, 
     assert asked.count("collections/rw/files/abc/rw-law-009-2026-en.document.json") == 1
 
 
+def test_a_collection_in_an_azure_blob_container_is_read_from_it_and_cached(tmp_path, monkeypatch):
+    from blob_support import BlobService
+
+    from ingestion import corpus_store
+    from ingestion import rw_gazette as RG
+
+    lines = [{"text": "Article One: Purpose", "x0": 300, "y0": 90, "x1": 420, "y1": 100, "page": 3}]
+    reading_json = RG.reading(RG.structure(lines, "en"), {}, "0" * 64, {}, {3: (842.0, 595.0)})
+    document = {
+        "id": "rw-law-009-2026-en",
+        "type": "law",
+        "title": "Law n° 009/2026",
+        "jurisdiction": "rw",
+        "language": "en",
+        "work": "rw-law-009-2026",
+        "source_object": "sources/rw/minijust-gazette/abc.pdf",
+        "objects": "files/abc/",
+    }
+    service = BlobService()
+    held = service.store("corpus")
+    manifest = json.dumps({"collection": "rw", "documents": [document]}).encode()
+    held.put("collections/rw/manifest.json", manifest, "application/json")
+    held.put(
+        "collections/rw/files/abc/rw-law-009-2026-en.reading.json",
+        json.dumps(reading_json).encode(),
+        "application/json",
+    )
+    held.put("sources/rw/minijust-gazette/abc.pdf", b"%PDF-1.4 the issue", "application/pdf")
+    opened = []
+
+    def open_store(address):
+        opened.append(address)
+        return service.store("corpus")
+
+    monkeypatch.setattr(content, "_STORES", {})
+    monkeypatch.setattr(corpus_store, "open_store", open_store)
+    monkeypatch.setenv("ALVARY_REVIEW_COLLECTIONS", "az://oatest/corpus/collections/rw/")
+    monkeypatch.setenv("ALVARY_REVIEW_CACHE", str(tmp_path / "cache"))
+    (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(reading()))
+    library = content.Library(tmp_path)
+    assert "rw-law-009-2026-en" in [d["id"] for d in library.documents()]
+    assert library.reading("rw-law-009-2026-en")["pages"][0]["page"] == 3
+    assert library.original("rw-law-009-2026-en").read_bytes() == b"%PDF-1.4 the issue"
+    assert library.act("rw-law-009-2026-en")["work"] == "rw-law-009-2026"  # it has no details beside it
+    assert opened == ["az://oatest/corpus"]  # one store for the container
+    cached = tmp_path / "cache" / "az" / "oatest" / "corpus" / "collections" / "rw"
+    assert (cached / "sources" / "abc.pdf").is_file()
+    assert (cached / "files" / "abc" / "rw-law-009-2026-en.reading.json").is_file()
+    service.requests.clear()
+    library.reading("rw-law-009-2026-en")
+    library.original("rw-law-009-2026-en")
+    assert service.requests == []  # read from the cache after the first time
+
+
 def test_a_scanned_document_says_it_was_read_by_ocr_and_checked_by_a_second_reading():
     from workbench import content as wb_content
 

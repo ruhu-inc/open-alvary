@@ -344,6 +344,9 @@ def _network_trouble(error: Exception) -> bool:
         return True
     if isinstance(error, requests.exceptions.HTTPError) and error.response is not None:
         return error.response.status_code >= 500
+    # The same from an Azure Blob container (a source website's server error is the file's failure).
+    if isinstance(error, httpx.HTTPStatusError) and error.request.url.host.endswith(".blob.core.windows.net"):
+        return error.response.status_code >= 500
     return isinstance(error, OSError)
 
 
@@ -1709,19 +1712,19 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     if args.command == "survey":
         summary = survey(
-            corpus_store.CorpusStore(), args.limit, log=lambda message: print(message, flush=True)
+            corpus_store.open_store(), args.limit, log=lambda message: print(message, flush=True)
         )
         print(json.dumps(summary["by"].get("all", {}), ensure_ascii=False))
         return 0
     if args.command == "scan-progress":
-        print(json.dumps(scan_progress(corpus_store.CorpusStore())))
+        print(json.dumps(scan_progress(corpus_store.open_store())))
         return 0
     if args.command == "scan-worklist":
         approval = {"approved_by": args.approved_by, "max_pages": args.max_pages, "basis": args.basis}
         worklist = scan_worklist(approval)
         if worklist["pages"] > args.max_pages:
             parser.error(f"{worklist['pages']} scanned pages exceed the approved {args.max_pages}")
-        corpus_store.CorpusStore().put(
+        corpus_store.open_store().put(
             WORKLIST, json.dumps(worklist, ensure_ascii=False).encode(), "application/json", replace=True
         )
         print(json.dumps({"files": len(worklist["files"]), "pages": worklist["pages"], "object": WORKLIST}))
@@ -1732,7 +1735,7 @@ def main(argv=None) -> int:
         result = read_scans(
             load_selection(args.selection) if args.selection else None,
             log=lambda message: print(message, flush=True),
-            store=corpus_store.CorpusStore(),
+            store=corpus_store.open_store(),
             max_pages=args.max_pages,
             files_at_once=args.files_at_once,
             kind=args.reader,
@@ -1741,14 +1744,14 @@ def main(argv=None) -> int:
         print(json.dumps(result))
         return 1 if result["stopped"] and "budget" not in result["stopped"] else 0
     if args.command == "push-held":
-        store = corpus_store.CorpusStore()
+        store = corpus_store.open_store()
         print(json.dumps({"stored": push_held(store)}))
         mirror_state(store)
         return 0
     if args.command == "fetch":
         if args.no_local and not args.to_bucket:
             parser.error("--no-local needs --to-bucket")
-        store = corpus_store.CorpusStore() if args.to_bucket else None
+        store = corpus_store.open_store() if args.to_bucket else None
         try:
             results = fetch_selection(
                 load_selection(args.selection),
@@ -1783,7 +1786,7 @@ def main(argv=None) -> int:
         if args.all == bool(args.selection):
             parser.error("give --selection or --all")
         # Files and readings not kept here are read from the bucket, whichever collection is written.
-        store = corpus_store.CorpusStore()
+        store = corpus_store.open_store()
         if args.all:
             ledger = Ledger(STAGING / "sync-ledger.json")
             items = sorted(i for i, r in ledger.data["items"].items() if r.get("stored"))

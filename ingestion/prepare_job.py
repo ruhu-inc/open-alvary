@@ -39,7 +39,7 @@ def main() -> int:
     os.environ.setdefault("ALVARY_TEXT_LAYER", "direct")
     task = int(os.environ.get("CLOUD_RUN_TASK_INDEX", "0"))
     tasks = int(os.environ.get("CLOUD_RUN_TASK_COUNT", "1"))
-    store = corpus_store.CorpusStore()
+    store = corpus_store.open_store()
     with tempfile.TemporaryDirectory() as scratch:
         rwanda.STAGING = Path(scratch)
         fetch_state(store, rwanda.STAGING)
