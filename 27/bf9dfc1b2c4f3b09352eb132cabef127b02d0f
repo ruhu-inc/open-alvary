@@ -1,0 +1,78 @@
+api/pinpoint.py
+  s_d665c62e07d76f::t_8e2260310dc2ce 8-12
+  s_d665c62e07d76f::t_afdfae690fded3 113-114,118,121-123,126,128-129
+  s_d665c62e07d76f::t_456dfb4f321197 179-190,195-197,200-206
+  s_d665c62e07d76f::t_4495d99d4bdef8 45
+  s_d665c62e07d76f::t_efcb291bfc0744 43-44,46-50
+  s_d665c62e07d76f::t_0d4afe5fa885d0 124-125,127
+tests/test_pinpoint.py
+  s_d665c62e07d76f::t_fbfaa4d7696f6a 39-43,50-84
+  s_d665c62e07d76f::t_eacd108b456d51 85-86
+api/courts.py
+  s_d665c62e07d76f::t_04d30c74adbbc3 1-19,21-39,41-42,45-99,103-106,110-142,145,147-151,153-155,157-158
+  s_d665c62e07d76f::t_4495d99d4bdef8 100-102,107-109,156
+  s_d665c62e07d76f::t_b9899e0a6739ed 40,43-44
+  s_d665c62e07d76f::t_89e48949893de4 143-144,146,152
+  s_d665c62e07d76f::t_a0ca300c025cd8 20
+api/catalogue.py
+  s_d665c62e07d76f::t_4495d99d4bdef8 769-771
+  s_d665c62e07d76f::t_dd4dc3f5ef42f3 767-768
+tests/test_courts.py
+  s_d665c62e07d76f::t_850d12f014475c 118,120-121
+  s_d665c62e07d76f::t_1c8a2d15dd42e3 1-117,119,122-124
+schema/corpus.schema.json
+  s_d665c62e07d76f::t_08618ed4c60a09 838-840
+schema/models.py
+  s_d665c62e07d76f::t_61ebc471236e88 151-152
+schema/public.schema.json
+  s_d665c62e07d76f::t_08618ed4c60a09 426-428
+tests/test_judgment_structure.py
+  s_d665c62e07d76f::t_7ea8222337619a 267
+  s_d665c62e07d76f::t_4b2d8642591fe6 4,12
+  s_d665c62e07d76f::t_5742c111ebe523 244-245,252
+  s_d665c62e07d76f::t_49172394ef6fd6 286
+  s_d665c62e07d76f::t_44098abfa7d3ae 315,317
+  s_d665c62e07d76f::t_7cfd3920e69d58 1-3,5-11,13-243,246-251,253-266,268-285,287-303,310-314,316,318-364
+  s_d665c62e07d76f::t_4495d99d4bdef8 304-309
+api/openapi_docs.py
+  s_d665c62e07d76f::t_31a3914105e6a7 1011
+ingestion/courts/README.md
+  s_d665c62e07d76f::t_b81e87ac506127 1-83,86-88
+  s_d665c62e07d76f::t_f642a73ce41765 84-85
+web/src/docs/data/openapi.json
+  s_d665c62e07d76f::t_6d8200c41a86d0 4941-4943,4946
+api/text_index.py
+  s_d665c62e07d76f::t_5641b69a99c260 4
+  s_d665c62e07d76f::t_5331c7b2119c15 119
+  s_d665c62e07d76f::t_7aa602932bb9ef 5-7
+  s_d665c62e07d76f::t_127a28ee660b0e 53-55
+workbench/structure.py
+  s_d665c62e07d76f::t_32e1c89da2a0b5 130-134,144-145
+  s_d665c62e07d76f::t_4762c684d7d573 699-710,712-803,806-845,848-887
+  s_d665c62e07d76f::t_d8c0f1b7aa8812 31-32
+  s_d665c62e07d76f::t_817d1822ee0165 804-805
+  s_d665c62e07d76f::t_915672a2684ee9 77
+  s_d665c62e07d76f::t_89e745864be4e1 846
+  s_d665c62e07d76f::t_0d038eea0b5983 847
+  s_d665c62e07d76f::t_34dd386466e9ba 119
+  s_d665c62e07d76f::t_0aebe21ce08b7b 711
+  s_d665c62e07d76f::t_13c477d4614608 11-13
+workbench/publication.py
+  s_d665c62e07d76f::t_5eddc863312eee 16
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "27bf9dfc1b2c4f3b09352eb132cabef127b02d0f",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
