@@ -1,0 +1,26 @@
+tests/test_restore_transfer.py
+  s_d665c62e07d76f::t_0a4c961300d469 38-45,89-91,151-156
+  s_d665c62e07d76f::t_1a5487244c3882 1-37,46-88,92-150,157-160
+deployment/azure/restore.py
+  s_d665c62e07d76f::t_9e227725dc2712 1-4,6-9,13-17,23-25,45-62,66-77,83-107,113,117-118,143-146,152-154,159-163,170-175,177-180,183-193,197-201,204,217,219-237,264-280,283,287,289-290,295,299-309
+  s_d665c62e07d76f::t_a5124ec4b3fd6b 108-112,114-116,181-182,238-240,243-245
+tests/test_postgres_restore.py
+  s_d665c62e07d76f::t_da4a9a6a01faa8 88-115
+  s_d665c62e07d76f::t_0c36dd49271786 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3095ea8acd1b6834449430605cad8de4184e03b8",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
