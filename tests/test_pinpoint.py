@@ -35,7 +35,9 @@ def part(kind, label=None, locator="x"):
         ("2nd Schedule", ("sch:2",)),
         ("Schedule", ("sch:1",)),
         ("para. 3", None),
-        ("chapter 4", None),
+        ("chapter 4", ("chap:4",)),
+        ("Part V", ("part:5",)),
+        ("Pt. II", ("part:2",)),
         ("[12]", ("para:12",)),
         ("at [ 12 ]", ("para:12",)),
         ("op. 2 [4]", ("op:2", "para:4")),
@@ -94,6 +96,11 @@ def test_a_citation_is_split_into_a_work_and_a_pinpoint_in_either_order():
     assert pinpoint.split("SEC Act 2007 s. 3") == [("SEC Act 2007", "s. 3", ("s:3",))]
     assert pinpoint.split("ISA 2025, First Schedule, para. 3")[0][1] == "First Schedule, para. 3"
     assert pinpoint.split("Act No. 2 of 2025") == [] and pinpoint.split("Securities Act 2007") == []
+    assert pinpoint.split("s 24(1)(a) Nigeria Data Protection Act 2023") == [
+        ("Nigeria Data Protection Act 2023", "s 24(1)(a)", ("s:24", "1", "a"))
+    ]
+    assert pinpoint.split("Part V of the NDPA") == [("NDPA", "Part V", ("part:5",))]
+    assert pinpoint.split("NDPA, Chapter III")[0] == ("NDPA", "Chapter III", ("chap:3",))
 
 
 def test_a_part_is_cited_from_its_printed_numbers_and_read_back_to_the_same_key():
@@ -117,7 +124,13 @@ def test_a_part_is_cited_from_its_printed_numbers_and_read_back_to_the_same_key(
     )
     assert shown == "Second Schedule, Part II, para. 4(b)" and pinpoint.read(shown) == key
     assert pinpoint.cite([part("schedule", "SCHEDULE II", "sch_ii")])[0] == ("sch:2",)
-    assert pinpoint.cite([part("document")]) is None and pinpoint.cite([part("part", "PART I")]) is None
+    assert pinpoint.cite([part("document")]) is None
+    # A Part or Chapter is cited by its number; what is inside it by its own.
+    assert pinpoint.cite([part("part", "PART V")]) == (("part:5",), "Part V") and pinpoint.read("Part V") == (
+        "part:5",
+    )
+    assert pinpoint.cite([part("chapter", "CHAPTER 3")])[1] == "Chapter 3"
+    assert pinpoint.cite([part("part", "PART V"), part("paragraph", "(a)")]) is None
     assert pinpoint.cite([part("paragraph", "(a)")]) is None  # outside any section
 
 
@@ -182,7 +195,7 @@ def test_a_text_is_cut_into_provisions_that_never_overlap_and_skip_the_contents(
         "1. Lagos office",
         "2. Abuja office",
     ]
-    assert [u.pinpoint for u in units] == [None, None, "s. 1", "s. 2", "First Schedule", "First Schedule, para. 1",
+    assert [u.pinpoint for u in units] == [None, "Part I", "s. 1", "s. 2", "First Schedule", "First Schedule, para. 1",
                                            "First Schedule, para. 2"]  # fmt: skip
     assert units[2].headings == "PART I 1. Loans" and units[2].node.id == "s1"
     assert all(

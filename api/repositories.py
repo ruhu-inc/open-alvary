@@ -353,6 +353,22 @@ class LegacyRepository:
             select(table.c.source_id).where(table.c.id == version_id, self._identity_matches(table))
         )
 
+    def versions_at(self, addresses: list[str], *, limit: int = 20) -> list[tuple[str, str]]:
+        """(version, source) pairs whose official address is one of ``addresses``; nothing about
+        whether they are public."""
+        table = tables["versions"]
+        return [
+            tuple(row)
+            for row in self.connection.execute(
+                select(table.c.id, table.c.source_id)
+                .where(
+                    table.c.payload["canonical_url"].as_string().in_(addresses), self._identity_matches(table)
+                )
+                .order_by(table.c.id)
+                .limit(limit)
+            )
+        ]
+
     def node(self, node_id: str) -> dict | None:
         table = tables["structure"]
         return self.connection.scalar(

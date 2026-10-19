@@ -190,6 +190,13 @@ def test_with_a_reranker_a_referenced_provision_joins_and_says_where_it_came_fro
         and by_anchor[nodes["sec_3"].id].context.expanded_from == nodes["sec_1"].id
     )
     assert by_anchor[nodes["sec_3"].id].ranking.arms == {"expansion": 1}
+    # A link asks for one place: what that place refers to stays out.
+    with store.engine.begin() as conn:
+        service = LegacyCatalogue(LegacyRepository(conn))
+        linked = Retriever(service, reranker=reranker).retrieve(
+            Request(query=f"https://api.open.alvary.ai/api/v1/anchors/{nodes['sec_1'].id}", filters=Filters())
+        )
+    assert [u.anchor_id for u in linked.evidence] == [nodes["sec_1"].id]
     with store.engine.begin() as conn:
         service = LegacyCatalogue(LegacyRepository(conn))
         plain = Retriever(service, reranker=None).retrieve(

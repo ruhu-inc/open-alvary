@@ -1,5 +1,5 @@
 """Pinpoints within a text (API-04 provision lookup): how a part is cited from its printed numbers,
-"s. 23(1)(a)", "art. 12", "First Schedule, para. 3", a definition with its section; and the reverse, a
+"s. 23(1)(a)", "art. 12", "First Schedule, para. 3", "Part V", a definition with its section; and the reverse, a
 cited pinpoint read into the same key, so the citation an anchor gives resolves back to that anchor.
 
 A key compares numbers as printed, case aside ("23A" is "23a"); schedule and part numbers compare as
@@ -40,6 +40,11 @@ SCHEDULE = re.compile(
     rf"\s*(?:,?\s*(?:paragraphs?|paras?|p)\.?\s*(\d{{1,3}}[a-z]?)\.?\s*{_SUBS})?$",
     re.I,
 )
+# A Part or Chapter of an Act outside its schedules: "Part V", "Pt. 5", "Chapter 3", "Chap. III".
+CONTAINER = re.compile(
+    rf"^(part|pt|chapter|chap|ch)\.?\s*(\d{{1,2}}|[ivxlc]{{1,6}}|{'|'.join(ORDINALS)})$",
+    re.I,
+)
 # A neutral citation, "[2019] NGSC 4", "[2020] EWCA Civ 123", "[2020] EWHC 123 (Ch)", and a judgment's
 # paragraph after it: "[12]", "at [12]", "op. 2 [4]", "para. 12" (group 3, read only after a citation).
 NEUTRAL = re.compile(r"\[\d{4}\]\s+[a-z]{2,16}(?:\s+[a-z]{2,11})?\s+\d{1,6}(?:\s*\([a-z]{1,20}\))?", re.I)
@@ -51,7 +56,7 @@ PARAGRAPH = re.compile(
 # Where a pinpoint may begin within a citation: "NDPA s. 23(1)(a)", "ISA 2025, First Schedule, para. 3".
 _STARTS = re.compile(
     rf"(?:^|(?<=[\s,;(]))(?:{_SECTION_LEADS}|{_ARTICLE_LEADS}|(?:{'|'.join(ORDINALS)}|\d{{1,2}}(?:st|nd|rd|th))\s+schedule"
-    r"|schedule|sch)(?=[\s.,\d(]|$)",
+    r"|schedule|sch|part|pt|chapter|chap|ch)(?=[\s.,\d(]|$)",
     re.I,
 )
 
@@ -110,8 +115,8 @@ def _schedule_title(label: str | None) -> str:
 
 def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str, ...], str] | None:
     """The key and printed pinpoint of the last part of ``chain`` (outermost first), or None for a part
-    no pinpoint names (the document, a contents list, a part of an Act, a judgment's opinion or
-    orders)."""
+    no pinpoint names (the document, a contents list, a judgment's opinion or orders). A Part or
+    Chapter of an Act is "Part V" or "Chapter 3"; what is inside it is cited by its own number."""
     key: list[str] = []
     shown = ""
     schedule = False
@@ -135,6 +140,12 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
             number = re.sub(r"^part\s+", "", _printed(part.label), flags=re.I)
             key.append(f"part:{_ordinal(number)}")
             shown += f", Part {number.upper() if _ROMAN.fullmatch(number.casefold()) else number}"
+        elif part.kind in ("part", "chapter") and part.label and not schedule:
+            # "Part V", "Chapter 3": a section or article inside it is cited by its own number.
+            word = "Part" if part.kind == "part" else "Chapter"
+            number = re.sub(rf"^{word}\s+", "", _printed(part.label), flags=re.I)
+            key = [f"{'part' if part.kind == 'part' else 'chap'}:{_ordinal(number)}"]
+            shown = f"{word} {number.upper() if _ROMAN.fullmatch(number.casefold()) else number}"
         elif part.kind == "section" and part.label and not schedule:
             key, shown = [f"s:{_plain(part.label)}"], f"{lead}{_printed(part.label)}"
         elif part.kind == "article" and part.label:
@@ -144,7 +155,7 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
             if schedule and not any(k.startswith("para:") for k in key):
                 key.append(f"para:{_plain(part.label)}")
                 shown += f", para. {_printed(part.label)}"
-            elif key:
+            elif key and not key[0].startswith(("part:", "chap:")):
                 key.append(_plain(part.label))
                 shown += f"({_printed(part.label)})"
             else:
@@ -172,6 +183,10 @@ def read(pinpoint: str) -> tuple[str, ...] | None:
         number = found.group(1).casefold()
         number = "1" if number in _WORD_ONE else str(_roman(number)) if _ROMAN.fullmatch(number) else number
         return (f"art:{number.lstrip('0') or number}", *subs(found.group(2)))
+    found = CONTAINER.match(value)
+    if found:
+        lead = found.group(1).casefold()
+        return (f"{'part' if lead in ('part', 'pt') else 'chap'}:{_ordinal(found.group(2))}",)
     found = SCHEDULE.match(value)
     if found:
         key = [f"sch:{_ordinal(found.group(1) or found.group(2)) or '1'}"]
@@ -196,7 +211,7 @@ def _paragraph(pinpoint: str, worded: bool = False) -> tuple[str, ...] | None:
 
 def split(citation: str) -> list[tuple[str, str, tuple[str, ...]]]:
     """Each way to read a citation as a work and a pinpoint within it, longest pinpoint first:
-    "NDPA s. 23(1)(a)" → ("NDPA", "s. 23(1)(a)", key); "section 23 of the NDPA" likewise; a judgment
+    "NDPA s. 23(1)(a)" → ("NDPA", "s. 23(1)(a)", key); "section 23 of the NDPA" and "s. 23 NDPA" likewise; a judgment
     by its neutral citation, alone and with the words before it: "Okafor v State [2019] NGSC 4 at
     [12]" → ("Okafor v State [2019] NGSC 4", "[12]", key), then ("[2019] NGSC 4", "[12]", key)."""
     value = " ".join(citation.split())
@@ -218,4 +233,14 @@ def split(citation: str) -> list[tuple[str, str, tuple[str, ...]]]:
         key = read(pin)
         if work and key:
             found.append((work, pin.strip(" ,;"), key))
+    # The pinpoint first, then the work: "s 24(1)(a) Nigeria Data Protection Act 2023".
+    words = value.split(" ")
+    for n in range(len(words) - 1, 0, -1):
+        pin = " ".join(words[:n]).strip(" ,;")
+        work = re.sub(r"^(?:of\s+)?(?:the\s+)?", "", " ".join(words[n:]).strip(" ,;"), flags=re.I)
+        key = read(pin)
+        statute = key is not None and key[0].split(":")[0] in ("s", "art", "sch", "part", "chap")
+        if statute and work and all(f[1] != pin for f in found):
+            found.append((work, pin, key))
+            break
     return found

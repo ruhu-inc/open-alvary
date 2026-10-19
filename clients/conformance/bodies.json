@@ -273,9 +273,9 @@
     },
     "revisions": {
       "dataset": "1:40",
-      "router": "oa-route-1",
-      "ranking": "oa-rank-2",
-      "analyzer": "oa-search-3"
+      "router": "oa-route-2",
+      "ranking": "oa-rank-3",
+      "analyzer": "oa-search-4"
     },
     "coverage": {
       "records_in_scope": 2,
@@ -307,6 +307,13 @@
         "jurisdiction_id": "ng",
         "document_type": "act",
         "official_url": "https://example.org/src-ng-sda-2023",
+        "retrieved_at": "2026-10-01T09:00:00Z",
+        "original_sha256": "e37c753dc5acee706bb51835cea8c9f54bc4b459afd90d738e3b2403db07397d",
+        "links": {
+          "web": "https://open.alvary.ai/sources/src-ng-sda-2023#anc-sda-1-s40",
+          "api": "https://api.open.alvary.ai/api/v1/anchors/anc-sda-1-s40",
+          "text": "https://api.open.alvary.ai/api/v1/versions/ver-sda-1/text"
+        },
         "text": "Synthetic fixture, not legislation. 40. A controller reports a breach within 72 hours.",
         "text_start_byte": 4096,
         "text_end_byte": 4182,
@@ -332,11 +339,11 @@
         },
         "ranking": {
           "position": 1,
-          "router": "oa-route-1",
+          "router": "oa-route-2",
           "routes": [
             "topic"
           ],
-          "profile": "oa-rank-2",
+          "profile": "oa-rank-3",
           "arms": {
             "lexical": 1
           },
@@ -363,6 +370,13 @@
         "jurisdiction_id": "ng",
         "document_type": "regulation",
         "official_url": "https://example.org/src-ng-sdr-2024",
+        "retrieved_at": "2026-10-01T09:00:00Z",
+        "original_sha256": "7687ad45916be99cb42f05da46bab16a1377451506cd2d592facecc06ffec22e",
+        "links": {
+          "web": "https://open.alvary.ai/sources/src-ng-sdr-2024#anc-sdr-1-r12",
+          "api": "https://api.open.alvary.ai/api/v1/anchors/anc-sdr-1-r12",
+          "text": "https://api.open.alvary.ai/api/v1/versions/ver-sdr-1/text"
+        },
         "text": "Synthetic fixture, not legislation. 12. A breach report names the data affected.",
         "text_start_byte": 2048,
         "text_end_byte": 2128,
@@ -388,11 +402,11 @@
         },
         "ranking": {
           "position": 2,
-          "router": "oa-route-1",
+          "router": "oa-route-2",
           "routes": [
             "topic"
           ],
-          "profile": "oa-rank-2",
+          "profile": "oa-rank-3",
           "arms": {
             "lexical": 2
           },
@@ -428,9 +442,9 @@
     },
     "revisions": {
       "dataset": "1:41",
-      "router": "oa-route-1",
-      "ranking": "oa-rank-2",
-      "analyzer": "oa-search-3"
+      "router": "oa-route-2",
+      "ranking": "oa-rank-3",
+      "analyzer": "oa-search-4"
     },
     "coverage": {
       "records_in_scope": 2,
@@ -462,6 +476,13 @@
         "jurisdiction_id": "ng",
         "document_type": "regulation",
         "official_url": "https://example.org/src-ng-sdr-2024",
+        "retrieved_at": "2026-10-01T09:00:00Z",
+        "original_sha256": "7687ad45916be99cb42f05da46bab16a1377451506cd2d592facecc06ffec22e",
+        "links": {
+          "web": "https://open.alvary.ai/sources/src-ng-sdr-2024#anc-sdr-1-r12",
+          "api": "https://api.open.alvary.ai/api/v1/anchors/anc-sdr-1-r12",
+          "text": "https://api.open.alvary.ai/api/v1/versions/ver-sdr-1/text"
+        },
         "text": "Synthetic fixture, not legislation. 12. A breach report names the data affected.",
         "text_start_byte": 2048,
         "text_end_byte": 2128,
@@ -487,11 +508,11 @@
         },
         "ranking": {
           "position": 1,
-          "router": "oa-route-1",
+          "router": "oa-route-2",
           "routes": [
             "topic"
           ],
-          "profile": "oa-rank-2",
+          "profile": "oa-rank-3",
           "arms": {
             "lexical": 2
           },
@@ -527,9 +548,9 @@
     },
     "revisions": {
       "dataset": "1:41",
-      "router": "oa-route-1",
-      "ranking": "oa-rank-2",
-      "analyzer": "oa-search-3"
+      "router": "oa-route-2",
+      "ranking": "oa-rank-3",
+      "analyzer": "oa-search-4"
     },
     "coverage": {
       "records_in_scope": 2,
@@ -561,6 +582,13 @@
         "jurisdiction_id": "ng",
         "document_type": "act",
         "official_url": "https://example.org/src-ng-sda-2023",
+        "retrieved_at": "2026-10-01T09:00:00Z",
+        "original_sha256": "e37c753dc5acee706bb51835cea8c9f54bc4b459afd90d738e3b2403db07397d",
+        "links": {
+          "web": "https://open.alvary.ai/sources/src-ng-sda-2023#anc-sda-2-s40",
+          "api": "https://api.open.alvary.ai/api/v1/anchors/anc-sda-2-s40",
+          "text": "https://api.open.alvary.ai/api/v1/versions/ver-sda-2/text"
+        },
         "text": "Synthetic fixture, not legislation. 40. A controller reports a breach within 48 hours.",
         "text_start_byte": 4096,
         "text_end_byte": 4182,
@@ -586,11 +614,11 @@
         },
         "ranking": {
           "position": 1,
-          "router": "oa-route-1",
+          "router": "oa-route-2",
           "routes": [
             "topic"
           ],
-          "profile": "oa-rank-2",
+          "profile": "oa-rank-3",
           "arms": {
             "lexical": 1
           },
@@ -617,6 +645,13 @@
         "jurisdiction_id": "ng",
         "document_type": "regulation",
         "official_url": "https://example.org/src-ng-sdr-2024",
+        "retrieved_at": "2026-10-01T09:00:00Z",
+        "original_sha256": "7687ad45916be99cb42f05da46bab16a1377451506cd2d592facecc06ffec22e",
+        "links": {
+          "web": "https://open.alvary.ai/sources/src-ng-sdr-2024#anc-sdr-1-r12",
+          "api": "https://api.open.alvary.ai/api/v1/anchors/anc-sdr-1-r12",
+          "text": "https://api.open.alvary.ai/api/v1/versions/ver-sdr-1/text"
+        },
         "text": "Synthetic fixture, not legislation. 12. A breach report names the data affected.",
         "text_start_byte": 2048,
         "text_end_byte": 2128,
@@ -642,11 +677,11 @@
         },
         "ranking": {
           "position": 2,
-          "router": "oa-route-1",
+          "router": "oa-route-2",
           "routes": [
             "topic"
           ],
-          "profile": "oa-rank-2",
+          "profile": "oa-rank-3",
           "arms": {
             "lexical": 2
           },

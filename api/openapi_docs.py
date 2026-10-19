@@ -259,7 +259,10 @@ OPERATIONS: dict[str, dict] = {
         "the same answer. Nothing is generated: only published texts' words. Without `jurisdiction`, it "
         "covers your plan's countries.",
         "parameters": {
-            "q": "The question or words, 1 to 2,000 characters.",
+            "q": "The question or words, 1 to 2,000 characters. It may be a citation (`NDPA s. 24(1)(a)`, "
+            "`section 24 of the Nigeria Data Protection Act`, `Part V of the NDPA`), a page of one law "
+            "(`page 18 of the NDPA`), or an address: an Open Alvary page or API address of a record or part, "
+            "or a text's official address. A pinpoint alone (`s. 24`) is read within `source_id`.",
             "jurisdiction": "Jurisdiction IDs, such as `ng`. Repeat for several, up to 10; with two or more, "
             "results alternate between them. A country outside your plan answers at the Starter rate.",
             "language": "Texts in this language, such as `en`; `en` also matches `en-NG`.",
@@ -725,16 +728,17 @@ FIELDS: dict[str, dict[str, str]] = {
     },
     "EvidenceQuery": {
         "text": "The question, with spacing normalised.",
-        "routes": "The routes taken, in order: `citation`, `instrument`, `definition`, `topic`, and the "
+        "routes": "The routes taken, in order: `link` (the query is an Open Alvary or official address), "
+        "`citation`, `page` (a page of one law's official file), `instrument`, `definition`, `topic`, and the "
         "modifiers `historical` and `comparative`.",
         "filters": "The filters applied, as given or as your plan set them.",
         "as_of": "The date asked about, when given.",
     },
     "EvidenceRevisions": {
         "dataset": "The change log's epoch and latest publication revision: any published change moves it.",
-        "router": "The routing rules, such as `oa-route-1`.",
-        "ranking": "The ranking profile, such as `oa-rank-2`.",
-        "analyzer": "The text analysis, such as `oa-search-3`.",
+        "router": "The routing rules, such as `oa-route-2`.",
+        "ranking": "The ranking profile, such as `oa-rank-3`.",
+        "analyzer": "The text analysis, such as `oa-search-4`.",
         "engine": "The search engine that ran the word and meaning searches (`vespa`), when one is configured; "
         "otherwise the system of record's own search ran them.",
         "vector": "The semantic index profile, when one is active.",
@@ -770,6 +774,13 @@ FIELDS: dict[str, dict[str, str]] = {
         "jurisdiction_id": "The record's jurisdiction.",
         "document_type": "The record's document type.",
         "official_url": "The official file the text was read from.",
+        "retrieved_at": "When the official file was fetched.",
+        "original_sha256": "SHA-256 of the official file as fetched: a copy with this hash is the file the text "
+        "was read from.",
+        "page_start": "The page of the official file the unit starts on (1 is the file's first page, not a "
+        "printed page number). Absent when the text was not read from a file with pages.",
+        "page_end": "The page of the official file the unit ends on.",
+        "links": "Where to read the unit: on the website, by the API, and the whole text.",
         "text": "The words: exactly the text's bytes from `text_start_byte` to `text_end_byte`.",
         "text_start_byte": "Where `text` starts: a byte offset into the text in UTF-8.",
         "text_end_byte": "Where `text` ends: a byte offset into the text in UTF-8.",
@@ -788,6 +799,12 @@ FIELDS: dict[str, dict[str, str]] = {
         "ranking": "Why the unit ranks where it does.",
         "context": "What travels with the unit and is never part of its words.",
         "warnings": "Notes on the unit, such as an excerpt or a newer text.",
+    },
+    "EvidenceLinks": {
+        "web": "The record on the website, at the unit when the website shows this text (a record's one text in "
+        "force); otherwise the record's page.",
+        "api": "This exact part of this exact text (`/anchors/{anchor_id}`); for a document unit, the record.",
+        "text": "The whole text the unit is in (`/versions/{version_id}/text`).",
     },
     "Currentness": {
         "state": "`in_force`, `not_in_force`, `partly_in_force`, `unknown` or `contested`.",
@@ -811,7 +828,8 @@ FIELDS: dict[str, dict[str, str]] = {
         "router": "The routing rules.",
         "routes": "The routes taken.",
         "profile": "The ranking profile.",
-        "arms": "Each search the unit came from and its rank there: `citation`, `instrument`, `definition`, "
+        "arms": "Each search the unit came from and its rank there: `link`, `citation`, `page`, `instrument`, "
+        "`definition`, "
         "`lexical` (every word), `lexical_any` (any word, rarer words weighing more; run when few units have "
         "every word), `document` or `dense` (meaning, where a semantic index is active).",
         "fused_score": "The fused score after the signals: relevance, not legal authority.",

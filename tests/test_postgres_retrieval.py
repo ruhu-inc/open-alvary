@@ -60,14 +60,22 @@ def test_a_topic_query_answers_an_evidence_pack(store, client):
     raw = version.canonical_text.encode()
     pack = retrieve(client, "repaid from salary")
     assert pack["schema_version"] == "oa-evidence-1" and pack["status"] == "results"
-    assert pack["query"]["routes"] == ["topic"] and pack["revisions"]["ranking"] == "oa-rank-2"
-    assert pack["revisions"]["router"] == "oa-route-1" and pack["revisions"]["dataset"].count(":") == 1
+    assert pack["query"]["routes"] == ["topic"] and pack["revisions"]["ranking"] == "oa-rank-3"
+    assert pack["revisions"]["router"] == "oa-route-2" and pack["revisions"]["dataset"].count(":") == 1
     first = pack["evidence"][0]
     assert first["anchor_id"] == nodes["sec_1"].id and first["unit"] == "provision"
     assert first["citation"] == "Example Act, 2023, s. 1" and first["complete"] is True
     span = raw[first["start_byte"] : first["end_byte"]]
     assert first["text"] == span.decode() and first["span_hash"] == hashlib.sha256(span).hexdigest()
     assert first["expression_id"] == f"{WORK}:en" and first["content_hash"] == version.content_hash
+    # Where to check it and read it: the original file's fingerprint, this part by the API, and the
+    # record on the website at this part (the website shows the record's one text).
+    assert first["original_sha256"] == version.raw_hash and first["retrieved_at"]
+    assert first["links"] == {
+        "web": f"https://open.alvary.ai/sources/{WORK}#{nodes['sec_1'].id}",
+        "api": f"https://api.open.alvary.ai/api/v1/anchors/{nodes['sec_1'].id}",
+        "text": f"https://api.open.alvary.ai/api/v1/versions/{version.id}/text",
+    }
     assert first["currentness"]["basis"] == "record" and first["currentness"]["state"] == "unknown"
     assert first["authority"] == {
         "document_type": "act",
@@ -75,7 +83,7 @@ def test_a_topic_query_answers_an_evidence_pack(store, client):
         "court_relation": "not_applicable",
     }
     ranking = first["ranking"]
-    assert ranking["position"] == 1 and ranking["arms"]["lexical"] == 1 and ranking["profile"] == "oa-rank-2"
+    assert ranking["position"] == 1 and ranking["arms"]["lexical"] == 1 and ranking["profile"] == "oa-rank-3"
     # The definition in force for a term the section uses travels with it, with its exact words.
     [fund] = first["context"]["definitions"]
     assert fund["term"] == "Fund" and fund["anchor_id"] == nodes["sec_2__def_fund"].id
@@ -194,3 +202,56 @@ def test_mcp_answers_the_same_pack_and_check_as_rest(store, client, tmp_path):
         call("check_currentness", {"items": items})
         == client.post("/currentness", json={"items": items}).json()
     )
+
+
+LOANS_WORK = "ng-student-loans-access-act-2024"
+LOANS_PAGES = [
+    {"page": 1, "units": [
+        {"kind": "heading", "text": "STUDENT LOANS ACCESS ACT, 2024"},
+        {"kind": "heading", "text": "PART I"},
+        {"kind": "paragraph", "text": "1. A borrower may defer repayment while unemployed.", "notes": ["Deferral"]},
+        {"kind": "paragraph", "text": "2. A deferral ends when the borrower is employed.", "notes": ["End"]},
+    ]},
+    {"page": 2, "units": [
+        {"kind": "heading", "text": "PART II"},
+        {"kind": "paragraph", "text": "3. The Fund shall publish its accounts every year.", "notes": ["Accounts"]},
+    ]},
+]  # fmt: skip
+
+
+def test_citations_as_people_write_them_pages_and_addresses_find_their_parts(store, client):
+    _, version, nodes = publish_act(store, None, work=LOANS_WORK, title="Student Loans Access Act, 2024",
+                                    pages=LOANS_PAGES)  # fmt: skip
+    for query in (
+        "section 2 of the Student Loans Access Act",  # the title without its year
+        "SLAA s. 2",  # its initials
+        "s. 2 Student Loans Access Act 2024",  # the pinpoint first
+    ):
+        pack = retrieve(client, query)
+        assert pack["query"]["routes"][0] == "citation", query
+        assert pack["evidence"][0]["anchor_id"] == nodes["sec_2"].id, query
+    # A Part: its heading, then its provisions in order, each cited by its own number.
+    part = retrieve(client, "Part I of the SLAA")
+    assert [u["pinpoint"] for u in part["evidence"][:3]] == ["Part I", "s. 1", "s. 2"]
+    # A page of the official file: the provisions on it, with their pages.
+    paged = retrieve(client, "page 2 of the Student Loans Access Act")
+    assert paged["query"]["routes"][0] == "page"
+    assert [u["pinpoint"] for u in paged["evidence"][:2]] == ["Part II", "s. 3"]
+    assert paged["evidence"][1]["page_start"] == paged["evidence"][1]["page_end"] == 2
+    # A pinpoint alone, within the record the request is limited to.
+    alone = retrieve(client, "s. 3", source_id=LOANS_WORK)
+    assert (
+        alone["query"]["routes"][0] == "citation" and alone["evidence"][0]["anchor_id"] == nodes["sec_3"].id
+    )
+    # Addresses: an Open Alvary page at a part, an API anchor, and the text's official address.
+    for address in (
+        f"https://open.alvary.ai/sources/{LOANS_WORK}#{nodes['sec_3'].id}",
+        f"https://api.open.alvary.ai/api/v1/anchors/{nodes['sec_3'].id}",
+    ):
+        linked = retrieve(client, address)
+        assert (
+            linked["query"]["routes"] == ["link"] and linked["evidence"][0]["anchor_id"] == nodes["sec_3"].id
+        )
+    official = retrieve(client, str(version.canonical_url))
+    assert official["query"]["routes"] == ["link"] and official["evidence"][0]["unit"] == "document"
+    assert retrieve(client, "https://example.org/not-a-law.pdf")["evidence"] == []

@@ -6,13 +6,15 @@ position. The same request over the same revisions gives the same pack."""
 
 import hashlib
 import os
+import re
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
+from urllib.parse import unquote, urlsplit
 
 from sqlalchemy import text as sql
 
 from api import text_index
-from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable, expression_id
+from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable, expression_id, select_versions
 from retrieval import indexer, links, rerank, router
 from retrieval.legal_time import Events
 from retrieval.ranking import INSTRUMENT_RANK, PROFILE, Candidate, Hit, apply_signals, diversify, fuse
@@ -23,6 +25,7 @@ from schema.public import (
     EvidenceContext,
     EvidenceCoverage,
     EvidenceDefinition,
+    EvidenceLinks,
     EvidencePack,
     EvidenceQualification,
     EvidenceQuery,
@@ -30,6 +33,7 @@ from schema.public import (
     EvidenceRevisions,
     EvidenceUnit,
     NextStep,
+    NodeViewRecord,
     RankingExplanation,
     RankingSignal,
 )
@@ -49,6 +53,16 @@ class Request:
     max_units: int = 10
     max_evidence_bytes: int = 49_152
     include: frozenset[str] = INCLUDE
+
+
+def unit_pages(start: int, end: int, node, nodes) -> tuple[int, int] | None:
+    """The first and last page of the original file a span is on: from the parts inside it (a container's
+    own pages run to its end, so a Part's heading is only on the page it is printed on), else the page its
+    part starts on; None when the text was not read from pages."""
+    inside = [n for n in nodes if start <= n.start_byte and n.end_byte <= end and n.page is not None]
+    if inside:
+        return min(n.page for n in inside), max(n.page_end or n.page for n in inside)
+    return (node.page, node.page) if node is not None and node.page is not None else None
 
 
 def _hit(row, unit: str | None = None) -> Hit:
@@ -122,6 +136,7 @@ class Retriever:
         self._qualifications: dict[str, tuple] = {}
         self.events = Events(self.conn)
         self._registers: dict[str, object] = {}
+        self._shown: dict[str, str | None] = {}  # source → the text the website shows, if one
 
     # --- reading public texts --------------------------------------------------------------------
 
@@ -164,6 +179,11 @@ class Retriever:
             node = next((n for n in self._structure(version) if n.id == match.anchor_id), None)
             if node is None:
                 continue
+            if node.kind in ("part", "chapter"):
+                # "Part V": its heading, then each provision inside it, in order: never the whole Part as
+                # one span.
+                hits += self._units_within(version, source, node)
+                continue
             hits.append(
                 Hit(
                     version_id=version.id, start_byte=match.start_byte, end_byte=match.end_byte,
@@ -175,6 +195,119 @@ class Retriever:
                 )
             )  # fmt: skip
         return hits
+
+    # --- the link and page routes ------------------------------------------------------------------
+
+    def _link_arm(self, address: str, filters) -> list[Hit]:
+        """What an address names: an Open Alvary page or API address of a record (its text chosen as
+        the website chooses), a text or a part; else the texts whose official address it is."""
+        parsed = urlsplit(address)
+        path = re.sub(r"/+$", "", parsed.path)
+        hits: list[Hit] = []
+        if found := re.fullmatch(r"(?:/api/v1)?/sources/([^/]+)", path):
+            source_id = unquote(found.group(1))
+            if parsed.fragment:
+                hits = self._anchor_hits(unquote(parsed.fragment), filters)
+            hits = hits or self._record_hits(source_id, filters)
+        elif found := re.fullmatch(r"/api/v1/anchors/([^/]+)", path):
+            hits = self._anchor_hits(unquote(found.group(1)), filters)
+        elif found := re.fullmatch(r"/api/v1/versions/([^/]+)(?:/text)?", path):
+            hits = self._document_hits([unquote(found.group(1))], filters)
+        if not hits:
+            base = address.split("#", 1)[0]
+            forms = {base, base.rstrip("/"), base.rstrip("/") + "/"}
+            forms |= {f.replace("http://", "https://", 1) for f in forms} | {
+                f.replace("https://", "http://", 1) for f in forms
+            }
+            versions = self.service.repository.versions_at(sorted(forms))
+            hits = self._document_hits([version_id for version_id, _ in versions], filters)
+        return hits
+
+    def _anchor_hits(self, anchor_id: str, filters) -> list[Hit]:
+        row = self.service.repository.node(anchor_id)
+        if row is None:
+            return []
+        node = NodeViewRecord.model_validate(row)
+        loaded = self._public(node.version_id)
+        if loaded is None or not self.service._within(loaded[1], loaded[0], filters):
+            return []
+        version, source, _ = loaded
+        nodes = self._structure(version)
+        node = next((n for n in nodes if n.id == node.id), None)
+        if node is None or node.kind in ("document", "contents", "contents_entry"):
+            return self._document_hits([version.id], filters) if node is not None else []
+        if node.kind in ("part", "chapter"):
+            return self._units_within(version, source, node)
+        match = self.service._match(node, version, source, {n.id: n for n in nodes})
+        return [self._node_hit(version, source, node, match.start_byte, match.end_byte, match.pinpoint)]
+
+    def _record_hits(self, source_id: str, filters) -> list[Hit]:
+        pairs = self.service._public({source_id})
+        if source_id not in pairs:
+            return []
+        source, rights = pairs[source_id]
+        _, chosen = select_versions(
+            list(self.service._approved(source, rights)), filters.as_of, filters.language
+        )
+        return self._document_hits([v.id for v in chosen], filters)
+
+    def _document_hits(self, version_ids: list[str], filters) -> list[Hit]:
+        hits = []
+        for version_id in version_ids:
+            loaded = self._public(version_id)
+            if loaded is None or not self.service._within(loaded[1], loaded[0], filters):
+                continue
+            version, source, _ = loaded
+            whole = text_index.document_unit(version, self._structure(version))
+            if whole.end > whole.start:
+                hit = self._node_hit(version, source, None, whole.start, whole.end, None)
+                hits.append(
+                    replace(hit, unit="document", node_id=whole.node_id, kind="document", locator="document")
+                )
+        return hits
+
+    def _page_arm(self, plan: router.Plan, filters) -> list[Hit]:
+        """The provisions on a page of the original file of the one work the query names (or the record
+        the request is limited to), in document order, from the text the date and language choose."""
+        work = next(iter(plan.works), None) or filters.source_id
+        pairs = self.service._public({work}) if work else {}
+        if work not in pairs:
+            return []
+        source, rights = pairs[work]
+        _, chosen = select_versions(
+            list(self.service._approved(source, rights)), filters.as_of, filters.language
+        )
+        hits = []
+        for version in chosen:
+            if not self.service._within(source, version, filters):
+                continue
+            nodes = self._structure(version)
+            for unit in text_index.units(version, nodes, source.document_type):
+                pages = unit_pages(unit.start, unit.end, unit.node, nodes)
+                if pages and pages[0] <= plan.page <= pages[1]:
+                    hits.append(
+                        self._node_hit(version, source, unit.node, unit.start, unit.end, unit.pinpoint)
+                    )
+        return hits[:SIDE_LIMIT]
+
+    def _node_hit(self, version, source, node, start: int, end: int, pinpoint: str | None) -> Hit:
+        return _hit(
+            {
+                "version_id": version.id, "start_byte": start, "end_byte": end, "work_id": source.id,
+                "node_id": node.id if node else None, "kind": node.kind if node else "document",
+                "locator": node.locator if node else "document", "pinpoint": pinpoint,
+                "heading": node.heading if node else None, "language": version.language,
+                "config": text_index.config_for(version.language), "content_hash": version.content_hash,
+                "legal_status": source.legal_status, "replaced": False, "jurisdiction_id": source.jurisdiction_id,
+                "document_type": source.document_type,
+            }
+        )  # fmt: skip
+
+    def _units_within(self, version, source, container) -> list[Hit]:
+        """The section index's units inside a Part or Chapter, in document order (at most SIDE_LIMIT)."""
+        units = text_index.units(version, self._structure(version), source.document_type)
+        inside = [u for u in units if container.start_byte <= u.start < container.end_byte][:SIDE_LIMIT]
+        return [self._node_hit(version, source, u.node, u.start, u.end, u.pinpoint) for u in inside]
 
     def _documents_of(self, works, filters) -> list[Hit]:
         table = text_index._documents(self.conn)
@@ -222,6 +355,11 @@ class Retriever:
     def _arms(self, query: str, plan: router.Plan, filters) -> tuple[dict[str, list[Hit]], list[str], int]:
         arms: dict[str, list[Hit]] = {}
         degraded: list[str] = []
+        if "link" in plan.routes:
+            arms["link"] = self._link_arm(plan.link, filters)
+            return arms, degraded, 0
+        if "page" in plan.routes:
+            arms["page"] = self._page_arm(plan, filters)
         if "citation" in plan.routes:
             arms["citation"] = self._citation_arm(plan, filters)
         if "instrument" in plan.routes:
@@ -437,7 +575,9 @@ class Retriever:
         if not 1 <= request.max_units <= 25 or not 4_096 <= request.max_evidence_bytes <= 262_144:
             raise InvalidSearch("Invalid evidence bounds")
         filters = request.filters
-        citation = self.service.citations(query, as_of=filters.as_of, language=filters.language)
+        citation = self.service.citations(
+            query, as_of=filters.as_of, language=filters.language, within=filters.source_id
+        )
         if (
             citation.matches
             and filters.jurisdictions is not None
@@ -446,13 +586,16 @@ class Retriever:
             citation = None
         works = text_index.named_works(self.conn, query, filters)
         plan = router.plan(
-            query, citation=citation, works=works, as_of=filters.as_of, jurisdictions=filters.jurisdictions
-        )
+            query, citation=citation, works=works, as_of=filters.as_of, jurisdictions=filters.jurisdictions,
+            within=filters.source_id,
+        )  # fmt: skip
         arms, degraded, _ = self._arms(query, plan, filters)
         fused = fuse(arms)
+        # A link or a page asks for one place: what it refers to stays out (RSV-06).
+        exact = "link" in plan.routes or "page" in plan.routes
         expanded = (
             self._expand(fused, filters)
-            if self.reranker is not None and "expansion" in request.include
+            if self.reranker is not None and "expansion" in request.include and not exact
             else []
         )
         fused += expanded
@@ -656,6 +799,10 @@ class Retriever:
                     jurisdiction_id=source.jurisdiction_id,
                     document_type=source.document_type,
                     official_url=str(version.canonical_url),
+                    retrieved_at=version.retrieved_at,
+                    original_sha256=version.raw_hash,
+                    **self._pages(hit, nodes, by_id),
+                    links=self._links(source, rights, version, hit),
                     text=words,
                     text_start_byte=start,
                     text_end_byte=end,
@@ -691,6 +838,28 @@ class Retriever:
                 f"{omitted} further units did not fit max_evidence_bytes ({budget:,}); raise it or narrow the query."
             )
         return evidence, used, sent, omitted, notices
+
+    @staticmethod
+    def _pages(hit: Hit, nodes, by_id) -> dict:
+        """The pages of the original file a unit is on; nothing when the text was not read from pages."""
+        found = unit_pages(hit.start_byte, hit.end_byte, by_id.get(hit.node_id), nodes)
+        return {"page_start": found[0], "page_end": found[1]} if found else {}
+
+    def _links(self, source, rights, version, hit: Hit) -> EvidenceLinks:
+        """Where to read a unit: the website shows a record's one text in force when there is one, so
+        the unit's anchor is added there only for that text; the API's anchor is always this text's."""
+        if source.id not in self._shown:
+            selection, _ = select_versions(list(self.service._approved(source, rights)))
+            self._shown[source.id] = selection.version_id if selection.status == "selected" else None
+        site = os.environ.get("ALVARY_SITE_ORIGIN", "https://open.alvary.ai").rstrip("/")
+        api = os.environ.get("ALVARY_API_ORIGIN", "https://api.open.alvary.ai").rstrip("/") + "/api/v1"
+        page = f"{site}/sources/{source.id}"
+        part = hit.node_id if hit.unit != "document" else None
+        return EvidenceLinks(
+            web=f"{page}#{part}" if part and self._shown[source.id] == version.id else page,
+            api=f"{api}/anchors/{part}" if part else f"{api}/sources/{source.id}",
+            text=f"{api}/versions/{version.id}/text",
+        )
 
     def _excerpt(self, query, hit: Hit, span: bytes, left: int) -> tuple[int, int]:
         """The unit's best fragment for the query (its exact bytes), widened to whole sentences while

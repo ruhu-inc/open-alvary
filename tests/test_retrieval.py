@@ -55,8 +55,14 @@ def test_names_fold_to_letters_and_digits_with_and_without_the_year():
         "nigeria data protection act 2023",
         "nigeria data protection act",
         "ndpa",
+        "ndpa 2023",
         "act no 37 of 2023",
     ]
+    # Initials as cited: of every word, and of the significant ones; three letters only with a year.
+    assert "foia" in name_forms(["Freedom of Information Act 2011"])
+    assert {"cama", "cama 2020"} <= set(name_forms(["Companies and Allied Matters Act, 2020"]))
+    assert "isa" not in name_forms(["Investments and Securities Act, 2025"])
+    assert "isa 2025" in name_forms(["Investments and Securities Act, 2025"])
 
 
 def test_fusion_collapses_each_arm_to_units_then_adds_reciprocal_ranks():
@@ -307,3 +313,17 @@ def test_weak_matches_need_the_rerankers_support_and_strong_ones_never_do():
     assert [c.hit.start_byte for c in Retriever._supported([candidate(0, ["dense"])])] == []
     both = Retriever._supported([candidate(0, ["dense"]), candidate(10, ["lexical_any"])])
     assert [c.hit.start_byte for c in both] == [0, 10]
+
+
+def test_a_unit_gives_the_pages_of_the_original_file_it_is_on():
+    from retrieval.pack import unit_pages
+
+    def node(id, start, end, page, page_end=None):
+        return SimpleNamespace(id=id, start_byte=start, end_byte=end, page=page, page_end=page_end)
+
+    document = node("doc", 0, 100, 1, 5)
+    heading, section = node("h", 0, 10, 1), node("s", 20, 90, 3, 5)
+    nodes = [document, heading, section]
+    assert unit_pages(20, 90, section, nodes) == (3, 5)  # a section across pages
+    assert unit_pages(0, 10, document, nodes) == (1, 1)  # the document's own words: not its last page
+    assert unit_pages(0, 10, node("x", 0, 10, None), [node("x", 0, 10, None)]) is None  # not read from pages

@@ -66,10 +66,11 @@ def catalogue(store, work, title, language):
 
 
 def publish_act(
-    store, units, *, work=WORK, title="Example Act, 2023", language="en", effective_from=None, record=True
-):
+    store, units, *, work=WORK, title="Example Act, 2023", language="en", effective_from=None, record=True,
+    pages=None,
+):  # fmt: skip
     """A catalogue record and a reviewed text published through operations.publish; ``record=False``
-    publishes another text of a record already catalogued."""
+    publishes another text of a record already catalogued; ``pages`` gives the text on several pages."""
     if record:
         catalogue(store, work, title, language)
     now = datetime.now(UTC).replace(microsecond=0)
@@ -88,7 +89,7 @@ def publish_act(
         "decided_at": (now - timedelta(minutes=1)).isoformat(),
         "expires_at": (now + timedelta(days=365)).isoformat(),
     }
-    text = publication.build({"id": work, "jurisdiction": "ng"}, [{"page": 1, "units": units}])
+    text = publication.build({"id": work, "jurisdiction": "ng"}, pages or [{"page": 1, "units": units}])
     item = publish.ApprovedText(
         document_id=work, work=work, language=language, document_type="act", text=text,
         approver="Ijidai Lassa", approved_at=now - timedelta(minutes=5), effective_from=effective_from,
