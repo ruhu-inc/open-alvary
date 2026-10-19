@@ -1,0 +1,23 @@
+tests/test_consolidation.py
+  s_d665c62e07d76f::t_68e909d6d7009e 1-87
+  s_d665c62e07d76f::t_4d0501d4a627c9 88-113
+workbench/consolidation.py
+  s_d665c62e07d76f::t_28389f0d5a1f40 1-254
+  s_d665c62e07d76f::t_3895c90622ebd8 255-265
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0e519ba7bbd663e81e482abc73495fb4d95d30fa",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "unknown"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
