@@ -174,3 +174,27 @@ def test_calibration_reports_what_reviews_changed_on_each_route():
     agreed = report["routes"]["agreed"]
     assert agreed["pages"] == 2 and agreed["material"] == 1 and agreed["material_rate"] == 0.5
     assert 0.5 < agreed["material_upper_95"] <= 1.0
+
+
+def test_review_time_is_reported_per_route():
+    from datetime import UTC, datetime, timedelta
+
+    from workbench.timing import timings
+
+    start = datetime(2026, 10, 19, 9, tzinfo=UTC)
+    rows = [
+        {
+            "act_id": ACT,
+            "page": page,
+            "status": "checked",
+            "author": "r",
+            "created_at": start + timedelta(minutes=m),
+        }
+        for page, m in ((1, 0), (2, 2), (3, 3))
+    ]
+    found = timings(rows, routes={(ACT, 2): "full", (ACT, 3): "agreed"})
+    assert found["by_route"] == {
+        "agreed": {"pages_timed": 1, "median": 1.0, "minutes": 1.0},
+        "full": {"pages_timed": 1, "median": 2.0, "minutes": 2.0},
+    }
+    assert "by_route" not in timings(rows)
