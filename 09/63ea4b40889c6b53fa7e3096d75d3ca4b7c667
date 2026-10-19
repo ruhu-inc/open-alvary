@@ -1,0 +1,24 @@
+deployment/gcp/archive.sh
+  s_d665c62e07d76f::t_9a1516cb9ae2e3 1-79
+tests/test_archive.py
+  s_d665c62e07d76f::t_74fa4b56348f9e 1-57
+operations/archive.py
+  s_d665c62e07d76f::t_39d387c610e872 1-115,119-137
+  s_d665c62e07d76f::t_74fa4b56348f9e 116-118
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0963ea4b40889c6b53fa7e3096d75d3ca4b7c667",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
