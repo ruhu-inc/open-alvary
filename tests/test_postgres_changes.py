@@ -529,14 +529,27 @@ def test_a_country_losing_its_last_record_or_gaining_its_first_is_a_coverage_cha
     assert served and all(e["schema_version"] == "change-event-1" for e in served)
 
 
-# Migrations 0029-0031 and 0034 grant their tables only to capability roles that already exist; the
-# provision bundles v0029-v0031 and v0034 grant the same to roles created afterwards.
+# Migrations 0029-0031, 0034 and 0035 grant their tables only to capability roles that already exist;
+# the provision bundles v0029-v0031, v0034 and v0035 grant the same to roles created afterwards. A key
+# without a schema is in the changes schema.
 LATER_TABLES = {
     "rights_revision": {"release": {"SELECT", "INSERT"}, "serving": {"SELECT"}},
     "link_state": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
     "text_unit": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
     "text_index_state": {"release": {"SELECT", "UPDATE"}, "serving": {"SELECT"}},
     "document_unit": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
+    "event_state": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
+    # The guard reads every table of the corpus schema (bundle v0003).
+    "corpus.legal_event": {
+        "release": {"SELECT", "INSERT", "UPDATE"},
+        "serving": {"SELECT"},
+        "guard": {"SELECT"},
+    },
+    "corpus.currentness_profile": {
+        "release": {"SELECT", "INSERT", "UPDATE"},
+        "serving": {"SELECT"},
+        "guard": {"SELECT"},
+    },
 }
 
 
@@ -560,7 +573,9 @@ def test_roles_provisioned_after_migrating_get_exactly_the_later_change_log_gran
                             text("SELECT has_table_privilege(:role, :table, :privilege)"),
                             {
                                 "role": role,
-                                "table": ns.qualified(conn, "changes", table),
+                                "table": ns.qualified(
+                                    conn, *(table.split(".") if "." in table else ("changes", table))
+                                ),
                                 "privilege": privilege,
                             },
                         )

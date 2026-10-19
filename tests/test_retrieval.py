@@ -6,7 +6,14 @@ from types import SimpleNamespace
 
 from api.text_index import fold, name_forms
 from retrieval import links, router
-from retrieval.legal_time import record_currentness
+from retrieval.legal_time import (
+    Event,
+    Profile,
+    aggregate,
+    provision_currentness,
+    provision_state,
+    record_currentness,
+)
 from retrieval.ranking import BAND_WIDTH, PER_WORK, RRF_K, Hit, apply_signals, diversify, fuse
 
 
@@ -136,3 +143,83 @@ def test_record_currentness_speaks_for_the_whole_text_only():
     assert record_currentness("current", version, date(2024, 1, 1), today).state == "in_force"
     undated = SimpleNamespace(effective_from=None, effective_until=None)
     assert record_currentness("current", undated, date(2024, 1, 1), today).state == "unknown"
+
+
+def event(
+    id_,
+    kind,
+    day,
+    *,
+    scope="whole",
+    locators=(),
+    precision="day",
+    until=None,
+    conditions=None,
+    supersedes=None,
+):
+    return Event(id_, kind, scope, tuple(locators), day, until, precision, conditions, supersedes)
+
+
+def test_currentness_v1_decides_each_provision_from_reviewed_events():
+    at = date(2024, 1, 1)
+    whole = [event("e1", "commenced", date(2023, 6, 12))]
+    assert provision_state(whole, "sec_5", at, None)[0] == "in_force"
+    assert provision_state(whole, "sec_5", date(2023, 1, 1), None)[0] == "not_in_force"  # commences later
+    assert provision_state([], "sec_5", at, None)[0] == "unknown"  # no commencement evidence
+    partial = [
+        event("e1", "commenced", date(2023, 6, 12), scope="explicit_nodes", locators=["sec_1", "sec_2"]),
+        event("e2", "commenced", date(2025, 1, 1), scope="explicit_nodes", locators=["sec_3"]),
+    ]
+    assert provision_state(partial, "sec_2__subsec_1", at, None)[0] == "in_force"  # inside a named provision
+    assert provision_state(partial, "sec_3", at, None)[0] == "not_in_force"
+    assert provision_state(partial, "sec_4", at, None)[0] == "unknown"  # unenumerated: never assumed
+    repealed = [*whole, event("e3", "repealed", date(2023, 9, 1), scope="explicit_nodes", locators=["sec_5"])]
+    assert provision_state(repealed, "sec_5", at, None)[0] == "not_in_force"
+    assert provision_state(repealed, "sec_6", at, None)[0] == "in_force"
+    assert provision_state(repealed, "sec_5", date(2023, 8, 1), None)[0] == "in_force"
+    two = [*whole, event("e4", "commenced", date(2023, 7, 1))]
+    assert provision_state(two, "sec_1", at, None)[0] == "contested"
+    corrected = [*whole, event("e4", "commenced", date(2023, 7, 1), supersedes="e1")]
+    assert (
+        provision_state(corrected, "sec_1", at, None)[0] == "in_force"
+    )  # a superseded event no longer counts
+    revived = [
+        *repealed,
+        event("e5", "revived", date(2023, 10, 1), scope="explicit_nodes", locators=["sec_5"]),
+    ]
+    assert provision_state(revived, "sec_5", at, None)[0] == "contested"  # no reviewed supersession
+    suspended = [*whole, event("e6", "suspended", date(2023, 11, 1), until=date(2024, 2, 1))]
+    assert provision_state(suspended, "sec_1", at, None)[0] == "not_in_force"
+    assert provision_state(suspended, "sec_1", date(2024, 3, 1), None)[0] == "in_force"
+    conditional = [
+        event("e7", "commenced", None, precision="unknown", conditions="On a date the Minister appoints")
+    ]
+    assert provision_state(conditional, "sec_1", at, None)[0] == "unknown"
+    imprecise = [event("e8", "commenced", date(2023, 12, 1), precision="month")]
+    assert (
+        provision_state(imprecise, "sec_1", date(2023, 12, 15), None)[0] == "unknown"
+    )  # sometime in December
+    assert provision_state(imprecise, "sec_1", at, None)[0] == "in_force"
+    assent = [event("e9", "assented", date(2023, 6, 12))]
+    assert provision_state(assent, "sec_1", at, None)[0] == "unknown"
+    assert provision_state(assent, "sec_1", at, Profile("p", "assent"))[0] == "in_force"  # the reviewed rule
+
+
+def test_a_unit_aggregates_the_parts_inside_it_that_events_name():
+    events = [
+        event("e1", "commenced", date(2023, 6, 12)),
+        event("e2", "repealed", date(2023, 9, 1), scope="explicit_nodes", locators=["sec_5__subsec_2"]),
+    ]
+    found = provision_currentness(
+        events, None, "sec_5", ["sec_5__subsec_1", "sec_5__subsec_2"], date(2024, 1, 1), date(2026, 10, 19)
+    )
+    assert (
+        found.state == "partly_in_force"
+        and found.basis == "provision"
+        and found.algorithm == "currentness-v1"
+    )
+    assert set(found.evidence) == {"e1", "e2"}
+    assert (
+        aggregate(["in_force", "unknown"]) == "unknown"
+        and aggregate(["contested", "in_force"]) == "contested"
+    )

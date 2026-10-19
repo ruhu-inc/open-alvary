@@ -13,7 +13,7 @@ from sqlalchemy import text as sql
 from api import text_index
 from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable, expression_id
 from retrieval import links, router
-from retrieval.legal_time import record_currentness
+from retrieval.legal_time import Events
 from retrieval.ranking import INSTRUMENT_RANK, PROFILE, Candidate, Hit, apply_signals, diversify, fuse
 from schema.public import (
     CatalogueMatch,
@@ -95,6 +95,7 @@ class Retriever:
         self._loaded: dict[str, tuple | None] = {}
         self._nodes: dict[str, list] = {}
         self._qualifications: dict[str, tuple] = {}
+        self.events = Events(self.conn)
 
     # --- reading public texts --------------------------------------------------------------------
 
@@ -436,7 +437,9 @@ class Retriever:
                     licence=rights.licence,
                     attribution_required=rights.attribution_required,
                     attribution_text=rights.attribution_text,
-                    currentness=record_currentness(source.legal_status, version, plan.as_of, self.today),
+                    currentness=self.events.currentness(
+                        source, version, hit.locator, inner(nodes, hit), plan.as_of, self.today
+                    ),
                     authority=EvidenceAuthority(
                         document_type=source.document_type,
                         instrument_rank=INSTRUMENT_RANK.get(source.document_type),
@@ -546,3 +549,12 @@ class Retriever:
         if hit.replaced:
             found.append("A later published text of this record replaces this one.")
         return tuple(found)
+
+
+def inner(nodes, hit: Hit) -> list[str]:
+    """The locators of the parts inside a unit's span (its own excluded)."""
+    return [
+        n.locator
+        for n in nodes
+        if hit.start_byte <= n.start_byte and n.end_byte <= hit.end_byte and n.locator != hit.locator
+    ]
