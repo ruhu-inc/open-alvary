@@ -31,6 +31,5 @@ vector_profile = ""
 # workbench_image  = ""
 # workbench_domain = "review.open.alvary.ai"
 # workbench_settings = {
-#   ALVARY_REVIEW_COLLECTIONS  = "az://<corpus account>/workbench/collections/rw/"
 #   ALVARY_REVIEW_OIDC_CLIENT_ID = "<the workbench's sign-in client ID>"
-# }
+# }  # the collections default to the corpus account's copies (workbench.tf)

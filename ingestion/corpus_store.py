@@ -164,6 +164,31 @@ class CorpusStore:
             if not token:
                 return names
 
+    def describe(self, prefix: str) -> dict[str, dict]:
+        """Each object under a prefix: its content type, MD5 (base64, as the service holds it; None
+        for a composite object) and metadata."""
+        found, token = {}, None
+        while True:
+            params = {
+                "prefix": prefix,
+                "fields": "items(name,contentType,md5Hash,metadata),nextPageToken",
+                "maxResults": 1000,
+            }
+            if token:
+                params["pageToken"] = token
+            response = self._request("GET", f"{API}/storage/v1/b/{self.bucket}/o", params=params, timeout=120)
+            response.raise_for_status()
+            page = response.json()
+            for item in page.get("items", []):
+                found[item["name"]] = {
+                    "content_type": item.get("contentType") or "application/octet-stream",
+                    "md5": item.get("md5Hash"),
+                    "metadata": item.get("metadata") or {},
+                }
+            token = page.get("nextPageToken")
+            if not token:
+                return found
+
     def get(self, name: str) -> bytes:
         response = self._request(
             "GET",
@@ -273,6 +298,34 @@ class AzureBlobStore:
             marker = page.findtext("NextMarker")
             if not marker:
                 return names
+
+    def describe(self, prefix: str) -> dict[str, dict]:
+        """Each blob under a prefix: its content type, MD5 (base64) and metadata."""
+        found, marker = {}, None
+        while True:
+            params = {
+                "restype": "container",
+                "comp": "list",
+                "prefix": prefix,
+                "maxresults": 1000,
+                "include": "metadata",
+            }
+            if marker:
+                params["marker"] = marker
+            response = self._request("GET", params=params)
+            response.raise_for_status()
+            page = ElementTree.fromstring(response.content)
+            for blob in page.iterfind("Blobs/Blob"):
+                element = blob.find("Name")
+                name = unquote(element.text) if element.get("Encoded") == "true" else element.text
+                found[name] = {
+                    "content_type": blob.findtext("Properties/Content-Type") or "application/octet-stream",
+                    "md5": blob.findtext("Properties/Content-MD5") or None,
+                    "metadata": {item.tag: unquote(item.text or "") for item in blob.findall("Metadata/*")},
+                }
+            marker = page.findtext("NextMarker")
+            if not marker:
+                return found
 
     def get(self, name: str) -> bytes:
         response = self._request("GET", name, timeout=600)

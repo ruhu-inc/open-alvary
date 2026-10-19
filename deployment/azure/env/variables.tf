@@ -242,3 +242,15 @@ variable "document_ai" {
   type        = map(string)
   default     = {}
 }
+
+variable "restore_image" {
+  description = "The restore job's image (release.sh restore), set only while databases are copied (phase 5)."
+  type        = string
+  default     = ""
+}
+
+variable "google_audience" {
+  description = "The Entra application (Application ID URI) the ingestion identity's token is for when Google exchanges it (README, Google from Azure)."
+  type        = string
+  default     = "api://open-alvary-google"
+}

@@ -67,6 +67,30 @@ def cache_root() -> Path:
     return Path(os.environ.get("ALVARY_REVIEW_CACHE", "private-staging/cache"))
 
 
+def mirror(place: str) -> Path:
+    """The first collection's place in the corpus store, copied into the private cache, for a platform
+    that cannot mount a bucket (Azure Container Apps; Cloud Run mounted it read-only): readings and
+    other JSON are fetched again at every start, as the mount always showed the latest, and page
+    images only when missing. Returns the folder to use as the collection's staging."""
+    from ingestion.corpus_store import split
+
+    bucket, prefix = split(place)
+    store = _store(bucket)
+    root = cache_root() / "mirror" / bucket.replace("://", "/", 1) / prefix
+    for name in store.list(prefix):
+        relative = Path(name[len(prefix) :])
+        if not relative.parts or ".." in relative.parts or name.endswith("/"):
+            continue
+        target = root / relative
+        if target.exists() and target.suffix != ".json":
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        partial = target.with_name(target.name + ".partial")
+        partial.write_bytes(store.get(name))
+        partial.replace(target)
+    return root
+
+
 def trim_cache() -> None:
     """Keep the cache of a deployed workbench (source PDFs, readings, page images fetched from the
     bucket) within ALVARY_REVIEW_CACHE_MB: when it grows past that, the files least recently used
@@ -77,7 +101,7 @@ def trim_cache() -> None:
         return
     files = []
     for path in root.rglob("*"):
-        if path.is_file():
+        if path.is_file() and (root / "mirror") not in path.parents:  # the first collection stays whole
             stat = path.stat()
             files.append((stat.st_mtime, stat.st_size, path))
     total = sum(size for _, size, _ in files)
@@ -113,7 +137,10 @@ class Library:
     """The collections' documents and their reconciled readings in private staging."""
 
     def __init__(self, staging: Path | None = None):
-        self.staging = Path(staging or os.environ.get("ALVARY_REVIEW_STAGING") or first_collection.STAGING)
+        place = staging or os.environ.get("ALVARY_REVIEW_STAGING") or first_collection.STAGING
+        # A place in the corpus store ("az://<account>/<container>/collections/ng/") is mirrored.
+        is_place = isinstance(place, str) and place.startswith(("gs://", "az://"))
+        self.staging = mirror(place) if is_place else Path(place)
         self.manifest = first_collection.load_manifest()
         self.collections = [(self.manifest, self.staging), *extra_collections()]
         # Built once: a corpus collection lists tens of thousands of documents.

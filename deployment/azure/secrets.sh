@@ -25,7 +25,7 @@ PUBLIC_PROJECT="${GCP_PROJECT:-open-alvary-prod}"         # the public service's
 REVIEW_PROJECT="${GCP_REVIEW_PROJECT:-open-alvary-ingestion}" # the workbench's
 
 # Secret name in Key Vault = its name in Secret Manager (both allow letters, digits and dashes).
-PUBLIC=(feed-keys webhook-keys admission-config site-admission-config)
+PUBLIC=(feed-keys webhook-keys admission-config site-admission-config access-role-password)
 ACCOUNTS=(key-pepper consent-secret console-client-secret resend-api-key)
 OPTIONAL=(resend-webhook-secret auth0-deletion-client-id auth0-deletion-client-secret)
 REVIEW=(review-oidc-client-secret)

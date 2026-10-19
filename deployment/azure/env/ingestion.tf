@@ -3,10 +3,17 @@
 # Document AI for now (the owner's choice): the jobs reach it with a workload identity federation
 # credential (google-wif-config), so no Google key is stored anywhere.
 
+# transfer copies the buckets from Google Cloud inside Azure (phase 5): by default the corpus bucket;
+# data.sh starts it with other arguments for the review collection and for verify.
 resource "azurerm_container_app_job" "ingestion" {
   for_each = var.ingestion_image != "" ? {
     scan    = { args = ["-m", "ingestion.scan_job"], env = { SCAN_READER = "ocr" }, timeout = 86400 }
     prepare = { args = ["-m", "ingestion.prepare_job"], env = {}, timeout = 86400 }
+    transfer = {
+      args    = ["-m", "operations.transfer", "copy", "gs://open-alvary-corpus", "az://${azurerm_storage_account.corpus.name}/corpus"]
+      env     = {}
+      timeout = 86400
+    }
   } : {}
 
   name                         = "${local.short_prefix}-${each.key}"
@@ -51,9 +58,11 @@ resource "azurerm_container_app_job" "ingestion" {
       dynamic "env" {
         for_each = merge(
           {
-            ALVARY_CORPUS_BUCKET           = "az://${azurerm_storage_account.corpus.name}/corpus"
-            AZURE_CLIENT_ID                = azurerm_user_assigned_identity.ingestion.client_id
-            GOOGLE_APPLICATION_CREDENTIALS = "/secrets/google-wif-config"
+            ALVARY_CORPUS_BUCKET                      = "az://${azurerm_storage_account.corpus.name}/corpus"
+            AZURE_CLIENT_ID                           = azurerm_user_assigned_identity.ingestion.client_id
+            GOOGLE_APPLICATION_CREDENTIALS            = "/secrets/google-wif-config"
+            GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES = "1" # the credential runs ingestion.google_federation
+            ALVARY_GOOGLE_AUDIENCE                    = var.google_audience
           },
           var.document_ai,
           each.value.env,
