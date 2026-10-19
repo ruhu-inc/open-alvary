@@ -1,0 +1,112 @@
+deployment/azure/env/postgres.tf
+  s_d665c62e07d76f::t_fcebc91552d9e0 1-49
+deployment/azure/env/locals.tf
+  s_d665c62e07d76f::t_aa21b834746cc0 1,28,30-56
+  s_d665c62e07d76f::t_dc7aa1c14c3947 2-27,29
+deployment/azure/env/providers.tf
+  s_d665c62e07d76f::t_00f5b7978197ad 1-18
+deployment/azure/env/monitoring.tf
+  s_d665c62e07d76f::t_62c250438607a2 1-4,6-10,12-14,16-19,21-23,25,28-37,39-44,46-55,57-60,62-75,77-96
+  s_d665c62e07d76f::t_dc7aa1c14c3947 5,11,15,20,24,26-27,38,45,56,61,76
+deployment/azure/env/keyvault.tf
+  s_d665c62e07d76f::t_dcdf2da06b3395 1-54
+deployment/azure/env/storage.tf
+  s_d665c62e07d76f::t_fcebc91552d9e0 1-77
+deployment/azure/env/container_apps.tf
+  s_d665c62e07d76f::t_1a2f445f192e15 1-58,60,66-97,99-137,139-142,144-161
+  s_d665c62e07d76f::t_3c1e3d98ce2005 59,61-65
+  s_d665c62e07d76f::t_ec8a235440669c 98,138,143
+deployment/azure/env/staging.tfvars.example
+  s_d665c62e07d76f::t_03476df12ddd6f 1-28
+deployment/azure/env/prod.tfvars.example
+  s_d665c62e07d76f::t_03476df12ddd6f 1-28
+deployment/azure/bootstrap/.terraform.lock.hcl
+  s_d665c62e07d76f::t_986fd303e45850 1-22
+retrieval/worker.py
+  s_d665c62e07d76f::t_9fbd49d76a9100 25
+  s_d665c62e07d76f::t_6b697490379de9 1-24,26-68
+deployment/azure/env/versions.tf
+  s_d665c62e07d76f::t_00f5b7978197ad 1-23
+deployment/azure/backend.hcl.example
+  s_d665c62e07d76f::t_03476df12ddd6f 1-6
+deployment/azure/secrets.sh
+  s_d665c62e07d76f::t_b087329673abdf 1-83
+deployment/azure/.gitignore
+  s_d665c62e07d76f::t_da824555c37982 1-7
+api/service.py
+  s_d665c62e07d76f::t_7581da227064d0 17-18,86-107
+  s_d665c62e07d76f::t_59bb830c0f0dc6 108
+deployment/azure/bootstrap/main.tf
+  s_d665c62e07d76f::t_c0a718d6944b50 20,36-37
+  s_d665c62e07d76f::t_dc7aa1c14c3947 1-2,6,8-9,21,28,30,33-35,38-40,45,50,52-53,55
+  s_d665c62e07d76f::t_da824555c37982 3-5,7,10-19,22-27,29,31-32,41-44,46-49,51,54,56-57
+deployment/azure/env/variables.tf
+  s_d665c62e07d76f::t_d290baf039e61f 1-8,10-11,14-51,53,61-62,69-221
+  s_d665c62e07d76f::t_dcdf2da06b3395 222-223,225-226,231
+  s_d665c62e07d76f::t_3c1e3d98ce2005 224,227-230
+  s_d665c62e07d76f::t_94487910cad4d8 232-237
+  s_d665c62e07d76f::t_1a2f445f192e15 52,54-60,63-68
+  s_d665c62e07d76f::t_dc7aa1c14c3947 9,12-13
+deployment/azure/release.sh
+  s_d665c62e07d76f::t_229eeb1949a562 59-61
+  s_d665c62e07d76f::t_8123b52539b6a3 1-29,31,33-58,62-65
+  s_d665c62e07d76f::t_ec8a235440669c 30,32
+deployment/azure/env/ingestion.tf
+  s_d665c62e07d76f::t_94487910cad4d8 1-80
+deployment/azure/env/engine.tf
+  s_d665c62e07d76f::t_930adfe1924f72 1-72
+deployment/azure/env/jobs.tf
+  s_d665c62e07d76f::t_3c1e3d98ce2005 1-120
+deployment/azure/env/engine-cloud-init.yaml.tftpl
+  s_d665c62e07d76f::t_930adfe1924f72 1-37
+deployment/azure/env/workbench.tf
+  s_d665c62e07d76f::t_94487910cad4d8 1-190
+tests/test_site.py
+  s_d665c62e07d76f::t_a96b80c14b94e1 381-382,385-386,388-389,392
+  s_d665c62e07d76f::t_6f2c78b0481b97 383-384
+  s_d665c62e07d76f::t_ca2e9f44c6d111 387,390-391
+deployment/azure/README.md
+  s_d665c62e07d76f::t_bc5e69fcc7e7e0 1-140
+deployment/azure/env/inference-cloud-init.yaml.tftpl
+  s_d665c62e07d76f::t_930adfe1924f72 1-37
+deployment/azure/env/identity.tf
+  s_d665c62e07d76f::t_dcdf2da06b3395 1-74
+web/src/docs/errors.ts
+  s_d665c62e07d76f::t_7581da227064d0 52
+deployment/azure/env/network.tf
+  s_d665c62e07d76f::t_aa21b834746cc0 1-6,8-10,12-61,63-64,66-92,94-95,97-133,135-138,140-142,144-146,148-165,167,169-175,177
+  s_d665c62e07d76f::t_dc7aa1c14c3947 7,11,62,65,93,96,134,139,143,147,166,168,176
+deployment/azure/env/.terraform.lock.hcl
+  s_d665c62e07d76f::t_03476df12ddd6f 1-64
+deployment/azure/env/main.tf
+  s_d665c62e07d76f::t_aa21b834746cc0 1-5,7,9
+  s_d665c62e07d76f::t_dc7aa1c14c3947 6,8
+deployment/azure/env/outputs.tf
+  s_d665c62e07d76f::t_03476df12ddd6f 1-53
+deployment/azure/env/inference.tf
+  s_d665c62e07d76f::t_930adfe1924f72 1-70
+deployment/azure/env/frontdoor.tf
+  s_d665c62e07d76f::t_cefcec06f17cad 1-124
+deployment/azure/env/registry.tf
+  s_d665c62e07d76f::t_dcdf2da06b3395 1-11
+retrieval/indexer.py
+  s_d665c62e07d76f::t_54c90bc91c398d 568
+tests/test_retrieval.py
+  s_d665c62e07d76f::t_859606b523b6ed 330-359
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "46a38dcd07b18b660254f676bb3441e7db6bad81",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
