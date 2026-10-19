@@ -1,0 +1,274 @@
+{
+  "name": "a feed reset means every cached unit is checked",
+  "covers": [
+    "409 feed_reset and 410 replay_window_expired mark every cached unit as needing the check operation before reuse, and the client takes the feed again from its present (start=now).",
+    "After the check finds the units unchanged, the pack is served as checked; then reused unchecked."
+  ],
+  "start": "2026-10-19T09:00:00+00:00",
+  "steps": [
+    {
+      "do": "sync",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "start": "now"
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$changes_start"
+          }
+        }
+      ]
+    },
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/retrieve",
+            "params": {
+              "q": "when must a controller report a breach",
+              "jurisdiction": "ng"
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$pack_breach",
+            "headers": {
+              "ETag": "W/\"pack-breach-1\""
+            }
+          }
+        }
+      ],
+      "expect": {
+        "answer": {
+          "from_cache": false,
+          "checked": true
+        }
+      }
+    },
+    {
+      "do": "sync",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "resume_token": "r1.start"
+            }
+          },
+          "response": {
+            "status": 409,
+            "body": "$problem_feed_reset"
+          }
+        },
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "start": "now"
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$changes_start_epoch_2"
+          }
+        }
+      ]
+    },
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [
+        {
+          "request": {
+            "method": "POST",
+            "path": "/currentness",
+            "json": {
+              "items": [
+                {
+                  "anchor_id": "anc-sda-1-s40",
+                  "span_hash": "0f9bf5fdfd86d6f60f3a5527bcaff7066dcb0e40604986268353bd95bcc312ce"
+                },
+                {
+                  "anchor_id": "anc-sdr-1-r12",
+                  "span_hash": "0c52012e8b5f30fda79ae72cee5d04881e9833cdc5165ce80bc8ecf8a7edb0cd"
+                }
+              ]
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$check_unchanged"
+          }
+        }
+      ],
+      "expect": {
+        "answer": {
+          "from_cache": true,
+          "checked": true,
+          "offline": false,
+          "evidence": [
+            "anc-sda-1-s40",
+            "anc-sdr-1-r12"
+          ],
+          "labels": "checked"
+        }
+      }
+    },
+    {
+      "do": "sync",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "resume_token": "r2.start"
+            }
+          },
+          "response": {
+            "status": 410,
+            "body": "$problem_replay_window_expired"
+          }
+        },
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "start": "now"
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$changes_later_epoch_2"
+          }
+        }
+      ]
+    },
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [
+        {
+          "request": {
+            "method": "POST",
+            "path": "/currentness",
+            "json": {
+              "items": [
+                {
+                  "anchor_id": "anc-sda-1-s40",
+                  "span_hash": "0f9bf5fdfd86d6f60f3a5527bcaff7066dcb0e40604986268353bd95bcc312ce"
+                },
+                {
+                  "anchor_id": "anc-sdr-1-r12",
+                  "span_hash": "0c52012e8b5f30fda79ae72cee5d04881e9833cdc5165ce80bc8ecf8a7edb0cd"
+                }
+              ]
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$check_unchanged"
+          }
+        }
+      ],
+      "expect": {
+        "answer": {
+          "from_cache": true,
+          "checked": true,
+          "offline": false,
+          "evidence": [
+            "anc-sda-1-s40",
+            "anc-sdr-1-r12"
+          ],
+          "labels": "checked"
+        }
+      }
+    },
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [],
+      "expect": {
+        "answer": {
+          "from_cache": true,
+          "checked": false,
+          "offline": false,
+          "evidence": [
+            "anc-sda-1-s40",
+            "anc-sdr-1-r12"
+          ],
+          "labels": "currentness_not_checked"
+        }
+      }
+    },
+    {
+      "do": "sync",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "resume_token": "r2.later"
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$changes_none_epoch_2"
+          }
+        }
+      ]
+    },
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [],
+      "expect": {
+        "answer": {
+          "from_cache": true,
+          "checked": false,
+          "offline": false,
+          "evidence": [
+            "anc-sda-1-s40",
+            "anc-sdr-1-r12"
+          ],
+          "labels": "currentness_not_checked"
+        }
+      }
+    }
+  ],
+  "bodies": {
+    "changes_none_epoch_2": {
+      "events": [],
+      "has_more": false,
+      "feed_epoch": "2",
+      "resume_token": "r2.after-none"
+    }
+  }
+}

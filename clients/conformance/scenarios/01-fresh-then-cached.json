@@ -1,0 +1,89 @@
+{
+  "name": "fresh retrieve, then cached reuse",
+  "covers": [
+    "Before caching anything, the client notes where the change feed is now (start=now).",
+    "A pack fresh from Open Alvary is served as checked.",
+    "The same request again, however its words are spaced and its filters ordered, is answered from the cache with no request while the feed is followed, each unit labelled currentness_not_checked with the time it was cached, and never presented as checked."
+  ],
+  "start": "2026-10-19T09:00:00+00:00",
+  "steps": [
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "start": "now"
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$changes_start"
+          }
+        },
+        {
+          "request": {
+            "method": "GET",
+            "path": "/retrieve",
+            "params": {
+              "q": "when must a controller report a breach",
+              "jurisdiction": "ng"
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$pack_breach",
+            "headers": {
+              "ETag": "W/\"pack-breach-1\""
+            }
+          }
+        }
+      ],
+      "expect": {
+        "answer": {
+          "from_cache": false,
+          "checked": true,
+          "offline": false,
+          "evidence": [
+            "anc-sda-1-s40",
+            "anc-sdr-1-r12"
+          ],
+          "labels": "checked"
+        }
+      }
+    },
+    {
+      "do": "advance",
+      "seconds": 600
+    },
+    {
+      "do": "retrieve",
+      "query": "  when must   a controller report   a breach ",
+      "filters": {
+        "jurisdiction": [
+          "ng"
+        ]
+      },
+      "exchanges": [],
+      "expect": {
+        "answer": {
+          "from_cache": true,
+          "checked": false,
+          "offline": false,
+          "evidence": [
+            "anc-sda-1-s40",
+            "anc-sdr-1-r12"
+          ],
+          "labels": "currentness_not_checked",
+          "cached_at": "2026-10-19T09:00:00+00:00"
+        }
+      }
+    }
+  ]
+}

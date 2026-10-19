@@ -1,0 +1,183 @@
+{
+  "name": "seven days without the feed, the cache stops answering",
+  "covers": [
+    "Out of reach, the cache answers for up to seven days after the last successful feed read.",
+    "After seven days without one it answers nothing; once the feed is read again, it answers again."
+  ],
+  "start": "2026-10-19T09:00:00+00:00",
+  "steps": [
+    {
+      "do": "sync",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "start": "now"
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$changes_start"
+          }
+        }
+      ]
+    },
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/retrieve",
+            "params": {
+              "q": "when must a controller report a breach",
+              "jurisdiction": "ng"
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$pack_breach",
+            "headers": {
+              "ETag": "W/\"pack-breach-1\""
+            }
+          }
+        }
+      ],
+      "expect": {
+        "answer": {
+          "from_cache": false,
+          "checked": true
+        }
+      }
+    },
+    {
+      "do": "advance",
+      "seconds": 518400
+    },
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "resume_token": "r1.start"
+            }
+          },
+          "response": {
+            "error": "connect"
+          },
+          "repeat": 3
+        },
+        {
+          "request": {
+            "method": "GET",
+            "path": "/retrieve"
+          },
+          "response": {
+            "error": "connect"
+          },
+          "repeat": 3
+        }
+      ],
+      "expect": {
+        "answer": {
+          "from_cache": true,
+          "checked": false,
+          "offline": true,
+          "evidence": [
+            "anc-sda-1-s40",
+            "anc-sdr-1-r12"
+          ],
+          "labels": "currentness_not_checked",
+          "cached_at": "2026-10-19T09:00:00+00:00"
+        }
+      }
+    },
+    {
+      "do": "advance",
+      "seconds": 86400
+    },
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "resume_token": "r1.start"
+            }
+          },
+          "response": {
+            "error": "connect"
+          },
+          "repeat": 3
+        },
+        {
+          "request": {
+            "method": "GET",
+            "path": "/retrieve"
+          },
+          "response": {
+            "error": "connect"
+          },
+          "repeat": 3
+        }
+      ],
+      "expect": {
+        "raises": "CacheExpired"
+      }
+    },
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "resume_token": "r1.start"
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$changes_none"
+          }
+        }
+      ],
+      "expect": {
+        "answer": {
+          "from_cache": true,
+          "checked": false,
+          "offline": false,
+          "evidence": [
+            "anc-sda-1-s40",
+            "anc-sdr-1-r12"
+          ],
+          "labels": "currentness_not_checked",
+          "cached_at": "2026-10-19T09:00:00+00:00"
+        }
+      }
+    }
+  ]
+}

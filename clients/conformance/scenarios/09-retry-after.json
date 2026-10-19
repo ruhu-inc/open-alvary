@@ -1,0 +1,98 @@
+{
+  "name": "Retry-After is honoured",
+  "covers": [
+    "After a 503 or a 429 with Retry-After, the client sends the request again no sooner than it says, and uses the answer that follows."
+  ],
+  "start": "2026-10-19T09:00:00+00:00",
+  "steps": [
+    {
+      "do": "sync",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "start": "now"
+            }
+          },
+          "response": {
+            "status": 503,
+            "body": "$problem_unavailable",
+            "headers": {
+              "Retry-After": "1"
+            }
+          }
+        },
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "start": "now"
+            },
+            "not_before": 1
+          },
+          "response": {
+            "status": 200,
+            "body": "$changes_start"
+          }
+        }
+      ]
+    },
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/retrieve",
+            "params": {
+              "q": "when must a controller report a breach"
+            }
+          },
+          "response": {
+            "status": 429,
+            "body": "$problem_rate_limited",
+            "headers": {
+              "Retry-After": "2"
+            }
+          }
+        },
+        {
+          "request": {
+            "method": "GET",
+            "path": "/retrieve",
+            "params": {
+              "q": "when must a controller report a breach"
+            },
+            "not_before": 2
+          },
+          "response": {
+            "status": 200,
+            "body": "$pack_breach",
+            "headers": {
+              "ETag": "W/\"pack-breach-1\""
+            }
+          }
+        }
+      ],
+      "expect": {
+        "answer": {
+          "from_cache": false,
+          "checked": true,
+          "offline": false,
+          "evidence": [
+            "anc-sda-1-s40",
+            "anc-sdr-1-r12"
+          ],
+          "labels": "checked"
+        }
+      }
+    }
+  ]
+}

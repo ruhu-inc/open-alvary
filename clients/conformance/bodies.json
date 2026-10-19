@@ -1,0 +1,827 @@
+{
+  "changes_start": {
+    "events": [],
+    "has_more": false,
+    "feed_epoch": "1",
+    "resume_token": "r1.start"
+  },
+  "changes_none": {
+    "events": [],
+    "has_more": false,
+    "feed_epoch": "1",
+    "resume_token": "r1.after-none"
+  },
+  "changes_withdrawal": {
+    "events": [
+      {
+        "schema_version": "change-event-1",
+        "event_id": "6f0c2a52-5d0e-4b8e-9a51-0c6f8d0e1a01",
+        "event_revision": 1,
+        "event_type": "withdrawal",
+        "feed_epoch": "1",
+        "publication_revision": 41,
+        "committed_at": "2026-10-19T09:00:00Z",
+        "observed_at": null,
+        "publisher_published_at": null,
+        "legal_effective": null,
+        "jurisdiction": {
+          "id": "ng",
+          "name": "Nigeria"
+        },
+        "work": {
+          "id": "src-ng-sda-2023",
+          "title": "Synthetic Data Act, 2023",
+          "citation": "Synthetic Data Act, 2023",
+          "legal_status": "current",
+          "jurisdiction_id": "ng",
+          "document_class": "act",
+          "language": "en",
+          "url": "https://open.alvary.ai/sources/src-ng-sda-2023",
+          "api_url": "https://open.alvary.ai/api/sources/src-ng-sda-2023"
+        },
+        "version": {
+          "id": "ver-sda-1",
+          "content_hash": "4c02ff12d8248c0ec29226b1f52f13b1349d60b81e9ce0c4e97bdbcbb8881fc4",
+          "language": "en"
+        },
+        "rights_revision": 3,
+        "changed_fields": [],
+        "change_reason": null,
+        "supersedes": null,
+        "summary": "A text version of Synthetic Data Act, 2023 was withdrawn. Stop serving copies of it.",
+        "sources": [],
+        "withdrawal": {
+          "scope_disclosure": "named",
+          "action": "stop_serving",
+          "reason_code": "rights_changed"
+        },
+        "legal_effect": null,
+        "previous": {},
+        "version_diff": null
+      }
+    ],
+    "has_more": false,
+    "feed_epoch": "1",
+    "resume_token": "r1.after-withdrawal"
+  },
+  "changes_text_published": {
+    "events": [
+      {
+        "schema_version": "change-event-1",
+        "event_id": "6f0c2a52-5d0e-4b8e-9a51-0c6f8d0e1a02",
+        "event_revision": 1,
+        "event_type": "text_version_published",
+        "feed_epoch": "1",
+        "publication_revision": 41,
+        "committed_at": "2026-10-19T09:00:00Z",
+        "observed_at": null,
+        "publisher_published_at": null,
+        "legal_effective": null,
+        "jurisdiction": {
+          "id": "ng",
+          "name": "Nigeria"
+        },
+        "work": {
+          "id": "src-ng-sda-2023",
+          "title": "Synthetic Data Act, 2023",
+          "citation": "Synthetic Data Act, 2023",
+          "legal_status": "current",
+          "jurisdiction_id": "ng",
+          "document_class": "act",
+          "language": "en",
+          "url": "https://open.alvary.ai/sources/src-ng-sda-2023",
+          "api_url": "https://open.alvary.ai/api/sources/src-ng-sda-2023"
+        },
+        "version": {
+          "id": "ver-sda-2",
+          "content_hash": "e9545be0efba55cc6b9fb13b80a78cb077a4d7f92405390bad8c536a2ac82ec7",
+          "language": "en"
+        },
+        "rights_revision": 3,
+        "changed_fields": [],
+        "change_reason": "source_revision",
+        "supersedes": null,
+        "summary": "A new text version of Synthetic Data Act, 2023 was published.",
+        "sources": [],
+        "withdrawal": null,
+        "legal_effect": null,
+        "previous": {},
+        "version_diff": {
+          "prior_version_id": "ver-sda-1",
+          "added": [],
+          "removed": [],
+          "changed": [
+            "sec_40"
+          ],
+          "truncated": false
+        }
+      }
+    ],
+    "has_more": false,
+    "feed_epoch": "1",
+    "resume_token": "r1.after-text"
+  },
+  "changes_legal_effect": {
+    "events": [
+      {
+        "schema_version": "change-event-1",
+        "event_id": "6f0c2a52-5d0e-4b8e-9a51-0c6f8d0e1a03",
+        "event_revision": 1,
+        "event_type": "legal_effect_recorded",
+        "feed_epoch": "1",
+        "publication_revision": 42,
+        "committed_at": "2026-10-19T09:00:00Z",
+        "observed_at": null,
+        "publisher_published_at": null,
+        "legal_effective": {
+          "from": "2026-10-01",
+          "precision": "day"
+        },
+        "jurisdiction": {
+          "id": "ng",
+          "name": "Nigeria"
+        },
+        "work": {
+          "id": "src-ng-sdr-2024",
+          "title": "Synthetic Data Regulations, 2024",
+          "citation": "Synthetic Data Regulations, 2024",
+          "legal_status": "repealed",
+          "jurisdiction_id": "ng",
+          "document_class": "regulation",
+          "language": "en",
+          "url": "https://open.alvary.ai/sources/src-ng-sdr-2024",
+          "api_url": "https://open.alvary.ai/api/sources/src-ng-sdr-2024"
+        },
+        "version": null,
+        "rights_revision": null,
+        "changed_fields": [],
+        "change_reason": null,
+        "supersedes": null,
+        "summary": "Synthetic Data Regulations, 2024 was repealed by Synthetic Data Regulations, 2026.",
+        "sources": [],
+        "withdrawal": null,
+        "legal_effect": {
+          "kind": "repeal",
+          "by": {
+            "id": "src-ng-sdr-2026",
+            "title": "Synthetic Data Regulations, 2026",
+            "citation": "Synthetic Data Regulations, 2026"
+          },
+          "effective_date": "2026-10-01",
+          "evidence_url": "https://example.org/sdr-2026"
+        },
+        "previous": {},
+        "version_diff": null
+      }
+    ],
+    "has_more": false,
+    "feed_epoch": "1",
+    "resume_token": "r1.after-effect"
+  },
+  "changes_legal_effect_corrected": {
+    "events": [
+      {
+        "schema_version": "change-event-1",
+        "event_id": "6f0c2a52-5d0e-4b8e-9a51-0c6f8d0e1a03",
+        "event_revision": 2,
+        "event_type": "legal_effect_recorded",
+        "feed_epoch": "1",
+        "publication_revision": 43,
+        "committed_at": "2026-10-19T09:00:00Z",
+        "observed_at": null,
+        "publisher_published_at": null,
+        "legal_effective": {
+          "from": "2026-09-01",
+          "precision": "day"
+        },
+        "jurisdiction": {
+          "id": "ng",
+          "name": "Nigeria"
+        },
+        "work": {
+          "id": "src-ng-sdr-2024",
+          "title": "Synthetic Data Regulations, 2024",
+          "citation": "Synthetic Data Regulations, 2024",
+          "legal_status": "repealed",
+          "jurisdiction_id": "ng",
+          "document_class": "regulation",
+          "language": "en",
+          "url": "https://open.alvary.ai/sources/src-ng-sdr-2024",
+          "api_url": "https://open.alvary.ai/api/sources/src-ng-sdr-2024"
+        },
+        "version": null,
+        "rights_revision": null,
+        "changed_fields": [],
+        "change_reason": "corrected",
+        "supersedes": {
+          "event_id": "6f0c2a52-5d0e-4b8e-9a51-0c6f8d0e1a03",
+          "event_revision": 1
+        },
+        "summary": "The record of how Synthetic Data Regulations, 2026 repeals Synthetic Data Regulations, 2024 was corrected.",
+        "sources": [],
+        "withdrawal": null,
+        "legal_effect": {
+          "kind": "repeal",
+          "by": {
+            "id": "src-ng-sdr-2026",
+            "title": "Synthetic Data Regulations, 2026",
+            "citation": "Synthetic Data Regulations, 2026"
+          },
+          "effective_date": "2026-09-01",
+          "evidence_url": "https://example.org/sdr-2026"
+        },
+        "previous": {},
+        "version_diff": null
+      }
+    ],
+    "has_more": false,
+    "feed_epoch": "1",
+    "resume_token": "r1.after-correction"
+  },
+  "changes_start_epoch_2": {
+    "events": [],
+    "has_more": false,
+    "feed_epoch": "2",
+    "resume_token": "r2.start"
+  },
+  "changes_later_epoch_2": {
+    "events": [],
+    "has_more": false,
+    "feed_epoch": "2",
+    "resume_token": "r2.later"
+  },
+  "changes_first_page": {
+    "events": [],
+    "has_more": true,
+    "feed_epoch": "1",
+    "resume_token": "r1.page-1",
+    "next_cursor": "c1.page-2"
+  },
+  "pack_breach": {
+    "schema_version": "oa-evidence-1",
+    "status": "results",
+    "query": {
+      "text": "when must a controller report a breach",
+      "routes": [
+        "topic"
+      ],
+      "filters": {
+        "jurisdictions": [
+          "ng"
+        ]
+      }
+    },
+    "revisions": {
+      "dataset": "1:40",
+      "router": "oa-route-1",
+      "ranking": "oa-rank-2",
+      "analyzer": "oa-search-3"
+    },
+    "coverage": {
+      "records_in_scope": 2,
+      "records_with_text": 2,
+      "texts_searched": 2,
+      "degraded": [
+        "dense:not_configured",
+        "reranker:not_configured"
+      ],
+      "unsupported": [],
+      "incomplete_evidence": false,
+      "omitted_units": 0,
+      "notices": []
+    },
+    "evidence": [
+      {
+        "anchor_id": "anc-sda-1-s40",
+        "source_id": "src-ng-sda-2023",
+        "version_id": "ver-sda-1",
+        "expression_id": "src-ng-sda-2023:en",
+        "unit": "provision",
+        "kind": "section",
+        "locator": "sec_40",
+        "pinpoint": "s. 40",
+        "heading": "Notification of a breach",
+        "citation": "Synthetic Data Act, 2023, s. 40",
+        "title": "Synthetic Data Act, 2023",
+        "language": "en",
+        "jurisdiction_id": "ng",
+        "document_type": "act",
+        "official_url": "https://example.org/src-ng-sda-2023",
+        "text": "Synthetic fixture, not legislation. 40. A controller reports a breach within 72 hours.",
+        "text_start_byte": 4096,
+        "text_end_byte": 4182,
+        "complete": true,
+        "start_byte": 4096,
+        "end_byte": 4182,
+        "offset_unit": "utf-8-bytes",
+        "span_hash": "0f9bf5fdfd86d6f60f3a5527bcaff7066dcb0e40604986268353bd95bcc312ce",
+        "content_hash": "4c02ff12d8248c0ec29226b1f52f13b1349d60b81e9ce0c4e97bdbcbb8881fc4",
+        "currentness": {
+          "state": "in_force",
+          "basis": "record",
+          "assessed_at": "2026-10-19",
+          "algorithm": "record-status-1",
+          "reasons": [
+            "Assessed for the whole text from the record; no provision-level events are recorded."
+          ]
+        },
+        "authority": {
+          "document_type": "act",
+          "instrument_rank": 2,
+          "court_relation": "not_applicable"
+        },
+        "ranking": {
+          "position": 1,
+          "router": "oa-route-1",
+          "routes": [
+            "topic"
+          ],
+          "profile": "oa-rank-2",
+          "arms": {
+            "lexical": 1
+          },
+          "fused_score": 0.01639344,
+          "band": 0,
+          "signals": [],
+          "diversification": []
+        },
+        "warnings": []
+      },
+      {
+        "anchor_id": "anc-sdr-1-r12",
+        "source_id": "src-ng-sdr-2024",
+        "version_id": "ver-sdr-1",
+        "expression_id": "src-ng-sdr-2024:en",
+        "unit": "provision",
+        "kind": "section",
+        "locator": "reg_12",
+        "pinpoint": "reg. 12",
+        "heading": "Form of a breach report",
+        "citation": "Synthetic Data Regulations, 2024, reg. 12",
+        "title": "Synthetic Data Regulations, 2024",
+        "language": "en",
+        "jurisdiction_id": "ng",
+        "document_type": "regulation",
+        "official_url": "https://example.org/src-ng-sdr-2024",
+        "text": "Synthetic fixture, not legislation. 12. A breach report names the data affected.",
+        "text_start_byte": 2048,
+        "text_end_byte": 2128,
+        "complete": true,
+        "start_byte": 2048,
+        "end_byte": 2128,
+        "offset_unit": "utf-8-bytes",
+        "span_hash": "0c52012e8b5f30fda79ae72cee5d04881e9833cdc5165ce80bc8ecf8a7edb0cd",
+        "content_hash": "2f6acc2131935f30b310f7de07b14a43901c8519e45d586122b877abeeebacf5",
+        "currentness": {
+          "state": "in_force",
+          "basis": "record",
+          "assessed_at": "2026-10-19",
+          "algorithm": "record-status-1",
+          "reasons": [
+            "Assessed for the whole text from the record; no provision-level events are recorded."
+          ]
+        },
+        "authority": {
+          "document_type": "regulation",
+          "instrument_rank": 3,
+          "court_relation": "not_applicable"
+        },
+        "ranking": {
+          "position": 2,
+          "router": "oa-route-1",
+          "routes": [
+            "topic"
+          ],
+          "profile": "oa-rank-2",
+          "arms": {
+            "lexical": 2
+          },
+          "fused_score": 0.01612903,
+          "band": 0,
+          "signals": [],
+          "diversification": []
+        },
+        "warnings": []
+      }
+    ],
+    "catalogue": [],
+    "next_steps": [],
+    "bytes": {
+      "unique": 166,
+      "transmitted": 166,
+      "budget": 49152
+    }
+  },
+  "pack_breach_after_withdrawal": {
+    "schema_version": "oa-evidence-1",
+    "status": "results",
+    "query": {
+      "text": "when must a controller report a breach",
+      "routes": [
+        "topic"
+      ],
+      "filters": {
+        "jurisdictions": [
+          "ng"
+        ]
+      }
+    },
+    "revisions": {
+      "dataset": "1:41",
+      "router": "oa-route-1",
+      "ranking": "oa-rank-2",
+      "analyzer": "oa-search-3"
+    },
+    "coverage": {
+      "records_in_scope": 2,
+      "records_with_text": 2,
+      "texts_searched": 2,
+      "degraded": [
+        "dense:not_configured",
+        "reranker:not_configured"
+      ],
+      "unsupported": [],
+      "incomplete_evidence": false,
+      "omitted_units": 0,
+      "notices": []
+    },
+    "evidence": [
+      {
+        "anchor_id": "anc-sdr-1-r12",
+        "source_id": "src-ng-sdr-2024",
+        "version_id": "ver-sdr-1",
+        "expression_id": "src-ng-sdr-2024:en",
+        "unit": "provision",
+        "kind": "section",
+        "locator": "reg_12",
+        "pinpoint": "reg. 12",
+        "heading": "Form of a breach report",
+        "citation": "Synthetic Data Regulations, 2024, reg. 12",
+        "title": "Synthetic Data Regulations, 2024",
+        "language": "en",
+        "jurisdiction_id": "ng",
+        "document_type": "regulation",
+        "official_url": "https://example.org/src-ng-sdr-2024",
+        "text": "Synthetic fixture, not legislation. 12. A breach report names the data affected.",
+        "text_start_byte": 2048,
+        "text_end_byte": 2128,
+        "complete": true,
+        "start_byte": 2048,
+        "end_byte": 2128,
+        "offset_unit": "utf-8-bytes",
+        "span_hash": "0c52012e8b5f30fda79ae72cee5d04881e9833cdc5165ce80bc8ecf8a7edb0cd",
+        "content_hash": "2f6acc2131935f30b310f7de07b14a43901c8519e45d586122b877abeeebacf5",
+        "currentness": {
+          "state": "in_force",
+          "basis": "record",
+          "assessed_at": "2026-10-19",
+          "algorithm": "record-status-1",
+          "reasons": [
+            "Assessed for the whole text from the record; no provision-level events are recorded."
+          ]
+        },
+        "authority": {
+          "document_type": "regulation",
+          "instrument_rank": 3,
+          "court_relation": "not_applicable"
+        },
+        "ranking": {
+          "position": 1,
+          "router": "oa-route-1",
+          "routes": [
+            "topic"
+          ],
+          "profile": "oa-rank-2",
+          "arms": {
+            "lexical": 2
+          },
+          "fused_score": 0.01612903,
+          "band": 0,
+          "signals": [],
+          "diversification": []
+        },
+        "warnings": []
+      }
+    ],
+    "catalogue": [],
+    "next_steps": [],
+    "bytes": {
+      "unique": 80,
+      "transmitted": 80,
+      "budget": 49152
+    }
+  },
+  "pack_breach_new_text": {
+    "schema_version": "oa-evidence-1",
+    "status": "results",
+    "query": {
+      "text": "when must a controller report a breach",
+      "routes": [
+        "topic"
+      ],
+      "filters": {
+        "jurisdictions": [
+          "ng"
+        ]
+      }
+    },
+    "revisions": {
+      "dataset": "1:41",
+      "router": "oa-route-1",
+      "ranking": "oa-rank-2",
+      "analyzer": "oa-search-3"
+    },
+    "coverage": {
+      "records_in_scope": 2,
+      "records_with_text": 2,
+      "texts_searched": 2,
+      "degraded": [
+        "dense:not_configured",
+        "reranker:not_configured"
+      ],
+      "unsupported": [],
+      "incomplete_evidence": false,
+      "omitted_units": 0,
+      "notices": []
+    },
+    "evidence": [
+      {
+        "anchor_id": "anc-sda-2-s40",
+        "source_id": "src-ng-sda-2023",
+        "version_id": "ver-sda-2",
+        "expression_id": "src-ng-sda-2023:en",
+        "unit": "provision",
+        "kind": "section",
+        "locator": "sec_40",
+        "pinpoint": "s. 40",
+        "heading": "Notification of a breach",
+        "citation": "Synthetic Data Act, 2023, s. 40",
+        "title": "Synthetic Data Act, 2023",
+        "language": "en",
+        "jurisdiction_id": "ng",
+        "document_type": "act",
+        "official_url": "https://example.org/src-ng-sda-2023",
+        "text": "Synthetic fixture, not legislation. 40. A controller reports a breach within 48 hours.",
+        "text_start_byte": 4096,
+        "text_end_byte": 4182,
+        "complete": true,
+        "start_byte": 4096,
+        "end_byte": 4182,
+        "offset_unit": "utf-8-bytes",
+        "span_hash": "a032fcce7430aa19cab85969a8eb709930a0899b08b0247385c75e59678e1696",
+        "content_hash": "e9545be0efba55cc6b9fb13b80a78cb077a4d7f92405390bad8c536a2ac82ec7",
+        "currentness": {
+          "state": "in_force",
+          "basis": "record",
+          "assessed_at": "2026-10-19",
+          "algorithm": "record-status-1",
+          "reasons": [
+            "Assessed for the whole text from the record; no provision-level events are recorded."
+          ]
+        },
+        "authority": {
+          "document_type": "act",
+          "instrument_rank": 2,
+          "court_relation": "not_applicable"
+        },
+        "ranking": {
+          "position": 1,
+          "router": "oa-route-1",
+          "routes": [
+            "topic"
+          ],
+          "profile": "oa-rank-2",
+          "arms": {
+            "lexical": 1
+          },
+          "fused_score": 0.01639344,
+          "band": 0,
+          "signals": [],
+          "diversification": []
+        },
+        "warnings": []
+      },
+      {
+        "anchor_id": "anc-sdr-1-r12",
+        "source_id": "src-ng-sdr-2024",
+        "version_id": "ver-sdr-1",
+        "expression_id": "src-ng-sdr-2024:en",
+        "unit": "provision",
+        "kind": "section",
+        "locator": "reg_12",
+        "pinpoint": "reg. 12",
+        "heading": "Form of a breach report",
+        "citation": "Synthetic Data Regulations, 2024, reg. 12",
+        "title": "Synthetic Data Regulations, 2024",
+        "language": "en",
+        "jurisdiction_id": "ng",
+        "document_type": "regulation",
+        "official_url": "https://example.org/src-ng-sdr-2024",
+        "text": "Synthetic fixture, not legislation. 12. A breach report names the data affected.",
+        "text_start_byte": 2048,
+        "text_end_byte": 2128,
+        "complete": true,
+        "start_byte": 2048,
+        "end_byte": 2128,
+        "offset_unit": "utf-8-bytes",
+        "span_hash": "0c52012e8b5f30fda79ae72cee5d04881e9833cdc5165ce80bc8ecf8a7edb0cd",
+        "content_hash": "2f6acc2131935f30b310f7de07b14a43901c8519e45d586122b877abeeebacf5",
+        "currentness": {
+          "state": "in_force",
+          "basis": "record",
+          "assessed_at": "2026-10-19",
+          "algorithm": "record-status-1",
+          "reasons": [
+            "Assessed for the whole text from the record; no provision-level events are recorded."
+          ]
+        },
+        "authority": {
+          "document_type": "regulation",
+          "instrument_rank": 3,
+          "court_relation": "not_applicable"
+        },
+        "ranking": {
+          "position": 2,
+          "router": "oa-route-1",
+          "routes": [
+            "topic"
+          ],
+          "profile": "oa-rank-2",
+          "arms": {
+            "lexical": 2
+          },
+          "fused_score": 0.01612903,
+          "band": 0,
+          "signals": [],
+          "diversification": []
+        },
+        "warnings": []
+      }
+    ],
+    "catalogue": [],
+    "next_steps": [],
+    "bytes": {
+      "unique": 166,
+      "transmitted": 166,
+      "budget": 49152
+    }
+  },
+  "check_new_text": {
+    "schema_version": "oa-check-1",
+    "dataset": "1:41",
+    "results": [
+      {
+        "index": 0,
+        "result": "newer_version",
+        "anchor_id": "anc-sda-1-s40",
+        "version_id": "ver-sda-1",
+        "locator": "sec_40",
+        "currentness": {
+          "state": "in_force",
+          "basis": "record",
+          "assessed_at": "2026-10-19",
+          "algorithm": "record-status-1",
+          "reasons": [
+            "Assessed for the whole text from the record; no provision-level events are recorded."
+          ]
+        },
+        "newer_version_id": "ver-sda-2",
+        "newer_anchor_id": "anc-sda-2-s40",
+        "same_words": false
+      },
+      {
+        "index": 1,
+        "result": "unchanged",
+        "anchor_id": "anc-sdr-1-r12",
+        "version_id": "ver-sdr-1",
+        "locator": "reg_12",
+        "currentness": {
+          "state": "in_force",
+          "basis": "record",
+          "assessed_at": "2026-10-19",
+          "algorithm": "record-status-1",
+          "reasons": [
+            "Assessed for the whole text from the record; no provision-level events are recorded."
+          ]
+        }
+      }
+    ]
+  },
+  "check_repealed": {
+    "schema_version": "oa-check-1",
+    "dataset": "1:42",
+    "results": [
+      {
+        "index": 0,
+        "result": "unchanged",
+        "anchor_id": "anc-sda-1-s40",
+        "version_id": "ver-sda-1",
+        "locator": "sec_40",
+        "currentness": {
+          "state": "in_force",
+          "basis": "record",
+          "assessed_at": "2026-10-19",
+          "algorithm": "record-status-1",
+          "reasons": [
+            "Assessed for the whole text from the record; no provision-level events are recorded."
+          ]
+        }
+      },
+      {
+        "index": 1,
+        "result": "unchanged",
+        "anchor_id": "anc-sdr-1-r12",
+        "version_id": "ver-sdr-1",
+        "locator": "reg_12",
+        "currentness": {
+          "state": "not_in_force",
+          "basis": "record",
+          "assessed_at": "2026-10-19",
+          "algorithm": "record-status-1",
+          "reasons": [
+            "The record's legal status is repealed.",
+            "Assessed for the whole text from the record; no provision-level events are recorded."
+          ]
+        }
+      }
+    ]
+  },
+  "check_unchanged": {
+    "schema_version": "oa-check-1",
+    "dataset": "2:0",
+    "results": [
+      {
+        "index": 0,
+        "result": "unchanged",
+        "anchor_id": "anc-sda-1-s40",
+        "version_id": "ver-sda-1",
+        "locator": "sec_40",
+        "currentness": {
+          "state": "in_force",
+          "basis": "record",
+          "assessed_at": "2026-10-19",
+          "algorithm": "record-status-1",
+          "reasons": [
+            "Assessed for the whole text from the record; no provision-level events are recorded."
+          ]
+        }
+      },
+      {
+        "index": 1,
+        "result": "unchanged",
+        "anchor_id": "anc-sdr-1-r12",
+        "version_id": "ver-sdr-1",
+        "locator": "reg_12",
+        "currentness": {
+          "state": "in_force",
+          "basis": "record",
+          "assessed_at": "2026-10-19",
+          "algorithm": "record-status-1",
+          "reasons": [
+            "Assessed for the whole text from the record; no provision-level events are recorded."
+          ]
+        }
+      }
+    ]
+  },
+  "problem_feed_reset": {
+    "type": "https://open.alvary.ai/docs/errors#feed_reset",
+    "title": "Request refused",
+    "status": 409,
+    "detail": "The change feed was reset. Capture a new start=now token, reconcile from a current release, then replay from that token.",
+    "code": "feed_reset",
+    "retryable": false
+  },
+  "problem_replay_window_expired": {
+    "type": "https://open.alvary.ai/docs/errors#replay_window_expired",
+    "title": "Request refused",
+    "status": 410,
+    "detail": "Changes after this position are no longer kept. Reconcile from a current release.",
+    "code": "replay_window_expired",
+    "retryable": false
+  },
+  "problem_stale_cursor": {
+    "type": "https://open.alvary.ai/docs/errors#stale_cursor",
+    "title": "Request refused",
+    "status": 409,
+    "detail": "This cursor expired. Continue from your last resume token.",
+    "code": "stale_cursor",
+    "retryable": false
+  },
+  "problem_rate_limited": {
+    "type": "https://open.alvary.ai/docs/errors#rate_limited",
+    "title": "Request refused",
+    "status": 429,
+    "detail": "Too many requests. Try again after Retry-After seconds.",
+    "code": "rate_limited",
+    "retryable": true
+  },
+  "problem_unavailable": {
+    "type": "https://open.alvary.ai/docs/errors#temporarily_unavailable",
+    "title": "Request refused",
+    "status": 503,
+    "detail": "Try again shortly.",
+    "code": "temporarily_unavailable",
+    "retryable": true
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "name": "never more than three attempts",
+  "covers": [
+    "A request is sent at most three times, whatever Open Alvary answers, and never in a loop.",
+    "Three 503s mean out of reach; three 429s are a refusal (rate_limited), not an outage."
+  ],
+  "start": "2026-10-19T09:00:00+00:00",
+  "steps": [
+    {
+      "do": "sync",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "start": "now"
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$changes_start"
+          }
+        }
+      ]
+    },
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/retrieve"
+          },
+          "response": {
+            "status": 503,
+            "body": "$problem_unavailable",
+            "headers": {
+              "Retry-After": "1"
+            }
+          },
+          "repeat": 3
+        }
+      ],
+      "expect": {
+        "raises": "Unavailable"
+      }
+    },
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/retrieve"
+          },
+          "response": {
+            "status": 429,
+            "body": "$problem_rate_limited",
+            "headers": {
+              "Retry-After": "1"
+            }
+          },
+          "repeat": 3
+        }
+      ],
+      "expect": {
+        "raises": "RateLimited"
+      }
+    },
+    {
+      "do": "check",
+      "items": [
+        {
+          "anchor_id": "anc-sda-1-s40",
+          "span_hash": "0f9bf5fdfd86d6f60f3a5527bcaff7066dcb0e40604986268353bd95bcc312ce"
+        },
+        {
+          "anchor_id": "anc-sdr-1-r12",
+          "span_hash": "0c52012e8b5f30fda79ae72cee5d04881e9833cdc5165ce80bc8ecf8a7edb0cd"
+        }
+      ],
+      "exchanges": [
+        {
+          "request": {
+            "method": "POST",
+            "path": "/currentness"
+          },
+          "response": {
+            "status": 500
+          },
+          "repeat": 3
+        }
+      ],
+      "expect": {
+        "raises": "Unavailable"
+      }
+    },
+    {
+      "do": "sync",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "resume_token": "r1.start"
+            }
+          },
+          "response": {
+            "status": 503,
+            "body": "$problem_unavailable"
+          },
+          "repeat": 3
+        }
+      ],
+      "expect": {
+        "raises": "Unavailable"
+      }
+    }
+  ]
+}
