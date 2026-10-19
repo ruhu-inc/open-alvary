@@ -200,6 +200,20 @@ def test_page_detail_offers_units_flags_and_image(world):
     assert browser.get("/api/documents/ng-unknown/pages/1").status_code == 404
 
 
+def test_a_deployed_collection_shows_its_prepared_page_images_without_the_pdf(tmp_path, monkeypatch):
+    # The workbench upload carries readings and page images, never PDFs (deployment/gcp/workbench.sh).
+    monkeypatch.delenv("ALVARY_REVIEW_COLLECTIONS", raising=False)
+    monkeypatch.setenv("ALVARY_RENDER", "direct")
+    (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(reading()))
+    folder = tmp_path / "review-images" / ACT
+    folder.mkdir(parents=True)
+    (folder / "page-1.jpg").write_bytes(b"\xff\xd8 prepared")
+    library = content.Library(tmp_path)
+    assert library.image(ACT, 1).read_bytes() == b"\xff\xd8 prepared"
+    with pytest.raises(FileNotFoundError):
+        library.image(ACT, 2)  # neither a prepared image nor a PDF to render one from
+
+
 def test_saving_is_versioned_and_a_stale_save_conflicts(world):
     first = signed_in(world, "reviewer@example.org")
     second = signed_in(world, "approver@example.org")

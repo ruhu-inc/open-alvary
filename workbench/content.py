@@ -230,14 +230,18 @@ class Library:
         """A legible page image (150 dpi), rendered once: in the sealed tools container here, or, in
         a deployed workbench whose own container is the sandbox (ALVARY_RENDER=direct), by
         pdftoppm there. Images of a corpus collection's pages are shared by the documents of one
-        source file and kept in the bounded cache."""
-        pdf = self.original(act_id)  # the PDF, fetched first if its collection is in the bucket
+        source file and kept in the bounded cache. A collection in private staging uses the images
+        prepared beside its readings, and needs the PDF only to render one that is missing: its
+        upload to a deployed workbench carries no PDFs."""
         manifest, staging = self._where(act_id)
-        folder = staging / "review-images" / (pdf.stem if manifest.get("_remote") else act_id)
+        pdf = self.original(act_id) if manifest.get("_remote") else None  # fetched from the bucket
+        folder = staging / "review-images" / (pdf.stem if pdf is not None else act_id)
         path = folder / f"page-{page}.jpg"
         if path.exists():
             os.utime(path)
-        elif os.environ.get("ALVARY_RENDER") == "direct":
+            return path
+        pdf = pdf or self.original(act_id)
+        if os.environ.get("ALVARY_RENDER") == "direct":
             folder.mkdir(parents=True, exist_ok=True)
             subprocess.run(
                 ["pdftoppm", "-r", "150", "-jpeg", "-jpegopt", "quality=85", "-singlefile"]
