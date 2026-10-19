@@ -835,7 +835,9 @@
             "subparagraph",
             "schedule",
             "annex",
-            "table"
+            "table",
+            "opinion",
+            "order"
           ],
           "title": "Kind",
           "type": "string"

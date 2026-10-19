@@ -1012,7 +1012,7 @@ FIELDS: dict[str, dict[str, str]] = {
         "parent_id": "The part it sits in, if any.",
         "kind": "What it is: `document`, `preamble`, `contents`, `contents_entry`, `notice`, `title`, `part`, "
         "`chapter`, `division`, `article`, `section`, `subsection`, `definition`, `paragraph`, "
-        "`subparagraph`, `schedule`, `annex` or `table`.",
+        "`subparagraph`, `schedule`, `annex`, `table`, or in a judgment `opinion` or `order`.",
         "locator": "A stable key for it within the text, such as `sec_23__subsec_1`. The same provision keeps "
         "its locator in later versions of the text.",
         "order": "Its position among the parts of the same parent.",

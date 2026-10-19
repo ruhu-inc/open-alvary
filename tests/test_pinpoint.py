@@ -36,10 +36,52 @@ def part(kind, label=None, locator="x"):
         ("Schedule", ("sch:1",)),
         ("para. 3", None),
         ("chapter 4", None),
+        ("[12]", ("para:12",)),
+        ("at [ 12 ]", ("para:12",)),
+        ("op. 2 [4]", ("op:2", "para:4")),
+        ("opinion 1, [4]", ("para:4",)),
+        ("op. 2, para. 4", None),  # worded, it is read only after a neutral citation
     ],
 )
 def test_a_cited_pinpoint_is_read_into_a_key(cited, key):
     assert pinpoint.read(cited) == key
+
+
+@pytest.mark.parametrize(
+    "citation, work, shown, key",
+    [
+        ("[2019] NGSC 4 [12]", "[2019] NGSC 4", "[12]", ("para:12",)),
+        ("[2019] NGSC 4 at [12]", "[2019] NGSC 4", "[12]", ("para:12",)),
+        ("[2019] NGSC 4, para. 12", "[2019] NGSC 4", "para. 12", ("para:12",)),
+        ("[2019] ngsc 4, paras 12", "[2019] ngsc 4", "paras 12", ("para:12",)),
+        ("[2019] NGSC 4, op. 2 [4]", "[2019] NGSC 4", "op. 2 [4]", ("op:2", "para:4")),
+        ("[2020] EWCA Civ 123 at [45]", "[2020] EWCA Civ 123", "[45]", ("para:45",)),
+        ("[2020] EWHC 123 (Ch) [45]", "[2020] EWHC 123 (Ch)", "[45]", ("para:45",)),
+    ],
+)
+def test_a_judgments_paragraph_is_split_from_its_neutral_citation(citation, work, shown, key):
+    assert pinpoint.split(citation) == [(work, shown, key)]
+
+
+def test_a_judgment_is_tried_with_and_without_the_words_before_its_neutral_citation():
+    assert pinpoint.split("Bello v. State [2019] NGSC 4 at [12]") == [
+        ("Bello v. State [2019] NGSC 4", "[12]", ("para:12",)),
+        ("[2019] NGSC 4", "[12]", ("para:12",)),
+    ]
+    assert pinpoint.split("[2019] NGSC 4") == [] and pinpoint.split("[2019] NGSC 4 para") == []
+
+
+def test_a_judgments_paragraph_is_cited_by_its_number_and_read_back_to_the_same_key():
+    lead, dissent = part("opinion", "lead", "op_1"), part("opinion", "dissenting", "op_2")
+    for label in ("[12]", "12.", "12"):
+        key, shown = pinpoint.cite([part("document"), lead, part("paragraph", label, "para_12")], "judgment")
+        assert (key, shown) == (("para:12",), "[12]") and pinpoint.read(shown) == key
+    key, shown = pinpoint.cite([part("document"), dissent, part("paragraph", "[4]", "op_2__para_4")])
+    assert (key, shown) == (("op:2", "para:4"), "op. 2 [4]") and pinpoint.read(shown) == key
+    # An opinion, its orders and a table inside a paragraph are cited by their headings, not numbers.
+    assert pinpoint.cite([part("document"), dissent]) is None
+    assert pinpoint.cite([lead, part("order", None, "order_1")]) is None
+    assert pinpoint.cite([lead, part("paragraph", "[12]", "para_12"), part("table", None, "x")]) is None
 
 
 def test_a_citation_is_split_into_a_work_and_a_pinpoint_in_either_order():

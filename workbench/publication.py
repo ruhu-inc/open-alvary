@@ -13,7 +13,7 @@ from workbench import content, serialize, structure
 
 # Because nobody proofreads, a word doubled while editing would publish unnoticed (TXP-06).
 DOUBLED = re.compile(r"\b(\w{3,})\s+\1\b", re.I)
-SHOWN = ("part", "chapter", "section", "article", "definition", "schedule", "table", "notice")
+SHOWN = tuple("part chapter section article definition schedule table notice opinion order".split())
 
 
 @dataclass
