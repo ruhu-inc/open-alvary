@@ -10,6 +10,7 @@ import hmac
 import html
 import os
 import re
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import parse_qs, quote, urlsplit
 
@@ -37,6 +38,7 @@ from workbench import (
     editorial,
     privileged,
     publication,
+    queue,
     record_view,
     serialize,
 )
@@ -389,6 +391,50 @@ def create_app(
             "names": store.names(
                 {e["actor"] for e in activity} | {r["last"]["actor"] for r in rows if r["last"]}
             ),
+        }
+
+    # Each worked-on document's page tasks, kept until its latest event or details revision changes.
+    task_cache: dict[str, tuple[tuple, list[dict]]] = {}
+
+    @app.get("/api/queue")
+    def work_queue(request: Request, kind: str = "", offset: int = 0, limit: int = 100):
+        """The work waiting across documents (workbench.queue): pages to review, flags to resolve and
+        proposals to review, each with its document, kind, priority and age; optionally of one kind."""
+        auth.current(request, store)
+        activity, saved, began = store.activity_stamps(), store.detail_stamps(), store.activity_began()
+        tasks = []
+        for document in library.documents():
+            stamp = (activity.get(document["id"]), saved.get(details_key(document)))
+            if stamp == (None, None) and document.get("page_count") is not None:
+                tasks.append(queue.not_started({**document, **listed(document)}))
+                continue
+            cached = task_cache.get(document["id"])
+            if cached is None or cached[0] != stamp or stamp == (None, None):
+                now = state(library.act(document["id"]))
+                found = queue.page_tasks(
+                    listed(document), now["readiness"], now["latest"], began.get(document["id"])
+                )
+                cached = task_cache[document["id"]] = (stamp, found)
+            tasks += [{**t, "started": stamp != (None, None)} for t in cached[1]]
+
+        def document_of(act_id: str) -> dict:
+            return listed(library.listed(act_id)) if library.has(act_id) else {"id": act_id, "title": act_id}
+
+        tasks += queue.proposal_tasks(
+            store.legal_event_revisions(), store.instruction_revisions(), document_of
+        )
+        counts = {
+            name: sum(t["kind"] == name for t in tasks)
+            for name in ("review", "flags", "events", "instructions")
+        }
+        chosen = queue.ordered([t for t in tasks if not kind or t["kind"] == kind])
+        limit, offset, moment = max(1, min(limit, 500)), max(0, offset), datetime.now(UTC)
+        return {
+            "total": len(chosen),
+            "offset": offset,
+            "limit": limit,
+            "counts": counts,
+            "tasks": [queue.shown(t, moment) for t in chosen[offset : offset + limit]],
         }
 
     @app.get("/api/documents")

@@ -375,6 +375,12 @@ class Store:
         with self.engine.connect() as db:
             return {key: revision for key, revision in db.execute(query)}
 
+    def activity_began(self) -> dict[str, datetime]:
+        """For each document anyone has worked on, when its first audited event was recorded."""
+        query = select(audit.c.act_id, func.min(audit.c.at)).where(audit.c.act_id.is_not(None))
+        with self.engine.connect() as db:
+            return {act_id: _aware(at) for act_id, at in db.execute(query.group_by(audit.c.act_id))}
+
     def last_event(self, actor: str, action: str) -> dict | None:
         query = (
             select(audit)

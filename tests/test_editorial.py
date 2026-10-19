@@ -221,13 +221,14 @@ def test_an_instruction_is_checked_when_saved_and_a_rejected_one_never_exports(w
     assert exported(approver) == {"instructions": []}
 
 
-def test_events_and_instructions_need_a_signed_in_operator(world):
+def test_events_instructions_and_the_queue_need_a_signed_in_operator(world):
     stranger = client(world, dev=False)
     for path in (
         f"/api/documents/{ACT}/events",
         f"/api/documents/{ACT}/events/export",
         f"/api/documents/{ACT}/instructions",
         f"/api/instructions/export?target={TARGET}",
+        "/api/queue",
     ):
         assert stranger.get(path).status_code == 401
     assert stranger.post(f"/api/documents/{ACT}/events/proposals").status_code == 401
