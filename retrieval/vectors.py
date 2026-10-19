@@ -48,6 +48,7 @@ class Profile:
     document_prompt: str = ""
     window_chars: int = WINDOW_CHARS
     window_overlap: int = WINDOW_OVERLAP
+    request_dims: bool = False  # ask the endpoint for dims (OpenAI "dimensions": Matryoshka truncation)
     test: bool = False
 
     @classmethod
@@ -131,16 +132,18 @@ class HttpEmbedder:
         url = url or os.environ.get("OPEN_ALVARY_EMBEDDER_URL")
         if not url:
             raise LookupError("No embedder: set OPEN_ALVARY_EMBEDDER_URL")
-        headers = {"Authorization": f"Bearer {key or os.environ.get('OPEN_ALVARY_EMBEDDER_KEY', '')}"}
+        key = key or os.environ.get("OPEN_ALVARY_EMBEDDER_KEY")
+        headers = {"Authorization": f"Bearer {key}"} if key else {}  # a local server may need no key
         self.client = httpx.Client(
             base_url=url.rstrip("/"), headers=headers, timeout=TIMEOUT_SECONDS, transport=transport
         )
 
     def embed(self, texts: list[str], *, query: bool) -> list[list[float]]:
         prompt = self.profile.query_prompt if query else self.profile.document_prompt
-        answer = self.client.post(
-            "/embeddings", json={"model": self.profile.model, "input": [prompt + t for t in texts]}
-        )
+        body = {"model": self.profile.model, "input": [prompt + t for t in texts]}
+        if self.profile.request_dims:
+            body["dimensions"] = self.profile.dims
+        answer = self.client.post("/embeddings", json=body)
         answer.raise_for_status()
         data = sorted(answer.json()["data"], key=lambda d: d["index"])
         vectors = [_normalise([float(x) for x in d["embedding"]]) for d in data]

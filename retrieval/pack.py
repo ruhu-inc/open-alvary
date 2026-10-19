@@ -239,15 +239,23 @@ class Retriever:
             arms["definition"] = self._definitions(plan.term, found.rows)
         total = 0
         if "topic" in plan.routes and self.engine is not None:
+            # The same arms as the system of record's below, with the same words.
+            terms = text_index.query_terms(self.conn, query)
             try:
-                arms["lexical"] = [_hit(r) for r in self.engine.lexical(query, filters, ARM_LIMIT)]
+                found = self.engine.lexical(terms, filters, ARM_LIMIT)
+                arms["lexical"], total = [_hit(r) for r in found], found.total
+                if found.total < SIDE_LIMIT and "citation" not in plan.routes:
+                    relaxed = self.engine.lexical(terms, filters, ARM_LIMIT, every=False)
+                    arms["lexical_any"] = [_hit(r) for r in relaxed]
                 arms["document"] = [
                     _hit(r, "document")
-                    for r in self.engine.lexical(query, filters, SIDE_LIMIT, unit_kind="document")
+                    for r in self.engine.lexical(terms, filters, SIDE_LIMIT, unit_kind="document")
                 ]
             except Exception:  # the system of record's own search carries the request
                 degraded.append("engine:unavailable")
-                arms.pop("lexical", None)
+                for arm in ("lexical", "lexical_any", "document"):
+                    arms.pop(arm, None)
+                total = 0
                 self.engine = None
         if "topic" in plan.routes and "lexical" not in arms:
             found = text_index.search(self.conn, query, filters, limit=ARM_LIMIT, offset=0)

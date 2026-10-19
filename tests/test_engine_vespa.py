@@ -1,6 +1,6 @@
 """RSV-04 and RSV-10 on the dedicated engine (Vespa): the projector makes the engine hold exactly the
 public units and catches up from the change log; lexical, document and dense searches run in the
-engine with the hard filters in the query and report their ranking features; a generation's vectors
+engine with the section index's words and match semantics and the hard filters in the query and report their ranking features; a generation's vectors
 are a field of the units, validated and activated; a withdrawal leaves the engine at the next sync;
 the pack degrades to the system of record when the engine is down.
 
@@ -82,6 +82,13 @@ def test_the_engine_holds_exactly_the_public_units_and_follows_the_change_log(st
     }  # fmt: skip
     named = pack(store, engine, "Example Act")
     assert any(u.unit == "document" for u in named.evidence)
+    # The engine matches the words the section index matches: all of them first, any of them when few
+    # units have all; a stopword alone matches nothing.
+    question = pack(store, engine, "when is a loan repaid from wages")
+    assert question.evidence and "lexical_any" in question.evidence[0].ranking.arms
+    assert "lexical" not in question.evidence[0].ranking.arms
+    assert pack(store, engine, "in the of").evidence == ()
+    assert not any(u.unit == "document" for u in pack(store, engine, "repaid from salary").evidence)
     withdraw(store)
     assert projector.sync(store.engine, engine)["removed"] > 0
     assert engine.visit(fields="version_id") == []

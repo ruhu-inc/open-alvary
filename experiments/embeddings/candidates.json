@@ -1,0 +1,17 @@
+{
+  "purpose": "EMB-01 shortlist for the development screen (phase 1), each pinned to the Hugging Face commit served. Qwen3-Embedding-8B is truncated to 2,048 of its 4,096 dimensions (Matryoshka; request_dims), within the profile limit of 4,000. EmbeddingGemma is excluded until its use-policy terms have a rights disposition (EMB-01). Licences are as the model cards state them, not a rights review.",
+  "observed": "2026-10-19",
+  "embedders": [
+    {"id": "qwen3-embedding-0.6b", "model": "Qwen/Qwen3-Embedding-0.6B", "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3", "dims": 1024, "licence": "apache-2.0",
+     "query_prompt": "Instruct: Given a legal question, retrieve the provisions of law that answer it\nQuery: ", "document_prompt": "", "port": 28101},
+    {"id": "bge-m3", "model": "BAAI/bge-m3", "revision": "5617a9f61b028005a4858fdac845db406aefb181", "dims": 1024, "licence": "mit",
+     "query_prompt": "", "document_prompt": "", "port": 28102},
+    {"id": "afrie5-large-instruct", "model": "McGill-NLP/AfriE5-Large-instruct", "revision": "0d7a51373bacc776c5f41696116c6c9100dcde72", "dims": 1024, "licence": "mit",
+     "query_prompt": "Instruct: Given a legal question, retrieve the provisions of law that answer it\nQuery: ", "document_prompt": "", "port": 28103},
+    {"id": "qwen3-embedding-8b", "model": "Qwen/Qwen3-Embedding-8B", "revision": "1d8ad4ca9b3dd8059ad90a75d4983776a23d44af", "dims": 2048, "request_dims": true, "licence": "apache-2.0",
+     "query_prompt": "Instruct: Given a legal question, retrieve the provisions of law that answer it\nQuery: ", "document_prompt": "", "port": 28104}
+  ],
+  "rerankers": [
+    {"id": "bge-reranker-v2-m3", "model": "BAAI/bge-reranker-v2-m3", "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e", "licence": "apache-2.0", "port": 28201}
+  ]
+}

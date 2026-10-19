@@ -33,6 +33,7 @@ import httpx
 
 LEXICAL = "1.0 * bm25(headings) + 0.4 * bm25(words) + 0.2 * bm25(title) + 0.1 * bm25(identifiers)"
 FIELDS = ("headings", "words", "title", "identifiers")
+LOCALES = {"english": "en", "french": "fr"}  # the language each analysis stems in; simple has none
 TIMEOUT_SECONDS = 10
 EPOCH = date(1970, 1, 1)
 UNKNOWN_DAY = -1
@@ -321,31 +322,48 @@ class Engine:
             )
         return " and ".join(clauses)
 
-    def _search(self, yql: str, body: dict, limit: int) -> list[dict]:
+    def _search(self, yql: str, body: dict, limit: int) -> "Hits":
         answer = self.query.post(
             "/search/", json={"yql": yql, "hits": limit, "timeout": f"{TIMEOUT_SECONDS}s", **body}
         )
         answer.raise_for_status()
-        children = answer.json().get("root", {}).get("children", [])
-        return [
+        root = answer.json().get("root", {})
+        found = Hits(
             {
                 **hit["fields"],
                 "score": hit.get("relevance"),
                 "features": hit["fields"].get("matchfeatures", {}),
             }
-            for hit in children
+            for hit in root.get("children", [])
             if "fields" in hit
-        ]
-
-    def lexical(self, query: str, filters, limit: int, unit_kind: str = "unit") -> list[dict]:
-        """Units (or document units) matching any of the query's words (weakAnd, so a question written as
-        a sentence still finds its provision, rarer words weighing more by BM25), by the lexical profile."""
-        where = " and ".join(filter(None, (self.where(filters), f'unit_kind contains "{unit_kind}"')))
-        yql = "select * from unit where ({targetHits: 1000}weakAnd(userInput(@q)))" + (
-            f" and {where}" if where else ""
         )
-        locale = (filters.language or "en").split("-")[0]
-        return self._search(yql, {"q": query, "ranking": "lexical", "model.locale": locale}, limit)
+        found.total = int(root.get("fields", {}).get("totalCount", len(found)))
+        return found
+
+    def lexical(
+        self, terms: dict[str, str], filters, limit: int, unit_kind: str = "unit", *, every: bool = True
+    ) -> "Hits":
+        """Units (or document units) matching the query, by the lexical profile. ``terms`` holds, for each
+        analysis (the section index's configs), the query's words that analysis indexes (its stopwords
+        removed: api.text_index.query_terms); a unit matches through its own analysis, as in PostgreSQL.
+        With ``every``, a unit must hold all of them; otherwise any (weakAnd, rarer words weighing more by
+        BM25), for a question written as a sentence."""
+        branches, params = [], {}
+        for n, (config, words) in enumerate(sorted(terms.items())):
+            if not words.strip():
+                continue
+            annotations = ['grammar: "all"'] if every else ['grammar: "weakAnd"', "targetHits: 1000"]
+            if config in LOCALES:
+                annotations.append(f'language: "{LOCALES[config]}"')
+            branches.append(
+                f'(config contains "{config}" and ({{{", ".join(annotations)}}}userInput(@q{n})))'
+            )
+            params[f"q{n}"] = words
+        if not branches:
+            return Hits()
+        where = " and ".join(filter(None, (self.where(filters), f'unit_kind contains "{unit_kind}"')))
+        yql = f"select * from unit where ({' or '.join(branches)})" + (f" and {where}" if where else "")
+        return self._search(yql, params | {"ranking": "lexical"}, limit)
 
     def dense(self, vector: list[float], vectors: str, filters, limit: int) -> list[dict]:
         """Units whose best window is nearest the query vector, within the filters (HNSW, filtered)."""
@@ -354,6 +372,12 @@ class Engine:
             f" and {where}" if where else ""
         )
         return self._search(yql, {"ranking": f"dense_{vectors}", "input.query(q)": vector}, limit)
+
+
+class Hits(list):
+    """Hits, best first, and how many matched (Vespa's totalCount)."""
+
+    total: int = 0
 
 
 def document(row: dict, words: str, headings: str, title: str, identifiers: str) -> dict:
