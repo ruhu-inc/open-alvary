@@ -36,7 +36,11 @@ export const CODES: [number, string, string][] = [
     "The key or token is unknown, revoked or expired, or was issued for another resource. Create a new key in the console.",
   ],
   [403, "insufficient_scope", "The token does not include corpus:read. Connect the app again."],
-  [403, "entitlement_required", "The organisation has no access. Ask for it in the console."],
+  [
+    403,
+    "entitlement_required",
+    "The organisation has no access, or its access does not include what was asked for, such as bulk releases with full text. Ask for access in the console; bulk releases are granted by agreement.",
+  ],
   [
     403,
     "entitlement_lapsed",

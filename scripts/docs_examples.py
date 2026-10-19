@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 
-from accounts.store import TIERS
+from accounts.store import listed_plans
 from api.mcp import TOOLS
 from api.store import ROOT, Store, metadata
 from api.v1 import create_v1_app
@@ -39,6 +39,10 @@ REQUESTS: dict[str, tuple[dict[str, str], list[tuple[str, str]]]] = {
     "list_jurisdictions": ({}, []),
     "get_coverage": ({}, []),
     "list_releases": ({}, []),
+    "get_bulk_file": (
+        {"release_id": "2026-10-05", "jurisdiction": "ng", "mode": "corpus", "filename": "manifest.json"},
+        [],
+    ),
     "list_plans": ({}, []),
     "get_quota_policy": ({}, []),
     "list_changes": ({}, [("jurisdiction", "ng"), ("limit", "10")]),
@@ -120,9 +124,9 @@ def main() -> None:
     metadata.create_all(engine)
     store = Store(engine)
     store.save(corpus)
-    plans = [t for t in json.loads(TIERS.read_text()) if t.get("listing", {}).get("action")]
+    plans = listed_plans()
     spec = json.loads((DATA / "openapi.json").read_text())
-    paths = {methods["get"]["operationId"]: path for path, methods in spec["paths"].items()}
+    paths = {next(iter(methods.values()))["operationId"]: path for path, methods in spec["paths"].items()}
     client = TestClient(create_v1_app(store, ROOT / "releases", lambda: plans))
     examples: dict[str, dict] = {}
     for operation, (values, query) in REQUESTS.items():

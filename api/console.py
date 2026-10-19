@@ -707,7 +707,9 @@ def create_console_app(
     @app.get("/api/v1/tiers")
     def tiers(request: Request):
         guard(request)
-        return {"tiers": accounts.tiers(published_only=False)}
+        # The published plans only: plans granted by agreement (pilot, partner, sovereign) are never
+        # listed; an organisation holding one sees its name with its access.
+        return {"tiers": accounts.tiers(published_only=True)}
 
     @app.get("/api/v1/countries")
     def country_list(request: Request):

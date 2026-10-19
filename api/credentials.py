@@ -46,6 +46,7 @@ GRANT_CLAIM = "https://open.alvary.ai/grant"
 STATUS = {
     "invalid_input": 400,
     "unavailable": 404,
+    "withdrawn": 410,
     "result_too_large": 413,
     "credential_not_accepted": 400,
     "credential_required": 401,
@@ -76,8 +77,17 @@ DETAIL = {
     "temporarily_unavailable": "Access cannot be checked right now. Try again shortly.",
     "credential_not_accepted": "Send the key in the Authorization header, never in the address.",
     "unavailable": "There is no such record, or it is not public.",
+    "withdrawn": "This release was withdrawn and is no longer served. Use the latest release.",
     "result_too_large": "The answer would be larger than one response may be.",
 }
+
+
+# What a refusal says when the plan does not include the class asked for.
+NOT_INCLUDED = {
+    "bulk": "Your organisation's access does not include bulk releases with full text. They are granted "
+    "by agreement: write to the address on https://open.alvary.ai/docs/plans.",
+}
+NOT_INCLUDED_DEFAULT = "Your organisation's plan does not include this. See the console."
 
 
 # MCP carries the same codes as a JSON-RPC error (agent-access application numbers), at the same
@@ -223,6 +233,9 @@ class GateConfig:
     grant_resource: str  # "api" or "mcp", as consent records it
     metadata_url: str  # this resource's protected-resource metadata (RFC 9728)
     public_paths: frozenset[str] = frozenset()
+    # Paths of another class, by prefix: (("/bulk/", "bulk"),) makes bulk downloads need a tier that
+    # includes bulk, and counts them as bulk.
+    classes: tuple[tuple[str, str], ...] = ()
     global_concurrency: int = 512
     lease_seconds: int = 60
     jsonrpc: bool = False  # MCP: refusals as JSON-RPC errors
@@ -324,12 +337,16 @@ class CredentialGate:
                 scope, receive, send
             )
         organisation, credential = result["organisation"], result["credential"]
-        usage = {"organisation": organisation, "credential": credential, "class": self.config.resource_class}
-        if self.config.resource_class not in (result.get("tier") or {}).get("includes", []):
+        resource_class = next(
+            (name for prefix, name in self.config.classes if path.startswith(prefix)),
+            self.config.resource_class,
+        )
+        usage = {"organisation": organisation, "credential": credential, "class": resource_class}
+        if resource_class not in (result.get("tier") or {}).get("includes", []):
             return await self._refuse(
                 "entitlement_required",
                 request_id,
-                detail="Your organisation's plan does not include this. See the console.",
+                detail=NOT_INCLUDED.get(resource_class, NOT_INCLUDED_DEFAULT),
             )(scope, receive, send)
         lease = None
         if self.admission is not None:
@@ -425,6 +442,10 @@ class CredentialGate:
                     again = {"ok": False, "code": "temporarily_unavailable"}
                 if not again.get("ok"):
                     await refuse_inside(again.get("code", "invalid_credentials"))
+                    return
+                if resource_class not in (again.get("tier") or {}).get("includes", []):
+                    detail = NOT_INCLUDED.get(resource_class, NOT_INCLUDED_DEFAULT)
+                    await refuse_inside("entitlement_required", detail=detail)
                     return
                 if not await reserve(message):
                     return

@@ -431,11 +431,18 @@ def test_invitations_and_access_requests_send_mail_after_the_change(console):
 
 def test_a_plan_request_names_the_plan_in_the_mail_and_the_tiers_list_carries_listings(console):
     accounts, fake, _ = console
-    accounts.set_tiers([TIER, TIER | {"id": "developer", "name": "Developer"}])
+    accounts.set_tiers(
+        [
+            TIER,
+            TIER | {"id": "developer", "name": "Developer"},
+            TIER | {"id": "partner", "name": "Partner", "published": False},
+        ]
+    )
     mailer = RecordingMailer()
     browser = client(create_console_app(accounts, app_provider(fake), mailer=mailer))
     organisation, headers, _ = onboard(browser, fake)
     tiers = browser.get("/api/v1/tiers").json()["tiers"]
+    assert "partner" not in {t["id"] for t in tiers}  # granted by agreement, never listed
     developer = next(t for t in tiers if t["id"] == "developer")
     assert developer["listing"]["action"] == "upgrade" and developer["listing"]["for"]
     ask = {

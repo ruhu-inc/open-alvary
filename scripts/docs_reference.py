@@ -14,7 +14,7 @@ from pathlib import Path
 
 from sqlalchemy import create_engine
 
-from accounts.store import TIERS
+from accounts.store import listed_plans
 from api.mcp import TOOLS
 from api.store import ROOT, Store
 from api.v1 import create_v1_app
@@ -32,13 +32,8 @@ def documents() -> dict[str, str]:
     return {
         "openapi.json": json.dumps(spec, indent=2, ensure_ascii=False) + "\n",
         "mcp-tools.json": json.dumps(TOOLS, indent=2, ensure_ascii=False) + "\n",
-        # The plans the console lists (those with a listing action), as /tiers answers them.
-        "plans.json": json.dumps(
-            [t for t in json.loads(TIERS.read_text()) if t.get("listing", {}).get("action")],
-            indent=2,
-            ensure_ascii=False,
-        )
-        + "\n",
+        # The plans the console lists (published, with a listing action), as /tiers answers them.
+        "plans.json": json.dumps(listed_plans(), indent=2, ensure_ascii=False) + "\n",
     }
 
 

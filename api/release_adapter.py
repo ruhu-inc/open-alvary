@@ -21,6 +21,16 @@ class ReleaseWithdrawn(ValueError):
     pass
 
 
+class BulkRequired(ReleaseMissing):
+    """The release holds full text: only an organisation whose access includes bulk may download it."""
+
+
+BULK_ELSEWHERE = (
+    "Releases with full text are not public downloads. Organisations whose access includes bulk "
+    "releases download them from /api/v1/bulk with a key."
+)
+
+
 JURISDICTION = re.compile(r"[a-z0-9-]{2,30}")
 MODES = {"corpus", "metadata"}
 
@@ -49,8 +59,9 @@ def holds_text(manifest: dict) -> bool:
 
 class LegacyReleases:
     """Release listing and files. A release holding full text is neither listed nor served unless
-    bulk_text is set: a full-text download cannot be taken back, and who may take bulk text is the
-    owner's decision when the first texts are cleared (D25(5)). Metadata releases stay public."""
+    bulk_text is set: a full-text download cannot be taken back, so bulk text goes only to
+    organisations whose access includes bulk (owner direction, 2026-10-19), through REST v1's /bulk
+    route. Catalogue metadata releases stay public and keyless at /downloads."""
 
     def __init__(self, store: Store, root: Path, bulk_text: bool = False):
         self.store = store
@@ -83,7 +94,7 @@ class LegacyReleases:
         if not manifest.is_file():
             raise ReleaseMissing()
         if holds_text(json.loads(manifest.read_text())) and not self.bulk_text:
-            raise ReleaseMissing()  # as if absent: bulk text is not offered (D25(5))
+            raise BulkRequired()  # missing to anyone without bulk access
         if not release_available(directory, self.store.load()):
             raise ReleaseWithdrawn("Release withdrawn or invalid; consult the latest release")
         allowed = set(json.loads(manifest.read_text())["files"]) | {"manifest.json"}

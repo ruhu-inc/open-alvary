@@ -132,11 +132,19 @@ class CheckedText(CheckedResponse):
 
 
 class CheckedFileResponse(FileResponse):
-    """Bulk release file (outside interactive byte buckets): recheck availability before sending."""
+    """A release file: recheck availability before sending. It charges no bytes itself; behind the
+    credential gate (REST v1's /bulk), the gate charges them to the organisation's data a day."""
 
-    def __init__(self, path, recheck: Callable[[], bool], **kwargs):
+    def __init__(
+        self,
+        path,
+        recheck: Callable[[], bool],
+        refusal: Callable[[int, str], Response] | None = None,
+        **kwargs,
+    ):
         super().__init__(path, **kwargs)
         self.recheck = recheck
+        self.refusal = refusal  # the interface's own refusal shape (REST v1: a problem document)
 
     async def __call__(self, scope, receive, send):
         try:
@@ -152,6 +160,8 @@ class CheckedFileResponse(FileResponse):
                     "Release withdrawn or invalid; consult the latest release",
                 )
             )
+            if self.refusal is not None:
+                return await self.refusal(status, detail)(scope, receive, send)
             body = json.dumps({"detail": detail}).encode()
             await send(
                 {

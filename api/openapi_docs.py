@@ -331,9 +331,34 @@ OPERATIONS: dict[str, dict] = {
         "tag": "Releases",
         "summary": "List data releases",
         "description": "The versioned data releases still available: their scope, files and checksums. "
-        "Download a file from `download_base` + `/` + its name; no key is needed for downloads.",
+        "Download a file from `download_base` + `/` + its name. Catalogue releases download from "
+        "`/downloads/…` with no key. Releases with full text are listed only when your organisation's "
+        "access includes bulk releases, for the countries of its plan, and download from `/api/v1/bulk/…` "
+        "with your key.",
         "errors": {},
         "answer": {"type": "array", "items": {"$ref": "#/components/schemas/Release"}},
+    },
+    "/bulk/{release_id}/{jurisdiction}/{mode}/{filename}": {
+        "operationId": "get_bulk_file",
+        "tag": "Releases",
+        "summary": "Download a bulk release file",
+        "description": "One file of a release, exactly as its manifest's SHA-256 says, for organisations "
+        "whose access includes bulk releases (granted by agreement, not a listed plan). Releases with "
+        "full text download only here, and only for the countries of your plan. Each file is checked "
+        "against the current catalogue just before it is sent: a release with a withdrawn or changed "
+        "record is no longer served, so download a newer one. Downloads count as bulk use and draw on "
+        "your organisation's data a day.",
+        "path": {
+            "release_id": "The release's ID, such as `2026-10-05`.",
+            "jurisdiction": "The release's jurisdiction ID, such as `ng`.",
+            "mode": "`corpus` (records with their cleared texts) or `metadata` (records only).",
+            "filename": "A file the manifest lists, such as `versions.jsonl`, or `manifest.json`.",
+        },
+        "errors": {
+            "404": "There is no such release or file (`unavailable`).",
+            "410": "The release was withdrawn: a record in it changed or stopped being public (`withdrawn`).",
+        },
+        "answer": ("application/octet-stream", {"type": "string", "format": "binary"}),
     },
     "/tiers": {
         "operationId": "list_plans",
@@ -673,7 +698,11 @@ SCHEMAS: dict[str, dict] = {
         "type": "object",
         "description": "A release's manifest.",
         "properties": {
-            "download_base": {"type": S, "description": "Where its files are; append `/` and a file name."},
+            "download_base": {
+                "type": S,
+                "description": "Where its files are; append `/` and a file name. `/downloads/…` needs no "
+                "key; `/api/v1/bulk/…` (releases with full text) needs your key.",
+            },
             "files": {"type": "object", "description": "Its files, with their SHA-256 checksums."},
         },
         "additionalProperties": True,

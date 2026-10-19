@@ -21,6 +21,16 @@ from accounts.ids import new_id, valid
 from rights.database import PolicyNamespace
 
 TIERS = Path(__file__).with_name("tiers.json")
+
+
+def listed_plans() -> list[dict]:
+    """The plans in accounts/tiers.json that people may see and ask for: published, with a listing
+    action. Plans granted only by agreement (pilot, partner, sovereign) are never listed."""
+    return [
+        t for t in json.loads(TIERS.read_text()) if t.get("published") and t.get("listing", {}).get("action")
+    ]
+
+
 COUNTRY = re.compile(r"^[a-z]{2}$")  # a plan's countries: ISO 3166-1 alpha-2, lower case
 COUNTRY_CHANGE_DAYS = 30
 

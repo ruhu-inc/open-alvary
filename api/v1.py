@@ -5,6 +5,11 @@ The same response shapes as today's read routes (API-01–06), behind the creden
 rate (api.reach); a search or listing without a jurisdiction covers the plan's. Public without a
 credential, and open to any origin without credentials: the OpenAPI document, the quota policy and
 the tier catalogue. Data routes send no CORS headers: keys never belong in a browser (N18).
+
+Releases with full text download only from /bulk, in the gate's bulk class: the organisation's access
+must include bulk and the release's country must be within its plan (MAC-06; owner direction,
+2026-10-19: bulk text for the sovereign tier only). Catalogue metadata releases stay keyless at
+/downloads.
 """
 
 import hashlib
@@ -23,11 +28,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from api import text_index
 from api.admission import AdmissionUnavailable
 from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable
-from api.credentials import problem
-from api.emission import MAX_SINGLE_RESPONSE_BYTES, CheckedResponse, CheckedText
+from api.credentials import NOT_INCLUDED, problem
+from api.emission import MAX_SINGLE_RESPONSE_BYTES, CheckedFileResponse, CheckedResponse, CheckedText
 from api.openapi_docs import describe
 from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
-from api.release_adapter import LegacyReleases
+from api.release_adapter import LegacyReleases, ReleaseMissing, ReleaseWithdrawn, holds_text
 from api.repositories import LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import Store, check_legacy_authority
 from changes.routes import create_router as create_changes_router
@@ -57,6 +62,8 @@ from schema.public import (
 )
 
 PUBLIC_PATHS = frozenset({"/openapi.json", "/quota-policy", "/tiers"})
+# Paths in another class of the credential gate: bulk downloads need a plan that includes bulk.
+CLASSES = (("/bulk/", "bulk"),)
 DocumentType = Literal["constitution", "act", "regulation", "judgment", "gazette", "guidance", "other"]
 # A BCP 47 language tag, such as en, fr or en-NG.
 LANGUAGE = Query(None, min_length=2, max_length=35, pattern=r"^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$")
@@ -174,9 +181,9 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
             "note": (
                 "Each organisation's access tier sets its requests a minute, burst, concurrent requests and "
                 "data a day (bytes_per_day; see /tiers), shared by every key and app of the organisation "
-                "across REST and MCP. One key or app may use at most half the organisation's concurrent "
-                "requests. Data a day refills continuously: a response that would go over it is refused. "
-                "A refused request answers 429 with Retry-After."
+                "across REST, MCP and bulk downloads. One key or app may use at most half the organisation's "
+                "concurrent requests. Data a day refills continuously: a response that would go over it is "
+                "refused. A refused request answers 429 with Retry-After."
             ),
         }
 
@@ -488,13 +495,53 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
         check_source(request, service, source_id)
         return service.rights_history(source_id)
 
+    def bulk(request: Request) -> bool:
+        """Whether the organisation's access includes bulk; never without the gate's word for it."""
+        tier = getattr(request.state, "access", {}).get("tier") or {}
+        return "bulk" in (tier.get("includes") or ())
+
     @app.get("/releases")
     def release_listing(request: Request):
-        # Files download from /downloads on either domain (as the website's listing says), keyless.
-        listing = LegacyReleases(store, releases).listing()
-        for manifest in listing:
-            manifest["download_base"] = "/downloads" + manifest["download_base"].removeprefix("/releases")
+        # Metadata releases download from /downloads on either domain (as the website's listing says),
+        # keyless. Releases with full text are listed only to organisations with bulk access, for the
+        # countries of their plan, and download from /bulk.
+        plan = reach(request)
+        listing = []
+        for manifest in LegacyReleases(store, releases, bulk_text=bulk(request)).listing():
+            text = holds_text(manifest)
+            if text and not plan.covers(manifest["jurisdiction"]):
+                continue
+            where = "/api/v1/bulk" if text else "/downloads"
+            manifest["download_base"] = where + manifest["download_base"].removeprefix("/releases")
+            listing.append(manifest)
         return listing
+
+    @app.get("/bulk/{release_id}/{jurisdiction}/{mode}/{filename}")
+    def bulk_file(request: Request, release_id: str, jurisdiction: str, mode: str, filename: str):
+        if not bulk(request):
+            return problem("entitlement_required", request_id(request), detail=NOT_INCLUDED["bulk"])
+        if not reach(request).covers(jurisdiction):
+            return problem("jurisdiction_not_included", request_id(request))
+        files = LegacyReleases(store, releases, bulk_text=True)
+        try:
+            path = files.file(release_id, jurisdiction, mode, filename)
+        except ReleaseMissing:
+            return problem("unavailable", request_id(request))
+        except ReleaseWithdrawn:
+            return problem("withdrawn", request_id(request))
+
+        def recheck() -> bool:
+            """Immediately before the first byte: the release is still current (REL-01)."""
+            try:
+                files.file(release_id, jurisdiction, mode, filename)
+            except (ReleaseMissing, ReleaseWithdrawn):
+                return False
+            return True
+
+        def refusal(status: int, detail: str):
+            return problem("withdrawn" if status == 410 else "temporarily_unavailable", request_id(request))
+
+        return CheckedFileResponse(path, recheck, refusal, filename=filename)
 
     def openapi():
         if app.openapi_schema is None:

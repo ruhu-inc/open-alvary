@@ -29,7 +29,7 @@ from api.admission import AdmissionConfig, AdmissionMiddleware, AdmissionStore
 from api.catalogue import FACETS, SORTS, InvalidSearch, LegacyCatalogue, SourceUnavailable
 from api.emission import CheckedFileResponse, CheckedResponse
 from api.project import project_info
-from api.release_adapter import LegacyReleases, ReleaseMissing, ReleaseWithdrawn
+from api.release_adapter import BULK_ELSEWHERE, BulkRequired, LegacyReleases, ReleaseMissing, ReleaseWithdrawn
 from api.repositories import EDGE_ORDER, LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import Store, check_legacy_authority
 from changes.routes import create_router as create_changes_router
@@ -355,6 +355,9 @@ def create_downloads_app(
         releases = LegacyReleases(store, release_root)
         try:
             path = releases.file(release_id, jurisdiction, mode, filename)
+        except BulkRequired:
+            # Never served here, keyless: a full-text release is for organisations with bulk access.
+            raise SiteProblem(404, "unavailable", BULK_ELSEWHERE) from None
         except ReleaseMissing:
             raise SiteProblem(404, "unavailable", "No such release file") from None
         except ReleaseWithdrawn as exception:

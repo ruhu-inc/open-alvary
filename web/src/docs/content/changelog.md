@@ -9,6 +9,7 @@ Changes that affect how you use the API and the MCP server, newest first.
 
 - [Retrieve evidence](/docs/api/retrieve-evidence) (`GET /api/v1/retrieve`, MCP `retrieve_evidence`): ranked parts of published texts for a question, each with its exact words, citation, hashes, currentness, definitions and why it ranks there. See [Retrieve evidence for AI answers](/docs/retrieval).
 - [Check cited parts](/docs/api/check-currentness) (`POST /api/v1/currentness`, MCP `check_currentness`): whether cited parts are still published with the same words, and whether a newer text exists.
+- [Download a bulk release file](/docs/api/get-bulk-file) (`GET /api/v1/bulk/…`): releases with full text, with a key, for organisations whose access includes bulk releases (granted by agreement). [List data releases](/docs/api/list-releases) lists them only to those organisations, for their plan's countries. Catalogue releases still download from `/downloads/…` with no key.
 
 ## 17 October 2026
 
