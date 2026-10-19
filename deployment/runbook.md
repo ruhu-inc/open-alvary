@@ -201,7 +201,9 @@ verifies them all: `python -m accounts.seals seal`, then `verify`. A seal covers
 (count, first and last sequence numbers, a SHA-256 over each entry) and the previous day's seal, so
 a changed, removed or back-dated entry, or a missing day, fails the check. Seals are kept in
 `accounts.audit_seal` (add-only, never purged) and each is logged as an `audit seal` line, which the
-`audit-seals` log bucket keeps for 800 days (`public_service.sh audit_seals`).
+`audit-seals` log bucket keeps for 800 days (`public_service.sh audit_seals`). On Azure the seal step
+also writes each seal not yet copied to the immutable `audit-seals` container named by
+`ALVARY_AUDIT_SEALS` (`<day>.json`, 800 days; deployment/azure/README.md).
 
 - A failed check prints an ERROR line `audit seal check` naming the days and problems
   (`entries_changed`, `missing_seal`, `chain_broken`, `seal_altered`, `entries_before_first_seal`,

@@ -26,7 +26,7 @@ other projects are (`open-alvary-<staging|prod>-sc-…`). It shares nothing with
 | Part | On Google Cloud | On Azure |
 |---|---|---|
 | Public service: website, docs, REST v1, MCP and the console | Cloud Run `open-alvary-public` | Container App `open-alvary-<env>-sc-public` |
-| Its jobs (migrations, worker, daily) | Cloud Run jobs + Scheduler | Container Apps jobs (`jobs.tf`) |
+| Its jobs (migrations, worker, daily at 03:15 UTC) | Cloud Run jobs + Scheduler | Container Apps jobs (`jobs.tf`) |
 | Retrieval job, every minute: section index, engine sync, embeddings | (not deployed) | Container Apps job `…-retrieval` (`python -m retrieval.worker run`) |
 | Search engine | (not deployed) | Vespa on one VM, private address (`engine.tf`) |
 | Embedder and reranker (D29: Qwen3-Embedding-0.6B, bge-reranker-v2-m3) | (not deployed) | One T4 GPU VM, text-embeddings-inference (`inference.tf`) |
@@ -35,10 +35,11 @@ other projects are (`open-alvary-<staging|prod>-sc-…`). It shares nothing with
 | Workbench | Cloud Run behind IAP, own Cloud SQL | Container App behind Entra ID sign-in, own server (`workbench.tf`) |
 | Corpus bucket (staged originals, readings) | `gs://open-alvary-corpus` | Storage account `openalvary<env>sccorp…` |
 | Write-once archive (CPR-05) | Locked-retention bucket | Storage container with a time-based immutability policy |
+| Audit seals' copy outside the database (MAC-13.7), 800 days | Log bucket `audit-seals` and its sink | Container `audit-seals` in the archive account, immutable; the daily job writes each seal there (`storage.tf`) |
 | Ingestion jobs | Cloud Run jobs | Container Apps jobs; reading stays on Google Document AI (`ingestion.tf`) |
 | Secrets | Secret Manager | Key Vault; values copied, never regenerated |
 | Images | Cloud Build + Artifact Registry | `az acr build` from `git archive` + Container Registry |
-| Logs and alerts | Cloud Logging and Monitoring | Log Analytics, Application Insights, an availability test, the budget |
+| Logs and alerts | Cloud Logging and Monitoring | Log Analytics, Application Insights, an availability test, a failed-job alert, the budget (`monitoring.tf`) |
 
 Unchanged: Auth0 (sign-in), Resend (email), DNS (records change at switchover), GitHub.
 
@@ -167,6 +168,13 @@ Each phase ends with a check, and nothing serves the public until phase 6.
      appends Front Door's). Compare what the service records with `X-Azure-ClientIP` before the
      website's throttle and admission depend on it.
    - Check: a request to the Container App's own address is refused (403 `wrong_address`).
+   - Check, once `accounts_enabled` is on: a failed job run emails the operator. Start the worker
+     once with its command replaced by one that fails (`az containerapp job start` with `--image`
+     set to `public_image`, `--container-name worker` and `--command false`); the email should
+     come within 15 minutes. If none does, find the run's rows in `ContainerAppSystemLogs_CL` and
+     correct the reasons or job column in `monitoring.tf`'s `job_failed` query.
+   - Check, after the first daily run with accounts on: `audit-seals` holds a `<day>.json` for every
+     seal in `accounts.audit_seal`, and the run's `audit seals` line counts what it copied.
 4. **Workbench.** The storage adapter (`az://`) and Entra ID sign-in. Set `workbench_image`,
    `workbench_domain` and `workbench_entra_client_id`, then apply. Check: an operator signs in and
    reviews a page.
@@ -231,6 +239,11 @@ After phase 5's archive copy checks out, lock the policy: set `locked = true` in
 can only be extended, and no one, including the owner, can delete an archived original before it
 ends. Originals with personal data go to the corpus account instead (CPR-05: lawful erasure stays
 possible).
+
+The audit seals' container is locked the same way, once the first seals are in it:
+`azurerm_storage_container_immutability_policy.audit_seals`, 800 days, as Google Cloud's
+`audit-seals` log bucket. The first daily run on Azure also writes every seal the restored database
+holds, so the copy covers the chain from its first day.
 
 ## Files
 

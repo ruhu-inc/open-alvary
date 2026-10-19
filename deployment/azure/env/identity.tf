@@ -1,6 +1,6 @@
 # One identity per workload, each with only what it needs: the public service (and its jobs) reads
-# its secrets and pulls its image; the workbench reads its secrets and the corpus; ingestion writes
-# the corpus and adds to the archive.
+# its secrets, pulls its image and adds the audit seals; the workbench reads its secrets and the
+# corpus; ingestion writes the corpus and adds to the archive.
 
 resource "azurerm_user_assigned_identity" "public" {
   name                = "${local.name_prefix}-public-id"
@@ -63,6 +63,13 @@ resource "azurerm_role_assignment" "archive_write" {
   scope                = azurerm_storage_account.archive.id
   role_definition_name = "Storage Blob Data Contributor"
   principal_id         = azurerm_user_assigned_identity.ingestion.principal_id
+}
+
+# The daily job adds each audit seal (accounts/seals.py), on that container alone.
+resource "azurerm_role_assignment" "audit_seals_write" {
+  scope                = azurerm_storage_container.audit_seals.id
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_user_assigned_identity.public.principal_id
 }
 
 # The operator copies the buckets from Google Cloud and checks them (deployment/azure/data.sh).

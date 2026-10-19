@@ -78,6 +78,46 @@ def test_every_ended_day_is_sealed_once_in_a_chain_and_verifies(accounts):
     assert seals.seal(accounts, now=LATER + timedelta(days=1) - timedelta(hours=1, minutes=30)) == []
 
 
+class WriteOnceStore:
+    """A container with an immutability policy: blobs are added, never replaced (AzureBlobStore.put)."""
+
+    def __init__(self):
+        self.blobs = {}
+
+    def list(self, prefix):
+        return [name for name in self.blobs if name.startswith(prefix)]
+
+    def put(self, name, data, content_type, metadata=None, replace=False):
+        if name in self.blobs:
+            return False
+        self.blobs[name] = data
+        return True
+
+
+def test_each_seal_is_copied_once_to_the_container_and_a_missed_one_later(accounts):
+    store = WriteOnceStore()
+    assert seals.copy_out(accounts, store) == 0  # nothing sealed yet
+    entry(accounts, days_ago(2))
+    out = io.StringIO()
+    sealed = seals.seal(accounts, now=LATER, out=out)
+    assert seals.copy_out(accounts, store) == 3
+    # Each copy holds the same fields as the seal's log line.
+    logged = {
+        line["audit_seal"]["day"]: line["audit_seal"] for line in map(json.loads, out.getvalue().splitlines())
+    }
+    assert {name: json.loads(data) for name, data in store.blobs.items()} == {
+        f"{s['day']}.json": logged[s["day"]] for s in sealed
+    }
+    assert seals.copy_out(accounts, store) == 0  # copied once
+    # A day whose copy a failed run never wrote is written by the next run; the others are kept.
+    missed = f"{sealed[1]['day']}.json"
+    kept = store.blobs.pop(missed)
+    entry(accounts, datetime.combine(TODAY + timedelta(days=1), time(9), tzinfo=UTC))
+    assert len(seals.seal(accounts, now=LATER + timedelta(days=1), out=io.StringIO())) == 1
+    assert seals.copy_out(accounts, store) == 2 and store.blobs[missed] == kept
+    assert len(store.blobs) == 4
+
+
 def test_changing_removing_or_back_dating_an_entry_breaks_that_days_seal(accounts):
     entry(accounts, days_ago(2))
     entry(accounts, days_ago(1))
