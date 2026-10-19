@@ -182,6 +182,11 @@ them; the budget tracks the cost before credits.
 1. **The project.** `open-alvary-staging` is active and billed to the same billing account as
    today's production, so the same credit covers it. Only Google's default services are on there
    today. The apply switches on the rest (`main.tf`), Compute Engine among them.
+   - On a fresh project the first apply may stop right after switching them on, with "Cloud
+     Resource Manager API has not been used": the services are on, but Terraform's check of each
+     ran before Cloud Resource Manager had spread. Plan again and apply. The plan then shows those
+     services as tainted, "to destroy" and to add: destroying one only drops it from the state
+     (`disable_on_destroy = false`), so nothing is turned off.
    - Turning on Compute Engine may create a `default` network unless the organisation skips it.
    - Check with `gcloud compute networks list --project open-alvary-staging`.
    - If `default` is there, delete its firewall rules, then the network itself:
