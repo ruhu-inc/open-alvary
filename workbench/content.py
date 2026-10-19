@@ -215,6 +215,18 @@ class Library:
             return {}
         return json.loads(path.read_text()) if path.exists() else {}
 
+    def has_original(self, act_id: str) -> bool:
+        """Whether the original file can be served, without fetching it: a corpus collection's PDF is
+        in the bucket by design; a collection in private staging has it only where it was kept
+        (its upload to a deployed workbench carries page images, not PDFs)."""
+        manifest, _ = self._where(act_id)
+        if manifest.get("_remote"):
+            return True
+        try:
+            return self._here(act_id, ".pdf").exists()
+        except Exception:  # noqa: BLE001 - an unreadable place has no original to offer
+            return False
+
     def original(self, act_id: str) -> Path:
         self.act(act_id)
         path = self._here(act_id, ".pdf")
