@@ -1,0 +1,61 @@
+clients/python/open_alvary_client/client.py
+  s_d665c62e07d76f::t_b58a8d61775fa8 43,45-46,198-200,270-272,323-325,365-369,417-419,425-427,446-448,468-470,505-507
+  s_d665c62e07d76f::t_8c964e864331f7 1-42,44,47-74,78-197,201-210,213-216,219-269,273-322,326-364,370-416,420-424,428-445,449-466,471-504,508-536
+  s_d665c62e07d76f::t_2ec108ead4037b 75-77
+  s_d665c62e07d76f::t_0f2c435ca166ba 211-212,217-218,467
+clients/python/open_alvary_client/errors.py
+  s_d665c62e07d76f::t_d7b60b8ed7a7f6 1-32
+clients/python/README.md
+  s_d665c62e07d76f::t_3931095cd5396e 55-56
+  s_d665c62e07d76f::t_72a99d68498ee3 1-54,57-80
+clients/conformance/runner.py
+  s_d665c62e07d76f::t_b58a8d61775fa8 61-63,65-67,183-185
+  s_d665c62e07d76f::t_afc65dbc57fa17 1-60,64,68-182,186-223
+clients/conformance/scenarios/01-fresh-then-cached.json
+  s_d665c62e07d76f::t_151a00a85ee5f2 1-89
+clients/conformance/scenarios/10-bounded-attempts.json
+  s_d665c62e07d76f::t_151a00a85ee5f2 1-130
+clients/conformance/scenarios/09-retry-after.json
+  s_d665c62e07d76f::t_151a00a85ee5f2 1-98
+clients/conformance/scenarios/02-withdrawal-purge.json
+  s_d665c62e07d76f::t_151a00a85ee5f2 1-134
+clients/conformance/scenarios/06-stale-cursor.json
+  s_d665c62e07d76f::t_151a00a85ee5f2 1-151
+clients/conformance/bodies.json
+  s_d665c62e07d76f::t_85592a87b27ece 1-827
+clients/conformance/scenarios/05-feed-reset.json
+  s_d665c62e07d76f::t_151a00a85ee5f2 1-274
+clients/python/open_alvary_client/__init__.py
+  s_d665c62e07d76f::t_0f2c435ca166ba 1-26
+tests/test_reference_client.py
+  s_d665c62e07d76f::t_aa1de7f0274b56 1-7,9-19,23-29,31-60,62-77,82-92,96-151,155-156,160-180,184,189-197,203-212,216-239,243-275,279-289
+  s_d665c62e07d76f::t_b58a8d61775fa8 20-22,78-81,93-95,152-154,157-159,181-183,185-188,198-202,213-215,240-242,276-278
+  s_d665c62e07d76f::t_06e5434517e335 8,30,61
+clients/python/open_alvary_client/cache.py
+  s_d665c62e07d76f::t_7e75f0ba3430f6 1-97,101-140,144-217,221-257
+  s_d665c62e07d76f::t_b58a8d61775fa8 98-100,141-143,218-220
+clients/conformance/scenarios/03-text-version-recheck.json
+  s_d665c62e07d76f::t_151a00a85ee5f2 1-161
+clients/conformance/scenarios/04-legal-effect-currentness.json
+  s_d665c62e07d76f::t_151a00a85ee5f2 1-209
+clients/conformance/scenarios/08-seven-day-cutoff.json
+  s_d665c62e07d76f::t_151a00a85ee5f2 1-183
+clients/conformance/scenarios/07-outage-fallback.json
+  s_d665c62e07d76f::t_151a00a85ee5f2 1-172
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ba38d928e9a315a083f133e108113e506e89b317",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
