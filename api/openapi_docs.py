@@ -801,6 +801,8 @@ FIELDS: dict[str, dict[str, str]] = {
         "references": "Provisions of the same text the part refers to by number.",
         "qualifications": "Checked links qualifying the record: what amended, repealed or superseded it.",
         "also_in": "Other texts of the same edition with this part, collapsed into this one.",
+        "expanded_from": "When the part joined because a ranked part refers to it by number (with a "
+        "reranker only): that part's anchor.",
     },
     "EvidenceDefinition": {
         "term": "The term defined.",

@@ -4018,6 +4018,19 @@
             "title": "Also In",
             "default": [],
             "description": "Other texts of the same edition with this part, collapsed into this one."
+          },
+          "expanded_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expanded From",
+            "description": "When the part joined because a ranked part refers to it by number (with a reranker only): that part's anchor."
           }
         },
         "additionalProperties": false,
