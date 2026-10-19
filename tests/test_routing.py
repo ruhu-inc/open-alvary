@@ -1,13 +1,14 @@
-"""CPR-01: pages are routed by the evidence of their readings; under an owner's verification-routing
-decision only the risky pages and an audit sample must be checked, and a material defect in the sample
-escalates the document; without the decision every page is checked; calibration reports what reviews
-changed on each route."""
+"""CPR-01: pages are routed by the evidence of their readings and of their text layers; under an owner's
+verification-routing decision only the risky pages and an audit sample must be checked, and a material
+defect in the sample escalates the document; without the decision every page is checked; calibration
+reports what reviews changed on each route."""
 
 import json
 
 import pytest
 from test_workbench import ACT, approve, confirm_details, node, save, signed_in
 
+from ingestion import native
 from workbench import content, routing
 from workbench.store import Store, connect
 
@@ -64,6 +65,84 @@ def test_each_page_gets_one_route_from_its_evidence():
     )
     assert routing.route(page(5, "FIRST SCHEDULE"), first=False, structure_issues=0)[0] == "full"
     assert routing.route(page(5, "ARRANGEMENT OF SECTIONS"), first=False, structure_issues=0)[0] == "full"
+
+
+def layer_page(number, text, flags=(), passed=True, supported=(), unflagged=0, **extra):
+    """A page with text-layer evidence (ingestion/native.py) as the library attaches it."""
+    found = {**page(number, text, flags, **extra)}
+    found["native"] = {
+        "profile": native.PROFILE, "class": "native", "passed": passed, "agreement": 1.0,
+        "flags": {"supported": list(supported), "unsupported": [], "unflagged_differences": unflagged},
+    }  # fmt: skip
+    return found
+
+
+def test_a_page_whose_text_layer_passed_is_native_unless_something_forces_full_review():
+    def routed(found, first=False, issues=0):
+        return routing.route(found, first=first, structure_issues=issues)[0]
+
+    plain = layer_page(2, "2. Plain words.")
+    assert (
+        routed(plain) == "native"
+        and routed(plain, first=True) == "full"
+        and routed(plain, issues=1) == "full"
+    )
+    assert routed(layer_page(2, "2. Plain words.", passed=False)) == "agreed"
+    # An ordinary flag is resolved only where the layer reads as the units do there.
+    assert routed(layer_page(3, "3. Words.", [flag("colour", "color")], supported=[0])) == "native"
+    assert routed(layer_page(3, "3. Words.", [flag("colour", "color")])) == "flagged"
+    for risky in (flag("198", "199"), flag("a", "b", "high")):
+        assert routed(layer_page(3, "3. Words.", [risky], supported=[0])) == "full"
+    assert routed(layer_page(4, "4. Words.", tables=[{"rows": []}])) == "full"
+    assert routed(layer_page(5, "FIRST SCHEDULE")) == "full"
+    assert routed(layer_page(5, "ARRANGEMENT OF SECTIONS")) == "full"
+
+
+def test_a_clean_text_layer_that_differs_from_the_units_where_nothing_is_flagged_sends_the_page_to_review():
+    name, why = routing.route(
+        layer_page(2, "2. Plain words.", passed=False, unflagged=2), first=False, structure_issues=0
+    )
+    assert name == "full" and why == ["the text layer differs from the units at 2 unflagged word(s)"]
+
+
+def test_native_and_agreed_pages_share_one_audit_sample_and_escalate_together():
+    found = reading(
+        page(1, "1. Short title."),
+        layer_page(2, "2. Plain."),
+        page(3, "3. Plain."),
+        layer_page(4, "4. Plain."),
+    )
+    plan = routing.requirement(ACT, found, {}, POLICY)
+    assert plan["routes"] == {1: "full", 2: "native", 3: "agreed", 4: "native"}
+    assert len(plan["audit_sample"]) == 2 and set(plan["audit_sample"]) <= {2, 3, 4}  # 50% of three
+    assert plan["required_pages"] == sorted([1, *plan["audit_sample"]])
+    sampled = plan["audit_sample"][0]
+    machine = content.units_from(found["pages"][sampled - 1])
+    defect = {"status": "checked", "units": [{**machine[0], "text": "Changed words."}]}
+    escalated = routing.requirement(ACT, found, {sampled: defect}, POLICY)
+    assert escalated["escalated"] and escalated["required_pages"] == [1, 2, 3, 4]
+
+
+def test_the_library_gives_a_page_its_text_layer_evidence_only_while_it_is_bound_to_the_reading(tmp_path):
+    found = reading(page(1, "1. Accounts are kept."), page(2, "2. Plain words."))
+    (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(found))
+    library = content.Library(tmp_path)
+    assert all("native" not in p for p in library.reading(ACT)["pages"])  # not assessed yet
+    held = {"profile": native.PROFILE, "class": "native", "passed": True, "agreement": 1.0, "flags": {}}
+    evidence = {
+        "profile": native.PROFILE,
+        "input_sha256": found["input_sha256"],
+        "pages": {
+            "1": {**held, "bound": "a reading prepared since"},
+            "2": {**held, "bound": native.bound(found["pages"][1])},
+        },
+    }
+    (tmp_path / f"{ACT}.native.json").write_text(json.dumps(evidence))
+    pages = library.reading(ACT)["pages"]
+    assert "native" not in pages[0] and pages[1]["native"]["passed"]
+    assert {n: r[0] for n, r in routing.routes(library.reading(ACT)).items()} == {1: "full", 2: "native"}
+    (tmp_path / f"{ACT}.native.json").write_text(json.dumps({**evidence, "input_sha256": "1" * 64}))
+    assert all("native" not in p for p in library.reading(ACT)["pages"])  # another PDF's evidence
 
 
 def test_the_audit_sample_is_fixed_by_the_decision_and_has_a_minimum():

@@ -3,21 +3,25 @@ verified by the agreement of independent readings and an audit sample, and the c
 whether that is safe.
 
 Routes (route profile ROUTES), one per page:
-  native    the page's own text layer passed the DIG-01 checks; not assigned yet, because readings do
-            not yet record text-layer evidence
+  native    the page's own text layer passed the DIG-01 checks (ingestion/native.py: a clean, visible
+            layer agreeing with the reading the units came from and with an independent reading,
+            numbers and negations exactly) and reads as the units do at every flag of the page;
+            nothing forces ``full``
   agreed    every reader agrees on every word, no flag of any severity, no table, and the structure
             deriver reports nothing on the page
   flagged   disagreements or flags, none of a risky kind and no table: the reviewer resolves each
             flag against the image; the rest of the page is not proofread
   full      a table; a flag whose words carry a number, an amount, a date, a cross-reference or a
             negation or exception; a high flag; the first page, a contents page or a page where a
-            schedule starts; a structure error or warning on the page: reviewed whole, as before
+            schedule starts; a structure error or warning on the page; a clean text layer that
+            differs from the units where no flag says so: reviewed whole, as before
 
 Routed readiness applies only under an owner's verification-routing policy (D28,
 ingestion/decisions/verification-routing.json): without it, every page must be checked, as REV-02 and
-TXP-06 require today. Under it, ``full`` and ``flagged`` pages and an audit sample of ``agreed`` pages
-must be checked; a sampled page whose review changed its words or structure (a material defect)
-escalates every ``agreed`` page of the document to review.
+TXP-06 require today. Under it, ``full`` and ``flagged`` pages and one audit sample drawn from the
+``agreed`` and ``native`` pages together must be checked; a sampled page whose review changed its words
+or structure (a material defect) escalates every ``agreed`` and ``native`` page of the document to
+review.
 """
 
 import hashlib
@@ -29,6 +33,7 @@ from pathlib import Path
 from workbench import content
 
 ROUTES = "oa-route-pages-1"
+UNREVIEWED = ("agreed", "native")  # verified without review, and covered by one audit sample
 POLICY = Path(__file__).resolve().parents[1] / "ingestion" / "decisions" / "verification-routing.json"
 # Words that make a disagreement risky (TXP-06's material classes).
 RISKY = re.compile(
@@ -79,8 +84,19 @@ def route(page: dict, *, first: bool, structure_issues: int) -> tuple[str, list[
         reasons.append("a high flag")
     if any(RISKY.search(_flag_words(f)) for f in flags):
         reasons.append("a flag on a number, date, reference or negation")
+    evidence = page.get("native") or {}
+    against = evidence.get("flags") or {}
+    if against.get("unflagged_differences"):
+        reasons.append(
+            f"the text layer differs from the units at {against['unflagged_differences']} unflagged word(s)"
+        )
     if reasons:
         return "full", reasons
+    if evidence.get("passed") and sorted(against.get("supported") or []) == list(range(len(flags))):
+        held = f"; it reads as the units do at all {len(flags)} flag(s)" if flags else ""
+        return "native", [
+            f"the text layer passed the DIG-01 checks (agreement {evidence['agreement']:.1%}){held}"
+        ]
     if flags:
         return "flagged", [f"{len(flags)} flag(s) to resolve"]
     return "agreed", ["every reader agrees and nothing is flagged"]
@@ -96,8 +112,9 @@ def routes(reading: dict, issues_by_page: dict[int, int] | None = None) -> dict[
 
 
 def sample(document_id: str, agreed: list[int], policy: dict) -> list[int]:
-    """The audit sample of a document's agreed pages: deterministic for the document and the policy's
-    decision, so it cannot be chosen after the fact; at least the policy's minimum (or all of them)."""
+    """The audit sample of a document's unreviewed (agreed and native) pages: deterministic for the
+    document and the policy's decision, so it cannot be chosen after the fact; at least the policy's
+    minimum (or all of them)."""
     if not agreed:
         return []
     size = min(
@@ -137,8 +154,8 @@ def requirement(
 ) -> dict:
     """Under the policy: the pages that must be checked, the audit sample, and any escalation."""
     found = routes(reading, issues_by_page)
-    agreed = [page for page, (name, _) in found.items() if name == "agreed"]
-    audited = sample(document_id, agreed, policy)
+    unreviewed = [page for page, (name, _) in found.items() if name in UNREVIEWED]
+    audited = sample(document_id, unreviewed, policy)
     machine = {p["page"]: content.units_from(p) for p in reading["pages"]}
     defects = [
         page
