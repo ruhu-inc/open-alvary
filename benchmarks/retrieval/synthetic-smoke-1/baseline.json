@@ -1,0 +1,426 @@
+{
+  "run_id": "20261019T124046Z-2b2716f8",
+  "created_at": "2026-10-19T12:40:46.945278+00:00",
+  "benchmark": {
+    "id": "synthetic-smoke-1",
+    "version": 1,
+    "digest": "e30aafda27f487ddfb60ef0fdec96dd9f65ec18465918708550a11063c1a7824",
+    "review_state": "development_unreviewed",
+    "synthetic": true
+  },
+  "split": "dev",
+  "system": {
+    "adapter": "in_process",
+    "revisions": {
+      "dataset": "923081f6-4791-42fd-a994-d90c3d186d2e:1",
+      "router": "oa-route-1",
+      "ranking": "oa-rank-2",
+      "analyzer": "oa-search-3"
+    }
+  },
+  "metrics": {
+    "recall@10": {
+      "value": 1.0,
+      "cases": 7
+    },
+    "recall@20": {
+      "value": 1.0,
+      "cases": 7
+    },
+    "ndcg@10": {
+      "value": 0.93005,
+      "cases": 7
+    },
+    "mrr": {
+      "value": 1.0,
+      "cases": 7
+    },
+    "support@10": {
+      "value": 1.0,
+      "cases": 7
+    },
+    "complete": {
+      "value": 1.0,
+      "cases": 7
+    },
+    "abstain": {
+      "value": 1.0,
+      "cases": 2
+    }
+  },
+  "cases": {
+    "s01": {
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "ndcg@10": 0.8339912323981488,
+      "mrr": 1.0,
+      "support@10": 1.0,
+      "complete": 1.0
+    },
+    "s02": {
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "ndcg@10": 1.0,
+      "mrr": 1.0,
+      "support@10": 1.0,
+      "complete": 1.0
+    },
+    "s03": {
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "ndcg@10": 1.0,
+      "mrr": 1.0,
+      "support@10": 1.0,
+      "complete": 1.0
+    },
+    "s04": {
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "ndcg@10": 1.0,
+      "mrr": 1.0,
+      "support@10": 1.0,
+      "complete": 1.0
+    },
+    "s05": {
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "ndcg@10": 1.0,
+      "mrr": 1.0,
+      "support@10": 1.0,
+      "complete": 1.0
+    },
+    "s06": {
+      "abstain": 1.0
+    },
+    "s07": {
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "ndcg@10": 1.0,
+      "mrr": 1.0,
+      "support@10": 1.0,
+      "complete": 1.0
+    },
+    "s08": {
+      "abstain": 1.0
+    },
+    "s09": {
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "ndcg@10": 0.6763610077981964,
+      "mrr": 1.0,
+      "support@10": 1.0,
+      "complete": 1.0
+    }
+  },
+  "outcomes": {
+    "s01": {
+      "status": "results",
+      "routes": [
+        "topic"
+      ],
+      "delivered": [
+        [
+          "synthetic-water-act-2030",
+          "sec_2",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "sec_3",
+          "provision"
+        ],
+        [
+          "synthetic-fisheries-act-2031",
+          "sec_1",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "preamble",
+          "container_run"
+        ],
+        [
+          "synthetic-water-regulations-2032",
+          "sec_1",
+          "provision"
+        ],
+        [
+          "synthetic-fisheries-act-2031",
+          "preamble",
+          "container_run"
+        ],
+        [
+          "synthetic-water-regulations-2032",
+          "document",
+          "container_run"
+        ],
+        [
+          "synthetic-water-regulations-2032",
+          "sec_2",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "sec_1",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "document",
+          "container_run"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "sec_4",
+          "provision"
+        ]
+      ]
+    },
+    "s02": {
+      "status": "results",
+      "routes": [
+        "definition",
+        "topic"
+      ],
+      "delivered": [
+        [
+          "synthetic-water-act-2030",
+          "sec_1__def_abstraction",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "sec_2",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "preamble",
+          "container_run"
+        ],
+        [
+          "synthetic-water-regulations-2032",
+          "sec_1",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "sec_3",
+          "provision"
+        ]
+      ]
+    },
+    "s03": {
+      "status": "results",
+      "routes": [
+        "citation",
+        "topic"
+      ],
+      "delivered": [
+        [
+          "synthetic-water-act-2030",
+          "sec_2",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "sec_3",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "sec_4",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "document",
+          "document"
+        ]
+      ]
+    },
+    "s04": {
+      "status": "results",
+      "routes": [
+        "instrument"
+      ],
+      "delivered": [
+        [
+          "synthetic-fisheries-act-2031",
+          "document",
+          "document"
+        ],
+        [
+          "synthetic-fisheries-act-2031",
+          "document",
+          "container_run"
+        ],
+        [
+          "synthetic-fisheries-act-2031",
+          "sec_1",
+          "provision"
+        ],
+        [
+          "synthetic-fisheries-act-2031",
+          "sec_2",
+          "provision"
+        ],
+        [
+          "synthetic-fisheries-act-2031",
+          "sec_3",
+          "provision"
+        ]
+      ]
+    },
+    "s05": {
+      "status": "results",
+      "routes": [
+        "topic"
+      ],
+      "delivered": [
+        [
+          "synthetic-fisheries-act-2031",
+          "sec_2",
+          "provision"
+        ],
+        [
+          "synthetic-fisheries-act-2031",
+          "sec_3",
+          "provision"
+        ],
+        [
+          "synthetic-fisheries-act-2031",
+          "sec_1",
+          "provision"
+        ],
+        [
+          "synthetic-fisheries-act-2031",
+          "preamble",
+          "container_run"
+        ]
+      ]
+    },
+    "s06": {
+      "status": "no_result",
+      "routes": [
+        "topic"
+      ],
+      "delivered": []
+    },
+    "s07": {
+      "status": "results",
+      "routes": [
+        "topic"
+      ],
+      "delivered": [
+        [
+          "synthetic-water-act-2030",
+          "sec_4",
+          "provision"
+        ],
+        [
+          "synthetic-fisheries-act-2031",
+          "sec_2",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "sec_1",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "preamble",
+          "container_run"
+        ],
+        [
+          "synthetic-water-regulations-2032",
+          "sec_2",
+          "provision"
+        ],
+        [
+          "synthetic-water-regulations-2032",
+          "sec_1",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "sec_2",
+          "provision"
+        ]
+      ]
+    },
+    "s08": {
+      "status": "unsupported_scope",
+      "routes": [
+        "topic",
+        "historical"
+      ],
+      "delivered": []
+    },
+    "s09": {
+      "status": "results",
+      "routes": [
+        "topic"
+      ],
+      "delivered": [
+        [
+          "synthetic-water-act-2030",
+          "sec_2",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "preamble",
+          "container_run"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "sec_1",
+          "provision"
+        ],
+        [
+          "synthetic-water-regulations-2032",
+          "sec_1",
+          "provision"
+        ],
+        [
+          "synthetic-fisheries-act-2031",
+          "preamble",
+          "container_run"
+        ],
+        [
+          "synthetic-fisheries-act-2031",
+          "sec_1",
+          "provision"
+        ],
+        [
+          "synthetic-water-regulations-2032",
+          "document",
+          "container_run"
+        ],
+        [
+          "synthetic-water-regulations-2032",
+          "sec_2",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "sec_3",
+          "provision"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "document",
+          "container_run"
+        ],
+        [
+          "synthetic-water-act-2030",
+          "sec_4",
+          "provision"
+        ]
+      ]
+    }
+  },
+  "failures": {}
+}
