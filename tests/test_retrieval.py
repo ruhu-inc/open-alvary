@@ -235,3 +235,37 @@ def test_within_a_band_decisions_order_by_court_relation_without_displacing_legi
     ranked = apply_signals(fused, set())
     assert [c.hit.version_id for c in ranked] == ["ver_b", "ver_act", "ver_p"]  # the Act keeps its place
     assert ranked[0].signals[-1] == ("court_authority", "binding", "tie-break in band")
+
+
+def test_the_http_embedder_sends_a_key_only_when_it_has_one(monkeypatch):
+    import httpx
+
+    from retrieval.vectors import HttpEmbedder, Profile
+
+    monkeypatch.delenv("OPEN_ALVARY_EMBEDDER_KEY", raising=False)
+    seen = []
+
+    def answer(request):
+        seen.append(request)
+        inputs = __import__("json").loads(request.content)["input"]
+        return httpx.Response(
+            200,
+            json={"data": [{"index": i, "embedding": [3.0, 4.0] + [0.0] * 6} for i in range(len(inputs))]},
+        )
+
+    profile = Profile.from_dict(
+        {"id": "local", "model": "m", "revision": "1", "dims": 8, "embedder": "http", "query_prompt": "Q: "}
+    )
+    local = HttpEmbedder(profile, url="http://embedder.test", transport=httpx.MockTransport(answer))
+    assert local.embed(["salary"], query=True) == [[0.6, 0.8] + [0.0] * 6]
+    assert "authorization" not in seen[-1].headers
+    assert __import__("json").loads(seen[-1].content)["input"] == ["Q: salary"]
+    keyed = HttpEmbedder(profile, url="http://embedder.test", key="k", transport=httpx.MockTransport(answer))
+    keyed.embed(["salary"], query=False)
+    assert seen[-1].headers["authorization"] == "Bearer k"
+    assert "dimensions" not in __import__("json").loads(seen[-1].content)
+    truncated = Profile.from_dict(profile.as_dict() | {"request_dims": True})
+    HttpEmbedder(truncated, url="http://embedder.test", transport=httpx.MockTransport(answer)).embed(
+        ["x"], query=False
+    )
+    assert __import__("json").loads(seen[-1].content)["dimensions"] == 8

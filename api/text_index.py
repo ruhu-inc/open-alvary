@@ -683,6 +683,24 @@ def _weighted(conn: Connection, table: str, query: str) -> tuple[str, str, dict]
     return " OR ".join(matches), score, params
 
 
+def query_terms(conn: Connection, query: str) -> dict[str, str]:
+    """For each analysis, the query's words it indexes, in order (its stopwords removed): what the
+    dedicated engine is asked to match, so that it and this index agree on which words count. Query
+    syntax (quoted phrases, excluded words) is not carried over."""
+    words = re.findall(r"\w+", query)
+    if not words:
+        return {}
+    rows = conn.execute(
+        text(
+            "SELECT c, string_agg(t.w, ' ' ORDER BY t.n) FROM unnest(CAST(:configs AS text[])) AS c"
+            " CROSS JOIN unnest(CAST(:words AS text[])) WITH ORDINALITY AS t(w, n)"
+            " WHERE to_tsvector(CAST(c AS regconfig), t.w) <> ''::tsvector GROUP BY c"
+        ),
+        {"configs": list(ANALYSES), "words": words},
+    ).all()
+    return dict(rows)
+
+
 def built(conn: Connection):
     """When the index was built, or None while it is not (or not this ANALYZER's)."""
     if not available(conn):

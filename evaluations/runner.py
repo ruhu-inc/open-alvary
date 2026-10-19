@@ -39,9 +39,10 @@ def git_state(root: Path) -> dict:
     }
 
 
-def in_process(database) -> Callable[[records.Case], dict]:
+def in_process(database, **retriever) -> Callable[[records.Case], dict]:
     """Retrieve through the service's own code against a database (a URL or an engine: a scratch copy
-    or a replica)."""
+    or a replica); ``retriever`` passes options to the Retriever (search_engine, vector_profile,
+    embedder, reranker), so one corpus can be run under several configurations."""
     from sqlalchemy import create_engine
 
     from api import text_index
@@ -57,7 +58,7 @@ def in_process(database) -> Callable[[records.Case], dict]:
             filters = text_index.Filters(
                 jurisdictions=case.jurisdictions, language=case.language, as_of=case.as_of
             )
-            pack = Retriever(service).retrieve(
+            pack = Retriever(service, **retriever).retrieve(
                 Request(query=case.query, filters=filters, max_units=MAX_UNITS)
             )
             return pack.model_dump(mode="json")

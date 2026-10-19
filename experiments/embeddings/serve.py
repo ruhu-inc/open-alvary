@@ -1,7 +1,7 @@
 """A local inference server for open-weight embedding and reranker models (EMB-01, EMB-05: the
 runnable local inference path). It answers the two APIs the retrieval service already speaks:
 
-  POST /embeddings  {"model", "input": [...]}            → {"data": [{"index", "embedding"}]}  (OpenAI)
+  POST /embeddings  {"model", "input": [...], "dimensions"?} → {"data": [{"index", "embedding"}]}  (OpenAI)
   POST /rerank      {"query", "texts": [...], "raw_scores": false} → [{"index", "score"}]       (TEI)
 
     python experiments/embeddings/serve.py --model Qwen/Qwen3-Embedding-0.6B --port 28101
@@ -75,6 +75,11 @@ def main(argv=None) -> int:
                     texts = body["input"] if isinstance(body["input"], list) else [body["input"]]
                     with lock:
                         vectors = model.encode(texts, batch_size=args.batch, normalize_embeddings=True)
+                    if body.get("dimensions"):  # Matryoshka: keep the leading dimensions, renormalised
+                        import numpy as np
+
+                        vectors = vectors[:, : int(body["dimensions"])]
+                        vectors = vectors / np.linalg.norm(vectors, axis=1, keepdims=True)
                     data = [{"index": i, "embedding": [float(x) for x in v]} for i, v in enumerate(vectors)]
                     return self.answer(200, {"object": "list", "model": args.model, "data": data})
                 if path.endswith("/rerank") and args.kind == "rerank":
