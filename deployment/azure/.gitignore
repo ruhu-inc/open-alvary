@@ -6,3 +6,4 @@
 !*.tfvars.example
 crash.log
 backend.hcl
+*.plan
