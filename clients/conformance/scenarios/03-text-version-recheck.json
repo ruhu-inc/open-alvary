@@ -1,0 +1,161 @@
+{
+  "name": "a later text marks its expression stale",
+  "covers": [
+    "text_version_published with a prior version marks cached units of that expression stale.",
+    "Before reuse the client runs the check operation (POST /currentness) on the pack's units.",
+    "When the check finds a newer version, the pack is fetched again (with its ETag) and the new pack replaces it."
+  ],
+  "start": "2026-10-19T09:00:00+00:00",
+  "steps": [
+    {
+      "do": "sync",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "start": "now"
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$changes_start"
+          }
+        }
+      ]
+    },
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/retrieve",
+            "params": {
+              "q": "when must a controller report a breach",
+              "jurisdiction": "ng"
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$pack_breach",
+            "headers": {
+              "ETag": "W/\"pack-breach-1\""
+            }
+          }
+        }
+      ],
+      "expect": {
+        "answer": {
+          "from_cache": false,
+          "checked": true
+        }
+      }
+    },
+    {
+      "do": "sync",
+      "exchanges": [
+        {
+          "request": {
+            "method": "GET",
+            "path": "/changes",
+            "params": {
+              "resume_token": "r1.start"
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$changes_text_published"
+          }
+        }
+      ]
+    },
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [
+        {
+          "request": {
+            "method": "POST",
+            "path": "/currentness",
+            "json": {
+              "items": [
+                {
+                  "anchor_id": "anc-sda-1-s40",
+                  "span_hash": "0f9bf5fdfd86d6f60f3a5527bcaff7066dcb0e40604986268353bd95bcc312ce"
+                },
+                {
+                  "anchor_id": "anc-sdr-1-r12",
+                  "span_hash": "0c52012e8b5f30fda79ae72cee5d04881e9833cdc5165ce80bc8ecf8a7edb0cd"
+                }
+              ]
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$check_new_text"
+          }
+        },
+        {
+          "request": {
+            "method": "GET",
+            "path": "/retrieve",
+            "params": {
+              "q": "when must a controller report a breach"
+            },
+            "headers": {
+              "if-none-match": "W/\"pack-breach-1\""
+            }
+          },
+          "response": {
+            "status": 200,
+            "body": "$pack_breach_new_text",
+            "headers": {
+              "ETag": "W/\"pack-breach-2\""
+            }
+          }
+        }
+      ],
+      "expect": {
+        "answer": {
+          "from_cache": false,
+          "checked": true,
+          "offline": false,
+          "evidence": [
+            "anc-sda-2-s40",
+            "anc-sdr-1-r12"
+          ],
+          "labels": "checked"
+        }
+      }
+    },
+    {
+      "do": "retrieve",
+      "query": "when must a controller report a breach",
+      "filters": {
+        "jurisdiction": "ng"
+      },
+      "exchanges": [],
+      "expect": {
+        "answer": {
+          "from_cache": true,
+          "checked": false,
+          "offline": false,
+          "evidence": [
+            "anc-sda-2-s40",
+            "anc-sdr-1-r12"
+          ],
+          "labels": "currentness_not_checked"
+        }
+      }
+    }
+  ]
+}
