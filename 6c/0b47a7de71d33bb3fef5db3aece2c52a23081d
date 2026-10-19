@@ -1,0 +1,35 @@
+tests/test_work_queue.py
+  s_d665c62e07d76f::t_67c1b6c91a03ae 1-41,44-49,52-55,58-86
+  s_d665c62e07d76f::t_7a6650a8a7c332 42-43,50-51,56-57
+workbench/static/app.css
+  s_d665c62e07d76f::t_905a66625f3f18 380-383
+tests/test_editorial.py
+  s_d665c62e07d76f::t_905a66625f3f18 224,231
+workbench/store.py
+  s_d665c62e07d76f::t_905a66625f3f18 378-383
+workbench/static/app.js
+  s_d665c62e07d76f::t_905a66625f3f18 106,221-231,346,1028-1081,2043,2053
+workbench/app.py
+  s_d665c62e07d76f::t_905a66625f3f18 13,41,396-438
+  s_d665c62e07d76f::t_0f46c07a353441 439
+workbench/queue.py
+  s_d665c62e07d76f::t_257456ffbc96a2 1-16,18-28,33-47,51-58,60-105
+  s_d665c62e07d76f::t_d470bb8a28d519 17,29-32,59
+  s_d665c62e07d76f::t_c55a6787719aad 48-50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6c0b47a7de71d33bb3fef5db3aece2c52a23081d",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
