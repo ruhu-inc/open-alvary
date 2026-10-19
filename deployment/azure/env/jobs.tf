@@ -12,11 +12,13 @@ locals {
         command = ["sh", "-c", "python -m scripts.check_launch && alembic upgrade head && python -m scripts.seed"]
         cron    = null
         timeout = 900
+        secrets = { POSTGRES_PASSWORD = "database-password" } # scripts.check_launch checks it
       }
       retrieval = {
         command = ["python", "-m", "retrieval.worker", "run"]
         cron    = "* * * * *"
         timeout = 55
+        secrets = {}
       }
     },
     var.accounts_enabled ? {
@@ -24,11 +26,13 @@ locals {
         command = ["python", "-m", "changes.worker", "run"]
         cron    = "*/5 * * * *"
         timeout = 280
+        secrets = {}
       }
       daily = {
         command = ["sh", "-c", "python -m accounts.seals seal && python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge && python -m accounts.seals verify"]
         cron    = "0 3 * * *"
         timeout = 600
+        secrets = {}
       }
     } : {},
   )
@@ -73,11 +77,11 @@ resource "azurerm_container_app_job" "public" {
   }
 
   dynamic "secret" {
-    for_each = toset(local.secret_names)
+    for_each = toset(concat(local.secret_names, values(each.value.secrets)))
     content {
       name                = secret.value
       identity            = azurerm_user_assigned_identity.public.id
-      key_vault_secret_id = local.secret[secret.value]
+      key_vault_secret_id = "${azurerm_key_vault.main.vault_uri}secrets/${secret.value}"
     }
   }
 
@@ -97,7 +101,7 @@ resource "azurerm_container_app_job" "public" {
         }
       }
       dynamic "env" {
-        for_each = local.public_secret_env
+        for_each = merge(local.public_secret_env, each.value.secrets)
         content {
           name        = env.key
           secret_name = env.value
@@ -116,5 +120,5 @@ resource "azurerm_container_app_job" "public" {
     }
   }
 
-  depends_on = [azurerm_role_assignment.pull, azurerm_role_assignment.secrets]
+  depends_on = [azurerm_role_assignment.pull, azurerm_role_assignment.secrets, azurerm_key_vault_secret.database_password]
 }

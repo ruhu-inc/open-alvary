@@ -4,9 +4,8 @@
 # Cloud SQL; the migrations create the restricted roles (rights/sql/provision) inside.
 
 resource "random_password" "postgres" {
-  length           = 32
-  special          = true
-  override_special = "_-" # safe in a URL
+  length  = 40
+  special = false # alphanumeric: what scripts.check_launch requires of POSTGRES_PASSWORD (migrate job)
 }
 
 resource "azurerm_postgresql_flexible_server" "main" {
