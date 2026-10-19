@@ -17,6 +17,9 @@ provider "google-beta" {
   zone    = var.zone
 }
 
+# Read once the services are on: with user_project_override the read is billed to this project, and a
+# fresh project has no Cloud Resource Manager API until main.tf switches it on.
 data "google_project" "main" {
   project_id = var.project_id
+  depends_on = [google_project_service.main]
 }
