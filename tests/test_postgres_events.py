@@ -89,9 +89,10 @@ def test_events_decide_currentness_at_provision_level_and_are_announced(store, t
         "state": "in_force", "basis": "provision", "assessed_at": "2024-01-01", "algorithm": "currentness-v1",
         "evidence": [commenced["id"]], "reasons": [],
     }  # fmt: skip
-    announced = changes(store)
-    assert [c["payload"]["legal_effect"]["kind"] for c in announced] == ["commenced", "repealed"]
-    assert announced[1]["payload"]["legal_effect"]["provisions"] == ["sec_2"]
+    # Both are announced in one publication: their order within it is not defined.
+    announced = {c["payload"]["legal_effect"]["kind"]: c for c in changes(store)}
+    assert set(announced) == {"commenced", "repealed"}
+    assert announced["repealed"]["payload"]["legal_effect"]["provisions"] == ["sec_2"]
 
 
 def test_published_events_are_superseded_or_withdrawn_never_edited(store):
