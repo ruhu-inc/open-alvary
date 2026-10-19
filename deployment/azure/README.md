@@ -51,10 +51,22 @@ Unchanged: Auth0 (sign-in), Resend (email), DNS (records change at switchover), 
 - **No vector profile is active** until a generation passes its gates (RSV-12): `vector_profile`
   stays empty and the service runs on the lexical arms with the reranker.
 
+## Found on 2026-10-19 (read-only checks)
+
+- **`ruhu-sub` is a Sponsorship subscription** with no spending limit. Azure Cost Management does
+  not report on it, so the budget resource is off (`budget_enabled`). Usage and the credit left are
+  in Microsoft's sponsorship portal. With no spending limit, use past the credit is billed: watch the
+  portal.
+- **GPU quota is 0** for the NCASv3_T4 family in Sweden Central: request it before phase 1.
+- **Azure Document Intelligence is already a reader.** `open-alvary-docintel-sc` (S0, in
+  `open-alvary-ingestion-sc-rg`) is the second independent check beside Document AI and MinerU
+  (deployment/runbook.md). Its agreement with Document AI is measured on every reconciled Act, so
+  making it the primary reading later is a measured step.
+
 ## Still to settle with the owner
 
 - **Alvary's spend.** The credit is shared: about $4.7K a month to mid-2028. Open Alvary's estimate
-  is below. The budget alerts (`monthly_budget`) warn at 50%, 80% and 100%.
+  is below. Check both products' usage in the sponsorship portal.
 - **Archive lock.** Is the archive bucket's retention on Google Cloud locked? If so, it stays until
   the retention ends; it is small, so this costs pennies.
 - **What is live on Google Cloud.** It decides what the data copy covers.

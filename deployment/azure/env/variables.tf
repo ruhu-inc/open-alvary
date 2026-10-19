@@ -31,9 +31,16 @@ variable "operator_ip_ranges" {
   default     = []
 }
 
+variable "budget_enabled" {
+  description = "Cost Management budgets: only where the subscription supports them (not Sponsorship offers such as ruhu-sub)."
+  type        = bool
+  default     = false
+}
+
 variable "monthly_budget" {
-  description = "The environment's monthly budget in USD: warnings at 50%, 80% and 100% (actual) and 100% (forecast)."
+  description = "The environment's monthly budget in USD, with budget_enabled: warnings at 50%, 80% and 100% (actual) and 100% (forecast)."
   type        = number
+  default     = 0
 }
 
 # --- the public service ------------------------------------------------------------------------------

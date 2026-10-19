@@ -26,3 +26,11 @@ console_client_id = ""
 
 # Empty until a generation passes its gates (RSV-12): the service runs on the lexical arms.
 vector_profile = ""
+
+# Phase 4: the workbench, reading its collections from the corpus account (az://<account>/workbench/…).
+# workbench_image  = ""
+# workbench_domain = "review.open.alvary.ai"
+# workbench_settings = {
+#   ALVARY_REVIEW_COLLECTIONS  = "az://<corpus account>/workbench/collections/rw/"
+#   ALVARY_REVIEW_OIDC_CLIENT_ID = "<the workbench's sign-in client ID>"
+# }
