@@ -440,11 +440,18 @@ def create_app(
                     "stale": bool(revision and revision["reading_sha256"] != content.reading_sha256(page)),
                 }
             )
+        provenance = library.provenance(act_id)
         return {
             "act": {**act, "rights_basis": library.manifest_for(act_id).get("rights_basis", "")},
             "standing": standing(act),
             "readers": {"primary": reading["primary"], "checks": reading["checks"]},
             "pages": pages,
+            # Where to check the document against its source: the address it was fetched from, and
+            # whether the original file itself can be opened here.
+            "source": {
+                "official_url": provenance.get("url") or act.get("url"),
+                "original_pdf": library.has_original(act_id),
+            },
             "readiness": now["readiness"],
             "text_check": publication.summary(now["text"]),
             "content_sha256": now["content_sha256"],

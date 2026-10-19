@@ -281,6 +281,18 @@ ul.plain li:first-child { border-top: 0; }
 .standing .enables ul { margin: .25rem 0 .5rem 1.2rem; padding: 0; }
 .relations .relation-actions { display: flex; gap: .5rem; align-items: center; white-space: nowrap; }
 .details-head textarea { width: 100%; box-sizing: border-box; }
+/* The details beside the original (sourcePanel): side by side on a wide screen, stacked on a narrow one. */
+.details-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.details-source { position: sticky; top: 3.4rem; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: .75rem; }
+.details-source h3 { margin: 0 0 .25rem; }
+.details-source .source-links { margin: 0 0 .5rem; font-size: 13px; }
+.details-source .viewer { position: static; max-height: calc(100vh - 9rem); }
+.details-source .viewer-tools select { font-size: 13px; }
+@media (max-width: 1200px) {
+  .details-layout { grid-template-columns: 1fr; }
+  .details-source { position: static; }
+  .details-source .viewer { max-height: 60vh; }
+}
 @media (max-width: 900px) {
   .details-group .detail-row { grid-template-columns: 1fr; }
   .relations .relation { grid-template-columns: 1fr; }

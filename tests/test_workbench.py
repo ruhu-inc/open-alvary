@@ -200,6 +200,18 @@ def test_page_detail_offers_units_flags_and_image(world):
     assert browser.get("/api/documents/ng-unknown/pages/1").status_code == 404
 
 
+def test_a_document_says_where_to_check_it_against_its_source(world, tmp_path):
+    browser = signed_in(world, "reviewer@example.org")
+    (tmp_path / f"{ACT}.provenance.json").write_text(
+        json.dumps({"url": "https://www.example.gov.ng/act.pdf"})
+    )
+    source = browser.get(f"/api/documents/{ACT}").json()["source"]
+    assert source == {"official_url": "https://www.example.gov.ng/act.pdf", "original_pdf": False}
+    (tmp_path / f"{ACT}.pdf").write_bytes(b"%PDF-1.4\n")
+    assert browser.get(f"/api/documents/{ACT}").json()["source"]["original_pdf"] is True
+    assert browser.get(f"/api/documents/{ACT}/original.pdf").content == b"%PDF-1.4\n"
+
+
 def test_a_deployed_collection_shows_its_prepared_page_images_without_the_pdf(tmp_path, monkeypatch):
     # The workbench upload carries readings and page images, never PDFs (deployment/gcp/workbench.sh).
     monkeypatch.delenv("ALVARY_REVIEW_COLLECTIONS", raising=False)

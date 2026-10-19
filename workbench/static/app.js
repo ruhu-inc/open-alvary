@@ -784,6 +784,8 @@ async function detailsView(actId) {
   const title = doc.data.act.title;
   setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: title }), "Details");
   const { standard, record, suggestions, related = {} } = data;
+  const firstEvidence = Object.values(suggestions).map((h) => h.page).filter(Boolean).sort((a, b) => a - b)[0];
+  const original = sourcePanel(actId, doc.data.pages.length, doc.data.source || {}, firstEvidence);
   const canEdit = app.me.roles.includes("reviewer");
   const values = structuredClone(record.details);
   const absent = { ...record.absent };
@@ -851,7 +853,8 @@ async function detailsView(actId) {
         : String(hint.value);
       const differs = hint.absent ? absent[field.key] !== hint.absent : JSON.stringify(hint.value) !== JSON.stringify(values[field.key]);
       note = el("div", { class: "hint" },
-        hint.page ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${hint.page}`, text: `p. ${hint.page}` }) : el("span", { text: "From the collection" }), " · ",
+        hint.page ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${hint.page}`, text: `p. ${hint.page}`, title: "Show this page beside the details",
+          on: { click: (event) => { event.preventDefault(); original.show(hint.page); } } }) : el("span", { text: "From the collection" }), " · ",
         el("span", { class: "evidence", text: `“${hint.evidence}”` }),
         differs && canEdit ? el("button", { class: "small", text: `Use: ${shown.length > 60 ? shown.slice(0, 60) + "…" : shown}`, on: { click: () => {
           if (hint.absent) { absent[field.key] = hint.absent; delete values[field.key]; why.value = hint.absent; }
@@ -892,16 +895,65 @@ async function detailsView(actId) {
   const history = data.history.length ? el("div", { class: "card" }, el("h3", { text: "Details record" }),
     el("ul", {}, data.history.map((h) => el("li", { text: `${h.at.slice(0, 16).replace("T", " ")} · revision ${h.revision} · ${h.status} by ${h.author}${h.comment ? ` — ${h.comment}` : ""}` })))) : null;
   main(
-    el("div", { class: "card details-head" },
-      el("h2", { text: `${title}: details` }),
-      el("p", { class: "muted", text: "Each detail was read from the document where it is printed; the page and words are shown beside it. Check each against the page image, correct it, or say why it is not given. Confirmed details are approved with the text and shown to the public." }),
-      el("p", {}, pill(record.status === "confirmed" ? "ok" : record.status === "draft" ? "warn" : "medium", DETAIL_STATUS[record.status] + (record.revision ? ` · revision ${record.revision} by ${record.author}` : "")), " ", counter),
-      canEdit ? el("p", {}, el("button", { text: "Save draft", on: { click: () => save("draft") } }), " ", confirmButton, " ", previewLink(actId)) : el("p", { class: "muted", text: "Editing needs the reviewer role." }),
-      canEdit ? comment : null),
-    ...groups,
-    history,
+    el("div", { class: "details-layout" },
+      el("div", { class: "details-form" },
+        el("div", { class: "card details-head" },
+          el("h2", { text: `${title}: details` }),
+          el("p", { class: "muted", text: "Each detail was read from the document where it is printed; the page and words are shown beside it. Check each against the original beside the form (a page number opens that page there), correct it, or say why it is not given. Confirmed details are approved with the text and shown to the public." }),
+          el("p", {}, pill(record.status === "confirmed" ? "ok" : record.status === "draft" ? "warn" : "medium", DETAIL_STATUS[record.status] + (record.revision ? ` · revision ${record.revision} by ${record.author}` : "")), " ", counter),
+          canEdit ? el("p", {}, el("button", { text: "Save draft", on: { click: () => save("draft") } }), " ", confirmButton, " ", previewLink(actId)) : el("p", { class: "muted", text: "Editing needs the reviewer role." }),
+          canEdit ? comment : null),
+        ...groups,
+        history),
+      original.panel),
   );
   refresh();
+}
+
+// The original beside the details: its pages, turned by the evidence links, with the official source
+// and the original file one click away, so every detail is checked against where it is printed.
+function sourcePanel(actId, pageCount, source, first) {
+  const id = encodeURIComponent(actId);
+  let page = Math.min(Math.max(first || 1, 1), pageCount || 1);
+  let zoom = 1;
+  const image = el("img", { alt: "", draggable: "false" });
+  const frame = el("div", { class: "frame" }, image);
+  const pick = el("select", { title: "Page", on: { change: () => show(Number(pick.value)) } },
+    Array.from({ length: pageCount }, (_, i) => el("option", { value: String(i + 1), text: `Page ${i + 1} of ${pageCount}` })));
+  const editor = el("a", { title: "Open this page in the editor" });
+  const label = el("span", { class: "muted zoom-label" });
+  const setZoom = (value) => {
+    zoom = Math.max(1, Math.min(4, value));
+    frame.style.width = `${zoom * 100}%`;
+    label.textContent = `${Math.round(zoom * 100)}%`;
+  };
+  const show = (n) => {
+    page = Math.min(Math.max(n, 1), pageCount);
+    pick.value = String(page);
+    image.src = `/api/documents/${id}/pages/${page}/image`;
+    image.alt = `Original page ${page}`;
+    editor.href = `#/doc/${id}/page/${page}`;
+    editor.textContent = `Edit page ${page}`;
+  };
+  const links = el("p", { class: "source-links" },
+    source.official_url
+      ? el("a", { href: source.official_url, target: "_blank", rel: "noopener noreferrer", title: source.official_url, text: "Official source ↗" })
+      : el("span", { class: "muted", text: "No official address recorded" }),
+    source.original_pdf ? [" · ", el("a", { href: `/api/documents/${id}/original.pdf`, target: "_blank", rel: "noopener", text: "Original PDF ↗" })] : null,
+    " · ", editor);
+  const viewer = el("div", { class: "viewer" },
+    el("div", { class: "viewer-tools" },
+      el("button", { class: "small", title: "Previous page", text: "←", on: { click: () => show(page - 1) } }),
+      pick,
+      el("button", { class: "small", title: "Next page", text: "→", on: { click: () => show(page + 1) } }),
+      el("button", { class: "small", title: "Zoom out", text: "−", on: { click: () => setZoom(zoom / 1.25) } }),
+      label,
+      el("button", { class: "small", title: "Zoom in", text: "+", on: { click: () => setZoom(zoom * 1.25) } }),
+      el("button", { class: "small", title: "Fit the page width", text: "Fit", on: { click: () => setZoom(1) } })),
+    frame);
+  setZoom(1);
+  show(page);
+  return { panel: el("aside", { class: "details-source", "aria-label": "The original document" }, el("h3", { text: "The original" }), links, viewer), show };
 }
 
 function relationsEditor(standard, links, onChange, related = {}) {
