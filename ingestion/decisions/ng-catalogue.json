@@ -1,0 +1,15 @@
+{
+  "decision": "catalogue-records-1",
+  "jurisdiction": "ng",
+  "operation": "publish_catalogue_records",
+  "text": "not_included",
+  "basis": "Independently written catalogue entries (title, number, dates, status, links between laws) with a link to the official text. No text, headnote or compilation is copied.",
+  "legal_note": "Texts are published only under the separate full-text decision (Copyright Act, 2022, s. 3(b)).",
+  "evidence": [
+    "https://placng.org/i/wp-content/uploads/2023/04/Copyright-Act-2022.pdf"
+  ],
+  "decided_by": "Ijidai Lassa",
+  "decided_at": "2026-10-19T02:34:55+00:00",
+  "expires_at": "2027-10-19T02:34:55+00:00",
+  "revision": 1
+}

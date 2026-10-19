@@ -1,0 +1,24 @@
+{
+  "decision": "full-text-1",
+  "jurisdiction": "ng",
+  "operation": "publish_full_text",
+  "document_types": [
+    "act",
+    "constitution"
+  ],
+  "rights_holder": "Federal Republic of Nigeria",
+  "licence": "Not eligible for copyright: Copyright Act, 2022, s. 3(b)",
+  "licence_url": null,
+  "attribution_required": false,
+  "attribution_text": null,
+  "database_rights_notes": "No database right is claimed. Each text is a single enactment, not a compilation.",
+  "privacy_status": "cleared",
+  "basis": "Official texts of a legislative nature, and their official translations, are not eligible for copyright in Nigeria (Copyright Act, 2022, s. 3(b)). Each text published is one enactment read from the Official Gazette, not a compilation, which s. 3(b) excepts.",
+  "evidence": [
+    "https://placng.org/i/wp-content/uploads/2023/04/Copyright-Act-2022.pdf"
+  ],
+  "decided_by": "Ijidai Lassa",
+  "decided_at": "2026-10-19T02:35:00+00:00",
+  "expires_at": "2027-10-19T02:35:00+00:00",
+  "revision": 1
+}
