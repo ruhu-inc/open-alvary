@@ -5,7 +5,7 @@ description: Answers to common questions, and how to reach us.
 
 ## Access and keys
 
-**Do I need an account?** Not to read the website, download releases or follow the change feed. The REST API and the MCP server need an account: sign in to [the console](/console), and your organisation gets the free Starter plan at once.
+**Do I need an account?** Not to read the website, download catalogue releases or follow the change feed. The REST API and the MCP server need an account: sign in to [the console](/console), and your organisation gets the free Starter plan at once. Releases with full text are for organisations whose access includes bulk releases, granted by agreement; they download with a key from [`/api/v1/bulk`](/docs/api/get-bulk-file).
 
 **Is it free?** The Starter plan is free, with no card. Prices for paid plans are coming; until then, we confirm each upgrade by email. Research, government and legal aid can apply for the Public interest plan. See [Plans and rate limits](/docs/plans).
 

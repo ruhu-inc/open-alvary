@@ -1,8 +1,9 @@
 """The public service (MAC-02, activation A): one process for everything the website's origin serves.
 
     /site/v1/...    the website's own data path (api.site), admitted in the "site" class
-    /downloads/...  public release files, rechecked on every response
-    /api/v1/...     REST v1 for organisations with access (api.v1), behind the credential gate
+    /downloads/...  public release files without full text, rechecked on every response
+    /api/v1/...     REST v1 for organisations with access (api.v1), behind the credential gate;
+                    releases with full text only at /api/v1/bulk/..., for access that includes bulk
     /mcp            MCP for organisations with access, behind the same gate
                     (these three only with ALVARY_ACCOUNTS=1: activation B, PostgreSQL)
     /api/...        the legacy anonymous API, unchanged until activation B; its release-file route
@@ -47,6 +48,7 @@ from api.repositories import LegacyRepository, PublicUnavailable
 from api.security_txt import security_txt
 from api.site import create_downloads_app, create_site_app
 from api.store import ROOT, Store, check_legacy_authority, engine_for
+from api.v1 import CLASSES as V1_CLASSES
 from api.v1 import PUBLIC_PATHS as V1_PUBLIC
 from api.v1 import create_v1_app
 from rights.bytes import ByteLedger
@@ -120,7 +122,9 @@ def create_service(
             "/api/v1",
             CredentialGate(
                 v1,
-                config=GateConfig(resource, "rest", "api", metadata, public_paths=V1_PUBLIC, **outside),
+                config=GateConfig(
+                    resource, "rest", "api", metadata, public_paths=V1_PUBLIC, classes=V1_CLASSES, **outside
+                ),
                 check=accounts.check_credential,
                 record_usage=accounts.record_usage,
                 admission=AdmissionStore(store.engine, namespace),

@@ -1,6 +1,7 @@
 """REST v1 through the public service against PostgreSQL: keys, access, scope, limits, usage."""
 
 import base64
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -9,9 +10,10 @@ from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
 
 from accounts import policies
-from accounts.store import Accounts
+from accounts.store import TIERS, Accounts
 from api.service import create_service
 from api.store import Store, seed
+from exports.release import write_release
 from rights.database import PolicyNamespace
 
 pytestmark = pytest.mark.postgres
@@ -226,6 +228,30 @@ def test_mcp_searches_the_plans_countries_and_reads_others_at_the_starter_rate(a
     lapsed = client.post("/mcp", json=rpc("tools/list"), headers=headers)
     assert lapsed.status_code == 403 and lapsed.json()["error"]["data"]["code"] == "entitlement_lapsed"
     assert "www-authenticate" not in lapsed.headers
+
+
+def test_plans_by_agreement_are_never_listed_and_bulk_downloads_need_one_that_includes_bulk(
+    api, pg_engine, tmp_path
+):
+    _, accounts, person, organisation = api
+    accounts.set_tiers(json.loads(TIERS.read_text()))
+    store = Store(pg_engine)
+    write_release(store.load(), tmp_path, "2026-10-05", "ng")
+    client = TestClient(create_service(store=store, releases=tmp_path))
+    listed = [t["id"] for t in client.get("/api/v1/tiers").json()["tiers"]]
+    assert listed[:5] == ["starter", "developer", "team", "enterprise", "public-interest"]
+    assert not {"pilot", "partner", "sovereign"} & set(listed)  # (and the fixture's own "tiny")
+    url = "/api/v1/bulk/2026-10-05/ng/corpus/manifest.json"
+    grant(accounts, organisation, tier="pilot")
+    pilot = key(accounts, person, organisation)
+    refused = client.get(url, headers=pilot)
+    assert refused.status_code == 403 and refused.json()["code"] == "entitlement_required"
+    accounts.revoke_access("op", organisation, "Test")
+    grant(accounts, organisation, tier="sovereign")
+    sovereign = client.get(url, headers=pilot)  # the same key: access is the organisation's
+    assert sovereign.status_code == 200 and sovereign.json()["release_id"] == "2026-10-05"
+    bulk = [day for day in accounts.usage(person, organisation) if day["class"] == "bulk"]
+    assert bulk and bulk[0]["requests"] == 1 and bulk[0]["bytes"] == len(sovereign.content)
 
 
 def test_activation_b_stays_off_unless_switched_on(pg_engine, monkeypatch):

@@ -3181,7 +3181,132 @@
             }
           }
         },
-        "description": "The versioned data releases still available: their scope, files and checksums. Download a file from `download_base` + `/` + its name; no key is needed for downloads.",
+        "description": "The versioned data releases still available: their scope, files and checksums. Download a file from `download_base` + `/` + its name. Catalogue releases download from `/downloads/…` with no key. Releases with full text are listed only when your organisation's access includes bulk releases, for the countries of its plan, and download from `/api/v1/bulk/…` with your key.",
+        "tags": [
+          "Releases"
+        ]
+      }
+    },
+    "/bulk/{release_id}/{jurisdiction}/{mode}/{filename}": {
+      "get": {
+        "summary": "Download a bulk release file",
+        "operationId": "get_bulk_file",
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Release Id"
+            },
+            "description": "The release's ID, such as `2026-10-05`."
+          },
+          {
+            "name": "jurisdiction",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Jurisdiction"
+            },
+            "description": "The release's jurisdiction ID, such as `ng`."
+          },
+          {
+            "name": "mode",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Mode"
+            },
+            "description": "`corpus` (records with their cleared texts) or `metadata` (records only)."
+          },
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filename"
+            },
+            "description": "A file the manifest lists, such as `versions.jsonl`, or `manifest.json`."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such release or file (`unavailable`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The release was withdrawn: a record in it changed or stopped being public (`withdrawn`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "One file of a release, exactly as its manifest's SHA-256 says, for organisations whose access includes bulk releases (granted by agreement, not a listed plan). Releases with full text download only here, and only for the countries of your plan. Each file is checked against the current catalogue just before it is sent: a release with a withdrawn or changed record is no longer served, so download a newer one. Downloads count as bulk use and draw on your organisation's data a day.",
         "tags": [
           "Releases"
         ]
@@ -7426,7 +7551,7 @@
         "properties": {
           "download_base": {
             "type": "string",
-            "description": "Where its files are; append `/` and a file name."
+            "description": "Where its files are; append `/` and a file name. `/downloads/…` needs no key; `/api/v1/bulk/…` (releases with full text) needs your key."
           },
           "files": {
             "type": "object",

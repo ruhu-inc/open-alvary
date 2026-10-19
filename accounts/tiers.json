@@ -159,5 +159,53 @@
     "listing": {
       "order": 9
     }
+  },
+  {
+    "id": "partner",
+    "name": "Partner",
+    "description": "Proposal pending decision D31: limits sized for agent traffic, with bulk releases. Granted by Open Alvary by agreement (MAC-04), never listed.",
+    "includes": [
+      "rest",
+      "mcp",
+      "bulk"
+    ],
+    "allowance": {
+      "requests_per_minute": 6000,
+      "burst": 3000,
+      "concurrency": 100,
+      "bytes_per_day": 50000000000,
+      "watches": 200,
+      "digest": "daily",
+      "shared_watches": true,
+      "webhook_endpoints": 5
+    },
+    "published": false,
+    "listing": {
+      "order": 10
+    }
+  },
+  {
+    "id": "sovereign",
+    "name": "Sovereign copy",
+    "description": "Proposal pending decision D31: bulk releases with full text for institutions that host their own copy, and the API and MCP at Team limits. Granted by Open Alvary by agreement (MAC-04), never listed.",
+    "includes": [
+      "rest",
+      "mcp",
+      "bulk"
+    ],
+    "allowance": {
+      "requests_per_minute": 1200,
+      "burst": 600,
+      "concurrency": 40,
+      "bytes_per_day": 10000000000,
+      "watches": 50,
+      "digest": "daily",
+      "shared_watches": true,
+      "webhook_endpoints": 3
+    },
+    "published": false,
+    "listing": {
+      "order": 11
+    }
   }
 ]

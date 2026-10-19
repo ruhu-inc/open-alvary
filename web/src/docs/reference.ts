@@ -375,6 +375,7 @@ const READING_ORDER = [
   "list-plans",
   "get-quota-policy",
   "list-releases",
+  "get-bulk-file",
 ];
 
 export function referencePages(spec: Spec, tools: Tool[], examples: Examples): ReferencePage[] {
