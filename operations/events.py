@@ -235,54 +235,68 @@ _APPOINTED = re.compile(r"(?:such\s+)?date\s+as\s+the\s+[\w\s]+?\s+may[\w\s,]*?\
 _REPEAL = re.compile(r"\b[Tt]he\s+([A-Z][\w\s,()’'-]{3,120}?)\s+is\s+(?:hereby\s+)?repealed\b")
 
 
+def propose_from(text: bytes, nodes, work_id: str, url: str) -> list[dict]:
+    """Events a work's text states, for an editor to check: its commencement provision (a date, or a date
+    to be appointed: a condition), and the laws it repeals. ``text`` is the canonical text's UTF-8
+    bytes and ``nodes`` its structure, each with ``kind``, ``locator``, ``start_byte`` and ``end_byte``
+    (as the catalogue and the workbench's built text both hold them); ``url`` is where the text is
+    published, the evidence's address. No database is needed. Never counted until reviewed and
+    published."""
+    proposals = []
+    for node in nodes:
+        if node["kind"] not in ("section", "article"):
+            continue
+        words = " ".join(text[node["start_byte"] : node["end_byte"]].decode().split())
+        evidence = {"url": url, "locator": node["locator"], "quote": words[:300]}
+        if _COMMENCES.search(words):
+            found = _ON_DATE.search(words)
+            appointed = _APPOINTED.search(words)
+            if found or appointed:
+                day, condition = None, None
+                if found:
+                    try:
+                        day = date(
+                            int(found.group(3)), MONTHS.index(found.group(2).lower()) + 1, int(found.group(1))
+                        )
+                    except ValueError:  # "the 31st day of June": printed, but no such day
+                        condition = f"The text gives a date that does not exist: {found.group(0)}"
+                if appointed and not day:
+                    condition = "On a date to be appointed: " + appointed.group(0)
+                proposals.append(
+                    {
+                        "id": f"evt_{uuid.uuid4()}", "type": "commenced", "affected_work": work_id,
+                        "scope": "whole", "date_from": day.isoformat() if day else None,
+                        "precision": "day" if day else "unknown", "conditions": condition,
+                        "evidence": evidence, "review_state": "reviewed", "reviewed_by": "", "reviewed_at": "",
+                    }
+                )  # fmt: skip
+        for repealed in _REPEAL.finditer(words):
+            proposals.append(
+                {
+                    "id": f"evt_{uuid.uuid4()}", "type": "repealed", "affected_work": None,
+                    "affected_title": repealed.group(1).strip(), "asserting_work": work_id, "scope": "whole",
+                    "date_from": None, "precision": "unknown", "evidence": evidence,
+                    "review_state": "reviewed", "reviewed_by": "", "reviewed_at": "",
+                }
+            )  # fmt: skip
+    return proposals
+
+
 def propose(conn, work_id: str) -> list[dict]:
-    """Events the published text of a work states, for an editor to check: its commencement provision
-    (a date, or a date to be appointed: a condition), and the laws it repeals. Never counted until
-    reviewed and published."""
+    """Events the published text of a work states (propose_from), read from its first public text;
+    editors review other texts separately."""
     from api.catalogue import LegacyCatalogue
     from api.repositories import LegacyRepository
 
     service = LegacyCatalogue(LegacyRepository(conn))
     source, rights = service._require(work_id)
-    proposals = []
     for version in service._approved(source, rights):
-        raw = version.canonical_text.encode()
-        for node in service._ordered_nodes(version):
-            if node.kind not in ("section", "article"):
-                continue
-            words = " ".join(raw[node.start_byte : node.end_byte].decode().split())
-            evidence = {"url": str(version.canonical_url), "locator": node.locator, "quote": words[:300]}
-            if _COMMENCES.search(words):
-                found = _ON_DATE.search(words)
-                appointed = _APPOINTED.search(words)
-                if found or appointed:
-                    day = (
-                        date(
-                            int(found.group(3)), MONTHS.index(found.group(2).lower()) + 1, int(found.group(1))
-                        )
-                        if found
-                        else None
-                    )
-                    proposals.append(
-                        {
-                            "id": f"evt_{uuid.uuid4()}", "type": "commenced", "affected_work": work_id,
-                            "scope": "whole", "date_from": day.isoformat() if day else None,
-                            "precision": "day" if day else "unknown",
-                            "conditions": None if day else "On a date to be appointed: " + appointed.group(0),
-                            "evidence": evidence, "review_state": "reviewed", "reviewed_by": "", "reviewed_at": "",
-                        }
-                    )  # fmt: skip
-            for repealed in _REPEAL.finditer(words):
-                proposals.append(
-                    {
-                        "id": f"evt_{uuid.uuid4()}", "type": "repealed", "affected_work": None,
-                        "affected_title": repealed.group(1).strip(), "asserting_work": work_id, "scope": "whole",
-                        "date_from": None, "precision": "unknown", "evidence": evidence,
-                        "review_state": "reviewed", "reviewed_by": "", "reviewed_at": "",
-                    }
-                )  # fmt: skip
-        break  # the first public text; editors review other texts separately
-    return proposals
+        nodes = [
+            {"kind": n.kind, "locator": n.locator, "start_byte": n.start_byte, "end_byte": n.end_byte}
+            for n in service._ordered_nodes(version)
+        ]
+        return propose_from(version.canonical_text.encode(), nodes, work_id, str(version.canonical_url))
+    return []
 
 
 def main(argv=None) -> int:

@@ -29,7 +29,17 @@ from ingestion import settings
 from schema import record as R
 from schema.jurisdictions import registry as jurisdiction_registry
 from workbench import access as access_section
-from workbench import akn, auth, content, details, privileged, publication, record_view, serialize
+from workbench import (
+    akn,
+    auth,
+    content,
+    details,
+    editorial,
+    privileged,
+    publication,
+    record_view,
+    serialize,
+)
 from workbench import operators as operators_section
 from workbench.review import Review, blind, to_do
 from workbench.store import Conflict, Store, engine_from_environment
@@ -1042,6 +1052,7 @@ def create_app(
         auth.current(request, store)
         return [{**e, "at": e["at"].isoformat()} for e in store.events(act_id=act, limit=300)]
 
+    editorial.install(app, store, library, review)
     privileged.install(app, store, relying)
     access_section.install(app, store, access, relying)
     operators_section.install(app, store, relying)

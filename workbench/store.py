@@ -157,6 +157,43 @@ approval = Table(
     UniqueConstraint("act_id", "revision"),
 )
 
+# Legal events read from a work's text (CPR-02, workbench.editorial): a proposal, each edit and the
+# review are revisions; an event is never updated in place.
+legal_event_revision = Table(
+    "legal_event_revision",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("event_id", String(60), nullable=False),  # evt_<uuid4>: its id when published
+    Column("work", String(160), nullable=False),  # the work whose text it was read from
+    Column("act_id", String(140), nullable=False),  # the document (language version) it was saved on
+    Column("revision", Integer, nullable=False),
+    Column("event", JSON, nullable=False),  # operations.events.EventIn fields, less its id and review
+    Column("status", String(20), nullable=False),  # proposed | reviewed | rejected
+    Column("proposed_from", String(400)),  # what the text proposed (type, provision, title), if it did
+    Column("comment", Text, nullable=False, default=""),
+    Column("author", String(320), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("event_id", "revision"),
+)
+
+# Consolidation instructions read from an amending work (CPR-03), reviewed by two editors (EDT-04).
+instruction_revision = Table(
+    "instruction_revision",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("instruction_id", String(80), nullable=False),
+    Column("work", String(160), nullable=False),  # the amending work
+    Column("act_id", String(140), nullable=False),  # the document (language version) it was saved on
+    Column("target_work", String(160), nullable=False),  # the work it amends
+    Column("revision", Integer, nullable=False),
+    Column("instruction", JSON, nullable=False),  # workbench.consolidation.Instruction, less its id
+    Column("status", String(20), nullable=False),  # proposed | reviewed | second_reviewed | rejected
+    Column("comment", Text, nullable=False, default=""),
+    Column("author", String(320), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("instruction_id", "revision"),
+)
+
 audit = Table(
     "audit_event",
     metadata,
@@ -617,6 +654,66 @@ class Store:
                 {"revision": expected + 1, "status": values["status"], "given": len(values["details"])},
             )
         return expected + 1
+
+    # --- legal events and amendment instructions (workbench.editorial) ----------------------------
+
+    def _revisions(self, table, work: str | None) -> list[dict]:
+        """Every revision, oldest first: of one work's items, or of all."""
+        query = select(table).order_by(table.c.id)
+        if work is not None:
+            query = query.where(table.c.work == work)
+        with self.engine.connect() as db:
+            return [{**row._mapping, "created_at": _aware(row.created_at)} for row in db.execute(query)]
+
+    def _save_revision(self, table, key: str, item: str, expected: int, author: str, action: str, **values):
+        """Write the item's revision expected+1; Conflict if someone else saved since the client loaded,
+        or if the item belongs to another work."""
+        with self.engine.begin() as db:
+            held = db.execute(
+                select(table.c.revision, table.c.work)
+                .where(table.c[key] == item)
+                .order_by(table.c.revision.desc())
+                .limit(1)
+            ).first()
+            current = held.revision if held else 0
+            if current != expected:
+                raise Conflict(f"{item} is at revision {current}, not {expected}")
+            if held and held.work != values["work"]:
+                raise Conflict(f"{item} belongs to {held.work}")
+            try:
+                db.execute(
+                    insert(table).values(
+                        **{key: item}, revision=expected + 1, author=author, created_at=now(), **values
+                    )
+                )
+            except IntegrityError as error:
+                raise Conflict(str(error)) from error
+            self._audit(
+                db,
+                author,
+                action,
+                values["act_id"],
+                None,
+                {key: item, "revision": expected + 1, "status": values["status"]},
+            )
+        return expected + 1
+
+    def legal_event_revisions(self, work: str | None = None) -> list[dict]:
+        return self._revisions(legal_event_revision, work)
+
+    def save_legal_event(self, event_id: str, expected: int, author: str, **values) -> int:
+        return self._save_revision(
+            legal_event_revision, "event_id", event_id, expected, author, "legal_event_saved", **values
+        )
+
+    def instruction_revisions(self, work: str | None = None) -> list[dict]:
+        return self._revisions(instruction_revision, work)
+
+    def save_instruction(self, instruction_id: str, expected: int, author: str, **values) -> int:
+        table, action = instruction_revision, "instruction_saved"
+        return self._save_revision(
+            table, "instruction_id", instruction_id, expected, author, action, **values
+        )
 
     # --- approvals -----------------------------------------------------------------------------
 
