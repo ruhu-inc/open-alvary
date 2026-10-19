@@ -8,6 +8,9 @@ structure rules of the document's kind:
                      definitions, schedules and the Clerk's certificates after them
   rw-law-1           Rwandan laws, one language at a time: titles, chapters, divisions (a civil-law
                      "section" groups articles) and articles
+  judgment-paragraphs-1
+                     judgments and rulings: the header, each opinion with its numbered paragraphs
+                     (each one a retrieval unit, cited "[2019] NGSC 4 [12]"), and the orders
 
 Where the reviewer set an indent level it decides a unit's depth; numbering patterns decide only
 where no level was set. Locators follow the Akoma Ntoso eId convention of the workbench export
@@ -25,6 +28,8 @@ from workbench.store import canonical_json
 
 NG_FEDERAL_ACT = "ng-federal-act-1"
 RW_LAW = "rw-law-1"
+JUDGMENT = "judgment-paragraphs-1"
+JUDGMENT_TYPES = {"judgment", "ruling"}
 
 # --- Nigerian federal Acts ---------------------------------------------------------------------------
 
@@ -69,6 +74,7 @@ class Node:
     trim: dict[int, int] = field(default_factory=dict)  # leaf index -> bytes of the leaf before this node
     opens_at: int | None = None  # a byte offset where the node starts without holding the leaf there
     target: str | None = None  # contents entries: the locator the entry points to
+    author: str = ""  # opinions: the judge who wrote it, when printed
     order: int = 0
     start: int = 0
     end: int = 0
@@ -110,6 +116,7 @@ class Structure:
                 "page_start": n.page_start,
                 "page_end": n.page_end,
                 **({"target": n.target} if n.kind == "contents_entry" else {}),
+                **({"author": n.author} if n.kind == "opinion" else {}),
             }
             for n in self.nodes
         ]
@@ -120,6 +127,11 @@ class Structure:
 
 
 def rules_for(document: dict) -> str:
+    """A judgment or ruling by its type (its details' document type, else its collection type), in any
+    jurisdiction; otherwise a law by its jurisdiction."""
+    kind = document.get("document_type") or document.get("type") or document.get("kind") or ""
+    if str(kind).casefold() in JUDGMENT_TYPES:
+        return JUDGMENT
     return RW_LAW if (document.get("jurisdiction") or document.get("id", "")[:2]) == "rw" else NG_FEDERAL_ACT
 
 
@@ -129,6 +141,8 @@ def derive(
     units = {(p["page"], i): unit for p in pages for i, unit in enumerate(p["units"])}
     if rules_id == RW_LAW:
         builder: Builder = RwandaBuilder(language or "en", serialized, units)
+    elif rules_id == JUDGMENT:
+        builder = JudgmentBuilder(serialized, units)
     else:
         builder = ActBuilder(serialized, units)
     builder.build()
@@ -681,4 +695,193 @@ class RwandaBuilder(Builder):
         self.open.append((rank, node))
         self.article, self.region_node = None, None
         self.notes_to(node, False)
+        self.hold(node, index)
+
+
+# --- judgment-paragraphs-1 ---------------------------------------------------------------------------
+
+# "JUDGMENT", "RULING", "LEAD JUDGMENT DELIVERED BY …", "DISSENTING OPINION OF …", "JUDGMENT (Delivered
+# by …)": an opinion, its type and, when printed, who wrote it.
+OPINION = re.compile(
+    r"^(?:(lead(?:ing)?|majority|concurring|dissenting|minority)\s+)?(judge?ment|ruling|opinion)\.?"
+    r"(?:\s+of\s+the\s+court|\s+(?:of|by|(?:delivered|read|written)\s+by)\s+(.+?))?"
+    r"(?:\s*\(\s*(?:delivered|read|written)\s+by\s*:?\s*(.+?)\s*\))?\s*:?$",
+    re.I | re.S,
+)
+OPINION_TYPES = {"leading": "lead", "majority": "lead", "minority": "dissenting"}  # else the word itself
+ORDERS_NOTHING = ("concurring", "dissenting")  # the orders are the lead opinion's or the court's
+DELIVERED = re.compile(r"^\(?\s*(?:delivered|read|written)\s+by\s*:?\s*(.+?)\s*\)?$", re.I | re.S)
+ORDER = re.compile(
+    r"^(?:(?:the\s+)?(?:final\s+)?orders?(?:\s+of\s+(?:the\s+)?court)?|disposition)\s*[.:]?$", re.I
+)
+REASONS = re.compile(r"^for\s+(?:all\s+)?(?:these|those|the(?:\s+foregoing|\s+above)?)\s+reasons\b", re.I)
+BRACKETED = re.compile(r"^\[(\d{1,4}[A-Za-z]?)\](?=\s|$)")
+DOTTED = re.compile(r"^(\d{1,3}[A-Za-z]?)\.(?=\s|$)")
+BARE = re.compile(r"^(\d{1,4}[A-Za-z]?)(?=\s|$)")  # a number the reviewer set beside the words: "12"
+
+
+class JudgmentBuilder(Builder):
+    """A judgment or ruling. What comes before the first opinion is its header (court, case number,
+    parties, coram, date): one notice, whose words are reviewed before any field read from them is
+    trusted. Each opinion holds its paragraphs: "[12]", or "12." where no paragraph number is printed
+    in brackets, opens one at level 0 or no level, and so does a number the reviewer set beside the
+    words; unnumbered words, indented quotations and items numbered within a paragraph are its
+    leaves, and headings are the opinion's cross-headings. "ORDER", "DISPOSITION" or "For these
+    reasons …" opens the operative orders, which a concurring or dissenting opinion never holds: an
+    ORDER heading there is the court's own."""
+
+    def __init__(self, serialized: Serialized, units: dict):
+        super().__init__(serialized, units)
+        self.header: Node | None = None
+        self.opinion: Node | None = None
+        self.paragraph: Node | None = None
+        self.order: Node | None = None
+        self.caption: Node | None = None
+        self.last: dict[str, tuple[int, str]] = {}  # each opinion's last paragraph number and label
+        self.item = 0  # the last item numbered within the open paragraph
+        self.counts: dict[str, int] = {}
+        # Where a paragraph number is printed in brackets, "12." numbers an item, never a paragraph.
+        self.bracketed = any(
+            leaf.role == "text" and BRACKETED.match(leaf.text) and not self.unit(leaf).get("level")
+            for leaf in self.leaves
+        )
+
+    def next_number(self, key: str) -> int:
+        self.counts[key] = self.counts.get(key, 0) + 1
+        return self.counts[key]
+
+    def qualified(self, own: str) -> str:
+        """The first opinion's paragraphs and orders are unqualified; a later opinion's carry its locator."""
+        later = self.opinion is not None and self.opinion.locator != "op_1"
+        return f"{self.opinion.locator}__{own}" if later else own
+
+    def owner(self, leaf: Leaf) -> Node:
+        if self.order or self.paragraph or self.opinion:
+            return self.order or self.paragraph or self.opinion
+        if self.header is None:
+            self.header = self.add(self.root, "notice", "header", leaf)
+        return self.header
+
+    def put(self, node: Node, index: int) -> None:
+        self.notes_to(node, False)
+        self.hold(node, index)
+
+    def build(self) -> None:
+        super().build()
+        if self.leaves and not self.counts.get("op"):
+            self.issue(
+                "warning",
+                "no_opinion",
+                self.leaves[0],
+                "No JUDGMENT, RULING or opinion heading and no paragraph number in brackets: "
+                "the text before any orders is all header",
+            )
+
+    def place(self, index: int, leaf: Leaf) -> None:
+        if leaf.role in ("caption", "table"):
+            self.table(index, leaf)
+            return
+        unit, text = self.unit(leaf), clean(leaf.text)
+        level, heading_unit = unit.get("level"), unit.get("kind") == "heading"
+        marked = heading_unit or unit.get("align") == "center"
+        opinion = OPINION.match(text) if len(text) <= 200 else None
+        if opinion and (marked or text[: opinion.end(2)].isupper()):
+            self.open_opinion(index, leaf, opinion)
+            return
+        if ORDER.match(text) and (marked or text.isupper()):
+            self.open_order(index, leaf, text)
+            return
+        delivered = DELIVERED.match(text) if len(text) <= 200 else None
+        open_ = self.opinion
+        if delivered and open_ and open_.heading and not (open_.author or open_.children or self.order):
+            open_.author = delivered.group(1)  # "JUDGMENT" then "(Delivered by …)"
+            self.put(open_, index)
+            return
+        number = self.number(leaf, unit, text, level)
+        if number:
+            self.open_paragraph(index, leaf, *number)
+            return
+        ordering = open_ is not None and open_.label not in ORDERS_NOTHING and self.order is None
+        if REASONS.match(text) and not level and ordering:
+            self.open_order(index, leaf, "")
+            return
+        if heading_unit and self.order is None:
+            self.paragraph = None  # a cross-heading: the opinion goes on, its paragraph ends
+        self.put(self.owner(leaf), index)
+
+    def number(self, leaf: Leaf, unit: dict, text: str, level) -> tuple[str, str] | None:
+        """The (number, label) of the paragraph a unit opens; None for words within the open node."""
+        if level:  # indented: a quotation or a list within the paragraph
+            return None
+        found = BRACKETED.match(text)
+        if not found and re.fullmatch(r"\d{1,4}[A-Za-z]?", clean(unit.get("marker") or "")):
+            found = BARE.match(text)
+        if found:
+            return found.group(1), found.group(0)
+        found = DOTTED.match(text)
+        if not found or self.bracketed or self.opinion is None or self.order is not None:
+            return None
+        value, last = int(re.match(r"\d+", found.group(1)).group(0)), self.last.get(self.opinion.locator)
+        if level == 0 or last is None or value > last[0]:
+            return found.group(1), found.group(0)
+        if value not in (1, self.item + 1):
+            self.issue(
+                "warning",
+                "paragraph_order",
+                leaf,
+                f"“{found.group(0)}” follows paragraph {last[1]}: held in it as a numbered item; "
+                "set its level to 0 if it is a paragraph",
+            )
+        self.item = value
+        return None
+
+    def new_opinion(self, leaf: Leaf, kind: str, author: str) -> Node:
+        locator = f"op_{self.next_number('op')}"
+        self.opinion = self.add(self.root, "opinion", locator, leaf, label=kind, author=author)
+        self.paragraph = self.order = None
+        return self.opinion
+
+    def open_opinion(self, index: int, leaf: Leaf, found: re.Match) -> None:
+        named = (found.group(1) or ("ruling" if found.group(2).casefold() == "ruling" else "")).casefold()
+        # A plain "JUDGMENT" or "OPINION" first is the lead opinion; a later one's type is not printed.
+        kind = OPINION_TYPES.get(named, named) or ("" if self.counts.get("op") else "lead")
+        node = self.new_opinion(leaf, kind, (found.group(3) or found.group(4) or "").strip())
+        node.heading = clean(leaf.text)
+        self.put(node, index)
+
+    def open_order(self, index: int, leaf: Leaf, heading: str) -> None:
+        """The operative orders: within the open lead opinion or ruling, else the court's own."""
+        if self.opinion is not None and self.opinion.label in ORDERS_NOTHING:
+            self.opinion = None
+        self.paragraph = None
+        parent, prefix = self.opinion or self.root, self.qualified("")
+        locator = self.qualified(f"order_{self.next_number('order:' + prefix)}")
+        self.order = self.add(parent, "order", locator, leaf, heading=heading)
+        self.put(self.order, index)
+
+    def open_paragraph(self, index: int, leaf: Leaf, number: str, label: str) -> None:
+        if self.opinion is None:
+            self.new_opinion(leaf, "", "")  # numbered paragraphs with no opinion heading before them
+        value, last = int(re.match(r"\d+", number).group(0)), self.last.get(self.opinion.locator)
+        if last is not None and value < last[0]:
+            self.issue("warning", "paragraph_order", leaf, f"Paragraph {label} follows paragraph {last[1]}")
+        self.last[self.opinion.locator] = (value, label)
+        self.order, self.item = None, 0
+        locator = self.qualified(f"para_{slug(number)}")
+        self.paragraph = self.add(self.opinion, "paragraph", locator, leaf, label=label)
+        self.put(self.paragraph, index)
+
+    def table(self, index: int, leaf: Leaf) -> None:
+        caption, self.caption = self.caption, None
+        if leaf.role == "table" and caption is not None:
+            first = self.leaves[caption.leaves[0]]
+            if (first.page, first.unit) == (leaf.page, leaf.unit):
+                self.hold(caption, index)
+                return
+        owner = self.owner(leaf)
+        self.notes_to(owner, False)
+        number = self.next_number("table:" + owner.locator)
+        node = self.add(owner, "table", f"{owner.locator}__table_{number}", leaf)
+        if leaf.role == "caption":
+            node.heading, self.caption = leaf.text, node
         self.hold(node, index)

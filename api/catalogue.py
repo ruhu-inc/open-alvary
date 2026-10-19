@@ -764,6 +764,11 @@ class LegacyCatalogue:
                 found = keyed.get(key, [])
                 if not found and key[-1].startswith("def:"):  # "s. 2, “Fund”" for a definition in s. 2(1)
                     found = [n for k, ns in keyed.items() if k[0] == key[0] and k[-1] == key[-1] for n in ns]
+                if not found and len(key) == 1 and key[0].startswith("para:"):
+                    # "[112]" of a judgment numbered through its opinions: in a later opinion.
+                    found = [
+                        n for k, ns in keyed.items() if k[0].startswith("op:") and k[1:] == key for n in ns
+                    ]
                 candidates += [(source, version, self._match(n, version, source, by_id)) for n in found]
                 if not found:
                     for size in range(len(key) - 1, 0, -1):

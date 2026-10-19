@@ -5,6 +5,11 @@ cited pinpoint read into the same key, so the citation an anchor gives resolves 
 A key compares numbers as printed, case aside ("23A" is "23a"); schedule and part numbers compare as
 numbers ("Second Schedule", "Schedule 2" and "Schedule II" are one schedule). Paragraph letters are
 never read as Roman numerals: "(i)" is "i" wherever it is printed.
+
+A judgment's paragraph (judgment-paragraphs-1) is cited by its number in brackets after the neutral
+citation, "[2019] NGSC 4 [12]" or "[2019] NGSC 4 at [12]", or "[2019] NGSC 4, para. 12"; a paragraph
+of a later opinion that numbers its own paragraphs is "op. 2 [4]". "para. 12" alone is read only
+after a neutral citation: in an Act it would be a schedule's paragraph.
 """
 
 import re
@@ -33,6 +38,14 @@ SCHEDULE = re.compile(
     rf"^(?:({'|'.join(ORDINALS)}|\d{{1,2}}(?:st|nd|rd|th))\s+schedule|(?:schedule|sch)\.?\s*(\d{{1,2}}|[ivxlc]{{1,6}})?)"
     r"\s*(?:,?\s*(?:part|pt)\.?\s*(\d{1,2}|[ivxlc]{1,6}))?"
     rf"\s*(?:,?\s*(?:paragraphs?|paras?|p)\.?\s*(\d{{1,3}}[a-z]?)\.?\s*{_SUBS})?$",
+    re.I,
+)
+# A neutral citation, "[2019] NGSC 4", "[2020] EWCA Civ 123", "[2020] EWHC 123 (Ch)", and a judgment's
+# paragraph after it: "[12]", "at [12]", "op. 2 [4]", "para. 12" (group 3, read only after a citation).
+NEUTRAL = re.compile(r"\[\d{4}\]\s+[a-z]{2,16}(?:\s+[a-z]{2,11})?\s+\d{1,6}(?:\s*\([a-z]{1,20}\))?", re.I)
+PARAGRAPH = re.compile(
+    r"^(?:(?:op|opinion)\.?\s*(\d{1,2})\s*,?\s*)?(?:at\s+)?"
+    r"(?:\[\s*(\d{1,4}[a-z]?)\s*\]|(?:paras?|paragraphs?)\.?\s*(\d{1,4}[a-z]?))$",
     re.I,
 )
 # Where a pinpoint may begin within a citation: "NDPA s. 23(1)(a)", "ISA 2025, First Schedule, para. 3".
@@ -97,13 +110,23 @@ def _schedule_title(label: str | None) -> str:
 
 def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str, ...], str] | None:
     """The key and printed pinpoint of the last part of ``chain`` (outermost first), or None for a part
-    no pinpoint names (the document, a contents list, a part of an Act)."""
+    no pinpoint names (the document, a contents list, a part of an Act, a judgment's opinion or
+    orders)."""
     key: list[str] = []
     shown = ""
     schedule = False
+    opinion: str | None = None  # within a judgment's opinion: its number, "1" for the first
     lead = "reg. " if document_type == "regulation" else "s. "
     for part in chain:
-        if part.kind == "schedule":
+        if part.kind == "opinion":
+            opinion, key, shown = _token_number(part.locator, "op") or "1", [], ""
+        elif opinion is not None:  # a judgment's paragraph; nothing within it has a pinpoint of its own
+            number = re.sub(r"\s+", "", _printed(part.label).strip("[]"))
+            if key or part.kind != "paragraph" or not number:
+                return None
+            key = [*([] if opinion == "1" else [f"op:{opinion}"]), f"para:{number.casefold()}"]
+            shown = f"[{number}]" if opinion == "1" else f"op. {opinion} [{number}]"
+        elif part.kind == "schedule":
             schedule, key = True, [f"sch:{_ordinal(_token_number(part.locator, 'sch')) or '1'}"]
             shown = _schedule_title(part.label)
         elif schedule and part.kind == "part" and part.label:
@@ -153,14 +176,34 @@ def read(pinpoint: str) -> tuple[str, ...] | None:
         if found.group(4):
             key += [f"para:{_plain(found.group(4))}", *subs(found.group(5))]
         return tuple(key)
-    return None
+    return _paragraph(value)
+
+
+def _paragraph(pinpoint: str, worded: bool = False) -> tuple[str, ...] | None:
+    """The key of a judgment's paragraph: "[12]", "at [12]", "op. 2 [4]"; "para. 12" only when
+    ``worded`` (after a neutral citation)."""
+    found = PARAGRAPH.match(pinpoint)
+    if not found or (found.group(3) and not worded):
+        return None
+    opinion, number = found.group(1), _plain(found.group(2) or found.group(3))
+    within = () if opinion is None or int(opinion) == 1 else (f"op:{int(opinion)}",)
+    return (*within, f"para:{number}")
 
 
 def split(citation: str) -> list[tuple[str, str, tuple[str, ...]]]:
     """Each way to read a citation as a work and a pinpoint within it, longest pinpoint first:
-    "NDPA s. 23(1)(a)" → ("NDPA", "s. 23(1)(a)", key); "section 23 of the NDPA" likewise."""
+    "NDPA s. 23(1)(a)" → ("NDPA", "s. 23(1)(a)", key); "section 23 of the NDPA" likewise; a judgment
+    by its neutral citation, alone and with the words before it: "Okafor v State [2019] NGSC 4 at
+    [12]" → ("Okafor v State [2019] NGSC 4", "[12]", key), then ("[2019] NGSC 4", "[12]", key)."""
     value = " ".join(citation.split())
     found = []
+    for neutral in NEUTRAL.finditer(value):
+        pin = value[neutral.end() :].strip(" ,;")
+        key = _paragraph(pin, worded=True)
+        if key:
+            shown = re.sub(r"^at\s+", "", pin, flags=re.I)
+            for work in dict.fromkeys((value[: neutral.end()].strip(" ,;"), neutral.group(0))):
+                found.append((work, shown, key))
     for start in _STARTS.finditer(value):
         work, pin = value[: start.start()].strip(" ,;("), value[start.start() :]
         key = read(pin)

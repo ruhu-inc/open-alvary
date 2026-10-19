@@ -1,10 +1,10 @@
 """The section index (RET-01, MIN-02, D15): each published text's provisions as search units, kept in
 the transaction that changes the catalogue, and the bounded lexical search over them.
 
-A unit is a provision (a section, an article, a schedule's paragraph), never a whole text. A provision
-larger than MAX_UNIT_BYTES is searched by its parts, and text outside every provision (a long title, a
-preamble, a part's heading) by its own runs, so units cover a text without overlapping and one passage
-is one hit. Only texts anyone may read now are indexed (changes.record.current, migration 0031); a hit is
+A unit is a provision (a section, an article, a schedule's paragraph, a judgment's paragraph or its
+orders), never a whole text. A provision larger than MAX_UNIT_BYTES is searched by its parts, and text
+outside every provision (a long title, a preamble, a part's heading, a judgment's header) by its own
+runs, so units cover a text without overlapping and one passage is one hit. Only texts anyone may read now are indexed (changes.record.current, migration 0031); a hit is
 rechecked against the rights policy before any of its words are served.
 
 Ranking (oa-rank-1) is PostgreSQL's cover density, ts_rank_cd with normalisation 32, over a unit's
@@ -50,8 +50,9 @@ COUNT_BOUND = 10_000
 TIMEOUT_MS = 10_000  # RET-02: a retrieval answers within ten seconds or says it could not
 START, STOP = "⟦", "⟧"  # highlight marks; never part of a snippet
 HEADLINE = f"StartSel={START}, StopSel={STOP}, MaxWords=40, MinWords=18, ShortWord=2, MaxFragments=1"
-# A provision of its own; a schedule's paragraph is one when it is not inside another paragraph.
-PROVISIONS = {"section", "article"}
+# A provision of its own; a schedule's or an opinion's paragraph is one when it is not inside another
+# paragraph.
+PROVISIONS = {"section", "article", "order"}
 SKIPPED = {"contents", "contents_entry"}  # a contents list repeats headings: layout, not law
 OUTLINE_KINDS = {"part", "chapter", "title", "division", "section", "article", "schedule"}
 OUTLINE_BYTES = 8 * 1024
@@ -115,7 +116,7 @@ def units(version: VersionViewRecord, nodes: list[NodeViewRecord], document_type
             return True
         if node.kind == "paragraph":
             enclosing = next((p for p in reversed(path) if p.kind not in ("part", "division")), None)
-            return enclosing is not None and enclosing.kind in ("schedule", "annex")
+            return enclosing is not None and enclosing.kind in ("schedule", "annex", "opinion")
         return False
 
     def emit(node, start, end, path):

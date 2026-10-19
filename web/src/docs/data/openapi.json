@@ -4938,10 +4938,12 @@
               "subparagraph",
               "schedule",
               "annex",
-              "table"
+              "table",
+              "opinion",
+              "order"
             ],
             "title": "Kind",
-            "description": "What it is: `document`, `preamble`, `contents`, `contents_entry`, `notice`, `title`, `part`, `chapter`, `division`, `article`, `section`, `subsection`, `definition`, `paragraph`, `subparagraph`, `schedule`, `annex` or `table`."
+            "description": "What it is: `document`, `preamble`, `contents`, `contents_entry`, `notice`, `title`, `part`, `chapter`, `division`, `article`, `section`, `subsection`, `definition`, `paragraph`, `subparagraph`, `schedule`, `annex`, `table`, or in a judgment `opinion` or `order`."
           },
           "locator": {
             "type": "string",
