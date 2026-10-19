@@ -1,0 +1,21 @@
+ingestion/decisions/ng-catalogue.json
+  s_fa12c52425abab::t_b9cd133b9a5645 1-15
+ingestion/decisions/ng-text.json
+  s_fa12c52425abab::t_1b04a8053a4820 1-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "216353755b0b702819518e768f53e374cab7b97d",
+  "prompts": {},
+  "sessions": {
+    "s_fa12c52425abab": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a148ac-66f5-76b1-85a7-162e3e001a80",
+        "model": "gpt-6.1-sol"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
