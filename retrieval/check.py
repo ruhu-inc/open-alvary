@@ -7,7 +7,7 @@ import hashlib
 from datetime import UTC, date, datetime
 
 from api.catalogue import LegacyCatalogue, SourceUnavailable, expression_id
-from retrieval.legal_time import record_currentness
+from retrieval.legal_time import Events
 from retrieval.pack import dataset_revision
 from schema.public import CheckItem, CheckPage, CheckResult, NodeViewRecord
 
@@ -19,6 +19,7 @@ class Checker:
         self._nodes: dict[str, list[NodeViewRecord]] = {}
         self.jurisdictions: set[str] = set()  # of the parts found, for the plan's admission
         self.served: set[tuple[str, str]] = set()  # (version, content hash) of every text read
+        self.events = Events(service.repository.connection)
 
     def _structure(self, version) -> list[NodeViewRecord]:
         if version.id not in self._nodes:
@@ -78,7 +79,11 @@ class Checker:
             if item.span_hash is not None and hashlib.sha256(span).hexdigest() != item.span_hash:
                 results.append(CheckResult(result="span_mismatch", **base))
                 continue
-            currentness = record_currentness(source.legal_status, version, item.as_of, self.today)
+            within = [n.locator for n in self._structure(version) if node.start_byte <= n.start_byte
+                      and n.end_byte <= node.end_byte and n.locator != node.locator]  # fmt: skip
+            currentness = self.events.currentness(
+                source, version, node.locator, within, item.as_of, self.today
+            )
             newest = self._newest(version, source)
             if newest.id == version.id:
                 results.append(CheckResult(result="unchanged", currentness=currentness, **base))
@@ -91,7 +96,9 @@ class Checker:
                     newer_version_id=newest.id,
                     newer_anchor_id=there.id if there else None,
                     same_words=there is not None and newer[there.start_byte : there.end_byte] == span,
-                    currentness=record_currentness(source.legal_status, newest, item.as_of, self.today),
+                    currentness=self.events.currentness(
+                        source, newest, node.locator, within, item.as_of, self.today
+                    ),
                     **base,
                 )
             )

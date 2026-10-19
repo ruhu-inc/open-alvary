@@ -554,7 +554,11 @@ SCHEMAS: dict[str, dict] = {
                 "description": "For a legal effect: {kind, by, effective_date, evidence_url}. `kind` is `repeal`, "
                 "`amendment` or `supersession` of the record in `work`; `by` is the record that had the effect "
                 "{id, title, citation}; the date is when it took effect, when known. A reviewer checked it "
-                "against the official text. A later correction of it has the same `event_id`.",
+                "against the official text. A later correction of it has the same `event_id`. For a reviewed "
+                "event on provisions, `kind` is the event (`commenced`, `repealed`, `suspended`, `revived`, "
+                "…), with `scope` (`whole` or `explicit_nodes`), `provisions` (their locators), `precision` "
+                "of the date and `review_state` (`withdrawn` when the event was withdrawn); `by` is present "
+                "when another law asserted it.",
             },
             "previous": {
                 "type": "object",

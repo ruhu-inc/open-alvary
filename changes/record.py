@@ -123,8 +123,10 @@ class _Recorder:
                 "coverage_state",
                 "rights_revision",
                 "link_state",
+                "event_state",
             )
         }
+        self.t["legal_event"] = ns.qualified(conn, "corpus", "legal_event")
         self.allocate = ns.qualified(conn, "policy", "allocate_publication_revision") + "()"
         self.events: list[dict] = []
         self.rights_revision: dict[str, int] = {}  # work -> the rights revision in force after this write
@@ -204,6 +206,7 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
     if conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["feed_state"]}) is None:
         return 0  # a database before migration 0023 has no change log
     keeps_links = conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["link_state"]}) is not None
+    keeps_events = conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["event_state"]}) is not None
     state = (
         conn.execute(
             text(
@@ -245,15 +248,22 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
     if keeps_links:
         announce = bool(state["baselined"] and state["links_baselined"])
         links = _links(rec, scope if announce else None, announce=announce)
+    provision_events = (
+        _provision_events(rec, scope if state["baselined"] else None, announce=bool(state["baselined"]))
+        if keeps_events
+        else []
+    )
     if not state["baselined"]:
         _record_rights(rec, revisions, 0)
         _record_links(rec, links, baseline=True)
+        _record_provision_events(rec, provision_events)
         conn.execute(
             text(f"UPDATE {rec.t['feed_state']} SET baselined = true, baseline_at = statement_timestamp()")
         )
         return 0
     if keeps_links:
         _record_links(rec, links, baseline=not state["links_baselined"])
+    _record_provision_events(rec, provision_events)
     if rec.events or revisions:
         revision = conn.scalar(text(f"SELECT {rec.allocate}"))
         _record_rights(rec, revisions, revision)
@@ -423,6 +433,119 @@ def _record_links(rec: _Recorder, states: list[tuple], *, baseline: bool) -> Non
         )
     if baseline:
         rec.conn.execute(text(f"UPDATE {rec.t['feed_state']} SET links_baselined = true"))
+
+
+# Reviewed provision events (CPR-02, migration 0035), as the change log announces them.
+EVENT_FIELDS = ("event_type", "scope", "locators", "date_from", "date_to", "precision", "review_state",
+                "supersedes_event_id", "asserting_work")  # fmt: skip
+
+
+def _provision_events(rec: _Recorder, scope, *, announce: bool) -> list[tuple]:
+    """Reviewed events on public works that concern these works (all when None), compared with their
+    last announced form: a new one is a legal_effect_recorded event on the affected work, a changed one
+    (corrected, superseded or withdrawn) its correction (SUB C1). Returns the state to record."""
+    query = f"SELECT event_id, affected_work, {', '.join(EVENT_FIELDS)} FROM {rec.t['legal_event']}"
+    params = {}
+    if scope is not None:
+        query += " WHERE affected_work = ANY(:ids)"
+        params = {"ids": sorted(scope)}
+    rows = rec.conn.execute(text(query + " ORDER BY event_id"), params).mappings().all()
+    works = sorted({r["affected_work"] for r in rows})
+    visible = current(rec.conn, works) if works else {}
+    public = {
+        r["event_id"]: {
+            "work": r["affected_work"],
+            **{
+                k: (v.isoformat() if hasattr(v, "isoformat") else list(v) if isinstance(v, list) else v)
+                for k, v in r.items()
+                if k in EVENT_FIELDS
+            },
+        }  # fmt: skip
+        for r in rows
+        if r["affected_work"] in visible
+    }
+    held_query = f"SELECT event_id, projection_hash, change_event_id, change_event_revision FROM {rec.t['event_state']}"
+    if scope is not None:
+        held_query += " WHERE event_id = ANY(:events) OR work_id = ANY(:ids)"
+        params = {"events": sorted(public), "ids": sorted(scope)}
+    held = {row.event_id: row for row in rec.conn.execute(text(held_query), params)}
+    states = []
+    for event_id, event in sorted(public.items()):
+        event_hash, was = digest(event), held.get(event_id)
+        if was is not None and was.projection_hash == event_hash:
+            continue
+        if was is None and event["review_state"] != "reviewed":
+            states.append(("put", event_id, event, event_hash, None))  # withdrawn before it was announced
+            continue
+        planned = None
+        if announce:
+            affected = visible[event["work"]]
+            title = affected["projection"].get("title")
+            corrects = (
+                (was.change_event_id, was.change_event_revision)
+                if was is not None and was.change_event_id
+                else None
+            )
+            what = "the whole work" if event["scope"] == "whole" else ", ".join(event["locators"])
+            if event["review_state"] == "withdrawn":
+                summary = f"The recorded {event['event_type']} of {title} ({what}) was withdrawn."
+            elif corrects:
+                summary = f"The record of when {title} ({what}) was {event['event_type']} was corrected."
+            else:
+                summary = f"{title} ({what}): {event['event_type']}."
+            planned = rec.add(
+                "legal_effect_recorded",
+                event_id,
+                event["work"],
+                affected,
+                summary=summary,
+                extra={
+                    "legal_effect": {
+                        "kind": event["event_type"],
+                        "scope": event["scope"],
+                        "provisions": event["locators"],
+                        "effective_date": event["date_from"],
+                        "precision": event["precision"],
+                        "review_state": event["review_state"],
+                        **({"by": {"id": event["asserting_work"]}} if event["asserting_work"] else {}),
+                    }
+                },
+                corrects=corrects,
+                legal_effective={"from": event["date_from"], "precision": event["precision"]}
+                if event["date_from"]
+                else None,
+            )
+        states.append(("put", event_id, event, event_hash, planned))
+    for event_id in sorted(held.keys() - public.keys()):
+        states.append(("drop", event_id, None, None, None))
+    return states
+
+
+def _record_provision_events(rec: _Recorder, states: list[tuple]) -> None:
+    table = rec.t["event_state"]
+    for action, event_id, event, event_hash, planned in states:
+        if action == "drop":
+            rec.conn.execute(text(f"DELETE FROM {table} WHERE event_id = :e"), {"e": event_id})
+            continue
+        rec.conn.execute(
+            text(
+                f"INSERT INTO {table} (event_id, work_id, projection, projection_hash, change_event_id,"
+                " change_event_revision) VALUES (:e, :w, CAST(:p AS jsonb), :h, :c, :r) ON CONFLICT (event_id)"
+                " DO UPDATE SET work_id = EXCLUDED.work_id, projection = EXCLUDED.projection,"
+                " projection_hash = EXCLUDED.projection_hash,"
+                f" change_event_id = coalesce(EXCLUDED.change_event_id, {table}.change_event_id),"
+                f" change_event_revision = coalesce(EXCLUDED.change_event_revision, {table}.change_event_revision),"
+                " updated_at = statement_timestamp()"
+            ),
+            {
+                "e": event_id,
+                "w": event["work"],
+                "p": json.dumps(event, ensure_ascii=False),
+                "h": event_hash,
+                "c": planned and planned["event_id"],
+                "r": planned and planned["event_revision"],
+            },
+        )
 
 
 def _version_diff(conn: Connection, version_id: str) -> dict | None:

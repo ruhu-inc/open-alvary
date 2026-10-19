@@ -438,17 +438,16 @@ class Feed:
         legal_effect = None
         if kind == "legal_effect_recorded":
             told = payload.get("legal_effect") or {}
-            by = visible.work((told.get("by") or {}).get("id"))
-            if by is None:  # the law that had the effect is not public: say nothing of it
-                return None
-            legal_effect = {
-                **told,
-                "by": {
+            legal_effect = dict(told)
+            if "by" in told:  # a provision event (CPR-02) may have no asserting law
+                by = visible.work((told.get("by") or {}).get("id"))
+                if by is None:  # the law that had the effect is not public: say nothing of it
+                    return None
+                legal_effect["by"] = {
                     "id": told["by"]["id"],
                     "title": by["projection"].get("title"),
                     "citation": by["projection"].get("citation"),
-                },
-            }
+                }
         if kind == "text_version_published" and (not named or row["version_id"] not in work["versions"]):
             return None
         summary = payload.get("summary")

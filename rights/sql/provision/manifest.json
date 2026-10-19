@@ -256,5 +256,15 @@
     "requires": [
       "changes.document_unit"
     ]
+  },
+  {
+    "revision": "0035",
+    "anchor": "corpus.legal_event",
+    "file": "v0035.sql",
+    "requires": [
+      "changes.event_state",
+      "corpus.currentness_profile",
+      "corpus.legal_event"
+    ]
   }
 ]
