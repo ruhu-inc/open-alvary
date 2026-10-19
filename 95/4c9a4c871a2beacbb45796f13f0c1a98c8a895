@@ -1,0 +1,64 @@
+retrieval/ranking.py
+  s_d665c62e07d76f::t_bbee50825a9a0d 63,74,106-107
+rights/sql/provision/v0037.sql
+  s_d665c62e07d76f::t_2af1c30a088375 1-2
+retrieval/pack.py
+  s_d665c62e07d76f::t_bbee50825a9a0d 69-70,78,105,114-119,241-252,267,288-294,472,734
+retrieval/engine.py
+  s_d665c62e07d76f::t_bcf30f2d5fb3dd 58,96,98,113,115,117-118,214,216,222,255-259,350,353-354,356
+  s_d665c62e07d76f::t_460fc9aebf81d3 86-88,93-95
+  s_d665c62e07d76f::t_b51a4ec33e2632 178,180-194
+  s_d665c62e07d76f::t_2af1c30a088375 6,91-92
+  s_d665c62e07d76f::t_728d9ee5c1b76d 70-78,80-81,83,85,89,158-160,162-164,213,215,290-292,299-301,303-305,325-327,331-335,344-346
+  s_d665c62e07d76f::t_21cc77a48e2e0c 1-5,7-29,31-40,46-57,59-69,79,84,97,99-112,114,116,119-136,145-149,151-157,161,165-177,179,195-208,210-212,217-221,223-244,247,249,252,262-289,293-298,302,306-324,328-330,336-339,347-349,351,355,357-383
+  s_d665c62e07d76f::t_b12ed2ae08cda7 30,137-144,150
+  s_d665c62e07d76f::t_467cb10a1b8669 41-45,90
+  s_d665c62e07d76f::t_f77e515886c0c9 82
+  s_d665c62e07d76f::t_a032b1d977241b 209,245-246,248,250-251,253-254,260-261,340-343,352
+tests/test_postgres_changes.py
+  s_d665c62e07d76f::t_2af1c30a088375 544
+rights/sql/provision/manifest.json
+  s_d665c62e07d76f::t_2af1c30a088375 278-285
+retrieval/indexer.py
+  s_d665c62e07d76f::t_486376e00bb864 277-279,302,336-339,344-346,374,383-418,420-428,430-450,507-512,521,536
+  s_d665c62e07d76f::t_e67087d8bd9e3c 54-85,137-141,144,146-147,189-217
+  s_d665c62e07d76f::t_070c0c7d63c0a1 457
+  s_d665c62e07d76f::t_1cd5a70ad9715d 50-53,218-220,419,429,513,537-538
+rights/capabilities.py
+  s_d665c62e07d76f::t_2af1c30a088375 11
+api/openapi_docs.py
+  s_d665c62e07d76f::t_bbee50825a9a0d 709-710,790-791
+retrieval/projector.py
+  s_d665c62e07d76f::t_bcf30f2d5fb3dd 44,48
+  s_d665c62e07d76f::t_9543c7c2240313 100-101
+  s_d665c62e07d76f::t_7eaf7e395103e5 1-43,45-47,49-85,87-94,96-99,102-133,135-238
+  s_d665c62e07d76f::t_bd849892847b84 86,95,134
+schema/public.py
+  s_d665c62e07d76f::t_bbee50825a9a0d 424,534
+experiments/embeddings/serve.py
+  s_d665c62e07d76f::t_59646003afc2a9 1-104
+web/src/docs/data/openapi.json
+  s_d665c62e07d76f::t_bbee50825a9a0d 4410-4421,5370-5387
+migrations/versions/0037_search_engine.py
+  s_d665c62e07d76f::t_2af1c30a088375 1-70,72-73
+  s_d665c62e07d76f::t_460fc9aebf81d3 71
+tests/test_engine_vespa.py
+  s_d665c62e07d76f::t_9fed3cf1310397 1-31,40-52,56-64,68-112
+  s_d665c62e07d76f::t_8a0a0228e081c4 32-39,53-55,65-67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "954c9a4c871a2beacbb45796f13f0c1a98c8a895",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
