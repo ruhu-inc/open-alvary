@@ -10,7 +10,8 @@ compressed, and searched by its best window). A new embedding generation is a ne
 partial updates and validated before queries use it: blue/green inside the engine.
 
 Rank profiles are written here and documented in each pack's ``ranking.features``:
-  lexical     1.0·bm25(headings) + 0.4·bm25(words) + 0.2·bm25(title) + 0.1·bm25(identifiers)
+  lexical     1.0·bm25(headings) + 0.4·bm25(words) + 0.2·bm25(title) + 0.1·bm25(identifiers),
+              with b = 0.3 for words and headings
   dense_<p>   closeness(field, emb_<p>)
 Every query carries the hard filters (jurisdiction, language, type, status, year, the date's
 effective interval) in its YQL, so filtering happens before ranking. The engine only ever holds units
@@ -33,6 +34,10 @@ import httpx
 
 LEXICAL = "1.0 * bm25(headings) + 0.4 * bm25(words) + 0.2 * bm25(title) + 0.1 * bm25(identifiers)"
 FIELDS = ("headings", "words", "title", "identifiers")
+# BM25's length normalisation (b, default 0.75) is weakened for words and headings: a part's own unit
+# is its heading alone, and at 0.75 it outranks the sections under it. Measured on the NDPA development
+# set through the whole pack (nDCG@10 0.746 to 0.783; experiments/embeddings/screen-2026-10-19.md).
+LENGTH_NORMALISATION = {"words": 0.3, "headings": 0.3}
 LOCALES = {"english": "en", "french": "fr"}  # the language each analysis stems in; simple has none
 TIMEOUT_SECONDS = 10
 EPOCH = date(1970, 1, 1)
@@ -105,10 +110,12 @@ class Application:
         lines.append("    }")
         lines.append(f"    fieldset default {{ fields: {', '.join(FIELDS)} }}")
         features = " ".join(f"bm25({name})" for name in FIELDS)
+        properties = "".join(f"            bm25({name}).b: {b}\n" for name, b in LENGTH_NORMALISATION.items())
         lines.append(
             "    rank-profile lexical {\n"
             f"        first-phase {{ expression: {LEXICAL} }}\n"
             f"        match-features {{ {features} }}\n"
+            f"        rank-properties {{\n{properties}        }}\n"
             "    }"
         )
         for vectors, dims in sorted(self.profiles.items()):
