@@ -42,6 +42,15 @@ resource "azurerm_key_vault_secret" "database_url" {
   depends_on = [azurerm_role_assignment.vault_operator]
 }
 
+# The migrate job's launch check reads the password itself (scripts.check_launch, POSTGRES_PASSWORD),
+# as on Google Cloud.
+resource "azurerm_key_vault_secret" "database_password" {
+  name         = "database-password"
+  key_vault_id = azurerm_key_vault.main.id
+  value        = random_password.postgres.result
+  depends_on   = [azurerm_role_assignment.vault_operator]
+}
+
 locals {
   # A secret's address for Container Apps: versionless, so a value copied again is read within
   # Container Apps' refresh (about 30 minutes) or at the next revision.

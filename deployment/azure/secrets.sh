@@ -56,7 +56,7 @@ if [[ "$COMMAND" == plan ]]; then
   ((${#missing[@]})) && { echo "Not in Secret Manager (accounts may be off):"; printf '  %s\n' "${missing[@]}"; }
   cat <<'PLAN'
 Made elsewhere, not copied:
-  database-url, review-database-url   Terraform, from the new servers' passwords
+  database-url, database-password, review-database-url   Terraform, from the new servers' passwords
   access-database-url                 copy composes it: the access role's password, the new host
   workbench-entra-client-secret       the owner, from the workbench's Entra app registration
   google-wif-config                   the owner, gcloud iam workload-identity-pools create-cred-config
