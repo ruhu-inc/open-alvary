@@ -421,6 +421,7 @@ class RankingExplanation(WireModel):
     arms: dict[str, int]
     fused_score: float
     rerank_score: float | None = Field(**OMIT)
+    features: dict[str, dict[str, float]] | None = Field(**OMIT)
     band: int = Field(ge=0)
     signals: tuple[RankingSignal, ...] = ()
     diversification: tuple[str, ...] = ()
@@ -530,6 +531,7 @@ class EvidenceRevisions(WireModel):
     router: str
     ranking: str
     analyzer: str
+    engine: str | None = Field(**OMIT)
     vector: str | None = Field(**OMIT)
     reranker: str | None = Field(**OMIT)
 

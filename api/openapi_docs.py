@@ -706,6 +706,8 @@ FIELDS: dict[str, dict[str, str]] = {
         "router": "The routing rules, such as `oa-route-1`.",
         "ranking": "The ranking profile, such as `oa-rank-2`.",
         "analyzer": "The text analysis, such as `oa-search-3`.",
+        "engine": "The search engine that ran the word and meaning searches (`vespa`), when one is configured; "
+        "otherwise the system of record's own search ran them.",
         "vector": "The semantic index profile, when one is active.",
         "reranker": "The reranker profile, when one is active.",
     },
@@ -785,6 +787,8 @@ FIELDS: dict[str, dict[str, str]] = {
         "every word), `document` or `dense` (meaning, where a semantic index is active).",
         "fused_score": "The fused score after the signals: relevance, not legal authority.",
         "rerank_score": "The reranker's score, when one ran.",
+        "features": "The search engine's ranking features for each search the unit came from, such as "
+        "`bm25(words)` or `closeness(field, emb_…)`: the inputs to its rank there.",
         "band": "The band of positions it was ordered within.",
         "signals": "Each documented signal applied, with its value and effect.",
         "diversification": "Anything diversification did, such as collapsing a duplicate into it.",

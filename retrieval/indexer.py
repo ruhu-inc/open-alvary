@@ -47,7 +47,42 @@ def available(conn: Connection) -> bool:
     )
 
 
-def store_for(conn: Connection, generation) -> Store:
+class EngineStore:
+    """A generation whose vectors live in the search engine (backend ``vespa``): a field of each unit,
+    one vector per window, set by partial update."""
+
+    def __init__(self, engine, vectors: str, dims: int):
+        self.engine, self.vectors, self.dims = engine, vectors, dims
+
+    def replace(self, version_id: str, rows: list[dict]) -> None:
+        by_unit: dict[int, dict[str, list[float]]] = {}
+        for row in rows:
+            windows = by_unit.setdefault(row["unit_start"], {})
+            windows[str(len(windows))] = row["embedding"]
+        for unit_start, windows in sorted(by_unit.items()):
+            if not self.engine.update_embedding(version_id, unit_start, self.vectors, windows):
+                raise LookupError(
+                    f"{version_id}:{unit_start} is not in the engine yet; the projector feeds it first"
+                )
+
+    def purge(self, live: str) -> int:
+        return 0  # the projector deletes a withdrawn text's units, vectors and all
+
+
+def search_engine():
+    from retrieval.engine import Engine, config_from_env
+
+    config = config_from_env()
+    if config is None:
+        raise LookupError("No search engine: set OPEN_ALVARY_ENGINE_URL")
+    return Engine(*config)
+
+
+def store_for(conn: Connection, generation, engine=None):
+    if generation["backend"] == "vespa":
+        return EngineStore(
+            engine or search_engine(), generation["vectors_table"], generation["profile"]["dims"]
+        )
     from changes.record import namespace
 
     table = namespace(conn).qualified(conn, "changes", generation["vectors_table"])
@@ -99,13 +134,17 @@ def queue(conn: Connection, version_ids) -> int:
     ).rowcount
 
 
-def prepare(admin: Engine, profile: Profile, *, backend: str | None = None) -> str:
-    """A new building generation for ``profile``: its vectors table and a job for every indexed text.
-    With pgvector unless the extension cannot be installed (then exact search, or a refusal when
-    ``backend`` asked for pgvector)."""
+def prepare(admin: Engine, profile: Profile, *, backend: str | None = None, engine=None) -> str:
+    """A new building generation for ``profile``: its vectors table (or, with backend ``vespa``, a vector
+    field of the search engine's units) and a job for every indexed text. Without a backend named: the
+    engine when one is configured or given; else pgvector unless the extension cannot be installed (then
+    exact search, or a refusal when ``backend`` asked for pgvector)."""
     from api.text_index import _tables
     from changes.record import namespace
+    from retrieval.engine import config_from_env
 
+    if backend == "vespa" or (backend is None and (engine is not None or config_from_env() is not None)):
+        return _prepare_engine(admin, profile, engine or search_engine())
     with admin.begin() as conn:
         ns = namespace(conn)
         has_vector = conn.scalar(text("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')"))
@@ -144,6 +183,38 @@ def prepare(admin: Engine, profile: Profile, *, backend: str | None = None) -> s
             ),
             {"g": generation_id},
         )
+    return generation_id
+
+
+def _prepare_engine(admin: Engine, profile: Profile, engine) -> str:
+    """A generation whose vectors are a new field of the engine's units, deployed with the others."""
+    from api.text_index import _tables
+    from retrieval import projector
+    from retrieval.engine import slug
+
+    generation_id = f"gen_{uuid.uuid4().hex}"
+    vectors = f"emb_{slug(profile.id)[:40]}_{generation_id[4:12]}"
+    with admin.begin() as conn:
+        units, _ = _tables(conn)
+        conn.execute(
+            text(
+                f"INSERT INTO {_t(conn, 'index_generation')} (generation_id, profile_id, profile, backend,"
+                " vectors_table, state, manifest) VALUES (:g, :p, CAST(:profile AS jsonb), 'vespa', :t, 'building',"
+                " CAST(:manifest AS jsonb))"
+            ),
+            {
+                "g": generation_id, "p": profile.id, "profile": json.dumps(profile.as_dict()), "t": vectors,
+                "manifest": json.dumps({"profile_hash": profile_hash(profile), "prepared_at": datetime.now(UTC).isoformat()}),
+            },
+        )  # fmt: skip
+        conn.execute(
+            text(
+                f"INSERT INTO {_t(conn, 'index_job')} (generation_id, version_id, state)"
+                f" SELECT :g, version_id, 'queued' FROM {units} GROUP BY version_id"
+            ),
+            {"g": generation_id},
+        )
+    projector.deploy(admin, engine)
     return generation_id
 
 
@@ -203,7 +274,9 @@ def _inputs(conn: Connection, version_id: str, profile: Profile) -> list[dict]:
     return found
 
 
-def work(engine: Engine, *, batches: int = 1, batch: int = 10, embedders: dict | None = None) -> dict:
+def work(
+    engine: Engine, *, batches: int = 1, batch: int = 10, embedders: dict | None = None, searcher=None
+) -> dict:
     """Lease and run up to ``batches`` batches of jobs; returns counts. ``embedders`` maps a profile ID to
     an embedder (tests); otherwise each profile's own."""
     embedders = embedders or {}
@@ -226,7 +299,7 @@ def work(engine: Engine, *, batches: int = 1, batch: int = 10, embedders: dict |
                     chunk = inputs[start : start + BATCH]
                     vectors += embedder.embed([i["input"] for i in chunk], query=False)
                 with engine.begin() as conn:
-                    store_for(conn, found).replace(
+                    store_for(conn, found, searcher).replace(
                         version_id,
                         [
                             {k: v for k, v in i.items() if k != "input"} | {"embedding": e}
@@ -260,13 +333,17 @@ def work(engine: Engine, *, batches: int = 1, batch: int = 10, embedders: dict |
     return counts
 
 
-def validate(engine: Engine, generation_id: str, *, embedder=None, sample: int = 20) -> dict:
-    """Coverage of every indexed unit, recomputation of a sample, and (pgvector) approximate-search
-    recall against exact search. Records the results; the generation becomes validating when they pass."""
+def validate(engine: Engine, generation_id: str, *, embedder=None, sample: int = 20, searcher=None) -> dict:
+    """Coverage of every indexed unit, recomputation of a sample, and approximate-search recall against
+    exact search (pgvector and the engine). Records the results; the generation becomes validating when
+    they pass."""
     from api.text_index import _tables
 
     with engine.begin() as conn:
         found = generation(conn, generation_id)
+    if found["backend"] == "vespa":
+        return _record(engine, generation_id, _validate_engine(engine, found, embedder, searcher, sample))
+    with engine.begin() as conn:
         profile = Profile.from_dict(found["profile"])
         store = store_for(conn, found)
         units, _ = _tables(conn)
@@ -294,7 +371,7 @@ def validate(engine: Engine, generation_id: str, *, embedder=None, sample: int =
             }
         stored = [json.loads(r.embedding.replace("{", "[").replace("}", "]")) for r in rows]
         again = embedder.embed([inputs.get((r.version_id, r.start_byte), "") for r in rows], query=False)
-        worst = min(sum(a * b for a, b in zip(x, y, strict=True)) for x, y in zip(stored, again, strict=True))
+        worst = min(_cosine(x, y) for x, y in zip(stored, again, strict=True))
     recall = None
     if found["backend"] == "pgvector" and rows:
         recall = _ann_recall(engine, found, [json.loads(r.embedding) for r in rows[:10]])
@@ -303,13 +380,81 @@ def validate(engine: Engine, generation_id: str, *, embedder=None, sample: int =
         "validated_at": datetime.now(UTC).isoformat(), "missing_units": missing, "recompute_min_cosine": round(worst, 6),
         "ann_recall_at_20": recall, "passed": passed,
     }  # fmt: skip
+    return _record(engine, generation_id, results)
+
+
+def _validate_engine(engine: Engine, found, embedder, searcher, sample: int) -> dict:
+    """The engine's generation: every indexed text's job done, a sample of stored vectors recomputed
+    (bfloat16 rounds them), and the index's recall against exact search."""
+    from api.text_index import _tables
+
+    profile = Profile.from_dict(found["profile"])
+    searcher = searcher or search_engine()
+    vectors = found["vectors_table"]
+    with engine.begin() as conn:
+        units, _ = _tables(conn)
+        missing = conn.scalar(
+            text(
+                f"SELECT count(*) FROM {units} u WHERE NOT EXISTS (SELECT 1 FROM {_t(conn, 'index_job')} j"
+                " WHERE j.generation_id = :g AND j.version_id = u.version_id AND j.state = 'done')"
+            ),
+            {"g": found["generation_id"]},
+        )
+        picked = conn.execute(
+            text(
+                f"SELECT version_id, start_byte FROM {units} ORDER BY md5(version_id || start_byte::text) LIMIT :n"
+            ),
+            {"n": sample},
+        ).all()
+        inputs = {
+            (i["version_id"], i["start_byte"]): i["input"]
+            for version in {r.version_id for r in picked}
+            for i in _inputs(conn, version, profile)
+        }
+    embedder = embedder or embedder_for(profile)
+    stored, texts = [], []
+    for version_id, start in picked:
+        fields = searcher.get(f"{version_id}:{start}", vectors) or {}
+        cells = fields.get(vectors) or {}
+        cells = cells.get("blocks", cells) if isinstance(cells, dict) else {}  # short or long tensor form
+        first = cells.get("0") if isinstance(cells, dict) else None
+        if first is None or (version_id, start) not in inputs:
+            missing += 1
+            continue
+        stored.append([float(x) for x in first])
+        texts.append(inputs[(version_id, start)])
+    worst = 1.0
+    if stored:
+        again = embedder.embed(texts, query=False)
+        worst = min(_cosine(x, y) for x, y in zip(stored, again, strict=True))
+    hits = total = 0
+    for query in stored[:10]:
+        approximate = set(searcher.nearest(query, vectors, 20, approximate=True))
+        exact = set(searcher.nearest(query, vectors, 20, approximate=False))
+        hits, total = hits + len(approximate & exact), total + len(exact)
+    recall = round(hits / total, 4) if total else None
+    passed = missing == 0 and worst >= RECOMPUTE_FLOOR and (recall is None or recall >= ANN_FLOOR)
+    return {
+        "validated_at": datetime.now(UTC).isoformat(), "missing_units": missing,
+        "recompute_min_cosine": round(worst, 6), "ann_recall_at_20": recall, "passed": passed,
+    }  # fmt: skip
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    """Cosine of two vectors: stored ones are rounded (halfvec, bfloat16), so they are not quite unit length."""
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    norm = (sum(x * x for x in a) * sum(y * y for y in b)) ** 0.5
+    return dot / norm if norm else 0.0
+
+
+def _record(engine: Engine, generation_id: str, results: dict) -> dict:
     with engine.begin() as conn:
         conn.execute(
             text(
                 f"UPDATE {_t(conn, 'index_generation')} SET manifest = manifest || CAST(:m AS jsonb),"
                 " state = CASE WHEN :ok AND state = 'building' THEN 'validating' ELSE state END WHERE generation_id = :g"
             ),
-            {"m": json.dumps({"validation": results}), "ok": passed, "g": generation_id},
+            {"m": json.dumps({"validation": results}), "ok": results["passed"], "g": generation_id},
         )
     return results
 
@@ -359,7 +504,13 @@ def activate(engine: Engine, generation_id: str, *, allow_test: bool = False) ->
 
 
 def rollback(
-    engine: Engine, profile_id: str, generation_id: str, *, embedder=None, allow_test: bool = False
+    engine: Engine,
+    profile_id: str,
+    generation_id: str,
+    *,
+    embedder=None,
+    allow_test: bool = False,
+    searcher=None,
 ) -> dict:
     """Make a retired generation active again only if it still covers every unit now indexed (EMB-06);
     otherwise refuse, and the lexical arms carry the service."""
@@ -367,7 +518,7 @@ def rollback(
         found = generation(conn, generation_id)
     if found["profile_id"] != profile_id or found["state"] != "retired":
         raise PermissionError("Only a retired generation of the same profile can be restored")
-    results = validate(engine, generation_id, embedder=embedder)
+    results = validate(engine, generation_id, embedder=embedder, searcher=searcher)
     if not results["passed"]:
         raise PermissionError(f"The generation no longer covers what is public: {results}")
     activate(engine, generation_id, allow_test=allow_test)
@@ -382,7 +533,9 @@ def purge(engine: Engine) -> int:
     with engine.begin() as conn:
         units, _ = _tables(conn)
         for row in conn.execute(
-            text(f"SELECT * FROM {_t(conn, 'index_generation')} WHERE state <> 'retired'")
+            text(
+                f"SELECT * FROM {_t(conn, 'index_generation')} WHERE state <> 'retired' AND backend <> 'vespa'"
+            )
         ).mappings():
             removed += store_for(conn, dict(row)).purge(units)
     return removed

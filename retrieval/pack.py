@@ -66,8 +66,8 @@ def _hit(row, unit: str | None = None) -> Hit:
         unit=unit,
         kind=node_kind if unit != "document" else "document",
         locator=m.get("locator") or "document",
-        pinpoint=m.get("pinpoint"),
-        heading=m.get("heading"),
+        pinpoint=m.get("pinpoint") or None,
+        heading=m.get("heading") or None,
         language=m["language"],
         config=m["config"],
         content_hash=m["content_hash"],
@@ -75,6 +75,7 @@ def _hit(row, unit: str | None = None) -> Hit:
         replaced=bool(m.get("replaced")),
         jurisdiction_id=m.get("jurisdiction_id") or "unknown",
         document_type=m.get("document_type") or "other",
+        features={k: round(float(v), 6) for k, v in (m.get("features") or {}).items()},
     )
 
 
@@ -101,6 +102,7 @@ class Retriever:
         vector_profile: str | None = None,
         embedder=None,
         reranker=None,
+        search_engine=None,
     ):
         self.service = service
         self.conn = service.repository.connection
@@ -109,6 +111,12 @@ class Retriever:
         self.generation = indexer.active(self.conn, self.vector_profile) if self.vector_profile else None
         self.embedder = embedder
         self.reranker = reranker if reranker is not None else rerank.configured()
+        if search_engine is None:
+            from retrieval.engine import Engine, config_from_env
+
+            configured = config_from_env()
+            search_engine = Engine(*configured) if configured else None
+        self.engine = search_engine
         self._loaded: dict[str, tuple | None] = {}
         self._nodes: dict[str, list] = {}
         self._qualifications: dict[str, tuple] = {}
@@ -230,7 +238,18 @@ class Retriever:
             found = text_index.search(self.conn, plan.term, scoped, limit=SIDE_LIMIT, offset=0)
             arms["definition"] = self._definitions(plan.term, found.rows)
         total = 0
-        if "topic" in plan.routes:
+        if "topic" in plan.routes and self.engine is not None:
+            try:
+                arms["lexical"] = [_hit(r) for r in self.engine.lexical(query, filters, ARM_LIMIT)]
+                arms["document"] = [
+                    _hit(r, "document")
+                    for r in self.engine.lexical(query, filters, SIDE_LIMIT, unit_kind="document")
+                ]
+            except Exception:  # the system of record's own search carries the request
+                degraded.append("engine:unavailable")
+                arms.pop("lexical", None)
+                self.engine = None
+        if "topic" in plan.routes and "lexical" not in arms:
             found = text_index.search(self.conn, query, filters, limit=ARM_LIMIT, offset=0)
             if found.state in ("unavailable", "building", "timeout"):
                 degraded.append(f"lexical:{found.state}")
@@ -245,6 +264,7 @@ class Retriever:
                 arms["lexical_any"] = [_hit(r) for r in relaxed.rows]
             documents = text_index.search_documents(self.conn, query, filters, limit=SIDE_LIMIT)
             arms["document"] = [_hit(r, "document") for r in documents.rows]
+        if "topic" in plan.routes:
             dense = self._dense(query, filters, degraded)
             if dense is not None:
                 arms["dense"] = dense
@@ -265,6 +285,13 @@ class Retriever:
         try:
             embedder = self.embedder or _EMBEDDERS.setdefault(profile.id, embedder_for(profile))
             [vector] = embedder.embed([query], query=True)
+            if self.generation["backend"] == "vespa":
+                if self.engine is None:
+                    raise LookupError("the engine holding this generation is unavailable")
+                return [
+                    _hit(r)
+                    for r in self.engine.dense(vector, self.generation["vectors_table"], filters, ARM_LIMIT)
+                ]
             units, _ = text_index._tables(self.conn)
             where, params = filters.where()
             with self.conn.begin_nested():
@@ -442,6 +469,7 @@ class Retriever:
                 router=router.ROUTER,
                 ranking=PROFILE,
                 analyzer=text_index.ANALYZER,
+                engine="vespa" if self.engine is not None else None,
                 vector=f"{self.generation['profile_id']}@{self.generation['generation_id']}"
                 if self.generation
                 else None,
@@ -703,6 +731,7 @@ class Retriever:
             profile=PROFILE,
             arms=dict(candidate.arms),
             fused_score=round(candidate.fused, 8),
+            features=candidate.features or None,
             rerank_score=round(candidate.rerank_score, 6) if candidate.rerank_score is not None else None,
             band=candidate.band,
             signals=tuple(RankingSignal(name=n, value=v, effect=e) for n, v, e in candidate.signals),
