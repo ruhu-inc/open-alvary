@@ -679,6 +679,16 @@ class LegacyCatalogue:
             {name: dict(counts.most_common()) for name, counts in facets.items()},
         )
 
+    def _named_by_form(self, value: str) -> list[tuple[tuple, None, None]]:
+        """The public sources one of the search index's name forms names, whole: "Nigeria Data
+        Protection Act" without its year, "NDPA" by its initials (text_index.name_forms)."""
+        folded = text_index.fold(value)
+        if len(folded) < text_index.MIN_NAME or not text_index.available(self.repository.connection):
+            return []
+        works = text_index.named_works(self.repository.connection, value, text_index.Filters())
+        pairs = self._public({work for work, name in works.items() if name == folded})
+        return [(pairs[i], None, None) for i in sorted(pairs)]
+
     def _named(self, value: str) -> list[tuple[tuple, NodeViewRecord | None, VersionViewRecord | None]]:
         """The public sources a citation names exactly, by an alias, their citation or their title, each
         with the part and text an alias names (None when it names the whole source)."""
@@ -800,13 +810,24 @@ class LegacyCatalogue:
             nearest=nearest[0] if len(nearest) == 1 else None,
         )
 
-    def citations(self, value, *, as_of=None, language=None):
+    def citations(self, value, *, as_of=None, language=None, within=None):
         """A citation resolved to the public sources it names (API-04): exactly, by an alias, citation
-        or title; or as a source and a pinpoint within it ("NDPA s. 23(1)(a)"), when ``provision`` says
-        which part of which public text it names. Alternatives are listed, never chosen between."""
-        named = self._named(value)
+        or title, else by a form the search index names a work by (without its closing year, or by its
+        initials); or as a source and a pinpoint within it ("NDPA s. 23(1)(a)", "s. 23 NDPA", "Part V
+        of the NDPA"), when ``provision`` says which part of which public text it names. A pinpoint
+        alone ("section 23") is read within the source ``within``, when a request names one.
+        Alternatives are listed, never chosen between."""
+        named = self._named(value) or self._named_by_form(value)
         provision = None
-        if named:
+        if not named and within and pinpoint.read(value):
+            pairs = self._public({within})
+            if pairs:
+                named = [(pairs[within], None, None)]
+                shown = " ".join(value.split())
+                provision = self._provision(
+                    [pairs[within]], shown, pinpoint.read(value), as_of=as_of, language=language
+                )
+        elif named:
             parts = [(pair, node, version) for pair, node, version in named if node is not None]
             if parts:
                 matches = [self._match(node, version, pair[0]) for pair, node, version in parts]
@@ -818,7 +839,7 @@ class LegacyCatalogue:
                 )
         else:
             for work, shown, key in pinpoint.split(value):
-                named = self._named(work)
+                named = self._named(work) or self._named_by_form(work)
                 if named:
                     pairs = [pair for pair, _, _ in named]
                     provision = self._provision(pairs, shown, key, as_of=as_of, language=language)

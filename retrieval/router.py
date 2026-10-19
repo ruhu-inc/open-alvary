@@ -1,5 +1,10 @@
-"""Query routes (RSV-03, router profile oa-route-1): deterministic rules decide which plans run; the
-router records them and never changes the caller's filters or assumes a jurisdiction or date."""
+"""Query routes (RSV-03, router profile oa-route-2): deterministic rules decide which plans run; the
+router records them and never changes the caller's filters or assumes a jurisdiction or date.
+
+oa-route-2 adds two routes. ``link``: the query is one address, an Open Alvary page or API address of a
+record or part, or a text's official address, and the evidence is what it addresses. ``page``: the
+query names a page of one work ("page 18 of the NDPA", "NDPA p. 18"), or of the record a request is
+limited to, and the evidence is the provisions on that page of the original file."""
 
 import re
 from dataclasses import dataclass
@@ -7,7 +12,7 @@ from datetime import date
 
 from api.text_index import fold
 
-ROUTER = "oa-route-1"
+ROUTER = "oa-route-2"
 
 # "meaning of 'personal data'", "definition of data controller in the NDPA", "what is a "data subject"?"
 _DEFINITION = re.compile(
@@ -15,10 +20,13 @@ _DEFINITION = re.compile(
     r"""\s*["“‘']?(?P<term>[^"”’'?]{2,80}?)["”’']?(?:\s+(?:in|under)\s+(?P<work>[^?]+?))?\s*\??\s*$""",
     re.IGNORECASE,
 )
+_LINK = re.compile(r"^\s*(https?://[^\s<>\"]+)\s*$", re.IGNORECASE)
+# "page 18", "pg. 18", "p. 18" (with its dot: "p 18" is too often something else).
+_PAGE = re.compile(r"(?:^|(?<=[\s,;(]))(?:at\s+)?(?:page|pg\.?|p\.)\s*(\d{1,4})\b", re.IGNORECASE)
 # Words that carry no topic once an instrument's name is taken out ("what does the NDPA say").
 _FILLER = frozenset(
     "a an the of in on under to for by and or what which does do did say says said about is are was were "
-    "this that these those act law provision provisions section sections text".split()
+    "this that these those act law provision provisions section sections text on at page".split()
 )
 
 
@@ -31,6 +39,8 @@ class Plan:
     residual: str  # the query without the names of the works it names
     as_of: date | None
     comparative: bool
+    link: str | None = None  # the address the query is, on the link route
+    page: int | None = None  # the page of the original file, on the page route
 
 
 def definition_term(query: str) -> str | None:
@@ -49,13 +59,38 @@ def residual(query: str, names: list[str]) -> str:
     return " ".join(words.split())
 
 
-def plan(query: str, *, citation, works: dict[str, str], as_of: date | None, jurisdictions) -> Plan:
+def link(query: str) -> str | None:
+    found = _LINK.match(query)
+    return found.group(1) if found else None
+
+
+def page(query: str) -> int | None:
+    found = _PAGE.search(query)
+    return int(found.group(1)) if found and int(found.group(1)) >= 1 else None
+
+
+def plan(
+    query: str,
+    *,
+    citation,
+    works: dict[str, str],
+    as_of: date | None,
+    jurisdictions,
+    within: str | None = None,
+) -> Plan:
+    address = link(query)
+    if address is not None:
+        return Plan(("link",), None, {}, None, "", as_of, False, link=address)
     routes: list[str] = []
     provision = getattr(citation, "provision", None)
     if provision is not None and provision.status in ("resolved", "ambiguous"):
         routes.append("citation")
     left = residual(query, list(works.values()))
-    if works and "citation" not in routes:
+    number = page(query)
+    if number is not None and "citation" not in routes and (len(works) == 1 or within):
+        routes.append("page")
+        left = residual(_PAGE.sub(" ", query), list(works.values()))
+    if works and "citation" not in routes and "page" not in routes:
         routes.append("instrument")
     term = definition_term(query)
     if term:
@@ -69,5 +104,6 @@ def plan(query: str, *, citation, works: dict[str, str], as_of: date | None, jur
     if comparative:
         routes.append("comparative")
     return Plan(
-        tuple(routes), citation if "citation" in routes else None, works, term, left, as_of, comparative
-    )
+        tuple(routes), citation if "citation" in routes else None, works, term, left, as_of, comparative,
+        page=number if "page" in routes else None,
+    )  # fmt: skip

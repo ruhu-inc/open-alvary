@@ -1,14 +1,22 @@
-"""Fusion, documented ranking signals and diversification (RSV-05, ranking profile oa-rank-2).
+"""Fusion, documented ranking signals and diversification (RSV-05, ranking profile oa-rank-3).
 
 Each arm's hits collapse to evidence units (a provision, a run of a container's own words, or a
 document unit) at their best rank in that arm; reciprocal-rank fusion (k=60, RET-02) combines the arms.
 When a reranker ran (retrieval.rerank), its scores (0 to 1) order the candidates it scored, ahead of the
-rest in fused order. Then, in order:
+rest in fused order. oa-rank-3 differs from oa-rank-2 in four ways:
+- a long unit is reranked by its best passage;
+- a weak match (found only by meaning or by some of the query's words) is evidence only with the
+  reranker's support (rerank.SUPPORT_FLOOR);
+- the dense arm does not run when a citation resolves;
+- the link and page routes lead, with the citation's.
+
+Then, in order:
 
 1. Legal status: a record repealed, superseded or historical, or a text a later published text
    replaces, scores 0.8 of its fused score (as oa-rank-1).
-2. Route match: what a route resolved exactly comes first, the citation's part, then the definition
-   asked for (RSV-03), as /search/text puts a cited part first. These never move in step 4.
+2. Route match: what a route resolved exactly comes first: the part or text a link addresses, the
+   citation's part, the provisions on a page asked for, then the definition asked for (RSV-03), as
+   /search/text puts a cited part first. These never move in step 4.
 3. Instrument match: when the query names instruments, their units come next.
 4. Bands: the other positions fall into bands of BAND_WIDTH. Within a band, legislation is reordered
    among its own positions by instrument (constitution, Act, subsidiary legislation, guidance), and
@@ -26,7 +34,7 @@ Ties go to the version ID, then the unit's first byte. Every unit records each s
 from collections import defaultdict
 from dataclasses import dataclass, field
 
-PROFILE = "oa-rank-2"
+PROFILE = "oa-rank-3"
 RRF_K = 60
 BAND_WIDTH = 5
 PER_WORK = 3
@@ -109,7 +117,7 @@ def fuse(arms: dict[str, list[Hit]]) -> list[Candidate]:
     return sorted(found.values(), key=lambda c: c.order)
 
 
-LEADING_ARMS = ("citation", "definition")
+LEADING_ARMS = ("link", "citation", "page", "definition")  # what the query names, in its own order
 
 
 def apply_signals(candidates: list[Candidate], named_works: set[str]) -> list[Candidate]:

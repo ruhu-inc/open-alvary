@@ -38,7 +38,7 @@ from api import pinpoint
 from api.store import tables
 from schema.public import NodeViewRecord, VersionViewRecord
 
-ANALYZER = "oa-search-3"  # a new value rebuilds every unit at the next publication
+ANALYZER = "oa-search-4"  # a new value rebuilds every unit at the next publication
 RANKING = "oa-rank-1"
 CONFIGS = {"en": "english", "fr": "french"}  # every other language: simple (MIN-02)
 ANALYSES = ("english", "french", "simple")  # the configs a unit may have (migration 0033)
@@ -162,13 +162,33 @@ def fold(value: str) -> str:
     return " ".join(re.sub(r"[\W_]+", " ", folded).split())
 
 
+SMALL_WORDS = frozenset("of the and for on in to a an de du des la le les et".split())
+
+
+def initials(name: str) -> list[str]:
+    """The initials a work of three words or more is cited by: every word's ("foia", Freedom of
+    Information Act) and the significant words' ("cama", Companies and Allied Matters Act)."""
+    words = [w for w in name.split() if not w.isdigit()]
+    if len(words) < 3:
+        return []
+    return list(
+        dict.fromkeys(["".join(w[0] for w in words), "".join(w[0] for w in words if w not in SMALL_WORDS)])
+    )
+
+
 def name_forms(values) -> list[str]:
-    """The forms a query may name a work by: each value folded, and again without a closing year
-    ("nigeria data protection act 2023" and "nigeria data protection act"). Short forms are left out."""
+    """The forms a query may name a work by: each value folded, again without a closing year
+    ("nigeria data protection act 2023" and "nigeria data protection act"), and its initials with and
+    without the year ("ndpa 2023", "ndpa"). Short forms are left out: three letters name a work only
+    with its year ("isa 2025")."""
     forms: list[str] = []
     for value in values:
         folded = fold(value or "")
-        for form in (folded, re.sub(r"(?<!\bof)\s+\d{4}$", "", folded)):
+        year = re.search(r"(?<!\bof)\s+(\d{4})$", folded)
+        bare = folded[: year.start()] if year else folded
+        letters = initials(bare)
+        candidates = [folded, bare, *letters, *([f"{i} {year.group(1)}" for i in letters] if year else [])]
+        for form in candidates:
             if len(form) >= MIN_NAME and not form.isdigit() and form not in forms:
                 forms.append(form)
     return forms

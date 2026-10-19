@@ -2399,7 +2399,7 @@
               "maxLength": 2000,
               "title": "Q"
             },
-            "description": "The question or words, 1 to 2,000 characters."
+            "description": "The question or words, 1 to 2,000 characters. It may be a citation (`NDPA s. 24(1)(a)`, `section 24 of the Nigeria Data Protection Act`, `Part V of the NDPA`), a page of one law (`page 18 of the NDPA`), or an address: an Open Alvary page or API address of a record or part, or a text's official address. A pinpoint alone (`s. 24`) is read within `source_id`."
           },
           {
             "name": "jurisdiction",
@@ -4301,6 +4301,34 @@
         "title": "EvidenceDefinition",
         "description": "A definition in force for a term the unit uses (RSV-06, derived): its exact words and span."
       },
+      "EvidenceLinks": {
+        "properties": {
+          "web": {
+            "type": "string",
+            "title": "Web",
+            "description": "The record on the website, at the unit when the website shows this text (a record's one text in force); otherwise the record's page."
+          },
+          "api": {
+            "type": "string",
+            "title": "Api",
+            "description": "This exact part of this exact text (`/anchors/{anchor_id}`); for a document unit, the record."
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "The whole text the unit is in (`/versions/{version_id}/text`)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "web",
+          "api",
+          "text"
+        ],
+        "title": "EvidenceLinks",
+        "description": "Where to read a unit: ``web``, the record on the website, at the unit when the website shows this\ntext; ``api``, this exact part of this exact text; ``text``, the whole text it is in."
+      },
       "EvidencePack": {
         "properties": {
           "schema_version": {
@@ -4450,7 +4478,7 @@
             },
             "type": "array",
             "title": "Routes",
-            "description": "The routes taken, in order: `citation`, `instrument`, `definition`, `topic`, and the modifiers `historical` and `comparative`."
+            "description": "The routes taken, in order: `link` (the query is an Open Alvary or official address), `citation`, `page` (a page of one law's official file), `instrument`, `definition`, `topic`, and the modifiers `historical` and `comparative`."
           },
           "filters": {
             "additionalProperties": true,
@@ -4520,17 +4548,17 @@
           "router": {
             "type": "string",
             "title": "Router",
-            "description": "The routing rules, such as `oa-route-1`."
+            "description": "The routing rules, such as `oa-route-2`."
           },
           "ranking": {
             "type": "string",
             "title": "Ranking",
-            "description": "The ranking profile, such as `oa-rank-2`."
+            "description": "The ranking profile, such as `oa-rank-3`."
           },
           "analyzer": {
             "type": "string",
             "title": "Analyzer",
-            "description": "The text analysis, such as `oa-search-3`."
+            "description": "The text analysis, such as `oa-search-4`."
           },
           "engine": {
             "anyOf": [
@@ -4681,6 +4709,46 @@
             "title": "Official Url",
             "description": "The official file the text was read from."
           },
+          "retrieved_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Retrieved At",
+            "description": "When the official file was fetched."
+          },
+          "original_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Original Sha256",
+            "description": "SHA-256 of the official file as fetched: a copy with this hash is the file the text was read from."
+          },
+          "page_start": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page Start",
+            "description": "The page of the official file the unit starts on (1 is the file's first page, not a printed page number). Absent when the text was not read from a file with pages."
+          },
+          "page_end": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page End",
+            "description": "The page of the official file the unit ends on."
+          },
+          "links": {
+            "$ref": "#/components/schemas/EvidenceLinks",
+            "description": "Where to read the unit: on the website, by the API, and the whole text."
+          },
           "text": {
             "type": "string",
             "title": "Text",
@@ -4826,6 +4894,9 @@
           "jurisdiction_id",
           "document_type",
           "official_url",
+          "retrieved_at",
+          "original_sha256",
+          "links",
           "text",
           "text_start_byte",
           "text_end_byte",
@@ -4838,7 +4909,7 @@
           "authority"
         ],
         "title": "EvidenceUnit",
-        "description": "One unit of legal evidence (RSV-07): which part of which published text, its exact words (or an\nexcerpt within the byte budget), the hashes to check them, what quoting asks for, whether it was in\nforce, and why it ranks where it does."
+        "description": "One unit of legal evidence (RSV-07): which part of which published text, its exact words (or an\nexcerpt within the byte budget), the hashes to check them, where it is in the original file and\nwhere to read it, what quoting asks for, whether it was in force, and why it ranks where it does."
       },
       "ExpressionPage": {
         "properties": {
@@ -5473,7 +5544,7 @@
             },
             "type": "object",
             "title": "Arms",
-            "description": "Each search the unit came from and its rank there: `citation`, `instrument`, `definition`, `lexical` (every word), `lexical_any` (any word, rarer words weighing more; run when few units have every word), `document` or `dense` (meaning, where a semantic index is active)."
+            "description": "Each search the unit came from and its rank there: `link`, `citation`, `page`, `instrument`, `definition`, `lexical` (every word), `lexical_any` (any word, rarer words weighing more; run when few units have every word), `document` or `dense` (meaning, where a semantic index is active)."
           },
           "fused_score": {
             "type": "number",

@@ -46,6 +46,9 @@ Each unit in `evidence` is one part of a published text, best first:
 | `text`, `complete` | The exact words to quote. When `complete` is false, `text` is an excerpt that fitted your byte budget; `/anchors/{anchor_id}` gives the whole part. |
 | `citation`, `pinpoint` | How to cite it, such as `Nigeria Data Protection Act, 2023, s. 40(2)`. |
 | `anchor_id`, `span_hash`, `content_hash` | How to check it later and link to it. Keep them with any answer that cites the part. |
+| `links` | Where to read it: `web` on Open Alvary (at the part when the website shows this text), `api` for this exact part, `text` for the whole text. |
+| `official_url`, `original_sha256`, `retrieved_at` | The official file the text was read from, and the hash to check a copy of it. |
+| `page_start`, `page_end` | The pages of that file the part is on (1 is the file's first page, not a printed page number), when the text was read from a file with pages. |
 | `currentness` | Whether it was in force. Read `basis`: `record` means only the whole law's status is known, which says nothing about one section; `provision` means reviewed events for this part. |
 | `context.definitions` | The definitions the part relies on, with their own exact words. |
 | `licence`, `attribution_text` | What quoting it asks for. |
@@ -55,7 +58,12 @@ Quote only `text`. A unit whose `unit` is `document` tells you which law is rele
 
 ## Routes
 
-A question that cites a part (`NDPA s. 23(1)(a)`), names a law (`the Companies and Allied Matters Act`) or asks what a term means (`meaning of "personal data"`) is answered by that first; anything else is a search of the words and, where a semantic index is active, of their meaning (`revisions.vector` names it). `query.routes` says which routes ran. Add `as_of` for the law on a date: only texts in force then, and currentness assessed at it. Without `as_of`, nothing is assumed about the date.
+A question that cites a part, names a law or asks what a term means (`meaning of "personal data"`) is answered by that first; anything else is a search of the words and, where a semantic index is active, of their meaning (`revisions.vector` names it). `query.routes` says which routes ran.
+
+- **Citations as people write them:** `NDPA s. 23(1)(a)`, `section 23 of the Nigeria Data Protection Act`, `s. 23 Nigeria Data Protection Act 2023`, `Part V of the NDPA` (its heading, then its sections in order), `First Schedule, para. 16`. A law can be named by its title with or without the year, its citation, or its initials (`NDPA`; three letters only with the year, `ISA 2025`).
+- **A pinpoint alone**, such as `s. 23`, is read within the record you limit the request to with `source_id`.
+- **A page:** `page 18 of the NDPA` gives the provisions on that page of the official file.
+- **An address:** paste an Open Alvary page or API address of a record or part, or a law's official address, and the pack holds what it addresses. Add `as_of` for the law on a date: only texts in force then, and currentness assessed at it. Without `as_of`, nothing is assumed about the date.
 
 ## Budgets
 

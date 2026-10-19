@@ -16,7 +16,17 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-ROUTES = ("citation", "instrument", "definition", "topic", "historical", "comparative", "unanswerable")
+ROUTES = (
+    "citation",
+    "link",
+    "page",
+    "instrument",
+    "definition",
+    "topic",
+    "historical",
+    "comparative",
+    "unanswerable",
+)
 
 
 class Record(BaseModel):

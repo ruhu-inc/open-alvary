@@ -1,6 +1,6 @@
 """Immutable pilot-compatible wire DTOs; no target authority or private policy fields."""
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, field_serializer, model_validator
@@ -478,10 +478,19 @@ class EvidenceAuthority(WireModel):
     court_relation: Literal["binding", "persuasive", "not_applicable", "unknown"] = "not_applicable"
 
 
+class EvidenceLinks(WireModel):
+    """Where to read a unit: ``web``, the record on the website, at the unit when the website shows this
+    text; ``api``, this exact part of this exact text; ``text``, the whole text it is in."""
+
+    web: str
+    api: str
+    text: str
+
+
 class EvidenceUnit(WireModel):
     """One unit of legal evidence (RSV-07): which part of which published text, its exact words (or an
-    excerpt within the byte budget), the hashes to check them, what quoting asks for, whether it was in
-    force, and why it ranks where it does."""
+    excerpt within the byte budget), the hashes to check them, where it is in the original file and
+    where to read it, what quoting asks for, whether it was in force, and why it ranks where it does."""
 
     anchor_id: ID
     source_id: ID
@@ -498,6 +507,13 @@ class EvidenceUnit(WireModel):
     jurisdiction_id: ID
     document_type: str
     official_url: str
+    retrieved_at: datetime  # when the original file was fetched from the official address
+    original_sha256: Hash  # the original file's SHA-256, to check a copy of it
+    # The pages of the original file the unit is on (1 is the file's first page, not a printed number);
+    # absent when the text was not read from a file with pages.
+    page_start: int | None = Field(**OMIT)
+    page_end: int | None = Field(**OMIT)
+    links: EvidenceLinks
     text: str
     text_start_byte: int = Field(ge=0)
     text_end_byte: int = Field(ge=0)

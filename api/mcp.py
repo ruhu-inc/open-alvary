@@ -209,10 +209,13 @@ TOOLS = [
         "title": "Retrieve legal evidence",
         "description": "Ranked legal evidence for a question, to cite in an answer: each unit is a provision "
         "(or a law's title and preamble) with its exact words or an excerpt, its anchor_id, byte span and "
-        "span_hash, its citation such as s. 23(1)(a), what quoting it asks for, whether it was in force "
-        "(currentness, with what that rests on), the definitions it relies on and why it ranks there. A "
-        "question that cites a part, names a law or asks what a term means is routed to that first. Quote "
-        "only the words given; check cited parts with check_currentness before showing an answer.",
+        "span_hash, its citation such as s. 23(1)(a), the pages of the official file it is on, links to "
+        "read it on Open Alvary and the official file's address and hash, what quoting it asks for, whether "
+        "it was in force (currentness, with what that rests on), the definitions it relies on and why it "
+        "ranks there. A question that cites a part (NDPA s. 24(1)(a), section 24 of the Nigeria Data "
+        "Protection Act, Part V of the NDPA), names a page of a law (page 18 of the NDPA), is an Open Alvary "
+        "or official address, names a law or asks what a term means is routed to that first. Quote only the "
+        "words given; check cited parts with check_currentness before showing an answer.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -240,6 +243,13 @@ TOOLS = [
                     "format": "date",
                     "description": "Only texts in force on this date, YYYY-MM-DD, with currentness assessed "
                     "at it. Without it, nothing is assumed about the date.",
+                },
+                "source_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "description": "Only this record, such as ng-data-protection-act-2023: then a pinpoint "
+                    "alone (s. 24) or a page (page 18) is read within it.",
                 },
                 "max_units": {
                     "type": "integer",
@@ -613,6 +623,7 @@ def create_router(
                 "jurisdictions",
                 "language",
                 "as_of",
+                "source_id",
                 "max_units",
                 "max_evidence_bytes",
             }:
@@ -644,7 +655,14 @@ def create_router(
                 else:
                     scope = plan.within(j.id for j in service.jurisdictions())
                     jurisdictions = None if scope is None else tuple(sorted(scope))
-                filters = text_index.Filters(jurisdictions=jurisdictions, language=language, as_of=as_of)
+                source_id = arguments.get("source_id")
+                if source_id is not None and (
+                    not isinstance(source_id, str) or not 1 <= len(source_id) <= 160
+                ):
+                    return None
+                filters = text_index.Filters(
+                    jurisdictions=jurisdictions, language=language, as_of=as_of, source_id=source_id
+                )
                 pack = Retriever(service).retrieve(
                     EvidenceRequest(query=query, filters=filters, max_units=units, max_evidence_bytes=budget)
                 )

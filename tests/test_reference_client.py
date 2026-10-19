@@ -254,7 +254,7 @@ def test_retry_after_may_be_an_http_date():
 def test_a_pack_of_other_profiles_is_not_reused():
     client, server, _ = scripted()
     started(client, server)
-    reranked = PACK | {"revisions": PACK["revisions"] | {"ranking": "oa-rank-3"}}
+    reranked = PACK | {"revisions": PACK["revisions"] | {"ranking": PACK["revisions"]["ranking"] + "-next"}}
     other = exchange("GET", "/retrieve", reranked, params={"q": "breach report"})
     step(server, [other], lambda: client.retrieve("breach report", jurisdiction="ng"))
     again = exchange("GET", "/retrieve", reranked, params={"q": Q})
