@@ -1,5 +1,6 @@
 """CPR-01: pages are routed by the evidence of their readings and of their text layers; under an owner's
-verification-routing decision only the risky pages and an audit sample must be checked, and a material
+verification-routing decision only the risky pages and an audit sample must be checked, a flagged page
+only needs its flags resolved, the sample is shown to reviewers exactly like full pages, and a material
 defect in the sample escalates the document; without the decision every page is checked; calibration
 reports what reviews changed on each route."""
 
@@ -178,14 +179,12 @@ def test_requirements_under_the_policy_and_escalation():
     assert escalated["required_pages"] == [1, 2, 3, 4]
 
 
-@pytest.fixture
-def routed_world(tmp_path, monkeypatch):
-    found = reading(
-        page(1, "1. Accounts are kept.", []), page(2, "2. Plain words."), page(3, "3. More words.")
-    )
+def world_of(found, tmp_path, monkeypatch):
+    """A workbench holding one document read as ``found``, under the routing decision."""
     (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(found))
     store = Store(connect(f"sqlite:///{tmp_path / 'workbench.db'}"))
     store.add_operator("approver@example.org", "App", {"reviewer", "approver"})
+    store.add_operator("reviewer@example.org", "Rev", {"reviewer"})
     library = content.Library(tmp_path)
     image = tmp_path / "page.jpg"
     image.write_bytes(b"\xff\xd8\xff\xd9")
@@ -194,6 +193,122 @@ def routed_world(tmp_path, monkeypatch):
     policy.write_text(json.dumps(POLICY))
     monkeypatch.setattr(routing, "POLICY", policy)
     return store, library, found
+
+
+@pytest.fixture
+def routed_world(tmp_path, monkeypatch):
+    found = reading(
+        page(1, "1. Accounts are kept.", []), page(2, "2. Plain words."), page(3, "3. More words.")
+    )
+    return world_of(found, tmp_path, monkeypatch)
+
+
+@pytest.fixture
+def flagged_world(tmp_path, monkeypatch):
+    """Page 1 full (the first page), page 2 flagged twice on words that carry no risk, 3 to 5 agreed."""
+    found = reading(
+        page(1, "1. Accounts are kept."),
+        page(2, "2. The colour of the favour.", [flag("colour", "color"), flag("favour", "favor", "medium")]),
+        page(3, "3. Plain words."),
+        page(4, "4. More words."),
+        page(5, "5. Last words."),
+    )
+    return world_of(found, tmp_path, monkeypatch)
+
+
+def readiness(browser):
+    return approve(browser).json()["readiness"]
+
+
+def test_under_the_decision_a_flagged_page_is_done_when_every_flag_is_resolved_unchecked(flagged_world):
+    store, library, found = flagged_world
+    approver = signed_in((store, library), "approver@example.org")
+    ready = readiness(approver)
+    plan = ready["routing"]
+    assert plan["flag_pages"] == [2] and 2 not in plan["required_pages"]
+    assert ready["unresolved_flag_pages"] == [2] and 2 not in ready["unchecked_pages"]
+    flagged, units = found["pages"][1], content.units_from(found["pages"][1])
+    first, second = (f["id"] for f in content.page_flags(flagged))
+    kept = {first: {"decision": "keep"}, second: {"decision": "dismissed"}}
+    save(approver, page=2, units=units, status="edited", resolutions={first: {"decision": "keep"}})
+    assert readiness(approver)["unresolved_flag_pages"] == [2]  # one flag is still open
+    save(approver, page=2, expected=1, units=units, status="attention", resolutions=kept)
+    marked = readiness(approver)
+    assert marked["unresolved_flag_pages"] == [] and 2 in marked["unchecked_pages"]  # checked whole now
+    save(approver, page=2, expected=2, units=units, status="edited", resolutions=kept)
+    ready = readiness(approver)
+    assert ready["unresolved_flag_pages"] == [] and 2 not in ready["unchecked_pages"]
+    for number in plan["required_pages"]:
+        save(approver, page=number, units=content.units_from(found["pages"][number - 1]))
+    confirm_details(approver)
+    assert approve(approver).json() == {"revision": 1}  # page 2 was never marked checked
+
+
+def test_a_flagged_page_reviewed_against_another_reading_is_not_done(flagged_world):
+    store, library, found = flagged_world
+    approver = signed_in((store, library), "approver@example.org")
+    flagged = found["pages"][1]
+    resolved = {f["id"]: {"decision": "keep"} for f in content.page_flags(flagged)}
+    sha = content.reading_sha256(flagged)
+    revision = {"status": "edited", "reading_sha256": sha, "resolutions": resolved}
+    assert routing.flags_resolved(flagged, revision)
+    assert not routing.flags_resolved(flagged, {**revision, "reading_sha256": "0" * 64})
+    assert not routing.flags_resolved(flagged, None)
+    save(approver, page=2, units=content.units_from(flagged), status="edited", resolutions=resolved)
+    assert readiness(approver)["unresolved_flag_pages"] == []
+
+
+def test_without_the_decision_a_flagged_page_must_still_be_checked(flagged_world, monkeypatch, tmp_path):
+    store, library, found = flagged_world
+    monkeypatch.setattr(routing, "POLICY", tmp_path / "absent.json")
+    approver = signed_in((store, library), "approver@example.org")
+    resolved = {f["id"]: {"decision": "keep"} for f in content.page_flags(found["pages"][1])}
+    save(approver, page=2, units=content.units_from(found["pages"][1]), status="edited", resolutions=resolved)
+    ready = readiness(approver)
+    assert ready["unchecked_pages"] == [1, 2, 3, 4, 5] and ready["unresolved_flag_pages"] == []
+
+
+ROUTING_KEYS = {"routing", "routes", "reasons", "audit_sample", "audit_defects", "escalated", "flag_pages"}
+
+
+def keys_in(value) -> set[str]:
+    if isinstance(value, dict):
+        return set(value) | {k for v in value.values() for k in keys_in(v)}
+    if isinstance(value, list):
+        return {k for v in value for k in keys_in(v)}
+    return set()
+
+
+def test_audit_pages_are_shown_to_a_reviewer_exactly_like_full_pages(flagged_world):
+    store, library, found = flagged_world
+    approver = signed_in((store, library), "approver@example.org")
+    reviewer = signed_in((store, library), "reviewer@example.org")
+    plan = readiness(approver)["routing"]  # the approver's refused approval names the plan
+    sampled = plan["audit_sample"]
+    assert len(sampled) == 2 and set(sampled) < {3, 4, 5}
+
+    def shown(browser):
+        detail = browser.get(f"/api/documents/{ACT}").json()
+        keys = keys_in(detail)
+        assert not keys & ROUTING_KEYS and not any("sample" in k or "audit" in k for k in keys)
+        return detail, {p["page"]: {k: v for k, v in p.items() if k != "page"} for p in detail["pages"]}
+
+    for browser in (reviewer, approver):  # the page list used while reviewing marks no sample, for anyone
+        detail, pages = shown(browser)
+        assert all(pages[n] == pages[1] for n in sampled) and pages[1]["todo"] == "review"
+        assert [pages[n]["todo"] for n in sorted({3, 4, 5} - set(sampled))] == [None]
+        assert pages[2]["todo"] == "flags" and detail["readiness"]["unchecked_pages"] == sorted([1, *sampled])
+
+    resolved = {f["id"]: {"decision": "keep"} for f in content.page_flags(found["pages"][1])}
+    save(approver, page=2, units=content.units_from(found["pages"][1]), status="edited", resolutions=resolved)
+    for number in plan["required_pages"]:
+        save(approver, page=number, units=content.units_from(found["pages"][number - 1]))
+    confirm_details(approver)
+    assert approve(approver).json() == {"revision": 1}
+    assert store.approvals(ACT)[0]["routing"]["audit_sample"] == sampled  # the record keeps the plan
+    detail, _ = shown(reviewer)
+    assert detail["approved"] and detail["approvals"][0]["decision"] == "approved"
+    assert not keys_in(reviewer.get(f"/api/documents/{ACT}/export").json()) & ROUTING_KEYS
 
 
 def test_under_the_decision_only_routed_and_sampled_pages_wait_and_the_approval_records_them(routed_world):

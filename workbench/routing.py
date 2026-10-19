@@ -18,10 +18,11 @@ Routes (route profile ROUTES), one per page:
 
 Routed readiness applies only under an owner's verification-routing policy (D28,
 ingestion/decisions/verification-routing.json): without it, every page must be checked, as REV-02 and
-TXP-06 require today. Under it, ``full`` and ``flagged`` pages and one audit sample drawn from the
-``agreed`` and ``native`` pages together must be checked; a sampled page whose review changed its words
-or structure (a material defect) escalates every ``agreed`` and ``native`` page of the document to
-review.
+TXP-06 require today. Under it, ``full`` pages and one audit sample drawn from the ``agreed`` and
+``native`` pages together must be checked, and a ``flagged`` page is done once its latest revision
+resolves every one of its flags (only the disagreements go to people); a sampled page whose review
+changed its words or structure (a material defect) escalates every page of the document to review
+whole. The sample is reviewed blind: a reviewer is shown its pages exactly like ``full`` pages.
 """
 
 import hashlib
@@ -152,7 +153,8 @@ def change(machine: list[dict], reviewed: list[dict]) -> str:
 def requirement(
     document_id: str, reading: dict, latest: dict[int, dict], policy: dict, issues_by_page=None
 ) -> dict:
-    """Under the policy: the pages that must be checked, the audit sample, and any escalation."""
+    """Under the policy: the pages that must be checked whole, the flagged pages whose flags must be
+    resolved, the audit sample, and any escalation."""
     found = routes(reading, issues_by_page)
     unreviewed = [page for page, (name, _) in found.items() if name in UNREVIEWED]
     audited = sample(document_id, unreviewed, policy)
@@ -165,10 +167,9 @@ def requirement(
     ]
     escalated = bool(defects)
     required = sorted(
-        page
-        for page, (name, _) in found.items()
-        if name in ("full", "flagged") or page in audited or escalated
+        page for page, (name, _) in found.items() if name == "full" or page in audited or escalated
     )
+    flagged = [] if escalated else sorted(page for page, (name, _) in found.items() if name == "flagged")
     return {
         "profile": ROUTES,
         "decision": policy["decision"],
@@ -178,7 +179,19 @@ def requirement(
         "audit_defects": defects,
         "escalated": escalated,
         "required_pages": required,
+        "flag_pages": flagged,
     }
+
+
+def flags_resolved(page: dict, revision: dict | None) -> bool:
+    """Whether a ``flagged`` page is done: its latest revision was made from this reading, is not marked
+    as needing attention, and resolves every one of the page's flags. The rest of the page is not
+    proofread, so it need not be marked checked."""
+    if not revision or revision["status"] == "attention":
+        return False
+    if revision["reading_sha256"] != content.reading_sha256(page):
+        return False
+    return {flag["id"] for flag in content.page_flags(page)} <= set(revision["resolutions"])
 
 
 def calibrate(library, store, document_ids: list[str]) -> dict:

@@ -22,6 +22,8 @@ const KIND_LABEL = {
   accents_restored: "scanned page: accents restored by Document AI where the OCR layer dropped them",
 };
 const DECISION_LABEL = { keep: "kept as read", use_check: "used check reading", edited: "edited by hand", dismissed: "dismissed" };
+// What a page still needs (/api/documents/{id} pages[].todo); audit pages are "review" pages too.
+const TODO_LABEL = { review: "to review against the image", flags: "flags to resolve" };
 
 // --- small helpers -----------------------------------------------------------------------------
 
@@ -365,12 +367,16 @@ async function actView(actId) {
   const act = data.act;
   setCrumbs(el("a", { href: "#/", text: "Documents" }), act.title);
   const ready = data.readiness;
+  // Under a routing decision each page says what it still needs: the whole page, or its flags. An audit
+  // page is a page to review like any other (CPR-01: the reviewer is not told it was sampled).
+  const routed = (page) => (!ready.routed ? "" : page.todo ? `todo-${page.todo}` : page.status === "checked" ? "" : "settled");
   const grid = el("div", { class: "pages" }, data.pages.map((page) => {
-    const classes = [page.status || "", page.open_high ? "high" : "", page.stale ? "stale" : ""].join(" ");
-    const tip = `${page.status || "not reviewed"}${page.open_high ? `, ${page.open_high} high flags open` : ""}${page.stale ? ", reading changed" : ""}`;
+    const classes = [page.status || "", page.open_high ? "high" : "", page.stale ? "stale" : "", routed(page)].join(" ");
+    const need = ready.routed ? (TODO_LABEL[page.todo] || (page.status === "checked" ? "" : "nothing to review")) : "";
+    const tip = `${page.status || "not reviewed"}${need ? `, ${need}` : ""}${page.open_high ? `, ${page.open_high} high flags open` : ""}${page.stale ? ", reading changed" : ""}`;
     return el("a", { class: classes, href: `#/doc/${encodeURIComponent(actId)}/page/${page.page}`, title: tip, text: String(page.page) });
   }));
-  const nextTodo = data.pages.find((p) => p.status !== "checked" || p.open_high || p.stale);
+  const nextTodo = data.pages.find((p) => p.todo);
   const head = data.approvals[0];
   const current = data.approved; // the approval covers exactly the current text and confirmed details
   main(
@@ -386,6 +392,7 @@ async function actView(actId) {
         previewLink(actId)),
       el("h3", { text: "Pages" }),
       el("p", { class: "muted", text: "Green: checked. Yellow: needs attention. Red border: high flags open. Dashed: the machine reading changed since review." }),
+      ready.routed ? el("p", { class: "muted", text: "Blue border: to review against the image. Dotted blue border: only its flags to resolve. Faded: nothing to review (the readings agree, or every flag is resolved)." }) : null,
       grid,
     ),
     detailsSummary(actId, ready),
@@ -441,9 +448,18 @@ function approvalChecklist(actId, data, current, head) {
   const toApproval = el("button", { class: "small", text: "Go to approval", on: { click: () => document.getElementById("approval")?.scrollIntoView({ block: "start" }) } });
   const text = data.text_check;
   const toText = (label) => el("button", { class: "small", text: label, on: { click: () => document.getElementById("text-check")?.scrollIntoView({ block: "start" }) } });
+  const toReview = ready.unchecked_pages, toResolve = ready.unresolved_flag_pages;
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   const steps = [
-    step(!ready.unchecked_pages.length, `${checked} of ${ready.pages} pages checked`,
-      ready.unchecked_pages.length ? el("span", {}, "next: ", page(ready.unchecked_pages[0])) : null),
+    ready.routed
+      ? step(!toReview.length, toReview.length ? `${plural(toReview.length, "page", "pages")} to review against the image` : "Every page to review is checked",
+        toReview.length ? el("span", {}, "next: ", page(toReview[0])) : null)
+      : step(!ready.unchecked_pages.length, `${checked} of ${ready.pages} pages checked`,
+        ready.unchecked_pages.length ? el("span", {}, "next: ", page(ready.unchecked_pages[0])) : null),
+    ready.routed
+      ? step(!toResolve.length, toResolve.length ? `Flags to resolve on ${plural(toResolve.length, "page", "pages")}` : "Every flag on the flagged pages resolved",
+        toResolve.length ? el("span", {}, "next: ", page(toResolve[0])) : null)
+      : null,
     step(!highPages.length, highPages.length ? `High flags open on ${highPages.length} page${highPages.length === 1 ? "" : "s"}` : "No high flags open",
       highPages.length ? el("span", {}, "first: ", page(highPages[0])) : null),
     step(!ready.stale_pages.length, ready.stale_pages.length ? `${ready.stale_pages.length} page${ready.stale_pages.length === 1 ? "" : "s"} to recheck: the reading changed` : "No page needs rechecking",
@@ -714,7 +730,8 @@ function approvalPanel(actId, data, current) {
   const canApprove = app.me.roles.includes("approver");
   const panel = el("div", { class: "card", id: "approval" }, el("h3", { text: "Approval" }));
   const blockers = el("ul", { class: "ready" });
-  if (ready.unchecked_pages.length) blockers.append(el("li", { text: `Pages not yet checked: ${summarise(ready.unchecked_pages)}` }));
+  if (ready.unchecked_pages.length) blockers.append(el("li", { text: `${ready.routed ? "Pages to review" : "Pages not yet checked"}: ${summarise(ready.unchecked_pages)}` }));
+  if (ready.unresolved_flag_pages.length) blockers.append(el("li", { text: `Pages with flags to resolve: ${summarise(ready.unresolved_flag_pages)}` }));
   if (ready.open_high_flags.length) blockers.append(el("li", {}, "High flags open on pages ", ...unique(ready.open_high_flags.map((f) => f.page)).flatMap((p, i) => [i ? ", " : "", el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${p}`, text: String(p) })])));
   if (ready.stale_pages.length) blockers.append(el("li", { text: `Pages to recheck because the reading changed: ${summarise(ready.stale_pages)}` }));
   if (ready.missing_checks.length) blockers.append(el("li", { text: `Check readings missing: ${ready.missing_checks.join(", ")} — rerun the batch` }));
@@ -1045,6 +1062,16 @@ async function pageView(actId, pageNumber) {
 
 function changed(view) { app.dirty = true; if (view.dirtyBadge) view.dirtyBadge.hidden = false; saveDraft(view); }
 
+// Under a routing decision: what this page needs, in a sentence (nothing for a page to review whole,
+// which is reviewed as before, whether it was routed there or sampled for the audit).
+function routedNeed(view) {
+  if (!view.detail.readiness.routed) return "";
+  const here = view.detail.pages.find((p) => p.page === view.pageNumber) || {};
+  if (here.todo === "flags") return "Only the flags on this page need you: resolve each one against the image, then save. The rest of the page does not need proofreading.";
+  if (!here.todo && here.status !== "checked") return view.page.flags.length ? "Every flag on this page is resolved: nothing more to review here." : "Nothing to review on this page: the readings agree on every word.";
+  return "";
+}
+
 // The working units: from the surface while it is open, otherwise the last snapshot.
 function currentUnits(view) {
   if (view.surface) view.units = view.surface.units();
@@ -1096,7 +1123,7 @@ function renderPage(view) {
   const numbers = detail.pages.map((p) => p.page);
   const index = numbers.indexOf(pageNumber);
   const go = (n) => { location.hash = `#/doc/${encodeURIComponent(actId)}/page/${n}`; };
-  const nextTodo = detail.pages.find((p) => p.page > pageNumber && (p.status !== "checked" || p.open_high || p.stale));
+  const nextTodo = detail.pages.find((p) => p.page > pageNumber && p.todo);
   const picker = el("select", { on: { change: (e) => go(e.target.value) } }, numbers.map((n) => el("option", { value: n, text: `Page ${n}`, selected: n === pageNumber })));
   view.dirtyBadge = el("span", { class: "pill warn", text: "unsaved changes", hidden: !app.dirty });
   const latest = page.latest;
@@ -1114,6 +1141,8 @@ function renderPage(view) {
   const draft = loadDraft(view);
   if (draft && !view.draftHandled) right.append(draftBanner(view, draft));
   if (latest && latest.stale) right.append(el("div", { class: "card", text: "The machine reading of this page changed after it was reviewed (a re-read). Compare the Machine reading tab and save again to confirm." }));
+  const need = routedNeed(view);
+  if (need) right.append(el("div", { class: "card routed-note", text: need }));
   const tabs = el("div", { class: "tabs" });
   const body = el("div");
   const tabNames = [["edit", "Review and edit"], ["changes", "Changes"], ["machine", "Machine reading"], ["checks", "Check readings"], ["history", `History (${page.history.length})`]];
@@ -1630,9 +1659,19 @@ function saveBar(view) {
     else pageView(view.actId, view.pageNumber);
   };
   const canEdit = app.me.roles.includes("reviewer");
+  // Under a routing decision a flagged page is done once every flag is resolved (CPR-01): saved without
+  // marking the whole page checked. It is the main action there (Ctrl/Cmd+S).
+  const here = view.detail.pages.find((p) => p.page === view.pageNumber) || {};
+  const spans = view.detail.readiness.routed && here.todo !== "review" && view.page.flags.length > 0;
+  const flagsDone = () => {
+    const open = view.page.flags.filter((f) => !view.resolutions[f.id]).length;
+    if (open) return toast(`Resolve every flag first: ${open} still open${view.showLow ? "" : " (tick “show punctuation-only” to see them all)"}`);
+    save("edited");
+  };
   return el("div", { class: "savebar" },
     comment,
-    el("button", { class: "primary", text: "Save as checked", disabled: !canEdit, on: { click: () => save("checked") } }),
+    spans ? el("button", { class: "primary", text: "Save: flags resolved", title: "Records your decision on each flag; the rest of the page needs no proofreading", disabled: !canEdit, on: { click: flagsDone } }) : null,
+    el("button", { class: spans ? "" : "primary", text: "Save as checked", disabled: !canEdit, on: { click: () => save("checked") } }),
     el("button", { text: "Checked → next page", disabled: !canEdit, on: { click: () => save("checked", true) } }),
     el("button", { text: "Save: needs attention", disabled: !canEdit, on: { click: () => save("attention") } }),
     canEdit ? null : el("span", { class: "muted", text: "Editing needs the reviewer role." }));

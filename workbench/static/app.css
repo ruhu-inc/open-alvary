@@ -370,3 +370,9 @@ table.operators tr.inactive td { opacity: .6; }
 .toolbar .restore { margin-left: auto; }
 .toolbar .tool-group button.on { background: color-mix(in srgb, var(--accent) 16%, var(--panel)); border-color: var(--accent); }
 #approval { scroll-margin-top: 4rem; }
+
+/* Under a routing decision (CPR-01): what each page still needs. Audit pages look like any page to review. */
+.pages a.todo-review:not(.high) { border: 2px solid var(--accent); }
+.pages a.todo-flags:not(.high) { border: 2px dotted var(--accent); }
+.pages a.settled { color: var(--muted); background: var(--bg); }
+.card.routed-note { border-left: 4px solid var(--accent); background: var(--accent-soft); }
