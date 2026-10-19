@@ -1,0 +1,52 @@
+deployment/runbook.md
+  s_6a406fa1418160::t_39150e0705de1e 204-206
+deployment/azure/env/monitoring.tf
+  s_6a406fa1418160::t_30e1971f91c766 113
+  s_6a406fa1418160::t_92f451b757a055 78-80,85-102,106-112,114-128
+  s_6a406fa1418160::t_9733ecf140c8a5 81-84
+  s_6a406fa1418160::t_c804bab4e72aae 2-3
+  s_6a406fa1418160::t_aa7f476c317fde 103-105
+deployment/azure/env/storage.tf
+  s_6a406fa1418160::t_87ddd4d7de1fce 79-96
+  s_6a406fa1418160::t_bdfacb5ff840ab 6-7
+deployment/azure/env/jobs.tf
+  s_6a406fa1418160::t_2ba167427f0adf 6-7,17,24,33,37,40-43,105,131-136
+deployment/azure/env/identity.tf
+  s_6a406fa1418160::t_d6a92bce2764c3 2-3
+  s_6a406fa1418160::t_1dae33dc69bef9 68-74
+deployment/azure/README.md
+  s_6a406fa1418160::t_98c3e2808bbda2 174-175
+  s_6a406fa1418160::t_4e3730e08e7128 172-173
+  s_8bc9e23096bbaa::t_b75ae95b95b53b 29,38,42,171,176-177,243-247
+tests/test_postgres_seals.py
+  s_6a406fa1418160::t_f7f65617f0642e 81-104,108-120
+  s_6a406fa1418160::t_c34a80f01b3ae2 105-107
+accounts/seals.py
+  s_6a406fa1418160::t_a81cf51326dc44 11-14,23
+  s_6a406fa1418160::t_6f4cdfd19f6ed1 122-142
+  s_6a406fa1418160::t_a3e198045fbd51 207-212
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "42919de89b0e5cb3128a54e7c9b4a7cee2b7c20e",
+  "prompts": {},
+  "sessions": {
+    "s_6a406fa1418160": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a4508425-b528-4922-bfa7-b9bbc15edcc0",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    },
+    "s_8bc9e23096bbaa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b1507c07-fa6c-4a93-bdc6-0ac4197d9346",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
