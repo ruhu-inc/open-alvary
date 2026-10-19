@@ -3,7 +3,8 @@
 # - retrieval: every minute, the engine catches up with the change log, embedding jobs run and the
 #   section index is rebuilt when its analyzer changed (python -m retrieval.worker run);
 # - worker and daily (activation B): monitors, digests and webhooks every five minutes; audit seals,
-#   sweeps and purges once a day, as on Google Cloud.
+#   sweeps and purges once a day at 03:15 UTC, as on Google Cloud. The daily job also writes each
+#   audit seal to the archive account's audit-seals container (storage.tf), as its own identity.
 
 locals {
   jobs = merge(
@@ -13,12 +14,14 @@ locals {
         cron    = null
         timeout = 900
         secrets = { POSTGRES_PASSWORD = "database-password" } # scripts.check_launch checks it
+        env     = {}
       }
       retrieval = {
         command = ["python", "-m", "retrieval.worker", "run"]
         cron    = "* * * * *"
         timeout = 55
         secrets = {}
+        env     = {}
       }
     },
     var.accounts_enabled ? {
@@ -27,12 +30,17 @@ locals {
         cron    = "*/5 * * * *"
         timeout = 280
         secrets = {}
+        env     = {}
       }
       daily = {
         command = ["sh", "-c", "python -m accounts.seals seal && python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge && python -m accounts.seals verify"]
-        cron    = "0 3 * * *"
+        cron    = "15 3 * * *"
         timeout = 600
         secrets = {}
+        env = {
+          ALVARY_AUDIT_SEALS = "az://${azurerm_storage_account.archive.name}/${azurerm_storage_container.audit_seals.name}"
+          AZURE_CLIENT_ID    = azurerm_user_assigned_identity.public.client_id
+        }
       }
     } : {},
   )
@@ -94,7 +102,7 @@ resource "azurerm_container_app_job" "public" {
       memory  = "1Gi"
 
       dynamic "env" {
-        for_each = local.public_env
+        for_each = merge(local.public_env, each.value.env)
         content {
           name  = env.key
           value = env.value
@@ -120,5 +128,10 @@ resource "azurerm_container_app_job" "public" {
     }
   }
 
-  depends_on = [azurerm_role_assignment.pull, azurerm_role_assignment.secrets, azurerm_key_vault_secret.database_password]
+  depends_on = [
+    azurerm_role_assignment.pull,
+    azurerm_role_assignment.secrets,
+    azurerm_role_assignment.audit_seals_write,
+    azurerm_key_vault_secret.database_password,
+  ]
 }

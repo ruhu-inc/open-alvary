@@ -1,5 +1,6 @@
 # Logs, the operator's alerts and the budget. Request logs never carry a query or legal text: the
-# service writes none (RSV-01), and Container Apps' console logs hold only what it writes.
+# service writes none (RSV-01), and Container Apps' console logs hold only what it writes. Log
+# Analytics keeps them 30 days; the audit seals' long-kept copy is a container (storage.tf).
 
 resource "azurerm_log_analytics_workspace" "main" {
   name                = "${local.name_prefix}-logs"
@@ -71,6 +72,57 @@ resource "azurerm_monitor_metric_alert" "site_down" {
 
   action {
     action_group_id = azurerm_monitor_action_group.operator.id
+  }
+}
+
+# A scheduled job failed (a broken audit seal fails the daily run), as on Google Cloud. The jobs'
+# Executions metric has a Failed state, but alerts on it are reported never to fire, so this reads
+# Container Apps' system log instead: an execution fails as BackoffLimitExceeded (its container
+# exited non-zero, with no retries) or DeadlineExceeded (it ran past its timeout). Microsoft names
+# no job column there, so the job is JobName_s if present, else its execution's name less the
+# suffix. The table appears with the environment's first logs, so the query is not checked when the
+# rule is made; the README's drill checks it once.
+resource "azurerm_monitor_scheduled_query_rules_alert_v2" "job_failed" {
+  count                   = local.public_enabled && var.accounts_enabled ? 1 : 0
+  name                    = "${local.name_prefix}-job-failed"
+  location                = azurerm_resource_group.main.location
+  resource_group_name     = azurerm_resource_group.main.name
+  scopes                  = [azurerm_log_analytics_workspace.main.id]
+  description             = "A run of the daily or worker job failed. For the daily job, look first for an ERROR line 'audit seal check' (deployment/runbook.md, Audit log seals); for the worker, see Monitors and webhooks."
+  severity                = 1
+  evaluation_frequency    = "PT5M"
+  window_duration         = "PT15M" # wider than the frequency, so a late log line is still seen
+  auto_mitigation_enabled = true    # one email per failure, not one per evaluation that sees it
+  skip_query_validation   = true
+  tags                    = local.common_tags
+
+  criteria {
+    query                   = <<-KQL
+      ContainerAppSystemLogs_CL
+      | where Reason_s in ("BackoffLimitExceeded", "DeadlineExceeded")
+      | extend job = coalesce(column_ifexists("JobName_s", ""), extract(@"^(.+)-[^-]+$", 1, column_ifexists("ExecutionName_s", "")))
+      | where job in ("${local.short_prefix}-daily", "${local.short_prefix}-worker")
+      | summarize failures = count() by job
+    KQL
+    time_aggregation_method = "Total"
+    metric_measure_column   = "failures"
+    operator                = "GreaterThan"
+    threshold               = 0
+
+    dimension {
+      name     = "job"
+      operator = "Include"
+      values   = ["*"]
+    }
+
+    failing_periods {
+      minimum_failing_periods_to_trigger_alert = 1
+      number_of_evaluation_periods             = 1
+    }
+  }
+
+  action {
+    action_groups = [azurerm_monitor_action_group.operator.id]
   }
 }
 

@@ -8,8 +8,10 @@ chain after it. Days without entries are sealed too, so the chain has no gaps.
 
 Seals are kept in accounts.audit_seal, which can be added to but never changed, and each new seal is
 also written to the job's log, the copy held outside the database (runbook: an audit-seals log
-bucket). Verification recomputes every day still held. Days past the two-year retention, whose
-entries the purge removed, are checked through the chain alone.
+bucket). Where no log bucket keeps the job's lines (Azure), ALVARY_AUDIT_SEALS names a container
+with an immutability policy instead, "az://<storage-account>/<container>", and each seal is written
+there as <day>.json. Verification recomputes every day still held. Days past the two-year
+retention, whose entries the purge removed, are checked through the chain alone.
 
   python -m accounts.seals seal      seal every day that has ended and is not yet sealed (run daily)
   python -m accounts.seals verify    check the chain and every day still held; exits 1 on a problem
@@ -18,6 +20,7 @@ entries the purge removed, are checked through the chain alone.
 import argparse
 import hashlib
 import json
+import os
 import sys
 from datetime import UTC, date, datetime, time, timedelta
 
@@ -116,6 +119,27 @@ def seal(accounts: Accounts, now: datetime | None = None, out=sys.stdout) -> lis
     return sealed
 
 
+def copy_out(accounts: Accounts, store) -> int:
+    """Write every seal the store does not hold yet as <day>.json, the same fields as its log line,
+    and return how many were written. A seal already there is never replaced (the container's
+    immutability policy would refuse it anyway), and one a failed run missed is written by the next."""
+    held = set(store.list(""))
+    with accounts.engine.connect() as conn:
+        stored = conn.execute(
+            text(
+                "SELECT day, entries, first_seq, last_seq, entries_hash, previous_hash, seal_hash"
+                f" FROM {accounts._t(conn, 'audit_seal')} ORDER BY day"
+            )
+        ).all()
+    written = 0
+    for row in stored:
+        name = f"{row.day.isoformat()}.json"
+        if name not in held:
+            body = json.dumps(dict(row._mapping) | {"day": row.day.isoformat()}).encode()
+            written += store.put(name, body, "application/json")
+    return written
+
+
 def verify(accounts: Accounts, now: datetime | None = None) -> dict:
     """Recompute the chain and every day still held. Problems are listed by day, never by entry
     content, so the report itself holds no personal data."""
@@ -180,7 +204,12 @@ def main(argv=None) -> int:
     command = parser.parse_args(argv).command
     accounts = accounts_for(engine_for())
     if command == "seal":
-        print(json.dumps({"message": "audit seals", "sealed": len(seal(accounts))}))
+        result = {"message": "audit seals", "sealed": len(seal(accounts))}
+        if os.environ.get("ALVARY_AUDIT_SEALS"):
+            from ingestion.corpus_store import open_store
+
+            result["copied"] = copy_out(accounts, open_store(os.environ["ALVARY_AUDIT_SEALS"]))
+        print(json.dumps(result))
         return 0
     report = verify(accounts)
     # A failed check is an ERROR line for the alert, and a failed job.
