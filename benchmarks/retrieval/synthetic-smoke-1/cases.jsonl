@@ -1,0 +1,9 @@
+{"case_id": "s01", "query": "penalty for abstracting water without a licence", "route": "topic", "family": "water"}
+{"case_id": "s02", "query": "meaning of \"abstraction\"", "route": "definition", "family": "water"}
+{"case_id": "s03", "query": "Water Resources Act, 2030, s. 2", "route": "citation", "family": "water"}
+{"case_id": "s04", "query": "Fisheries Act", "route": "instrument", "family": "fisheries"}
+{"case_id": "s05", "query": "closed season for fishing", "route": "topic", "family": "fisheries"}
+{"case_id": "s06", "query": "royalties payable on gold mining", "route": "unanswerable", "expected": "abstain", "family": "none"}
+{"case_id": "s07", "query": "annual report of the Authority to the Minister", "route": "topic", "family": "water"}
+{"case_id": "s08", "query": "licence to abstract water", "route": "historical", "expected": "abstain", "family": "water", "as_of": "2029-06-01"}
+{"case_id": "s09", "query": "how do I apply for a licence to abstract water", "route": "topic", "family": "water-regulations"}

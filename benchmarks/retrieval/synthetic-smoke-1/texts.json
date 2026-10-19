@@ -1,0 +1,42 @@
+[
+  {
+    "work": "synthetic-water-act-2030",
+    "title": "Water Resources Act, 2030",
+    "effective_from": "2030-01-01",
+    "units": [
+      {"kind": "heading", "text": "WATER RESOURCES ACT, 2030"},
+      {"kind": "paragraph", "text": "An Act to regulate the abstraction of water and to establish the Water Resources Authority."},
+      {"kind": "paragraph", "text": "1. In this Act —", "notes": ["Interpretation"]},
+      {"kind": "paragraph", "text": "“abstraction” means the taking of water from a river, lake or aquifer by any means;"},
+      {"kind": "paragraph", "text": "“Authority” means the Water Resources Authority established under section 4."},
+      {"kind": "paragraph", "text": "2. (1) No person shall abstract water without a licence issued by the Authority.", "notes": ["Licence to abstract water"]},
+      {"kind": "paragraph", "text": "(2) A licence states the quantity of water that may be abstracted each year."},
+      {"kind": "paragraph", "text": "3. A person who abstracts water in breach of section 2 commits an offence and is liable on conviction to a fine not exceeding one million naira.", "notes": ["Penalty"]},
+      {"kind": "paragraph", "text": "4. (1) There is established the Water Resources Authority.", "notes": ["Authority"]},
+      {"kind": "paragraph", "text": "(2) The Authority shall, within three months after the end of each year, submit an annual report of its activities to the Minister."}
+    ]
+  },
+  {
+    "work": "synthetic-fisheries-act-2031",
+    "title": "Fisheries Act, 2031",
+    "effective_from": "2031-01-01",
+    "units": [
+      {"kind": "heading", "text": "FISHERIES ACT, 2031"},
+      {"kind": "paragraph", "text": "An Act to conserve fish stocks in inland waters."},
+      {"kind": "paragraph", "text": "1. No person shall fish in inland waters without a fishing permit.", "notes": ["Fishing permit"]},
+      {"kind": "paragraph", "text": "2. The Minister may declare a closed season during which no fishing is permitted in a named lake or river.", "notes": ["Closed season"]},
+      {"kind": "paragraph", "text": "3. A person who fishes during a closed season is liable to forfeit the catch and the boat used.", "notes": ["Forfeiture"]}
+    ]
+  },
+  {
+    "work": "synthetic-water-regulations-2032",
+    "title": "Water Resources (Licensing) Regulations, 2032",
+    "effective_from": "2032-01-01",
+    "document_type": "regulation",
+    "units": [
+      {"kind": "heading", "text": "WATER RESOURCES (LICENSING) REGULATIONS, 2032"},
+      {"kind": "paragraph", "text": "1. An application for a licence to abstract water is made to the Authority on the approved form with the prescribed fee.", "notes": ["Application for a licence"]},
+      {"kind": "paragraph", "text": "2. The Authority shall decide an application within sixty days.", "notes": ["Decision"]}
+    ]
+  }
+]

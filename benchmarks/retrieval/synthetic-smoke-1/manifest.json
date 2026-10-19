@@ -1,0 +1,13 @@
+{
+  "id": "synthetic-smoke-1",
+  "version": 1,
+  "purpose": "CI regression for the retrieval service (RSV-12): every route on three synthetic laws, so a ranking change that does worse than the committed baseline fails. Synthetic text: never real law, and no quality claim.",
+  "review_state": "development_unreviewed",
+  "synthetic": true,
+  "corpus": "texts.json: three synthetic laws written for this benchmark, published into a scratch database by the test",
+  "splits": ["dev"],
+  "limitations": [
+    "Synthetic laws of a few sections each; scores say nothing about retrieval quality on real law.",
+    "Judgments by the author of the retrieval code; not independently reviewed."
+  ]
+}

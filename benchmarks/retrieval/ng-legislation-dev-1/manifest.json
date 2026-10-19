@@ -1,0 +1,14 @@
+{
+  "id": "ng-legislation-dev-1",
+  "version": 1,
+  "purpose": "Development set for retrieval over Nigerian federal legislation in English (RSV-12): every route on the Nigeria Data Protection Act, 2023, to compare ranking profiles while building. Not a held-out set.",
+  "review_state": "development_unreviewed",
+  "synthetic": false,
+  "corpus": "The Nigeria Data Protection Act, 2023 (ng-data-protection-act-2023) as published; judgments name provisions by their locators in the reviewed text",
+  "splits": ["dev"],
+  "limitations": [
+    "Judged by the author of the retrieval code from the Act's text; no qualified reviewer has checked the judgments (EVAL-04), so scores support no quality claim.",
+    "One Act; scores say nothing about other laws, languages or jurisdictions.",
+    "Definitions are judged at their reviewed locators (sec_65__def_…); a text whose interpretation section is not yet structured scores lower on definition cases."
+  ]
+}

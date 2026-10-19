@@ -1,0 +1,11 @@
+{
+  "id": "ng-legislation-dev-1-gate-1",
+  "split": "dev",
+  "metrics": [
+    {"metric": "ndcg@10", "margin": 0.02},
+    {"metric": "recall@10", "margin": 0.02},
+    {"metric": "mrr", "margin": 0.02},
+    {"metric": "complete", "margin": 0.05},
+    {"metric": "abstain", "margin": 0.0}
+  ]
+}

@@ -1,0 +1,24 @@
+{"case_id": "n01", "query": "when must a data controller notify the Commission of a personal data breach", "route": "topic", "family": "security", "jurisdictions": ["ng"]}
+{"case_id": "n02", "query": "lawful basis for processing personal data", "route": "topic", "family": "principles", "jurisdictions": ["ng"]}
+{"case_id": "n03", "query": "Nigeria Data Protection Act, 2023, s. 23(1)(a)", "route": "citation", "family": "finance", "jurisdictions": ["ng"]}
+{"case_id": "n04", "query": "meaning of \"personal data\"", "route": "definition", "family": "definitions", "jurisdictions": ["ng"]}
+{"case_id": "n05", "query": "Nigeria Data Protection Act", "route": "instrument", "family": "instrument", "jurisdictions": ["ng"]}
+{"case_id": "n06", "query": "annual report of the Commission to the National Assembly", "route": "topic", "family": "finance", "jurisdictions": ["ng"]}
+{"case_id": "n07", "query": "transfer of personal data outside Nigeria", "route": "topic", "family": "transfers", "jurisdictions": ["ng"]}
+{"case_id": "n08", "query": "right of a data subject to object to processing", "route": "topic", "family": "rights", "jurisdictions": ["ng"]}
+{"case_id": "n09", "query": "penalty for a data controller that fails to comply with an order of the Commission", "route": "topic", "family": "enforcement", "jurisdictions": ["ng"]}
+{"case_id": "n10", "query": "consent of a parent before processing a child's personal data", "route": "topic", "family": "principles", "jurisdictions": ["ng"]}
+{"case_id": "n11", "query": "who must appoint a data protection officer", "route": "topic", "family": "principles", "jurisdictions": ["ng"]}
+{"case_id": "n12", "query": "can a data subject withdraw consent", "route": "topic", "family": "rights", "jurisdictions": ["ng"]}
+{"case_id": "n13", "query": "decisions based solely on automated processing including profiling", "route": "topic", "family": "rights", "jurisdictions": ["ng"]}
+{"case_id": "n14", "query": "data privacy impact assessment for high risk processing", "route": "topic", "family": "principles", "jurisdictions": ["ng"]}
+{"case_id": "n15", "query": "registration of data controllers of major importance", "route": "topic", "family": "registration", "jurisdictions": ["ng"]}
+{"case_id": "n16", "query": "how does a data subject complain to the Commission", "route": "topic", "family": "enforcement", "jurisdictions": ["ng"]}
+{"case_id": "n17", "query": "damages for harm caused by a violation of the Act", "route": "topic", "family": "enforcement", "jurisdictions": ["ng"]}
+{"case_id": "n18", "query": "processing of sensitive personal data", "route": "topic", "family": "principles", "jurisdictions": ["ng"]}
+{"case_id": "n19", "query": "does the Act apply to processing for household purposes", "route": "topic", "family": "application", "jurisdictions": ["ng"]}
+{"case_id": "n20", "query": "establishment of the Nigeria Data Protection Commission", "route": "topic", "family": "commission", "jurisdictions": ["ng"]}
+{"case_id": "n21", "query": "security measures to protect personal data", "route": "topic", "family": "security", "jurisdictions": ["ng"]}
+{"case_id": "n22", "query": "meaning of \"data controller\"", "route": "definition", "family": "definitions", "jurisdictions": ["ng"]}
+{"case_id": "n23", "query": "copyright in broadcasts", "route": "unanswerable", "expected": "abstain", "family": "none", "jurisdictions": ["ng"]}
+{"case_id": "n24", "query": "Nigeria Data Protection Act, 2023, s. 40", "route": "citation", "family": "security", "jurisdictions": ["ng"]}
