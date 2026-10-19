@@ -1,14 +1,18 @@
 # Open Alvary on Google Cloud, as code
 
 Open Alvary's whole architecture, as code on Google Cloud. It is written as Terraform piece for piece
-beside deployment/azure, which holds the same environment for Azure, so Open Alvary can run in
-either cloud and move between them (only one is live at a time). Nothing here has been applied, and
-nothing is applied without the owner's go-ahead, step by step.
+beside deployment/azure, which holds the same environment for Azure, so Open Alvary can run on
+whichever cloud has credit (D33) and move between them (only one is live at a time). Nothing here
+has been applied, and nothing is applied without the owner's go-ahead, step by step. Saved plans
+(`*.plan`) stay local: they can hold secret values.
 
 **Staging is the live environment until there are paying users** (the owner, 2026-10-19). It serves
 `open.alvary.ai` and `api.open.alvary.ai`, uses today's buckets in place, and runs Vespa and a T4
 GPU. There is no production. `prod` stays possible through `prod.tfvars`, in a fresh project, and
-takes the public domains over from staging when it comes.
+takes the public domains over from staging when it comes. Azure staging is built as the standby,
+with its Vespa machine and GPU off (deployment/azure/README.md, MAC-12a). On 1 December 2026 the
+owner decides whether Open Alvary stays here, or moves there before Google's credit ends on 18
+December.
 
 **Never point this code at `open-alvary-prod` or `open-alvary-ingestion`.** Today's live system was
 built by the bash scripts in deployment/gcp. Applying here against those projects would try to
@@ -309,6 +313,24 @@ pretrained versions (`document_ai`). The order is phase 1 above, then:
      `./data.sh verify staging azure` checks every MD5.
 5. **Switchover** as in phase 6, pausing Azure's worker and daily jobs. Lock the archive here once
    its copy checks out. Then remove `azure_federation` and apply.
+
+## Moving from here to Azure
+
+deployment/azure/README.md's phases hold, with three differences, because this environment's
+databases have private addresses only:
+
+- **Secrets:** run Azure's `secrets.sh` with `GCP_PROJECT` and `GCP_REVIEW_PROJECT` both set to this
+  project.
+- **Databases:** cloud-sql-proxy cannot reach a private-only instance from outside, so this
+  environment's restore job makes the dump. For each database, `public` and `review`:
+  - run `gcloud run jobs execute open-alvary-staging-restore-public --args=dump --wait`
+    (`restore_image` set);
+  - carry the three files from `gs://open-alvary-staging-transfer/public/` to Azure's transfer
+    container under `public/`, through a private temporary folder (`gcloud storage cp`, then
+    `az storage blob upload`);
+  - run Azure's `data.sh restore`.
+- **Buckets:** Azure's copy job reads today's buckets as before, used in place here. They are
+  copied from wherever they live.
 
 ## Locking the archive (owner, irreversible)
 

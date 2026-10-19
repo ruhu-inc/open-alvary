@@ -6,4 +6,5 @@
 *.tfvars
 !*.tfvars.example
 *.backend.hcl
+*.plan
 crash.log
