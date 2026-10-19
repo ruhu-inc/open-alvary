@@ -90,21 +90,30 @@ Unchanged: Auth0 (sign-in), Resend (email), DNS (records change at switchover), 
   is below. Check both products' usage in the sponsorship portal.
 - **The penetration test.** It moves to the Azure environment, after switchover.
 
-## Cost, estimated per month (Sweden Central, list prices, low traffic)
+## Cost per month (Sweden Central list prices, checked 2026-10-19 in Azure's retail price list; 730 hours)
 
-| Part | Staging | Production |
-|---|---|---|
-| GPU VM, NC4as T4 v3, always on | ~$380 | ~$380 |
-| Vespa VM, D4s v5, and 128 GB disk | ~$160 | ~$160 |
-| PostgreSQL B2s, and the workbench's B1ms | ~$45 | ~$45 (+ geo backups) |
-| Container Apps (one warm replica, jobs) | ~$40 | ~$60 |
-| Front Door Standard and WAF policy | ~$40 | ~$45 |
-| NAT gateway and address | ~$35 | ~$35 |
-| Storage, registry, Key Vault, logs | ~$25 | ~$40 |
-| **Total** | **~$725** | **~$765** |
+| Part | Phase | Staging | Production |
+|---|---|---|---|
+| Vespa VM D4s v5 ($0.204/h), 128 GB data disk (P10), OS disk (P4) | 1 | ~$176 | ~$176 |
+| PostgreSQL Flexible B2s ($0.0398/h) and 32 GB storage | 1 | ~$33 | ~$33 (+ geo backups) |
+| Front Door Standard base fee, WAF policy, little traffic | 1 | ~$35 | ~$40 |
+| NAT gateway and its address (the VMs' outbound) | 1 | ~$37 | ~$37 |
+| Registry Basic, Key Vault, storage (18 GB corpus), logs, DNS zone | 1 | ~$12 | ~$20 |
+| Container Apps: one warm replica (1 vCPU, 2 GiB), jobs every minute | 3 | ~$30 | ~$45 |
+| Workbench: PostgreSQL B1ms ($0.0199/h) and storage; app scales to zero | 4 | ~$19 | ~$19 |
+| GPU VM NC4as T4 v3 ($0.558/h) and 128 GB OS disk | when quota | ~$429 | ~$429 |
+| **Total without the GPU** | | **~$342** | **~$370** |
+| **Total with the GPU** | | **~$771** | **~$799** |
 
-Staging can be stopped between rehearsals; the VMs then cost only their disks. Check these with
-Azure's pricing calculator before the first apply.
+- Container Apps environments on the consumption plan have no fixed fee that the price list shows
+  (its $0.13/h meters are for dedicated plans, private endpoints and maintenance windows). The
+  monthly free grant (180,000 vCPU-seconds, 360,000 GiB-seconds) is shared with the subscription's
+  other apps.
+- Parking staging between rehearsals: deallocating both VMs leaves only their disks (~$27, plus ~$22
+  for the GPU's), and PostgreSQL can be stopped for up to 7 days at a time. Front Door's base fee and
+  the NAT gateway keep running.
+- Serverless T4 GPUs on Container Apps cost more kept warm: about $1.64/h with their fixed 8 vCPU and
+  56 GiB, against the VM's $0.56.
 
 ## Before the first apply (owner)
 
