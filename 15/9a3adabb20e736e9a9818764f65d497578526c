@@ -1,0 +1,25 @@
+workbench/static/public-preview/preview.js
+  s_d665c62e07d76f::t_94954efaba0256 1,9,17,25,33,41,43,45-46,48-49,54,64,69,139
+workbench/static/public-preview/preview.css
+  s_d665c62e07d76f::t_94954efaba0256 1
+web/src/document.tsx
+  s_d665c62e07d76f::t_e9c2d643195cb4 110-113,117-127
+  s_d665c62e07d76f::t_f4ecd9ecab0c8a 197-198
+  s_d665c62e07d76f::t_9a0aed6745ee62 199-206,354-355
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "159a3adabb20e736e9a9818764f65d497578526c",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
