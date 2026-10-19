@@ -14,7 +14,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from ingestion import first_collection, layout_parser
+from ingestion import first_collection, layout_parser, native
 from workbench.store import canonical_json
 
 KINDS = {"heading", "paragraph", "list_item", "table"}
@@ -130,6 +130,7 @@ class Library:
             for document in manifest["documents"]
         }
         self._details: dict[str, dict] = {}
+        self._unassessed: set[str] = set()
 
     def documents(self) -> list[dict]:
         """Documents of any type in the collections that have a reconciled reading, as listed in
@@ -235,8 +236,26 @@ class Library:
         return path
 
     def reading(self, act_id: str) -> dict:
+        """The reconciled reading, each page with its text-layer evidence as page["native"] where
+        <id>.native.json holds evidence still bound to it (ingestion/native.py)."""
         self.act(act_id)
-        return json.loads(self._here(act_id, ".reading.json").read_text())
+        found = json.loads(self._here(act_id, ".reading.json").read_text())
+        return native.attach(found, self.native_evidence(act_id))
+
+    def native_evidence(self, act_id: str) -> dict | None:
+        """The text-layer evidence beside a document's reading, if it has been assessed."""
+        manifest, staging = self._where(act_id)
+        remote = manifest.get("_remote")
+        if not remote:
+            path = staging / f"{act_id}.native.json"
+            return json.loads(path.read_text()) if path.exists() else None
+        if act_id in self._unassessed:
+            return None
+        name = f"{remote['prefix']}{self._index[act_id].get('objects', '')}{act_id}.native.json"
+        if not _store(remote["bucket"]).exists(name):
+            self._unassessed.add(act_id)  # asked once: a listing reads many documents
+            return None
+        return json.loads(self._here(act_id, ".native.json").read_text())
 
     def image(self, act_id: str, page: int) -> Path:
         """A legible page image (150 dpi), rendered once: in the sealed tools container here, or, in
