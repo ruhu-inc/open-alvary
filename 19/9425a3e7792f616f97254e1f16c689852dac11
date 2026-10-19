@@ -1,0 +1,55 @@
+workbench/app.py
+  s_d665c62e07d76f::t_c23d099547c5d0 238
+  s_d665c62e07d76f::t_abf4a18d82e698 448
+  s_d665c62e07d76f::t_4249722ba42d9d 427
+  s_d665c62e07d76f::t_2b1c76702fafaf 463,468
+  s_d665c62e07d76f::t_1311251b5d17d4 262-264,267
+  s_d665c62e07d76f::t_f14c481b8cd962 34
+  s_d665c62e07d76f::t_bcc1ca68fd39d9 629
+  s_d665c62e07d76f::t_1c0dc10188dc34 265-266
+workbench/routing.py
+  s_d665c62e07d76f::t_06324b9b6ffef7 18-22,154,156,166,170-178
+  s_d665c62e07d76f::t_b74e7b1713f356 140-141
+  s_d665c62e07d76f::t_e2de44f4178232 179-180
+workbench/static/app.css
+  s_d665c62e07d76f::t_bc45cdfb2f3d8c 373-376,378
+  s_d665c62e07d76f::t_5180782443d147 377
+workbench/static/app.js
+  s_d665c62e07d76f::t_116ddbac9495d5 1662-1670,1673-1674
+  s_d665c62e07d76f::t_b12852c006e902 1065-1074
+  s_d665c62e07d76f::t_b649d317966047 370-372,374-376,379
+  s_d665c62e07d76f::t_d8650de5ca495a 25-26
+  s_d665c62e07d76f::t_295e9205b9cf8e 733-734
+  s_d665c62e07d76f::t_2d25654904b8ea 1144-1145
+  s_d665c62e07d76f::t_348611b15aa6fc 1126
+  s_d665c62e07d76f::t_611fc05c986a7b 451-452,454-462
+  s_d665c62e07d76f::t_7a7884d4fb8b40 395
+workbench/review.py
+  s_d665c62e07d76f::t_fbb747b2404a48 119
+  s_d665c62e07d76f::t_77bd15a1c28b75 8-24
+  s_d665c62e07d76f::t_d5945233c0bbbd 110-112,118,120-127,130,132,135
+tests/test_routing.py
+  s_d665c62e07d76f::t_a29f55af68102e 213-214
+  s_d665c62e07d76f::t_2b18c1ffb02a42 2-3
+  s_d665c62e07d76f::t_5cd5afcefef2ee 103-104,108,119-172,175-212,215-232
+  s_d665c62e07d76f::t_06e35dd74368ac 173-174
+  s_d665c62e07d76f::t_118add4265be92 233-234
+workbench/content.py
+  s_d665c62e07d76f::t_c047ab274d77d9 823-825
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "199425a3e7792f616f97254e1f16c689852dac11",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
