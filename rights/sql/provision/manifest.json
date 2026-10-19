@@ -275,5 +275,13 @@
       "changes.index_generation",
       "changes.index_job"
     ]
+  },
+  {
+    "revision": "0037",
+    "anchor": "changes.engine_state",
+    "file": "v0037.sql",
+    "requires": [
+      "changes.engine_state"
+    ]
   }
 ]

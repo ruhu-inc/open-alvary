@@ -4407,6 +4407,18 @@
             "title": "Analyzer",
             "description": "The text analysis, such as `oa-search-3`."
           },
+          "engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engine",
+            "description": "The search engine that ran the word and meaning searches (`vespa`), when one is configured; otherwise the system of record's own search ran them."
+          },
           "vector": {
             "anyOf": [
               {
@@ -5354,6 +5366,24 @@
             ],
             "title": "Rerank Score",
             "description": "The reranker's score, when one ran."
+          },
+          "features": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "type": "object"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Features",
+            "description": "The search engine's ranking features for each search the unit came from, such as `bm25(words)` or `closeness(field, emb_…)`: the inputs to its rank there."
           },
           "band": {
             "type": "integer",

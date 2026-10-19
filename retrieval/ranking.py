@@ -60,6 +60,7 @@ class Hit:
     replaced: bool
     jurisdiction_id: str
     document_type: str
+    features: dict[str, float] = field(default_factory=dict)  # the engine's ranking features for this hit
 
 
 @dataclass
@@ -70,6 +71,7 @@ class Candidate:
     rerank_score: float | None = None  # 0 to 1 when the reranker scored it
     court_relation: str | None = None  # for a decision: binding, persuasive, not_applicable or unknown
     expanded_from: str | None = None  # the seed unit whose reference added it (RSV-06)
+    features: dict[str, dict[str, float]] = field(default_factory=dict)  # arm → its features
     band: int = 0
     signals: list[tuple[str, str, str]] = field(default_factory=list)
     diversification: list[str] = field(default_factory=list)
@@ -101,6 +103,8 @@ def fuse(arms: dict[str, list[Hit]]) -> list[Candidate]:
             rank += 1
             held = found.setdefault(candidate.key, candidate)
             held.arms[arm] = rank
+            if hit.features:
+                held.features[arm] = hit.features
             held.fused += 1.0 / (RRF_K + rank)
     return sorted(found.values(), key=lambda c: c.order)
 
