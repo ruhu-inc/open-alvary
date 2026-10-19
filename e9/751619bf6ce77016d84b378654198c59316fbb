@@ -1,0 +1,24 @@
+experiments/embeddings/baselines.py
+  s_d665c62e07d76f::t_638bfc79c0e096 15
+  s_d665c62e07d76f::t_7db2f5cadd2950 1-14,16-69
+retrieval/engine.py
+  s_d665c62e07d76f::t_2739e039b4328b 13-14,37-40,113,118
+experiments/embeddings/screen-2026-10-19.md
+  s_d665c62e07d76f::t_fc705c45e0d433 1-97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e9751619bf6ce77016d84b378654198c59316fbb",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
