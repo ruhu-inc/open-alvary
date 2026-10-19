@@ -1,0 +1,7 @@
+# Terraform working files and the values for one environment stay on the operator's machine.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log

@@ -565,7 +565,7 @@ def main(argv=None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     prep = commands.add_parser("prepare")
     prep.add_argument("profile")
-    prep.add_argument("--backend", choices=("pgvector", "exact"))
+    prep.add_argument("--backend", choices=("vespa", "pgvector", "exact"))
     run = commands.add_parser("work")
     run.add_argument("--batches", type=int, default=10)
     for name in ("validate", "activate"):

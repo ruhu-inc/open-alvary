@@ -1,0 +1,37 @@
+#cloud-config
+# The inference machine: Docker with NVIDIA's container toolkit, and the two models as services. Each
+# waits for the GPU driver (installed by Azure's extension), then serves on the private address only.
+package_update: true
+package_upgrade: true
+packages: [docker.io, curl, gnupg, unattended-upgrades]
+
+write_files:
+%{ for name, spec in { embedder = { model = embedder.model, revision = embedder.revision, port = 8080 }, reranker = { model = reranker.model, revision = reranker.revision, port = 8081 } } ~}
+  - path: /etc/systemd/system/${name}.service
+    content: |
+      [Unit]
+      Description=Open Alvary ${name} (${spec.model})
+      After=docker.service
+      Requires=docker.service
+      [Service]
+      ExecStartPre=/usr/bin/nvidia-smi
+      ExecStartPre=-/usr/bin/docker rm -f ${name}
+      ExecStart=/usr/bin/docker run --rm --name ${name} --gpus all \
+        -p ${ip}:${spec.port}:80 -v /var/models:/data ${image} \
+        --model-id ${spec.model} --revision ${spec.revision}
+      ExecStop=/usr/bin/docker stop -t 30 ${name}
+      Restart=always
+      RestartSec=30
+      [Install]
+      WantedBy=multi-user.target
+%{ endfor ~}
+
+runcmd:
+  - [sh, -c, "curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"]
+  - [sh, -c, "curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' > /etc/apt/sources.list.d/nvidia-container-toolkit.list"]
+  - [sh, -c, "apt-get update && apt-get install -y nvidia-container-toolkit"]
+  - [nvidia-ctk, runtime, configure, --runtime=docker]
+  - [systemctl, restart, docker]
+  - [mkdir, -p, /var/models]
+  - [systemctl, daemon-reload]
+  - [systemctl, enable, --now, embedder.service, reranker.service]

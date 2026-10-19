@@ -327,3 +327,33 @@ def test_a_unit_gives_the_pages_of_the_original_file_it_is_on():
     assert unit_pages(20, 90, section, nodes) == (3, 5)  # a section across pages
     assert unit_pages(0, 10, document, nodes) == (1, 1)  # the document's own words: not its last page
     assert unit_pages(0, 10, node("x", 0, 10, None), [node("x", 0, 10, None)]) is None  # not read from pages
+
+
+def test_the_retrieval_job_runs_each_step_and_reports_one_that_fails(monkeypatch):
+    from contextlib import contextmanager
+
+    from api import text_index
+    from retrieval import indexer, projector, worker
+
+    calls = []
+
+    class Database:
+        @contextmanager
+        def begin(self):
+            yield None
+
+    monkeypatch.setattr(text_index, "ensure", lambda conn: calls.append("ensure") or False)
+    monkeypatch.setattr(projector, "application", lambda conn: "app")
+    monkeypatch.setattr(projector, "application_hash", lambda app: "new")
+    monkeypatch.setattr(projector, "state", lambda conn: {"application_hash": "old"})
+    monkeypatch.setattr(projector, "deploy", lambda db, engine: calls.append("deploy"))
+
+    def broken(db, engine):
+        raise ConnectionError("engine down")
+
+    monkeypatch.setattr(projector, "sync", broken)
+    monkeypatch.setattr(indexer, "work", lambda db, batches, searcher: calls.append("work") or {"done": 0})
+    report = worker.run(Database(), search=object())
+    # The application changed, so it is deployed; the failing sync is reported; embedding still runs.
+    assert calls == ["ensure", "deploy", "work"]
+    assert report["engine"] == {"error": "ConnectionError"} and report["embeddings"] == {"done": 0}
