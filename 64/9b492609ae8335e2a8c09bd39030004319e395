@@ -1,0 +1,23 @@
+tests/test_engine_vespa.py
+  s_d665c62e07d76f::t_08d87dabb23dd8 112-116
+retrieval/pack.py
+  s_d665c62e07d76f::t_a3814814450554 275-277
+experiments/embeddings/screen-2026-10-19.md
+  s_d665c62e07d76f::t_4768b11c84dee7 136-159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "649b492609ae8335e2a8c09bd39030004319e395",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
