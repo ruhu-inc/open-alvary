@@ -109,6 +109,11 @@ def test_a_generation_in_the_engine_is_built_validated_and_searched(store, engin
     assert found.revisions.vector == f"{PROFILE.id}@{generation}"
     dense = [u for u in found.evidence if "dense" in u.ranking.arms]
     assert dense and any(k.startswith("closeness") for k in dense[0].ranking.features["dense"])
+    # A resolved citation is the answer: meaning adds nothing to it.
+    cited = pack(store, engine, "Example Act, 2023, s. 1(2)(b)", vector_profile=PROFILE.id,
+                 embedder=HashingEmbedder(PROFILE))  # fmt: skip
+    assert cited.evidence[0].ranking.arms.get("citation") == 1
+    assert not any("dense" in u.ranking.arms for u in cited.evidence)
 
 
 def test_the_pack_falls_back_to_the_system_of_record_when_the_engine_is_down(store):

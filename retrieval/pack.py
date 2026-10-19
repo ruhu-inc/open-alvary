@@ -272,7 +272,9 @@ class Retriever:
                 arms["lexical_any"] = [_hit(r) for r in relaxed.rows]
             documents = text_index.search_documents(self.conn, query, filters, limit=SIDE_LIMIT)
             arms["document"] = [_hit(r, "document") for r in documents.rows]
-        if "topic" in plan.routes:
+        if "topic" in plan.routes and "citation" not in plan.routes:
+            # A resolved citation is the answer: like the any-word arm, meaning adds only the text the
+            # citation's title shares with everything else in the law.
             dense = self._dense(query, filters, degraded)
             if dense is not None:
                 arms["dense"] = dense
