@@ -269,3 +269,41 @@ def test_the_http_embedder_sends_a_key_only_when_it_has_one(monkeypatch):
         ["x"], query=False
     )
     assert __import__("json").loads(seen[-1].content)["dimensions"] == 8
+
+
+def test_a_long_unit_is_reranked_by_its_opening_and_the_windows_with_the_query_words():
+    from retrieval import rerank
+
+    filler = "The Commission may publish guidance on any matter. " * 60  # several windows
+    words = (
+        "Section 42 opens here. " + filler + "A controller shall not transfer personal data abroad. " + filler
+    )
+    found = rerank.passages(words, {"transfer", "abroad"})
+    assert len(found) == rerank.PASSAGES and found[0].startswith("Section 42")
+    assert any("transfer personal data abroad" in p for p in found)
+    assert all(len(p) <= rerank.MAX_CHARS for p in found)
+    assert rerank.passages("A short section.", {"short"}) == ["A short section."]
+
+
+def test_weak_matches_need_the_rerankers_support_and_strong_ones_never_do():
+    from retrieval import rerank
+    from retrieval.pack import Retriever
+    from retrieval.ranking import Candidate
+
+    def candidate(start, arms, score=None):
+        return Candidate(hit(start=start), arms=dict.fromkeys(arms, 1), rerank_score=score)
+
+    low = rerank.SUPPORT_FLOOR / 10
+    kept = Retriever._supported([
+        candidate(0, ["lexical"], 0.0),  # every word: never held to the floor
+        candidate(10, ["citation"], 0.0),
+        candidate(20, ["dense"], low),  # weak and scored low
+        candidate(30, ["dense", "lexical_any"], low),
+        candidate(40, ["lexical_any"], 0.9),
+        candidate(50, ["dense"]),  # the reranker ran but did not score it
+    ])  # fmt: skip
+    assert [c.hit.start_byte for c in kept] == [0, 10, 40]
+    # Without a reranker, meaning alone is evidence only when the query's words found something.
+    assert [c.hit.start_byte for c in Retriever._supported([candidate(0, ["dense"])])] == []
+    both = Retriever._supported([candidate(0, ["dense"]), candidate(10, ["lexical_any"])])
+    assert [c.hit.start_byte for c in both] == [0, 10]

@@ -386,19 +386,45 @@ class Retriever:
         kept = {c.key for c in keep}
         first = [c for c in candidates if c.key not in kept][: rerank.MAX_CANDIDATES - len(keep)]
         pool = [c for c in [*first, *keep] if self._public(c.hit.version_id)]
-        texts = [
-            self._public(c.hit.version_id)[0]
-            .canonical_text.encode()[c.hit.start_byte : c.hit.end_byte]
-            .decode()
-            for c in pool
-        ]
+        terms = {
+            w.casefold() for words in text_index.query_terms(self.conn, query).values() for w in words.split()
+        }
+        owners, texts = [], []
+        for n, candidate in enumerate(pool):
+            words = (
+                self._public(candidate.hit.version_id)[0]
+                .canonical_text.encode()[candidate.hit.start_byte : candidate.hit.end_byte]
+                .decode()
+            )
+            for passage in rerank.passages(words, terms):
+                owners.append(n)
+                texts.append(passage)
         try:
-            scores = self.reranker.scores(query, texts) if pool else []
+            scores = self.reranker.scores(query, texts) if texts else []
         except Exception:
             degraded.append("reranker:unavailable")
             return
-        for candidate, score in zip(pool, scores, strict=True):
-            candidate.rerank_score = score
+        for n, score in zip(owners, scores, strict=True):
+            pool[n].rerank_score = max(score, pool[n].rerank_score or 0.0)
+
+    @staticmethod
+    def _supported(candidates: list[Candidate]) -> list[Candidate]:
+        """Weak matches (found only by meaning or by some of the query's words) are evidence when the
+        reranker scores them at least SUPPORT_FLOOR; when it ran, a weak match it did not score (below
+        the candidates it scores) is not. Without a reranker, a unit found only by meaning is evidence
+        when the query's words found something too. Nearest neighbours and single shared words always
+        exist, so without this the pack would never say that nothing answers (RSV-07)."""
+        worded = any(set(c.arms) - {"dense"} for c in candidates)
+        reranked = any(c.rerank_score is not None for c in candidates)
+
+        def kept(c: Candidate) -> bool:
+            if not set(c.arms) <= rerank.WEAK_ARMS:
+                return True
+            if c.rerank_score is not None:
+                return c.rerank_score >= rerank.SUPPORT_FLOOR
+            return not reranked and (set(c.arms) != {"dense"} or worded)
+
+        return [c for c in candidates if kept(c)]
 
     # --- the pack --------------------------------------------------------------------------------
 
@@ -430,7 +456,7 @@ class Retriever:
         fused += expanded
         self._courts(fused, filters)
         self._rerank(query, fused, degraded, keep=expanded)
-        candidates = apply_signals(fused, set(works))
+        candidates = apply_signals(self._supported(fused), set(works))
         scoped = "citation" in plan.routes or len(works) == 1 or bool(filters.source_id or filters.version_id)
         candidates = diversify(candidates, scoped=scoped, comparative=plan.comparative)
         evidence, used, sent, omitted, notices = self._assemble(query, candidates, plan, request)
