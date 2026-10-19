@@ -44,10 +44,10 @@ locals {
 
   # What the retrieval service is told (retrieval/engine.py, retrieval/vectors.py, retrieval/rerank.py).
   retrieval_env = merge(
-    {
+    var.engine_enabled ? {
       OPEN_ALVARY_ENGINE_URL        = "http://${local.engine_ip}:8080"
       OPEN_ALVARY_ENGINE_CONFIG_URL = "http://${local.engine_ip}:19071"
-    },
+    } : {},
     var.inference_enabled ? {
       OPEN_ALVARY_EMBEDDER_URL     = "http://${local.inference_ip}:8080/v1"
       OPEN_ALVARY_RERANKER_URL     = "http://${local.inference_ip}:8081"
