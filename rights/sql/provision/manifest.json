@@ -266,5 +266,14 @@
       "corpus.currentness_profile",
       "corpus.legal_event"
     ]
+  },
+  {
+    "revision": "0036",
+    "anchor": "changes.index_generation",
+    "file": "v0036.sql",
+    "requires": [
+      "changes.index_generation",
+      "changes.index_job"
+    ]
   }
 ]

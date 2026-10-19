@@ -354,7 +354,7 @@ def sync(conn: Connection, now: dict[str, dict] | None, scope: set[str] | None) 
         {} if scope is None else {"ids": sorted(scope)},
     ):
         held.setdefault(row.work_id, {})[row.version_id] = row.work_hash
-    touched = set()
+    touched, indexed = set(), set()
     for work_id, versions in held.items():
         readable = set((now.get(work_id) or {}).get("versions") or ())
         for version_id in set(versions) - readable:
@@ -365,6 +365,7 @@ def sync(conn: Connection, now: dict[str, dict] | None, scope: set[str] | None) 
         kept = set(held.get(work_id, {})) & set(facts.get("versions") or ())
         for version_id in sorted(set(facts.get("versions") or ()) - kept):
             _index_version(conn, table, work_id, version_id, projection)
+            indexed.add(version_id)
             touched.add(work_id)
         if kept and any(held[work_id][v] != _work_hash(projection) for v in kept):
             # The work's record was corrected: its filter values, title and citation, for every unit.
@@ -399,6 +400,10 @@ def sync(conn: Connection, now: dict[str, dict] | None, scope: set[str] | None) 
     documents = _documents(conn)
     if documents is not None:
         _sync_documents(conn, documents, now, scope, rebuild)
+    if indexed:  # the semantic generations embed new texts in the background (RSV-10)
+        from retrieval import indexer
+
+        indexer.queue(conn, indexed)
     if rebuild:
         conn.execute(
             text(f"UPDATE {state_table} SET built = true, analyzer = :a, built_at = statement_timestamp()"),

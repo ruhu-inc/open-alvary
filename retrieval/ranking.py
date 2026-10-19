@@ -2,7 +2,8 @@
 
 Each arm's hits collapse to evidence units (a provision, a run of a container's own words, or a
 document unit) at their best rank in that arm; reciprocal-rank fusion (k=60, RET-02) combines the arms.
-Then, in order:
+When a reranker ran (retrieval.rerank), its scores (0 to 1) order the candidates it scored, ahead of the
+rest in fused order. Then, in order:
 
 1. Legal status: a record repealed, superseded or historical, or a text a later published text
    replaces, scores 0.8 of its fused score (as oa-rank-1).
@@ -63,6 +64,7 @@ class Candidate:
     hit: Hit
     arms: dict[str, int] = field(default_factory=dict)
     fused: float = 0.0
+    rerank_score: float | None = None  # 0 to 1 when the reranker scored it
     band: int = 0
     signals: list[tuple[str, str, str]] = field(default_factory=list)
     diversification: list[str] = field(default_factory=list)
@@ -74,7 +76,10 @@ class Candidate:
 
     @property
     def order(self) -> tuple:
-        return (-round(self.fused, 12), self.hit.version_id, self.hit.start_byte)
+        """Reranked candidates first, by score; then the rest by fused score; ties by version and byte."""
+        if self.rerank_score is not None:
+            return (0, -round(self.rerank_score, 12), self.hit.version_id, self.hit.start_byte)
+        return (1, -round(self.fused, 12), self.hit.version_id, self.hit.start_byte)
 
 
 def fuse(arms: dict[str, list[Hit]]) -> list[Candidate]:
@@ -103,9 +108,13 @@ def apply_signals(candidates: list[Candidate], named_works: set[str]) -> list[Ca
         hit = candidate.hit
         if hit.legal_status in NOT_IN_FORCE_STATUSES:
             candidate.fused *= NOT_IN_FORCE
+            if candidate.rerank_score is not None:
+                candidate.rerank_score *= NOT_IN_FORCE
             candidate.signals.append(("legal_status", hit.legal_status, f"x{NOT_IN_FORCE}"))
         elif hit.replaced:
             candidate.fused *= NOT_IN_FORCE
+            if candidate.rerank_score is not None:
+                candidate.rerank_score *= NOT_IN_FORCE
             candidate.signals.append(
                 ("replaced", "a later text of this record replaces it", f"x{NOT_IN_FORCE}")
             )

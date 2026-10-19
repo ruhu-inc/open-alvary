@@ -782,7 +782,7 @@ FIELDS: dict[str, dict[str, str]] = {
         "profile": "The ranking profile.",
         "arms": "Each search the unit came from and its rank there: `citation`, `instrument`, `definition`, "
         "`lexical` (every word), `lexical_any` (any word, rarer words weighing more; run when few units have "
-        "every word) or `document`.",
+        "every word), `document` or `dense` (meaning, where a semantic index is active).",
         "fused_score": "The fused score after the signals: relevance, not legal authority.",
         "rerank_score": "The reranker's score, when one ran.",
         "band": "The band of positions it was ordered within.",

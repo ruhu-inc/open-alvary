@@ -55,7 +55,7 @@ Quote only `text`. A unit whose `unit` is `document` tells you which law is rele
 
 ## Routes
 
-A question that cites a part (`NDPA s. 23(1)(a)`), names a law (`the Companies and Allied Matters Act`) or asks what a term means (`meaning of "personal data"`) is answered by that first; anything else is a search of the words. `query.routes` says which routes ran. Add `as_of` for the law on a date: only texts in force then, and currentness assessed at it. Without `as_of`, nothing is assumed about the date.
+A question that cites a part (`NDPA s. 23(1)(a)`), names a law (`the Companies and Allied Matters Act`) or asks what a term means (`meaning of "personal data"`) is answered by that first; anything else is a search of the words and, where a semantic index is active, of their meaning (`revisions.vector` names it). `query.routes` says which routes ran. Add `as_of` for the law on a date: only texts in force then, and currentness assessed at it. Without `as_of`, nothing is assumed about the date.
 
 ## Budgets
 
