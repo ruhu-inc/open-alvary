@@ -3,7 +3,10 @@
 # projects exist and before env/:
 #
 #   cd deployment/gcp-terraform/bootstrap
-#   terraform init && terraform apply -var 'projects={staging="open-alvary-staging",prod="<fresh prod project>"}'
+#   terraform init && terraform apply -var 'projects={staging="open-alvary-staging"}'
+#
+# Staging is the only environment until there are paying users; production, when it comes, is added
+# to the map (a fresh project, never today's open-alvary-prod) and applied again.
 #
 # This module's own state is small and stays on the operator's machine (ignored by git). State holds
 # the database passwords and URLs and resource IDs, never the application's other secrets: those are

@@ -125,7 +125,7 @@ resource "google_compute_router_nat" "egress" {
   source_subnetwork_ip_ranges_to_nat = "LIST_OF_SUBNETWORKS"
 
   dynamic "subnetwork" {
-    for_each = [google_compute_subnetwork.engine.id, google_compute_subnetwork.inference.id]
+    for_each = [google_compute_subnetwork.engine.self_link, google_compute_subnetwork.inference.self_link]
     content {
       name                    = subnetwork.value
       source_ip_ranges_to_nat = ["ALL_IP_RANGES"]
