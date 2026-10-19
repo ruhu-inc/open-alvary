@@ -227,3 +227,14 @@ def test_a_snippet_is_the_exact_bytes_of_the_text_with_its_terms_marked():
     assert [raw[a - base : b - base].decode() for a, b in marks] == ["consent", "freely"]
     opening, start, end, marks = text_index.place(words, "not in the words", base)
     assert words.startswith(opening) and start == base and marks == ()
+
+
+def test_a_table_inside_a_section_has_no_pinpoint_of_its_own():
+    from types import SimpleNamespace
+
+    def part(kind, locator, label=""):
+        return SimpleNamespace(kind=kind, locator=locator, label=label, heading="")
+
+    section = part("section", "sec_23", "23.")
+    assert pinpoint.cite([part("document", "document"), section])[0] == ("s:23",)
+    assert pinpoint.cite([part("document", "document"), section, part("table", "sec_23__table_1")]) is None
