@@ -1,0 +1,9 @@
+# Terraform working files and the values for one environment stay on the operator's machine.
+# .terraform.lock.hcl is committed: it pins the providers' versions and checksums.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+*.backend.hcl
+crash.log

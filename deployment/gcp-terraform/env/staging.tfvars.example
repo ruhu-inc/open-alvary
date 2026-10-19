@@ -1,0 +1,66 @@
+# Copy to staging.tfvars (ignored by git) and fill in. Apply with deployment/gcp-terraform/README.md.
+# Staging is the live environment until there are paying users (the owner, 2026-10-19): it serves the
+# public domains, with today's buckets used in place, and there is no production yet.
+project_id      = "open-alvary-staging"
+environment     = "staging"
+region          = "europe-west1"
+zone            = "europe-west1-b"
+operator_email  = "hello@ruhu.ai"
+budget_enabled  = true
+billing_account = "<the billing account open-alvary-staging is linked to>"
+monthly_budget  = 1200
+public_domain   = "open.alvary.ai"
+api_domain      = "api.open.alvary.ai"
+
+# true only once both domains point at this load balancer (README, phase 6): the uptime check, and
+# the worker's and daily job's schedules, start then.
+domain_live = false
+
+public_settings = {
+  PUBLIC_REPOSITORY_URL = "https://github.com/ruhu-inc/open-alvary"
+  PUBLIC_MAINTAINER     = "Ruhu, Inc."
+  PUBLIC_CONTACT_EMAIL  = "hello@ruhu.ai"
+  METADATA_LICENCE      = "CC-BY-4.0"
+}
+
+# Set by release.sh after the first build; the service and jobs are created only once it is set.
+public_image = ""
+
+# Activation B, as it runs today, with the Auth0 tenant the console uses and the optional secrets
+# today's service reads.
+accounts_enabled  = true
+auth0_domain      = "<the console's Auth0 domain, as AUTH0_DOMAIN today>"
+console_client_id = "<the console's Auth0 client ID, as today>"
+optional_secrets  = ["auth0-deletion-client-id", "auth0-deletion-client-secret"]
+
+# Today's buckets, used in place: nothing is copied, and Terraform only grants this project's
+# accounts their roles on them.
+existing_corpus_bucket = "open-alvary-corpus"
+existing_review_bucket = "open-alvary-ingestion-review-collection"
+
+# Vespa and the GPU machine (one T4) are on. The project needs T4 quota in europe-west1 first
+# (README, Before the first apply); until it is granted, set inference_enabled = false.
+engine_enabled    = true
+inference_enabled = true
+inference_gpu     = "t4"
+
+# Empty until a generation passes its gates (RSV-12): the service runs on the lexical arms.
+vector_profile = ""
+
+# Phase 4: the workbench, behind Identity-Aware Proxy at its run.app address.
+# workbench_image       = ""
+# workbench_iap_members = ["group:workbench-operators@ruhu.ai"]
+# workbench_settings = {
+#   ALVARY_REVIEW_OIDC_CLIENT_ID = "<the workbench's sign-in client ID, as today>"
+# }
+
+# Phase 5: ingestion, reading with today's Document AI processors in open-alvary-ingestion.
+# ingestion_image = ""
+# document_ai = {
+#   ALVARY_DOCAI_PROJECT              = "open-alvary-ingestion"
+#   ALVARY_DOCAI_LOCATION             = "<as today>"
+#   ALVARY_DOCAI_PROCESSOR_ID         = "<as today>"
+#   ALVARY_DOCAI_PROCESSOR_VERSION    = "<as today>"
+#   ALVARY_DOCAI_OCR_PROCESSOR_ID     = "<as today>"
+#   ALVARY_DOCAI_OCR_PROCESSOR_VERSION = "<as today>"
+# }

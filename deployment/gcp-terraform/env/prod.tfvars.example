@@ -1,0 +1,49 @@
+# Copy to prod.tfvars (ignored by git) and fill in. Apply with deployment/gcp-terraform/README.md.
+# Not built yet: staging serves the public until there are paying users. Production then takes over
+# the public domains from staging, in a fresh project: never today's open-alvary-prod, which
+# deployment/gcp/*.sh built (README).
+project_id      = "<a fresh project, such as open-alvary-production>"
+environment     = "prod"
+region          = "europe-west1"
+zone            = "europe-west1-b"
+operator_email  = "hello@ruhu.ai"
+budget_enabled  = true
+billing_account = "<the billing account the project is linked to>"
+monthly_budget  = 2000
+public_domain   = "open.alvary.ai"
+api_domain      = "api.open.alvary.ai"
+domain_live     = false
+
+public_settings = {
+  PUBLIC_REPOSITORY_URL = "https://github.com/ruhu-inc/open-alvary"
+  PUBLIC_MAINTAINER     = "Ruhu, Inc."
+  PUBLIC_CONTACT_EMAIL  = "hello@ruhu.ai"
+  METADATA_LICENCE      = "CC-BY-4.0"
+}
+
+# Set by release.sh after the first build; the service and jobs are created only once it is set.
+public_image = ""
+
+# Activation B, with the Auth0 tenant the console uses today.
+accounts_enabled  = true
+auth0_domain      = ""
+console_client_id = ""
+optional_secrets  = ["auth0-deletion-client-id", "auth0-deletion-client-secret"]
+
+# Its own buckets, filled by data.sh buckets (leave these empty), or staging's used in place.
+existing_corpus_bucket = ""
+existing_review_bucket = ""
+
+engine_enabled    = true
+inference_enabled = true
+inference_gpu     = "t4"
+
+# Empty until a generation passes its gates (RSV-12): the service runs on the lexical arms.
+vector_profile = ""
+
+# Phase 4: the workbench, behind Identity-Aware Proxy at its run.app address.
+# workbench_image       = ""
+# workbench_iap_members = ["group:workbench-operators@ruhu.ai"]
+# workbench_settings = {
+#   ALVARY_REVIEW_OIDC_CLIENT_ID = "<the workbench's sign-in client ID>"
+# }
