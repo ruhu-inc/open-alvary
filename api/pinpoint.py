@@ -117,7 +117,9 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
     schedule = False
     opinion: str | None = None  # within a judgment's opinion: its number, "1" for the first
     lead = "reg. " if document_type == "regulation" else "s. "
+    named = False  # whether the last part itself is named: a table in s. 23 is not s. 23
     for part in chain:
+        before, named = (tuple(key), shown), True
         if part.kind == "opinion":
             opinion, key, shown = _token_number(part.locator, "op") or "1", [], ""
         elif opinion is not None:  # a judgment's paragraph; nothing within it has a pinpoint of its own
@@ -150,7 +152,9 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
         elif part.kind == "definition" and part.label and key:
             key.append(f"def:{' '.join(part.label.split()).casefold()}")
             shown += f", “{part.label}”"
-    return (tuple(key), shown) if key else None
+        if (tuple(key), shown) == before:
+            named = False
+    return (tuple(key), shown) if key and named else None
 
 
 def read(pinpoint: str) -> tuple[str, ...] | None:
