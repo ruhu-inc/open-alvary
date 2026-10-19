@@ -21,6 +21,10 @@ from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
 from api.repositories import EDGE_ORDER
 from changes.feed import Feed, FeedError, Filters
 from changes.routes import tokens
+from retrieval.check import Checker
+from retrieval.pack import Request as EvidenceRequest
+from retrieval.pack import Retriever
+from schema.public import CheckRequest
 
 PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26")
 # Tool answers stay inside the MCP payload budget (BUD-01: 64 KiB), never shortened.
@@ -196,6 +200,96 @@ TOOLS = [
                 },
             },
             "required": ["query"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
+        "name": "retrieve_evidence",
+        "title": "Retrieve legal evidence",
+        "description": "Ranked legal evidence for a question, to cite in an answer: each unit is a provision "
+        "(or a law's title and preamble) with its exact words or an excerpt, its anchor_id, byte span and "
+        "span_hash, its citation such as s. 23(1)(a), what quoting it asks for, whether it was in force "
+        "(currentness, with what that rests on), the definitions it relies on and why it ranks there. A "
+        "question that cites a part, names a law or asks what a term means is routed to that first. Quote "
+        "only the words given; check cited parts with check_currentness before showing an answer.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 2000,
+                    "description": "The question, such as: when must a data controller report a breach in Nigeria?",
+                },
+                "jurisdictions": {
+                    "type": "array",
+                    "items": {"type": "string", "minLength": 2, "maxLength": 40},
+                    "maxItems": 10,
+                    "description": 'Jurisdictions to search, such as ["ng"]. With two or more, results '
+                    "alternate between them. Without it, every jurisdiction available to you.",
+                },
+                "language": {
+                    "type": "string",
+                    "minLength": 2,
+                    "maxLength": 35,
+                    "description": "Only texts in this language, such as en or fr.",
+                },
+                "as_of": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Only texts in force on this date, YYYY-MM-DD, with currentness assessed "
+                    "at it. Without it, nothing is assumed about the date.",
+                },
+                "max_units": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 15,
+                    "description": "How many units, 1 to 15. The default is 8.",
+                },
+                "max_evidence_bytes": {
+                    "type": "integer",
+                    "minimum": 4096,
+                    "maximum": 40960,
+                    "description": "The most bytes of words, 4,096 to 40,960. The default is 24,576.",
+                },
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
+        "name": "check_currentness",
+        "title": "Check cited parts",
+        "description": "Before showing an answer that cites the corpus: for each cited part, whether it is "
+        "still published with the same words (unchanged), whether a newer text of the same edition exists "
+        "(newer_version, with the same part's anchor_id there and whether its words changed), whether the "
+        "span_hash sent is wrong (span_mismatch) or the part is not public (unavailable); and whether it "
+        "was in force on a date.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 100,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "anchor_id": {"type": "string", "minLength": 1, "maxLength": 160},
+                            "version_id": {"type": "string", "minLength": 1, "maxLength": 160},
+                            "locator": {"type": "string", "minLength": 1, "maxLength": 1000},
+                            "span_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+                            "as_of": {"type": "string", "format": "date"},
+                        },
+                        "additionalProperties": False,
+                    },
+                    "description": "The parts: each an anchor_id, or a version_id with a locator, with the "
+                    "span_hash you hold and an optional as_of date.",
+                },
+            },
+            "required": ["items"],
             "additionalProperties": False,
         },
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
@@ -514,6 +608,56 @@ def create_router(
                 view = service.citations(citation, as_of=as_of, language=language)
                 plan.admit(*(m.jurisdiction_id for m in view.matches))
                 return _bounded(view.model_dump(mode="json"))
+            if name == "retrieve_evidence" and {"query"} <= set(arguments) <= {
+                "query",
+                "jurisdictions",
+                "language",
+                "as_of",
+                "max_units",
+                "max_evidence_bytes",
+            }:
+                query = arguments["query"]
+                as_of, language = _date(arguments.get("as_of")), _language(arguments.get("language"))
+                units, budget = arguments.get("max_units", 8), arguments.get("max_evidence_bytes", 24_576)
+                named = arguments.get("jurisdictions")
+                if (
+                    not isinstance(query, str)
+                    or not 1 <= len(query) <= 2000
+                    or as_of is False
+                    or language is False
+                ):
+                    return None
+                if not isinstance(units, int) or isinstance(units, bool) or not 1 <= units <= 15:
+                    return None
+                if not isinstance(budget, int) or isinstance(budget, bool) or not 4096 <= budget <= 40_960:
+                    return None
+                if named is not None:
+                    if (
+                        not isinstance(named, list)
+                        or not 1 <= len(named) <= 10
+                        or any(not isinstance(j, str) or not 2 <= len(j) <= 40 for j in named)
+                    ):
+                        return None
+                    for jurisdiction in named:
+                        plan.admit(jurisdiction.lower())
+                    jurisdictions = tuple(sorted({j.lower() for j in named}))
+                else:
+                    scope = plan.within(j.id for j in service.jurisdictions())
+                    jurisdictions = None if scope is None else tuple(sorted(scope))
+                filters = text_index.Filters(jurisdictions=jurisdictions, language=language, as_of=as_of)
+                pack = Retriever(service).retrieve(
+                    EvidenceRequest(query=query, filters=filters, max_units=units, max_evidence_bytes=budget)
+                )
+                return _bounded(pack.model_dump(mode="json"))
+            if name == "check_currentness" and set(arguments) == {"items"}:
+                try:
+                    request = CheckRequest.model_validate(arguments)
+                except ValueError:
+                    return None
+                checker = Checker(service)
+                page = checker.check(request.items)
+                plan.admit(*sorted(checker.jurisdictions))
+                return _bounded(page.model_dump(mode="json"))
             if name in ("list_changes", "get_change"):
                 return changes_tool(service.repository.connection, name, arguments)
             if name == "get_coverage" and not arguments:

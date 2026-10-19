@@ -377,6 +377,257 @@ class TextSearchPage(WireModel):
     notices: tuple[str, ...] = ()
 
 
+CURRENTNESS = Literal["in_force", "not_in_force", "partly_in_force", "unknown", "contested"]
+OMIT = {"default": None, "exclude_if": lambda value: value is None}
+
+
+class Currentness(WireModel):
+    """Whether a part was in force at a date (RSV-08, IDT-03). ``basis`` says what the state rests on:
+    reviewed events covering this provision (``provision``), only the record's status for its whole text
+    (``record``), or nothing (``none``). A record-level state is never a claim about one provision."""
+
+    state: CURRENTNESS
+    basis: Literal["provision", "record", "none"]
+    assessed_at: date
+    algorithm: str
+    profile: str | None = Field(**OMIT)
+    evidence: tuple[ID, ...] = ()
+    reasons: tuple[str, ...] = ()
+
+
+class RankingSignal(WireModel):
+    """One documented signal that moved a unit (RSV-05), with its value and effect."""
+
+    name: Literal[
+        "legal_status",
+        "replaced",
+        "route_match",
+        "instrument_match",
+        "instrument_authority",
+        "court_authority",
+    ]
+    value: str
+    effect: str
+
+
+class RankingExplanation(WireModel):
+    """Why a unit is where it is (RSV-05): the route, each arm's rank, the fused score, the band, the
+    signals applied and any diversification. Mechanical, never a legal justification."""
+
+    position: int = Field(ge=1)
+    router: str
+    routes: tuple[str, ...]
+    profile: str
+    arms: dict[str, int]
+    fused_score: float
+    rerank_score: float | None = Field(**OMIT)
+    band: int = Field(ge=0)
+    signals: tuple[RankingSignal, ...] = ()
+    diversification: tuple[str, ...] = ()
+
+
+class EvidenceDefinition(WireModel):
+    """A definition in force for a term the unit uses (RSV-06, derived): its exact words and span."""
+
+    term: str
+    anchor_id: ID
+    locator: str
+    text: str
+    start_byte: int = Field(ge=0)
+    end_byte: int = Field(ge=0)
+    span_hash: Hash
+
+
+class EvidenceReference(WireModel):
+    """A provision of the same text that the unit refers to by number (RSV-06, derived)."""
+
+    pinpoint: str
+    anchor_id: ID
+    locator: str
+
+
+class EvidenceQualification(WireModel):
+    """A reviewed link that qualifies the unit's work: it was amended, repealed or superseded."""
+
+    kind: Literal["amended_by", "repealed_by", "superseded_by"]
+    source_id: ID
+    title: str
+    citation: str
+    effective_date: date | None = Field(**OMIT)
+    scope: Literal["work"] = "work"
+
+
+class EvidenceContext(WireModel):
+    """What travels with a unit and is never part of its quotable words."""
+
+    heading_path: tuple[str, ...] = ()
+    definitions: tuple[EvidenceDefinition, ...] = ()
+    references: tuple[EvidenceReference, ...] = ()
+    qualifications: tuple[EvidenceQualification, ...] = ()
+    also_in: tuple[ID, ...] = ()
+
+
+class EvidenceAuthority(WireModel):
+    """The inputs to the authority signals (RSV-05): the instrument's place in its jurisdiction's
+    hierarchy (0 is highest), and for decisions the court's relation to the queried jurisdiction."""
+
+    document_type: str
+    instrument_rank: int | None = Field(**OMIT)
+    court_relation: Literal["binding", "persuasive", "not_applicable", "unknown"] = "not_applicable"
+
+
+class EvidenceUnit(WireModel):
+    """One unit of legal evidence (RSV-07): which part of which published text, its exact words (or an
+    excerpt within the byte budget), the hashes to check them, what quoting asks for, whether it was in
+    force, and why it ranks where it does."""
+
+    anchor_id: ID
+    source_id: ID
+    version_id: ID
+    expression_id: str
+    unit: Literal["provision", "container_run", "document"]
+    kind: str
+    locator: str
+    pinpoint: str | None = Field(**OMIT)
+    heading: str | None = Field(**OMIT)
+    citation: str
+    title: str
+    language: ID
+    jurisdiction_id: ID
+    document_type: str
+    official_url: str
+    text: str
+    text_start_byte: int = Field(ge=0)
+    text_end_byte: int = Field(ge=0)
+    complete: bool
+    start_byte: int = Field(ge=0)
+    end_byte: int = Field(ge=0)
+    offset_unit: Literal["utf-8-bytes"] = "utf-8-bytes"
+    span_hash: Hash
+    content_hash: Hash
+    licence: str | None = Field(**OMIT)
+    attribution_required: bool | None = Field(**OMIT)
+    attribution_text: str | None = Field(**OMIT)
+    currentness: Currentness
+    authority: EvidenceAuthority
+    ranking: RankingExplanation | None = Field(**OMIT)
+    context: EvidenceContext | None = Field(**OMIT)
+    warnings: tuple[str, ...] = ()
+
+
+class EvidenceQuery(WireModel):
+    text: str
+    routes: tuple[str, ...]
+    filters: dict[str, object]
+    as_of: date | None = Field(**OMIT)
+
+
+class EvidenceRevisions(WireModel):
+    """Everything the pack depends on: the same request and revisions give the same pack."""
+
+    dataset: str
+    router: str
+    ranking: str
+    analyzer: str
+    vector: str | None = Field(**OMIT)
+    reranker: str | None = Field(**OMIT)
+
+
+class EvidenceCoverage(WireModel):
+    records_in_scope: int = Field(ge=0)
+    records_with_text: int = Field(ge=0)
+    texts_searched: int = Field(ge=0)
+    dense_coverage: float | None = Field(**OMIT)
+    degraded: tuple[str, ...] = ()
+    unsupported: tuple[str, ...] = ()
+    incomplete_evidence: bool = False
+    omitted_units: int = Field(0, ge=0)
+    notices: tuple[str, ...] = ()
+
+
+class EvidenceBytes(WireModel):
+    unique: int = Field(ge=0)
+    transmitted: int = Field(ge=0)
+    budget: int = Field(ge=0)
+
+
+class NextStep(WireModel):
+    kind: Literal["ambiguous_citation", "metadata_only", "narrow_query"]
+    detail: str
+    candidates: tuple[ID, ...] = ()
+
+
+class CatalogueMatch(WireModel):
+    """A record that matches but has no published text: identity only, never words."""
+
+    source_id: ID
+    title: str
+    citation: str
+    jurisdiction_id: ID
+    document_type: str
+    official_url: str
+
+
+class EvidencePack(WireModel):
+    """The retrieval service's answer (RSV-07): ordered evidence a generator can cite, with everything
+    needed to check it and the revisions it depends on. Never a generated answer."""
+
+    schema_version: Literal["oa-evidence-1"] = "oa-evidence-1"
+    status: Literal["results", "no_result", "unsupported_scope", "degraded"]
+    query: EvidenceQuery
+    revisions: EvidenceRevisions
+    coverage: EvidenceCoverage
+    evidence: tuple[EvidenceUnit, ...]
+    catalogue: tuple[CatalogueMatch, ...] = ()
+    next_steps: tuple[NextStep, ...] = ()
+    bytes: EvidenceBytes
+
+
+class CheckItem(WireModel):
+    """A cited part to check (RSV-08): its anchor, or its text version and locator, with the span hash
+    the client holds and the date to assess it at."""
+
+    anchor_id: ID | None = None
+    version_id: ID | None = None
+    locator: str | None = Field(None, min_length=1, max_length=1000)
+    span_hash: Hash | None = None
+    as_of: date | None = None
+
+    @model_validator(mode="after")
+    def one_reference(self):
+        if (self.anchor_id is None) == (self.version_id is None and self.locator is None):
+            raise ValueError("give anchor_id, or version_id with locator")
+        if self.anchor_id is None and (self.version_id is None or self.locator is None):
+            raise ValueError("give version_id with locator")
+        return self
+
+
+class CheckRequest(WireModel):
+    items: tuple[CheckItem, ...] = Field(min_length=1, max_length=100)
+
+
+class CheckResult(WireModel):
+    """What became of a cited part: ``unchanged``; ``newer_version`` (a later text of the same expression,
+    with the same locator's anchor there and whether its words are identical); ``span_mismatch`` (the
+    hash sent is not this part's); or ``unavailable`` (not public now, or never: not told apart)."""
+
+    index: int = Field(ge=0)
+    result: Literal["unchanged", "newer_version", "span_mismatch", "unavailable"]
+    anchor_id: ID | None = Field(**OMIT)
+    version_id: ID | None = Field(**OMIT)
+    locator: str | None = Field(**OMIT)
+    newer_version_id: ID | None = Field(**OMIT)
+    newer_anchor_id: ID | None = Field(**OMIT)
+    same_words: bool | None = Field(**OMIT)
+    currentness: Currentness | None = Field(**OMIT)
+
+
+class CheckPage(WireModel):
+    schema_version: Literal["oa-check-1"] = "oa-check-1"
+    dataset: str
+    results: tuple[CheckResult, ...]
+
+
 class PublicContracts(WireModel):
     schema_version: Literal["pilot-public-1"] = "pilot-public-1"
     sources: tuple[SourcePage, ...] = ()

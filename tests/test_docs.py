@@ -46,7 +46,7 @@ def pages() -> dict[str, set[str] | None]:
     found["errors"] = set(ERROR_CODES)
     found["api/mcp"] = {tool["name"] for tool in TOOLS}
     for methods in SPEC["paths"].values():
-        found["api/" + methods["get"]["operationId"].replace("_", "-")] = None
+        found["api/" + next(iter(methods.values()))["operationId"].replace("_", "-")] = None
     return found
 
 
@@ -95,14 +95,14 @@ def v1(store, tmp_path):
 
 
 def test_recorded_answers_are_what_the_api_answers(v1):
-    operations = {methods["get"]["operationId"] for methods in SPEC["paths"].values()}
+    operations = {next(iter(methods.values()))["operationId"] for methods in SPEC["paths"].values()}
     assert {key for key in EXAMPLES if not key.startswith("mcp:")} <= operations
     models = {
         route.operation_id or route.name: route.response_model
         for route in v1.routes
         if getattr(route, "response_model", None) is not None
     }
-    by_path = {path: methods["get"]["operationId"] for path, methods in SPEC["paths"].items()}
+    by_path = {path: next(iter(methods.values()))["operationId"] for path, methods in SPEC["paths"].items()}
     checked = 0
     for route in v1.routes:
         operation = by_path.get(getattr(route, "path", None))

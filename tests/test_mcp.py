@@ -37,6 +37,8 @@ def test_initialize_negotiates_protocol_and_declares_read_only_tools(client):
         "get_coverage",
         "list_changes",
         "get_change",
+        "retrieve_evidence",
+        "check_currentness",
     }
     assert all(t["annotations"]["readOnlyHint"] for t in tools)
 
@@ -69,6 +71,10 @@ def test_withdrawn_or_missing_sources_are_not_disclosed(client, store, catalogue
         {"name": "search_catalogue", "arguments": {"query": "x", "limit": 1000}},
         {"name": "search_catalogue", "arguments": {"query": "x", "sql": "drop"}},
         {"name": "get_source"},
+        {"name": "retrieve_evidence", "arguments": {"query": "x", "max_units": 99}},
+        {"name": "retrieve_evidence", "arguments": {"query": "x", "jurisdictions": "ng"}},
+        {"name": "check_currentness", "arguments": {"items": []}},
+        {"name": "check_currentness", "arguments": {"items": [{"locator": "sec_1"}]}},
     ],
 )
 def test_unknown_tools_and_invalid_arguments_are_rejected(client, params):

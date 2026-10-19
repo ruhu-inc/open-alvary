@@ -2384,6 +2384,392 @@
         ]
       }
     },
+    "/retrieve": {
+      "get": {
+        "summary": "Retrieve evidence",
+        "operationId": "retrieve_evidence",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2000,
+              "title": "Q"
+            },
+            "description": "The question or words, 1 to 2,000 characters."
+          },
+          {
+            "name": "jurisdiction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": [],
+              "title": "Jurisdiction"
+            },
+            "description": "Jurisdiction IDs, such as `ng`. Repeat for several, up to 10; with two or more, results alternate between them. A country outside your plan answers at the Starter rate."
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 2,
+                  "maxLength": 35,
+                  "pattern": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Language"
+            },
+            "description": "Texts in this language, such as `en`; `en` also matches `en-NG`."
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "constitution",
+                  "act",
+                  "regulation",
+                  "judgment",
+                  "gazette",
+                  "guidance",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "default": [],
+              "title": "Type"
+            },
+            "description": "Document types, such as `act` or `regulation`. Repeat for several."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "unknown",
+                  "current",
+                  "historical",
+                  "repealed",
+                  "superseded"
+                ],
+                "type": "string"
+              },
+              "default": [],
+              "title": "Status"
+            },
+            "description": "Legal statuses: `current`, `historical`, `repealed`, `superseded` or `unknown`. Repeat for several."
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            },
+            "description": "A date, such as `2024-01-01`: only texts in force on it, and currentness assessed at it. Without it, nothing is assumed about the date."
+          },
+          {
+            "name": "year_from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2200,
+                  "minimum": 1800
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year From"
+            },
+            "description": "Only laws made in this year or later."
+          },
+          {
+            "name": "year_to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 2200,
+                  "minimum": 1800
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Year To"
+            },
+            "description": "Only laws made in this year or earlier."
+          },
+          {
+            "name": "source_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source Id"
+            },
+            "description": "Only this record's texts."
+          },
+          {
+            "name": "version_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Version Id"
+            },
+            "description": "Only this text version."
+          },
+          {
+            "name": "max_units",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 25,
+              "minimum": 1,
+              "default": 10,
+              "title": "Max Units"
+            },
+            "description": "How many evidence units, 1 to 25. Default 10."
+          },
+          {
+            "name": "max_evidence_bytes",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 262144,
+              "minimum": 4096,
+              "default": 49152,
+              "title": "Max Evidence Bytes"
+            },
+            "description": "The most bytes of words (evidence and definitions, each counted once), 4,096 to 262,144. Default 49,152. A unit that does not fit is an excerpt, then units stop."
+          },
+          {
+            "name": "include",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "context",
+                  "expansion",
+                  "ranking"
+                ],
+                "type": "string"
+              },
+              "default": [],
+              "title": "Include"
+            },
+            "description": "What to add to each unit: `context` (headings, qualifications), `expansion` (definitions, references) and `ranking` (why it ranks there). Repeat for several; all by default."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvidencePack"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "Ranked legal evidence for a question, for an application that writes answers: each unit is a provision (or the text a part holds between its provisions, or a whole law's title and preamble), with its exact words or an excerpt within `max_evidence_bytes`, its byte span and hashes to check it, what quoting it asks for, whether it was in force, the definitions it relies on, and why it ranks where it does. A query that cites a part, names a law or asks what a term means is routed to that first (`query.routes`). The same request over the same revisions gives the same answer. Nothing is generated: only published texts' words. Without `jurisdiction`, it covers your plan's countries.",
+        "tags": [
+          "Retrieval"
+        ]
+      }
+    },
+    "/currentness": {
+      "post": {
+        "summary": "Check cited parts",
+        "operationId": "check_currentness",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckRequest"
+              }
+            }
+          },
+          "required": true,
+          "description": "The parts to check: `items`, each an `anchor_id`, or a `version_id` with a `locator`, with the `span_hash` you hold and an optional `as_of` date."
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "Before showing an answer that cites the corpus: for each cited part (up to 100), whether it is still published with the same words, whether a newer text of the same edition exists (with the same part's anchor there and whether its words changed), and whether it was in force on a date. A part that is not public now and one that never was get the same answer, `unavailable`.",
+        "tags": [
+          "Retrieval"
+        ]
+      }
+    },
     "/citations/{citation}": {
       "get": {
         "summary": "Resolve a citation",
@@ -2996,6 +3382,295 @@
         "title": "AnchorView",
         "description": "One part of a text exactly (API-02 /anchors/{id}, DAT-06): its span, locator, hashes, offset unit,\ncitation and attribution, and the words of the span themselves."
       },
+      "CatalogueMatch": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The record."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Its title."
+          },
+          "citation": {
+            "type": "string",
+            "title": "Citation",
+            "description": "How it is cited."
+          },
+          "jurisdiction_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Jurisdiction Id",
+            "description": "Its jurisdiction."
+          },
+          "document_type": {
+            "type": "string",
+            "title": "Document Type",
+            "description": "Its document type."
+          },
+          "official_url": {
+            "type": "string",
+            "title": "Official Url",
+            "description": "Its official source."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "title",
+          "citation",
+          "jurisdiction_id",
+          "document_type",
+          "official_url"
+        ],
+        "title": "CatalogueMatch",
+        "description": "A record that matches but has no published text: identity only, never words."
+      },
+      "CheckItem": {
+        "properties": {
+          "anchor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor Id",
+            "description": "The part's anchor, from an evidence unit or a search."
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id",
+            "description": "Instead of `anchor_id`: the text version, with `locator`."
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locator",
+            "description": "With `version_id`: the part's locator."
+          },
+          "span_hash": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Span Hash",
+            "description": "The `span_hash` you hold; a different one answers `span_mismatch`."
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of",
+            "description": "The date to assess currentness at; today when absent."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "CheckItem",
+        "description": "A cited part to check (RSV-08): its anchor, or its text version and locator, with the span hash\nthe client holds and the date to assess it at."
+      },
+      "CheckPage": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "oa-check-1",
+            "title": "Schema Version",
+            "default": "oa-check-1",
+            "description": "`oa-check-1`."
+          },
+          "dataset": {
+            "type": "string",
+            "title": "Dataset",
+            "description": "The change log's epoch and latest publication revision."
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/CheckResult"
+            },
+            "type": "array",
+            "title": "Results",
+            "description": "One per item, in order."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "dataset",
+          "results"
+        ],
+        "title": "CheckPage"
+      },
+      "CheckRequest": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CheckItem"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "minItems": 1,
+            "title": "Items",
+            "description": "The parts to check, 1 to 100."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "CheckRequest"
+      },
+      "CheckResult": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Index",
+            "description": "The item's position in the request, from 0."
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "unchanged",
+              "newer_version",
+              "span_mismatch",
+              "unavailable"
+            ],
+            "title": "Result",
+            "description": "`unchanged`; `newer_version` (a later text of the same edition exists); `span_mismatch` (the hash sent is not this part's); or `unavailable` (not public now, or never)."
+          },
+          "anchor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Anchor Id",
+            "description": "The part."
+          },
+          "version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version Id",
+            "description": "The text version checked."
+          },
+          "locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Locator",
+            "description": "The part's locator."
+          },
+          "newer_version_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newer Version Id",
+            "description": "The newer text, for `newer_version`."
+          },
+          "newer_anchor_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Newer Anchor Id",
+            "description": "The same locator's part in the newer text, when it has one."
+          },
+          "same_words": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Same Words",
+            "description": "Whether the part's words are identical in the newer text."
+          },
+          "currentness": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Currentness"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Whether the part (or, for `newer_version`, the newer text's part) was in force."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "index",
+          "result"
+        ],
+        "title": "CheckResult",
+        "description": "What became of a cited part: ``unchanged``; ``newer_version`` (a later text of the same expression,\nwith the same locator's anchor there and whether its words are identical); ``span_mismatch`` (the\nhash sent is not this part's); or ``unavailable`` (not public now, or never: not told apart)."
+      },
       "CitationView": {
         "properties": {
           "status": {
@@ -3118,6 +3793,84 @@
         ],
         "title": "CurrentSource"
       },
+      "Currentness": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "in_force",
+              "not_in_force",
+              "partly_in_force",
+              "unknown",
+              "contested"
+            ],
+            "title": "State",
+            "description": "`in_force`, `not_in_force`, `partly_in_force`, `unknown` or `contested`."
+          },
+          "basis": {
+            "type": "string",
+            "enum": [
+              "provision",
+              "record",
+              "none"
+            ],
+            "title": "Basis",
+            "description": "`provision` (reviewed events for this part), `record` (only the record's status for the whole text: never a claim about one part) or `none`."
+          },
+          "assessed_at": {
+            "type": "string",
+            "format": "date",
+            "title": "Assessed At",
+            "description": "The date assessed: `as_of`, or today."
+          },
+          "algorithm": {
+            "type": "string",
+            "title": "Algorithm",
+            "description": "How the state was computed, such as `record-status-1`."
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile",
+            "description": "The jurisdiction's rule profile, when one applied."
+          },
+          "evidence": {
+            "items": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+            },
+            "type": "array",
+            "title": "Evidence",
+            "default": [],
+            "description": "The events relied on."
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons",
+            "default": [],
+            "description": "Why the state is what it is, in plain language."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "state",
+          "basis",
+          "assessed_at",
+          "algorithm"
+        ],
+        "title": "Currentness",
+        "description": "Whether a part was in force at a date (RSV-08, IDT-03). ``basis`` says what the state rests on:\nreviewed events covering this provision (``provision``), only the record's status for its whole text\n(``record``), or nothing (``none``). A record-level state is never a claim about one provision."
+      },
       "DecisionView": {
         "properties": {
           "metadata": {
@@ -3147,6 +3900,795 @@
           "reasons"
         ],
         "title": "DecisionView"
+      },
+      "EvidenceAuthority": {
+        "properties": {
+          "document_type": {
+            "type": "string",
+            "title": "Document Type",
+            "description": "The record's document type."
+          },
+          "instrument_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instrument Rank",
+            "description": "The instrument's place in the hierarchy, 0 highest (constitution 0, Act 1, subsidiary legislation 2, guidance 3)."
+          },
+          "court_relation": {
+            "type": "string",
+            "enum": [
+              "binding",
+              "persuasive",
+              "not_applicable",
+              "unknown"
+            ],
+            "title": "Court Relation",
+            "default": "not_applicable",
+            "description": "For a decision, the court's relation to the jurisdiction asked about: `binding`, `persuasive` or `unknown`; `not_applicable` otherwise."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "document_type"
+        ],
+        "title": "EvidenceAuthority",
+        "description": "The inputs to the authority signals (RSV-05): the instrument's place in its jurisdiction's\nhierarchy (0 is highest), and for decisions the court's relation to the queried jurisdiction."
+      },
+      "EvidenceBytes": {
+        "properties": {
+          "unique": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Unique",
+            "description": "Bytes of words, each span counted once."
+          },
+          "transmitted": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Transmitted",
+            "description": "Bytes of words as sent."
+          },
+          "budget": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Budget",
+            "description": "The `max_evidence_bytes` asked for."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "unique",
+          "transmitted",
+          "budget"
+        ],
+        "title": "EvidenceBytes"
+      },
+      "EvidenceContext": {
+        "properties": {
+          "heading_path": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Heading Path",
+            "default": [],
+            "description": "The headings above the part, outermost first."
+          },
+          "definitions": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceDefinition"
+            },
+            "type": "array",
+            "title": "Definitions",
+            "default": [],
+            "description": "Definitions in the same text for terms the part uses."
+          },
+          "references": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceReference"
+            },
+            "type": "array",
+            "title": "References",
+            "default": [],
+            "description": "Provisions of the same text the part refers to by number."
+          },
+          "qualifications": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceQualification"
+            },
+            "type": "array",
+            "title": "Qualifications",
+            "default": [],
+            "description": "Checked links qualifying the record: what amended, repealed or superseded it."
+          },
+          "also_in": {
+            "items": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+            },
+            "type": "array",
+            "title": "Also In",
+            "default": [],
+            "description": "Other texts of the same edition with this part, collapsed into this one."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "EvidenceContext",
+        "description": "What travels with a unit and is never part of its quotable words."
+      },
+      "EvidenceCoverage": {
+        "properties": {
+          "records_in_scope": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Records In Scope",
+            "description": "Records the filters cover."
+          },
+          "records_with_text": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Records With Text",
+            "description": "Of those, records with a published text that was searched."
+          },
+          "texts_searched": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Texts Searched",
+            "description": "Published texts searched."
+          },
+          "dense_coverage": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dense Coverage",
+            "description": "The share of searched texts in the semantic index, when one is active."
+          },
+          "degraded": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Degraded",
+            "default": [],
+            "description": "Parts of the search that could not run or are not configured, such as `dense:not_configured`."
+          },
+          "unsupported": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Unsupported",
+            "default": [],
+            "description": "Filters that could not be applied."
+          },
+          "incomplete_evidence": {
+            "type": "boolean",
+            "title": "Incomplete Evidence",
+            "default": false,
+            "description": "Whether units were left out because the byte budget ran out."
+          },
+          "omitted_units": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Omitted Units",
+            "default": 0,
+            "description": "How many units were left out for the byte budget."
+          },
+          "notices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notices",
+            "default": [],
+            "description": "Plain-language notes on the answer."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "records_in_scope",
+          "records_with_text",
+          "texts_searched"
+        ],
+        "title": "EvidenceCoverage"
+      },
+      "EvidenceDefinition": {
+        "properties": {
+          "term": {
+            "type": "string",
+            "title": "Term",
+            "description": "The term defined."
+          },
+          "anchor_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Anchor Id",
+            "description": "The definition's part."
+          },
+          "locator": {
+            "type": "string",
+            "title": "Locator",
+            "description": "The definition's locator."
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "The definition's words, exactly."
+          },
+          "start_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Byte",
+            "description": "Where it starts: a byte offset into the text in UTF-8."
+          },
+          "end_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End Byte",
+            "description": "Where it ends: a byte offset into the text in UTF-8."
+          },
+          "span_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Span Hash",
+            "description": "SHA-256 of its bytes."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "term",
+          "anchor_id",
+          "locator",
+          "text",
+          "start_byte",
+          "end_byte",
+          "span_hash"
+        ],
+        "title": "EvidenceDefinition",
+        "description": "A definition in force for a term the unit uses (RSV-06, derived): its exact words and span."
+      },
+      "EvidencePack": {
+        "properties": {
+          "schema_version": {
+            "type": "string",
+            "const": "oa-evidence-1",
+            "title": "Schema Version",
+            "default": "oa-evidence-1",
+            "description": "`oa-evidence-1`."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "results",
+              "no_result",
+              "unsupported_scope",
+              "degraded"
+            ],
+            "title": "Status",
+            "description": "`results`; `no_result` (published texts were searched and none matched); `unsupported_scope` (no published text in this scope); or `degraded` (the search could not run)."
+          },
+          "query": {
+            "$ref": "#/components/schemas/EvidenceQuery",
+            "description": "The question as searched, the routes taken and the filters applied."
+          },
+          "revisions": {
+            "$ref": "#/components/schemas/EvidenceRevisions",
+            "description": "Everything the answer depends on; the same request and revisions give the same answer."
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/EvidenceCoverage",
+            "description": "What was searched, what could not run and what was left out."
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceUnit"
+            },
+            "type": "array",
+            "title": "Evidence",
+            "description": "The evidence units, best first."
+          },
+          "catalogue": {
+            "items": {
+              "$ref": "#/components/schemas/CatalogueMatch"
+            },
+            "type": "array",
+            "title": "Catalogue",
+            "default": [],
+            "description": "Records that match but have no published text: identity and official link only."
+          },
+          "next_steps": {
+            "items": {
+              "$ref": "#/components/schemas/NextStep"
+            },
+            "type": "array",
+            "title": "Next Steps",
+            "default": [],
+            "description": "Hints for a follow-up request, such as an ambiguous citation's candidates."
+          },
+          "bytes": {
+            "$ref": "#/components/schemas/EvidenceBytes",
+            "description": "The words sent: unique bytes (each span once), bytes as transmitted, and the budget."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "query",
+          "revisions",
+          "coverage",
+          "evidence",
+          "bytes"
+        ],
+        "title": "EvidencePack",
+        "description": "The retrieval service's answer (RSV-07): ordered evidence a generator can cite, with everything\nneeded to check it and the revisions it depends on. Never a generated answer."
+      },
+      "EvidenceQualification": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "amended_by",
+              "repealed_by",
+              "superseded_by"
+            ],
+            "title": "Kind",
+            "description": "`amended_by`, `repealed_by` or `superseded_by`."
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The other record."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Its title."
+          },
+          "citation": {
+            "type": "string",
+            "title": "Citation",
+            "description": "How it is cited."
+          },
+          "effective_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Date",
+            "description": "When the link took effect, when known."
+          },
+          "scope": {
+            "type": "string",
+            "const": "work",
+            "title": "Scope",
+            "default": "work",
+            "description": "What it applies to: `work`, the whole record."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "source_id",
+          "title",
+          "citation"
+        ],
+        "title": "EvidenceQualification",
+        "description": "A reviewed link that qualifies the unit's work: it was amended, repealed or superseded."
+      },
+      "EvidenceQuery": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "The question, with spacing normalised."
+          },
+          "routes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Routes",
+            "description": "The routes taken, in order: `citation`, `instrument`, `definition`, `topic`, and the modifiers `historical` and `comparative`."
+          },
+          "filters": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Filters",
+            "description": "The filters applied, as given or as your plan set them."
+          },
+          "as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of",
+            "description": "The date asked about, when given."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text",
+          "routes",
+          "filters"
+        ],
+        "title": "EvidenceQuery"
+      },
+      "EvidenceReference": {
+        "properties": {
+          "pinpoint": {
+            "type": "string",
+            "title": "Pinpoint",
+            "description": "The provision referred to, such as `s. 23`."
+          },
+          "anchor_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Anchor Id",
+            "description": "Its part."
+          },
+          "locator": {
+            "type": "string",
+            "title": "Locator",
+            "description": "Its locator."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "pinpoint",
+          "anchor_id",
+          "locator"
+        ],
+        "title": "EvidenceReference",
+        "description": "A provision of the same text that the unit refers to by number (RSV-06, derived)."
+      },
+      "EvidenceRevisions": {
+        "properties": {
+          "dataset": {
+            "type": "string",
+            "title": "Dataset",
+            "description": "The change log's epoch and latest publication revision: any published change moves it."
+          },
+          "router": {
+            "type": "string",
+            "title": "Router",
+            "description": "The routing rules, such as `oa-route-1`."
+          },
+          "ranking": {
+            "type": "string",
+            "title": "Ranking",
+            "description": "The ranking profile, such as `oa-rank-2`."
+          },
+          "analyzer": {
+            "type": "string",
+            "title": "Analyzer",
+            "description": "The text analysis, such as `oa-search-3`."
+          },
+          "vector": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vector",
+            "description": "The semantic index profile, when one is active."
+          },
+          "reranker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reranker",
+            "description": "The reranker profile, when one is active."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "dataset",
+          "router",
+          "ranking",
+          "analyzer"
+        ],
+        "title": "EvidenceRevisions",
+        "description": "Everything the pack depends on: the same request and revisions give the same pack."
+      },
+      "EvidenceUnit": {
+        "properties": {
+          "anchor_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Anchor Id",
+            "description": "The part: `/anchors/{anchor_id}` gives it whole; quote it with this ID."
+          },
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The record."
+          },
+          "version_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Version Id",
+            "description": "The text version."
+          },
+          "expression_id": {
+            "type": "string",
+            "title": "Expression Id",
+            "description": "The edition (`{source_id}:{language}`)."
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "provision",
+              "container_run",
+              "document"
+            ],
+            "title": "Unit",
+            "description": "`provision`; `container_run` (words a part holds between its provisions); or `document` (a law's title and preamble: evidence of which law is relevant, never of a provision)."
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind",
+            "description": "What the part is, such as `section`, `definition` or `article`."
+          },
+          "locator": {
+            "type": "string",
+            "title": "Locator",
+            "description": "The part's stable key within the text, such as `sec_23__subsec_1`; the same in a later text of the same edition."
+          },
+          "pinpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pinpoint",
+            "description": "How the part is cited within the text, such as `s. 23(1)`."
+          },
+          "heading": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Heading",
+            "description": "The part's printed heading, when it has one."
+          },
+          "citation": {
+            "type": "string",
+            "title": "Citation",
+            "description": "The record's citation and the pinpoint."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "The record's title."
+          },
+          "language": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Language",
+            "description": "The text's language."
+          },
+          "jurisdiction_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Jurisdiction Id",
+            "description": "The record's jurisdiction."
+          },
+          "document_type": {
+            "type": "string",
+            "title": "Document Type",
+            "description": "The record's document type."
+          },
+          "official_url": {
+            "type": "string",
+            "title": "Official Url",
+            "description": "The official file the text was read from."
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "The words: exactly the text's bytes from `text_start_byte` to `text_end_byte`."
+          },
+          "text_start_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Text Start Byte",
+            "description": "Where `text` starts: a byte offset into the text in UTF-8."
+          },
+          "text_end_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Text End Byte",
+            "description": "Where `text` ends: a byte offset into the text in UTF-8."
+          },
+          "complete": {
+            "type": "boolean",
+            "title": "Complete",
+            "description": "Whether `text` is the whole unit; when false it is an excerpt (see `warnings`)."
+          },
+          "start_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Start Byte",
+            "description": "Where the whole unit starts: a byte offset into the text in UTF-8."
+          },
+          "end_byte": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "End Byte",
+            "description": "Where the whole unit ends: a byte offset into the text in UTF-8."
+          },
+          "offset_unit": {
+            "type": "string",
+            "const": "utf-8-bytes",
+            "title": "Offset Unit",
+            "default": "utf-8-bytes",
+            "description": "The unit of the offsets: `utf-8-bytes`."
+          },
+          "span_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Span Hash",
+            "description": "SHA-256 of the whole unit's bytes, `start_byte` to `end_byte`: send it to Check cited parts."
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Content Hash",
+            "description": "The `content_hash` of the whole text."
+          },
+          "licence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Licence",
+            "description": "The terms the text is published under."
+          },
+          "attribution_required": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Required",
+            "description": "Whether reuse must credit the source."
+          },
+          "attribution_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution Text",
+            "description": "The credit to give, when one is required."
+          },
+          "currentness": {
+            "$ref": "#/components/schemas/Currentness",
+            "description": "Whether the part was in force, and what that rests on."
+          },
+          "authority": {
+            "$ref": "#/components/schemas/EvidenceAuthority",
+            "description": "The inputs to the authority signals."
+          },
+          "ranking": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RankingExplanation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why the unit ranks where it does."
+          },
+          "context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceContext"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What travels with the unit and is never part of its words."
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings",
+            "default": [],
+            "description": "Notes on the unit, such as an excerpt or a newer text."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "anchor_id",
+          "source_id",
+          "version_id",
+          "expression_id",
+          "unit",
+          "kind",
+          "locator",
+          "citation",
+          "title",
+          "language",
+          "jurisdiction_id",
+          "document_type",
+          "official_url",
+          "text",
+          "text_start_byte",
+          "text_end_byte",
+          "complete",
+          "start_byte",
+          "end_byte",
+          "span_hash",
+          "content_hash",
+          "currentness",
+          "authority"
+        ],
+        "title": "EvidenceUnit",
+        "description": "One unit of legal evidence (RSV-07): which part of which published text, its exact words (or an\nexcerpt within the byte budget), the hashes to check them, what quoting asks for, whether it was in\nforce, and why it ranks where it does."
       },
       "ExpressionPage": {
         "properties": {
@@ -3306,6 +4848,42 @@
           "country_code"
         ],
         "title": "JurisdictionView"
+      },
+      "NextStep": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "ambiguous_citation",
+              "metadata_only",
+              "narrow_query"
+            ],
+            "title": "Kind",
+            "description": "`ambiguous_citation`, `metadata_only` or `narrow_query`."
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "description": "What to do, in plain language."
+          },
+          "candidates": {
+            "items": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+            },
+            "type": "array",
+            "title": "Candidates",
+            "default": [],
+            "description": "The IDs it refers to."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "detail"
+        ],
+        "title": "NextStep"
       },
       "NodeViewRecord": {
         "properties": {
@@ -3710,6 +5288,132 @@
         ],
         "title": "ProvisionMatch",
         "description": "One part of a public text that a pinpoint names (API-04 provision lookup): its anchor, locator and\nexact span. /anchors/{anchor_id} gives its words."
+      },
+      "RankingExplanation": {
+        "properties": {
+          "position": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Position",
+            "description": "The unit's position, from 1."
+          },
+          "router": {
+            "type": "string",
+            "title": "Router",
+            "description": "The routing rules."
+          },
+          "routes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Routes",
+            "description": "The routes taken."
+          },
+          "profile": {
+            "type": "string",
+            "title": "Profile",
+            "description": "The ranking profile."
+          },
+          "arms": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Arms",
+            "description": "Each search the unit came from and its rank there: `citation`, `instrument`, `definition`, `lexical` (every word), `lexical_any` (any word, rarer words weighing more; run when few units have every word) or `document`."
+          },
+          "fused_score": {
+            "type": "number",
+            "title": "Fused Score",
+            "description": "The fused score after the signals: relevance, not legal authority."
+          },
+          "rerank_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rerank Score",
+            "description": "The reranker's score, when one ran."
+          },
+          "band": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Band",
+            "description": "The band of positions it was ordered within."
+          },
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/RankingSignal"
+            },
+            "type": "array",
+            "title": "Signals",
+            "default": [],
+            "description": "Each documented signal applied, with its value and effect."
+          },
+          "diversification": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Diversification",
+            "default": [],
+            "description": "Anything diversification did, such as collapsing a duplicate into it."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "position",
+          "router",
+          "routes",
+          "profile",
+          "arms",
+          "fused_score",
+          "band"
+        ],
+        "title": "RankingExplanation",
+        "description": "Why a unit is where it is (RSV-05): the route, each arm's rank, the fused score, the band, the\nsignals applied and any diversification. Mechanical, never a legal justification."
+      },
+      "RankingSignal": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": [
+              "legal_status",
+              "replaced",
+              "route_match",
+              "instrument_match",
+              "instrument_authority",
+              "court_authority"
+            ],
+            "title": "Name",
+            "description": "`legal_status`, `replaced`, `route_match`, `instrument_match`, `instrument_authority` or `court_authority`."
+          },
+          "value": {
+            "type": "string",
+            "title": "Value",
+            "description": "The value that triggered it."
+          },
+          "effect": {
+            "type": "string",
+            "title": "Effect",
+            "description": "What it did, such as `x0.8` or `first`."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "value",
+          "effect"
+        ],
+        "title": "RankingSignal",
+        "description": "One documented signal that moved a unit (RSV-05), with its value and effect."
       },
       "RelatedSource": {
         "properties": {
@@ -5699,6 +7403,10 @@
     {
       "name": "Catalogue",
       "description": "Records, their texts and rights, citations and coverage."
+    },
+    {
+      "name": "Retrieval",
+      "description": "Evidence for applications that write answers: ranked parts of published texts with everything needed to cite and check them."
     },
     {
       "name": "Changes",

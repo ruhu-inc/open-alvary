@@ -31,11 +31,17 @@ from api.release_adapter import LegacyReleases
 from api.repositories import LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import Store, check_legacy_authority
 from changes.routes import create_router as create_changes_router
+from retrieval.check import Checker
+from retrieval.pack import INCLUDE, Retriever
+from retrieval.pack import Request as EvidenceRequest
 from schema.public import (
     LEGAL_STATUS,
     AnchorView,
+    CheckPage,
+    CheckRequest,
     CitationView,
     CoverageView,
+    EvidencePack,
     ExpressionPage,
     JurisdictionView,
     RelationKind,
@@ -373,6 +379,86 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
                 return all(fresh.readable(version_id) == content_hash for version_id, content_hash in served)
 
         return checked(request, payload, recheck, f'"{hashlib.sha256(payload).hexdigest()}"')
+
+    @app.get("/retrieve")
+    def retrieve(
+        request: Request,
+        q: str = Query(min_length=1, max_length=2000),
+        jurisdictions: list[str] = Query([], alias="jurisdiction"),
+        language: str | None = LANGUAGE,
+        kinds: list[DocumentType] = Query([], alias="type"),
+        statuses: list[LEGAL_STATUS] = Query([], alias="status"),
+        as_of: date | None = None,
+        year_from: int | None = Query(None, ge=1800, le=2200),
+        year_to: int | None = Query(None, ge=1800, le=2200),
+        source_id: str | None = Query(None, min_length=1, max_length=160),
+        version_id: str | None = Query(None, min_length=1, max_length=160),
+        max_units: int = Query(10, ge=1, le=25),
+        max_evidence_bytes: int = Query(49_152, ge=4_096, le=262_144),
+        include: list[Literal["context", "expansion", "ranking"]] = Query([]),
+        service: LegacyCatalogue = Depends(catalogue),
+    ) -> EvidencePack:
+        if len(jurisdictions) > 10 or any(not 2 <= len(j) <= 40 for j in jurisdictions):
+            raise InvalidSearch("jurisdiction: at most 10, each 2 to 40 characters")
+        if jurisdictions:
+            plan = reach(request)
+            for jurisdiction in jurisdictions:
+                plan.admit(jurisdiction)
+            scope = tuple(sorted(set(jurisdictions)))
+        else:
+            within_plan = within(request, service, None)
+            scope = (
+                None
+                if within_plan is None
+                else (within_plan,)
+                if isinstance(within_plan, str)
+                else tuple(sorted(within_plan))
+            )
+        filters = text_index.Filters(
+            jurisdictions=scope,
+            language=language,
+            types=tuple(kinds),
+            statuses=tuple(statuses),
+            as_of=as_of,
+            year_from=year_from,
+            year_to=year_to,
+            source_id=source_id,
+            version_id=version_id,
+        )
+        pack = Retriever(service).retrieve(
+            EvidenceRequest(
+                query=q,
+                filters=filters,
+                max_units=max_units,
+                max_evidence_bytes=max_evidence_bytes,
+                include=frozenset(include) or INCLUDE,
+            )
+        )
+        payload = pack.model_dump_json().encode()
+        served = {(unit.version_id, unit.content_hash) for unit in pack.evidence}
+
+        def recheck() -> bool:
+            """Immediately before the first byte: every text quoted is still public."""
+            with session() as fresh:
+                return all(fresh.readable(version_id) == content_hash for version_id, content_hash in served)
+
+        return checked(request, payload, recheck, f'W/"{hashlib.sha256(payload).hexdigest()}"')
+
+    @app.post("/currentness")
+    def currentness(
+        request: Request, body: CheckRequest, service: LegacyCatalogue = Depends(catalogue)
+    ) -> CheckPage:
+        checker = Checker(service)
+        page = checker.check(body.items)
+        reach(request).admit(*sorted(checker.jurisdictions))
+        payload = page.model_dump_json().encode()
+        served = checker.served
+
+        def recheck() -> bool:
+            with session() as fresh:
+                return all(fresh.readable(version_id) == content_hash for version_id, content_hash in served)
+
+        return checked(request, payload, recheck, f'W/"{hashlib.sha256(payload).hexdigest()}"')
 
     @app.get("/citations/{citation:path}")
     def citations(

@@ -33,10 +33,12 @@ type Operation = {
   tags: string[];
   parameters?: Parameter[];
   security?: unknown[];
+  requestBody?: { description: string; required?: boolean; content: Record<string, { schema: Schema }> };
   responses: Record<string, { description: string; content?: Record<string, { schema: Schema }> }>;
 };
+type Methods = { get?: Operation; post?: Operation };
 export type Spec = {
-  paths: Record<string, { get: Operation }>;
+  paths: Record<string, Methods>;
   components: { schemas: Record<string, Schema> };
   tags: { name: string; description: string }[];
 };
@@ -52,8 +54,12 @@ export type Tool = {
 // operationId → an example request (path values and query) and the answer it gave.
 export type Examples = Record<
   string,
-  { path?: Record<string, string>; query?: [string, string][]; answer?: unknown; note?: string }
+  { path?: Record<string, string>; query?: [string, string][]; body?: unknown; answer?: unknown; note?: string }
 >;
+
+// Each route has one method: GET for reading, POST where the request carries a list (Check cited parts).
+const methodOf = (methods: Methods): ["GET" | "POST", Operation] =>
+  methods.get ? ["GET", methods.get] : ["POST", methods.post!];
 
 export type ReferencePage = { slug: string; title: string; description: string; markdown: string; group: string };
 
@@ -135,12 +141,52 @@ const table = (head: string[], rows: string[][]) =>
   ].join("\n");
 const fence = (lang: string, text: string) => "```" + lang + "\n" + text + "\n```";
 
+function postExamples(url: string, body: unknown): string[] {
+  const json = JSON.stringify(body ?? {}, null, 2);
+  const curl = [
+    `curl -X POST ${url}`,
+    `-H "Authorization: Bearer $OPEN_ALVARY_KEY"`,
+    `-H "Content-Type: application/json"`,
+    `-d '${JSON.stringify(body ?? {})}'`,
+  ];
+  const python = [
+    "import os",
+    "",
+    "import requests",
+    "",
+    "response = requests.post(",
+    `    ${quote(url)},`,
+    `    json=${json.replace(/\n/g, "\n    ").replace(/true/g, "True").replace(/false/g, "False").replace(/null/g, "None")},`,
+    `    headers={"Authorization": f"Bearer {os.environ['OPEN_ALVARY_KEY']}"},`,
+    "    timeout=30,",
+    ")",
+    "response.raise_for_status()",
+    "answer = response.json()",
+  ];
+  const javascript = [
+    `const response = await fetch(${quote(url)}, {`,
+    `  method: "POST",`,
+    "  headers: { Authorization: `Bearer ${process.env.OPEN_ALVARY_KEY}`, \"Content-Type\": \"application/json\" },",
+    `  body: JSON.stringify(${json.replace(/\n/g, "\n  ")}),`,
+    "});",
+    "if (!response.ok) throw new Error((await response.json()).detail);",
+    "const answer = await response.json();",
+  ];
+  return [fence("curl", curl.join(" \\\n  ")), fence("python", python.join("\n")), fence("javascript", javascript.join("\n"))];
+}
+
 function requestExamples(
   path: string,
   operation: Operation,
   media: string | undefined,
   request: Examples[string] = {},
+  method: "GET" | "POST" = "GET",
 ): string[] {
+  if (method === "POST")
+    return [
+      ...postExamples(BASE + path, request.body ?? { items: [{ anchor_id: "nod_…", span_hash: "…" }] }),
+      ...(request.body ? [] : ["Use the `anchor_id` and `span_hash` of each evidence unit you cite."]),
+    ];
   const filled = path.replace(/\{(\w+)\}/g, (_, name) =>
     request.path?.[name] ? encodeURIComponent(request.path[name]) : `{${name}}`,
   );
@@ -188,11 +234,12 @@ function requestExamples(
   ];
 }
 
-function operationPage(path: string, operation: Operation, spec: Spec, examples: Examples): ReferencePage {
+function operationPage(path: string, methods: Methods, spec: Spec, examples: Examples): ReferencePage {
+  const [method, operation] = methodOf(methods);
   const example = examples[operation.operationId];
   const keyed = operation.security === undefined || operation.security.length > 0;
   const lines: string[] = [];
-  lines.push(fence("http", `GET ${BASE}${path}`));
+  lines.push(fence("http", `${method} ${BASE}${path}`));
   if (!keyed) lines.push("> Tip: No key is needed for this one.");
   if (path.startsWith("/changes") || path === "/change-coverage")
     lines.push(
@@ -217,10 +264,14 @@ function operationPage(path: string, operation: Operation, spec: Spec, examples:
     });
     lines.push("## Parameters", table(["Name", "In", "Type", "Required", "Description"], rows));
   }
+  const requestBody = operation.requestBody?.content["application/json"]?.schema;
+  if (operation.requestBody && requestBody?.$ref) {
+    lines.push("## Request body", linkCodes(operation.requestBody.description), ...fields(refName(requestBody.$ref), spec));
+  }
   const ok = operation.responses["200"];
   const [media, content] = Object.entries(ok?.content ?? {})[0] ?? [];
   const body = content?.schema;
-  lines.push("## Request", ...requestExamples(path, operation, media, example));
+  lines.push("## Request", ...requestExamples(path, operation, media, example, method));
   lines.push("## Response");
   if (media && media !== "application/json") lines.push(`\`200 OK\` with \`${media}\`.`);
   else if (body) {
@@ -305,6 +356,8 @@ function toolsPage(tools: Tool[], examples: Examples): ReferencePage {
 
 // Within each group, the order a reader needs them in (by operation ID); any other route comes last.
 const READING_ORDER = [
+  "retrieve-evidence",
+  "check-currentness",
   "search",
   "list-sources",
   "get-source",
@@ -325,7 +378,7 @@ const READING_ORDER = [
 ];
 
 export function referencePages(spec: Spec, tools: Tool[], examples: Examples): ReferencePage[] {
-  const pages = Object.entries(spec.paths).map(([path, methods]) => operationPage(path, methods.get, spec, examples));
+  const pages = Object.entries(spec.paths).map(([path, methods]) => operationPage(path, methods, spec, examples));
   const groups = spec.tags.map((t) => t.name);
   const rank = (page: ReferencePage) => {
     const at = READING_ORDER.indexOf(page.slug.replace(/^api\//, ""));
@@ -359,11 +412,11 @@ export function referenceOverview(spec: Spec): string {
   ];
   for (const tag of spec.tags) {
     const rows = Object.entries(spec.paths)
-      .filter(([, methods]) => methods.get.tags[0] === tag.name)
-      .map(([path, methods]) => [
-        `[\`GET ${path}\`](/docs/${slugFor(methods.get.operationId)})`,
-        cell(methods.get.summary),
-      ]);
+      .filter(([, methods]) => methodOf(methods)[1].tags[0] === tag.name)
+      .map(([path, methods]) => {
+        const [method, operation] = methodOf(methods);
+        return [`[\`${method} ${path}\`](/docs/${slugFor(operation.operationId)})`, cell(operation.summary)];
+      });
     lines.push(`## ${tag.name}`, tag.description, table(["Route", "What it does"], rows));
   }
   lines.push("## MCP", `AI tools use the MCP server at \`${API_ORIGIN}/mcp\`. See [MCP tools](/docs/api/mcp).`);
