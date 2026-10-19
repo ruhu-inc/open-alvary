@@ -1,0 +1,27 @@
+tests/test_retrieval.py
+  s_d665c62e07d76f::t_68e234f77c814e 226-237
+retrieval/ranking.py
+  s_d665c62e07d76f::t_531ec113418040 13-16,144-146
+  s_d665c62e07d76f::t_c37f4d00bb19c0 38-39,71,147,154-175
+  s_d665c62e07d76f::t_8995d9a4a36d8c 176-177
+api/text_index.py
+  s_d665c62e07d76f::t_68e234f77c814e 57,178-179,187,191-192
+retrieval/pack.py
+  s_d665c62e07d76f::t_531ec113418040 58,115,278-305,348,564-566
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e43ff21dcadf53ea68ed6e4b0f8844a7069b5bfe",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
