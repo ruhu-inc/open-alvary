@@ -1,0 +1,6 @@
+# Copy to staging.backend.hcl (and prod.backend.hcl; both ignored by git) from
+# deployment/gcp-terraform/bootstrap's output, then in env/:
+#   terraform init -backend-config=../staging.backend.hcl
+# Each environment's state is in a bucket in its own project, so neither project holds the other's.
+bucket = "<project>-tfstate"
+prefix = "open-alvary"
