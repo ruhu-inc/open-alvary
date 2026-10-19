@@ -10,6 +10,11 @@ locals {
     {
       ALVARY_REVIEW_BASE_URL      = "https://${var.workbench_domain}"
       ALVARY_REVIEW_ALLOWED_HOSTS = var.workbench_domain
+      # The first collection (Cloud Run mounted its bucket) is mirrored from the store at start.
+      ALVARY_REVIEW_STAGING     = "az://${azurerm_storage_account.corpus.name}/workbench/collections/ng/"
+      ALVARY_REVIEW_COLLECTIONS = "az://${azurerm_storage_account.corpus.name}/corpus/collections/rw/"
+      ALVARY_REVIEW_CACHE       = "/tmp/review-cache"
+      ALVARY_REVIEW_CACHE_MB    = "2048"
     },
     var.workbench_settings,
   )

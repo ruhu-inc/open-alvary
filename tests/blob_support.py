@@ -90,7 +90,16 @@ class BlobService:
         start = int(params.get("marker") or 0)
         page = names[start : start + self.PAGE]
         following = str(start + self.PAGE) if start + self.PAGE < len(names) else ""
-        blobs = "".join(f"<Blob><Name>{escape(n)}</Name><Properties /></Blob>" for n in page)
+
+        def entry(name: str) -> str:
+            # Properties always, as the service gives them; metadata when asked for.
+            blob = self.blobs[(container, name)]
+            properties = f"<Content-Type>{escape(blob['content_type'])}</Content-Type><Content-MD5>{blob['md5']}</Content-MD5>"
+            metadata = "".join(f"<{k}>{escape(v)}</{k}>" for k, v in blob["metadata"].items())
+            extra = f"<Metadata>{metadata}</Metadata>" if params.get("include") == "metadata" else ""
+            return f"<Blob><Name>{escape(name)}</Name><Properties>{properties}</Properties>{extra}</Blob>"
+
+        blobs = "".join(entry(n) for n in page)
         body = (
             '\ufeff<?xml version="1.0" encoding="utf-8"?>'  # led by a byte order mark, as the service does
             f'<EnumerationResults ServiceEndpoint="https://{self.account}.blob.core.windows.net/"'

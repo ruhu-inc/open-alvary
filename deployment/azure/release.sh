@@ -7,6 +7,7 @@
 #   deployment/azure/release.sh staging public       # build, then migrate, then print the apply
 #   deployment/azure/release.sh staging workbench    # build
 #   deployment/azure/release.sh staging ingestion    # build
+#   deployment/azure/release.sh staging restore      # build the database restore job (phase 5)
 #
 # Needs az signed in, with AcrPush on the registry and Contributor on the resource group.
 
@@ -14,8 +15,8 @@ set -euo pipefail
 
 ENVIRONMENT="${1:-}"
 WHAT="${2:-}"
-[[ "$ENVIRONMENT" == staging || "$ENVIRONMENT" == prod ]] && [[ "$WHAT" =~ ^(public|workbench|ingestion)$ ]] || {
-  echo "Usage: $0 staging|prod public|workbench|ingestion" >&2
+[[ "$ENVIRONMENT" == staging || "$ENVIRONMENT" == prod ]] && [[ "$WHAT" =~ ^(public|workbench|ingestion|restore)$ ]] || {
+  echo "Usage: $0 staging|prod public|workbench|ingestion|restore" >&2
   exit 2
 }
 [[ -z "$(git status --porcelain --untracked-files=no)" ]] || { echo "Commit first: the image is the commit" >&2; exit 1; }
@@ -30,6 +31,7 @@ case "$WHAT" in
   public) NAME=public-service DOCKERFILE=deployment/public-service.Dockerfile ;;
   workbench) NAME=workbench DOCKERFILE=deployment/workbench.Dockerfile ;;
   ingestion) NAME=ingestion DOCKERFILE=deployment/ingestion-jobs.Dockerfile ;;
+  restore) NAME=restore DOCKERFILE=deployment/azure/restore.Dockerfile ;;
 esac
 [[ -f "$DOCKERFILE" ]] || { echo "No $DOCKERFILE at this commit" >&2; exit 1; }
 

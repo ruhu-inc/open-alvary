@@ -1317,3 +1317,35 @@ def test_join_marks_are_validated_and_words_doubled_in_editing_are_reported(worl
     save(reviewer, units=[{"kind": "paragraph", "text": "1. Accounts prepared prepared under section 199."}])
     warnings = reviewer.get(f"/api/documents/{ACT}").json()["text_check"]["warnings"]
     assert [(w["code"], w["page"]) for w in warnings] == [("doubled_word", 1)]
+
+
+def test_the_first_collection_can_live_in_the_store_and_is_mirrored_whole(tmp_path, monkeypatch):
+    from blob_support import BlobService
+
+    from ingestion import corpus_store
+
+    service = BlobService()
+    held = service.store("corpus")
+    held.put(f"collections/ng/{ACT}.reading.json", json.dumps(reading()).encode(), "application/json")
+    held.put(f"collections/ng/review-images/{ACT}/page-1.jpg", b"jpeg bytes", "image/jpeg")
+    monkeypatch.setattr(content, "_STORES", {})
+    monkeypatch.setattr(corpus_store, "open_store", lambda address: service.store("corpus"))
+    monkeypatch.setenv("ALVARY_REVIEW_STAGING", "az://oatest/corpus/collections/ng/")
+    monkeypatch.setenv("ALVARY_REVIEW_CACHE", str(tmp_path / "cache"))
+    library = content.Library()
+    assert (library.staging / f"{ACT}.reading.json").is_file()
+    assert (library.staging / "review-images" / ACT / "page-1.jpg").read_bytes() == b"jpeg bytes"
+    assert ACT in [d["id"] for d in library.documents()]
+    # The next start fetches the readings again (they may have been re-read), not the images.
+    service.requests.clear()
+    content.Library()
+    fetched = [r.url.path for r in service.requests if r.method == "GET" and "comp=list" not in str(r.url)]
+    assert fetched == [f"/corpus/collections/ng/{ACT}.reading.json"]
+    # Trimming the cache takes what other collections fetched, never the first collection.
+    other = tmp_path / "cache" / "az" / "oatest" / "corpus" / "big.pdf"
+    other.parent.mkdir(parents=True)
+    other.write_bytes(b"x" * 2 * 1024 * 1024)
+    monkeypatch.setenv("ALVARY_REVIEW_CACHE_MB", "1")
+    content.trim_cache()
+    assert not other.exists()
+    assert (library.staging / "review-images" / ACT / "page-1.jpg").is_file()

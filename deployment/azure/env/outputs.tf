@@ -51,3 +51,11 @@ output "egress_address" {
   description = "The engine's and models' outbound address, for any allow-list."
   value       = azurerm_public_ip.egress.ip_address
 }
+
+output "ingestion_identity" {
+  description = "Google's workload identity provider admits this principal only (README, Google from Azure)."
+  value = {
+    principal_id = azurerm_user_assigned_identity.ingestion.principal_id
+    tenant_id    = data.azurerm_client_config.current.tenant_id
+  }
+}

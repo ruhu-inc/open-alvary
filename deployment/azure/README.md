@@ -63,13 +63,31 @@ Unchanged: Auth0 (sign-in), Resend (email), DNS (records change at switchover), 
   (deployment/runbook.md). Its agreement with Document AI is measured on every reconciled Act, so
   making it the primary reading later is a measured step.
 
+## What is live on Google Cloud (listed 2026-10-19, read-only)
+
+| Project | Running | Data |
+|---|---|---|
+| `open-alvary-prod` | `open-alvary-public` (website, docs, REST, MCP, console: activation B is on); jobs `migrate`, `worker`, `daily`, `access-role`; Scheduler every 5 minutes and 03:15; load balancer `35.244.181.134` | Cloud SQL `open-alvary-db` (Postgres 16, 10 GB disk) |
+| `open-alvary-ingestion` | `review-workbench`; jobs `scan-reader`, `corpus-preparer`, `workbench-admin`, `workbench-enrol` | Cloud SQL `review-db` (Postgres 16); buckets `open-alvary-corpus` (18.4 GB), `open-alvary-ingestion-review-collection` (111 MB) |
+| `open-alvary-staging` | nothing (no APIs enabled) | |
+
+- **No archive bucket exists**, so nothing on Google Cloud is locked. Azure's archive starts empty
+  and is filled by ingestion.
+- **DNS.** `open.alvary.ai` and `api.open.alvary.ai` point at the load balancer. The domain is
+  registered and its DNS hosted at Squarespace Domains (Google Domains' former name servers), apart
+  from any Google Cloud project, so shutting Google Cloud down does not touch DNS. Switchover is a
+  record change there.
+- **Secret Manager** holds every secret `secrets.sh` copies: the Auth0 deletion pair goes in
+  `optional_secrets`; `database-*` and `review-database-url` are made anew for the new servers.
+- **The workbench's first collection** (the review-collection bucket, mounted read-only on Cloud
+  Run) goes to `az://<corpus account>/workbench/collections/ng/` and is mirrored into the
+  workbench's cache at start (`ALVARY_REVIEW_STAGING`); Rwanda's stays at `collections/rw/` in the
+  corpus copy.
+
 ## Still to settle with the owner
 
 - **Alvary's spend.** The credit is shared: about $4.7K a month to mid-2028. Open Alvary's estimate
   is below. Check both products' usage in the sponsorship portal.
-- **Archive lock.** Is the archive bucket's retention on Google Cloud locked? If so, it stays until
-  the retention ends; it is small, so this costs pennies.
-- **What is live on Google Cloud.** It decides what the data copy covers.
 - **The penetration test.** It moves to the Azure environment, after switchover.
 
 ## Cost, estimated per month (Sweden Central, list prices, low traffic)
@@ -119,17 +137,59 @@ Each phase ends with a check, and nothing serves the public until phase 6.
 4. **Workbench.** The storage adapter (`az://`) and Entra ID sign-in. Set `workbench_image`,
    `workbench_domain` and `workbench_entra_client_id`, then apply. Check: an operator signs in and
    reviews a page.
-5. **Data.**
-   - Copy the database by Cloud SQL export and a restore job inside the network;
-   - copy the corpus and archive buckets, checking every object by its SHA-256;
-   - rehearse on staging, then repeat for production.
-   - Check: row counts and hashes match, `python -m operations.archive verify` is clean, and the
-     benchmarks give the same metrics through the new service.
+5. **Data** (`./data.sh plan <env>` lists it). Rehearse on staging, then repeat for production.
+   - Build the restore and ingestion images (`./release.sh <env> restore`, `./release.sh <env>
+     ingestion`), set `restore_image` and `ingestion_image`, and apply.
+   - Databases:
+     - `cloud-sql-proxy <instance> --port 55432` (55433 for the review database);
+     - `./data.sh dump <env> public`, then `./data.sh restore <env> public`;
+     - the same with `review`;
+     - then `./release.sh <env> public` runs the migrations against the restored schema.
+     The restore recreates the source's roles (only the access role logs in), loads the dump
+     without owners, and fails on any table whose rows differ from the source's.
+   - Buckets: `./data.sh buckets <env>` copies both inside Azure; a second run copies only what is
+     new. `./data.sh verify <env>` checks every object's MD5. The copy job reads Google Cloud
+     Storage through workload identity federation (`google-wif-config`, below).
+   - Check: the restore and verify pass, and the benchmarks give the same metrics through the new
+     service.
 6. **Switchover.**
    - Add the validation TXT records `terraform output dns_records` prints;
    - then move the CNAMEs of `open.alvary.ai` and `api.open.alvary.ai` to the Front Door endpoint.
    - Keep Google Cloud read-only as a fallback until 18 December, then shut it down. Moving the
      CNAMEs back is the rollback.
+
+## Google from Azure (owner, once)
+
+The ingestion and copy jobs reach Google Cloud (Document AI, the buckets) as the ingestion job's
+managed identity, by workload identity federation: Google's token service exchanges its Entra
+token for a short-lived Google one, so no Google key exists anywhere. After phase 1:
+
+1. **An Entra application for the audience**, with no secret and no permissions:
+   `az ad app create --display-name open-alvary-google-federation --identifier-uris api://open-alvary-google`.
+2. **In `open-alvary-ingestion`**, a pool and a provider that admit only the ingestion identity.
+   `terraform output ingestion_identity` gives the principal ID and the tenant ID.
+   ```
+   gcloud iam workload-identity-pools create azure --location=global --display-name="Azure (Open Alvary)"
+   gcloud iam workload-identity-pools providers create-oidc azure --location=global \
+     --workload-identity-pool=azure --issuer-uri="https://sts.windows.net/<tenant ID>/" \
+     --allowed-audiences="api://open-alvary-google" --attribute-mapping="google.subject=assertion.sub" \
+     --attribute-condition="assertion.sub == '<principal ID>'"
+   ```
+3. **Let that principal act as the jobs' existing service account**, which already holds Document
+   AI and the corpus bucket:
+   ```
+   gcloud iam service-accounts add-iam-policy-binding <jobs' service account> \
+     --role=roles/iam.workloadIdentityUser \
+     --member="principal://iam.googleapis.com/projects/<project number>/locations/global/workloadIdentityPools/azure/subject/<principal ID>"
+   ```
+4. **The credential configuration.** It names a command, not a key:
+   ```
+   gcloud iam workload-identity-pools create-cred-config \
+     projects/<project number>/locations/global/workloadIdentityPools/azure/providers/azure \
+     --service-account=<jobs' service account> --executable-command="python -m ingestion.google_federation token" \
+     --executable-timeout-millis=30000 --output-file=google-wif-config.json
+   az keyvault secret set --vault-name open-alvary-<stg|prod>-sc-kv --name google-wif-config --file google-wif-config.json
+   ```
 
 ## Locking the archive (owner, irreversible)
 
@@ -150,3 +210,5 @@ possible).
   - `variables.tf`, `outputs.tf`, and `staging.tfvars.example` and `prod.tfvars.example`.
 - `secrets.sh`: copies secrets from Secret Manager to Key Vault.
 - `release.sh`: builds an image from the commit, runs the migrations, and gives the image to apply.
+- `data.sh`: the database dump and restore and the bucket copies, with their checks;
+  `restore.py` and `restore.Dockerfile`: the restore job; `operations/transfer.py`: the copy.
