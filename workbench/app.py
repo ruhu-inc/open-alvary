@@ -602,6 +602,7 @@ def create_app(
                 rights_basis=basis,
                 materials={k: bool(v) for k, v in materials.items() if k in content.MATERIALS},
                 note=note,
+                routing=now["readiness"].get("routing") if decision == "approved" else None,
             )
         except Conflict as error:
             raise HTTPException(409, str(error)) from error

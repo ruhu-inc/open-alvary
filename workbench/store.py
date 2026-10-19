@@ -150,6 +150,8 @@ approval = Table(
     Column("rights_basis", Text, nullable=False),
     Column("materials", JSON, nullable=False),
     Column("note", Text, nullable=False, default=""),
+    # Under a verification-routing decision (CPR-01, D28): the routes, audit sample and escalation approved.
+    Column("routing", JSON),
     Column("author", String(320), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     UniqueConstraint("act_id", "revision"),
@@ -207,6 +209,7 @@ def _upgrade(engine: Engine) -> None:
             "structure_sha256": "VARCHAR(64)",
             "serialization_profile": "VARCHAR(60)",
             "structure_rules": "VARCHAR(60)",
+            "routing": "JSON",
         },
         "session": {
             "passkey_at": "TIMESTAMP WITH TIME ZONE",

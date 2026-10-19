@@ -2,7 +2,7 @@
 (operations.publish): its pages, its details (shared by a work's language versions) and whether
 the latest approval still covers both exactly."""
 
-from workbench import content, details, publication, record_view
+from workbench import content, details, publication, record_view, routing
 
 
 class Review:
@@ -84,10 +84,31 @@ class Review:
             and record["status"] == "confirmed"
         )
         readiness = content.readiness(reading, latest, content.details_state(record, view["missing"]))
-        built = publication.build(document, final, reading) if text else None
+        policy = routing.load_policy()
+        built = publication.build(document, final, reading) if text or policy else None
         if built is not None:
             readiness["text"] = {"errors": len(built.errors), "warnings": len(built.warnings)}
             readiness["ready"] = readiness["ready"] and not built.errors
+        if policy is not None and built is not None:
+            # CPR-01 under the owner's decision: only the routed pages and the audit sample must be checked.
+            issues: dict[int, int] = {}
+            for issue in [*built.errors, *built.warnings]:
+                if issue.page is not None:
+                    issues[issue.page] = issues.get(issue.page, 0) + 1
+            plan = routing.requirement(document["id"], reading, latest, policy, issues)
+            unchecked = [
+                p for p in plan["required_pages"] if (latest.get(p) or {}).get("status") != "checked"
+            ]
+            readiness["routing"] = plan
+            readiness["unchecked_pages"] = unchecked
+            readiness["ready"] = (
+                not unchecked
+                and not readiness["open_high_flags"]
+                and not readiness["stale_pages"]
+                and not readiness["missing_checks"]
+                and readiness["details"]["confirmed"]
+                and not built.errors
+            )
         return {
             "reading": reading,
             "latest": latest,
