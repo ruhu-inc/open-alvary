@@ -1,0 +1,6 @@
+# Copy to backend.hcl (ignored by git), from deployment/azure/bootstrap's output, then in env/:
+#   terraform init -backend-config=../backend.hcl -backend-config="key=staging.tfstate"
+resource_group_name  = "ruhu-tfstate-sc-rg"
+storage_account_name = "ruhutfstatesc9kw9zn"
+container_name       = "open-alvary"
+use_azuread_auth     = true

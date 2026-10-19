@@ -14,7 +14,8 @@
                     ALVARY_FRONTEND, local)
 
 Every response carries the website's security headers, which Vercel and nginx used to add, so the
-service can stand alone behind the load balancer (MAC-12).
+service can stand alone behind the load balancer (MAC-12). With ALVARY_FRONT_DOOR_ID set (Azure), a
+request without that Front Door profile's ID is refused (403 ``wrong_address``), /healthz aside.
 
 Admission is all or nothing: when the API's allowance is configured, the website's own class must be
 configured too (``ALVARY_SITE_ADMISSION_CONFIG``), or the service refuses to start.
@@ -81,6 +82,29 @@ def create_service(
         store = Store(engine_for(pool_size=pool))
     release_root = releases or ROOT / "releases"
     service = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+
+    # Behind Azure Front Door (deployment/azure), a request that did not come through its profile is
+    # refused, so the service's own address is no way around the edge's rules. The platform's probes
+    # reach /healthz directly.
+    edge = os.getenv("ALVARY_FRONT_DOOR_ID")
+    if edge:
+
+        @service.middleware("http")
+        async def through_the_edge(request: Request, call_next):
+            if request.url.path != "/healthz" and request.headers.get("x-azure-fdid") != edge:
+                return JSONResponse(
+                    {
+                        "type": "https://open.alvary.ai/docs/errors#wrong_address",
+                        "title": "Request refused",
+                        "status": 403,
+                        "detail": "Requests reach Open Alvary at open.alvary.ai and api.open.alvary.ai.",
+                        "code": "wrong_address",
+                    },
+                    status_code=403,
+                    media_type="application/problem+json",
+                    headers={"Cache-Control": "no-store"},
+                )
+            return await call_next(request)
 
     @service.middleware("http")
     async def security_headers(request: Request, call_next):

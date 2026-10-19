@@ -378,3 +378,15 @@ def test_a_laws_many_instruments_come_a_page_at_a_time_and_agents_get_the_same(c
         json=call | {"params": {"name": "get_relationships", "arguments": {"source_id": law.id, "limit": 0}}},
     ).json()
     assert refused["error"]["code"] == -32602
+
+
+def test_behind_front_door_only_its_requests_are_served(catalogue, store, tmp_path, monkeypatch):
+    store.save(catalogue)
+    monkeypatch.setenv("ALVARY_FRONT_DOOR_ID", "fd-1")
+    client = TestClient(create_service(store, tmp_path))
+    refused = client.get("/site/v1/project")
+    assert refused.status_code == 403 and refused.json()["code"] == "wrong_address"
+    assert refused.headers["x-content-type-options"] == "nosniff"  # still with the security headers
+    assert client.get("/site/v1/project", headers={"X-Azure-FDID": "fd-2"}).status_code == 403
+    assert client.get("/site/v1/project", headers={"X-Azure-FDID": "fd-1"}).status_code == 200
+    assert client.get("/healthz").status_code == 200  # the platform's probes come straight in

@@ -49,6 +49,7 @@ export const CODES: [number, string, string][] = [
   [403, "jurisdiction_not_included", "The record or country is outside the organisation's plan."],
   [403, "account_inactive", "The person's account is suspended or closed."],
   [403, "organisation_suspended", "The organisation is suspended."],
+  [403, "wrong_address", "The request did not come through open.alvary.ai or api.open.alvary.ai. Use those addresses."],
   [404, "unavailable", "There is no such record or change, or it is not public."],
   [409, "stale_cursor", "The cursor expired (after 15 minutes). Continue from your last resume token."],
   [

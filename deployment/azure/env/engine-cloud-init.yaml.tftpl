@@ -1,0 +1,37 @@
+#cloud-config
+# The engine machine: Docker, the data disk at /var/vespa, and Vespa as a service that restarts on
+# failure and at boot, listening on the machine's private address only.
+package_update: true
+package_upgrade: true
+packages: [docker.io, unattended-upgrades]
+
+disk_setup:
+  /dev/disk/azure/scsi1/lun0: { table_type: gpt, layout: true, overwrite: false }
+fs_setup:
+  - { label: vespa, filesystem: ext4, device: /dev/disk/azure/scsi1/lun0, partition: auto, overwrite: false }
+mounts:
+  - [LABEL=vespa, /var/vespa, ext4, "defaults,nofail", "0", "2"]
+
+write_files:
+  - path: /etc/systemd/system/vespa.service
+    content: |
+      [Unit]
+      Description=Vespa (Open Alvary's search engine)
+      After=docker.service var-vespa.mount
+      Requires=docker.service
+      [Service]
+      ExecStartPre=-/usr/bin/docker rm -f vespa
+      ExecStart=/usr/bin/docker run --rm --name vespa --hostname vespa-container \
+        -p ${ip}:8080:8080 -p ${ip}:19071:19071 \
+        -v /var/vespa:/opt/vespa/var ${image}
+      ExecStop=/usr/bin/docker stop -t 120 vespa
+      Restart=always
+      RestartSec=15
+      [Install]
+      WantedBy=multi-user.target
+
+runcmd:
+  - [mkdir, -p, /var/vespa]
+  - [chown, "1000:1000", /var/vespa]
+  - [systemctl, daemon-reload]
+  - [systemctl, enable, --now, vespa.service]

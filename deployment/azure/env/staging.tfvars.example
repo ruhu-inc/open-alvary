@@ -1,0 +1,28 @@
+# Copy to staging.tfvars (ignored by git) and fill in. Apply with deployment/azure/README.md.
+subscription_id      = "<ruhu-sub subscription id>"
+environment          = "staging"
+location             = "swedencentral"
+operator_email       = "hello@ruhu.ai"
+operator_ip_ranges   = ["<your address>/32"]
+monthly_budget       = 1200
+public_domain        = "staging.open.alvary.ai"
+api_domain           = "api.staging.open.alvary.ai"
+admin_ssh_public_key = "ssh-ed25519 AAAA… operator"
+
+public_settings = {
+  PUBLIC_REPOSITORY_URL = "https://github.com/ruhu-inc/open-alvary"
+  PUBLIC_MAINTAINER     = "Ruhu, Inc."
+  PUBLIC_CONTACT_EMAIL  = "hello@ruhu.ai"
+  METADATA_LICENCE      = "CC-BY-4.0"
+}
+
+# Set by release.sh after the first build; the apps and jobs are created only once it is set.
+public_image = ""
+
+# Activation B, with the Auth0 tenant the console uses today.
+accounts_enabled  = false
+auth0_domain      = ""
+console_client_id = ""
+
+# Empty until a generation passes its gates (RSV-12): the service runs on the lexical arms.
+vector_profile = ""
