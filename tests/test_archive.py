@@ -55,3 +55,57 @@ def test_an_original_that_no_longer_matches_its_record_is_refused(tmp_path):
     (sources / "act-1.pdf").write_bytes(b"%PDF-1.7 altered")
     with pytest.raises(ValueError, match="no longer matches"):
         archive.copy(sources, tmp_path / "archive")
+
+
+def test_an_azure_container_under_an_immutability_policy_is_only_ever_added_to(tmp_path, monkeypatch, capsys):
+    """In a store every write creates an object: the originals once each, and each copy's manifest
+    lines as a manifest of its own."""
+    from blob_support import BlobService
+
+    from ingestion import corpus_store
+
+    service = BlobService()
+    service.immutable.add("archive")
+    opened = []
+
+    def open_store(address):
+        opened.append(address)
+        return service.store("archive")
+
+    monkeypatch.setattr(corpus_store, "open_store", open_store)
+    sources = tmp_path / "sources"
+    sources.mkdir()
+    first = original(sources, "act-1.pdf", b"%PDF-1.7 one")
+    second = original(sources, "act-2.pdf", b"%PDF-1.7 two")
+    place = "az://oatest/archive/originals"
+    assert archive.copy(sources, place, dry_run=True) == {
+        "added": 2,
+        "already_archived": 0,
+        "tier": "locked",
+        "dry_run": True,
+    }
+    assert not service.blobs and opened == ["az://oatest/archive"]
+    assert archive.main(["copy", str(sources), place]) == 0  # an address, not a folder
+    assert json.loads(capsys.readouterr().out)["added"] == 2
+    puts = [r for r in service.requests if r.method == "PUT"]
+    assert len(puts) == 3 and all(r.headers["If-None-Match"] == "*" for r in puts)
+    assert service.blobs[("archive", "originals/" + archive.address(first))]["data"] == b"%PDF-1.7 one"
+    assert service.blobs[("archive", "originals/" + archive.address(first))]["metadata"] == {"sha256": first}
+    [manifest] = [name for _, name in service.blobs if name.startswith("originals/manifests/")]
+    lines = [json.loads(line) for line in service.blobs[("archive", manifest)]["data"].splitlines()]
+    assert {line["sha256"] for line in lines} == {first, second} and lines[0][
+        "media_type"
+    ] == "application/pdf"
+    assert archive.copy(sources, place) == {
+        "added": 0,
+        "already_archived": 2,
+        "tier": "locked",
+        "dry_run": False,
+    }
+    assert len([r for r in service.requests if r.method == "PUT"]) == 3  # nothing more written
+    assert archive.verify(place) == {"checked": 2, "tampered": [], "missing": [], "ok": True}
+    service.rewrite("archive", "originals/" + archive.address(first), b"changed")
+    del service.blobs[("archive", "originals/" + archive.address(second))]
+    assert archive.main(["verify", place]) == 1
+    report = json.loads(capsys.readouterr().out)
+    assert report["tampered"] == [first] and report["missing"] == [second]
