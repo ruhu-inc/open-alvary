@@ -1,0 +1,33 @@
+deployment/gcp-terraform/bootstrap/main.tf
+  s_d665c62e07d76f::t_e15ddc39024f7b 6-9
+deployment/gcp-terraform/cloudbuild.yaml
+  s_d665c62e07d76f::t_6b26471fac2a27 1-9
+deployment/gcp-terraform/README.md
+  s_d665c62e07d76f::t_be2f16f1a0351a 135-136,138-139
+  s_d665c62e07d76f::t_0e73f2621df9f0 223-225,280-282
+  s_d665c62e07d76f::t_56e7f49722cfcb 259-261,283,285-288
+  s_d665c62e07d76f::t_d57179e834652b 1-2,7-37,39-134,137,140-222,226-258,262-279,284,289-337
+  s_d665c62e07d76f::t_5d1202d248f198 3-6,38
+deployment/gcp-terraform/data.sh
+  s_d665c62e07d76f::t_d64b519b03a023 1-205
+deployment/gcp-terraform/secrets.sh
+  s_d665c62e07d76f::t_92b1d4946e6299 1-125
+deployment/gcp-terraform/release.sh
+  s_d665c62e07d76f::t_692548032ce75a 1-76
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "78d4f9a824ebf93aa4224a23bfa73a9887167b44",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
