@@ -238,7 +238,10 @@ class Library:
         folder = staging / "review-images" / (pdf.stem if pdf is not None else act_id)
         path = folder / f"page-{page}.jpg"
         if path.exists():
-            os.utime(path)
+            try:
+                os.utime(path)  # recently used, so the bounded cache keeps it
+            except OSError:
+                pass  # a prepared image on a read-only mount is not in the cache
             return path
         pdf = pdf or self.original(act_id)
         if os.environ.get("ALVARY_RENDER") == "direct":

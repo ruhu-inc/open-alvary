@@ -209,6 +209,10 @@ def test_a_deployed_collection_shows_its_prepared_page_images_without_the_pdf(tm
     folder.mkdir(parents=True)
     (folder / "page-1.jpg").write_bytes(b"\xff\xd8 prepared")
     library = content.Library(tmp_path)
+    # The deployed workbench mounts the collection read-only: its images are served, never touched.
+    monkeypatch.setattr(
+        content.os, "utime", lambda path: (_ for _ in ()).throw(OSError(30, "Read-only file system"))
+    )
     assert library.image(ACT, 1).read_bytes() == b"\xff\xd8 prepared"
     with pytest.raises(FileNotFoundError):
         library.image(ACT, 2)  # neither a prepared image nor a PDF to render one from
