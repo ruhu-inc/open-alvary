@@ -5,6 +5,8 @@
 # The region needs GPU quota for the machine size (README, "Before the first apply").
 
 resource "azurerm_network_interface" "inference" {
+  count = var.inference_enabled ? 1 : 0
+
   name                = "${local.name_prefix}-inference-nic"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
@@ -19,13 +21,15 @@ resource "azurerm_network_interface" "inference" {
 }
 
 resource "azurerm_linux_virtual_machine" "inference" {
+  count = var.inference_enabled ? 1 : 0
+
   name                            = "${local.name_prefix}-inference"
   location                        = azurerm_resource_group.main.location
   resource_group_name             = azurerm_resource_group.main.name
   size                            = var.inference_vm_size
   admin_username                  = "openalvary"
   disable_password_authentication = true
-  network_interface_ids           = [azurerm_network_interface.inference.id]
+  network_interface_ids           = [azurerm_network_interface.inference[0].id]
   custom_data = base64encode(templatefile("${path.module}/inference-cloud-init.yaml.tftpl", {
     image    = var.tei_image
     ip       = local.inference_ip
@@ -60,8 +64,10 @@ resource "azurerm_linux_virtual_machine" "inference" {
 
 # NVIDIA's driver, installed and kept by Azure's extension.
 resource "azurerm_virtual_machine_extension" "gpu_driver" {
+  count = var.inference_enabled ? 1 : 0
+
   name                       = "NvidiaGpuDriverLinux"
-  virtual_machine_id         = azurerm_linux_virtual_machine.inference.id
+  virtual_machine_id         = azurerm_linux_virtual_machine.inference[0].id
   publisher                  = "Microsoft.HpcCompute"
   type                       = "NvidiaGpuDriverLinux"
   type_handler_version       = "1.6"

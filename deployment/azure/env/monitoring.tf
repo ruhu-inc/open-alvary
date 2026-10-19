@@ -33,8 +33,10 @@ resource "azurerm_monitor_action_group" "operator" {
   }
 }
 
-# The public site answers: an availability test from three regions every five minutes.
+# The public site answers: an availability test from three regions every five minutes, once the
+# domain points at Front Door (domain_live); before that it could only fail.
 resource "azurerm_application_insights_standard_web_test" "site" {
+  count                   = var.domain_live ? 1 : 0
   name                    = "${local.name_prefix}-site"
   location                = azurerm_resource_group.main.location
   resource_group_name     = azurerm_resource_group.main.name
@@ -53,15 +55,16 @@ resource "azurerm_application_insights_standard_web_test" "site" {
 }
 
 resource "azurerm_monitor_metric_alert" "site_down" {
+  count               = var.domain_live ? 1 : 0
   name                = "${local.name_prefix}-site-down"
   resource_group_name = azurerm_resource_group.main.name
-  scopes              = [azurerm_application_insights_standard_web_test.site.id, azurerm_application_insights.main.id]
+  scopes              = [azurerm_application_insights_standard_web_test.site[0].id, azurerm_application_insights.main.id]
   description         = "The public site failed its availability test from two or more locations."
   severity            = 1
   tags                = local.common_tags
 
   application_insights_web_test_location_availability_criteria {
-    web_test_id           = azurerm_application_insights_standard_web_test.site.id
+    web_test_id           = azurerm_application_insights_standard_web_test.site[0].id
     component_id          = azurerm_application_insights.main.id
     failed_location_count = 2
   }
