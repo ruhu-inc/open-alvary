@@ -10,9 +10,10 @@ rest in fused order. Then, in order:
 2. Route match: what a route resolved exactly comes first, the citation's part, then the definition
    asked for (RSV-03), as /search/text puts a cited part first. These never move in step 4.
 3. Instrument match: when the query names instruments, their units come next.
-4. Bands: the other positions fall into bands of BAND_WIDTH; within a band, a higher instrument
-   (constitution, then Act, then subsidiary legislation, then guidance) comes first. A unit never moves
-   out of its band.
+4. Bands: the other positions fall into bands of BAND_WIDTH. Within a band, legislation is reordered
+   among its own positions by instrument (constitution, Act, subsidiary legislation, guidance), and
+   decisions among theirs by their court's relation to the queried jurisdiction (binding, persuasive,
+   then not applicable or unknown), so neither displaces the other. A unit never moves out of its band.
 5. Diversification: a unit overlapping one already kept from the same text collapses into it; the
    same locator in another text of the same work and language collapses into the first (``also_in``);
    unless the query is scoped to one instrument or citation, units beyond the first PER_WORK of one
@@ -34,6 +35,8 @@ NOT_IN_FORCE_STATUSES = frozenset({"repealed", "superseded", "historical"})
 # The instrument hierarchy shared by the jurisdiction profiles assessed so far (0 is highest). A
 # judgment's authority is its court's (CPR-04), not a document type's.
 INSTRUMENT_RANK = {"constitution": 0, "act": 1, "regulation": 2, "guidance": 3, "gazette": 4, "other": 5}
+# A decision's court relation to the queried jurisdiction (CPR-04 court register): binding first.
+COURT_ORDER = {"binding": 0, "persuasive": 1, "not_applicable": 2, "unknown": 2}
 
 
 @dataclass
@@ -65,6 +68,7 @@ class Candidate:
     arms: dict[str, int] = field(default_factory=dict)
     fused: float = 0.0
     rerank_score: float | None = None  # 0 to 1 when the reranker scored it
+    court_relation: str | None = None  # for a decision: binding, persuasive, not_applicable or unknown
     band: int = 0
     signals: list[tuple[str, str, str]] = field(default_factory=list)
     diversification: list[str] = field(default_factory=list)
@@ -137,17 +141,38 @@ def apply_signals(candidates: list[Candidate], named_works: set[str]) -> list[Ca
     banded: list[Candidate] = []
     for start in range(0, len(ordered), BAND_WIDTH):
         band = ordered[start : start + BAND_WIDTH]
-        ranks = {INSTRUMENT_RANK.get(c.hit.document_type) for c in band}
-        if len(ranks - {None}) > 1:
-            band = sorted(band, key=lambda c: INSTRUMENT_RANK.get(c.hit.document_type, len(INSTRUMENT_RANK)))
-            for candidate in band:
-                candidate.signals.append(
-                    ("instrument_authority", candidate.hit.document_type, "tie-break in band")
-                )
+        band = _reorder(
+            band, lambda c: c.hit.document_type != "judgment", _instrument, "instrument_authority"
+        )
+        band = _reorder(band, lambda c: c.hit.document_type == "judgment", _court, "court_authority")
         for candidate in band:
             candidate.band = start // BAND_WIDTH
         banded += band
     return leading + banded
+
+
+def _instrument(candidate: Candidate) -> int:
+    return INSTRUMENT_RANK.get(candidate.hit.document_type, len(INSTRUMENT_RANK))
+
+
+def _court(candidate: Candidate) -> int:
+    return COURT_ORDER.get(candidate.court_relation or "unknown", len(COURT_ORDER))
+
+
+def _reorder(band: list[Candidate], member, key, signal: str) -> list[Candidate]:
+    """Within a band, reorder only the members (legislation, or decisions) among their own positions by
+    ``key``, so legislation and decisions never displace each other; each moved member records it."""
+    places = [n for n, c in enumerate(band) if member(c)]
+    members = [band[n] for n in places]
+    if len({key(c) for c in members}) <= 1:
+        return band
+    ordered = sorted(members, key=key)
+    out = list(band)
+    for place, candidate in zip(places, ordered, strict=True):
+        out[place] = candidate
+        value = candidate.hit.document_type if signal == "instrument_authority" else candidate.court_relation
+        candidate.signals.append((signal, value or "unknown", "tie-break in band"))
+    return out
 
 
 def diversify(candidates: list[Candidate], *, scoped: bool, comparative: bool) -> list[Candidate]:

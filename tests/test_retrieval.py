@@ -223,3 +223,15 @@ def test_a_unit_aggregates_the_parts_inside_it_that_events_name():
         aggregate(["in_force", "unknown"]) == "unknown"
         and aggregate(["contested", "in_force"]) == "contested"
     )
+
+
+def test_within_a_band_decisions_order_by_court_relation_without_displacing_legislation():
+    act = hit(version="ver_act", start=0, document_type="act")
+    persuasive = hit(version="ver_p", start=0, work="w2", document_type="judgment")
+    binding = hit(version="ver_b", start=0, work="w3", document_type="judgment")
+    fused = fuse({"lexical": [persuasive, act, binding]})
+    for candidate in fused:
+        candidate.court_relation = {"ver_p": "persuasive", "ver_b": "binding"}.get(candidate.hit.version_id)
+    ranked = apply_signals(fused, set())
+    assert [c.hit.version_id for c in ranked] == ["ver_b", "ver_act", "ver_p"]  # the Act keeps its place
+    assert ranked[0].signals[-1] == ("court_authority", "binding", "tie-break in band")
