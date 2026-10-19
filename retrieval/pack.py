@@ -35,6 +35,7 @@ from schema.public import (
 )
 
 ARM_LIMIT = 100  # RET-02: at most 100 raw candidates per arm
+SEEDS, EXPANDED = 10, 30  # RET-05: at most 10 seeds and 30 added candidates per query
 SIDE_LIMIT = 20  # the instrument, definition and document arms
 MIN_EXCERPT = 256  # below this many bytes left, no further unit is started
 INCLUDE = frozenset({"context", "expansion", "ranking"})
@@ -303,12 +304,53 @@ class Retriever:
                 relation(register, source.authority_id, asked) if register else "unknown"
             )
 
-    def _rerank(self, query: str, candidates: list[Candidate], degraded: list[str]) -> None:
-        """Score the first fused candidates with the reranker (RSV-05); on failure the fused order stands."""
+    def _expand(self, fused: list[Candidate], filters) -> list[Candidate]:
+        """RSV-06 with a reranker: the provisions of the same text that the first seeds refer to by number
+        join the pool (at most EXPANDED), marked ``expanded_from``; the reranker then scores them with
+        the rest. Without a reranker, references stay context only."""
+        held = {c.key for c in fused}
+        added: list[Candidate] = []
+        for seed in fused[:SEEDS]:
+            loaded = self._public(seed.hit.version_id)
+            if loaded is None or seed.hit.unit == "document":
+                continue
+            version, source, _ = loaded
+            if not self.service._within(source, version, filters):
+                continue
+            nodes = self._structure(version)
+            by_locator = {n.locator: n for n in nodes}
+            by_id = {n.id: n for n in nodes}
+            words = version.canonical_text.encode()[seed.hit.start_byte : seed.hit.end_byte].decode()
+            for _shown, node in links.references(words, by_locator, seed.hit.locator):
+                hit = Hit(
+                    version_id=version.id, start_byte=node.start_byte, end_byte=node.end_byte,
+                    work_id=source.id, node_id=node.id, unit="provision", kind=node.kind, locator=node.locator,
+                    pinpoint=self.service._pinpoint(node, source.document_type, by_id), heading=node.heading,
+                    language=version.language, config=seed.hit.config, content_hash=version.content_hash,
+                    legal_status=source.legal_status, replaced=seed.hit.replaced,
+                    jurisdiction_id=source.jurisdiction_id, document_type=source.document_type,
+                )  # fmt: skip
+                candidate = Candidate(hit, arms={"expansion": len(added) + 1})
+                if candidate.key in held:
+                    continue
+                held.add(candidate.key)
+                candidate.expanded_from = seed.hit.node_id
+                added.append(candidate)
+                if len(added) >= EXPANDED:
+                    return added
+        return added
+
+    def _rerank(
+        self, query: str, candidates: list[Candidate], degraded: list[str], keep: list[Candidate] = ()
+    ) -> None:
+        """Score the first fused candidates (and any expansion) with the reranker (RSV-05); on failure the
+        fused order stands."""
         if self.reranker is None:
             degraded.append("reranker:not_configured")
             return
-        pool = [c for c in candidates[: rerank.MAX_CANDIDATES] if self._public(c.hit.version_id)]
+        kept = {c.key for c in keep}
+        first = [c for c in candidates if c.key not in kept][: rerank.MAX_CANDIDATES - len(keep)]
+        pool = [c for c in [*first, *keep] if self._public(c.hit.version_id)]
         texts = [
             self._public(c.hit.version_id)[0]
             .canonical_text.encode()[c.hit.start_byte : c.hit.end_byte]
@@ -345,8 +387,14 @@ class Retriever:
         )
         arms, degraded, _ = self._arms(query, plan, filters)
         fused = fuse(arms)
+        expanded = (
+            self._expand(fused, filters)
+            if self.reranker is not None and "expansion" in request.include
+            else []
+        )
+        fused += expanded
         self._courts(fused, filters)
-        self._rerank(query, fused, degraded)
+        self._rerank(query, fused, degraded, keep=expanded)
         candidates = apply_signals(fused, set(works))
         scoped = "citation" in plan.routes or len(works) == 1 or bool(filters.source_id or filters.version_id)
         candidates = diversify(candidates, scoped=scoped, comparative=plan.comparative)
@@ -642,6 +690,7 @@ class Retriever:
             references=references,
             qualifications=self._qualified(source_id) if "context" in request.include else (),
             also_in=tuple(candidate.also_in),
+            expanded_from=candidate.expanded_from,
         )
         return context, unique, sent
 

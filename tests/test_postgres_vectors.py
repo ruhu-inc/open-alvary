@@ -159,3 +159,41 @@ def test_status_reports_each_generation(store, tmp_path):
     [row] = indexer.status(store.engine)
     assert row["generation_id"] == generation and row["state"] == "building" and row["done"] == 1
     assert TestClient  # the API is unaffected by a building generation
+
+
+def test_with_a_reranker_a_referenced_provision_joins_and_says_where_it_came_from(store):
+    units = [
+        {"kind": "heading", "text": "LEVY ACT, 2023"},
+        {
+            "kind": "paragraph",
+            "text": "1. Subject to section 3, the Fund shall lend to students.",
+            "notes": ["Loans"],
+        },
+        {"kind": "paragraph", "text": "2. The Board meets quarterly.", "notes": ["Board"]},
+        {"kind": "paragraph", "text": "3. The levy is payable monthly.", "notes": ["Levy"]},
+    ]
+    _, version, nodes = publish_act(store, units)
+
+    def answer(request):
+        texts = __import__("json").loads(request.content)["texts"]
+        return httpx.Response(200, json=[{"index": i, "score": 0.5} for i, _ in enumerate(texts)])
+
+    reranker = HttpReranker("http://reranker.test", "test-reranker@1", transport=httpx.MockTransport(answer))
+    with store.engine.begin() as conn:
+        service = LegacyCatalogue(LegacyRepository(conn))
+        found = Retriever(service, reranker=reranker).retrieve(
+            Request(query="Fund lend students", filters=Filters())
+        )
+    by_anchor = {u.anchor_id: u for u in found.evidence}
+    assert (
+        nodes["sec_3"].id in by_anchor
+        and by_anchor[nodes["sec_3"].id].context.expanded_from == nodes["sec_1"].id
+    )
+    assert by_anchor[nodes["sec_3"].id].ranking.arms == {"expansion": 1}
+    with store.engine.begin() as conn:
+        service = LegacyCatalogue(LegacyRepository(conn))
+        plain = Retriever(service, reranker=None).retrieve(
+            Request(query="Fund lend students", filters=Filters())
+        )
+    assert nodes["sec_3"].id not in {u.anchor_id for u in plain.evidence if u.ranking.arms.get("expansion")}
+    assert [r.locator for r in plain.evidence[0].context.references] == ["sec_3"]  # context only

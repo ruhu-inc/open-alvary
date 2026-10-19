@@ -465,6 +465,7 @@ class EvidenceContext(WireModel):
     references: tuple[EvidenceReference, ...] = ()
     qualifications: tuple[EvidenceQualification, ...] = ()
     also_in: tuple[ID, ...] = ()
+    expanded_from: ID | None = Field(**OMIT)
 
 
 class EvidenceAuthority(WireModel):

@@ -69,6 +69,7 @@ class Candidate:
     fused: float = 0.0
     rerank_score: float | None = None  # 0 to 1 when the reranker scored it
     court_relation: str | None = None  # for a decision: binding, persuasive, not_applicable or unknown
+    expanded_from: str | None = None  # the seed unit whose reference added it (RSV-06)
     band: int = 0
     signals: list[tuple[str, str, str]] = field(default_factory=list)
     diversification: list[str] = field(default_factory=list)
