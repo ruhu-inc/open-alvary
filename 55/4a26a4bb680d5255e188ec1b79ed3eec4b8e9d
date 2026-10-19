@@ -1,0 +1,33 @@
+deployment/azure/env/staging.tfvars.example
+  s_d665c62e07d76f::t_a6c7e093677eea 27-30
+deployment/azure/env/engine.tf
+  s_d665c62e07d76f::t_e190d46e727a46 23,61,72
+  s_d665c62e07d76f::t_6907c1aaa466aa 8,30,73-74
+  s_d665c62e07d76f::t_a495f10c191de9 4-5
+deployment/azure/README.md
+  s_d665c62e07d76f::t_8cd6aa4d210ea8 11-12
+  s_d665c62e07d76f::t_809be35297bf13 3-10,13-19
+  s_d665c62e07d76f::t_96b07eac0847e5 119
+deployment/azure/env/locals.tf
+  s_d665c62e07d76f::t_6907c1aaa466aa 47,50
+deployment/azure/env/outputs.tf
+  s_d665c62e07d76f::t_a495f10c191de9 27
+deployment/azure/env/variables.tf
+  s_d665c62e07d76f::t_6907c1aaa466aa 123-128
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "554a26a4bb680d5255e188ec1b79ed3eec4b8e9d",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
