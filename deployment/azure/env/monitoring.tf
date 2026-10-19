@@ -71,8 +71,11 @@ resource "azurerm_monitor_metric_alert" "site_down" {
   }
 }
 
-# The budget covers everything in the environment's resource group.
+# The budget covers everything in the environment's resource group. Cost Management, which budgets
+# need, does not report on every kind of subscription, so
+# the budget is off unless the subscription supports it.
 resource "azurerm_consumption_budget_resource_group" "main" {
+  count             = var.budget_enabled ? 1 : 0
   name              = "${local.name_prefix}-budget"
   resource_group_id = azurerm_resource_group.main.id
   amount            = var.monthly_budget
