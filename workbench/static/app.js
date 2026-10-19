@@ -396,6 +396,7 @@ async function actView(actId) {
       grid,
     ),
     detailsSummary(actId, ready),
+    editorialSummary(actId),
     textCheckCard(actId, data.text_check),
     findReplaceCard(actId),
     approvalPanel(actId, data, current),
@@ -1018,6 +1019,286 @@ function rowsEditor(columns, rows, onChange) {
   };
   draw();
   return box;
+}
+
+// --- legal events and amendment instructions (CPR-02, CPR-03) ----------------------------------------
+
+const EVENT_STATUS = { proposed: ["medium", "proposed"], reviewed: ["ok", "reviewed"], rejected: ["warn", "rejected"] };
+const INSTRUCTION_STATUS = { proposed: ["medium", "proposed"], reviewed: ["warn", "reviewed: awaiting a second editor"], second_reviewed: ["ok", "reviewed by two editors"], rejected: ["warn", "rejected"] };
+const OPERATION_LABEL = { substitute: "Substitute the provision", insert: "Insert new provisions", repeal: "Repeal the provision", renumber: "Renumber the provision", amend_words: "Amend words in it" };
+const spaced = (value) => String(value || "").replace(/_/g, " ");
+
+// On the document's page: what its work's events and instructions are waiting for, and where to edit them.
+function editorialSummary(actId) {
+  const id = encodeURIComponent(actId);
+  const line = el("p", { class: "muted", text: "Loading…" });
+  const tally = (items, labels) => {
+    const counts = {};
+    for (const item of items) counts[item.status] = (counts[item.status] || 0) + 1;
+    return Object.entries(counts).map(([status, n]) => `${n} ${labels[status][1]}`).join(", ") || "none yet";
+  };
+  Promise.all([api(`/api/documents/${id}/events`), api(`/api/documents/${id}/instructions`)]).then(([events, instructions]) => {
+    if (!events.ok || !instructions.ok) { line.textContent = ""; return; }
+    line.textContent = `Legal events: ${tally(events.data.events, EVENT_STATUS)}. Amendment instructions: ${tally(instructions.data.instructions, INSTRUCTION_STATUS)}.`;
+  });
+  return el("div", { class: "card" },
+    el("h3", { text: "Legal events and amendments" }),
+    el("p", { class: "muted", text: "When this law and its provisions came into force, were repealed or suspended (proposed from its text, checked by you), and, for an amending law, the instructions that consolidate the law it amends." }),
+    line,
+    el("p", {},
+      el("a", { href: `#/doc/${id}/events` }, el("button", { text: "Legal events" })), " ",
+      el("a", { href: `#/doc/${id}/instructions` }, el("button", { text: "Amendment instructions" }))));
+}
+
+const field = (label, control, hint) => el("label", { class: "editor-field" }, el("span", { class: "editor-label", text: label }), control, hint ? el("span", { class: "muted small", text: hint }) : null);
+const optional = (value) => (value === "" ? null : value);
+
+function historyList(item) {
+  return el("details", { class: "editor-history" }, el("summary", { text: `History (${item.history.length})` }),
+    el("ul", {}, item.history.map((h) => el("li", { text: `${h.at.slice(0, 16).replace("T", " ")} · revision ${h.revision} · ${spaced(h.status)} by ${operatorName(h.author)}${h.comment ? ` — ${h.comment}` : ""}` }))));
+}
+
+// The provisions of this law, to choose some (the affected-provision picker), with a filter.
+function provisionPicker(provisions, chosen, onChange) {
+  const picked = new Set(chosen);
+  const filter = el("input", { type: "search", placeholder: "Filter provisions" });
+  const list = el("div", { class: "picker" });
+  const draw = () => {
+    const words = filter.value.toLowerCase();
+    list.replaceChildren(...provisions.filter((p) => !words || `${p.locator} ${p.label} ${p.heading}`.toLowerCase().includes(words)).slice(0, 400).map((p) => {
+      const box = el("input", { type: "checkbox", checked: picked.has(p.locator), on: { change: () => { if (box.checked) picked.add(p.locator); else picked.delete(p.locator); onChange([...picked]); } } });
+      return el("label", { class: "picker-row" }, box, el("code", { text: p.locator }), el("span", { class: "muted", text: ` ${p.label} ${p.heading}`.trimEnd() }));
+    }));
+  };
+  filter.addEventListener("input", draw);
+  draw();
+  return el("div", {}, filter, list);
+}
+
+function provisionSelect(provisions, value) {
+  const select = el("select", {}, el("option", { value: "", text: "—" }),
+    provisions.map((p) => el("option", { value: p.locator, text: `${p.locator}${p.label || p.heading ? ` · ${[p.label, p.heading].filter(Boolean).join(" ")}` : ""}`.slice(0, 90) })));
+  select.value = value || "";
+  return select;
+}
+
+async function eventsView(actId) {
+  const id = encodeURIComponent(actId);
+  const [listing, doc] = await Promise.all([api(`/api/documents/${id}/events`), api(`/api/documents/${id}`)]);
+  if (!listing.ok) return main(el("p", { text: message(listing) }));
+  const data = listing.data;
+  app.names = { ...(app.names || {}), ...data.names };
+  setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${id}`, text: doc.data.act.title }), "Legal events");
+  const original = sourcePanel(actId, doc.data.pages.length, doc.data.source || {}, 1);
+  const canPropose = app.me.roles.includes("reviewer"), canReview = app.me.roles.includes("approver");
+  const pageOf = Object.fromEntries(data.provisions.map((p) => [p.locator, p.page]));
+  const cards = el("div");
+  const card = (item) => {
+    const e = item ? item.event : { type: "commenced", affected_work: data.work, scope: "whole", locators: [], precision: "day", evidence: { url: data.source_url } };
+    let locators = [...(e.locators || [])];
+    const touched = () => { app.dirty = true; };
+    const type = el("select", { on: { change: touched } }, data.types.map((t) => el("option", { value: t, text: spaced(t) })));
+    type.value = e.type;
+    const affected = el("input", { type: "text", value: e.affected_work || "", placeholder: "the affected law's record id", on: { input: () => { touched(); drawScope(); } } });
+    const scope = el("select", { on: { change: () => { touched(); drawScope(); } } }, el("option", { value: "whole", text: "the whole law" }), el("option", { value: "explicit_nodes", text: "chosen provisions" }));
+    scope.value = e.scope;
+    const scopeBox = el("div");
+    const typed = el("input", { type: "text", placeholder: "locators, separated by commas (sec_5, sec_6__subsec_2)", on: { input: () => { touched(); locators = typed.value.split(",").map((x) => x.trim()).filter(Boolean); } } });
+    const drawScope = () => {
+      if (scope.value !== "explicit_nodes") return scopeBox.replaceChildren();
+      if (affected.value.trim() === data.work) return scopeBox.replaceChildren(provisionPicker(data.provisions, locators, (chosen) => { locators = chosen; touched(); }));
+      typed.value = locators.join(", ");
+      scopeBox.replaceChildren(field("Provisions of the affected law", typed, "Checked against its published text when the events are published"));
+    };
+    const from = el("input", { type: "date", value: e.date_from || "", on: { input: touched } });
+    const to = el("input", { type: "date", value: e.date_to || "", on: { input: touched } });
+    const precision = el("select", { on: { change: touched } }, data.precisions.map((p) => el("option", { value: p, text: p })));
+    precision.value = e.precision || "unknown";
+    const conditions = el("textarea", { rows: 2, value: e.conditions || "", placeholder: "A condition, when no date is known (“on a date the Minister appoints”)", on: { input: touched } });
+    const evidence = e.evidence || {};
+    const anchor = provisionSelect(data.provisions, evidence.locator);
+    const showAnchor = el("button", { class: "small", text: "Show its page", on: { click: () => { if (pageOf[anchor.value]) original.show(pageOf[anchor.value]); } } });
+    anchor.addEventListener("change", touched);
+    const quote = el("textarea", { rows: 3, value: evidence.quote || "", placeholder: "The words that say so", on: { input: touched } });
+    const url = el("input", { type: "url", value: evidence.url || "", on: { input: touched } });
+    const supersedes = el("input", { type: "text", value: e.supersedes || "", placeholder: "evt_… (optional)", on: { input: touched } });
+    const comment = el("textarea", { rows: 1, placeholder: "Note for the record (optional)" });
+    const read = () => ({
+      type: type.value, affected_work: affected.value.trim() || null, scope: scope.value, locators: scope.value === "explicit_nodes" ? locators : [],
+      date_from: optional(from.value), date_to: optional(to.value), precision: precision.value, conditions: optional(conditions.value.trim()),
+      evidence: { url: optional(url.value.trim()), locator: optional(anchor.value), quote: optional(quote.value.trim()) }, supersedes: optional(supersedes.value.trim()),
+    });
+    const send = async (status) => {
+      if (status === "rejected" && !confirm("Reject this event? It stays in the record and is never exported.")) return;
+      const body = { expected_revision: item ? item.revision : 0, status, event: read(), comment: comment.value };
+      if (item) body.event_id = item.event_id;
+      const result = await api(`/api/documents/${id}/events`, { method: "POST", body });
+      if (!result.ok) return toast(message(result));
+      app.dirty = false;
+      toast(status === "reviewed" ? "Reviewed and recorded in your name" : status === "rejected" ? "Rejected" : "Saved");
+      eventsView(actId);
+    };
+    drawScope();
+    const [tone, label] = item ? EVENT_STATUS[item.status] : ["medium", "new"];
+    return el("div", { class: `card editor-card status-${item ? item.status : "new"}` },
+      el("div", { class: "editor-head" }, pill(tone, label),
+        el("span", { class: "muted", text: item ? `revision ${item.revision} by ${operatorName(item.author)}, ${ago(item.at)}${item.comment ? ` — ${item.comment}` : ""}` : "not saved yet" })),
+      el("div", { class: "editor-grid" },
+        field("Event", type),
+        field("Affected law", affected, affected.value === data.work ? "this law" : "a record id, as published"),
+        field("Scope", scope),
+        field("From", from), field("Until (optional)", to), field("Precision of the date", precision)),
+      scopeBox,
+      field("Condition", conditions),
+      el("div", { class: "editor-grid" },
+        el("div", { class: "editor-field" }, el("span", { class: "editor-label", text: "Evidence: the provision that says so" }), anchor, showAnchor),
+        field("Address of the text", url),
+        field("Corrects a published event", supersedes)),
+      field("Its words", quote),
+      comment,
+      el("p", { class: "editor-actions" },
+        canPropose ? el("button", { text: item ? "Save as proposed" : "Save the proposal", on: { click: () => send("proposed") } }) : null,
+        canReview ? el("button", { class: "primary", text: "Mark reviewed", title: "Records you as its reviewer, now", on: { click: () => send("reviewed") } }) : null,
+        canReview && item && item.status !== "rejected" ? el("button", { class: "danger", text: "Reject", on: { click: () => send("rejected") } }) : null,
+        !canReview ? el("span", { class: "muted", text: "Marking an event reviewed needs the approver role." }) : null),
+      item ? historyList(item) : null);
+  };
+  cards.replaceChildren(...data.events.map(card));
+  const propose = async () => {
+    const result = await api(`/api/documents/${id}/events/proposals`, { method: "POST" });
+    if (!result.ok) return toast(message(result));
+    toast(result.data.added.length ? `${result.data.added.length} proposal${result.data.added.length === 1 ? "" : "s"} recorded from the text` : "No new proposals in the text");
+    eventsView(actId);
+  };
+  const reviewed = data.events.filter((e) => e.status === "reviewed").length;
+  main(el("div", { class: "details-layout" },
+    el("div", {},
+      el("div", { class: "card" },
+        el("h2", { text: "Legal events" }),
+        el("p", { class: "muted", text: "When this law, or provisions of it, came into force, were repealed, suspended or revived. Proposals are read from the text's commencement and repeal provisions; check each against the original beside it, complete it, and mark it reviewed, or reject it. Only reviewed events are exported for publishing." }),
+        el("p", {},
+          canPropose ? el("button", { class: "primary", text: "Propose from the text", on: { click: propose } }) : null, " ",
+          canPropose ? el("button", { text: "+ Add an event", on: { click: () => cards.prepend(card(null)) } }) : null, " ",
+          el("a", { href: `/api/documents/${id}/events/export`, text: `Export the ${reviewed} reviewed event${reviewed === 1 ? "" : "s"} (JSON, for operations.events publish)` }))),
+      cards,
+      data.events.length ? null : el("p", { class: "muted", text: "No events recorded for this law yet." })),
+    original.panel));
+}
+
+async function instructionsView(actId) {
+  const id = encodeURIComponent(actId);
+  const [listing, doc] = await Promise.all([api(`/api/documents/${id}/instructions`), api(`/api/documents/${id}`)]);
+  if (!listing.ok) return main(el("p", { text: message(listing) }));
+  const data = listing.data;
+  app.names = { ...(app.names || {}), ...data.names };
+  setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${id}`, text: doc.data.act.title }), "Amendment instructions");
+  const original = sourcePanel(actId, doc.data.pages.length, doc.data.source || {}, 1);
+  const isReviewer = app.me.roles.includes("reviewer"), isApprover = app.me.roles.includes("approver");
+  const pageOf = Object.fromEntries(data.provisions.map((p) => [p.locator, p.page]));
+  const cards = el("div");
+  const card = (item) => {
+    const i = item ? item.instruction : { operation: "amend_words", occurrences: 1, amending: {} };
+    const touched = () => { app.dirty = true; };
+    const target = el("input", { type: "text", value: item ? item.target_work : "", placeholder: "the amended law's record id", on: { input: touched } });
+    const operation = el("select", { on: { change: () => { touched(); show(); } } }, Object.entries(OPERATION_LABEL).map(([value, text]) => el("option", { value, text })));
+    operation.value = i.operation;
+    const locator = el("input", { type: "text", value: i.target || "", placeholder: "sec_5, sec_5__subsec_2", on: { input: touched } });
+    const effective = el("input", { type: "date", value: i.effective_date || "", on: { input: touched } });
+    const position = el("select", { on: { change: touched } }, el("option", { value: "after", text: "after it" }), el("option", { value: "before", text: "before it" }));
+    position.value = i.position || "after";
+    // New text: one paragraph per line; units the editor has not touched are kept as they were.
+    const units = i.units || [];
+    const initial = units.map((u) => [u.marker, u.text].filter(Boolean).join(" ")).join("\n");
+    const firstNote = (units[0] && units[0].notes && units[0].notes[0]) || "";
+    const text = el("textarea", { rows: 4, value: initial, placeholder: "The new text, one paragraph per line (“5A. A loan may be deferred.”)", on: { input: touched } });
+    const note = el("input", { type: "text", value: firstNote, placeholder: "Margin note of the first paragraph (optional)", on: { input: touched } });
+    const remove = el("input", { type: "text", value: i.words_delete || "", on: { input: touched } });
+    const add = el("input", { type: "text", value: i.words_insert || "", on: { input: touched } });
+    const times = el("input", { type: "number", min: "1", max: "100", value: String(i.occurrences || 1), on: { input: touched } });
+    const labelFrom = el("input", { type: "text", value: i.label_from || "", placeholder: "5.", on: { input: touched } });
+    const labelTo = el("input", { type: "text", value: i.label_to || "", placeholder: "6.", on: { input: touched } });
+    const amending = i.amending || {};
+    const anchor = provisionSelect(data.provisions, amending.locator);
+    anchor.addEventListener("change", touched);
+    const citation = el("input", { type: "text", value: amending.citation || "", placeholder: "Example (Amendment) Act, 2024, s. 1", on: { input: touched } });
+    const comment = el("textarea", { rows: 1, placeholder: "Note for the record (optional)" });
+    const newText = el("div", { class: "editor-grid wide" }, field("New text", text), field("Margin note", note));
+    const words = el("div", { class: "editor-grid" }, field("Words to delete", remove), field("Words to insert (empty: delete only)", add), field("Times they occur", times));
+    const numbers = el("div", { class: "editor-grid" }, field("Number from", labelFrom), field("Number to", labelTo));
+    const where = field("Insert", position);
+    const show = () => {
+      const op = operation.value;
+      newText.hidden = !["substitute", "insert"].includes(op); where.hidden = op !== "insert";
+      words.hidden = op !== "amend_words"; numbers.hidden = op !== "renumber";
+    };
+    const read = () => {
+      const op = operation.value;
+      let built = [];
+      if (["substitute", "insert"].includes(op)) {
+        built = text.value === initial && note.value === firstNote ? units
+          : text.value.split("\n").map((line) => line.trim()).filter(Boolean).map((line) => ({ kind: "paragraph", text: line }));
+        if (built !== units && note.value.trim() && built[0]) built[0].notes = [note.value.trim()];
+      }
+      return {
+        operation: op, target: locator.value.trim(), effective_date: optional(effective.value), units: built,
+        position: op === "insert" ? position.value : null,
+        words_delete: op === "amend_words" ? optional(remove.value) : null, words_insert: op === "amend_words" ? add.value : "",
+        occurrences: op === "amend_words" ? Number(times.value || 1) : 1,
+        label_from: op === "renumber" ? optional(labelFrom.value.trim()) : null, label_to: op === "renumber" ? optional(labelTo.value.trim()) : null,
+        amending: { locator: anchor.value, citation: citation.value.trim() },
+      };
+    };
+    const send = async (status) => {
+      if (status === "rejected" && !confirm("Reject this instruction? It stays in the record and is never exported.")) return;
+      const body = { expected_revision: item ? item.revision : 0, status, target_work: target.value.trim(), instruction: read(), comment: comment.value };
+      if (item) body.instruction_id = item.instruction_id;
+      const result = await api(`/api/documents/${id}/instructions`, { method: "POST", body });
+      if (!result.ok) return toast(message(result));
+      app.dirty = false;
+      toast(status === "second_reviewed" ? "Second review recorded: it now exports" : status === "reviewed" ? "Reviewed: another editor confirms it next" : status === "rejected" ? "Rejected" : "Saved");
+      instructionsView(actId);
+    };
+    show();
+    // The second review confirms the instruction exactly as the first editor saved it (EDT-04).
+    const second = item && item.status === "reviewed" && isApprover;
+    const mine = item && item.author === app.me.email;
+    const [tone, label] = item ? INSTRUCTION_STATUS[item.status] : ["medium", "new"];
+    const held = item && data.targets[item.target_work];
+    return el("div", { class: `card editor-card status-${item ? item.status : "new"}` },
+      el("div", { class: "editor-head" }, pill(tone, label),
+        el("span", { class: "muted", text: item ? `revision ${item.revision} by ${operatorName(item.author)}, ${ago(item.at)}${item.comment ? ` — ${item.comment}` : ""}` : "not saved yet" }),
+        held ? el("a", { href: `#/doc/${encodeURIComponent(held)}`, text: "Open the amended law" }) : null),
+      el("div", { class: "editor-grid" },
+        field("Amended law", target, "its record id"),
+        field("Operation", operation),
+        field("Target provision", locator, "its locator in the amended law, as it stands when this applies"),
+        field("In force from", effective)),
+      where, newText, words, numbers,
+      el("div", { class: "editor-grid" },
+        el("div", { class: "editor-field" }, el("span", { class: "editor-label", text: "Amending provision (in this law)" }), anchor,
+          el("button", { class: "small", text: "Show its page", on: { click: () => { if (pageOf[anchor.value]) original.show(pageOf[anchor.value]); } } })),
+        field("Its citation", citation)),
+      comment,
+      el("p", { class: "editor-actions" },
+        isReviewer ? el("button", { text: item ? "Save as proposed" : "Save the proposal", on: { click: () => send("proposed") } }) : null,
+        isReviewer ? el("button", { class: second ? "" : "primary", text: "Save as reviewed", title: "Your review; a second editor confirms it", on: { click: () => send("reviewed") } }) : null,
+        second ? el("button", { class: "primary", text: "Confirm: second review", disabled: mine, title: mine ? "You reviewed it: another editor gives the second review" : "Confirms it exactly as reviewed", on: { click: () => send("second_reviewed") } }) : null,
+        isApprover && item && item.status !== "rejected" ? el("button", { class: "danger", text: "Reject", on: { click: () => send("rejected") } }) : null),
+      item ? historyList(item) : null);
+  };
+  cards.replaceChildren(...data.instructions.map(card));
+  const exports = Object.keys(data.targets).map((work) => el("li", {},
+    el("a", { href: `/api/instructions/export?${new URLSearchParams({ target: work })}`, text: `Instructions amending ${work} (JSON)` })));
+  main(el("div", { class: "details-layout" },
+    el("div", {},
+      el("div", { class: "card" },
+        el("h2", { text: "Amendment instructions" }),
+        el("p", { class: "muted", text: "For an amending law: what each of its provisions does to the law it amends, read from its text. An editor reviews each instruction; a second editor confirms it unchanged. Only then is it exported to build an unofficial consolidation of the amended law (with every law that amends it)." }),
+        isReviewer ? el("p", {}, el("button", { class: "primary", text: "+ Add an instruction", on: { click: () => cards.prepend(card(null)) } })) : null,
+        exports.length ? el("ul", {}, exports) : null),
+      cards,
+      data.instructions.length ? null : el("p", { class: "muted", text: "No instructions recorded from this law yet." })),
+    original.panel));
 }
 
 function unique(values) { return [...new Set(values)]; }
@@ -1709,6 +1990,8 @@ async function route() {
     if (parts[0] === "doc" && parts[2] === "read") return await readView(parts[1]);
     if (parts[0] === "doc" && parts[2] === "details") return await detailsView(parts[1]);
     if (parts[0] === "doc" && parts[2] === "languages") return await languagesView(parts[1]);
+    if (parts[0] === "doc" && parts[2] === "events") return await eventsView(parts[1]);
+    if (parts[0] === "doc" && parts[2] === "instructions") return await instructionsView(parts[1]);
     if (parts[0] === "doc" && parts[1]) return await actView(parts[1]);
     if (parts[0] === "audit" && parts[1]) return await auditView(parts[1]);
     if (parts[0] === "access" && app.me.access) return await accessView(parts.slice(1));
