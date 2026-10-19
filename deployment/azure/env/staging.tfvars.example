@@ -24,7 +24,10 @@ accounts_enabled  = false
 auth0_domain      = ""
 console_client_id = ""
 
-# Until Azure grants GPU quota for the NCASv3_T4 family: no GPU machine, no reranker.
+# A standby until the 1 December decision (MAC-12a): no Vespa machine and no GPU; the service searches
+# in PostgreSQL. Both on before staging takes the public domains, the GPU once Azure grants quota (the
+# A10 slice, Standard_NV6ads_A10_v5, is offered in Spain Central only).
+engine_enabled    = false
 inference_enabled = false
 
 # Empty until a generation passes its gates (RSV-12): the service runs on the lexical arms.

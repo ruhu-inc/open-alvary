@@ -1,9 +1,11 @@
 # Vespa, one node to start (the owner's choice, RSV-04): its private address only, its index on a
 # data disk, the application deployed and the units fed by the retrieval job (retrieval.projector),
 # rebuilt from PostgreSQL whenever it is replaced. A second node and a content cluster per large
-# jurisdiction come when the corpus needs them (retrieval/engine.py, CLUSTERS).
+# jurisdiction come when the corpus needs them (retrieval/engine.py, CLUSTERS). Off (engine_enabled)
+# while the environment stands by: the service then searches in PostgreSQL, as it does with no engine.
 
 resource "azurerm_network_interface" "engine" {
+  count               = var.engine_enabled ? 1 : 0
   name                = "${local.name_prefix}-engine-nic"
   location            = azurerm_resource_group.main.location
   resource_group_name = azurerm_resource_group.main.name
@@ -18,13 +20,14 @@ resource "azurerm_network_interface" "engine" {
 }
 
 resource "azurerm_linux_virtual_machine" "engine" {
+  count                           = var.engine_enabled ? 1 : 0
   name                            = "${local.name_prefix}-engine"
   location                        = azurerm_resource_group.main.location
   resource_group_name             = azurerm_resource_group.main.name
   size                            = var.engine_vm_size
   admin_username                  = "openalvary"
   disable_password_authentication = true
-  network_interface_ids           = [azurerm_network_interface.engine.id]
+  network_interface_ids           = [azurerm_network_interface.engine[0].id]
   custom_data = base64encode(templatefile("${path.module}/engine-cloud-init.yaml.tftpl", {
     image = var.vespa_image
     ip    = local.engine_ip
@@ -55,6 +58,7 @@ resource "azurerm_linux_virtual_machine" "engine" {
 }
 
 resource "azurerm_managed_disk" "engine" {
+  count                = var.engine_enabled ? 1 : 0
   name                 = "${local.name_prefix}-engine-data"
   location             = azurerm_resource_group.main.location
   resource_group_name  = azurerm_resource_group.main.name
@@ -65,8 +69,9 @@ resource "azurerm_managed_disk" "engine" {
 }
 
 resource "azurerm_virtual_machine_data_disk_attachment" "engine" {
-  managed_disk_id    = azurerm_managed_disk.engine.id
-  virtual_machine_id = azurerm_linux_virtual_machine.engine.id
+  count              = var.engine_enabled ? 1 : 0
+  managed_disk_id    = azurerm_managed_disk.engine[0].id
+  virtual_machine_id = azurerm_linux_virtual_machine.engine[0].id
   lun                = 0
   caching            = "None"
 }

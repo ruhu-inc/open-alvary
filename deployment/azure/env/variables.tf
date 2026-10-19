@@ -120,6 +120,12 @@ variable "edge_requests_per_minute" {
 
 # --- retrieval: the engine and the models -----------------------------------------------------------
 
+variable "engine_enabled" {
+  description = "The Vespa machine. Off while the environment stands by (MAC-12a): the service then searches in PostgreSQL. On, the retrieval job deploys the application and feeds it from PostgreSQL within minutes."
+  type        = bool
+  default     = true
+}
+
 variable "engine_vm_size" {
   description = "Vespa, one node to start (the owner's choice): 4 vCPU and 16 GiB hold the current corpus."
   type        = string

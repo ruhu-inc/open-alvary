@@ -24,7 +24,7 @@ output "database_host" {
 }
 
 output "engine_address" {
-  value = local.engine_ip
+  value = var.engine_enabled ? local.engine_ip : null
 }
 
 output "inference_address" {

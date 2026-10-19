@@ -1,8 +1,22 @@
 # Open Alvary on Azure
 
-Open Alvary moves from Google Cloud to Azure, decided by the owner on 2026-10-19. The Azure credit
-runs to mid-2028; Google Cloud's ends on 18 December 2026. This directory is the whole environment as
-code. Nothing here is applied without the owner's go-ahead, step by step.
+The whole Azure environment as code, kept with its Google Cloud mirror (`deployment/gcp-terraform/`)
+so that Open Alvary can run on whichever cloud has credit (D33). The Azure credit runs to mid-2028;
+Google Cloud's ends on 18 December 2026. Nothing here is applied without the owner's go-ahead, step by
+step.
+
+**Its role now (owner, 2026-10-19; MAC-12a).** There is no production environment until Open Alvary
+accepts paying users: staging serves the public. Google Cloud staging goes first and takes over from
+today's production. Azure staging is built as a standby, with the Vespa machine and the GPU off
+(`engine_enabled = false`, `inference_enabled = false`; about $166 a month, by the table below).
+On 1 December 2026 the owner decides:
+- new Google Cloud credit means Open Alvary stays there;
+- otherwise Azure staging takes the data and DNS before 18 December. Both flags go on first, and
+  the domains in `staging.tfvars` become `open.alvary.ai` and `api.open.alvary.ai`.
+
+The phases below were written for a move from today's production. They hold for a move from Google
+Cloud staging too: its database, buckets and secrets are where `data.sh` and `secrets.sh` read them,
+unless its Terraform moved them (check `GCP_PROJECT` and the instance names then).
 
 ## What runs where
 
@@ -102,6 +116,7 @@ Unchanged: Auth0 (sign-in), Resend (email), DNS (records change at switchover), 
 | Container Apps: one warm replica (1 vCPU, 2 GiB), jobs every minute | 3 | ~$30 | ~$45 |
 | Workbench: PostgreSQL B1ms ($0.0199/h) and storage; app scales to zero | 4 | ~$19 | ~$19 |
 | GPU VM NC4as T4 v3 ($0.558/h) and 128 GB OS disk | when quota | ~$429 | ~$429 |
+| **Standby** (Vespa and the GPU off: foundation without the VM, apps, workbench) | | **~$166** | — |
 | **Total without the GPU** | | **~$342** | **~$370** |
 | **Total with the GPU** | | **~$771** | **~$799** |
 
