@@ -138,6 +138,11 @@ Each phase ends with a check, and nothing serves the public until phase 6.
    - then set `public_image` and apply.
    - Check: the Front Door endpoint serves `/healthz` and the website, and the full test and smoke
      suites pass against it.
+   - Check: the service sees each visitor's own address (MAC-12: second from the right in
+     `X-Forwarded-For`, which holds when Front Door appends the client's address and the ingress
+     appends Front Door's). Compare what the service records with `X-Azure-ClientIP` before the
+     website's throttle and admission depend on it.
+   - Check: a request to the Container App's own address is refused (403 `wrong_address`).
 4. **Workbench.** The storage adapter (`az://`) and Entra ID sign-in. Set `workbench_image`,
    `workbench_domain` and `workbench_entra_client_id`, then apply. Check: an operator signs in and
    reviews a page.
