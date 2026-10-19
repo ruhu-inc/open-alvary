@@ -377,6 +377,10 @@ table.operators tr.inactive td { opacity: .6; }
 .pages a.settled { color: var(--muted); background: var(--bg); }
 .card.routed-note { border-left: 4px solid var(--accent); background: var(--accent-soft); }
 
+/* The work queue (CPR-06) */
+table.queue td { vertical-align: top; }
+table.queue td:first-child { white-space: nowrap; }
+
 /* Legal events and amendment instructions (CPR-02, CPR-03) */
 .editor-card { border-left: 4px solid var(--line); }
 .editor-card.status-reviewed, .editor-card.status-second_reviewed { border-left-color: var(--ok); }

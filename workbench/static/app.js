@@ -103,6 +103,7 @@ async function loadMe() {
   const who = document.getElementById("who");
   who.replaceChildren(
     el("a", { class: "nav-link", href: "#/", text: "Documents" }),
+    el("a", { class: "nav-link", href: "#/queue", text: "Work queue" }),
     result.data.access ? el("a", { class: "nav-link", href: "#/access", text: "Access" }) : "",
     result.data.operators ? el("a", { class: "nav-link", href: "#/operators", text: "Operators" }) : "",
     el("span", { class: "who-name", text: result.data.name, title: `${result.data.email} · ${result.data.roles.join(", ")}` }),
@@ -215,6 +216,17 @@ function ago(iso) {
   for (const [size, name] of steps) if (seconds >= size) unit = [name, size];
   const n = Math.floor(seconds / unit[1]);
   return `${n} ${unit[0]}${n === 1 ? "" : "s"} ago`;
+}
+
+// Page numbers as runs: "1, 3–6".
+function pageRuns(pages) {
+  const sorted = [...pages].sort((a, b) => a - b);
+  const runs = [];
+  for (const page of sorted) {
+    const run = runs[runs.length - 1];
+    if (run && page === run[1] + 1) run[1] = page; else runs.push([page, page]);
+  }
+  return runs.map(([a, b]) => (a === b ? String(a) : `${a}–${b}`)).join(", ");
 }
 
 function remember(key, value) {
@@ -331,15 +343,7 @@ async function dashboard() {
       groups.push({ ...e, pages: new Set(e.page ? [e.page] : []) });
     }
   }
-  const pageList = (pages) => {
-    const sorted = [...pages].sort((a, b) => a - b);
-    const runs = [];
-    for (const page of sorted) {
-      const run = runs[runs.length - 1];
-      if (run && page === run[1] + 1) run[1] = page; else runs.push([page, page]);
-    }
-    return runs.map(([a, b]) => (a === b ? String(a) : `${a}–${b}`)).join(", ");
-  };
+  const pageList = pageRuns;
   const activity = el("div", { class: "card activity" }, el("h3", { text: "Recent activity" }),
     groups.length ? el("ul", { class: "plain" }, groups.slice(0, 10).map((g) => el("li", {},
       el("div", {},
@@ -1019,6 +1023,60 @@ function rowsEditor(columns, rows, onChange) {
   };
   draw();
   return box;
+}
+
+// --- the work queue (CPR-06) ------------------------------------------------------------------------
+
+const TASK_PRIORITY = { high: ["high", "high flags"], full: ["medium", "review"], flags: ["warn", "flags"], proposal: ["role", "proposal"] };
+const TASK_KINDS = [["", "All work"], ["review", "Pages to review"], ["flags", "Flags to resolve"], ["events", "Legal events"], ["instructions", "Amendment instructions"]];
+
+// One task in words, with a link to where it is done. Pages to review are listed alike whatever the
+// reason (an audit page is one of them: CPR-01).
+function taskLine(t) {
+  const id = encodeURIComponent(t.id);
+  const s = t.count === 1 ? "" : "s";
+  if (!t.started && !t.pages) return el("a", { href: `#/doc/${id}`, text: `Not started: ${t.count} page${s}` });
+  if (t.kind === "review" || t.kind === "flags") {
+    const what = t.kind === "review" ? `${t.count} page${s} to review against the image` : `Flags to resolve on ${t.count} page${s}`;
+    return el("span", {}, el("a", { href: `#/doc/${id}/page/${t.pages[0]}`, text: what }), el("span", { class: "muted", text: ` · pages ${pageRuns(t.pages.slice(0, 60))}${t.pages.length > 60 ? "…" : ""}` }));
+  }
+  if (t.kind === "events") return el("a", { href: `#/doc/${id}/events`, text: `${t.count} legal event${s} to review` });
+  return el("a", { href: `#/doc/${id}/instructions`, text: t.step === "second_review" ? `${t.count} instruction${s} awaiting a second editor` : `${t.count} instruction${s} to review` });
+}
+
+async function queueView() {
+  setCrumbs("Work queue");
+  const kind = el("select", {}, TASK_KINDS.map(([value, label]) => el("option", { value, text: label })));
+  kind.value = remember("queue-kind") || "";
+  const rows = el("tbody");
+  const pager = el("div", { class: "pager" });
+  const summary = el("p", { class: "muted", text: "Work in documents already started first, the pages with high flags at the top, then pages to review, flags to resolve, and proposals to review; within each, what has waited longest." });
+  const PAGE = 100;
+  let offset = 0;
+  const load = async () => {
+    remember("queue-kind", kind.value);
+    const { data } = await api(`/api/queue?${new URLSearchParams({ kind: kind.value, offset: String(offset), limit: String(PAGE) })}`);
+    const c = data.counts;
+    for (const option of kind.options) option.textContent = `${TASK_KINDS.find(([v]) => v === option.value)[1]}${option.value ? ` (${c[option.value]})` : ""}`;
+    rows.replaceChildren(...(data.tasks.length ? data.tasks.map((t) => el("tr", {},
+      el("td", {}, pill(...TASK_PRIORITY[t.priority])),
+      el("td", {}, taskLine(t)),
+      el("td", {}, el("a", { href: `#/doc/${encodeURIComponent(t.id)}`, text: t.title })),
+      el("td", { class: "muted", text: t.since ? ago(t.since) : "not started", title: t.since ? new Date(t.since).toLocaleString() : "" })))
+      : [el("tr", {}, el("td", { colspan: 4, class: "muted", text: "Nothing waiting." }))]));
+    const last = Math.min(data.offset + data.tasks.length, data.total);
+    pager.replaceChildren(
+      el("span", { class: "muted", text: data.total ? `${data.offset + 1}–${last} of ${data.total}` : "" }),
+      el("button", { class: "small", text: "← Previous", disabled: data.offset === 0, on: { click: () => { offset = Math.max(0, offset - PAGE); load(); } } }),
+      el("button", { class: "small", text: "Next →", disabled: last >= data.total, on: { click: () => { offset += PAGE; load(); } } }));
+  };
+  kind.addEventListener("input", () => { offset = 0; load(); });
+  main(el("div", { class: "card" },
+    el("div", { class: "doc-tools" }, el("h3", { text: "Work queue" }), kind),
+    summary,
+    el("table", { class: "list queue" }, el("thead", {}, el("tr", {}, ["Priority", "Task", "Document", "Waiting since"].map((h) => el("th", { text: h })))), rows),
+    pager));
+  await load();
 }
 
 // --- legal events and amendment instructions (CPR-02, CPR-03) ----------------------------------------
@@ -1982,7 +2040,7 @@ async function route() {
   if (!location.hash.includes("/page/") || !document.querySelector(".review")) main(el("div", { class: "loading" }, el("span", { class: "spinner" }), "Loading…"));
   const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
   for (const link of document.querySelectorAll("#who .nav-link")) {
-    const section = ["access", "operators"].includes(parts[0]) ? `#/${parts[0]}` : "#/";
+    const section = ["access", "operators", "queue"].includes(parts[0]) ? `#/${parts[0]}` : "#/";
     link.classList.toggle("on", link.hash === section);
   }
   try {
@@ -1992,6 +2050,7 @@ async function route() {
     if (parts[0] === "doc" && parts[2] === "languages") return await languagesView(parts[1]);
     if (parts[0] === "doc" && parts[2] === "events") return await eventsView(parts[1]);
     if (parts[0] === "doc" && parts[2] === "instructions") return await instructionsView(parts[1]);
+    if (parts[0] === "queue") return await queueView();
     if (parts[0] === "doc" && parts[1]) return await actView(parts[1]);
     if (parts[0] === "audit" && parts[1]) return await auditView(parts[1]);
     if (parts[0] === "access" && app.me.access) return await accessView(parts.slice(1));
