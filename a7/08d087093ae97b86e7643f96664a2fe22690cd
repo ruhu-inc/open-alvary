@@ -1,0 +1,91 @@
+deployment/gcp-terraform/env/registry.tf
+  s_d665c62e07d76f::t_bc19528aa62ac6 1-50
+deployment/gcp-terraform/env/storage.tf
+  s_d665c62e07d76f::t_3b95cdff7d81bc 11-15,18,40,49-53,69,75,81,86-87,89-90
+  s_d665c62e07d76f::t_b0a383dbabcce5 1-10,16-17,19-39,41-48,54-68,70-74,76-80,82-85,88,91-102
+deployment/gcp-terraform/env/staging.tfvars.example
+  s_d665c62e07d76f::t_9377c81d018b95 1,5-9,11,14,19-28,35,40,47-53
+  s_d665c62e07d76f::t_4f12b2910a5db5 2-4,10,12-13,15-18,29-34,36-39,41-46,54-66
+deployment/gcp-terraform/env/secrets.tf
+  s_d665c62e07d76f::t_b9bee268b35945 1-92
+deployment/gcp-terraform/env/.terraform.lock.hcl
+  s_d665c62e07d76f::t_5c35e1182854d3 1-63
+deployment/gcp-terraform/env/variables.tf
+  s_d665c62e07d76f::t_c554f15a97f8c5 123
+  s_d665c62e07d76f::t_37f51cae1bf773 1-104,106-122,124-165,167,169-187,189-236,263-317,319-331
+  s_d665c62e07d76f::t_a66022f44ee653 105,166,168,188,237-262,318
+deployment/gcp-terraform/env/inference.tf
+  s_d665c62e07d76f::t_8024dac0b4f165 1-78
+deployment/gcp-terraform/env/locals.tf
+  s_d665c62e07d76f::t_8e904f006666d8 1-65
+deployment/gcp-terraform/env/network.tf
+  s_d665c62e07d76f::t_53ca7ec56de4a7 1-139
+deployment/gcp-terraform/env/engine-cloud-init.yaml.tftpl
+  s_d665c62e07d76f::t_c6140a05410cb5 1-39
+deployment/gcp-terraform/.gitignore
+  s_d665c62e07d76f::t_3d93f9fb186494 1-9
+deployment/gcp-terraform/env/main.tf
+  s_d665c62e07d76f::t_d10af991814744 1-40
+deployment/gcp-terraform/env/transfer.tf
+  s_d665c62e07d76f::t_f4d0749b1e2d14 1-125
+deployment/gcp-terraform/bootstrap/.terraform.lock.hcl
+  s_d665c62e07d76f::t_0ba32b3fd30b99 1-22
+deployment/gcp-terraform/env/versions.tf
+  s_d665c62e07d76f::t_1d333209ace0b5 1-23
+deployment/gcp-terraform/env/engine.tf
+  s_d665c62e07d76f::t_6e62463cfda9de 1-80
+deployment/gcp-terraform/env/jobs.tf
+  s_d665c62e07d76f::t_b625159751082f 1-6,9-149,151-166
+  s_d665c62e07d76f::t_c554f15a97f8c5 7-8,150
+deployment/gcp-terraform/env/prod.tfvars.example
+  s_d665c62e07d76f::t_ebce527c71824f 1,5-14,16-26,29-30,32,36,41-48
+  s_d665c62e07d76f::t_c857c9f562510c 2-4,15,27-28,31,33-35,37-40,49
+deployment/gcp-terraform/env/identity.tf
+  s_d665c62e07d76f::t_f8eac3c2e83354 67
+  s_d665c62e07d76f::t_504528fead459f 1-62,66,69-110
+  s_d665c62e07d76f::t_610a780e2a9240 63-65,68
+deployment/gcp-terraform/bootstrap/main.tf
+  s_d665c62e07d76f::t_f0f07e0ef2c93a 1-77
+deployment/gcp-terraform/env/cloud_run.tf
+  s_d665c62e07d76f::t_5ee5f76139cf3d 1-165
+deployment/gcp-terraform/env/edge.tf
+  s_d665c62e07d76f::t_50c2027235c0aa 1-22,25-28,30-178
+  s_d665c62e07d76f::t_610a780e2a9240 23-24,29
+deployment/gcp-terraform/env/ingestion.tf
+  s_d665c62e07d76f::t_610a780e2a9240 6-10,13-21,51
+  s_d665c62e07d76f::t_8bbfb28026f92b 1-5,11-12,22-50,52-69
+deployment/gcp-terraform/env/inference-cloud-init.yaml.tftpl
+  s_d665c62e07d76f::t_378ac030d976c3 1-42
+deployment/gcp-terraform/env/monitoring.tf
+  s_d665c62e07d76f::t_04ac62ad36ed75 1-181
+deployment/gcp-terraform/backend.hcl.example
+  s_d665c62e07d76f::t_ed6a05236b6c14 1-6
+deployment/gcp-terraform/env/outputs.tf
+  s_d665c62e07d76f::t_31b5a62efa5ea8 1-16,19-78
+  s_d665c62e07d76f::t_610a780e2a9240 17-18
+deployment/gcp-terraform/env/postgres.tf
+  s_d665c62e07d76f::t_c7ed263df26897 65-68
+  s_d665c62e07d76f::t_610a780e2a9240 21,30
+  s_d665c62e07d76f::t_05837a06ab6005 1-20,22-29,31-64,69
+deployment/gcp-terraform/env/workbench.tf
+  s_d665c62e07d76f::t_cf2ed0656a66e4 1-3,9-20,22-49,51-58,60-200,202-239
+  s_d665c62e07d76f::t_610a780e2a9240 4-8,21,50,59,201
+deployment/gcp-terraform/env/providers.tf
+  s_d665c62e07d76f::t_bf637aba3584bb 1-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a708d087093ae97b86e7643f96664a2fe22690cd",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}

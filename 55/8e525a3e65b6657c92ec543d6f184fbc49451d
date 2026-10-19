@@ -1,0 +1,27 @@
+deployment/azure/env/jobs.tf
+  s_d665c62e07d76f::t_fcf07d328e0b03 15,21,29,35,80,104
+  s_d665c62e07d76f::t_d4a76669ee08ac 84
+  s_d665c62e07d76f::t_84f199fc83ee1c 123
+deployment/azure/env/postgres.tf
+  s_d665c62e07d76f::t_fcf07d328e0b03 7-8
+deployment/azure/secrets.sh
+  s_d665c62e07d76f::t_fcf07d328e0b03 59
+deployment/azure/env/keyvault.tf
+  s_d665c62e07d76f::t_fcf07d328e0b03 45-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "558e525a3e65b6657c92ec543d6f184fbc49451d",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
