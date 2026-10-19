@@ -1,0 +1,22 @@
+tests/test_workbench.py
+  s_d665c62e07d76f::t_2afd8c37550ccf 212-213
+  s_d665c62e07d76f::t_e5946ed7639f01 214-215
+workbench/content.py
+  s_d665c62e07d76f::t_6bcaac2426ebc8 241-244
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "656f68120a9c5d6972907cd7c4b75cf088a982ea",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
