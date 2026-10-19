@@ -47,6 +47,10 @@ variable "billing_account" {
   description = "The billing account the project is linked to (XXXXXX-XXXXXX-XXXXXX), for the budget."
   type        = string
   default     = ""
+  validation {
+    condition     = !var.budget_enabled || can(regex("^[0-9A-F]{6}-[0-9A-F]{6}-[0-9A-F]{6}$", var.billing_account))
+    error_message = "budget_enabled needs billing_account, as XXXXXX-XXXXXX-XXXXXX."
+  }
 }
 
 variable "monthly_budget" {
