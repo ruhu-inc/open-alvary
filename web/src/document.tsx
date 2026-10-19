@@ -107,11 +107,24 @@ function Formatted({ text, marks = [] }: { text: string; marks?: Mark[] }) {
   );
 }
 
+// A section and its first subsection read as one number ("29. (1)"): the section is the number,
+// and "(1)" begins its words, as the published structure reads it.
+const SECTION_AND_SUBSECTION = /^(\d{1,3}[A-Z]?\.)\s*(\(\d{1,3}[A-Z]?\))$/;
+
 // Splits a provision's number from its words, moving formatting with the words.
 function split(block: Extract<DocumentBlock, { text: string }>) {
   const text = block.text ?? "";
-  if (block.marker)
-    return { lead: block.marker.trim(), text, marks: block.marks };
+  if (block.marker) {
+    const both = SECTION_AND_SUBSECTION.exec(block.marker.trim());
+    if (!both) return { lead: block.marker.trim(), text, marks: block.marks };
+    const opening = both[2] + " ";
+    const marks = block.marks?.map((m) => ({
+      ...m,
+      start: m.start + opening.length,
+      end: m.end + opening.length,
+    }));
+    return { lead: both[1], text: opening + text, marks };
+  }
   const match = SECTION_LEAD.exec(text);
   if (!match) return { lead: null, text, marks: block.marks };
   const cut = match[0].length;
@@ -173,6 +186,16 @@ function layout(pages: DocumentPageContent[]) {
     items: page.blocks.map((block, index) => {
       const key = `${page.page}-${index}`;
       if (block.kind === "table")
+        return {
+          key,
+          block,
+          id: null,
+          lead: null,
+          section: null,
+          titled: false,
+        };
+      if (block.kind === "heading" && !(block.text ?? "").trim())
+        // An emptied heading has nothing to show or list, and never displaces the Part before it.
         return {
           key,
           block,
@@ -328,6 +351,8 @@ export function DocumentText({
                 </div>
               );
             const align = block.align ? " doc-align-" + block.align : "";
+            if (block.kind === "heading" && !(block.text ?? "").trim())
+              return null;
             if (block.kind === "heading")
               return (
                 <h2
