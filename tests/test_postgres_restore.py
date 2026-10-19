@@ -1,6 +1,6 @@
-"""The migration's restore (deployment/azure/restore.py): a dump restored into a new, empty database
-gets back its roles (without login, but the access role, with its password), their memberships and
-its grants, and every table's rows; a database that already has tables is refused."""
+"""The migration's restore (deployment/azure/restore.py, for both clouds): a dump restored into a new,
+empty database gets back its roles (without login, but the access role, with its password), their
+memberships and its grants, and every table's rows; a database that already has tables is refused."""
 
 import importlib.util
 import os
@@ -85,3 +85,31 @@ def test_a_dump_comes_back_with_its_roles_grants_and_rows(tmp_path, monkeypatch)
             for role in (access, capability):
                 conn.execute(text(f'DROP ROLE IF EXISTS "{role}"'))
         os.environ.pop("SOURCE_URL", None)
+
+
+def test_dump_writes_what_a_restore_reads(tmp_path, monkeypatch):
+    """The job's dump mode (a move away from a cloud whose servers no one outside can reach) writes the
+    three files the restore reads, and they restore with every row."""
+    restore = load()
+    url = validated_test_url()
+    tag = uuid4().hex[:10]
+    source, target = f"src_{tag}_test", f"dst_{tag}_test"
+    admin = create_engine(url, poolclass=NullPool, isolation_level="AUTOCOMMIT")
+    libpq = lambda name: restore.libpq(url.set(database=name).render_as_string(hide_password=False))  # noqa: E731
+    try:
+        with admin.connect() as conn:
+            conn.execute(text(f'CREATE DATABASE "{source}"'))
+            conn.execute(text(f'CREATE DATABASE "{target}"'))
+        with create_engine(url.set(database=source), poolclass=NullPool).begin() as conn:
+            conn.execute(text("CREATE TABLE ledger (id int PRIMARY KEY, note text)"))
+            conn.execute(text("INSERT INTO ledger SELECT g, 'row ' || g FROM generate_series(1, 5) g"))
+        assert restore.dump(libpq(source), tmp_path) == 0
+        assert sorted(path.name for path in tmp_path.iterdir()) == sorted(restore.FILES)
+        monkeypatch.setenv("DATABASE_URL", libpq(target))
+        assert restore.main(["local", str(tmp_path)]) == 0
+        with create_engine(url.set(database=target), poolclass=NullPool).connect() as conn:
+            assert conn.scalar(text("SELECT count(*) FROM ledger")) == 5
+    finally:
+        with admin.connect() as conn:
+            for name in (source, target):
+                conn.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
