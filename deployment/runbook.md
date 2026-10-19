@@ -426,7 +426,7 @@ python -m ingestion.rwanda scan-progress         # files and pages each reader h
   `manifest.json` assembled from the indexes. A file is prepared again when the pipeline version
   (`rw_gazette.PIPELINE`) changes or a scan's reading arrives after it was prepared; a file that
   fails is logged (`failed …`) and the task goes on. Mirror the ledger and catalogues first:
-  `python -c "from ingestion import rwanda, corpus_store; rwanda.mirror_state(corpus_store.CorpusStore())"`.
+  `python -c "from ingestion import rwanda, corpus_store; rwanda.mirror_state(corpus_store.open_store())"`.
 - **Memory.** Tasks have 4 GiB. OCR asks only for text, words and page sizes: unasked, the service
   returns an image of every page, which ran 2 GiB tasks out of memory on large issues.
 

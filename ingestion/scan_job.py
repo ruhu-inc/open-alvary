@@ -33,7 +33,7 @@ def main() -> int:
     task = int(os.environ.get("CLOUD_RUN_TASK_INDEX", "0"))
     tasks = int(os.environ.get("CLOUD_RUN_TASK_COUNT", "1"))
     files_at_once = int(os.environ.get("SCAN_FILES_AT_ONCE", "2"))
-    store = corpus_store.CorpusStore()
+    store = corpus_store.open_store()
     worklist = json.loads(store.get(rwanda.WORKLIST))
     mine = share(worklist["files"], task, tasks)
     budget = sum(f["scanned_pages"] for f in mine)

@@ -35,18 +35,22 @@ COLLECTION_ID = re.compile(r"[a-z]{2}-[a-z0-9-]{3,120}")
 def extra_collections() -> list[tuple[dict, Path]]:
     """Further collections to review beside the first, named in ALVARY_REVIEW_COLLECTIONS (separated by
     the path separator): a folder holding its manifest.json and its documents' readings and PDFs, or
-    a place in the corpus bucket ("gs://open-alvary-corpus/collections/rw/"), whose documents are
-    fetched into a private cache the first time they are opened. A document id must be a plain
-    slug, so no file outside its folder is reached."""
+    a place in the corpus store, a Cloud Storage bucket ("gs://open-alvary-corpus/collections/rw/")
+    or an Azure Blob container ("az://<storage-account>/<container>/collections/rw/"), whose
+    documents are fetched into a private cache the first time they are opened. A document id must
+    be a plain slug, so no file outside its folder is reached."""
+    from ingestion.corpus_store import split
+
     out = []
     listed = os.environ.get("ALVARY_REVIEW_COLLECTIONS", "")
-    # Separated like PATH (":"), except the colon of a "gs://" address.
+    # Separated like PATH (":"), except the colon of a "gs://" or "az://" address.
     for place in filter(None, re.split(r":(?!//)" if os.pathsep == ":" else re.escape(os.pathsep), listed)):
-        if place.startswith("gs://"):
-            bucket, _, prefix = place[len("gs://") :].partition("/")
+        if place.startswith(("gs://", "az://")):
+            # A bucket by its name; a container by its address, cached under az/<account>/<container>.
+            bucket, prefix = split(place)
             store = _store(bucket)
             manifest = json.loads(store.get(f"{prefix}manifest.json"))
-            staging = cache_root() / bucket / prefix
+            staging = cache_root() / bucket.replace("az://", "az/", 1) / prefix
             staging.mkdir(parents=True, exist_ok=True)
             manifest["_remote"] = {"bucket": bucket, "prefix": prefix}
         else:
@@ -90,10 +94,10 @@ _STORES: dict = {}
 
 
 def _store(bucket: str):
-    from ingestion.corpus_store import CorpusStore
+    from ingestion.corpus_store import open_store
 
     if bucket not in _STORES:
-        _STORES[bucket] = CorpusStore(bucket)
+        _STORES[bucket] = open_store(bucket)
     return _STORES[bucket]
 
 
