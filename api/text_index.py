@@ -54,7 +54,7 @@ HEADLINE = f"StartSel={START}, StopSel={STOP}, MaxWords=40, MinWords=18, ShortWo
 # paragraph.
 PROVISIONS = {"section", "article", "order"}
 SKIPPED = {"contents", "contents_entry"}  # a contents list repeats headings: layout, not law
-OUTLINE_KINDS = {"part", "chapter", "title", "division", "section", "article", "schedule"}
+OUTLINE_KINDS = {"part", "chapter", "title", "division", "section", "article", "schedule", "opinion"}
 OUTLINE_BYTES = 8 * 1024
 MIN_NAME = 4  # shorter names (and single letters) are never matched inside a query
 
@@ -175,8 +175,8 @@ def name_forms(values) -> list[str]:
 
 
 def document_unit(version: VersionViewRecord, nodes: list[NodeViewRecord]) -> DocumentUnit:
-    """A text's document unit: its quotable span (the preamble or long title; else the words the
-    document node holds before its first part) and the outline of its headings, truncated."""
+    """A text's document unit: its quotable span (the preamble or long title; a judgment's header; else
+    the words the document node holds before its first part) and the outline of its headings, truncated."""
     raw = version.canonical_text.encode()
     ordered = sorted(nodes, key=lambda n: (n.start_byte, -n.end_byte, n.order))
     in_contents = set()
@@ -184,9 +184,12 @@ def document_unit(version: VersionViewRecord, nodes: list[NodeViewRecord]) -> Do
         if node.kind in SKIPPED or node.parent_id in in_contents:
             in_contents.add(node.id)
     preamble = next((n for n in ordered if n.kind == "preamble"), None)
+    header = next((n for n in ordered if n.kind == "notice" and n.locator == "header"), None)  # a judgment's
     root = next((n for n in ordered if n.kind == "document"), None)
     if preamble is not None:
         start, end, node_id = preamble.start_byte, preamble.end_byte, preamble.id
+    elif header is not None:
+        start, end, node_id = header.start_byte, header.end_byte, header.id
     elif root is not None:
         first = next((n.start_byte for n in ordered if n.parent_id == root.id), root.end_byte)
         start, end, node_id = root.start_byte, first, root.id

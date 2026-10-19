@@ -55,7 +55,7 @@ def _hit(row, unit: str | None = None) -> Hit:
     node_kind = m.get("kind") or "document"
     if unit is None:
         unit = "provision" if node_kind in ("section", "article", "paragraph", "definition", "subsection",
-                                            "subparagraph", "schedule", "annex", "table") else "container_run"  # fmt: skip
+                                            "subparagraph", "schedule", "annex", "table", "order") else "container_run"  # fmt: skip
     return Hit(
         version_id=m["version_id"],
         start_byte=m["start_byte"],
@@ -112,6 +112,7 @@ class Retriever:
         self._nodes: dict[str, list] = {}
         self._qualifications: dict[str, tuple] = {}
         self.events = Events(self.conn)
+        self._registers: dict[str, object] = {}
 
     # --- reading public texts --------------------------------------------------------------------
 
@@ -274,6 +275,34 @@ class Retriever:
             return None
         return [_hit(row) for row, _distance in found]
 
+    def _courts(self, candidates: list[Candidate], filters) -> None:
+        """Each decision's court relation to the jurisdiction asked about (CPR-04): its own jurisdiction's
+        when the query names none or several. The court is the record's issuing authority."""
+        from api.courts import load, relation
+
+        for candidate in candidates:
+            if candidate.hit.document_type != "judgment":
+                continue
+            loaded = self._public(candidate.hit.version_id)
+            if loaded is None:
+                continue
+            source = loaded[1]
+            asked = (
+                filters.jurisdictions[0]
+                if filters.jurisdictions and len(filters.jurisdictions) == 1
+                else None
+            )
+            asked = asked or source.jurisdiction_id
+            if asked not in self._registers:
+                try:
+                    self._registers[asked] = load(asked)
+                except ValueError:
+                    self._registers[asked] = None
+            register = self._registers[asked]
+            candidate.court_relation = (
+                relation(register, source.authority_id, asked) if register else "unknown"
+            )
+
     def _rerank(self, query: str, candidates: list[Candidate], degraded: list[str]) -> None:
         """Score the first fused candidates with the reranker (RSV-05); on failure the fused order stands."""
         if self.reranker is None:
@@ -316,6 +345,7 @@ class Retriever:
         )
         arms, degraded, _ = self._arms(query, plan, filters)
         fused = fuse(arms)
+        self._courts(fused, filters)
         self._rerank(query, fused, degraded)
         candidates = apply_signals(fused, set(works))
         scoped = "citation" in plan.routes or len(works) == 1 or bool(filters.source_id or filters.version_id)
@@ -531,7 +561,9 @@ class Retriever:
                     authority=EvidenceAuthority(
                         document_type=source.document_type,
                         instrument_rank=INSTRUMENT_RANK.get(source.document_type),
-                        court_relation="unknown" if source.document_type == "judgment" else "not_applicable",
+                        court_relation=(candidate.court_relation or "unknown")
+                        if source.document_type == "judgment"
+                        else "not_applicable",
                     ),
                     ranking=self._explain(candidate, plan, len(evidence) + 1)
                     if "ranking" in request.include
