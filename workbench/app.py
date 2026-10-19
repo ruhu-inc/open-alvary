@@ -31,7 +31,7 @@ from schema.jurisdictions import registry as jurisdiction_registry
 from workbench import access as access_section
 from workbench import akn, auth, content, details, privileged, publication, record_view, serialize
 from workbench import operators as operators_section
-from workbench.review import Review
+from workbench.review import Review, blind, to_do
 from workbench.store import Conflict, Store, engine_from_environment
 
 STATIC = Path(__file__).with_name("static")
@@ -235,7 +235,7 @@ def create_app(
             {
                 **listed(document),
                 "pages": ready["pages"],
-                "checked": ready["pages"] - len(ready["unchecked_pages"]),
+                "checked": ready["pages"] - len({*ready["unchecked_pages"], *ready["unresolved_flag_pages"]}),
                 "attention": sum(1 for r in latest.values() if r["status"] == "attention"),
                 "open_high": len(ready["open_high_flags"]),
                 "stale": len(ready["stale_pages"]),
@@ -258,6 +258,12 @@ def create_app(
             "jurisdiction": document.get("jurisdiction"),
             "language": document.get("language"),
         }
+
+    def recorded(approval: dict) -> dict:
+        """An approval as the workbench shows it: without the routing plan it bound, whose audit sample
+        reviewers must not see (CPR-01: audit pages are reviewed blind)."""
+        shown = {k: v for k, v in approval.items() if k != "routing"}
+        return {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in shown.items()}
 
     def with_status(row: dict) -> dict:
         if row["approval"] == "approved":
@@ -418,6 +424,7 @@ def create_app(
         act = act_or_404(act_id)
         now = state(act, text=True)
         reading, latest = now["reading"], now["latest"]
+        todo = to_do(now["readiness"])  # audit pages are "review" pages, like full ones (CPR-01)
         pages = []
         for page in reading["pages"]:
             revision = latest.get(page["page"])
@@ -438,6 +445,7 @@ def create_app(
                     "status": revision["status"] if revision else None,
                     "author": revision["author"] if revision else None,
                     "stale": bool(revision and revision["reading_sha256"] != content.reading_sha256(page)),
+                    "todo": todo.get(page["page"]),
                 }
             )
         provenance = library.provenance(act_id)
@@ -452,15 +460,12 @@ def create_app(
                 "official_url": provenance.get("url") or act.get("url"),
                 "original_pdf": library.has_original(act_id),
             },
-            "readiness": now["readiness"],
+            "readiness": blind(now["readiness"]),
             "text_check": publication.summary(now["text"]),
             "content_sha256": now["content_sha256"],
             "details_sha256": now["details_sha256"],
             "approved": now["approved"],
-            "approvals": [
-                {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in a.items()}
-                for a in now["approvals"]
-            ],
+            "approvals": [recorded(a) for a in now["approvals"]],
             "materials": content.MATERIALS,
         }
 
@@ -621,9 +626,7 @@ def create_app(
             "content_sha256": now["content_sha256"],
             "details_sha256": now["details_sha256"],
             "approved": now["approved"],
-            "approval": {k: (v.isoformat() if hasattr(v, "isoformat") else v) for k, v in head.items()}
-            if head
-            else None,
+            "approval": recorded(head) if head else None,
             "details": {"details": record["details"], "absent": record["absent"], "status": record["status"]}
             if record
             else None,

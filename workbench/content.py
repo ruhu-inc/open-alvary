@@ -839,6 +839,9 @@ def readiness(reading: dict, latest: dict[int, dict], described: dict | None = N
         "stale_pages": stale,
         "missing_checks": missing,
         "details": described,
+        # Under a verification-routing decision (workbench.review): flagged pages whose flags are open.
+        "unresolved_flag_pages": [],
+        "routed": False,
         "ready": not unchecked and not open_high and not stale and not missing and described["confirmed"],
     }
 

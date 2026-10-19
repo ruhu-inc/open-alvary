@@ -5,6 +5,23 @@ the latest approval still covers both exactly."""
 from workbench import content, details, publication, record_view, routing
 
 
+def to_do(readiness: dict) -> dict[int, str]:
+    """What each page still needs, as a reviewer is shown it: ``review`` (the whole page against the
+    image) or ``flags`` (its flags resolved); a page needing nothing is left out. Audit pages are
+    reviewed blind (CPR-01): a sampled page is a ``review`` page exactly like a ``full`` one."""
+    out = dict.fromkeys(readiness["unresolved_flag_pages"], "flags")
+    for flag in readiness["open_high_flags"]:
+        out.setdefault(flag["page"], "flags")
+    out.update(dict.fromkeys([*readiness["unchecked_pages"], *readiness["stale_pages"]], "review"))
+    return out
+
+
+def blind(readiness: dict) -> dict:
+    """Readiness as anyone reviewing pages sees it: what is left to do, never which pages are the audit
+    sample or why each page was routed (the plan stays with the approval)."""
+    return {key: value for key, value in readiness.items() if key != "routing"}
+
+
 class Review:
     def __init__(self, store, library, profiles):
         self.store, self.library, self.profiles = store, library, profiles
@@ -90,19 +107,32 @@ class Review:
             readiness["text"] = {"errors": len(built.errors), "warnings": len(built.warnings)}
             readiness["ready"] = readiness["ready"] and not built.errors
         if policy is not None and built is not None:
-            # CPR-01 under the owner's decision: only the routed pages and the audit sample must be checked.
+            # CPR-01 under the owner's decision: the full pages and the audit sample must be checked, and
+            # the flagged pages' flags resolved. A page someone marked as needing attention is checked
+            # whole, whatever its route.
             issues: dict[int, int] = {}
             for issue in [*built.errors, *built.warnings]:
                 if issue.page is not None:
                     issues[issue.page] = issues.get(issue.page, 0) + 1
             plan = routing.requirement(document["id"], reading, latest, policy, issues)
-            unchecked = [
-                p for p in plan["required_pages"] if (latest.get(p) or {}).get("status") != "checked"
+            pages = {page["page"]: page for page in reading["pages"]}
+            attention = {p for p, r in latest.items() if r["status"] == "attention" and p in pages}
+            unchecked = sorted(
+                {p for p in plan["required_pages"] if (latest.get(p) or {}).get("status") != "checked"}
+                | attention
+            )
+            unresolved = [
+                p
+                for p in plan["flag_pages"]
+                if p not in attention and not routing.flags_resolved(pages[p], latest.get(p))
             ]
             readiness["routing"] = plan
+            readiness["routed"] = True
             readiness["unchecked_pages"] = unchecked
+            readiness["unresolved_flag_pages"] = unresolved
             readiness["ready"] = (
                 not unchecked
+                and not unresolved
                 and not readiness["open_high_flags"]
                 and not readiness["stale_pages"]
                 and not readiness["missing_checks"]
