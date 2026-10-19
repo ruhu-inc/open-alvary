@@ -14,12 +14,20 @@ published text of the same record replaces it) scores 0.8 of that. Ties go to th
 earlier unit. English texts are analysed in English and French texts in French (stemming and common
 words; tests/test_postgres_search.py); every other language word for word (simple) until it passes
 the language tests.
+
+Beside the provisions, each published text has one document unit (RSV-02, migration 0034) for questions
+about a whole law: its work's title (weight 1.0), its long title or preamble (0.4, the unit's quotable
+span) and the outline of its part, chapter and section headings (0.2), with its identifiers (0.1). Its
+names (the work's title, citation and aliases, folded to letters and digits) let a query that names the
+instrument be recognised (RSV-03). A document unit never stands for a provision.
 """
 
 import hashlib
 import json
+import math
 import re
-from dataclasses import dataclass, field
+import unicodedata
+from dataclasses import dataclass, field, replace
 from datetime import date
 
 from sqlalchemy import select, text
@@ -30,7 +38,7 @@ from api import pinpoint
 from api.store import tables
 from schema.public import NodeViewRecord, VersionViewRecord
 
-ANALYZER = "oa-search-2"  # a new value rebuilds every unit at the next publication
+ANALYZER = "oa-search-3"  # a new value rebuilds every unit at the next publication
 RANKING = "oa-rank-1"
 CONFIGS = {"en": "english", "fr": "french"}  # every other language: simple (MIN-02)
 ANALYSES = ("english", "french", "simple")  # the configs a unit may have (migration 0033)
@@ -45,6 +53,9 @@ HEADLINE = f"StartSel={START}, StopSel={STOP}, MaxWords=40, MinWords=18, ShortWo
 # A provision of its own; a schedule's paragraph is one when it is not inside another paragraph.
 PROVISIONS = {"section", "article"}
 SKIPPED = {"contents", "contents_entry"}  # a contents list repeats headings: layout, not law
+OUTLINE_KINDS = {"part", "chapter", "title", "division", "section", "article", "schedule"}
+OUTLINE_BYTES = 8 * 1024
+MIN_NAME = 4  # shorter names (and single letters) are never matched inside a query
 
 
 def config_for(language: str) -> str:
@@ -135,6 +146,69 @@ def units(version: VersionViewRecord, nodes: list[NodeViewRecord], document_type
     return found
 
 
+@dataclass(frozen=True)
+class DocumentUnit:
+    start: int
+    end: int
+    node_id: str | None
+    outline: str
+    truncated: bool
+
+
+def fold(value: str) -> str:
+    """Letters and digits only, in lower case, one space apart: how names and queries are compared."""
+    folded = unicodedata.normalize("NFKC", value).casefold()
+    return " ".join(re.sub(r"[\W_]+", " ", folded).split())
+
+
+def name_forms(values) -> list[str]:
+    """The forms a query may name a work by: each value folded, and again without a closing year
+    ("nigeria data protection act 2023" and "nigeria data protection act"). Short forms are left out."""
+    forms: list[str] = []
+    for value in values:
+        folded = fold(value or "")
+        for form in (folded, re.sub(r"(?<!\bof)\s+\d{4}$", "", folded)):
+            if len(form) >= MIN_NAME and not form.isdigit() and form not in forms:
+                forms.append(form)
+    return forms
+
+
+def document_unit(version: VersionViewRecord, nodes: list[NodeViewRecord]) -> DocumentUnit:
+    """A text's document unit: its quotable span (the preamble or long title; else the words the
+    document node holds before its first part) and the outline of its headings, truncated."""
+    raw = version.canonical_text.encode()
+    ordered = sorted(nodes, key=lambda n: (n.start_byte, -n.end_byte, n.order))
+    in_contents = set()
+    for node in ordered:
+        if node.kind in SKIPPED or node.parent_id in in_contents:
+            in_contents.add(node.id)
+    preamble = next((n for n in ordered if n.kind == "preamble"), None)
+    root = next((n for n in ordered if n.kind == "document"), None)
+    if preamble is not None:
+        start, end, node_id = preamble.start_byte, preamble.end_byte, preamble.id
+    elif root is not None:
+        first = next((n.start_byte for n in ordered if n.parent_id == root.id), root.end_byte)
+        start, end, node_id = root.start_byte, first, root.id
+    else:
+        start, end, node_id = 0, 0, None
+    pieces = _segments(raw, start, end)
+    start, end = pieces[0] if pieces else (start, start)
+    lines, size, truncated = [], 0, False
+    for node in ordered:
+        if node.kind not in OUTLINE_KINDS or node.id in in_contents:
+            continue
+        line = " ".join(filter(None, (node.label, node.heading)))
+        if not line:
+            continue
+        cost = len(line.encode()) + 2
+        if size + cost > OUTLINE_BYTES:
+            truncated = True
+            break
+        lines.append(line)
+        size += cost
+    return DocumentUnit(start, end, node_id, "; ".join(lines), truncated)
+
+
 # --- keeping the index in step with what is public --------------------------------------------------
 
 
@@ -143,6 +217,14 @@ def _tables(conn: Connection) -> tuple[str, str]:
 
     ns = namespace(conn)
     return ns.qualified(conn, "changes", "text_unit"), ns.qualified(conn, "changes", "text_index_state")
+
+
+def _documents(conn: Connection) -> str | None:
+    """The document unit table, or None before migration 0034."""
+    from changes.record import namespace
+
+    table = namespace(conn).qualified(conn, "changes", "document_unit")
+    return table if conn.scalar(text("SELECT to_regclass(:t)"), {"t": table}) is not None else None
 
 
 def available(conn: Connection) -> bool:
@@ -190,16 +272,23 @@ WHERE work_id = :work_id AND pinpoint IS NOT DISTINCT FROM :pinpoint AND work_ha
 """
 
 
-def _index_version(conn: Connection, table: str, work_id: str, version_id: str, projection: dict) -> None:
+def _load(conn: Connection, version_id: str) -> tuple[VersionViewRecord, list[NodeViewRecord]] | None:
     from api.repositories import LegacyRepository
 
     versions = tables["versions"]
     payload = conn.scalar(select(versions.c.payload).where(versions.c.id == version_id))
     if payload is None:
-        return
+        return None
     version = VersionViewRecord.model_validate(payload)
     rows = LegacyRepository(conn).rows("structure", version_ids=[version_id], bound=MAX_INDEXED_NODES)
-    nodes = [NodeViewRecord.model_validate(row) for row in rows]
+    return version, [NodeViewRecord.model_validate(row) for row in rows]
+
+
+def _index_version(conn: Connection, table: str, work_id: str, version_id: str, projection: dict) -> None:
+    loaded = _load(conn, version_id)
+    if loaded is None:
+        return
+    version, nodes = loaded
     raw = version.canonical_text.encode()
     config = config_for(version.language)
     citation = projection.get("citation") or ""
@@ -307,10 +396,114 @@ def sync(conn: Connection, now: dict[str, dict] | None, scope: set[str] | None) 
             ),
             {"ids": sorted(touched)},
         )
+    documents = _documents(conn)
+    if documents is not None:
+        _sync_documents(conn, documents, now, scope, rebuild)
     if rebuild:
         conn.execute(
             text(f"UPDATE {state_table} SET built = true, analyzer = :a, built_at = statement_timestamp()"),
             {"a": ANALYZER},
+        )
+
+
+DOCUMENT_INSERT = """
+INSERT INTO {t} (version_id, work_id, start_byte, end_byte, node_id, language, config, jurisdiction_id,
+    document_type, legal_status, year, effective_from, effective_until, content_hash, prior_version_id,
+    work_hash, names, outline_truncated, document, context)
+VALUES (:version_id, :work_id, :start_byte, :end_byte, :node_id, :language, :config, :jurisdiction_id,
+    :document_type, :legal_status, :year, :effective_from, :effective_until, :content_hash,
+    :prior_version_id, :work_hash, :names, :truncated,
+    setweight(to_tsvector(CAST(:analysis AS regconfig), :title), 'A')
+        || setweight(to_tsvector(CAST(:analysis AS regconfig), :words), 'B')
+        || setweight(to_tsvector(CAST(:analysis AS regconfig), :outline), 'C'),
+    setweight(to_tsvector('simple', :identifiers), 'D'))
+"""
+
+
+def _aliases(conn: Connection, work_id: str) -> list[str]:
+    """The values a work is cited by as a whole (aliases naming a part are left out)."""
+    citations = tables["citations"]
+    rows = conn.execute(select(citations.c.payload).where(citations.c.source_id == work_id)).all()
+    return sorted({row.payload["value"] for row in rows if not row.payload.get("node_id")})
+
+
+def _sync_documents(conn: Connection, table: str, now: dict, scope: set[str] | None, rebuild: bool) -> None:
+    """Document units for exactly the texts ``now`` says anyone may read, rebuilt when the work's
+    public fields or names change (their hash is kept in work_hash)."""
+    if rebuild:
+        conn.execute(text(f"DELETE FROM {table}"))
+    held = {
+        row.version_id: row.work_hash
+        for row in conn.execute(
+            text(
+                f"SELECT version_id, work_hash FROM {table}"
+                + ("" if scope is None else " WHERE work_id = ANY(:ids)")
+            ),
+            {} if scope is None else {"ids": sorted(scope)},
+        )
+    }
+    wanted = {}
+    for work_id, facts in now.items():
+        projection = facts["projection"]
+        names = name_forms([projection.get("title"), projection.get("citation"), *_aliases(conn, work_id)])
+        digest = hashlib.sha256(
+            json.dumps(
+                [ANALYZER, {k: projection.get(k) for k in WORK_FIELDS}, names], sort_keys=True
+            ).encode()
+        ).hexdigest()
+        for version_id in facts.get("versions") or ():
+            wanted[version_id] = (work_id, projection, names, digest)
+    stale = [v for v, digest in held.items() if v not in wanted or wanted[v][3] != digest]
+    if stale:
+        conn.execute(text(f"DELETE FROM {table} WHERE version_id = ANY(:ids)"), {"ids": stale})
+    touched = set()
+    for version_id, (work_id, projection, names, digest) in sorted(wanted.items()):
+        if held.get(version_id) == digest:
+            continue
+        loaded = _load(conn, version_id)
+        if loaded is None:
+            continue
+        version, nodes = loaded
+        unit = document_unit(version, nodes)
+        config = config_for(version.language)
+        raw = version.canonical_text.encode()
+        conn.execute(
+            text(DOCUMENT_INSERT.format(t=table)),
+            {
+                "version_id": version_id,
+                "work_id": work_id,
+                "start_byte": unit.start,
+                "end_byte": unit.end,
+                "node_id": unit.node_id,
+                "language": version.language,
+                "config": config,
+                "analysis": config,
+                "jurisdiction_id": projection.get("jurisdiction_id") or "unknown",
+                "document_type": projection.get("document_type") or "other",
+                "legal_status": projection.get("legal_status") or "unknown",
+                "year": projection.get("year"),
+                "effective_from": version.effective_from,
+                "effective_until": version.effective_until,
+                "content_hash": version.content_hash,
+                "prior_version_id": version.prior_version_id,
+                "work_hash": digest,
+                "names": names,
+                "truncated": unit.truncated,
+                "title": projection.get("title") or "",
+                "words": raw[unit.start : unit.end].decode("utf-8"),
+                "outline": unit.outline,
+                "identifiers": identifiers(projection.get("citation") or "", None) + " " + " ".join(names),
+            },
+        )
+        touched.add(work_id)
+    if touched or stale:
+        conn.execute(
+            text(
+                f"UPDATE {table} u SET replaced = EXISTS (SELECT 1 FROM {table} v WHERE v.work_id = u.work_id"
+                " AND v.prior_version_id = u.version_id AND v.version_id <> u.version_id)"
+                + ("" if scope is None else " WHERE u.work_id = ANY(:ids)")
+            ),
+            {} if scope is None else {"ids": sorted(scope)},
         )
 
 
@@ -340,6 +533,7 @@ class Filters:
     year_to: int | None = None
     source_id: str | None = None
     version_id: str | None = None
+    kinds: tuple[str, ...] = ()  # provision kinds (the definition route); never for document units
 
     def where(self) -> tuple[str, dict]:
         clauses, params = ["true"], {}
@@ -376,6 +570,9 @@ class Filters:
         if self.version_id:
             clauses.append("u.version_id = :f_version")
             params["f_version"] = self.version_id
+        if self.kinds:
+            clauses.append("u.kind = ANY(:f_kinds)")
+            params["f_kinds"] = list(self.kinds)
         return " AND ".join(clauses), params
 
 
@@ -400,8 +597,11 @@ class Scope:
 _COLUMNS = ", ".join(
     f"u.{c}"
     for c in ("version_id", "start_byte", "end_byte", "work_id", "node_id", "kind", "locator", "pinpoint",
-              "heading", "language", "config", "content_hash")
+              "heading", "language", "config", "content_hash", "legal_status", "replaced", "jurisdiction_id",
+              "document_type")
 )  # fmt: skip
+
+
 _MATCH = " OR ".join(
     f"(u.config = '{c}' AND (u.document || u.context) @@ websearch_to_tsquery('{c}', :q))" for c in ANALYSES
 )
@@ -411,6 +611,67 @@ _SCORE = (
     f" * CASE WHEN u.replaced OR u.legal_status IN ('repealed', 'superseded', 'historical') THEN {NOT_IN_FORCE}"
     " ELSE 1.0 END"
 )
+
+# The any-term arm (oa-any-1): each of the query's words, per analysis, weighted by how rare it is in
+# the index (an inverse document frequency from capped counts), so a provision with the rare words of
+# a question outranks a long one with its common words. An approximation of BM25's term weighting
+# over PostgreSQL's ranking, not BM25 (EMB-03 keeps a pinned BM25 engine as a separate comparison).
+ANY_RANKING = "oa-any-1"
+MAX_ANY_TERMS = 12
+DF_BOUND = 50_000
+
+
+def _weighted(conn: Connection, table: str, query: str) -> tuple[str, str, dict] | None:
+    """The any-term arm's match and score expressions and their parameters; None when the query has no
+    indexable word in any analysis."""
+    total = conn.scalar(
+        text("SELECT greatest(reltuples, 0)::bigint FROM pg_class WHERE oid = to_regclass(:t)"), {"t": table}
+    )
+    if not total:
+        total = conn.scalar(text(f"SELECT count(*) FROM {table}")) or 0
+    matches, scores, params = [], [], {}
+    for config in ANALYSES:
+        present = conn.scalar(
+            text(f"SELECT EXISTS (SELECT 1 FROM {table} u WHERE u.config = :c)"), {"c": config}
+        )
+        if not present:
+            continue
+        lexemes = conn.scalars(
+            text("SELECT unnest(tsvector_to_array(to_tsvector(CAST(:c AS regconfig), :q)))"),
+            {"c": config, "q": query},
+        ).all()[:MAX_ANY_TERMS]
+        if not lexemes:
+            continue
+        parts, keys = [], []
+        for n, lexeme in enumerate(sorted(lexemes)):
+            key = f"lx_{config}_{n}"
+            params[key] = "'" + lexeme.replace("'", "''") + "'"
+            keys.append(key)
+            df = conn.scalar(
+                text(
+                    f"SELECT count(*) FROM (SELECT 1 FROM {table} u WHERE u.config = :c"
+                    f" AND (u.document || u.context) @@ CAST(:lx AS tsquery) LIMIT {DF_BOUND}) AS d"
+                ),
+                {"c": config, "lx": params[key]},
+            )
+            idf = math.log(1 + (max(total, df) - df + 0.5) / (df + 0.5))
+            parts.append(
+                f"{idf:.6f} * ts_rank_cd(CAST('{WEIGHTS}' AS float4[]), u.document || u.context,"
+                f" CAST(:{key} AS tsquery), 1)"
+            )
+        params[f"any_{config}"] = " | ".join(params[k] for k in keys)
+        matches.append(
+            f"(u.config = '{config}' AND (u.document || u.context) @@ CAST(:any_{config} AS tsquery))"
+        )
+        scores.append(f"WHEN '{config}' THEN {' + '.join(parts)}")
+    if not matches:
+        return None
+    score = (
+        f"(CASE u.config {' '.join(scores)} ELSE 0 END)"
+        f" * CASE WHEN u.replaced OR u.legal_status IN ('repealed', 'superseded', 'historical')"
+        f" THEN {NOT_IN_FORCE} ELSE 1.0 END"
+    )
+    return " OR ".join(matches), score, params
 
 
 def built(conn: Connection):
@@ -436,9 +697,17 @@ def scope(conn: Connection, filters: Filters) -> Scope:
 
 
 def search(
-    conn: Connection, query: str, filters: Filters, *, limit: int, offset: int, exclude: tuple | None = None
+    conn: Connection,
+    query: str,
+    filters: Filters,
+    *,
+    limit: int,
+    offset: int,
+    exclude: tuple | None = None,
+    any_terms: bool = False,
 ) -> Found:
-    """One page of units matching ``query`` within ``filters``, best first, and how many match."""
+    """One page of units matching ``query`` within ``filters``, best first, and how many match; with
+    ``any_terms``, units matching any of its terms rather than all."""
     if not available(conn):
         return Found("unavailable")
     if built(conn) is None:
@@ -461,20 +730,27 @@ def search(
     if exclude:
         where += " AND NOT (u.version_id = :x_version AND u.start_byte = :x_start AND u.end_byte = :x_end)"
         params |= dict(zip(("x_version", "x_start", "x_end"), exclude, strict=True))
+    match, score = _MATCH, _SCORE
+    if any_terms:
+        weighted = _weighted(conn, table, query)
+        if weighted is None:
+            return Found("no_terms", common_only=common_only)
+        match, score, extra = weighted
+        params |= extra
     old = conn.scalar(text("SELECT current_setting('statement_timeout')"))
     try:
         with conn.begin_nested():
             conn.execute(text("SELECT set_config('statement_timeout', :ms, true)"), {"ms": str(TIMEOUT_MS)})
             total = conn.scalar(
                 text(
-                    f"SELECT count(*) FROM (SELECT 1 FROM {table} u WHERE ({_MATCH}) AND {where}"
+                    f"SELECT count(*) FROM (SELECT 1 FROM {table} u WHERE ({match}) AND {where}"
                     f" LIMIT {COUNT_BOUND + 1}) AS matched"
                 ),
                 params,
             )
             rows = conn.execute(
                 text(
-                    f"SELECT {_COLUMNS}, {_SCORE} AS score FROM {table} u WHERE ({_MATCH}) AND {where}"
+                    f"SELECT {_COLUMNS}, {score} AS score FROM {table} u WHERE ({match}) AND {where}"
                     " ORDER BY score DESC, u.version_id, u.start_byte LIMIT :limit OFFSET :offset"
                 ),
                 params | {"limit": limit, "offset": offset},
@@ -533,3 +809,61 @@ def place(words: str, headline: str, base: int) -> tuple[str, int, int, tuple[tu
         else:
             offset += len(piece.encode())
     return plain, start, start + len(plain.encode()), tuple(marks)
+
+
+# --- document units (RSV-02, RSV-03) -----------------------------------------------------------------
+
+_DOCUMENT_COLUMNS = ", ".join(
+    f"u.{c}"
+    for c in ("version_id", "work_id", "start_byte", "end_byte", "node_id", "language", "config",
+              "content_hash", "legal_status", "replaced")
+)  # fmt: skip
+MAX_NAMED = 5  # a query naming more works than this names none in particular
+
+
+def search_documents(conn: Connection, query: str, filters: Filters, *, limit: int) -> Found:
+    """Document units matching ``query`` within ``filters``, best first (the same ranking as units)."""
+    table = _documents(conn) if available(conn) else None
+    if table is None:
+        return Found("unavailable")
+    if built(conn) is None:
+        return Found("building")
+    where, params = replace(filters, kinds=()).where()
+    params |= {"q": query, "limit": limit}
+    try:
+        with conn.begin_nested():
+            conn.execute(text("SELECT set_config('statement_timeout', :ms, true)"), {"ms": str(TIMEOUT_MS)})
+            rows = conn.execute(
+                text(
+                    f"SELECT {_DOCUMENT_COLUMNS}, {_SCORE} AS score FROM {table} u WHERE ({_MATCH}) AND {where}"
+                    " ORDER BY score DESC, u.version_id LIMIT :limit"
+                ),
+                params,
+            ).all()
+    except OperationalError as error:
+        if getattr(error.orig, "sqlstate", None) == "57014":
+            return Found("timeout")
+        raise
+    return Found("ok", list(rows), len(rows))
+
+
+def named_works(conn: Connection, query: str, filters: Filters) -> dict[str, str]:
+    """The works the query names by a whole name (title, citation or alias, folded), each with the
+    longest name found; empty when none, or when more than MAX_NAMED works match."""
+    table = _documents(conn) if available(conn) else None
+    folded = fold(query)
+    if table is None or len(folded) < MIN_NAME:
+        return {}
+    where, params = replace(filters, kinds=(), version_id=None).where()
+    rows = conn.execute(
+        text(
+            f"SELECT DISTINCT u.work_id, n.name FROM {table} u CROSS JOIN LATERAL unnest(u.names) AS n(name)"
+            f" WHERE position(' ' || n.name || ' ' IN :q) > 0 AND {where}"
+        ),
+        params | {"q": f" {folded} "},
+    ).all()
+    found: dict[str, str] = {}
+    for work_id, name in rows:
+        if len(name) > len(found.get(work_id, "")):
+            found[work_id] = name
+    return found if len(found) <= MAX_NAMED else {}

@@ -529,13 +529,14 @@ def test_a_country_losing_its_last_record_or_gaining_its_first_is_a_coverage_cha
     assert served and all(e["schema_version"] == "change-event-1" for e in served)
 
 
-# Migrations 0029-0031 grant their tables only to capability roles that already exist; the provision
-# bundles v0029-v0031 grant the same to roles created afterwards.
+# Migrations 0029-0031 and 0034 grant their tables only to capability roles that already exist; the
+# provision bundles v0029-v0031 and v0034 grant the same to roles created afterwards.
 LATER_TABLES = {
     "rights_revision": {"release": {"SELECT", "INSERT"}, "serving": {"SELECT"}},
     "link_state": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
     "text_unit": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
     "text_index_state": {"release": {"SELECT", "UPDATE"}, "serving": {"SELECT"}},
+    "document_unit": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
 }
 
 

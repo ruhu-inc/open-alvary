@@ -193,6 +193,8 @@ def test_mcp_needs_a_credential_and_answers_tools_within_the_access(api):
         "get_coverage",
         "list_changes",
         "get_change",
+        "retrieve_evidence",
+        "check_currentness",
     }
     found = client.post(
         "/mcp",

@@ -27,9 +27,10 @@ def v1(catalogue, store, tmp_path):
 def test_every_route_parameter_and_field_is_described():
     spec = json.loads(docs_reference.documents()["openapi.json"])
     for path, methods in spec["paths"].items():
-        operation = methods["get"]
+        [operation] = methods.values()
         assert operation["summary"] and operation["description"] and operation["tags"], path
         assert all(p.get("description") for p in operation.get("parameters", [])), path
+        assert "requestBody" not in operation or operation["requestBody"]["description"], path
         assert "422" not in operation["responses"], path
         for status, response in operation["responses"].items():
             if status != "200":
@@ -45,7 +46,8 @@ def test_documented_error_codes_are_the_ones_the_api_gives():
     spec = json.loads(docs_reference.documents()["openapi.json"])
     documented = ERRORS.read_text()
     for methods in spec["paths"].values():
-        for response in methods["get"]["responses"].values():
+        [operation] = methods.values()
+        for response in operation["responses"].values():
             for code in response["description"].split("`")[1::2]:
                 assert f'"{code}"' in documented, code
 

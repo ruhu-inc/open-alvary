@@ -248,5 +248,13 @@
       "changes.text_index_state",
       "changes.text_unit"
     ]
+  },
+  {
+    "revision": "0034",
+    "anchor": "changes.document_unit",
+    "file": "v0034.sql",
+    "requires": [
+      "changes.document_unit"
+    ]
   }
 ]

@@ -246,6 +246,54 @@ OPERATIONS: dict[str, dict] = {
         },
         "errors": BAD,
     },
+    "/retrieve": {
+        "operationId": "retrieve_evidence",
+        "tag": "Retrieval",
+        "summary": "Retrieve evidence",
+        "description": "Ranked legal evidence for a question, for an application that writes answers: each "
+        "unit is a provision (or the text a part holds between its provisions, or a whole law's title and "
+        "preamble), with its exact words or an excerpt within `max_evidence_bytes`, its byte span and "
+        "hashes to check it, what quoting it asks for, whether it was in force, the definitions it relies "
+        "on, and why it ranks where it does. A query that cites a part, names a law or asks what a term "
+        "means is routed to that first (`query.routes`). The same request over the same revisions gives "
+        "the same answer. Nothing is generated: only published texts' words. Without `jurisdiction`, it "
+        "covers your plan's countries.",
+        "parameters": {
+            "q": "The question or words, 1 to 2,000 characters.",
+            "jurisdiction": "Jurisdiction IDs, such as `ng`. Repeat for several, up to 10; with two or more, "
+            "results alternate between them. A country outside your plan answers at the Starter rate.",
+            "language": "Texts in this language, such as `en`; `en` also matches `en-NG`.",
+            "type": "Document types, such as `act` or `regulation`. Repeat for several.",
+            "status": "Legal statuses: `current`, `historical`, `repealed`, `superseded` or `unknown`. "
+            "Repeat for several.",
+            "as_of": "A date, such as `2024-01-01`: only texts in force on it, and currentness assessed at "
+            "it. Without it, nothing is assumed about the date.",
+            "year_from": "Only laws made in this year or later.",
+            "year_to": "Only laws made in this year or earlier.",
+            "source_id": "Only this record's texts.",
+            "version_id": "Only this text version.",
+            "max_units": "How many evidence units, 1 to 25. Default 10.",
+            "max_evidence_bytes": "The most bytes of words (evidence and definitions, each counted once), "
+            "4,096 to 262,144. Default 49,152. A unit that does not fit is an excerpt, then units stop.",
+            "include": "What to add to each unit: `context` (headings, qualifications), `expansion` "
+            "(definitions, references) and `ranking` (why it ranks there). Repeat for several; all by "
+            "default.",
+        },
+        "errors": BAD,
+    },
+    "/currentness": {
+        "operationId": "check_currentness",
+        "tag": "Retrieval",
+        "summary": "Check cited parts",
+        "description": "Before showing an answer that cites the corpus: for each cited part (up to 100), "
+        "whether it is still published with the same words, whether a newer text of the same edition "
+        "exists (with the same part's anchor there and whether its words changed), and whether it was in "
+        "force on a date. A part that is not public now and one that never was get the same answer, "
+        "`unavailable`.",
+        "body": "The parts to check: `items`, each an `anchor_id`, or a `version_id` with a `locator`, "
+        "with the `span_hash` you hold and an optional `as_of` date.",
+        "errors": BAD,
+    },
     "/citations/{citation}": {
         "operationId": "resolve_citation",
         "tag": "Catalogue",
@@ -369,6 +417,11 @@ OPERATIONS: dict[str, dict] = {
 
 TAGS = [
     {"name": "Catalogue", "description": "Records, their texts and rights, citations and coverage."},
+    {
+        "name": "Retrieval",
+        "description": "Evidence for applications that write answers: ranked parts of published texts with "
+        "everything needed to cite and check them.",
+    },
     {"name": "Changes", "description": "What changed in the catalogue, in order, and feeds."},
     {"name": "Plans", "description": "Plans, limits and how limits are counted."},
     {"name": "Releases", "description": "Versioned data releases to download."},
@@ -625,6 +678,191 @@ SCHEMAS: dict[str, dict] = {
 
 # Field descriptions of the response models, by schema.
 FIELDS: dict[str, dict[str, str]] = {
+    "EvidencePack": {
+        "schema_version": "`oa-evidence-1`.",
+        "status": "`results`; `no_result` (published texts were searched and none matched); "
+        "`unsupported_scope` (no published text in this scope); or `degraded` (the search could not run).",
+        "query": "The question as searched, the routes taken and the filters applied.",
+        "revisions": "Everything the answer depends on; the same request and revisions give the same answer.",
+        "coverage": "What was searched, what could not run and what was left out.",
+        "evidence": "The evidence units, best first.",
+        "catalogue": "Records that match but have no published text: identity and official link only.",
+        "next_steps": "Hints for a follow-up request, such as an ambiguous citation's candidates.",
+        "bytes": "The words sent: unique bytes (each span once), bytes as transmitted, and the budget.",
+    },
+    "EvidenceQuery": {
+        "text": "The question, with spacing normalised.",
+        "routes": "The routes taken, in order: `citation`, `instrument`, `definition`, `topic`, and the "
+        "modifiers `historical` and `comparative`.",
+        "filters": "The filters applied, as given or as your plan set them.",
+        "as_of": "The date asked about, when given.",
+    },
+    "EvidenceRevisions": {
+        "dataset": "The change log's epoch and latest publication revision: any published change moves it.",
+        "router": "The routing rules, such as `oa-route-1`.",
+        "ranking": "The ranking profile, such as `oa-rank-2`.",
+        "analyzer": "The text analysis, such as `oa-search-3`.",
+        "vector": "The semantic index profile, when one is active.",
+        "reranker": "The reranker profile, when one is active.",
+    },
+    "EvidenceCoverage": {
+        "records_in_scope": "Records the filters cover.",
+        "records_with_text": "Of those, records with a published text that was searched.",
+        "texts_searched": "Published texts searched.",
+        "dense_coverage": "The share of searched texts in the semantic index, when one is active.",
+        "degraded": "Parts of the search that could not run or are not configured, such as "
+        "`dense:not_configured`.",
+        "unsupported": "Filters that could not be applied.",
+        "incomplete_evidence": "Whether units were left out because the byte budget ran out.",
+        "omitted_units": "How many units were left out for the byte budget.",
+        "notices": "Plain-language notes on the answer.",
+    },
+    "EvidenceUnit": {
+        "anchor_id": "The part: `/anchors/{anchor_id}` gives it whole; quote it with this ID.",
+        "source_id": "The record.",
+        "version_id": "The text version.",
+        "expression_id": "The edition (`{source_id}:{language}`).",
+        "unit": "`provision`; `container_run` (words a part holds between its provisions); or `document` "
+        "(a law's title and preamble: evidence of which law is relevant, never of a provision).",
+        "kind": "What the part is, such as `section`, `definition` or `article`.",
+        "locator": "The part's stable key within the text, such as `sec_23__subsec_1`; the same in a later "
+        "text of the same edition.",
+        "pinpoint": "How the part is cited within the text, such as `s. 23(1)`.",
+        "heading": "The part's printed heading, when it has one.",
+        "citation": "The record's citation and the pinpoint.",
+        "title": "The record's title.",
+        "language": "The text's language.",
+        "jurisdiction_id": "The record's jurisdiction.",
+        "document_type": "The record's document type.",
+        "official_url": "The official file the text was read from.",
+        "text": "The words: exactly the text's bytes from `text_start_byte` to `text_end_byte`.",
+        "text_start_byte": "Where `text` starts: a byte offset into the text in UTF-8.",
+        "text_end_byte": "Where `text` ends: a byte offset into the text in UTF-8.",
+        "complete": "Whether `text` is the whole unit; when false it is an excerpt (see `warnings`).",
+        "start_byte": "Where the whole unit starts: a byte offset into the text in UTF-8.",
+        "end_byte": "Where the whole unit ends: a byte offset into the text in UTF-8.",
+        "offset_unit": "The unit of the offsets: `utf-8-bytes`.",
+        "span_hash": "SHA-256 of the whole unit's bytes, `start_byte` to `end_byte`: send it to Check cited "
+        "parts.",
+        "content_hash": "The `content_hash` of the whole text.",
+        "licence": "The terms the text is published under.",
+        "attribution_required": "Whether reuse must credit the source.",
+        "attribution_text": "The credit to give, when one is required.",
+        "currentness": "Whether the part was in force, and what that rests on.",
+        "authority": "The inputs to the authority signals.",
+        "ranking": "Why the unit ranks where it does.",
+        "context": "What travels with the unit and is never part of its words.",
+        "warnings": "Notes on the unit, such as an excerpt or a newer text.",
+    },
+    "Currentness": {
+        "state": "`in_force`, `not_in_force`, `partly_in_force`, `unknown` or `contested`.",
+        "basis": "`provision` (reviewed events for this part), `record` (only the record's status for the "
+        "whole text: never a claim about one part) or `none`.",
+        "assessed_at": "The date assessed: `as_of`, or today.",
+        "algorithm": "How the state was computed, such as `record-status-1`.",
+        "profile": "The jurisdiction's rule profile, when one applied.",
+        "evidence": "The events relied on.",
+        "reasons": "Why the state is what it is, in plain language.",
+    },
+    "EvidenceAuthority": {
+        "document_type": "The record's document type.",
+        "instrument_rank": "The instrument's place in the hierarchy, 0 highest (constitution 0, Act 1, "
+        "subsidiary legislation 2, guidance 3).",
+        "court_relation": "For a decision, the court's relation to the jurisdiction asked about: `binding`, "
+        "`persuasive` or `unknown`; `not_applicable` otherwise.",
+    },
+    "RankingExplanation": {
+        "position": "The unit's position, from 1.",
+        "router": "The routing rules.",
+        "routes": "The routes taken.",
+        "profile": "The ranking profile.",
+        "arms": "Each search the unit came from and its rank there: `citation`, `instrument`, `definition`, "
+        "`lexical` (every word), `lexical_any` (any word, rarer words weighing more; run when few units have "
+        "every word) or `document`.",
+        "fused_score": "The fused score after the signals: relevance, not legal authority.",
+        "rerank_score": "The reranker's score, when one ran.",
+        "band": "The band of positions it was ordered within.",
+        "signals": "Each documented signal applied, with its value and effect.",
+        "diversification": "Anything diversification did, such as collapsing a duplicate into it.",
+    },
+    "RankingSignal": {
+        "name": "`legal_status`, `replaced`, `route_match`, `instrument_match`, `instrument_authority` or "
+        "`court_authority`.",
+        "value": "The value that triggered it.",
+        "effect": "What it did, such as `x0.8` or `first`.",
+    },
+    "EvidenceContext": {
+        "heading_path": "The headings above the part, outermost first.",
+        "definitions": "Definitions in the same text for terms the part uses.",
+        "references": "Provisions of the same text the part refers to by number.",
+        "qualifications": "Checked links qualifying the record: what amended, repealed or superseded it.",
+        "also_in": "Other texts of the same edition with this part, collapsed into this one.",
+    },
+    "EvidenceDefinition": {
+        "term": "The term defined.",
+        "anchor_id": "The definition's part.",
+        "locator": "The definition's locator.",
+        "text": "The definition's words, exactly.",
+        "start_byte": "Where it starts: a byte offset into the text in UTF-8.",
+        "end_byte": "Where it ends: a byte offset into the text in UTF-8.",
+        "span_hash": "SHA-256 of its bytes.",
+    },
+    "EvidenceReference": {
+        "pinpoint": "The provision referred to, such as `s. 23`.",
+        "anchor_id": "Its part.",
+        "locator": "Its locator.",
+    },
+    "EvidenceQualification": {
+        "kind": "`amended_by`, `repealed_by` or `superseded_by`.",
+        "source_id": "The other record.",
+        "title": "Its title.",
+        "citation": "How it is cited.",
+        "effective_date": "When the link took effect, when known.",
+        "scope": "What it applies to: `work`, the whole record.",
+    },
+    "EvidenceBytes": {
+        "unique": "Bytes of words, each span counted once.",
+        "transmitted": "Bytes of words as sent.",
+        "budget": "The `max_evidence_bytes` asked for.",
+    },
+    "NextStep": {
+        "kind": "`ambiguous_citation`, `metadata_only` or `narrow_query`.",
+        "detail": "What to do, in plain language.",
+        "candidates": "The IDs it refers to.",
+    },
+    "CatalogueMatch": {
+        "source_id": "The record.",
+        "title": "Its title.",
+        "citation": "How it is cited.",
+        "jurisdiction_id": "Its jurisdiction.",
+        "document_type": "Its document type.",
+        "official_url": "Its official source.",
+    },
+    "CheckRequest": {"items": "The parts to check, 1 to 100."},
+    "CheckItem": {
+        "anchor_id": "The part's anchor, from an evidence unit or a search.",
+        "version_id": "Instead of `anchor_id`: the text version, with `locator`.",
+        "locator": "With `version_id`: the part's locator.",
+        "span_hash": "The `span_hash` you hold; a different one answers `span_mismatch`.",
+        "as_of": "The date to assess currentness at; today when absent.",
+    },
+    "CheckPage": {
+        "schema_version": "`oa-check-1`.",
+        "dataset": "The change log's epoch and latest publication revision.",
+        "results": "One per item, in order.",
+    },
+    "CheckResult": {
+        "index": "The item's position in the request, from 0.",
+        "result": "`unchanged`; `newer_version` (a later text of the same edition exists); `span_mismatch` "
+        "(the hash sent is not this part's); or `unavailable` (not public now, or never).",
+        "anchor_id": "The part.",
+        "version_id": "The text version checked.",
+        "locator": "The part's locator.",
+        "newer_version_id": "The newer text, for `newer_version`.",
+        "newer_anchor_id": "The same locator's part in the newer text, when it has one.",
+        "same_words": "Whether the part's words are identical in the newer text.",
+        "currentness": "Whether the part (or, for `newer_version`, the newer text's part) was in force.",
+    },
     "SourceView": {
         "id": "The record's ID, such as `ng-foi-act-2011`. It doesn't change.",
         "jurisdiction_id": "Its jurisdiction, such as `ng` or `rw`.",
@@ -987,7 +1225,9 @@ def describe(generated: dict) -> dict:
     spec["security"] = [{"bearer": []}]
     for path, methods in spec["paths"].items():
         words = OPERATIONS[path]
-        operation = methods["get"]
+        [operation] = methods.values()
+        if "requestBody" in operation:
+            operation["requestBody"]["description"] = words["body"]
         operation["operationId"] = words["operationId"]
         operation["summary"] = words["summary"]
         operation["description"] = words["description"]

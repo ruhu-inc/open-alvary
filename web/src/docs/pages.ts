@@ -93,7 +93,10 @@ export function buildPages(
   const groups = [...new Set(reference.map((p) => p.group))];
   const nav: NavSection[] = [
     { title: "Start here", items: ["", "quickstart", "authentication", "plans", "console"] },
-    { title: "Guides", items: ["search", "records", "rights", "pagination", "changes", "webhooks", "ai-tools"] },
+    {
+      title: "Guides",
+      items: ["search", "retrieval", "records", "rights", "pagination", "changes", "webhooks", "ai-tools"],
+    },
     {
       title: "API reference",
       items: [

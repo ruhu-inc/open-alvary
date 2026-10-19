@@ -5,6 +5,11 @@ description: Changes to the API, the MCP server and these docs.
 
 Changes that affect how you use the API and the MCP server, newest first.
 
+## 19 October 2026
+
+- [Retrieve evidence](/docs/api/retrieve-evidence) (`GET /api/v1/retrieve`, MCP `retrieve_evidence`): ranked parts of published texts for a question, each with its exact words, citation, hashes, currentness, definitions and why it ranks there. See [Retrieve evidence for AI answers](/docs/retrieval).
+- [Check cited parts](/docs/api/check-currentness) (`POST /api/v1/currentness`, MCP `check_currentness`): whether cited parts are still published with the same words, and whether a newer text exists.
+
 ## 17 October 2026
 
 - These docs: guides, a reference for every route generated from the API's own description, and every page also as Markdown (add `.md` to its address) and in [`/llms.txt`](/llms.txt).
