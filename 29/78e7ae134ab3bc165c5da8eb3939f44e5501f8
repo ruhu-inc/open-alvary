@@ -1,0 +1,31 @@
+workbench/app.py
+  s_d665c62e07d76f::t_0cf6aaf5765a19 443,449-454
+workbench/static/app.css
+  s_d665c62e07d76f::t_7e480f8880e48b 284-295
+workbench/content.py
+  s_d665c62e07d76f::t_b4e57266fa76f8 218-229
+tests/test_workbench.py
+  s_d665c62e07d76f::t_717eba8ae54466 203-204,208-214
+  s_d665c62e07d76f::t_65ac2a32ba9921 205-207
+workbench/static/app.js
+  s_d665c62e07d76f::t_d085fa8586b53d 913-958
+  s_d665c62e07d76f::t_927d10d2a0879b 787-788
+  s_d665c62e07d76f::t_7815e95ec69d9c 856-857
+  s_d665c62e07d76f::t_bba9e34956ce9d 898-908
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2978e7ae134ab3bc165c5da8eb3939f44e5501f8",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
