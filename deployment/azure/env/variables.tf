@@ -106,6 +106,12 @@ variable "console_client_id" {
   default     = ""
 }
 
+variable "domain_live" {
+  description = "Whether public_domain points at this environment's Front Door: the availability test and its alert run only then."
+  type        = bool
+  default     = false
+}
+
 variable "edge_requests_per_minute" {
   description = "Per-address limit on the website's paths at the edge (D23), as Cloud Armor had it."
   type        = number
@@ -129,6 +135,12 @@ variable "vespa_image" {
   description = "The Vespa image, pinned to the release the tests ran against."
   type        = string
   default     = "vespaengine/vespa:8.763.13"
+}
+
+variable "inference_enabled" {
+  description = "The GPU machine for the embedder and reranker. Off until the region grants GPU quota: the service then runs on the lexical arms without a reranker, and says so in every pack."
+  type        = bool
+  default     = true
 }
 
 variable "inference_vm_size" {

@@ -24,6 +24,9 @@ accounts_enabled  = false
 auth0_domain      = ""
 console_client_id = ""
 
+# Until Azure grants GPU quota for the NCASv3_T4 family: no GPU machine, no reranker.
+inference_enabled = false
+
 # Empty until a generation passes its gates (RSV-12): the service runs on the lexical arms.
 vector_profile = ""
 

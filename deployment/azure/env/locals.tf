@@ -47,10 +47,12 @@ locals {
     {
       OPEN_ALVARY_ENGINE_URL        = "http://${local.engine_ip}:8080"
       OPEN_ALVARY_ENGINE_CONFIG_URL = "http://${local.engine_ip}:19071"
-      OPEN_ALVARY_EMBEDDER_URL      = "http://${local.inference_ip}:8080/v1"
-      OPEN_ALVARY_RERANKER_URL      = "http://${local.inference_ip}:8081"
-      OPEN_ALVARY_RERANKER_PROFILE  = "${var.reranker.model}@${substr(var.reranker.revision, 0, 12)}"
     },
-    var.vector_profile == "" ? {} : { OPEN_ALVARY_VECTOR_PROFILE = var.vector_profile },
+    var.inference_enabled ? {
+      OPEN_ALVARY_EMBEDDER_URL     = "http://${local.inference_ip}:8080/v1"
+      OPEN_ALVARY_RERANKER_URL     = "http://${local.inference_ip}:8081"
+      OPEN_ALVARY_RERANKER_PROFILE = "${var.reranker.model}@${substr(var.reranker.revision, 0, 12)}"
+    } : {},
+    var.vector_profile == "" || !var.inference_enabled ? {} : { OPEN_ALVARY_VECTOR_PROFILE = var.vector_profile },
   )
 }

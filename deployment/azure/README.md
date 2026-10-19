@@ -108,10 +108,14 @@ Azure's pricing calculator before the first apply.
 
 ## Before the first apply (owner)
 
-1. **GPU quota.** Ask for quota for the NCASv3_T4 family (4 vCPUs) in Sweden Central: Azure portal →
-   Quotas → Compute. Without it the inference VM fails to create.
+1. **GPU quota.** The NCASv3_T4 family in Sweden Central: 8 vCPUs, one machine per environment
+   (requested by support ticket, 2026-10-19). Until it is granted, apply with
+   `inference_enabled = false`: no GPU machine, and the service runs on the lexical arms without a
+   reranker, saying so in every pack.
 2. **Settings.** `cp env/staging.tfvars.example env/staging.tfvars` and fill it in. Do the same for
-   `backend.hcl` from `backend.hcl.example`.
+   `backend.hcl` from `backend.hcl.example`. `operator_ip_ranges` must hold the address you apply
+   from (`curl -s https://ifconfig.me`): the vault and storage refuse every other one, Terraform's
+   own requests included. Set `domain_live = true` only once DNS points at Front Door.
 3. **Pins to check.** `tei_image` must be a text-embeddings-inference release for Turing GPUs that
    lists Qwen3-Embedding among its supported models; `vespa_image` is the release the tests ran on.
 
