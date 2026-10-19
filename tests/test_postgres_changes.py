@@ -539,6 +539,8 @@ LATER_TABLES = {
     "text_index_state": {"release": {"SELECT", "UPDATE"}, "serving": {"SELECT"}},
     "document_unit": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
     "event_state": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
+    "index_generation": {"release": {"SELECT", "INSERT", "UPDATE"}, "serving": {"SELECT"}},
+    "index_job": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
     # The guard reads every table of the corpus schema (bundle v0003).
     "corpus.legal_event": {
         "release": {"SELECT", "INSERT", "UPDATE"},

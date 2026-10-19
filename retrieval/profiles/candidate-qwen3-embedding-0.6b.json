@@ -1,0 +1,14 @@
+{
+  "id": "candidate-qwen3-embedding-0.6b-1024",
+  "model": "Qwen/Qwen3-Embedding-0.6B",
+  "revision": "pin-before-use",
+  "dims": 1024,
+  "embedder": "http",
+  "metric": "cosine",
+  "precision": "halfvec",
+  "query_prompt": "Instruct: Given a legal question, retrieve the provisions of law that answer it\nQuery: ",
+  "document_prompt": "",
+  "window_chars": 2000,
+  "window_overlap": 200,
+  "test": false
+}

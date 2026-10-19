@@ -5321,7 +5321,7 @@
             },
             "type": "object",
             "title": "Arms",
-            "description": "Each search the unit came from and its rank there: `citation`, `instrument`, `definition`, `lexical` (every word), `lexical_any` (any word, rarer words weighing more; run when few units have every word) or `document`."
+            "description": "Each search the unit came from and its rank there: `citation`, `instrument`, `definition`, `lexical` (every word), `lexical_any` (any word, rarer words weighing more; run when few units have every word), `document` or `dense` (meaning, where a semantic index is active)."
           },
           "fused_score": {
             "type": "number",

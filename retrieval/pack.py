@@ -5,6 +5,7 @@ hashes, currentness (retrieval.legal_time), authority inputs, derived links and 
 position. The same request over the same revisions gives the same pack."""
 
 import hashlib
+import os
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 
@@ -12,7 +13,7 @@ from sqlalchemy import text as sql
 
 from api import text_index
 from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable, expression_id
-from retrieval import links, router
+from retrieval import indexer, links, rerank, router
 from retrieval.legal_time import Events
 from retrieval.ranking import INSTRUMENT_RANK, PROFILE, Candidate, Hit, apply_signals, diversify, fuse
 from schema.public import (
@@ -87,11 +88,26 @@ def dataset_revision(conn) -> str:
         return "unknown"
 
 
+_EMBEDDERS: dict[str, object] = {}  # one per profile, kept for the process
+
+
 class Retriever:
-    def __init__(self, service: LegacyCatalogue, *, today: date | None = None):
+    def __init__(
+        self,
+        service: LegacyCatalogue,
+        *,
+        today: date | None = None,
+        vector_profile: str | None = None,
+        embedder=None,
+        reranker=None,
+    ):
         self.service = service
         self.conn = service.repository.connection
         self.today = today or datetime.now(UTC).date()
+        self.vector_profile = vector_profile or os.environ.get("OPEN_ALVARY_VECTOR_PROFILE")
+        self.generation = indexer.active(self.conn, self.vector_profile) if self.vector_profile else None
+        self.embedder = embedder
+        self.reranker = reranker if reranker is not None else rerank.configured()
         self._loaded: dict[str, tuple | None] = {}
         self._nodes: dict[str, list] = {}
         self._qualifications: dict[str, tuple] = {}
@@ -227,7 +243,56 @@ class Retriever:
                 arms["lexical_any"] = [_hit(r) for r in relaxed.rows]
             documents = text_index.search_documents(self.conn, query, filters, limit=SIDE_LIMIT)
             arms["document"] = [_hit(r, "document") for r in documents.rows]
+            dense = self._dense(query, filters, degraded)
+            if dense is not None:
+                arms["dense"] = dense
         return arms, degraded, total
+
+    def _dense(self, query: str, filters, degraded: list[str]) -> list[Hit] | None:
+        """The dense arm over the active generation (RSV-04); None (with the reason in ``degraded``) when
+        no profile is configured or active, or the embedder or search fails."""
+        if not self.vector_profile:
+            degraded.append("dense:not_configured")
+            return None
+        if self.generation is None:
+            degraded.append("dense:not_active")
+            return None
+        from retrieval.vectors import Profile, embedder_for
+
+        profile = Profile.from_dict(self.generation["profile"])
+        try:
+            embedder = self.embedder or _EMBEDDERS.setdefault(profile.id, embedder_for(profile))
+            [vector] = embedder.embed([query], query=True)
+            units, _ = text_index._tables(self.conn)
+            where, params = filters.where()
+            with self.conn.begin_nested():
+                found = indexer.store_for(self.conn, self.generation).search(
+                    units, where, params, vector, ARM_LIMIT
+                )
+        except Exception:  # the lexical arms carry the request; the pack says the dense arm did not run
+            degraded.append("dense:unavailable")
+            return None
+        return [_hit(row) for row, _distance in found]
+
+    def _rerank(self, query: str, candidates: list[Candidate], degraded: list[str]) -> None:
+        """Score the first fused candidates with the reranker (RSV-05); on failure the fused order stands."""
+        if self.reranker is None:
+            degraded.append("reranker:not_configured")
+            return
+        pool = [c for c in candidates[: rerank.MAX_CANDIDATES] if self._public(c.hit.version_id)]
+        texts = [
+            self._public(c.hit.version_id)[0]
+            .canonical_text.encode()[c.hit.start_byte : c.hit.end_byte]
+            .decode()
+            for c in pool
+        ]
+        try:
+            scores = self.reranker.scores(query, texts) if pool else []
+        except Exception:
+            degraded.append("reranker:unavailable")
+            return
+        for candidate, score in zip(pool, scores, strict=True):
+            candidate.rerank_score = score
 
     # --- the pack --------------------------------------------------------------------------------
 
@@ -250,7 +315,9 @@ class Retriever:
             query, citation=citation, works=works, as_of=filters.as_of, jurisdictions=filters.jurisdictions
         )
         arms, degraded, _ = self._arms(query, plan, filters)
-        candidates = apply_signals(fuse(arms), set(works))
+        fused = fuse(arms)
+        self._rerank(query, fused, degraded)
+        candidates = apply_signals(fused, set(works))
         scoped = "citation" in plan.routes or len(works) == 1 or bool(filters.source_id or filters.version_id)
         candidates = diversify(candidates, scoped=scoped, comparative=plan.comparative)
         evidence, used, sent, omitted, notices = self._assemble(query, candidates, plan, request)
@@ -297,12 +364,17 @@ class Retriever:
                 router=router.ROUTER,
                 ranking=PROFILE,
                 analyzer=text_index.ANALYZER,
+                vector=f"{self.generation['profile_id']}@{self.generation['generation_id']}"
+                if self.generation
+                else None,
+                reranker=self.reranker.profile if self.reranker is not None else None,
             ),
             coverage=EvidenceCoverage(
                 records_in_scope=records,
                 records_with_text=searched.records,
                 texts_searched=searched.texts,
-                degraded=tuple(degraded) + ("dense:not_configured", "reranker:not_configured"),
+                dense_coverage=self._dense_coverage(filters),
+                degraded=tuple(dict.fromkeys(degraded)),
                 incomplete_evidence=omitted > 0,
                 omitted_units=omitted,
                 notices=tuple(notices),
@@ -312,6 +384,22 @@ class Retriever:
             next_steps=tuple(next_steps),
             bytes=EvidenceBytes(unique=used, transmitted=sent, budget=request.max_evidence_bytes),
         )
+
+    def _dense_coverage(self, filters) -> float | None:
+        """The share of texts in scope whose vectors are in the active generation."""
+        if self.generation is None or not text_index.available(self.conn):
+            return None
+        units, _ = text_index._tables(self.conn)
+        where, params = filters.where()
+        row = self.conn.execute(
+            sql(
+                f"SELECT count(DISTINCT u.version_id) AS texts, count(DISTINCT u.version_id) FILTER"
+                f" (WHERE j.state = 'done') AS done FROM {units} u LEFT JOIN {indexer._t(self.conn, 'index_job')} j"
+                f" ON j.version_id = u.version_id AND j.generation_id = :g WHERE {where}"
+            ),
+            params | {"g": self.generation["generation_id"]},
+        ).one()
+        return round(row.done / row.texts, 4) if row.texts else None
 
     @staticmethod
     def _filters(filters: text_index.Filters) -> dict:
@@ -534,6 +622,7 @@ class Retriever:
             profile=PROFILE,
             arms=dict(candidate.arms),
             fused_score=round(candidate.fused, 8),
+            rerank_score=round(candidate.rerank_score, 6) if candidate.rerank_score is not None else None,
             band=candidate.band,
             signals=tuple(RankingSignal(name=n, value=v, effect=e) for n, v, e in candidate.signals),
             diversification=tuple(candidate.diversification),
