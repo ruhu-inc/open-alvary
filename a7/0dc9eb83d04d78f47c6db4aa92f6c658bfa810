@@ -1,0 +1,27 @@
+ingestion/compare.py
+  s_42c250865c68fb::t_87255e7733894a 86-87
+  s_42c250865c68fb::t_24cd7f1cd1cbaa 26-32
+tests/test_batch_pipeline.py
+  s_42c250865c68fb::t_aeef4570148113 75-78,88-89,91-96
+  s_42c250865c68fb::t_7a2079fb0c4e8d 64-74,79-87,90,97-99
+deployment/runbook.md
+  s_42c250865c68fb::t_23a52ca7251caf 389-391
+ingestion/native.py
+  s_42c250865c68fb::t_bcc70e17a361d6 58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a70dc9eb83d04d78f47c6db4aa92f6c658bfa810",
+  "prompts": {},
+  "sessions": {
+    "s_42c250865c68fb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3c7640a6-d718-40e2-953b-857a5ce57f35",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
