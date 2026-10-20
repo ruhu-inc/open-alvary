@@ -9,6 +9,10 @@
 #   deployment/gcp-terraform/release.sh staging workbench    # build
 #   deployment/gcp-terraform/release.sh staging ingestion    # build
 #   deployment/gcp-terraform/release.sh staging restore      # build the database restore job (phase 5)
+#   COMMIT=2163537 deployment/gcp-terraform/release.sh staging public   # an earlier commit: the one live today
+#
+# COMMIT builds that commit instead of HEAD (it must be on main). The build instructions are this
+# tree's (cloudbuild.yaml), since an earlier commit may not have them.
 #
 # The project is read from env/<environment>.tfvars. Needs gcloud signed in as someone who may act as
 # the builder account and run the project's jobs (the project's owner may).
@@ -21,7 +25,12 @@ WHAT="${2:-}"
   echo "Usage: $0 staging|prod public|workbench|ingestion|restore" >&2
   exit 2
 }
-[[ -z "$(git status --porcelain --untracked-files=no)" ]] || { echo "Commit first: the image is the commit" >&2; exit 1; }
+REVISION="${COMMIT:-HEAD}"
+if [[ "$REVISION" == HEAD ]]; then
+  [[ -z "$(git status --porcelain --untracked-files=no)" ]] || { echo "Commit first: the image is the commit" >&2; exit 1; }
+else
+  git merge-base --is-ancestor "$REVISION" main 2>/dev/null || { echo "$REVISION is not on main" >&2; exit 1; }
+fi
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 tfvar() {  # name: its quoted value in env/<environment>.tfvars, else nothing
@@ -36,7 +45,7 @@ REGION="${REGION:-europe-west1}"
 GC=(gcloud --project "$PROJECT" --quiet)
 "${GC[@]}" artifacts repositories describe open-alvary --location="$REGION" >/dev/null 2>&1 \
   || { echo "No registry in $PROJECT: apply env/ first" >&2; exit 1; }
-COMMIT="$(git rev-parse --short HEAD)"
+COMMIT="$(git rev-parse --short "$REVISION")"
 BUILDER="open-alvary-${ENVIRONMENT}-builder@${PROJECT}.iam.gserviceaccount.com"
 
 case "$WHAT" in
@@ -45,16 +54,16 @@ case "$WHAT" in
   ingestion) NAME=ingestion DOCKERFILE=deployment/ingestion-jobs.Dockerfile ;;
   restore) NAME=restore DOCKERFILE=deployment/azure/restore.Dockerfile ;;  # the same job for both clouds
 esac
-[[ -f "$DOCKERFILE" ]] || { echo "No $DOCKERFILE at this commit" >&2; exit 1; }
+git cat-file -e "$REVISION:$DOCKERFILE" 2>/dev/null || { echo "No $DOCKERFILE at $COMMIT" >&2; exit 1; }
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/open-alvary/${NAME}:${COMMIT}"
 
 context="$(mktemp -d)"
 trap 'rm -rf "$context"' EXIT
-git archive HEAD | tar -x -C "$context"
+git archive "$REVISION" | tar -x -C "$context"
 "${GC[@]}" builds submit "$context" --region="$REGION" \
   --service-account="projects/$PROJECT/serviceAccounts/$BUILDER" \
   --gcs-source-staging-dir="gs://${PROJECT}_cloudbuild/source" \
-  --config="$context/deployment/gcp-terraform/cloudbuild.yaml" \
+  --config="$HERE/cloudbuild.yaml" \
   --substitutions="_IMAGE=$IMAGE,_DOCKERFILE=$DOCKERFILE"
 echo "Built $IMAGE"
 

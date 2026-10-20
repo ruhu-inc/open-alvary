@@ -137,6 +137,12 @@ variable "edge_requests_per_minute" {
 
 # --- retrieval: the engine and the models -----------------------------------------------------------
 
+variable "retrieval_enabled" {
+  description = "The retrieval job (python -m retrieval.worker run, every minute). Off while public_image is a release from before the retrieval service: its module is not in that image."
+  type        = bool
+  default     = true
+}
+
 variable "engine_enabled" {
   description = "The Vespa machine. Off, the service runs without the engine (the lexical arms in PostgreSQL), and says so in every pack."
   type        = bool

@@ -233,6 +233,12 @@ serves:
 At switchover the rehearsal's data is stale: freeze writes in the old system, then copy both
 databases again with `FRESH=1` (a backup taken at that moment) and the password applies.
 
+**The code that goes live is the old system's own commit** (the owner, 2026-10-20), so the move
+changes nothing visitors see; newer work follows as a release of its own. Build it with `COMMIT`
+(`COMMIT=2163537 ./release.sh staging public`, and the workbench's live commit likewise). Set
+`retrieval_enabled = false` while that image predates the retrieval service. A schema migrated by a
+newer commit is refused by older code, so copy the databases again before releasing an older commit.
+
 1. **Foundation.** In `env/`:
    `terraform init -backend-config=../staging.backend.hcl`, then
    `terraform apply -var-file=staging.tfvars`, with `public_image` empty.
