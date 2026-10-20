@@ -5,10 +5,19 @@
 # table's rows with the source's, and verify compares every object's MD5.
 #
 #   deployment/gcp-terraform/data.sh plan    staging
+#   deployment/gcp-terraform/data.sh backup  staging public|review   # from today's Google Cloud: its backup, restored here
 #   deployment/gcp-terraform/data.sh dump    staging public|review [gcp|azure]
 #   deployment/gcp-terraform/data.sh restore staging public|review   # the restore job, inside the network
 #   deployment/gcp-terraform/data.sh buckets staging [gcp|azure]     # the copy jobs
 #   deployment/gcp-terraform/data.sh verify  staging [gcp|azure]     # every object, by MD5
+#
+# backup is how the databases move from today's Google Cloud: Cloud SQL restores the source instance's
+# latest backup (FRESH=1: one taken now) into this environment's instance, across projects. It is an
+# exact copy, with the roles, the row-level security and every row. A dump cannot be: the private
+# tables' policies admit only the guard role (USING current_user = '<prefix>_guard', FORCE ROW LEVEL
+# SECURITY), so pg_dump, run by any user Cloud SQL gives a customer, stops at the first of them. The
+# copy brings the source's passwords; the apply this command prints gives this environment's users
+# their own again and rewrites the URLs in Secret Manager.
 #
 # gcp (the default) is today's live system: dump reads its Cloud SQL instances through cloud-sql-proxy
 # on this machine, as deployment/azure/data.sh does, and needs PostgreSQL 16's client tools here.
@@ -25,11 +34,11 @@ set -euo pipefail
 
 COMMAND="${1:-}"
 ENVIRONMENT="${2:-}"
-[[ "$COMMAND" =~ ^(plan|dump|restore|buckets|verify)$ ]] && [[ "$ENVIRONMENT" == staging || "$ENVIRONMENT" == prod ]] || {
-  echo "Usage: $0 plan|dump|restore|buckets|verify staging|prod [public|review] [gcp|azure]" >&2
+[[ "$COMMAND" =~ ^(plan|backup|dump|restore|buckets|verify)$ ]] && [[ "$ENVIRONMENT" == staging || "$ENVIRONMENT" == prod ]] || {
+  echo "Usage: $0 plan|backup|dump|restore|buckets|verify staging|prod [public|review] [gcp|azure]" >&2
   exit 2
 }
-if [[ "$COMMAND" == dump || "$COMMAND" == restore ]]; then
+if [[ "$COMMAND" == backup || "$COMMAND" == dump || "$COMMAND" == restore ]]; then
   TARGET="${3:-}"
   SOURCE="${4:-gcp}"
   [[ "$TARGET" == public || "$TARGET" == review ]] || { echo "Name the database: public or review" >&2; exit 2; }
@@ -164,6 +173,30 @@ dump)
     gcloud storage cp "$folder/$name" "gs://$TRANSFER/$TARGET/$name" --project="$PROJECT" --quiet
   done
   echo "In gs://$TRANSFER/$TARGET/ (deleted there after 14 days). Next: $0 restore $ENVIRONMENT $TARGET"
+  ;;
+
+backup)
+  [[ "$SOURCE" == gcp ]] || { echo "backup restores a Google Cloud backup; from Azure, use dump and restore" >&2; exit 2; }
+  if [[ "$TARGET" == public ]]; then
+    FROM=open-alvary-db FROM_PROJECT=open-alvary-prod TO="${PREFIX}-pg" PASSWORD="random_password.postgres"
+  else
+    FROM=review-db FROM_PROJECT=open-alvary-ingestion TO="${PREFIX}-review-pg" PASSWORD="random_password.review[0]"
+  fi
+  "${GC[@]}" sql instances describe "$TO" --format="value(name)" >/dev/null \
+    || { echo "No $TO in $PROJECT: apply env/ first (restore_image or workbench_image makes the review one)" >&2; exit 1; }
+  if [[ -n "${FRESH:-}" ]]; then
+    echo "Taking a backup of $FROM_PROJECT:$FROM now…"
+    gcloud sql backups create --instance="$FROM" --project="$FROM_PROJECT" --description="copy to $PROJECT" --quiet
+  fi
+  read -r backup taken <<<"$(gcloud sql backups list --instance="$FROM" --project="$FROM_PROJECT" \
+    --filter="status=SUCCESSFUL" --sort-by=~windowStartTime --limit=1 --format="value(id,windowStartTime)")"
+  [[ -n "$backup" ]] || { echo "No successful backup of $FROM_PROJECT:$FROM" >&2; exit 1; }
+  echo "Restoring $FROM_PROJECT:$FROM's backup of $taken into $PROJECT:$TO (everything in $TO is replaced)…"
+  "${GC[@]}" sql backups restore "$backup" --restore-instance="$TO" \
+    --backup-instance="$FROM" --backup-project="$FROM_PROJECT"
+  echo "Restored. Now give $TO's users this environment's passwords again, in deployment/gcp-terraform/env:"
+  echo "  terraform apply -var-file=${ENVIRONMENT}.tfvars -replace='$PASSWORD'"
+  [[ "$TARGET" == public ]] && echo "Then release the public service (release.sh $ENVIRONMENT public): its migrations check the schema."
   ;;
 
 restore)

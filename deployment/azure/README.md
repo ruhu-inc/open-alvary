@@ -99,6 +99,15 @@ Unchanged: Auth0 (sign-in), Resend (email), DNS (records change at switchover), 
   workbench's cache at start (`ALVARY_REVIEW_STAGING`); Rwanda's stays at `collections/rw/` in the
   corpus copy.
 
+## Known issue: dumps and row-level security (found 2026-10-20)
+
+`data.sh dump` and `restore.py dump` cannot copy today's public database as written. Its private
+tables admit only the guard role (`USING current_user = '<prefix>_guard'`, with `FORCE ROW LEVEL
+SECURITY`). Neither Cloud SQL nor Flexible Server gives customers a user that bypasses row-level
+security, so `pg_dump` stops at the first of those tables. Google Cloud to Google Cloud now moves by
+backup instead (`deployment/gcp-terraform/data.sh backup`). A move to Azure needs a way first, for
+example dumping each schema as the role its policies admit. Settle it before the 1 December decision.
+
 ## Still to settle with the owner
 
 - **Alvary's spend.** The credit is shared: about $4.7K a month to mid-2028. Open Alvary's estimate

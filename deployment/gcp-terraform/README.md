@@ -225,14 +225,13 @@ Each phase ends with a check, and nothing serves the public until phase 6.
 loads only into an empty database, and both the first release's migrations (phase 3) and the
 workbench's start (phase 4, `workbench/store.py`) create tables. So, while the old system still
 serves:
-- build the restore image and apply with `restore_image` set (this also creates the workbench's
-  database, before the workbench);
-- dump and restore both databases as a rehearsal;
+- apply with `restore_image` set (it also creates the workbench's database, before the workbench);
+- copy both databases in by backup (phase 5) as a rehearsal;
 - then release the public service (its migrations run on the restored schema) and the workbench, and
   test both on real data.
 
-At switchover the rehearsal's data is stale. Empty both databases and restore the final dumps (phase
-5's rehearsal note), with the workbench scaled to zero so it cannot create tables first.
+At switchover the rehearsal's data is stale: freeze writes in the old system, then copy both
+databases again with `FRESH=1` (a backup taken at that moment) and the password applies.
 
 1. **Foundation.** In `env/`:
    `terraform init -backend-config=../staging.backend.hcl`, then
@@ -270,22 +269,27 @@ At switchover the rehearsal's data is stale. Empty both databases and restore th
 5. **Data** (`./data.sh plan staging` lists it).
    - Build the restore and ingestion images (`./release.sh staging restore`, `./release.sh staging
      ingestion`), set `restore_image`, `ingestion_image` and `document_ai`, and apply.
-   - Databases, in the switchover window with writes frozen:
-     - `cloud-sql-proxy open-alvary-prod:europe-west1:open-alvary-db --port 55432`;
-     - `./data.sh dump staging public`, then `./data.sh restore staging public`;
-     - the same with `review` (55433, `open-alvary-ingestion:europe-west1:review-db`);
-     - then `./release.sh staging public` runs the migrations against the restored schema.
-     The restore recreates the source's roles (only the access role logs in), leaves Cloud SQL's
-     own roles to Cloud SQL, loads the dump without owners, and fails on any table whose rows differ
-     from the source's.
-   - To rehearse first, while today's system still serves: dump and restore as above, check, then
-     empty the target (`gcloud sql databases delete open_alvary --instance open-alvary-staging-pg`,
-     then apply to make it again). The restore only loads into an empty database.
+   - **Databases from today's Google Cloud: by backup.**
+     - `./data.sh backup staging public`, then the apply it prints (`-replace='random_password.postgres'`).
+     - The same with `review`: `-replace='random_password.review[0]'`.
+     - Then `./release.sh staging public`: the migrations check the restored schema.
+     Cloud SQL restores the source instance's latest backup (`FRESH=1`: one taken now) into staging's
+     instance, across projects. It is an exact copy, with the roles, the row-level security and
+     every row, and it replaces whatever the target held, so it serves the rehearsal and the
+     switchover alike. The apply then gives staging's users their own passwords again, since the
+     copy brings the source's, and rewrites the URLs in Secret Manager. Staging's names match the
+     source's (`open_alvary`; `review` for the workbench) so Terraform's state stays true.
+   - **Why not a dump.** The private tables' policies admit only the guard role
+     (`USING current_user = '<prefix>_guard'`, with `FORCE ROW LEVEL SECURITY`), and Cloud SQL gives
+     customers no user that bypasses row-level security. So `pg_dump` stops at the first of them
+     ("query would be affected by row-level security policy"), as it did on 2026-10-20. `dump` and
+     `restore` remain for moves to and from Azure, which have the same problem to solve first.
    - Buckets: today's are used in place, so there is nothing to copy (`./data.sh buckets staging`
      says so). An environment with its own buckets copies them with that command, after the owner
      grants `terraform output ingestion_identity` read on today's buckets. `./data.sh verify`
      checks every MD5.
-   - Check: the restores pass, and the benchmarks give the same metrics through the new service.
+   - Check: the public service and the workbench answer on the copied data, and the benchmarks give
+     the same metrics through the new service.
 6. **Switchover.**
    - Point the A records of `open.alvary.ai` and `api.open.alvary.ai` at `edge_address`.
    - In the same change, set `domain_live = true` and apply. The uptime check and alert start, and

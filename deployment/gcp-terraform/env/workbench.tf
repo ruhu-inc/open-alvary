@@ -84,15 +84,17 @@ resource "google_sql_database_instance" "review" {
   depends_on = [google_service_networking_connection.services]
 }
 
+# The names today's review-db uses (user and database review), so a backup of it restores here with
+# Terraform's state still true (data.sh backup).
 resource "google_sql_database" "review" {
   count    = local.review_database_enabled ? 1 : 0
-  name     = "workbench"
+  name     = "review"
   instance = google_sql_database_instance.review[0].name
 }
 
 resource "google_sql_user" "review" {
   count           = local.review_database_enabled ? 1 : 0
-  name            = "workbench"
+  name            = "review"
   instance        = google_sql_database_instance.review[0].name
   password        = random_password.review[0].result
   deletion_policy = "ABANDON"
@@ -117,9 +119,11 @@ resource "google_secret_manager_secret_version" "review_database_url" {
   count  = local.review_database_enabled ? 1 : 0
   secret = google_secret_manager_secret.review_database_url[0].id
   secret_data = format(
-    "postgresql+psycopg://workbench:%s@%s:5432/workbench?sslmode=require",
+    "postgresql+psycopg://%s:%s@%s:5432/%s?sslmode=require",
+    google_sql_user.review[0].name,
     random_password.review[0].result,
     google_sql_database_instance.review[0].private_ip_address,
+    google_sql_database.review[0].name,
   )
 }
 
