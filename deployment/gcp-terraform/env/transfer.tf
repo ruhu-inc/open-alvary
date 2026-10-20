@@ -49,7 +49,7 @@ locals {
         secrets = { DATABASE_URL = "database-url", ACCESS_ROLE_PASSWORD = "access-role-password" }
       }
     },
-    local.workbench_enabled ? {
+    local.review_database_enabled ? {
       review = {
         account = google_service_account.workbench.email
         secrets = { DATABASE_URL = "review-database-url" }

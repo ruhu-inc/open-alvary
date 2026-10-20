@@ -9,7 +9,11 @@
 
 locals {
   workbench_enabled = var.workbench_image != ""
-  workbench_name    = "${local.name_prefix}-workbench"
+  # The workbench's database comes before the workbench when the review data is restored into it: the
+  # workbench creates its tables when it starts (workbench/store.py), and the restore loads only into
+  # an empty database.
+  review_database_enabled = local.workbench_enabled || var.restore_image != ""
+  workbench_name          = "${local.name_prefix}-workbench"
   # Cloud Run's deterministic address for the service, known before it exists.
   workbench_host = "${local.workbench_name}-${data.google_project.main.number}.${var.region}.run.app"
 
@@ -37,13 +41,13 @@ locals {
 }
 
 resource "random_password" "review" {
-  count   = local.workbench_enabled ? 1 : 0
+  count   = local.review_database_enabled ? 1 : 0
   length  = 40
   special = false
 }
 
 resource "google_sql_database_instance" "review" {
-  count               = local.workbench_enabled ? 1 : 0
+  count               = local.review_database_enabled ? 1 : 0
   name                = "${local.name_prefix}-review-pg"
   region              = var.region
   database_version    = "POSTGRES_${var.postgres_version}"
@@ -81,13 +85,13 @@ resource "google_sql_database_instance" "review" {
 }
 
 resource "google_sql_database" "review" {
-  count    = local.workbench_enabled ? 1 : 0
+  count    = local.review_database_enabled ? 1 : 0
   name     = "workbench"
   instance = google_sql_database_instance.review[0].name
 }
 
 resource "google_sql_user" "review" {
-  count           = local.workbench_enabled ? 1 : 0
+  count           = local.review_database_enabled ? 1 : 0
   name            = "workbench"
   instance        = google_sql_database_instance.review[0].name
   password        = random_password.review[0].result
@@ -95,7 +99,7 @@ resource "google_sql_user" "review" {
 }
 
 resource "google_secret_manager_secret" "review_database_url" {
-  count     = local.workbench_enabled ? 1 : 0
+  count     = local.review_database_enabled ? 1 : 0
   secret_id = "review-database-url"
 
   replication {
@@ -110,7 +114,7 @@ resource "google_secret_manager_secret" "review_database_url" {
 }
 
 resource "google_secret_manager_secret_version" "review_database_url" {
-  count  = local.workbench_enabled ? 1 : 0
+  count  = local.review_database_enabled ? 1 : 0
   secret = google_secret_manager_secret.review_database_url[0].id
   secret_data = format(
     "postgresql+psycopg://workbench:%s@%s:5432/workbench?sslmode=require",
@@ -120,7 +124,7 @@ resource "google_secret_manager_secret_version" "review_database_url" {
 }
 
 resource "google_secret_manager_secret_iam_member" "review_database_url" {
-  count     = local.workbench_enabled ? 1 : 0
+  count     = local.review_database_enabled ? 1 : 0
   secret_id = google_secret_manager_secret.review_database_url[0].id
   role      = "roles/secretmanager.secretAccessor"
   member    = google_service_account.workbench.member

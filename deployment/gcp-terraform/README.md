@@ -221,6 +221,19 @@ them; the budget tracks the cost before credits.
 
 Each phase ends with a check, and nothing serves the public until phase 6.
 
+**Order when taking over from a live system: 1, 2, then 5's databases, then 3, 4 and 6.** The restore
+loads only into an empty database, and both the first release's migrations (phase 3) and the
+workbench's start (phase 4, `workbench/store.py`) create tables. So, while the old system still
+serves:
+- build the restore image and apply with `restore_image` set (this also creates the workbench's
+  database, before the workbench);
+- dump and restore both databases as a rehearsal;
+- then release the public service (its migrations run on the restored schema) and the workbench, and
+  test both on real data.
+
+At switchover the rehearsal's data is stale. Empty both databases and restore the final dumps (phase
+5's rehearsal note), with the workbench scaled to zero so it cannot create tables first.
+
 1. **Foundation.** In `env/`:
    `terraform init -backend-config=../staging.backend.hcl`, then
    `terraform apply -var-file=staging.tfvars`, with `public_image` empty.
