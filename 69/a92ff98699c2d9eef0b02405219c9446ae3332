@@ -1,0 +1,29 @@
+deployment/azure/env/variables.tf
+  s_fb6a8009629331::t_a51c8b6f5b19a8 110
+deployment/azure/env/staging.tfvars.example
+  s_fb6a8009629331::t_a83a28a348958e 12-15
+deployment/azure/env/jobs.tf
+  s_fb6a8009629331::t_1321585f28a7fd 9-12
+  s_fb6a8009629331::t_518ecc67348c25 1-2,35,42
+deployment/azure/env/prod.tfvars.example
+  s_fb6a8009629331::t_a83a28a348958e 10
+deployment/azure/README.md
+  s_fb6a8009629331::t_1321585f28a7fd 144-145
+  s_fb6a8009629331::t_23fd9983a98dc1 29,143,146,200-207,209-210,255-256
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "69a92ff98699c2d9eef0b02405219c9446ae3332",
+  "prompts": {},
+  "sessions": {
+    "s_fb6a8009629331": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "15b77691-f961-4bf8-92fa-8dba413c7a08",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
