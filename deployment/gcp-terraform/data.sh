@@ -203,7 +203,7 @@ restore)
   JOB="${PREFIX}-restore-${TARGET}"
   "${GC[@]}" run jobs describe "$JOB" --region="$REGION" >/dev/null 2>&1 \
     || { echo "No $JOB: set restore_image (release.sh $ENVIRONMENT restore) and apply" >&2; exit 1; }
-  echo "Restoring $TARGET…"
+  echo "Restoring ${TARGET}…"
   "${GC[@]}" run jobs execute "$JOB" --region="$REGION" --wait \
     || { echo "The restore failed: its log has the counts and names (Cloud Run, job $JOB)." >&2; exit 1; }
   echo "Then run the migrations job (release.sh $ENVIRONMENT public): it checks the restored schema."
@@ -219,7 +219,7 @@ buckets|verify)
       JOB="${PREFIX}-transfer"
       "${GC[@]}" run jobs describe "$JOB" --region="$REGION" >/dev/null 2>&1 \
         || { echo "No $JOB: set ingestion_image (release.sh $ENVIRONMENT ingestion) and apply" >&2; exit 1; }
-      echo "$action $source → $target…"
+      echo "$action $source → ${target}…"
       "${GC[@]}" run jobs execute "$JOB" --region="$REGION" --wait \
         --args="-m,operations.transfer,$action,$source,$target" || status=1
     else
