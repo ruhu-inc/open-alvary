@@ -1,0 +1,21 @@
+deployment/gcp-terraform/env/cloud_run.tf
+  s_d665c62e07d76f::t_12aa1296abc4b4 74-76
+deployment/gcp-terraform/env/workbench.tf
+  s_d665c62e07d76f::t_12aa1296abc4b4 149-150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "38f191737fb204e0910d1a10f6b59370a09528bf",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
