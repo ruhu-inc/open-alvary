@@ -71,6 +71,9 @@ resource "google_cloud_run_v2_service" "public" {
   template {
     service_account                  = google_service_account.public.email
     max_instance_request_concurrency = 80
+    # Cloud Run reads a secret when an instance starts: a new database URL (a new password after a
+    # backup restore, data.sh) starts a new revision in the same apply.
+    labels = { database-url-version = google_secret_manager_secret_version.generated["database-url"].version }
 
     scaling {
       min_instance_count = var.public_min_replicas

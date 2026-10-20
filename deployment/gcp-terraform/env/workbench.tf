@@ -146,6 +146,8 @@ resource "google_cloud_run_v2_service" "workbench" {
     service_account                  = google_service_account.workbench.email
     execution_environment            = "EXECUTION_ENVIRONMENT_GEN2" # a bucket mount needs it
     max_instance_request_concurrency = 80
+    # A new database URL starts a new revision (cloud_run.tf).
+    labels = { review-database-url-version = google_secret_manager_secret_version.review_database_url[0].version }
 
     scaling {
       min_instance_count = 0
