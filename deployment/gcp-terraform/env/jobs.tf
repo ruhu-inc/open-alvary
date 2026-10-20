@@ -16,13 +16,17 @@ locals {
         timeout = 900
         secrets = { POSTGRES_PASSWORD = "database-password" } # scripts.check_launch checks it
       }
+    },
+    # Off while the image is a release from before the retrieval service (retrieval.worker), such as
+    # the one live when this environment took over.
+    var.retrieval_enabled ? {
       retrieval = {
         command = ["python", "-m", "retrieval.worker", "run"]
         cron    = "* * * * *"
         timeout = 55
         secrets = {}
       }
-    },
+    } : {},
     var.accounts_enabled ? {
       worker = {
         command = ["python", "-m", "changes.worker", "run"]
