@@ -61,6 +61,42 @@ def test_words_every_check_has_but_the_primary_lacks_are_reported():
     assert all("44" in text for text in flags[0].checks.values())
 
 
+def test_a_negation_gained_lost_or_swapped_is_high():
+    tariff = "The Minister shall approve the tariff."
+    negated = "The Minister shall not approve the tariff."
+    lost = compare.compare(tariff, {"azure": negated, "mineru": negated})
+    assert [(f.severity, f.kind, f.checks) for f in lost] == [
+        ("high", "missing_from_primary", {"azure": "not", "mineru": "not"})
+    ]
+    gained = compare.compare(negated, {"azure": tariff, "mineru": tariff})
+    assert [(f.severity, f.kind, f.primary) for f in gained] == [("high", "only_in_primary", "not")]
+    swapped = compare.compare(
+        "except with the consent of the Commission",
+        {
+            "azure": "unless with the consent of the Commission",
+            "mineru": "unless with the consent of the Commission",
+        },
+    )
+    assert [(f.severity, f.kind, f.primary) for f in swapped] == [("high", "differs", "except")]
+    for word in ("no", "nor", "never", "without", "notwithstanding", "neither", "cannot"):
+        flags = compare.compare(f"and {word} person", {"azure": "and the person", "mineru": "and the person"})
+        assert [f.severity for f in flags] == ["high"], word
+
+
+def test_a_negation_one_check_disputes_is_medium_and_its_typography_alone_is_low():
+    split = compare.compare(
+        "The Minister shall not approve",
+        {"azure": "The Minister shall approve", "mineru": "The Minister shall not approve"},
+    )
+    assert [(f.severity, f.kind, f.readers_disagreeing) for f in split] == [
+        ("medium", "only_in_primary", ["azure"])
+    ]
+    punctuation = compare.compare(
+        "shall not, approve", {"azure": "shall not; approve", "mineru": "shall not; approve"}
+    )
+    assert [f.severity for f in punctuation] == ["low"]
+
+
 # --- converters --------------------------------------------------------------------------------
 
 

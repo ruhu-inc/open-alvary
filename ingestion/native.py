@@ -55,7 +55,7 @@ from pathlib import Path
 from pypdf import PdfReader
 from pypdf.generic import ContentStream
 
-from ingestion.compare import TOKEN
+from ingestion.compare import NEGATIONS, TOKEN
 from ingestion.ruled_tables import _times
 
 PROFILE = "oa-native-1"
@@ -93,11 +93,6 @@ THRESHOLDS = {
 
 WORD = re.compile(r"\d+|[^\W\d_]+")  # letters or digits; a number and a word printed together split
 GLUED = re.compile(r"(?<=[a-z])(?=[A-Z][a-z])")
-NEGATIONS = frozenset(
-    "not no nor never unless except without notwithstanding neither cannot "  # English
-    "ne pas ni jamais sauf sans nul aucun aucune non "  # French
-    "nta ntabwo ntibyemewe".split()  # Kinyarwanda
-)
 CID = re.compile(r"\(cid:\d+\)")
 MOJIBAKE = re.compile("Ã[\u0080-\u00bf]|Â[\u0080-\u00bf]|â€|ï¿½")
 INVISIBLE = {3, 7}  # text render modes that paint nothing

@@ -23,6 +23,13 @@ DASH = re.compile(r"^-{1,4}$")
 
 
 FILLER = re.compile(r"^[.…_·•]+$")  # dot leaders and blank fill-in lines: printed, never words
+# Words that turn a provision around when gained, lost or swapped; the text-layer checks
+# (ingestion/native.py) use the same list.
+NEGATIONS = frozenset(
+    "not no nor never unless except without notwithstanding neither cannot "  # English
+    "ne pas ni jamais sauf sans nul aucun aucune non "  # French
+    "nta ntabwo ntibyemewe".split()  # Kinyarwanda
+)
 
 
 def key(token: str) -> str:
@@ -76,6 +83,8 @@ def _severity(primary: list[str], others: list[list[str]], kind: str) -> str:
         "".join(loose(w) for w in primary) == "".join(loose(w) for w in other) for other in others
     ):
         return "low"  # typography or case only
+    if any(loose(w) in NEGATIONS for w in words):
+        return "high"  # a negation or exception gained, lost or swapped: the provision may say the opposite
     return "medium"
 
 

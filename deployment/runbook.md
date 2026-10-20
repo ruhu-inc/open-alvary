@@ -386,8 +386,9 @@ python -m ingestion.batch status                      # flags per reconciled Act
 - A failed reader is isolated: the other readings are kept and the run log under `runs/` records
   the error. Exit status is non-zero until every Act has every reading.
 - Reconciliation keeps Document AI's words; check readings only restore dropped list markers when
-  they agree, and flag what they do not support. Review high flags (numbers, dates, words no check
-  reading saw, conflicting markers) on every page before recording a content decision.
+  they agree, and flag what they do not support. Review high flags (numbers, dates, negations and
+  exceptions such as not, no, unless, except, words no check reading saw, conflicting markers) on
+  every page before recording a content decision.
 
 ## Corpus ingestion jobs on Google Cloud (Rwanda, 2026-10-13)
 
