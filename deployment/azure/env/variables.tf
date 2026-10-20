@@ -107,7 +107,7 @@ variable "console_client_id" {
 }
 
 variable "domain_live" {
-  description = "Whether public_domain points at this environment's Front Door: the availability test and its alert run only then."
+  description = "Whether public_domain points at this environment's Front Door: the availability test and its alert run only then, and so do the worker's and the daily job's schedules, so an environment being readied beside the live one sends no digests or webhooks and purges nothing."
   type        = bool
   default     = false
 }

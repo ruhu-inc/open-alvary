@@ -26,7 +26,7 @@ other projects are (`open-alvary-<staging|prod>-sc-…`). It shares nothing with
 | Part | On Google Cloud | On Azure |
 |---|---|---|
 | Public service: website, docs, REST v1, MCP and the console | Cloud Run `open-alvary-public` | Container App `open-alvary-<env>-sc-public` |
-| Its jobs (migrations, worker, daily at 03:15 UTC) | Cloud Run jobs + Scheduler | Container Apps jobs (`jobs.tf`) |
+| Its jobs (migrations, worker, daily at 03:15 UTC) | Cloud Run jobs + Scheduler | Container Apps jobs (`jobs.tf`); the worker and daily job have no schedule until `domain_live` |
 | Retrieval job, every minute: section index, engine sync, embeddings | (not deployed) | Container Apps job `…-retrieval` (`python -m retrieval.worker run`) |
 | Search engine | (not deployed) | Vespa on one VM, private address (`engine.tf`) |
 | Embedder and reranker (D29: Qwen3-Embedding-0.6B, bge-reranker-v2-m3) | (not deployed) | One T4 GPU VM, text-embeddings-inference (`inference.tf`) |
@@ -140,7 +140,10 @@ Unchanged: Auth0 (sign-in), Resend (email), DNS (records change at switchover), 
 2. **Settings.** `cp env/staging.tfvars.example env/staging.tfvars` and fill it in. Do the same for
    `backend.hcl` from `backend.hcl.example`. `operator_ip_ranges` must hold the address you apply
    from (`curl -s https://ifconfig.me`): the vault and storage refuse every other one, Terraform's
-   own requests included. Set `domain_live = true` only once DNS points at Front Door.
+   own requests included. Set `domain_live = true` only once DNS points at Front Door (phase 6).
+   Until then the worker and daily job are manual jobs that never start on their own (Google Cloud
+   pauses their schedules instead), so an environment being readied beside the live one sends no
+   digests or webhooks and purges nothing.
 3. **Pins to check.** `tei_image` must be a text-embeddings-inference release for Turing GPUs that
    lists Qwen3-Embedding among its supported models; `vespa_image` is the release the tests ran on.
 
@@ -173,8 +176,6 @@ Each phase ends with a check, and nothing serves the public until phase 6.
      set to `public_image`, `--container-name worker` and `--command false`); the email should
      come within 15 minutes. If none does, find the run's rows in `ContainerAppSystemLogs_CL` and
      correct the reasons or job column in `monitoring.tf`'s `job_failed` query.
-   - Check, after the first daily run with accounts on: `audit-seals` holds a `<day>.json` for every
-     seal in `accounts.audit_seal`, and the run's `audit seals` line counts what it copied.
 4. **Workbench.** The storage adapter (`az://`) and Entra ID sign-in. Set `workbench_image`,
    `workbench_domain` and `workbench_entra_client_id`, then apply. Check: an operator signs in and
    reviews a page.
@@ -196,8 +197,17 @@ Each phase ends with a check, and nothing serves the public until phase 6.
 6. **Switchover.**
    - Add the validation TXT records `terraform output dns_records` prints;
    - then move the CNAMEs of `open.alvary.ai` and `api.open.alvary.ai` to the Front Door endpoint.
+   - In the same change, set `domain_live = true` and apply. The availability test and its alert
+     start, and the worker and daily job are made again with their schedules (a job's trigger cannot
+     change in place).
+   - Pause the worker's and daily job's schedules on Google Cloud: `domain_live = false` in its
+     Terraform, or for today's `open-alvary-prod` the `gcloud scheduler jobs pause` commands in
+     `deployment/gcp-terraform/README.md` (phase 6). Only one environment sends at a time.
+   - Check, after the first daily run with accounts on: `audit-seals` holds a `<day>.json` for every
+     seal in `accounts.audit_seal`, and the run's `audit seals` line counts what it copied.
    - Keep Google Cloud read-only as a fallback until 18 December, then shut it down. Moving the
-     CNAMEs back is the rollback.
+     CNAMEs back, with `domain_live = false` here and Google Cloud's schedules resumed, is the
+     rollback.
 
 ## Google from Azure (owner, once)
 
@@ -242,8 +252,8 @@ possible).
 
 The audit seals' container is locked the same way, once the first seals are in it:
 `azurerm_storage_container_immutability_policy.audit_seals`, 800 days, as Google Cloud's
-`audit-seals` log bucket. The first daily run on Azure also writes every seal the restored database
-holds, so the copy covers the chain from its first day.
+`audit-seals` log bucket. The first daily run on Azure, after switchover, also writes every seal the
+restored database holds, so the copy covers the chain from its first day.
 
 ## Files
 

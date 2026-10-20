@@ -7,6 +7,7 @@ operator_ip_ranges   = ["<your address>/32"]
 monthly_budget       = 2000
 public_domain        = "open.alvary.ai"
 api_domain           = "api.open.alvary.ai"
+domain_live          = false
 admin_ssh_public_key = "ssh-ed25519 AAAA… operator"
 
 public_settings = {
