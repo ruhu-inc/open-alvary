@@ -9,6 +9,10 @@ public_domain        = "staging.open.alvary.ai"
 api_domain           = "api.staging.open.alvary.ai"
 admin_ssh_public_key = "ssh-ed25519 AAAA… operator"
 
+# true only once both domains point at Front Door (README, phase 6): the availability test, and the
+# worker's and daily job's schedules, start then.
+domain_live = false
+
 public_settings = {
   PUBLIC_REPOSITORY_URL = "https://github.com/ruhu-inc/open-alvary"
   PUBLIC_MAINTAINER     = "Ruhu, Inc."

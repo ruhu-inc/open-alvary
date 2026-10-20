@@ -1,10 +1,15 @@
-# The public service's jobs, on its image, identity, secrets and settings:
+# The public service's jobs, on its image, identity, secrets and settings. A job without a cron is a
+# manual one, which runs only when started (release.sh, or az containerapp job start):
 # - migrate: launch checks, migrations and the seed, run by release.sh before each new revision;
 # - retrieval: every minute, the engine catches up with the change log, embedding jobs run and the
 #   section index is rebuilt when its analyzer changed (python -m retrieval.worker run);
 # - worker and daily (activation B): monitors, digests and webhooks every five minutes; audit seals,
 #   sweeps and purges once a day at 03:15 UTC, as on Google Cloud. The daily job also writes each
 #   audit seal to the archive account's audit-seals container (storage.tf), as its own identity.
+#   Until the public domains point here (domain_live), the two are manual jobs (Google Cloud pauses
+#   their schedules instead): only the live environment writes to the outside world. A Container
+#   Apps job's schedule cannot be paused, and azurerm cannot change a job's trigger in place, so
+#   changing domain_live replaces both jobs; all they keep is in the database.
 
 locals {
   jobs = merge(
@@ -27,14 +32,14 @@ locals {
     var.accounts_enabled ? {
       worker = {
         command = ["python", "-m", "changes.worker", "run"]
-        cron    = "*/5 * * * *"
+        cron    = var.domain_live ? "*/5 * * * *" : null
         timeout = 280
         secrets = {}
         env     = {}
       }
       daily = {
         command = ["sh", "-c", "python -m accounts.seals seal && python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge && python -m accounts.seals verify"]
-        cron    = "15 3 * * *"
+        cron    = var.domain_live ? "15 3 * * *" : null
         timeout = 600
         secrets = {}
         env = {
