@@ -1,0 +1,26 @@
+deployment/gcp-terraform/env/workbench.tf
+  s_d665c62e07d76f::t_568ada413fb5ed 87-88,91,97,122-123,126
+deployment/gcp-terraform/data.sh
+  s_d665c62e07d76f::t_5da1fc87da9f89 8,14-21,37-38,41,178-199
+  s_d665c62e07d76f::t_ec2548c256c05f 200-201
+deployment/azure/README.md
+  s_d665c62e07d76f::t_ead13a19dbc28c 102-110
+deployment/gcp-terraform/README.md
+  s_d665c62e07d76f::t_de1230f609e32d 228-229,233-234,272-286,291-292
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "63b5de937e03ad1b9d136ec574ee09a9efcdfe61",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
