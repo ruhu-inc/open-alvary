@@ -117,9 +117,12 @@ resource "google_cloud_run_v2_job" "restore" {
     ignore_changes = [client, client_version]
   }
 
+  # Cloud Run refuses a job whose secret has no version yet: the generated URLs are written first.
   depends_on = [
     google_secret_manager_secret_iam_member.readers,
     google_secret_manager_secret_iam_member.review_database_url,
+    google_secret_manager_secret_version.generated,
+    google_secret_manager_secret_version.review_database_url,
     google_storage_bucket_iam_member.transfer,
   ]
 }
