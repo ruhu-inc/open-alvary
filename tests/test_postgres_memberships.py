@@ -441,7 +441,7 @@ def test_migration_0042_refuses_memberships_published_without_a_basis_and_steps_
 
     migrate(pg_engine)
     config = Config("alembic.ini")
-    before = ScriptDirectory.from_config(config).get_revision("0042").down_revision
+    before = ScriptDirectory.from_config(config).get_revision("0041").down_revision
 
     def run(step, revision):
         with pg_engine.begin() as conn:
@@ -476,7 +476,7 @@ def test_migration_0042_refuses_memberships_published_without_a_basis_and_steps_
             )
         )
     with pytest.raises(RuntimeError, match="no basis"):
-        run(command.upgrade, "0042")
+        run(command.upgrade, "0041")
     with pg_engine.begin() as conn:
         conn.execute(text(f"DELETE FROM {table}"))
     run(command.upgrade, "head")

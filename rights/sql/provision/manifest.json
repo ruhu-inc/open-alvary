@@ -294,9 +294,9 @@
     ]
   },
   {
-    "revision": "0042",
+    "revision": "0041",
     "anchor": "corpus.membership_suspension",
-    "file": "v0042.sql",
+    "file": "v0041.sql",
     "requires": [
       "changes.suspension_state",
       "corpus.membership_suspension"
