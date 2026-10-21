@@ -58,11 +58,31 @@ Each unit in `evidence` is one part of a published text, best first:
 | `authority` | Where the text stands: an instrument's place in its hierarchy, or for a decision its court and how the court's decisions bear on other courts (see [Court authority](#court-authority)). |
 | `ranking` | Why it ranks where it does: the route, each search's rank and every signal applied. |
 
-Quote only `text`. A unit whose `unit` is `document` tells you which law is relevant; never cite it for what a provision says.
+Quote only `text`. A unit whose `unit` is `document` tells you which law is relevant; never cite it for what a provision says. Each unit's `warnings` notes what to watch for: that `text` is an excerpt, that a unit is a whole document, or that a later published text replaces this one.
+
+### Narrow the request
+
+| Parameter | Use |
+|---|---|
+| `jurisdiction` | Jurisdiction IDs, such as `ng`. Repeat it for several, up to 10; with two or more, results alternate between them. Each matches that jurisdiction only. Without it, the request covers your plan's jurisdictions. |
+| `language`, `type`, `status`, `year_from`, `year_to` | As in [Search published texts](/docs/search#search-published-texts). |
+| `as_of` | Only texts in force on that date, with currentness assessed at it ([below](#routes)). |
+| `source_id`, `version_id` | Only one record's texts, or one text. |
+| `include` | What each unit carries besides its words: `context` (headings and qualifications), `expansion` (definitions and references) and `ranking` (why it ranks there). All three by default; name one or more, repeating the parameter, to get only those. |
+
+### When no text answers
+
+Besides `evidence`, the pack says what else it found:
+
+- `catalogue`: up to 5 records that match but have no published text yet: their ID, title, citation and official link, never words.
+- `next_steps`: what you can do next, each with a `detail` sentence and `candidates`. `metadata_only` lists the records in `catalogue`, to read at their official links; `ambiguous_citation` lists the anchors of the parts a citation could mean, to choose between with `as_of` or `language`.
+- `status`: `results`, `no_result`, `unsupported_scope` (no published text in the scope) or `degraded` (the search could not run; `coverage.degraded` says why), as for [Search published texts](/docs/search#search-published-texts).
 
 ## Court authority
 
-A decision's unit names its court in `authority.court`, as the [court register](/docs/api/get-court-register) of the jurisdiction asked about lists it, with whether a reviewer has checked the court's entry. `court.bears_on` lists how the court's decisions bear on other courts on the date assessed (`as_of`, or today), each relation once someone legally qualified for the jurisdiction has reviewed it, with the words of its source:
+A decision's unit names its court in `authority.court`, as the [court register](/docs/api/get-court-register) of the jurisdiction asked about lists it, with whether a reviewer has checked the court's entry. `court.bears_on` lists how the court's decisions bear on other courts on the date assessed (`as_of`, or today), each relation once someone legally qualified for the jurisdiction has reviewed it, with the words of its source.
+
+This example is an illustration of a reviewed register. No register has been reviewed yet, so for now every `court_relation` is `unknown` and `bears_on` is empty:
 
 ```json
 "authority": {
@@ -182,7 +202,7 @@ These are rules for matching word forms, not a measure of how well questions are
 
 ## Budgets
 
-`max_units` (default 10, at most 25) and `max_evidence_bytes` (default 49,152) bound the answer. Definitions count towards the bytes once each. When the budget runs out, the last unit is an excerpt and later ones are left out: `coverage.incomplete_evidence` says so. The answer counts towards your organisation's [data a day](/docs/plans).
+`max_units` (1 to 25, default 10) and `max_evidence_bytes` (4,096 to 262,144, default 49,152) bound the answer. Definitions count towards the bytes once each. When the budget runs out, the last unit is an excerpt and later ones are left out: `coverage.incomplete_evidence` says so. The answer counts towards your organisation's [data a day](/docs/plans).
 
 ## Check before you answer
 
