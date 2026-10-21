@@ -22,7 +22,7 @@ from sqlalchemy import text
 
 from rights.database import PolicyNamespace
 
-revision = "0042"
+revision = "0041"
 down_revision = "0040"
 branch_labels = None
 depends_on = None
