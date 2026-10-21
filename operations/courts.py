@@ -131,7 +131,7 @@ def sheet(register: CourtRegister) -> list[str]:
         rule = register.precedent
         lines += [f"  precedent [{state(rule)}] binds: {rule.binds}. {rule.note}"] + cited(rule.sources)
     else:
-        lines += ["  precedent: not recorded (binding, persuasive and not_applicable answer unknown)"]
+        lines += ["  precedent: not recorded (binding and persuasive answer unknown)"]
     for court in register.courts:
         appeals = f" → {', '.join(court.appeals_to)}" if court.appeals_to else ""
         lines += [f"  court {court.id} [{state(court)}]: {court.name} ({court.kind}, {court.level}){appeals}"

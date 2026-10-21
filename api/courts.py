@@ -61,8 +61,9 @@ Answer = Literal[*COURT_BEARINGS, "unknown"]
 Level = Literal["structural", "doctrinal"]
 # Relations that say how precedent works in the jurisdiction: they answer only once its precedent rule is
 # reviewed too. A rule of precedence on a matter, or a ruling's force in the case referred, rests on its
-# own provision instead.
-PRECEDENTIAL = frozenset({"binding", "persuasive", "not_applicable"})
+# own provision instead; and that a court sits in another hierarchy (``not_applicable``) is a structural
+# fact, answered once the relation and the courts it names are reviewed.
+PRECEDENTIAL = frozenset({"binding", "persuasive"})
 
 
 class Source(RecordModel):
@@ -353,8 +354,8 @@ def written(root: Path | None = None) -> list[CourtRegister]:
 
 def answered(register: CourtRegister, relation: Relation) -> Answer:
     """What a recorded relation answers: its value once it has its own doctrinal review and the courts it
-    names have their structural ones, and for ``binding``, ``persuasive`` and ``not_applicable`` once the
-    precedent rule is reviewed too; ``unknown`` until then."""
+    names have their structural ones, and for ``binding`` and ``persuasive`` once the precedent rule is
+    reviewed too; ``unknown`` until then."""
     courts = {c.id: c for c in register.courts}
     named = [courts[relation.court], *([courts[relation.bound]] if relation.bound else [])]
     if not (register.reviewed(relation) and all(register.reviewed(c) for c in named)):

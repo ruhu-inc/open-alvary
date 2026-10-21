@@ -156,6 +156,30 @@ def test_an_unreviewed_relation_or_one_without_a_precedent_rule_answers_unknown(
     )
 
 
+def test_not_applicable_answers_without_a_precedent_rule_and_binding_does_not():
+    """That a court sits in another hierarchy is a structural fact: a reviewed not_applicable relation answers
+    once the courts it names are reviewed, whether or not the precedent rule is. Binding and persuasive say
+    how precedent works there, and wait for its reviewed rule."""
+    stale = register()
+    stale["precedent"]["note"] = "Higher courts bind lower ones, as the Constitution says."
+    for data in (register(precedent=None), stale):
+        xx = courts.CourtRegister.model_validate(data)
+        assert courts.relation(xx, "high", "xx", before="tax") == "not_applicable"
+        assert courts.relation(xx, "apex", "xx", before="high") == "unknown"  # binding
+        assert courts.relation(xx, "high", "xx", before="appeal") == "unknown"  # persuasive
+        bears_on = courts.evidence_court(xx, "high", date(2026, 10, 21)).bears_on
+        assert [(b.id, b.relation) for b in bears_on] == [("high-on-tax", "not_applicable")]
+        answered = {r.id: r.relation for r in courts.public(xx).relations}
+        assert (answered["high-on-tax"], answered["apex-on-high"]) == ("not_applicable", "unknown")
+    # It still waits for its own review and for the courts it names.
+    unreviewed = courts.CourtRegister.model_validate(register(review=False, precedent=None))
+    assert courts.relation(unreviewed, "high", "xx", before="tax") == "unknown"
+    renamed = register(precedent=None)
+    renamed["courts"][4]["name"] = "Tax Tribunal"
+    tax_renamed = courts.CourtRegister.model_validate(renamed)
+    assert courts.relation(tax_renamed, "high", "xx", before="tax") == "unknown"
+
+
 def test_a_civil_law_rule_that_precedent_does_not_bind_is_recorded_and_kept():
     rule = {"binds": False, "note": "Decisions bind only the parties.", "sources": ["constitution"]}
     persuasive = [{"id": "apex-on-high", "court": "apex", "bound": "high", "relation": "persuasive",

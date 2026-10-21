@@ -5414,7 +5414,7 @@
                 "type": "null"
               }
             ],
-            "description": "Whether decisions bind later courts there at all, as its law says; null when not recorded, and then every `binding`, `persuasive` or `not_applicable` relation is `unknown`."
+            "description": "Whether decisions bind later courts there at all, as its law says; null when not recorded, and then every `binding` or `persuasive` relation is `unknown`."
           },
           "courts": {
             "items": {
@@ -5638,7 +5638,7 @@
               "unknown"
             ],
             "title": "Relation",
-            "description": "What Open Alvary answers: the recorded relation once it has its own doctrinal review (and, for `binding`, `persuasive` and `not_applicable`, once the precedent rule has its own), `unknown` until then."
+            "description": "What Open Alvary answers: the recorded relation once it has its own doctrinal review and the courts it names have theirs (and, for `binding` and `persuasive`, once the precedent rule has its own), `unknown` until then."
           },
           "recorded": {
             "type": "string",
