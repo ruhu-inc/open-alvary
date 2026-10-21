@@ -369,8 +369,9 @@ TOOLS = [
         "name": "list_changes",
         "title": "List catalogue changes",
         "description": "Changes to the catalogue in commit order: records added, corrected or withdrawn, text "
-        "published, and legal effects (repeals, amendments, commencements, transpositions and others a "
-        "reviewer checked) recorded or withdrawn. Filter by jurisdiction, work, type, document class, "
+        "published, legal effects (repeals, amendments, commencements, transpositions and others a "
+        "reviewer checked) recorded or withdrawn, and reviewed memberships of the African Union and the "
+        "regional bodies recorded, ended or corrected. Filter by jurisdiction, work, type, document class, "
         "language or keyword. Pass the returned resume_token next time to get only newer changes. Changes "
         "to what Open Alvary holds, not every change in a country's law.",
         "inputSchema": {
@@ -380,7 +381,8 @@ TOOLS = [
                     "type": "array",
                     "items": {"type": "string"},
                     "maxItems": 50,
-                    "description": "Jurisdiction IDs, such as ng or rw; a country includes its states.",
+                    "description": "Jurisdiction IDs, such as ng or rw; a country includes its states, and a "
+                    "body such as aa-ecowas includes changes to its membership.",
                 },
                 "work": {
                     "type": "array",
@@ -391,9 +393,10 @@ TOOLS = [
                 "type": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "maxItems": 9,
+                    "maxItems": 10,
                     "description": "Kinds of change: catalogue_added, metadata_corrected, "
-                    "text_version_published, legal_effect_recorded, withdrawal, coverage_changed.",
+                    "text_version_published, legal_effect_recorded, withdrawal, coverage_changed, "
+                    "membership_recorded.",
                 },
                 "class": {
                     "type": "array",

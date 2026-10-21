@@ -256,4 +256,5 @@ LABELS = {
     "text_version_published": "Text published",
     "withdrawal": "Withdrawn",
     "coverage_changed": "Coverage",
+    "membership_recorded": "Membership",
 }

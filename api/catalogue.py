@@ -3,7 +3,8 @@
 import base64
 import hashlib
 from collections import Counter
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from functools import cache
 from typing import Protocol
 
 from sqlalchemy import text
@@ -23,6 +24,7 @@ from api.search import normalize_citation as normalize_citation
 from api.search import words
 from changes.record import namespace
 from rights.policy import decide
+from schema.jurisdictions import catalogue_entry, registry
 from schema.models import Citation, Corpus
 from schema.policy import MetadataPage, PublicMetadata
 from schema.public import (
@@ -34,8 +36,11 @@ from schema.public import (
     DecisionView,
     ExpressionPage,
     ExpressionView,
+    JurisdictionDetail,
     JurisdictionView,
     LanguageRuleView,
+    MembershipList,
+    MembershipView,
     NodeViewRecord,
     ProvisionLookup,
     ProvisionMatch,
@@ -60,6 +65,30 @@ from schema.public import (
 
 class SourceUnavailable(LookupError):
     pass
+
+
+_profiles = cache(registry)
+MEMBERSHIP_NOTICE = {
+    "reviewed": "Reviewed memberships only. A membership not yet reviewed is not listed, so a body or member "
+    "missing here is not proof of non-membership.",
+    "unknown": "No membership here has been reviewed yet: unknown, not none.",
+}
+
+
+def membership_list(
+    held: list[MembershipView], jurisdiction_id: str, side: str, as_of: date
+) -> MembershipList:
+    """The reviewed memberships on one side of a jurisdiction on a date: as ``member`` (the bodies it
+    belongs to) or as ``body`` (its members). Dates are inclusive; none reviewed is ``unknown``."""
+    mine = [m for m in held if getattr(m, f"{side}_id") == jurisdiction_id]
+    if not mine:
+        return MembershipList(status="unknown", notice=MEMBERSHIP_NOTICE["unknown"])
+    return MembershipList(
+        status="reviewed",
+        items=tuple(m for m in mine if m.valid_from <= as_of and (m.valid_to is None or as_of <= m.valid_to)),
+        ended=tuple(m for m in mine if m.valid_to is not None and m.valid_to < as_of),
+        notice=MEMBERSHIP_NOTICE["reviewed"],
+    )
 
 
 def _cursor(offset: int, kind: str = "edges") -> str:
@@ -1127,8 +1156,73 @@ class LegacyCatalogue:
             notices=tuple(notices),
         )
 
-    def jurisdictions(self):
-        return tuple(JurisdictionView.model_validate(row) for row in self.repository.rows("jurisdictions"))
+    def jurisdictions(self, as_of: date | None = None):
+        """The catalogue's jurisdictions; with a date, each country's reviewed memberships on it."""
+        views = tuple(JurisdictionView.model_validate(row) for row in self.repository.rows("jurisdictions"))
+        if as_of is None:
+            return views
+        held = self.memberships()
+        return tuple(
+            view
+            if country(view.id) is None  # a body is no member: its members are in jurisdiction()
+            else view.model_copy(update={"member_of": membership_list(held, view.id, "member", as_of)})
+            for view in views
+        )
+
+    def jurisdiction(self, jurisdiction_id: str, as_of: date) -> JurisdictionDetail:
+        """One jurisdiction on a date: a country's bodies, or a body's members, reviewed only. Every
+        jurisdiction of the profiles answers, catalogued or not; an unknown ID is unavailable."""
+        rows = self.repository.rows("jurisdictions", ids=[jurisdiction_id])
+        profile = _profiles().get(jurisdiction_id)
+        if rows:
+            view = JurisdictionView.model_validate(rows[0])
+        elif profile is not None:
+            view = JurisdictionView.model_validate(catalogue_entry(jurisdiction_id).model_dump())
+        else:
+            raise SourceUnavailable("No such jurisdiction")
+        held = self.memberships(jurisdiction_id)
+        body = country(jurisdiction_id) is None
+        return JurisdictionDetail(
+            **view.model_dump(exclude={"member_of"}),
+            level=profile.level if profile else None,
+            as_of=as_of,
+            member_of=None if body else membership_list(held, jurisdiction_id, "member", as_of),
+            members=membership_list(held, jurisdiction_id, "body", as_of) if body else None,
+        )
+
+    def memberships(self, jurisdiction_id: str | None = None) -> list[MembershipView]:
+        """The reviewed memberships published to the catalogue (corpus.membership, operations.memberships),
+        all or those of one member or body; none in SQLite or before migration g1_memberships."""
+        conn = self.repository.connection
+        if conn.dialect.name != "postgresql":
+            return []
+        table = namespace(conn).qualified(conn, "corpus", "membership")
+        if conn.scalar(text("SELECT to_regclass(:t)"), {"t": table}) is None:
+            return []
+        rows = (
+            conn.execute(
+                text(
+                    "SELECT m.membership_id AS id, m.member_id, m.body_id, m.valid_from, m.valid_to,"
+                    " m.evidence_url, m.note, m.reviewed_by, m.reviewed_at,"
+                    " coalesce(mj.payload->>'name', m.member_id) AS member_name,"
+                    " coalesce(bj.payload->>'name', m.body_id) AS body_name"
+                    f" FROM {table} m JOIN jurisdictions mj ON mj.id = m.member_id"
+                    " JOIN jurisdictions bj ON bj.id = m.body_id"
+                    + ("" if jurisdiction_id is None else " WHERE m.member_id = :j OR m.body_id = :j")
+                    + " ORDER BY m.body_id, m.member_id, m.valid_from LIMIT :bound"
+                ),
+                {"j": jurisdiction_id, "bound": MAX_UNPAGED_ROWS + 1},
+            )
+            .mappings()
+            .all()
+        )
+        if len(rows) > MAX_UNPAGED_ROWS:
+            raise ResultTooLarge("Pilot unpaged response exceeds row bound")
+        # In UTC whatever the database session's time zone.
+        return [
+            MembershipView.model_validate(dict(row) | {"reviewed_at": row["reviewed_at"].astimezone(UTC)})
+            for row in rows
+        ]
 
     def countries(self):
         """Each country with catalogued material, for choosing a plan's countries: its sources and how
