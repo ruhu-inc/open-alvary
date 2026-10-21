@@ -5928,7 +5928,7 @@
           "router": {
             "type": "string",
             "title": "Router",
-            "description": "The routing rules, such as `oa-route-2`."
+            "description": "The routing rules, such as `oa-route-3`."
           },
           "ranking": {
             "type": "string",
