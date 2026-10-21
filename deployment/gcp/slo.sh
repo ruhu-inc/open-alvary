@@ -20,13 +20,14 @@
 # Per-route latency. Cloud Run's metrics carry no route: one service answers the website, the
 # console, REST, MCP and downloads, so until the routes are told apart every latency objective
 # measures all of its requests. Telling them apart needs log-based metrics, and not from Cloud Run's
-# request logs: those for /api/v1 and /mcp are dropped before storage (public_service.sh
-# request_logs, OA-A2), and their addresses carry queries. The application would write one
-# structured line per request with the operation (resolve, retrieve and its mode: lexical, hybrid or
-# rerank, check) and its server time, never the query; a log-based distribution metric over it, with
-# an `operation` label, then narrows each objective: LATENCY_METRIC=logging.googleapis.com/user/<name>
-# deployment/gcp/slo.sh setup. Until then only the loosest budget (2.5 s, which every operation
-# must meet) alerts; the others are kept for their error budgets, without paging anyone.
+# request logs: those for /api/v1 and /mcp, and every one with a query string, are dropped before
+# storage (public_service.sh request_logs, OA-A2), and their addresses carry queries. The application
+# would write one structured line per request with the operation (resolve, retrieve and its mode:
+# lexical, hybrid or rerank, check) and its server time, never the query; a log-based distribution
+# metric over it, with an `operation` label, then narrows each objective:
+# LATENCY_METRIC=logging.googleapis.com/user/<name> deployment/gcp/slo.sh setup. Until then only the
+# loosest budget (2.5 s, which every operation must meet) alerts; the others are kept for their error
+# budgets, without paging anyone.
 #
 # Burn-rate alerts follow the multiwindow rule: fast (2% of a 30-day budget in an hour: 14.4 times
 # the allowed rate over the last hour and the last 5 minutes) and slow (5% in six hours: 6 times
@@ -75,7 +76,8 @@ PLAN
 
 Until per-operation latency is recorded (LATENCY_METRIC), every latency objective measures all of
 the service's requests: the website, the console, REST, MCP and downloads together. Cloud Run's
-request logs cannot supply it: those for /api/v1 and /mcp are not stored (OA-A2) and carry queries.
+request logs cannot supply it: those for /api/v1 and /mcp, and any with a query string, are not stored
+(OA-A2).
 
 Monthly cost: ~ \$0 (objectives, alert policies and Cloud Run's metrics are free; a log-based metric
 later costs only beyond the free logging allowance).
