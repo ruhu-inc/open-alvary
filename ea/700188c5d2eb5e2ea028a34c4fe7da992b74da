@@ -6,6 +6,7 @@ ingestion/rwanda.py
   s_d665c62e07d76f::t_62c0b9cd99becb 1147
 workbench/record_view.py
   s_d665c62e07d76f::t_d8a259731814df 1227-1231
+  s_d665c62e07d76f::t_71d9a8555e3518 1189-1190
 tests/test_rw_gazette.py
   s_d665c62e07d76f::t_4b91af74e23b3f 295,299,301
   s_d665c62e07d76f::t_3ad0e5d2a22f72 343,346-347
