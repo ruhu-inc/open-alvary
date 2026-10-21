@@ -390,9 +390,17 @@
           "type": "string"
         },
         "country_code": {
-          "pattern": "^[A-Z]{2}$",
-          "title": "Country Code",
-          "type": "string"
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Country Code"
         },
         "parent_id": {
           "anyOf": [
@@ -426,8 +434,7 @@
       },
       "required": [
         "id",
-        "name",
-        "country_code"
+        "name"
       ],
       "title": "JurisdictionView",
       "type": "object"

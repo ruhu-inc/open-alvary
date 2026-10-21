@@ -6,6 +6,7 @@ from schema.assembly import AssemblyContracts
 from schema.gazette import GazetteContracts
 from schema.identity import IdentityContracts
 from schema.jurisdictions import JurisdictionProfile
+from schema.memberships import MembershipRegister
 from schema.models import Corpus
 from schema.operator import OperatorContracts
 from schema.policy import PolicyContracts
@@ -44,4 +45,7 @@ if __name__ == "__main__":
     )
     Path("schema/jurisdiction.schema.json").write_text(
         json.dumps(JurisdictionProfile.model_json_schema(), indent=2) + "\n"
+    )
+    Path("schema/membership.schema.json").write_text(
+        json.dumps(MembershipRegister.model_json_schema(), indent=2) + "\n"
     )

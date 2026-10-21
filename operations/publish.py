@@ -45,14 +45,13 @@ from api.search import normalize_citation
 from api.store import Store, engine_for
 from ingestion import settings
 from rights.policy import decide as rights_decision
-from schema.jurisdictions import registry
+from schema.jurisdictions import catalogue_entry, registry
 from schema.models import (
     Amendment,
     Authority,
     Citation,
     Corpus,
     Edition,
-    Jurisdiction,
     Language,
     LanguageRule,
     Permission,
@@ -461,18 +460,10 @@ def publish_records(
     by_id = {name: {m.id: m for m in getattr(corpus, name)} for name in Corpus.model_fields}
     report = {"published": [], "updated": [], "taken_down": [], "skipped": {}}
     if jurisdiction not in by_id["jurisdictions"]:
-        profile = registry().get(jurisdiction)  # the project's researched jurisdiction profile
-        languages = sorted(
-            {code for item in approved for code in (e.language for e in item.record.expressions)}
-        )
+        # From the project's jurisdiction profile; a regional body carries no country code (DAT-02).
+        languages = {code for item in approved for code in (e.language for e in item.record.expressions)}
         corpus.jurisdictions.append(
-            Jurisdiction(
-                id=jurisdiction,
-                name=profile.name if profile else NAMES.get(jurisdiction, jurisdiction.upper()),
-                country_code=jurisdiction.upper(),
-                legal_systems=[s.replace("_", " ") for s in profile.legal_systems] if profile else [],
-                languages=languages,
-            )
+            catalogue_entry(jurisdiction, name=NAMES.get(jurisdiction), languages=languages)
         )
     for item in approved:
         try:

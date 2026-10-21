@@ -1,0 +1,141 @@
+{
+  "$defs": {
+    "Membership": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?:aa-[a-z0-9]{1,12}:[1-9][0-9]{0,2}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "subject_id": {
+          "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?$",
+          "title": "Subject Id",
+          "type": "string"
+        },
+        "target_id": {
+          "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?$",
+          "title": "Target Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "member_of",
+          "default": "member_of",
+          "title": "Kind",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "proposal",
+            "reviewed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "valid_from": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Valid From"
+        },
+        "valid_to": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Valid To"
+        },
+        "evidence_url": {
+          "maxLength": 2000,
+          "pattern": "^https://",
+          "title": "Evidence Url",
+          "type": "string"
+        },
+        "note": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Note",
+          "type": "string"
+        },
+        "reviewed_by": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed By"
+        },
+        "reviewed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed At"
+        }
+      },
+      "required": [
+        "id",
+        "subject_id",
+        "target_id",
+        "status",
+        "valid_from",
+        "valid_to",
+        "evidence_url",
+        "note"
+      ],
+      "title": "Membership",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "standard": {
+      "const": "memberships-1",
+      "default": "memberships-1",
+      "title": "Standard",
+      "type": "string"
+    },
+    "description": {
+      "maxLength": 300,
+      "minLength": 1,
+      "title": "Description",
+      "type": "string"
+    },
+    "memberships": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Membership"
+      },
+      "title": "Memberships",
+      "type": "array"
+    }
+  },
+  "required": [
+    "description"
+  ],
+  "title": "MembershipRegister",
+  "type": "object"
+}

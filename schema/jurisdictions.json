@@ -78,154 +78,103 @@
       "code": "bi",
       "name": "Burundi",
       "level": "national",
-      "au_region": "central",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "central"
     },
     {
       "code": "cm",
       "name": "Cameroon",
       "level": "national",
-      "au_region": "central",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "central"
     },
     {
       "code": "cf",
       "name": "Central African Republic",
       "level": "national",
-      "au_region": "central",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "central"
     },
     {
       "code": "td",
       "name": "Chad",
       "level": "national",
-      "au_region": "central",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "central"
     },
     {
       "code": "cg",
       "name": "Republic of the Congo",
       "level": "national",
-      "au_region": "central",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "central"
     },
     {
       "code": "cd",
       "name": "Democratic Republic of the Congo",
       "level": "national",
-      "au_region": "central",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "central"
     },
     {
       "code": "gq",
       "name": "Equatorial Guinea",
       "level": "national",
-      "au_region": "central",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "central"
     },
     {
       "code": "ga",
       "name": "Gabon",
       "level": "national",
-      "au_region": "central",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "central"
     },
     {
       "code": "st",
       "name": "São Tomé and Príncipe",
       "level": "national",
-      "au_region": "central",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "central"
     },
     {
       "code": "km",
       "name": "Comoros",
       "level": "national",
-      "au_region": "eastern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "eastern"
     },
     {
       "code": "dj",
       "name": "Djibouti",
       "level": "national",
-      "au_region": "eastern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "eastern"
     },
     {
       "code": "er",
       "name": "Eritrea",
       "level": "national",
-      "au_region": "eastern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "eastern"
     },
     {
       "code": "et",
       "name": "Ethiopia",
       "level": "national",
-      "au_region": "eastern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "eastern"
     },
     {
       "code": "ke",
       "name": "Kenya",
       "level": "national",
-      "au_region": "eastern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "eastern"
     },
     {
       "code": "mg",
       "name": "Madagascar",
       "level": "national",
-      "au_region": "eastern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "eastern"
     },
     {
       "code": "mu",
       "name": "Mauritius",
       "level": "national",
-      "au_region": "eastern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "eastern"
     },
     {
       "code": "rw",
       "name": "Rwanda",
       "level": "national",
       "au_region": "eastern",
-      "member_of": [
-        "aa-au"
-      ],
       "names": {
         "rw": "Repubulika y'u Rwanda",
         "en": "Republic of Rwanda",
@@ -623,317 +572,212 @@
       "code": "sc",
       "name": "Seychelles",
       "level": "national",
-      "au_region": "eastern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "eastern"
     },
     {
       "code": "so",
       "name": "Somalia",
       "level": "national",
-      "au_region": "eastern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "eastern"
     },
     {
       "code": "ss",
       "name": "South Sudan",
       "level": "national",
-      "au_region": "eastern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "eastern"
     },
     {
       "code": "sd",
       "name": "Sudan",
       "level": "national",
-      "au_region": "eastern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "eastern"
     },
     {
       "code": "tz",
       "name": "Tanzania",
       "level": "national",
-      "au_region": "eastern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "eastern"
     },
     {
       "code": "ug",
       "name": "Uganda",
       "level": "national",
-      "au_region": "eastern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "eastern"
     },
     {
       "code": "dz",
       "name": "Algeria",
       "level": "national",
-      "au_region": "northern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "northern"
     },
     {
       "code": "eg",
       "name": "Egypt",
       "level": "national",
-      "au_region": "northern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "northern"
     },
     {
       "code": "ly",
       "name": "Libya",
       "level": "national",
-      "au_region": "northern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "northern"
     },
     {
       "code": "mr",
       "name": "Mauritania",
       "level": "national",
-      "au_region": "northern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "northern"
     },
     {
       "code": "ma",
       "name": "Morocco",
       "level": "national",
-      "au_region": "northern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "northern"
     },
     {
       "code": "eh",
       "name": "Sahrawi Arab Democratic Republic",
       "level": "national",
       "au_region": "northern",
-      "member_of": [
-        "aa-au"
-      ],
       "note": "African Union member; ISO 3166-1 assigns EH to Western Sahara."
     },
     {
       "code": "tn",
       "name": "Tunisia",
       "level": "national",
-      "au_region": "northern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "northern"
     },
     {
       "code": "ao",
       "name": "Angola",
       "level": "national",
-      "au_region": "southern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "southern"
     },
     {
       "code": "bw",
       "name": "Botswana",
       "level": "national",
-      "au_region": "southern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "southern"
     },
     {
       "code": "sz",
       "name": "Eswatini",
       "level": "national",
-      "au_region": "southern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "southern"
     },
     {
       "code": "ls",
       "name": "Lesotho",
       "level": "national",
-      "au_region": "southern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "southern"
     },
     {
       "code": "mw",
       "name": "Malawi",
       "level": "national",
-      "au_region": "southern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "southern"
     },
     {
       "code": "mz",
       "name": "Mozambique",
       "level": "national",
-      "au_region": "southern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "southern"
     },
     {
       "code": "na",
       "name": "Namibia",
       "level": "national",
-      "au_region": "southern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "southern"
     },
     {
       "code": "za",
       "name": "South Africa",
       "level": "national",
-      "au_region": "southern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "southern"
     },
     {
       "code": "zm",
       "name": "Zambia",
       "level": "national",
-      "au_region": "southern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "southern"
     },
     {
       "code": "zw",
       "name": "Zimbabwe",
       "level": "national",
-      "au_region": "southern",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "southern"
     },
     {
       "code": "bj",
       "name": "Benin",
       "level": "national",
-      "au_region": "western",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "western"
     },
     {
       "code": "bf",
       "name": "Burkina Faso",
       "level": "national",
-      "au_region": "western",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "western"
     },
     {
       "code": "cv",
       "name": "Cabo Verde",
       "level": "national",
-      "au_region": "western",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "western"
     },
     {
       "code": "ci",
       "name": "Côte d'Ivoire",
       "level": "national",
-      "au_region": "western",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "western"
     },
     {
       "code": "gm",
       "name": "Gambia",
       "level": "national",
-      "au_region": "western",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "western"
     },
     {
       "code": "gh",
       "name": "Ghana",
       "level": "national",
-      "au_region": "western",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "western"
     },
     {
       "code": "gn",
       "name": "Guinea",
       "level": "national",
-      "au_region": "western",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "western"
     },
     {
       "code": "gw",
       "name": "Guinea-Bissau",
       "level": "national",
-      "au_region": "western",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "western"
     },
     {
       "code": "lr",
       "name": "Liberia",
       "level": "national",
-      "au_region": "western",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "western"
     },
     {
       "code": "ml",
       "name": "Mali",
       "level": "national",
-      "au_region": "western",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "western"
     },
     {
       "code": "ne",
       "name": "Niger",
       "level": "national",
-      "au_region": "western",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "western"
     },
     {
       "code": "ng",
       "name": "Nigeria",
       "level": "national",
       "au_region": "western",
-      "member_of": [
-        "aa-au"
-      ],
       "names": {
         "en": "Federal Republic of Nigeria"
       },
@@ -1114,28 +958,19 @@
       "code": "sn",
       "name": "Senegal",
       "level": "national",
-      "au_region": "western",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "western"
     },
     {
       "code": "sl",
       "name": "Sierra Leone",
       "level": "national",
-      "au_region": "western",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "western"
     },
     {
       "code": "tg",
       "name": "Togo",
       "level": "national",
-      "au_region": "western",
-      "member_of": [
-        "aa-au"
-      ]
+      "au_region": "western"
     }
   ]
 }

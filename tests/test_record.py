@@ -11,6 +11,8 @@ from pydantic import ValidationError
 
 from schema import record as R
 from schema.jurisdictions import JurisdictionProfile, expected_steps, registry
+from schema.memberships import MembershipRegister
+from schema.memberships import register as membership_register
 
 
 def core(**overrides):
@@ -246,7 +248,10 @@ def test_records_refuse_inconsistent_identity():
 def test_the_registry_covers_the_african_union_and_its_regional_communities():
     profiles = registry()
     countries = [p for p in profiles.values() if p.level == "national"]
-    assert len(countries) == 55 and all("aa-au" in p.member_of and p.au_region for p in countries)
+    assert len(countries) == 55 and all(p.au_region for p in countries)
+    # Membership of the AU is a dated relationship in the membership register, not a profile field.
+    au = {m.subject_id for m in membership_register().memberships if m.target_id == "aa-au"}
+    assert au == {p.code for p in countries}
     assert {"aa-au", "aa-eac", "aa-ecowas", "aa-sadc"} <= set(profiles)
     assert all(p.sources for p in profiles.values() if p.researched)
     nigeria = profiles["ng"]
@@ -315,7 +320,11 @@ def test_a_reviewed_nigerian_act_becomes_a_complete_common_record():
 
 
 def test_the_published_json_schemas_match_the_contracts():
-    for name, model in (("record", R.DocumentRecord), ("jurisdiction", JurisdictionProfile)):
+    for name, model in (
+        ("record", R.DocumentRecord),
+        ("jurisdiction", JurisdictionProfile),
+        ("membership", MembershipRegister),
+    ):
         published = json.loads(Path(f"schema/{name}.schema.json").read_text())
         assert published == model.model_json_schema(), f"run scripts/generate_schema.py ({name})"
 
