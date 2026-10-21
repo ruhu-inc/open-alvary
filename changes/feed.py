@@ -46,6 +46,7 @@ SUPPORTED = (
     "metadata_corrected",
     "text_version_published",
     "legal_effect_recorded",
+    "treatment_recorded",
     "withdrawal",
     "coverage_changed",
     "membership_recorded",
@@ -459,25 +460,30 @@ class Feed:
                 place = (told.get(side) or {}).get("id")
                 told[side] = {"id": place, "name": visible.jurisdiction(place)}
             membership, suspension = (told, None) if kind == "membership_recorded" else (None, told)
-        if kind in ("catalogue_added", "metadata_corrected", "legal_effect_recorded") and not named:
+        if (
+            kind in ("catalogue_added", "metadata_corrected", "legal_effect_recorded", "treatment_recorded")
+            and not named
+        ):
             return None
-        legal_effect = None
-        if kind == "legal_effect_recorded":
-            told = payload.get("legal_effect") or {}
-            legal_effect = dict(told)
-            # The other law: `by` the one that had the effect (a provision event, CPR-02, may have none),
-            # or `of` the instrument a law gives effect to (changes.record.BOTH_SIDES).
+        legal_effect = treatment = None
+        if kind in ("legal_effect_recorded", "treatment_recorded"):
+            told = payload.get("legal_effect" if kind == "legal_effect_recorded" else "treatment") or {}
+            shown = dict(told)
+            # The other record: `by` the one that had the effect (a provision event, CPR-02, may have none),
+            # or `of` the instrument a law gives effect to (changes.record.BOTH_SIDES); for a treatment, `of`
+            # the judgment treated, or `by` the judgment that overruled this one (changes.record.TREATED).
             for role in ("by", "of"):
                 if role not in told:
                     continue
                 other = visible.work((told.get(role) or {}).get("id"))
-                if other is None:  # the other law is not public: say nothing of it
+                if other is None:  # the other record is not public: say nothing of it
                     return None
-                legal_effect[role] = {
+                shown[role] = {
                     "id": told[role]["id"],
                     "title": other["projection"].get("title"),
                     "citation": other["projection"].get("citation"),
                 }
+            legal_effect, treatment = (shown, None) if kind == "legal_effect_recorded" else (None, shown)
         if kind == "text_version_published" and (not named or row["version_id"] not in work["versions"]):
             return None
         summary = payload.get("summary")
@@ -536,6 +542,8 @@ class Feed:
             "sources": payload.get("sources", []) if named or kind in BODY_EVENTS else [],
             "withdrawal": withdrawal,
             "legal_effect": legal_effect,
+            # A reviewer's direct treatment of one judgment by another, never an inferred risk (EDT-02).
+            "treatment": treatment,
             "membership": membership,
             # Never a change of membership: a suspended member remains one.
             "suspension": suspension,
@@ -692,6 +700,7 @@ LABELS = {
     "coverage_changed": "Coverage",
     "membership_recorded": "Membership",
     "suspension_recorded": "Suspension",
+    "treatment_recorded": "Treatment",
 }
 
 
