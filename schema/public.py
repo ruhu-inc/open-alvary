@@ -18,7 +18,7 @@ from schema.models import (
     SourceVersion,
     StructureNode,
 )
-from schema.record import EXPRESSION_AUTHORITY
+from schema.record import EXPRESSION_AUTHORITY, LEGAL_EFFECTS
 
 OMIT = {"default": None, "exclude_if": lambda value: value is None}
 
@@ -55,6 +55,60 @@ class LanguageRuleView(WireModel):
     evidence: AuthorityEvidence | None = Field(**OMIT)
 
 
+class StatedDateView(WireModel):
+    """A reviewed date as its record gives it: the date, how precise it is, and as printed when the record
+    keeps that. A date with no normalised value is never compared with another."""
+
+    value: date | None = Field(**OMIT)
+    precision: Literal["day", "month", "year"] = "day"
+    printed: str | None = Field(**OMIT)
+
+
+class RegionalView(WireModel):
+    """A regional instrument's legal effect, as its reviewed record states it (JUR-04, DAT-03)."""
+
+    organ: str
+    legal_effect: Literal[*LEGAL_EFFECTS]
+    member_states: tuple[ID, ...] = ()  # none listed: every member
+    transposition_deadline: date | None = Field(**OMIT)
+
+
+class LinkedAct(WireModel):
+    """A public record a checked link names (EDT-01), such as a national act that domesticates a treaty or
+    transposes a directive."""
+
+    source_id: ID
+    jurisdiction_id: ID
+    title: str
+    citation: str
+    effective_date: date | None = Field(**OMIT)
+
+
+class TreatyPartyView(WireModel):
+    """One party to a treaty as its reviewed record lists it, with the acts of that state that a checked
+    link records as domesticating the treaty. Signature alone never binds (COR-01)."""
+
+    party: str
+    place: ID | None = Field(**OMIT)
+    signed: StatedDateView | None = Field(**OMIT)
+    ratified: StatedDateView | None = Field(**OMIT)
+    acceded: StatedDateView | None = Field(**OMIT)
+    denounced: StatedDateView | None = Field(**OMIT)
+    reservations: str | None = Field(**OMIT)
+    domesticated_by: tuple[LinkedAct, ...] = ()
+
+
+class TreatyView(WireModel):
+    """A treaty's status, as its reviewed record states it (JUR-04, DAT-03). ``parties`` is on the record
+    and its anchors, never on an evidence unit; an empty list means none is recorded, never none exists."""
+
+    adopted_by: str | None = Field(**OMIT)
+    depositary: str | None = Field(**OMIT)
+    entered_into_force: StatedDateView | None = Field(**OMIT)
+    authentic_languages: tuple[ID, ...] = ()
+    parties: tuple[TreatyPartyView, ...] | None = Field(**OMIT)
+
+
 class SourceView(Source):
     model_config = ConfigDict(extra="forbid", frozen=True)
     access_mode: Literal["open_full_text", "metadata_link_only"]
@@ -63,6 +117,9 @@ class SourceView(Source):
     # Answered on the record's editions and texts instead (API-02), so the record's answer is unchanged.
     editions: list[Edition] = Field(default_factory=list, exclude=True)
     language_rule: LanguageRule | None = Field(default=None, exclude=True)
+    # Absent from every record that is neither a regional instrument nor a treaty.
+    regional: RegionalView | None = Field(**OMIT)
+    treaty: TreatyView | None = Field(**OMIT)
 
 
 class RightsViewRecord(RightsRecord):
@@ -407,6 +464,9 @@ class AnchorView(WireModel):
     licence: str | None = None
     attribution_required: bool | None = None
     attribution_text: str | None = None
+    # The record's legal effect (a regional instrument) or status and parties (a treaty), from its record.
+    regional: RegionalView | None = Field(**OMIT)
+    treaty: TreatyView | None = Field(**OMIT)
     text: str
 
 
@@ -659,6 +719,10 @@ class EvidenceUnit(WireModel):
     attribution_text: str | None = Field(**OMIT)
     currentness: Currentness
     authority: EvidenceAuthority
+    # A regional instrument's legal effect, or a treaty's status (its parties are on the record), from its
+    # record (JUR-04).
+    regional: RegionalView | None = Field(**OMIT)
+    treaty: TreatyView | None = Field(**OMIT)
     ranking: RankingExplanation | None = Field(**OMIT)
     context: EvidenceContext | None = Field(**OMIT)
     warnings: tuple[str, ...] = ()

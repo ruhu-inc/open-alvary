@@ -884,6 +884,10 @@ FIELDS: dict[str, dict[str, str]] = {
         "attribution_text": "The credit to give, when one is required.",
         "currentness": "Whether the part was in force, and what that rests on.",
         "authority": "The inputs to the authority signals.",
+        "regional": "For a regional instrument: the organ that adopted it, its legal effect, the member states it binds and "
+        "its transposition deadline, as its record states them.",
+        "treaty": "For a treaty: who adopted it, its depositary, when it entered into force and its authentic "
+        "languages. Its parties are on the record (Get a record) and its anchors.",
         "ranking": "Why the unit ranks where it does.",
         "context": "What travels with the unit and is never part of its words.",
         "warnings": "Notes on the unit, such as an excerpt or a newer text.",
@@ -1162,6 +1166,10 @@ FIELDS: dict[str, dict[str, str]] = {
         "rights_status": "The rights decision for its text: `OPEN`, `OPEN_WITH_CONDITIONS`, `LINK_ONLY`, "
         "`RESTRICTED` or `RIGHTS_UNDER_REVIEW`.",
         "has_full_text": "Whether Get a record's texts returns a text for it.",
+        "regional": "For a regional instrument: the organ that adopted it, its legal effect, the member states it binds and "
+        "its transposition deadline, as its record states them.",
+        "treaty": "For a treaty: its status as its record states it, with each party's signature, ratification, "
+        "accession and denunciation, its reservations and the acts that domesticate it.",
     },
     "SourcePage": {"total": "Records matching, across all pages.", "items": "This page's records."},
     "StructurePage": {
@@ -1192,6 +1200,9 @@ FIELDS: dict[str, dict[str, str]] = {
         "licence": "The terms the text is published under, from the rights record.",
         "attribution_required": "Whether reuse must credit the source, from the rights record.",
         "attribution_text": "The credit to give, when one is required.",
+        "regional": "For a regional instrument: the organ that adopted it, its legal effect, the member states it binds and "
+        "its transposition deadline, as its record states them.",
+        "treaty": "For a treaty: its status and parties, as on the record.",
         "text": "Its words, exactly: the text's bytes from `start_byte` to `end_byte`.",
     },
     "SourceRelationships": {
@@ -1518,6 +1529,45 @@ FIELDS: dict[str, dict[str, str]] = {
         "note": "What the evidence says, and anything a reader should know about the dates.",
         "reviewed_by": "Who reviewed it.",
         "reviewed_at": "When it was reviewed.",
+    },
+    "StatedDateView": {
+        "value": "The date (for a month or a year, its first day), when the record gives one.",
+        "precision": "How precise it is: `day`, `month` or `year`. A date is compared with another only where "
+        "its precision allows.",
+        "printed": "The date as printed, when the record keeps it.",
+    },
+    "RegionalView": {
+        "organ": "The organ that adopted it, such as the Council of Ministers.",
+        "legal_effect": "`directly_applicable` (applies in the members as it stands), `requires_transposition` "
+        "(binds the members as to its result, through national law), `binding_on_addressees` (binds the member "
+        "states it is addressed to) or `non_binding`.",
+        "member_states": "The member states it binds; empty means every member.",
+        "transposition_deadline": "The date by which members must transpose it, when one is set.",
+    },
+    "LinkedAct": {
+        "source_id": "The other record.",
+        "jurisdiction_id": "Its jurisdiction.",
+        "title": "Its title.",
+        "citation": "How it is cited.",
+        "effective_date": "When the link took effect, when known.",
+    },
+    "TreatyView": {
+        "adopted_by": "The body that adopted it, when recorded.",
+        "depositary": "Its depositary, when recorded.",
+        "entered_into_force": "When it entered into force, when the record gives one date for the whole treaty.",
+        "authentic_languages": "The languages in which its text is authentic.",
+        "parties": "On a record and its anchors: each party as its record lists it. Empty means none is "
+        "recorded, never that it has none.",
+    },
+    "TreatyPartyView": {
+        "party": "The party, as listed.",
+        "place": "Its jurisdiction ID, such as `ke`.",
+        "signed": "When it signed. Signature alone never binds.",
+        "ratified": "When it ratified.",
+        "acceded": "When it acceded.",
+        "denounced": "When its denunciation or withdrawal took effect.",
+        "reservations": "Its reservations, as recorded.",
+        "domesticated_by": "Acts of that state that a checked link records as domesticating the treaty.",
     },
 }
 

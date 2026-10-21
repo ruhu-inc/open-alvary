@@ -157,6 +157,28 @@
           "default": null,
           "title": "Attribution Text"
         },
+        "regional": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RegionalView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "treaty": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TreatyView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "text": {
           "title": "Text",
           "type": "string"
@@ -559,6 +581,51 @@
         "name"
       ],
       "title": "JurisdictionView",
+      "type": "object"
+    },
+    "LinkedAct": {
+      "additionalProperties": false,
+      "description": "A public record a checked link names (EDT-01), such as a national act that domesticates a treaty or\ntransposes a directive.",
+      "properties": {
+        "source_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Source Id",
+          "type": "string"
+        },
+        "jurisdiction_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Jurisdiction Id",
+          "type": "string"
+        },
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "citation": {
+          "title": "Citation",
+          "type": "string"
+        },
+        "effective_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective Date"
+        }
+      },
+      "required": [
+        "source_id",
+        "jurisdiction_id",
+        "title",
+        "citation"
+      ],
+      "title": "LinkedAct",
       "type": "object"
     },
     "MembershipList": {
@@ -1063,6 +1130,54 @@
         "content_hash"
       ],
       "title": "ProvisionMatch",
+      "type": "object"
+    },
+    "RegionalView": {
+      "additionalProperties": false,
+      "description": "A regional instrument's legal effect, as its reviewed record states it (JUR-04, DAT-03).",
+      "properties": {
+        "organ": {
+          "title": "Organ",
+          "type": "string"
+        },
+        "legal_effect": {
+          "enum": [
+            "directly_applicable",
+            "requires_transposition",
+            "binding_on_addressees",
+            "non_binding"
+          ],
+          "title": "Legal Effect",
+          "type": "string"
+        },
+        "member_states": {
+          "default": [],
+          "items": {
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "type": "string"
+          },
+          "title": "Member States",
+          "type": "array"
+        },
+        "transposition_deadline": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transposition Deadline"
+        }
+      },
+      "required": [
+        "organ",
+        "legal_effect"
+      ],
+      "title": "RegionalView",
       "type": "object"
     },
     "RelatedSource": {
@@ -1778,6 +1893,28 @@
           "default": null,
           "title": "Year"
         },
+        "regional": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RegionalView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "treaty": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TreatyView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "access_mode": {
           "enum": [
             "open_full_text",
@@ -1807,6 +1944,49 @@
         "has_full_text"
       ],
       "title": "SourceView",
+      "type": "object"
+    },
+    "StatedDateView": {
+      "additionalProperties": false,
+      "description": "A reviewed date as its record gives it: the date, how precise it is, and as printed when the record\nkeeps that. A date with no normalised value is never compared with another.",
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "precision": {
+          "default": "day",
+          "enum": [
+            "day",
+            "month",
+            "year"
+          ],
+          "title": "Precision",
+          "type": "string"
+        },
+        "printed": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Printed"
+        }
+      },
+      "title": "StatedDateView",
       "type": "object"
     },
     "StructurePage": {
@@ -2225,6 +2405,165 @@
         "ranking"
       ],
       "title": "TextSearchPage",
+      "type": "object"
+    },
+    "TreatyPartyView": {
+      "additionalProperties": false,
+      "description": "One party to a treaty as its reviewed record lists it, with the acts of that state that a checked\nlink records as domesticating the treaty. Signature alone never binds (COR-01).",
+      "properties": {
+        "party": {
+          "title": "Party",
+          "type": "string"
+        },
+        "place": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Place"
+        },
+        "signed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatedDateView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ratified": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatedDateView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "acceded": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatedDateView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "denounced": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatedDateView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reservations": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reservations"
+        },
+        "domesticated_by": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/LinkedAct"
+          },
+          "title": "Domesticated By",
+          "type": "array"
+        }
+      },
+      "required": [
+        "party"
+      ],
+      "title": "TreatyPartyView",
+      "type": "object"
+    },
+    "TreatyView": {
+      "additionalProperties": false,
+      "description": "A treaty's status, as its reviewed record states it (JUR-04, DAT-03). ``parties`` is on the record\nand its anchors, never on an evidence unit; an empty list means none is recorded, never none exists.",
+      "properties": {
+        "adopted_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adopted By"
+        },
+        "depositary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Depositary"
+        },
+        "entered_into_force": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatedDateView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "authentic_languages": {
+          "default": [],
+          "items": {
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "type": "string"
+          },
+          "title": "Authentic Languages",
+          "type": "array"
+        },
+        "parties": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/TreatyPartyView"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parties"
+        }
+      },
+      "title": "TreatyView",
       "type": "object"
     },
     "VersionPage": {

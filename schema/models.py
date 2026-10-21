@@ -7,7 +7,7 @@ from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, StringConstraints, model_validator
 
-from schema.record import EXPRESSION_AUTHORITY
+from schema.record import EXPRESSION_AUTHORITY, LEGAL_EFFECTS
 
 ID = Annotated[str, Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$")]
 Hash = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
@@ -129,6 +129,57 @@ class LanguageRule(Model):
         return self
 
 
+class StatedDate(Model):
+    """A reviewed date as its record gives it (schema.record.Dated): the date, how precise it is, and as
+    printed when the record keeps that. A date with no normalised value is never compared."""
+
+    value: date | None = None
+    precision: Literal["day", "month", "year"] = "day"
+    printed: Nonempty | None = None
+
+    @model_validator(mode="after")
+    def stated(self):
+        if self.value is None and self.printed is None:
+            raise ValueError("a date needs its value or its printed form")
+        return self
+
+
+class RegionalEffect(Model):
+    """A regional instrument's legal effect, from its reviewed record (JUR-04, DAT-03): the organ that
+    adopted it, its effect, the member states it binds (none listed: every member) and the date by which
+    members must transpose it, when one is set."""
+
+    organ: Nonempty
+    legal_effect: Literal[*LEGAL_EFFECTS]
+    member_states: list[ID] = Field(default_factory=list)
+    transposition_deadline: date | None = None
+
+
+class PartyStatus(Model):
+    """One party to a treaty as its reviewed record lists it: its signature, ratification, accession and
+    denunciation, each dated, and its reservations. Signature alone never binds (COR-01)."""
+
+    party: Nonempty
+    place: ID | None = None
+    signed: StatedDate | None = None
+    ratified: StatedDate | None = None
+    acceded: StatedDate | None = None
+    denounced: StatedDate | None = None
+    reservations: Nonempty | None = None
+
+
+class TreatyStatus(Model):
+    """A treaty's status, from its reviewed record (JUR-04, DAT-03): who adopted it, its depositary, when it
+    entered into force (null when the record states no single date), its authentic languages and its
+    parties. No party listed means none is recorded, never that it has none."""
+
+    adopted_by: Nonempty | None = None
+    depositary: Nonempty | None = None
+    entered_into_force: StatedDate | None = None
+    authentic_languages: list[ID] = Field(default_factory=list)
+    parties: list[PartyStatus] = Field(default_factory=list)
+
+
 class Source(Model):
     id: ID
     jurisdiction_id: ID
@@ -151,6 +202,10 @@ class Source(Model):
     # of the row when not recorded, so rows stored before them are unchanged (DAT-08).
     editions: list[Edition] = Field(default_factory=list, exclude_if=lambda value: not value)
     language_rule: LanguageRule | None = Field(default=None, exclude_if=lambda value: value is None)
+    # A regional instrument's legal effect and a treaty's status, from its reviewed record (JUR-04); left
+    # out of the row for every other record, so rows stored before them are unchanged (DAT-08).
+    regional: RegionalEffect | None = Field(default=None, exclude_if=lambda value: value is None)
+    treaty: TreatyStatus | None = Field(default=None, exclude_if=lambda value: value is None)
 
     @model_validator(mode="after")
     def one_authority_per_edition(self):

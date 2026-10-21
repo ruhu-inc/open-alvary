@@ -369,6 +369,92 @@
       "title": "LanguageRule",
       "type": "object"
     },
+    "PartyStatus": {
+      "additionalProperties": false,
+      "description": "One party to a treaty as its reviewed record lists it: its signature, ratification, accession and\ndenunciation, each dated, and its reservations. Signature alone never binds (COR-01).",
+      "properties": {
+        "party": {
+          "minLength": 1,
+          "title": "Party",
+          "type": "string"
+        },
+        "place": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Place"
+        },
+        "signed": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatedDate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "ratified": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatedDate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "acceded": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatedDate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "denounced": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatedDate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "reservations": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reservations"
+        }
+      },
+      "required": [
+        "party"
+      ],
+      "title": "PartyStatus",
+      "type": "object"
+    },
     "Permission": {
       "enum": [
         "yes",
@@ -378,6 +464,54 @@
       ],
       "title": "Permission",
       "type": "string"
+    },
+    "RegionalEffect": {
+      "additionalProperties": false,
+      "description": "A regional instrument's legal effect, from its reviewed record (JUR-04, DAT-03): the organ that\nadopted it, its effect, the member states it binds (none listed: every member) and the date by which\nmembers must transpose it, when one is set.",
+      "properties": {
+        "organ": {
+          "minLength": 1,
+          "title": "Organ",
+          "type": "string"
+        },
+        "legal_effect": {
+          "enum": [
+            "directly_applicable",
+            "requires_transposition",
+            "binding_on_addressees",
+            "non_binding"
+          ],
+          "title": "Legal Effect",
+          "type": "string"
+        },
+        "member_states": {
+          "items": {
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "type": "string"
+          },
+          "title": "Member States",
+          "type": "array"
+        },
+        "transposition_deadline": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transposition Deadline"
+        }
+      },
+      "required": [
+        "organ",
+        "legal_effect"
+      ],
+      "title": "RegionalEffect",
+      "type": "object"
     },
     "RightsRecord": {
       "additionalProperties": false,
@@ -760,6 +894,28 @@
             }
           ],
           "default": null
+        },
+        "regional": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RegionalEffect"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "treaty": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TreatyStatus"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -924,6 +1080,50 @@
         "parser"
       ],
       "title": "SourceVersion",
+      "type": "object"
+    },
+    "StatedDate": {
+      "additionalProperties": false,
+      "description": "A reviewed date as its record gives it (schema.record.Dated): the date, how precise it is, and as\nprinted when the record keeps that. A date with no normalised value is never compared.",
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Value"
+        },
+        "precision": {
+          "default": "day",
+          "enum": [
+            "day",
+            "month",
+            "year"
+          ],
+          "title": "Precision",
+          "type": "string"
+        },
+        "printed": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Printed"
+        }
+      },
+      "title": "StatedDate",
       "type": "object"
     },
     "StatedEvidence": {
@@ -1223,6 +1423,66 @@
         "provenance_url"
       ],
       "title": "Translation",
+      "type": "object"
+    },
+    "TreatyStatus": {
+      "additionalProperties": false,
+      "description": "A treaty's status, from its reviewed record (JUR-04, DAT-03): who adopted it, its depositary, when it\nentered into force (null when the record states no single date), its authentic languages and its\nparties. No party listed means none is recorded, never that it has none.",
+      "properties": {
+        "adopted_by": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Adopted By"
+        },
+        "depositary": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Depositary"
+        },
+        "entered_into_force": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatedDate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "authentic_languages": {
+          "items": {
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "type": "string"
+          },
+          "title": "Authentic Languages",
+          "type": "array"
+        },
+        "parties": {
+          "items": {
+            "$ref": "#/$defs/PartyStatus"
+          },
+          "title": "Parties",
+          "type": "array"
+        }
+      },
+      "title": "TreatyStatus",
       "type": "object"
     }
   },
