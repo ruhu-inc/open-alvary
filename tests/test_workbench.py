@@ -928,12 +928,12 @@ def test_a_rwandan_laws_authority_is_suggested_with_its_words_and_stays_blank_un
     from schema.jurisdictions import registry
     from workbench.review import Review
 
-    values, legal = read_law()
+    values, legal, inferred = read_law()
     folder = tmp_path / "rw"
     rwanda_collection(folder, monkeypatch)
     manifest = json.loads((folder / "manifest.json").read_text())
     for document in manifest["documents"]:
-        document |= {"suggested": values, "suggested_legal": legal}
+        document |= {"suggested": values, "suggested_legal": legal, "suggested_inferred": inferred}
     (folder / "manifest.json").write_text(json.dumps(manifest))
     (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(reading()))
     store = Store(connect(f"sqlite:///{tmp_path / 'workbench.db'}"))
@@ -952,6 +952,19 @@ def test_a_rwandan_laws_authority_is_suggested_with_its_words_and_stays_blank_un
     authorities = shown["suggestions"]["expressions"]["authority"]
     assert authorities["en"] == {"value": "official_translation", "page": 2, "evidence": adopted}
     assert authorities["rw"]["value"] == "authoritative"
+    # What the reader inferred rather than read where it is printed for its step is suggested the same way:
+    # the one date above the signatures for the countersignature and the seal, and the Senate's absence
+    # from a preamble naming only the Chamber of Deputies.
+    assert draft["step:promulgated.date"] == "2026-03-12"  # printed for the President's signature
+    kigali = {"value": "2026-03-12", "page": 2, "evidence": "Kigali, 12/03/2026"}
+    for step in ("step:countersigned.date", "step:sealed.date"):
+        assert step not in draft and step in shown["missing"] and shown["suggestions"][step] == kigali
+    assert "step:adopted:senate.date" not in shown["record"]["absent"]
+    assert shown["suggestions"]["step:adopted:senate.date"] == {
+        "absent": "not_applicable",
+        "page": 2,
+        "evidence": "The Chamber of Deputies, in its sitting of 20 February 2026;",
+    }
     assert shown["suggestions"]["step:commenced.date"] == {
         "value": "2026-03-16",
         "page": 2,

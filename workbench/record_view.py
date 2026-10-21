@@ -1184,8 +1184,10 @@ def suggestions_view(suggestions: dict) -> dict:
 # What a document is worth as law and when: each language version's authority, its rule where they
 # differ, when it commences, what it does to other laws, whether it is current, whether a treaty's party
 # list is complete. A reader may suggest each, with the words that state it; none is a field's value
-# until a reviewer chooses it (owner decision 2026-10-21). The details as printed (titles, numbers, the
-# dates of each step of its making, the gazette and its pages) are filled in for the reviewer to check.
+# until a reviewer chooses it (owner decision 2026-10-21). The details as printed (titles, numbers, a
+# date printed for a step of its making, the gazette and its pages) are filled in for the reviewer to
+# check; what a reader infers rather than reads where it is printed for its field is suggested too,
+# never filled in.
 LEGAL = {
     "step:commenced.date",
     "event:commenced.date",
@@ -1222,9 +1224,11 @@ def suggestions(document: dict) -> dict:
     """The legal facts suggested for a document, keyed as its fields are, each with the words that state
     it and their page, or where else it was read: when it commences and what each language version is
     worth (under "expressions", the authority by language), read from its text; whether it is current,
-    as a later text of its collection or its listing says. Shown beside the empty fields for the reviewer
-    to choose; never filled in."""
-    out = dict(document.get("suggested_legal") or {})
+    as a later text of its collection or its listing says. With them, what its reader inferred rather than
+    read where it is printed for its field (a date printed once for several steps, a step that did not
+    happen), with the words it rests on. Shown beside the empty fields for the reviewer to choose; never
+    filled in."""
+    out = {**(document.get("suggested_inferred") or {}), **(document.get("suggested_legal") or {})}
     listed = (out.get("status.legal") or {}).get("value")
     said = [(out.get("status.note") or {}).get("value")]
     links = document.get("relations") or []

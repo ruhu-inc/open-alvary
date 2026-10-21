@@ -22,7 +22,7 @@ from ingestion import gazette_layout
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-21.1"  # legal facts suggested apart from the details, with the words that state them
+PIPELINE = "2026-10-21.2"  # what is inferred, not printed for its step, suggested apart with its words
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -1156,6 +1156,9 @@ SITTING = {
     "senate": re.compile(r"\bSenate,?\s+in its (?:plenary )?(?:session|sitting) of\s+(.{6,40}?\d{4})", re.I),
 }
 KIGALI = re.compile(r"Kigali\s*,\s*(?:on\s+)?(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*((?:19|20)\d\d)", re.I)
+# Who adopted it, as the enacting words print it: "THE PARLIAMENT HAS ADOPTED AND WE SANCTION, PROMULGATE
+# …", "THE TRANSITIONAL NATIONAL ASSEMBLY HAD ADOPTED AND WE SANCTION …" (in capitals, as printed).
+ADOPTED_BY = re.compile(r"\b(?:THE\s+)?([A-Z]+(?:\s+[A-Z]+){0,4})\s+HA[SD]\s+ADOPTED\b")
 IN_FORCE_ON_PUBLICATION = re.compile(
     r"(?:comes|shall come|enters) into force on the date of its publication", re.I
 )
@@ -1455,33 +1458,37 @@ def signatories(lines: list[str]) -> dict[str, str]:
     return found
 
 
-def stated(paragraphs: list[dict], pattern: re.Pattern) -> dict | None:
+def stated(paragraphs: list[dict], pattern: re.Pattern, stops: tuple[str, ...] = (". ",)) -> dict | None:
     """Where the text states something: the page of the paragraph that says it and the sentence that
-    does, as printed (a paragraph may run on into the signatures). None when no paragraph says it in a
-    sentence of at most 400 characters."""
+    does, as printed (a paragraph may run on into the signatures); with ``stops`` (". ", "; "), the clause
+    of a preamble that does. None when no paragraph says it in a sentence of at most 400 characters."""
     for node in paragraphs:
         words = " ".join(node["text"].split())
         found = pattern.search(words)
         if not found:
             continue
-        end = words.find(". ", found.end())
-        sentence = words[words.rfind(". ", 0, found.start()) + 1 : end + 1 if end >= 0 else None].strip()
+        start = max(words.rfind(stop, 0, found.start()) for stop in stops) + 1
+        ends = [end for end in (words.find(stop, found.end()) for stop in stops) if end >= 0]
+        sentence = words[start : min(ends) + 1 if ends else None].strip()
         return {"page": node["page"], "evidence": sentence} if len(sentence) <= 400 else None
     return None
 
 
-def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[dict, dict]:
-    """Details of the record read from the instrument as printed: its title, number and dates, the
-    sittings that adopted it, who promulgated, countersigned and sealed it and when, and where it was
-    published; the reviewer confirms each against the page.
+def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[dict, dict, dict]:
+    """Details of the record read from the instrument as printed: its title, number and dates, who
+    adopted it and the sittings that did, who promulgated, countersigned and sealed it, the date it was
+    promulgated, and where it was published; the reviewer confirms each against the page.
 
-    And apart from them, the legal facts the text suggests: when it came into force, and what each
-    language version is worth as law from the language it was adopted in. Each comes with the words
-    that state it and their page, and stays a suggestion until a reviewer chooses it (owner decision
-    2026-10-21); the record's own fields are left empty for them."""
+    And apart from them, each with the words that state it and their page, a suggestion until a reviewer
+    chooses it (owner decision 2026-10-21), the record's own fields left empty:
+    - the legal facts the text suggests: when it came into force, and what each language version is
+      worth as law from the language it was adopted in;
+    - what is inferred, not printed for its step: the dates it was countersigned and sealed, for the
+      Gazette prints one date above the three signatures ("Kigali, on 19/09/2019"); and, for a law
+      whose preamble names only the Chamber of Deputies' sitting, that the Senate did not sit on it."""
     english = [line["text"] for line in versions.get("en", [])]
     text = " ".join(english)
-    every = [line["text"] for lines in versions.values() for line in lines]
+    paragraphs = [n for n in versions_nodes(versions.get("en", [])) if n["kind"] == "paragraph"]
     values: dict = {"identity.type": entry["kind"]}
     if entry["kind"] == "constitution":
         values["identity.family"] = "constitution"
@@ -1506,22 +1513,33 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
             values["identity.number.printed"] = f"{printed[entry['kind']]} n° {entry['number']}"
     if entry.get("date"):
         values["identity.year"] = entry["date"][:4]
-    if entry["kind"] in ("law", "organic_law", "constitution"):
-        values["issued_by"] = "Parliament of the Republic of Rwanda"
+    adopted_by = ADOPTED_BY.search(text)
+    if adopted_by and entry["kind"] in ("law", "organic_law", "constitution"):
+        values["issued_by"] = adopted_by.group(1).title()  # "Parliament", "Transitional National Assembly"
+    inferred: dict = {}
     for step, pattern in SITTING.items():
         match = pattern.search(text)
         if match and spoken_date(match.group(1)):
             values[f"step:adopted:{step}.date"] = spoken_date(match.group(1))
-    kigali = next((KIGALI.search(t) for t in every if KIGALI.search(t)), None)
-    if kigali:
-        when = f"{kigali.group(3)}-{int(kigali.group(2)):02d}-{int(kigali.group(1)):02d}"
-        for step in ("promulgated", "countersigned", "sealed"):
-            values[f"step:{step}.date"] = when
+    sittings = {step for step in SITTING if f"step:adopted:{step}.date" in values}
+    if entry["kind"] == "law" and sittings == {"deputies"}:
+        # A law whose preamble names only the Chamber of Deputies' sitting: the Senate did not sit on it.
+        deputies = stated(paragraphs, SITTING["deputies"], stops=(". ", "; "))
+        if deputies:
+            inferred["step:adopted:senate.date"] = {"absent": "not_applicable", **deputies}
+    every = [line for lines in versions.values() for line in lines]
+    signed = next((line for line in every if KIGALI.search(line["text"])), None)
+    if signed:
+        found = KIGALI.search(signed["text"])
+        when = f"{found.group(3)}-{int(found.group(2)):02d}-{int(found.group(1)):02d}"
+        values["step:promulgated.date"] = when  # the President signs under the date
+        kigali = {"value": when, "page": signed.get("page"), "evidence": found.group(0)}
+        for step in ("countersigned", "sealed"):  # the other two signatures carry no date of their own
+            inferred[f"step:{step}.date"] = dict(kigali)
     for language in ("en", *[k for k in versions if k != "en"]):
         people = signatories([line["text"] for line in versions.get(language, [])])
         for step, person in people.items():
             values.setdefault(f"step:{step}.person", person)
-    paragraphs = [n for n in versions_nodes(versions.get("en", [])) if n["kind"] == "paragraph"]
     legal: dict = {}
     if issue.get("date"):
         values["step:published.date"] = issue["date"]
@@ -1567,7 +1585,7 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
     )
     if purpose:
         values["text.summary.text"] = purpose["text"]
-    return values, legal
+    return values, legal, inferred
 
 
 def versions_nodes(lines: list[dict]) -> list[dict]:
