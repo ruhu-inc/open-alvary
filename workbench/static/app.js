@@ -401,6 +401,7 @@ async function actView(actId) {
     ),
     detailsSummary(actId, ready),
     editorialSummary(actId),
+    act.type === "judgment" || act.type === "ruling" ? citationsSummary(actId) : null,
     textCheckCard(actId, data.text_check),
     findReplaceCard(actId),
     approvalPanel(actId, data, current),
@@ -1395,6 +1396,141 @@ async function instructionsView(actId) {
     original.panel));
 }
 
+// --- a judgment's citations and their treatment (EDT-01, EDT-02) -----------------------------------
+
+const CITATION_STATUS = { proposed: ["medium", "proposed"], confirmed: ["ok", "confirmed"], rejected: ["warn", "rejected"], withdrawn: ["warn", "withdrawn"] };
+
+// On a judgment's page: how many of its citations wait for review, and where to review them.
+function citationsSummary(actId) {
+  const id = encodeURIComponent(actId);
+  const line = el("p", { class: "muted", text: "Loading…" });
+  api(`/api/documents/${id}/citations`).then((listing) => {
+    if (!listing.ok) { line.textContent = ""; return; }
+    const counts = {};
+    for (const c of listing.data.citations) counts[c.status] = (counts[c.status] || 0) + 1;
+    line.textContent = `Citations: ${Object.entries(counts).map(([status, n]) => `${n} ${CITATION_STATUS[status][1]}`).join(", ") || "none yet"}.`;
+  });
+  return el("div", { class: "card" },
+    el("h3", { text: "Citations and treatment" }),
+    el("p", { class: "muted", text: "The provisions and judgments this judgment's paragraphs cite (proposed from its published text, confirmed by you), and how it treats the judgments it cites, recorded only by a legally qualified reviewer." }),
+    line,
+    el("p", {}, el("a", { href: `#/doc/${id}/citations` }, el("button", { text: "Citations" }))));
+}
+
+async function citationsView(actId) {
+  const id = encodeURIComponent(actId);
+  const [listing, doc] = await Promise.all([api(`/api/documents/${id}/citations`), api(`/api/documents/${id}`)]);
+  if (!listing.ok) return main(el("p", { text: message(listing) }));
+  const data = listing.data;
+  app.names = { ...(app.names || {}), ...data.names };
+  setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${id}`, text: doc.data.act.title }), "Citations");
+  const original = sourcePanel(actId, doc.data.pages.map((p) => p.page), doc.data.source || {}, 1);
+  const canImport = app.me.roles.includes("reviewer"), canReview = app.me.roles.includes("approver");
+  const paragraphOf = Object.fromEntries(data.paragraphs.map((p) => [p.locator, p]));
+  const card = (item) => {
+    const c = item.citation;
+    const paragraph = paragraphOf[c.citing_locator] || {};
+    const role = el("input", { type: "text", placeholder: "such as owner or Nigerian advocate" });
+    const comment = el("textarea", { rows: 1, placeholder: "Note for the record (optional)" });
+    const decide = async (status) => {
+      if (status === "rejected" && !confirm("Reject this citation? It stays in the record and is never exported.")) return;
+      if (status === "withdrawn" && !confirm("Withdraw this citation, and its treatment? Publishing then takes them out of public view.")) return;
+      const body = { citation_id: item.citation_id, expected_revision: item.revision, status, reviewer_role: role.value, comment: comment.value };
+      const result = await api(`/api/documents/${id}/citations`, { method: "POST", body });
+      if (!result.ok) return toast(message(result));
+      toast(status === "confirmed" ? "Confirmed and recorded in your name" : status === "rejected" ? "Rejected" : "Withdrawn");
+      citationsView(actId);
+    };
+    const treatments = c.treatments || [];
+    const live = treatments.find((t) => t.review_state === "reviewed");
+    const withdrawn = treatments.filter((t) => t.review_state === "withdrawn");
+    const past = withdrawn.length ? el("p", { class: "muted small", text: `Withdrawn: ${withdrawn.map((t) => `${spaced(t.kind)}, recorded by ${operatorName(t.reviewed_by)}`).join("; ")}` }) : null;
+    // How the paragraph treats the judgment it cites: a doctrinal review, never inferred from the citation.
+    const treatment = () => {
+      if (c.cited_document_type !== "judgment") return null;
+      const send = async (body) => {
+        const result = await api(`/api/documents/${id}/citations/${encodeURIComponent(item.citation_id)}/treatment`, { method: "POST", body: { expected_revision: item.revision, ...body } });
+        if (!result.ok) return toast(message(result));
+        toast(body.action === "record" ? "Treatment recorded in your name" : "Treatment withdrawn");
+        citationsView(actId);
+      };
+      if (live) {
+        return el("div", { class: "editor-field" },
+          el("p", {}, "Treatment: ", el("strong", { text: spaced(live.kind) }), ` (${live.opinion} opinion), recorded by ${operatorName(live.reviewed_by)}, ${live.reviewer_role}: ${live.reviewer_qualification}`),
+          el("blockquote", { class: "muted", text: live.quote }),
+          past,
+          canReview ? el("button", { class: "danger small", text: "Withdraw the treatment", on: { click: () => { if (confirm("Withdraw this treatment? Publishing then corrects its announcements.")) send({ action: "withdraw" }); } } }) : null);
+      }
+      if (!canReview) return el("div", {}, el("p", { class: "muted", text: "No treatment recorded, so none is published. Recording one needs the approver role and a legal qualification." }), past);
+      const kind = el("select", {}, el("option", { value: "", text: "—" }), data.treatments.map((t) => el("option", { value: t, text: spaced(t) })));
+      const opinion = el("select", {}, data.opinions.map((o) => el("option", { value: o, text: o })));
+      opinion.value = "unknown";
+      const passage = el("textarea", { rows: 3, value: c.quote });
+      const by = el("input", { type: "text", placeholder: "such as Nigerian advocate" });
+      const qualification = el("input", { type: "text", placeholder: `Your legal qualification for ${data.jurisdiction || "this jurisdiction"}` });
+      return el("details", { class: "editor-history" },
+        el("summary", { text: "Record how this paragraph treats the judgment it cites (a doctrinal review)" }),
+        el("p", { class: "muted", text: "Only what the paragraph itself says, in the opinion it is in. No treatment recorded means none is published: never infer one from the citation." }),
+        el("div", { class: "editor-grid" },
+          field("Treatment", kind),
+          field("Opinion the paragraph is in", opinion, paragraph.opinion ? `The text calls it the ${paragraph.opinion} opinion` : "")),
+        field("The passage that does it, in the paragraph's own words", passage),
+        el("div", { class: "editor-grid" }, field("Your role", by), field("Your legal qualification", qualification, "Required: a treatment is refused without it")),
+        past,
+        el("p", { class: "editor-actions" }, el("button", { class: "primary", text: "Record the treatment", on: { click: () => send({ action: "record", review_level: "doctrinal", kind: kind.value, opinion: opinion.value, quote: passage.value, reviewer_role: by.value, reviewer_qualification: qualification.value }) } })));
+    };
+    const cited = c.cited_locator
+      ? `${c.cited_pinpoint || c.cited_locator} of ${c.cited_title || c.cited_work}`
+      : `${c.cited_title || c.cited_work}, as a whole${c.unresolved_pinpoint ? ` (its pinpoint names no part: ${spaced(c.unresolved_pinpoint)})` : ""}`;
+    const [tone, label] = CITATION_STATUS[item.status];
+    return el("div", { class: `card editor-card status-${item.status}` },
+      el("div", { class: "editor-head" }, pill(tone, label),
+        el("span", { class: "muted", text: `revision ${item.revision} by ${operatorName(item.author)}, ${ago(item.at)}${item.comment ? ` — ${item.comment}` : ""}` })),
+      el("p", {}, el("strong", { text: c.citing_pinpoint || paragraph.label || c.citing_locator }),
+        el("span", { class: "muted", text: ` ${c.citing_locator}${paragraph.opinion ? ` · ${paragraph.opinion} opinion` : ""} ` }),
+        paragraph.page ? el("button", { class: "small", text: "Show its page", on: { click: () => original.show(paragraph.page) } }) : null),
+      el("p", {}, "Cites ", el("strong", { text: cited }), el("span", { class: "muted", text: ` (${c.cited_work}${c.cited_citation ? `, ${c.cited_citation}` : ""})` })),
+      el("p", {}, "As written: ", el("q", { text: c.printed })),
+      el("blockquote", { class: "muted", text: c.quote }),
+      c.review ? el("p", { class: "muted", text: `Confirmed by ${operatorName(c.review.reviewed_by)} (${c.review.reviewer_role}), ${ago(c.review.reviewed_at)}` }) : null,
+      item.status === "proposed" && canReview ? el("div", {},
+        field("Your role (a structural review: whether the paragraph cites this; no qualification is needed)", role),
+        comment,
+        el("p", { class: "editor-actions" },
+          el("button", { class: "primary", text: "Confirm: the paragraph cites this", on: { click: () => decide("confirmed") } }), " ",
+          el("button", { class: "danger", text: "Reject", on: { click: () => decide("rejected") } }))) : null,
+      item.status === "proposed" && !canReview ? el("p", { class: "muted", text: "Confirming a citation needs the approver role." }) : null,
+      item.status === "confirmed" ? treatment() : null,
+      item.status === "withdrawn" ? past : null,
+      item.status === "confirmed" && canReview ? el("p", { class: "editor-actions" }, el("button", { class: "danger small", text: "Withdraw the citation", on: { click: () => decide("withdrawn") } })) : null,
+      historyList(item));
+  };
+  const file = el("input", { type: "file", accept: "application/json,.json" });
+  const importProposals = async () => {
+    const chosen = file.files[0];
+    if (!chosen) return toast("Choose the proposals file that operations.citations propose printed");
+    let body;
+    try { body = JSON.parse(await chosen.text()); } catch { return toast("That file is not JSON"); }
+    const result = await api(`/api/documents/${id}/citations/proposals`, { method: "POST", body });
+    if (!result.ok) return toast(message(result));
+    const { added, skipped } = result.data;
+    toast(`${added.length} proposal${added.length === 1 ? "" : "s"} recorded${skipped.length ? `; ${skipped.length} left out (${unique(skipped.map((s) => s.reason)).join("; ")})` : ""}`);
+    citationsView(actId);
+  };
+  const exported = data.citations.filter((c) => c.status === "confirmed" || c.status === "withdrawn").length;
+  main(el("div", { class: "details-layout" },
+    el("div", {},
+      el("div", { class: "card" },
+        el("h2", { text: "Citations and treatment" }),
+        el("p", { class: "muted", text: "The provisions and judgments each paragraph of this judgment cites. Proposals are read from its published text with the catalogue's citation resolver (python -m operations.citations propose --work …); import the file, check each against the paragraph beside it, and confirm or reject it. A confirmed citation of another judgment may also have its treatment recorded, by a reviewer who states their legal qualification. Only confirmed and withdrawn citations are exported for publishing." }),
+        data.judgment ? null : el("p", { class: "warn", text: "This document is not read as a judgment's paragraphs, so it has no citations to review here." }),
+        canImport && data.judgment ? el("p", {}, file, " ", el("button", { class: "primary", text: "Import proposals", on: { click: importProposals } })) : null,
+        el("p", {}, el("a", { href: `/api/documents/${id}/citations/export`, text: `Export the ${exported} confirmed or withdrawn citation${exported === 1 ? "" : "s"} (JSON, for operations.citations publish)` }))),
+      ...data.citations.map(card),
+      data.citations.length ? null : el("p", { class: "muted", text: "No citations recorded for this judgment yet." })),
+    original.panel));
+}
+
 function unique(values) { return [...new Set(values)]; }
 function summarise(pages) { return pages.length > 20 ? `${pages.slice(0, 20).join(", ")} and ${pages.length - 20} more` : pages.join(", "); }
 
@@ -2086,6 +2222,7 @@ async function route() {
     if (parts[0] === "doc" && parts[2] === "languages") return await languagesView(parts[1]);
     if (parts[0] === "doc" && parts[2] === "events") return await eventsView(parts[1]);
     if (parts[0] === "doc" && parts[2] === "instructions") return await instructionsView(parts[1]);
+    if (parts[0] === "doc" && parts[2] === "citations") return await citationsView(parts[1]);
     if (parts[0] === "queue") return await queueView();
     if (parts[0] === "doc" && parts[1]) return await actView(parts[1]);
     if (parts[0] === "audit" && parts[1]) return await auditView(parts[1]);

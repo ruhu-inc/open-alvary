@@ -194,6 +194,25 @@ instruction_revision = Table(
     UniqueConstraint("instruction_id", "revision"),
 )
 
+# A judgment's citations (EDT-01, workbench.citations): a proposal, its confirmation or rejection, its
+# withdrawal and each treatment recorded or withdrawn are revisions; a citation is never updated in place.
+citation_revision = Table(
+    "citation_revision",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("citation_id", String(60), nullable=False),  # cit_<uuid4>: its id when published
+    Column("work", String(160), nullable=False),  # the citing judgment
+    Column("act_id", String(140), nullable=False),  # the document (language version) it was saved on
+    Column("revision", Integer, nullable=False),
+    Column("citation", JSON, nullable=False),  # what it cites, its words, its review and its treatments
+    Column("status", String(20), nullable=False),  # proposed | confirmed | rejected | withdrawn
+    Column("proposed_from", String(400)),  # the proposal's paragraph, work and part
+    Column("comment", Text, nullable=False, default=""),
+    Column("author", String(320), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("citation_id", "revision"),
+)
+
 audit = Table(
     "audit_event",
     metadata,
@@ -661,7 +680,7 @@ class Store:
             )
         return expected + 1
 
-    # --- legal events and amendment instructions (workbench.editorial) ----------------------------
+    # --- legal events, amendment instructions (workbench.editorial) and citations (workbench.citations) ---
 
     def _revisions(self, table, work: str | None) -> list[dict]:
         """Every revision, oldest first: of one work's items, or of all."""
@@ -714,6 +733,14 @@ class Store:
 
     def instruction_revisions(self, work: str | None = None) -> list[dict]:
         return self._revisions(instruction_revision, work)
+
+    def citation_revisions(self, work: str | None = None) -> list[dict]:
+        return self._revisions(citation_revision, work)
+
+    def save_citation(self, citation_id: str, expected: int, author: str, **values) -> int:
+        return self._save_revision(
+            citation_revision, "citation_id", citation_id, expected, author, "citation_saved", **values
+        )
 
     def save_instruction(self, instruction_id: str, expected: int, author: str, **values) -> int:
         table, action = instruction_revision, "instruction_saved"

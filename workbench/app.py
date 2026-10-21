@@ -33,6 +33,7 @@ from workbench import access as access_section
 from workbench import (
     akn,
     auth,
+    citations,
     content,
     details,
     editorial,
@@ -1101,6 +1102,7 @@ def create_app(
         return [{**e, "at": e["at"].isoformat()} for e in store.events(act_id=act, limit=300)]
 
     editorial.install(app, store, library, review)
+    citations.install(app, store, library, review)
     privileged.install(app, store, relying)
     access_section.install(app, store, access, relying)
     operators_section.install(app, store, relying)
