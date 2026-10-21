@@ -62,7 +62,7 @@
   {
     "name": "get_relationships",
     "title": "Get a source's history",
-    "description": "Whether a source is current and how it relates to other public sources, one step away: what it repeals or amends and the law it is made under, what repealed or amended it, the instruments made under it, and the source in force in its place now when it has been repealed. Only links a reviewer has checked against the official text. A page at a time.",
+    "description": "Whether a source is current and how it relates to other public sources, one step away: what it repeals, amends or commences and the law it is made under, what repealed, amended or commenced it, the treaty or directive it transposes, domesticates, implements or ratifies and the laws that do so for it, what it cites and is cited by, the instruments made under it, and the source in force in its place now when it has been repealed. Only links a reviewer has checked against the official text; judicial treatment is not included yet. A page at a time.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -78,11 +78,23 @@
             "repealed_by",
             "superseded_by",
             "amended_by",
+            "commenced_by",
             "made_under",
+            "transposes",
+            "domesticates",
+            "implements",
+            "ratifies",
             "repeals",
             "supersedes",
             "amends",
+            "commences",
+            "transposed_by",
+            "domesticated_by",
+            "implemented_by",
+            "ratified_by",
             "cross_reference",
+            "cites",
+            "cited_by",
             "enables"
           ],
           "description": "Only links of this kind, such as repealed_by or enables."

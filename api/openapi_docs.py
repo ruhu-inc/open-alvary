@@ -189,13 +189,16 @@ OPERATIONS: dict[str, dict] = {
         "tag": "Catalogue",
         "summary": "Get a record's history",
         "description": "Whether the record is current, and how it relates to other records, a page at a "
-        "time: the laws it repeals or amends and the law it is made under; the later laws that repealed or "
-        "amended it; the instruments made under it; and, when it has been repealed or replaced, the record "
-        "in force in its place now. Links one step away only (depth 1), between public records that a "
-        "reviewer has checked against the official text.",
+        "time: the laws it repeals, amends or commences and the law it is made under; the later laws that "
+        "repealed, amended or commenced it; the treaty or directive it transposes, domesticates, implements "
+        "or ratifies, and the laws that do so for it; the records it cites and that cite it; the "
+        "instruments made under it; and, when it has been repealed or replaced, the record in force in its "
+        "place now. Links one step away only (depth 1), between public records that a reviewer has checked "
+        "against the official text. Judicial treatment (a judgment following or overruling another) is not "
+        "listed yet.",
         "parameters": {
             "source_id": "The record's ID.",
-            "kind": "Only links of this kind, such as `repealed_by` or `enables`.",
+            "kind": "Only links of this kind, such as `repealed_by`, `transposed_by` or `enables`.",
             "limit": "Links per page, 1 to 100. The default is 25.",
             "cursor": "The `next_cursor` of the previous page, to continue it.",
         },
@@ -990,22 +993,30 @@ FIELDS: dict[str, dict[str, str]] = {
         "current": "When it has been repealed or replaced: the record in force in its place now, at the "
         "end of its line of repeals (up to three steps). Absent when nothing in the catalogue repealed it.",
         "total": "Links matching, across all pages.",
-        "items": "This page's links, from the record's side: it `repeals`, `amends` or `supersedes` an "
-        "earlier record, is `repealed_by`, `amended_by` or `superseded_by` a later one, is `made_under` a "
-        "parent law, or `enables` an instrument made under it. Ordered by kind in that order, then by ID.",
+        "items": "This page's links, from the record's side, in this order: it is `repealed_by`, "
+        "`superseded_by`, `amended_by` or `commenced_by` a later record; it is `made_under` a parent law, or "
+        "`transposes`, `domesticates`, `implements` or `ratifies` a treaty or directive; it `repeals`, "
+        "`supersedes`, `amends` or `commences` another record; a treaty or directive is `transposed_by`, "
+        "`domesticated_by`, `implemented_by` or `ratified_by` a law; a `cross_reference`; it `cites` or is "
+        "`cited_by` another record; it `enables` an instrument made under it. Then by ID.",
         "next_cursor": "Pass it as `cursor` for the next page; absent on the last.",
     },
     "RelatedSource": {
         "kind": "How the other record relates to this one, from this one's side: `repeals`, "
-        "`repealed_by`, `amends`, `amended_by`, `supersedes`, `superseded_by`, `made_under`, `enables` "
-        "or `cross_reference`.",
+        "`repealed_by`, `amends`, `amended_by`, `supersedes`, `superseded_by`, `commences`, `commenced_by`, "
+        "`made_under`, `enables`, `transposes`, `transposed_by`, `domesticates`, `domesticated_by`, "
+        "`implements`, `implemented_by`, `ratifies`, `ratified_by`, `cites`, `cited_by` or "
+        "`cross_reference`. A kind and its `_by` form are the same link seen from each end. `cites` says "
+        "only that one record refers to the other, never that it agrees with it or changes it.",
         "source_id": "The other record's ID.",
         "title": "The other record's title.",
         "citation": "How the other record is cited.",
         "legal_status": "The other record's legal status.",
         "year": "The year the other record was made, when known.",
-        "effective_date": "When the repeal or amendment took effect, when known.",
-        "evidence_url": "The official text that makes the link (the repealing or amending law).",
+        "effective_date": "When the link took effect, such as the date of a repeal or commencement, when "
+        "known.",
+        "evidence_url": "The official text that makes the link (the repealing, amending, commencing or "
+        "transposing law, for example).",
         "verified": "Whether a reviewer checked the link against that text.",
     },
     "CurrentSource": {

@@ -245,10 +245,24 @@ class Citation(Model):
 
 
 class Amendment(Model):
+    """A link between two works, from the asserting (later) one to the one it concerns (EDT-01)."""
+
     id: ID
     source_id: ID
     target_source_id: ID
-    kind: Literal["amends", "repeals", "supersedes", "made_under", "cross_reference"]
+    kind: Literal[
+        "amends",
+        "repeals",
+        "supersedes",
+        "made_under",
+        "cross_reference",
+        "commences",
+        "transposes",
+        "domesticates",
+        "implements",
+        "ratifies",
+        "cites",
+    ]
     effective_date: date | None = None
     evidence_url: HttpUrl
     verified: bool = False

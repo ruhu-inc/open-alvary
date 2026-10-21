@@ -1,7 +1,8 @@
 // A record's place in the law, beside the record: whether it is current and, when it has been
-// repealed or replaced, the law in force in its place now; the records it repeals, amends or is made
-// under; those that repealed or amended it; and the instruments made under it. Only links between
-// public records that a reviewer has checked against the official text (GET /site/v1/sources/{id}/relationships).
+// repealed or replaced, the law in force in its place now; the records it repeals, amends, commences,
+// gives effect to or is made under; those that repealed, amended, commenced or gave effect to it; what
+// it cites and is cited by; and the instruments made under it. Only links between public records that
+// a reviewer has checked against the official text (GET /site/v1/sources/{id}/relationships).
 import { ArrowRight, ExternalLink } from "lucide-react";
 import { LEGAL_STATUS, Link } from "./site";
 
@@ -31,11 +32,23 @@ const KINDS: [string, string][] = [
   ["repealed_by", "Repealed by"],
   ["superseded_by", "Replaced by"],
   ["amended_by", "Amended by"],
+  ["commenced_by", "Brought into force by"],
   ["made_under", "Made under"],
+  ["transposes", "Transposes"],
+  ["domesticates", "Domesticates"],
+  ["implements", "Implements"],
+  ["ratifies", "Ratifies"],
   ["repeals", "Repeals"],
   ["supersedes", "Replaces"],
   ["amends", "Amends"],
+  ["commences", "Brings into force"],
+  ["transposed_by", "Transposed by"],
+  ["domesticated_by", "Domesticated by"],
+  ["implemented_by", "Implemented by"],
+  ["ratified_by", "Ratified by"],
   ["cross_reference", "See also"],
+  ["cites", "Cites"],
+  ["cited_by", "Cited by"],
 ];
 
 const record = (id: string) => "/sources/" + encodeURIComponent(id);

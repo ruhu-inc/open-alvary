@@ -308,8 +308,9 @@ class LegacyCatalogue:
 
     def relationships(self, source_id, *, kinds=None, limit=EDGES_PER_PAGE, cursor=None, current=True):
         """A page of a source's checked links to other public sources, as seen from its side: what it
-        repeals or amends and is made under, what repealed or amended it, the instruments made under
-        it; and, when it has been repealed or replaced, the source in force in its place now."""
+        repeals, amends, commences, gives effect to or is made under, what repealed, amended, commenced
+        or gave effect to it, what it cites and is cited by, the instruments made under it; and, when it
+        has been repealed or replaced, the source in force in its place now."""
         source, _ = self._require(source_id)
         kinds = set(EDGE_ORDER) if kinds is None else set(kinds)
         if not kinds <= set(EDGE_ORDER) or not 1 <= limit <= MAX_EDGES_PER_PAGE:

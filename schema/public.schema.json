@@ -826,7 +826,19 @@
             "superseded_by",
             "made_under",
             "enables",
-            "cross_reference"
+            "cross_reference",
+            "commences",
+            "commenced_by",
+            "transposes",
+            "transposed_by",
+            "domesticates",
+            "domesticated_by",
+            "implements",
+            "implemented_by",
+            "ratifies",
+            "ratified_by",
+            "cites",
+            "cited_by"
           ],
           "title": "Kind",
           "type": "string"

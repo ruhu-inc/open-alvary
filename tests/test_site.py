@@ -380,6 +380,32 @@ def test_a_laws_many_instruments_come_a_page_at_a_time_and_agents_get_the_same(c
     assert refused["error"]["code"] == -32602
 
 
+def test_the_reviewed_vocabulary_is_served_from_both_ends_in_the_readers_order(catalogue, store, tmp_path):
+    from api.catalogue import LegacyCatalogue
+    from api.repositories import LegacyRepository
+    from schema.models import Amendment
+
+    kinds = ("commences", "transposes", "domesticates", "implements", "ratifies", "cites")
+    catalogue.amendments += [
+        Amendment(id=f"link-{kind}", source_id="ng-foi-act-2011", target_source_id="ng-cbn-act-2007", kind=kind,
+                  evidence_url="https://example.org/synthetic-link", verified=True)
+        for kind in kinds
+    ]  # fmt: skip
+    store.save(catalogue)
+    with store.engine.connect() as connection:
+        service = LegacyCatalogue(LegacyRepository(connection))
+        forward = [i.kind for i in service.relationships("ng-foi-act-2011").items]
+        backward = [i.kind for i in service.relationships("ng-cbn-act-2007").items]
+        assert forward == ["transposes", "domesticates", "implements", "ratifies", "commences", "cites"]
+        assert backward == ["commenced_by", "transposed_by", "domesticated_by", "implemented_by",
+                            "ratified_by", "cited_by"]  # fmt: skip
+        assert [i.source_id for i in service.relationships("ng-cbn-act-2007", kinds=["cited_by"]).items] == [
+            "ng-foi-act-2011"
+        ]
+    site = TestClient(create_service(store, tmp_path)).get("/site/v1/sources/ng-cbn-act-2007/relationships")
+    assert [i["kind"] for i in site.json()["items"]] == backward
+
+
 def test_behind_front_door_only_its_requests_are_served(catalogue, store, tmp_path, monkeypatch):
     store.save(catalogue)
     monkeypatch.setenv("ALVARY_FRONT_DOOR_ID", "fd-1")
