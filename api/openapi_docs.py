@@ -1032,7 +1032,7 @@ FIELDS: dict[str, dict[str, str]] = {
         "review_state": "`reviewed` when every entry has its review, `partly_reviewed` when some have, "
         "`unreviewed` when none has: a proposal awaiting review.",
         "precedent": "Whether decisions bind later courts there at all, as its law says; null when not "
-        "recorded, and then every `binding`, `persuasive` or `not_applicable` relation is `unknown`.",
+        "recorded, and then every `binding` or `persuasive` relation is `unknown`.",
         "courts": "Each court and tribunal.",
         "relations": "How each court's decisions bear on other courts. A relation not listed is `unknown`: "
         "none is inferred from rank or appeal routes.",
@@ -1070,9 +1070,9 @@ FIELDS: dict[str, dict[str, str]] = {
         "the courts of each member state.",
         "members": "True when the relation covers the courts of each member state while it is a member.",
         "matter": "The subject matter it is limited to, by its ID in `matters`. Absent: any matter.",
-        "relation": "What Open Alvary answers: the recorded relation once it has its own doctrinal review "
-        "(and, for `binding`, `persuasive` and `not_applicable`, once the precedent rule has its own), "
-        "`unknown` until then.",
+        "relation": "What Open Alvary answers: the recorded relation once it has its own doctrinal review and "
+        "the courts it names have theirs (and, for `binding` and `persuasive`, once the precedent rule has its "
+        "own), `unknown` until then.",
         "recorded": "The relation the register records, in its source's terms: `binding` (precedent binds), "
         "`prevails_on_matter` (precedence on `matter` over national courts' decisions: not stare "
         "decisis), `binding_in_referred_case` (the ruling binds the court that referred the question, in "

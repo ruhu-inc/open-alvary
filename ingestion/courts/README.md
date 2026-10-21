@@ -120,8 +120,10 @@ reviewed.
   `reviewed_on` and `reviewed_sha256`. Absent until the entry is reviewed.
 - **`precedent`**: whether decisions bind later courts there at all. In a civil-law jurisdiction
   where they do not, record `"binds": false` with the rule and its source. It is never assumed
-  from the legal system. Without it, reviewed, a `binding`, `persuasive` or `not_applicable` relation
-  answers `unknown`. Where `binds` is false, no relation may be `binding`.
+  from the legal system. Without it, reviewed, a `binding` or `persuasive` relation answers
+  `unknown`. A `not_applicable` relation does not wait for it: that a court sits in another hierarchy
+  is a structural fact, answered once the relation and the courts it names are reviewed. Where `binds`
+  is false, no relation may be `binding`.
 - **`courts`**: each court or tribunal. Its `id` is the issuing authority's ID in the catalogue
   (`ke-hc`, `aa-ohada-ccja`), so a judgment's court is found by its record's `authority_id`. `kind`
   is `court`, `tribunal` or `quasi_judicial` (a body such as the African Commission, whose findings
