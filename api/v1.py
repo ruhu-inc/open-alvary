@@ -72,6 +72,9 @@ DocumentType = Literal["constitution", "act", "regulation", "judgment", "gazette
 # A BCP 47 language tag, such as en, fr or en-NG.
 LANGUAGE = Query(None, min_length=2, max_length=35, pattern=r"^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$")
 PLACE = re.compile(r"[a-z]{2}(?:-[a-z0-9]{1,12})?")  # a court register's jurisdiction (schema.record)
+ONE_JURISDICTION = (
+    "scope=applicable needs exactly one jurisdiction: the country whose applicable law you ask for."
+)
 
 
 def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]]) -> FastAPI:
@@ -154,6 +157,14 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
             plan.admit(jurisdiction)
             return jurisdiction
         return plan.within(j.id for j in service.jurisdictions())
+
+    def applicable(request: Request, service: LegacyCatalogue, jurisdiction, as_of, source_id, version_id):
+        """An applicable-law scope (api.applicable), asked for with scope=applicable: the records of other
+        jurisdictions it admits are read like any other jurisdiction's under the plan."""
+        named = source_id or (service.repository.version_owner(version_id) if version_id else None)
+        scope = service.applicable_scope(jurisdiction, as_of, named=named)
+        reach(request).admit(*sorted(scope.jurisdictions))
+        return scope
 
     def check_source(request: Request, service: LegacyCatalogue, source_id: str) -> SourceView:
         view = service.source(source_id)
@@ -371,17 +382,21 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
         year_to: int | None = Query(None, ge=1800, le=2200),
         source_id: str | None = Query(None, min_length=1, max_length=160),
         version_id: str | None = Query(None, min_length=1, max_length=160),
+        law: Literal["applicable"] | None = Query(None, alias="scope"),
         limit: int = Query(25, ge=1, le=100),
         cursor: str | None = Query(None, max_length=200),
         service: LegacyCatalogue = Depends(catalogue),
     ) -> TextSearchPage:
-        scope = within(request, service, jurisdiction)
+        if law is not None and jurisdiction is None:
+            raise InvalidSearch(ONE_JURISDICTION)
+        covered = within(request, service, jurisdiction)
+        widened = applicable(request, service, jurisdiction, as_of, source_id, version_id) if law else None
         filters = text_index.Filters(
             jurisdictions=None
-            if scope is None
-            else (scope,)
-            if isinstance(scope, str)
-            else tuple(sorted(scope)),
+            if covered is None
+            else (covered,)
+            if isinstance(covered, str)
+            else tuple(sorted(covered)),
             language=language,
             types=tuple(kinds),
             statuses=tuple(statuses),
@@ -391,7 +406,7 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
             source_id=source_id,
             version_id=version_id,
         )
-        page = service.search_text(q, filters, limit=limit, cursor=cursor)
+        page = service.search_text(q, filters, limit=limit, cursor=cursor, scope=widened)
         payload = page.model_dump_json().encode()
         served = {(hit.version_id, hit.content_hash) for hit in page.items}
 
@@ -415,6 +430,7 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
         year_to: int | None = Query(None, ge=1800, le=2200),
         source_id: str | None = Query(None, min_length=1, max_length=160),
         version_id: str | None = Query(None, min_length=1, max_length=160),
+        law: Literal["applicable"] | None = Query(None, alias="scope"),
         max_units: int = Query(10, ge=1, le=25),
         max_evidence_bytes: int = Query(49_152, ge=4_096, le=262_144),
         include: list[Literal["context", "expansion", "ranking"]] = Query([]),
@@ -422,6 +438,8 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
     ) -> EvidencePack:
         if len(jurisdictions) > 10 or any(not 2 <= len(j) <= 40 for j in jurisdictions):
             raise InvalidSearch("jurisdiction: at most 10, each 2 to 40 characters")
+        if law is not None and len(set(jurisdictions)) != 1:
+            raise InvalidSearch(ONE_JURISDICTION)
         if jurisdictions:
             plan = reach(request)
             for jurisdiction in jurisdictions:
@@ -447,6 +465,9 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
             source_id=source_id,
             version_id=version_id,
         )
+        widened = (
+            applicable(request, service, jurisdictions[0], as_of, source_id, version_id) if law else None
+        )
         pack = Retriever(service).retrieve(
             EvidenceRequest(
                 query=q,
@@ -454,6 +475,7 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
                 max_units=max_units,
                 max_evidence_bytes=max_evidence_bytes,
                 include=frozenset(include) or INCLUDE,
+                scope=widened,
             )
         )
         payload = pack.model_dump_json().encode()

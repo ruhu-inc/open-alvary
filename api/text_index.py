@@ -576,10 +576,19 @@ class Filters:
     source_id: str | None = None
     version_id: str | None = None
     kinds: tuple[str, ...] = ()  # provision kinds (the definition route); never for document units
+    # Works of other jurisdictions an applicable-law scope admits besides ``jurisdictions`` (api.applicable):
+    # the regional instruments and treaties that bind there, or whose relation is unknown.
+    admitted: tuple[str, ...] = ()
+
+    def admits(self, jurisdiction_id: str, work_id: str) -> bool:
+        return self.jurisdictions is None or jurisdiction_id in self.jurisdictions or work_id in self.admitted
 
     def where(self) -> tuple[str, dict]:
         clauses, params = ["true"], {}
-        if self.jurisdictions is not None:
+        if self.jurisdictions is not None and self.admitted:
+            clauses.append("(u.jurisdiction_id = ANY(:f_jurisdictions) OR u.work_id = ANY(:f_admitted))")
+            params |= {"f_jurisdictions": list(self.jurisdictions), "f_admitted": list(self.admitted)}
+        elif self.jurisdictions is not None:
             clauses.append("u.jurisdiction_id = ANY(:f_jurisdictions)")
             params["f_jurisdictions"] = list(self.jurisdictions)
         if self.language:

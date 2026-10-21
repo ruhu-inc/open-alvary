@@ -317,13 +317,10 @@ class Engine:
 
         clauses = []
         if filters.jurisdictions is not None:
-            clauses.append(
-                "("
-                + " or ".join(f"jurisdiction_id contains {quoted(j)}" for j in filters.jurisdictions)
-                + ")"
-                if filters.jurisdictions
-                else "false"
-            )
+            # An applicable-law scope's admitted works join the jurisdictions (api.applicable).
+            either = [f"jurisdiction_id contains {quoted(j)}" for j in filters.jurisdictions]
+            either += [f"work_id contains {quoted(w)}" for w in filters.admitted]
+            clauses.append("(" + " or ".join(either) + ")" if either else "false")
         if filters.language:
             clauses.append(f"language contains {quoted(filters.language.split('-')[0].casefold())}")
         if filters.types:

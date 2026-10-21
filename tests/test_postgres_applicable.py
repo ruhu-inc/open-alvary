@@ -1,8 +1,12 @@
-"""Regional and treaty law (JUR-04) published and served: a regional instrument's legal effect and a
-treaty's parties are published with the record and served on its view, its anchors and its evidence
-units; every other record's answer is unchanged. Every record, membership, ratification and date here
-is a synthetic fixture, not research."""
+"""Regional and treaty law (JUR-03, JUR-04) served and applied: a regional instrument's legal effect and a
+treaty's parties are published with the record, served on its view, its anchors and its evidence units;
+an opt-in applicable-law scope (scope=applicable) widens a search of a country to the law that binds there,
+from reviewed memberships and recorded ratifications only, labels every unit's relation to that country,
+states its widening (RSV-03), and changes nothing when not asked for. /currentness says whether a record
+binds in a country on a date. Every record, membership, ratification and date here is a synthetic fixture,
+not research."""
 
+import json
 from datetime import UTC, date, datetime, timedelta
 
 import pytest
@@ -11,6 +15,7 @@ from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
 from test_postgres_memberships import row, write
 
+from api.main import create_app
 from api.store import Store
 from api.v1 import create_v1_app
 from operations import memberships, publish
@@ -231,3 +236,210 @@ def test_each_unit_carries_its_records_legal_effect_or_treaty_status(published):
     }  # fmt: skip
     national = by_source(retrieve(client, "border")["evidence"])["ke-customs-act"]
     assert not {"regional", "treaty", "applicability"} & set(national)
+
+
+def test_a_senegal_applicable_query_on_company_law_returns_the_ohada_uniform_act_as_regional_direct(
+    published,
+):
+    _, client, _ = published
+    pack = retrieve(client, "commercial company", jurisdiction="sn", scope="applicable", as_of=AS_OF)
+    units = by_source(pack["evidence"])
+    ohada = units["ohada-commercial-companies-act"]["applicability"]
+    assert (ohada["relation"], ohada["binds"], ohada["jurisdiction_id"], ohada["as_of"]) == (
+        "regional_direct", "bound", "sn", AS_OF,
+    )  # fmt: skip
+    assert ohada["memberships"] == [{"id": "sn:aa-ohada:1", "body_id": "aa-ohada", "held": "held"}]
+    assert ohada["regional"] == {"organ": "Council of Ministers", "legal_effect": "directly_applicable",
+                                 "member_states": []}  # fmt: skip
+    assert units["ohada-commercial-companies-act"]["regional"]["legal_effect"] == "directly_applicable"
+    assert units["sn-company-accounts-act"]["applicability"]["relation"] == "national"
+    decision = units["ecowas-register-decision"]["applicability"]
+    assert decision["relation"] == "regional_binding_on_addressees" and decision["regional"][
+        "member_states"
+    ] == ["sn"]
+    # A body's record that states no legal effect is kept, labelled unknown: reported, never dropped.
+    assert units["ohada-registry-report"]["applicability"]["relation"] == "unknown"
+    # What does not bind Senegal is left out, and the pack says so, by relation.
+    assert "ecowas-registers-recommendation" not in units and "au-trade-charter" not in units
+    scope = pack["applicability"]
+    assert (
+        scope["jurisdiction_id"] == "sn"
+        and scope["date_basis"] == "as_of"
+        and scope["membership"] == "reviewed"
+    )
+    assert [(b["body_id"], b["held"]) for b in scope["bodies"]] == [
+        ("aa-au", "held"), ("aa-ecowas", "held"), ("aa-ohada", "held"),
+    ]  # fmt: skip
+    assert scope["left_out"] == {"non_binding": 1, "treaty_not_in_force_for_state": 1}
+    assert scope["admitted"] == 4 and any("labelled unknown" in n for n in scope["notices"])
+    # The caller's filters are shown as given; the widening is stated beside them, never applied silently.
+    assert pack["query"]["filters"] == {"jurisdictions": ["sn"], "scope": "applicable"}
+    assert retrieve(client, "commercial company", jurisdiction="sn", scope="applicable", as_of=AS_OF) == pack
+
+
+def test_a_kenya_applicable_query_on_customs_returns_the_eac_act_and_the_ratified_treaty(published):
+    _, client, _ = published
+    pack = retrieve(client, "customs", jurisdiction="ke", scope="applicable", as_of=AS_OF)
+    units = by_source(pack["evidence"])
+    eac = units["eac-customs-management-act"]["applicability"]
+    assert eac["relation"] == "regional_direct" and eac["memberships"][0]["id"] == "ke:aa-eac:1"
+    assert units["ke-customs-act"]["applicability"]["relation"] == "national"
+    charter = units["au-trade-charter"]
+    assert charter["applicability"]["relation"] == "treaty_in_force_for_state"
+    party = charter["applicability"]["party"]
+    assert party["place"] == "ke" and party["ratified"] == {"value": "2005-03-01", "precision": "day"}
+    assert [a["source_id"] for a in party["domesticated_by"]] == ["ke-customs-act"]
+    assert charter["applicability"]["entered_into_force"]["value"] == "2005-01-01"
+    # On a unit, the treaty's status without its parties: they are on the record.
+    assert charter["treaty"] == {
+        "adopted_by": "Assembly of the Union", "depositary": "African Union Commission",
+        "entered_into_force": {"value": "2005-01-01", "precision": "day"}, "authentic_languages": ["en", "fr"],
+    }  # fmt: skip
+
+
+def test_an_ecowas_directive_requires_transposition_with_its_deadline_and_transposing_act(published):
+    _, client, _ = published
+    page = client.get(
+        "/search/text",
+        params={"q": "publish accounts", "jurisdiction": "sn", "scope": "applicable", "as_of": AS_OF},
+    ).json()
+    hits = {h["source_id"]: h for h in page["items"]}
+    directive = hits["ecowas-company-accounts-directive"]["applicability"]
+    assert (directive["relation"], directive["binds"]) == ("regional_requires_transposition", "bound")
+    assert directive["regional"]["transposition_deadline"] == "2010-12-31"
+    assert [a["source_id"] for a in directive["transposed_by"]] == ["sn-company-accounts-act"]
+    assert "Transposition was due by 2010-12-31." in directive["reasons"]
+    assert hits["sn-company-accounts-act"]["applicability"]["relation"] == "national"
+    assert page["applicability"]["left_out"] == {"non_binding": 1, "treaty_not_in_force_for_state": 1}
+
+
+def test_an_au_treaty_binds_the_state_that_ratified_it_and_not_one_without_a_ratification(published):
+    store, client, _ = published
+    # Named by source_id, the treaty is answered for Senegal with its relation: no ratification recorded.
+    pack = retrieve(
+        client,
+        "customs procedures",
+        jurisdiction="sn",
+        scope="applicable",
+        as_of=AS_OF,
+        source_id="au-trade-charter",
+    )
+    [unit] = [u for u in pack["evidence"] if u["unit"] == "provision"]
+    assert unit["applicability"]["relation"] == "treaty_not_in_force_for_state"
+    assert unit["applicability"]["binds"] == "not_bound" and "party" not in unit["applicability"]
+    assert any("named by source_id" in n for n in pack["applicability"]["notices"])
+    # The check says the same for Senegal, and that Kenya, which ratified it, is bound.
+    part = anchor(store, "au-trade-charter")
+    items = [{"anchor_id": part, "as_of": AS_OF, "jurisdiction": j} for j in ("sn", "ke", "gh")]
+    results = client.post("/currentness", json={"items": items}).json()["results"]
+    found = [(r["applicability"]["relation"], r["applicability"]["binds"]) for r in results]
+    assert found == [
+        ("treaty_not_in_force_for_state", "not_bound"),
+        ("treaty_in_force_for_state", "bound"),
+        ("treaty_not_in_force_for_state", "not_bound"),  # Ghana signed only: signature alone does not bind
+    ]
+    assert results[0]["currentness"]["state"] == "in_force" and results[0]["result"] == "unchanged"
+    assert "signature alone" in results[2]["applicability"]["reasons"][0]
+    # Before the treaty entered into force, it bound no one.
+    [early] = client.post(
+        "/currentness", json={"items": [{"anchor_id": part, "as_of": "2004-06-01", "jurisdiction": "ke"}]}
+    ).json()["results"]
+    assert early["applicability"]["relation"] == "treaty_not_in_force_for_state"
+    # Without a jurisdiction, the check is as before.
+    [plain] = client.post("/currentness", json={"items": [{"anchor_id": part}]}).json()["results"]
+    assert "applicability" not in plain
+
+
+def test_regional_instruments_bind_through_membership_on_the_date(published):
+    store, client, _ = published
+    ohada = anchor(store, "ohada-commercial-companies-act")
+    items = [
+        {"anchor_id": ohada, "as_of": AS_OF, "jurisdiction": "sn"},
+        {"anchor_id": ohada, "as_of": "1990-01-01", "jurisdiction": "sn"},  # before Senegal joined
+        {"anchor_id": anchor(store, "eac-customs-management-act"), "as_of": AS_OF, "jurisdiction": "sn"},
+    ]
+    results = client.post("/currentness", json={"items": items}).json()["results"]
+    assert [r["applicability"]["relation"] for r in results] == ["regional_direct", "comparative", "unknown"]
+    assert results[1]["applicability"]["memberships"] == [
+        {"id": "sn:aa-ohada:1", "body_id": "aa-ohada", "held": "not_held"}
+    ]
+    # Senegal has no reviewed EAC membership: unknown, not "not a member".
+    assert "No membership of sn in aa-eac" in results[2]["applicability"]["reasons"][0]
+    refused = client.post("/currentness", json={"items": [{"anchor_id": ohada, "jurisdiction": "aa-ecowas"}]})
+    assert refused.status_code == 400 and refused.json()["code"] == "invalid_input"
+
+
+def test_an_unreviewed_membership_is_unknown_and_adds_no_body(published):
+    store, client, _ = published
+    pack = retrieve(client, "commercial company", jurisdiction="cm", scope="applicable", as_of=AS_OF)
+    assert pack["evidence"] == [] and pack["coverage"]["texts_searched"] == 0
+    scope = pack["applicability"]
+    assert scope["membership"] == "unknown" and scope["bodies"] == [] and scope["admitted"] == 0
+    assert "never means cm belongs to none" in scope["notices"][0]
+    [result] = client.post(
+        "/currentness",
+        json={
+            "items": [{"anchor_id": anchor(store, "ohada-commercial-companies-act"), "jurisdiction": "cm"}]
+        },
+    ).json()["results"]
+    assert result["applicability"]["relation"] == "unknown" and result["applicability"]["binds"] == "unknown"
+
+
+def test_a_named_record_is_answered_with_its_relation_whatever_it_is(published):
+    _, client, _ = published
+
+    def relation(work):
+        pack = retrieve(client, "commercial company", jurisdiction="sn", scope="applicable", as_of=AS_OF,
+                        source_id=work)  # fmt: skip
+        return {u["applicability"]["relation"] for u in pack["evidence"]}
+
+    assert relation("gh-companies-act") == {"comparative"}
+    assert relation("ecowas-registers-recommendation") == {"non_binding"}
+
+
+def test_without_scope_applicable_nothing_changes(published):
+    _, client, _ = published
+    pack = retrieve(client, "commercial company", jurisdiction="sn", as_of=AS_OF)
+    assert {u["source_id"] for u in pack["evidence"]} == {"sn-company-accounts-act"}
+    assert "applicability" not in pack and pack["query"]["filters"] == {"jurisdictions": ["sn"]}
+    assert all("applicability" not in u and "regional" not in u for u in pack["evidence"])
+    page = client.get("/search/text", params={"q": "commercial company", "jurisdiction": "sn"}).json()
+    assert {h["source_id"] for h in page["items"]} == {"sn-company-accounts-act"}
+    assert "applicability" not in page and all("applicability" not in h for h in page["items"])
+    # A regional instrument found without a jurisdiction carries its legal effect, never a relation.
+    everywhere = by_source(retrieve(client, "registered office")["evidence"])
+    unit = everywhere["ohada-commercial-companies-act"]
+    assert unit["regional"]["legal_effect"] == "directly_applicable" and "applicability" not in unit
+    # The scope is asked of one country.
+    for params in ({}, {"jurisdiction": ["sn", "ke"]}, {"jurisdiction": "aa-ecowas"}):
+        refused = client.get("/retrieve", params={"q": "company", "scope": "applicable", **params})
+        assert refused.status_code == 400 and refused.json()["code"] == "invalid_input", params
+    refused = client.get("/search/text", params={"q": "company", "scope": "applicable"})
+    assert refused.status_code == 400
+
+
+def test_the_mcp_tools_answer_the_same_scope_and_check(published):
+    store, client, tmp_path = published
+    mcp = TestClient(create_app(store, tmp_path))
+
+    def call(name, arguments):
+        body = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        }
+        return json.loads(mcp.post("/mcp", json=body).json()["result"]["content"][0]["text"])
+
+    pack = call("retrieve_evidence", {"query": "customs", "jurisdictions": ["ke"], "scope": "applicable",
+                                      "as_of": AS_OF})  # fmt: skip
+    rest = retrieve(client, "customs", jurisdiction="ke", scope="applicable", as_of=AS_OF, max_units=8,
+                    max_evidence_bytes=24_576)  # fmt: skip
+    assert pack == rest
+    page = call("search_text", {"query": "publish accounts", "jurisdiction": "sn", "scope": "applicable"})
+    assert page["applicability"]["date_basis"] == "today"
+    part = anchor(store, "au-trade-charter")
+    checked = call(
+        "check_currentness", {"items": [{"anchor_id": part, "jurisdiction": "ke", "as_of": AS_OF}]}
+    )
+    assert checked["results"][0]["applicability"]["relation"] == "treaty_in_force_for_state"

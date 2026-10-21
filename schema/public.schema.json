@@ -201,6 +201,180 @@
       "title": "AnchorView",
       "type": "object"
     },
+    "Applicability": {
+      "additionalProperties": false,
+      "description": "How a record relates to the law of a jurisdiction on a date (JUR-03, JUR-04), and what that rests on:\nthe reviewed memberships, the instrument's legal effect and the state's entry in the treaty's party\nlist. ``binds`` is ``bound``, ``not_bound`` or ``unknown``; whether the text is in force is\n``currentness``, a separate question. Never a decision of anyone's governing law.",
+      "properties": {
+        "jurisdiction_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Jurisdiction Id",
+          "type": "string"
+        },
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "relation": {
+          "enum": [
+            "national",
+            "regional_direct",
+            "regional_requires_transposition",
+            "regional_binding_on_addressees",
+            "treaty_in_force_for_state",
+            "treaty_not_in_force_for_state",
+            "non_binding",
+            "comparative",
+            "unknown"
+          ],
+          "title": "Relation",
+          "type": "string"
+        },
+        "binds": {
+          "enum": [
+            "bound",
+            "not_bound",
+            "unknown"
+          ],
+          "title": "Binds",
+          "type": "string"
+        },
+        "memberships": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MembershipBasis"
+          },
+          "title": "Memberships",
+          "type": "array"
+        },
+        "regional": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RegionalView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "party": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TreatyPartyView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "entered_into_force": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatedDateView"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "transposed_by": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/LinkedAct"
+          },
+          "title": "Transposed By",
+          "type": "array"
+        },
+        "reasons": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Reasons",
+          "type": "array"
+        }
+      },
+      "required": [
+        "jurisdiction_id",
+        "as_of",
+        "relation",
+        "binds"
+      ],
+      "title": "Applicability",
+      "type": "object"
+    },
+    "ApplicableScope": {
+      "additionalProperties": false,
+      "description": "The applicable-law scope a request asked for (``scope=applicable``) and the widening it applied, so\nthat nothing is widened silently (RSV-03): each body the jurisdiction has a reviewed membership of, with\nwhether it held on the date (only the law of bodies ``held`` was added), how many records of other\njurisdictions were admitted, and how many were left out, by relation.",
+      "properties": {
+        "jurisdiction_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Jurisdiction Id",
+          "type": "string"
+        },
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "date_basis": {
+          "enum": [
+            "as_of",
+            "today"
+          ],
+          "title": "Date Basis",
+          "type": "string"
+        },
+        "membership": {
+          "enum": [
+            "reviewed",
+            "unknown"
+          ],
+          "title": "Membership",
+          "type": "string"
+        },
+        "bodies": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MembershipBasis"
+          },
+          "title": "Bodies",
+          "type": "array"
+        },
+        "admitted": {
+          "minimum": 0,
+          "title": "Admitted",
+          "type": "integer"
+        },
+        "left_out": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Left Out",
+          "type": "object"
+        },
+        "notices": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Notices",
+          "type": "array"
+        }
+      },
+      "required": [
+        "jurisdiction_id",
+        "as_of",
+        "date_basis",
+        "membership",
+        "admitted"
+      ],
+      "title": "ApplicableScope",
+      "type": "object"
+    },
     "AuthorityEvidence": {
       "additionalProperties": false,
       "description": "Where an edition's authority or a language rule is stated: a page and the words of the document\n(``document``), the address of another instrument (``external``), or the reviewer who recorded it.",
@@ -626,6 +800,38 @@
         "citation"
       ],
       "title": "LinkedAct",
+      "type": "object"
+    },
+    "MembershipBasis": {
+      "additionalProperties": false,
+      "description": "A reviewed membership an applicable-law answer rests on: its ID, the body, and whether the\njurisdiction was a member of that body on the date asked about: ``held``, ``not_held``, or ``unknown``\nwhen the date falls in an uncertain window of the membership's dates. /jurisdictions/{id} gives its\ndates, evidence and review.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "body_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Body Id",
+          "type": "string"
+        },
+        "held": {
+          "enum": [
+            "held",
+            "not_held",
+            "unknown"
+          ],
+          "title": "Held",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "body_id",
+        "held"
+      ],
+      "title": "MembershipBasis",
       "type": "object"
     },
     "MembershipList": {
@@ -2271,6 +2477,17 @@
           ],
           "default": null,
           "title": "Attribution Text"
+        },
+        "applicability": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Applicability"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -2392,6 +2609,17 @@
           },
           "title": "Notices",
           "type": "array"
+        },
+        "applicability": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ApplicableScope"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
