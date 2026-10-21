@@ -393,3 +393,25 @@ def test_the_reviewer_approves_a_suspension_of_a_reviewed_membership(proposals):
         now=AT,
     )
     assert str(lifted.valid_to) == "2025-04-29" and register(proposals).reviewed_suspensions() == (lifted,)
+
+
+def researched(body):
+    return {m.subject_id: m for m in register().memberships if m.target_id == body}
+
+
+def test_au_proposals_start_at_entry_into_force_a_later_deposit_or_admission_and_stay_proposals():
+    au = researched("aa-au")
+    assert all(
+        m.status == "proposal" and m.basis and m.basis.evidence_url.startswith("https://")
+        for m in au.values()
+    )
+    for member, m in au.items():
+        if m.basis.kind == "entry_into_force":
+            assert str(m.valid_from) == "2001-05-26" and m.basis.pinpoint == "art. 28", member
+        elif m.basis.kind == "deposit":  # an OAU member that deposited after the Act entered into force
+            assert m.valid_from.earliest > date(2001, 5, 26) and f"deposit {m.valid_from}" in m.note, member
+    assert (au["ma"].basis.kind, str(au["ma"].valid_from)) == ("admission_decision", "2017-01-30")
+    # South Sudan's admission decision is known only to a window: the majority's receipt or its announcement.
+    assert (au["ss"].basis.kind, au["ss"].valid_from.precision) == ("admission_decision", "range")
+    assert str(au["dz"].valid_from) == "2001-05-31" and au["dz"].basis.kind == "deposit"
+    assert sum(m.basis.kind == "entry_into_force" for m in au.values()) == 38
