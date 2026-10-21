@@ -1,11 +1,130 @@
+"""Request logs never carry what a caller sent: queries reveal what someone is researching (RSV-01,
+ACS-06, OA-A2). The legacy API's own request log holds no input, and every image runs uvicorn without
+its access log."""
+
+import http.client
 import json
 import logging
+import re
+import shlex
+import socket
+import threading
+import time
+from contextlib import contextmanager
+from pathlib import Path
 from uuid import UUID
 
 import pytest
+import uvicorn
+from click.core import ParameterSource
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.main import create_app
+
+ROOT = Path(__file__).resolve().parents[1]
+# A query no text holds. Its first seven characters survive every analyser (case, stemming), so they are
+# what a leak would show.
+MARKER = "Qzv7731kq"
+TRACE = MARKER[:7].lower()
+
+
+def carried(record: logging.LogRecord) -> bool:
+    """Whether a log record holds the marker anywhere: message, arguments, exception text or extras."""
+    shown = logging.Formatter().format(record) + repr(vars(record))
+    return TRACE in shown.lower()
+
+
+@contextmanager
+def every_log():
+    """Every logger at DEBUG into one list: the root, uvicorn's, the service's, SQLAlchemy's, the HTTP
+    client's and every other logger already made, including those that do not propagate."""
+    records: list[logging.LogRecord] = []
+    seen: set[int] = set()
+
+    class Keep(logging.Handler):
+        def emit(self, record):
+            if id(record) not in seen:  # a record reaches each logger it propagates through
+                seen.add(id(record))
+                records.append(record)
+
+    keep = Keep(logging.DEBUG)
+    names = {"uvicorn", "uvicorn.error", "uvicorn.access", "open_alvary", "sqlalchemy", "httpx", "httpcore"}
+    names |= set(logging.Logger.manager.loggerDict)
+    loggers = [logging.getLogger(), *(logging.getLogger(name) for name in sorted(names))]
+    saved = [(logger, logger.level, logger.disabled) for logger in loggers]
+    disabled = logging.root.manager.disable
+    logging.disable(logging.NOTSET)
+    for logger in loggers:
+        logger.setLevel(logging.DEBUG)
+        logger.disabled = False
+        logger.addHandler(keep)
+    try:
+        yield records
+    finally:
+        for logger, level, was_disabled in saved:
+            logger.removeHandler(keep)
+            logger.setLevel(level)
+            logger.disabled = was_disabled
+        logging.disable(disabled)
+
+
+def free_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def uvicorn_arguments(command: list[str]) -> list[str]:
+    """What a container command passes uvicorn, through `sh -c`, `exec` and any setup before it."""
+    if command[:2] == ["sh", "-c"]:
+        # The shell's defaults stand in for the platform's variables (${PORT:-8080}).
+        command = shlex.split(re.sub(r"\$\{\w+:-([^}]*)\}", r"\1", command[2]))
+    start = command.index("uvicorn") + 1
+    ends = [i for i, word in enumerate(command) if i > start and word in ("&&", "||", ";")]
+    return command[start : ends[0] if ends else len(command)]
+
+
+def image_options(dockerfile: str) -> dict:
+    """The options an image's CMD gives uvicorn, read by uvicorn's own command line, less its address."""
+    lines = (ROOT / dockerfile).read_text().splitlines()
+    [command] = [json.loads(line.removeprefix("CMD")) for line in lines if line.startswith("CMD ")]
+    parsed = uvicorn.main.make_context("uvicorn", uvicorn_arguments(command))
+    given = [n for n in parsed.params if parsed.get_parameter_source(n) is ParameterSource.COMMANDLINE]
+    return {name: parsed.params[name] for name in given if name not in ("app", "host", "port")}
+
+
+@contextmanager
+def served(app, options: dict):
+    """The app under uvicorn on a free local port with these options, and no logging set-up of uvicorn's
+    own, so every record reaches every_log."""
+    port = free_port()
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_config=None, **options))
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+    deadline = time.monotonic() + 10
+    while not server.started:
+        assert thread.is_alive() and time.monotonic() < deadline, "uvicorn did not start"
+        time.sleep(0.01)
+    try:
+        yield port
+    finally:
+        server.should_exit = True
+        thread.join(10)
+
+
+def ask(port: int, method: str, path: str, body=None, headers: dict | None = None) -> tuple[int, str]:
+    """One request over HTTP. http.client logs nothing, so every record is the server's."""
+    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=60)
+    try:
+        payload = body if body is None or isinstance(body, bytes) else json.dumps(body).encode()
+        connection.request(
+            method, path, body=payload, headers={"Content-Type": "application/json", **(headers or {})}
+        )
+        response = connection.getresponse()
+        return response.status, response.read().decode()
+    finally:
+        connection.close()
 
 
 @pytest.mark.parametrize("path,status", [("/project", 200), ("/private-name-not-a-route", 404)])
@@ -39,3 +158,47 @@ def test_failed_request_logs_status_without_exception_text(store, caplog):
     events = [json.loads(r.message) for r in caplog.records if r.name == "open_alvary.requests"]
     assert len(events) == 1 and events[0]["status"] == 500
     assert "private-error-content" not in json.dumps(events)
+
+
+# An app uvicorn serves, wherever a command names one.
+SERVES = re.compile(r"\b(?:api\.service|api\.main|workbench\.app):app\b")
+
+
+def test_every_image_compose_file_terraform_and_deploy_script_runs_uvicorn_without_its_access_log():
+    commands = {}
+    for path in [ROOT / "Dockerfile", ROOT / "compose.yaml", *sorted((ROOT / "deployment").rglob("*"))]:
+        if path.is_file() and (path.name.endswith("Dockerfile") or path.suffix in (".yaml", ".tf", ".sh")):
+            for number, line in enumerate(path.read_text().splitlines(), 1):
+                if SERVES.search(line) and not line.lstrip().startswith("#"):
+                    commands[f"{path.relative_to(ROOT)}:{number}"] = line
+    assert {where.split(":")[0] for where in commands} >= {
+        "Dockerfile",
+        "compose.yaml",
+        "deployment/public-service.Dockerfile",
+        "deployment/compose.yaml",
+        "deployment/admission.yaml",
+        "deployment/workbench.Dockerfile",
+        "deployment/workbench.yaml",
+        "deployment/azure/env/workbench.tf",
+        "deployment/gcp-terraform/env/workbench.tf",
+        "deployment/gcp/workbench.sh",
+    }
+    assert [where for where, line in commands.items() if "--no-access-log" not in line] == []
+
+
+def test_uvicorn_as_the_images_run_it_logs_no_request_where_its_access_log_would_carry_the_query():
+    app = FastAPI()
+
+    @app.get("/search")
+    def search(q: str):
+        return {"words": len(q.split())}
+
+    for options, logged in (
+        (image_options("deployment/public-service.Dockerfile"), False),
+        (image_options("Dockerfile"), False),
+        ({}, True),  # uvicorn's default: the access log, with each request's address
+    ):
+        with every_log() as records, served(app, options) as port:
+            assert ask(port, "GET", f"/search?q=data+protection+{MARKER}")[0] == 200
+        assert any(carried(r) for r in records) is logged, options
+        assert any(r.name == "uvicorn.access" for r in records) is logged, options
