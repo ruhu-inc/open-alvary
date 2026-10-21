@@ -375,6 +375,37 @@ def test_details_are_validated_and_confirming_needs_every_detail_accounted_for(w
     assert reviewer.get(f"/api/documents/{ACT}/details").json()["record"]["status"] == "draft"
 
 
+def test_the_details_record_each_versions_authority_and_the_language_rule_with_evidence(world):
+    from schema.jurisdictions import registry
+    from workbench.review import Review
+
+    reviewer = signed_in(world, "reviewer@example.org")
+    fields = {f["key"]: f for f in reviewer.get(f"/api/documents/{ACT}/details").json()["standard"]["fields"]}
+    assert fields["language_rule.rule"]["accountable"] and not fields["language_rule.rule"]["required"]
+    words = "This Act is made in English."
+    expressions = [
+        {"language": "en", "authority": "authoritative", "authority_page": "1", "authority_words": words,
+         "this_text": "yes"},
+        {"language": "fr", "this_text": "no"},  # nothing states it
+    ]  # fmt: skip
+    rule = {"language_rule.rule": "Where a translation differs, the English text prevails."}
+    refused = confirm_details(reviewer, expressions=expressions, **rule)
+    assert refused.status_code == 422 and "where the language rule is stated" in refused.json()["message"]
+    rule |= {"language_rule.prevails": "en", "language_rule.evidence.page": "1"}
+    assert confirm_details(reviewer, expressions=expressions, **rule).json() == {"revision": 1}
+    store, library = world
+    review, act = Review(store, library, registry()), library.act(ACT)
+    record = review.built(act, review.state(act)["view"])
+    english, french = record.expressions
+    assert (english.authority, english.authority_evidence.page, english.authority_evidence.quote) == (
+        "authoritative",
+        1,
+        words,
+    )
+    assert french.authority is None  # published as unknown
+    assert record.language_rule.prevails == "en" and record.language_rule.evidence.page == 1
+
+
 def test_a_judgment_gets_the_case_fields_and_a_record_that_validates(world):
     reviewer = signed_in(world, "reviewer@example.org")
     judgment = {"identity.family": "judgment", "identity.type": "judgment"}
