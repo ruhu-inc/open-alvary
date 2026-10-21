@@ -1,0 +1,42 @@
+schema/memberships.py
+  s_d665c62e07d76f::t_41aef782c941fd 74-76
+  s_d665c62e07d76f::t_012f3e3d3ad216 54-57,73,80,124-126,152-155
+schema/public.py
+  s_d665c62e07d76f::t_38e89731749802 188
+  s_d665c62e07d76f::t_012f3e3d3ad216 9,163-165,169,174,177-180,189
+migrations/versions/0041_membership_dates.py
+  s_d665c62e07d76f::t_b9382d8688841f 6-12,43-44,73-76,167-168
+operations/memberships.py
+  s_d665c62e07d76f::t_37e944b616af16 17-18
+api/openapi_docs.py
+  s_d665c62e07d76f::t_f6f6bbdfb17339 704-707,1632-1637,1661-1662
+tests/test_postgres_memberships.py
+  s_d665c62e07d76f::t_fdc7657ce7f3fd 54-61,70,298
+schema/public.schema.json
+  s_d665c62e07d76f::t_9e643ad2395c90 2430
+  s_d665c62e07d76f::t_44cea83ae75bba 1476,1488-1495,1517
+web/src/docs/data/openapi.json
+  s_d665c62e07d76f::t_44cea83ae75bba 8332-8340,8345,8357,8365,8369,9549,10812
+  s_d665c62e07d76f::t_9e643ad2395c90 9601
+tests/test_memberships.py
+  s_d665c62e07d76f::t_37e944b616af16 30-35,310-328,419-424
+schema/membership.schema.json
+  s_d665c62e07d76f::t_44cea83ae75bba 196-211,243
+  s_d665c62e07d76f::t_9e643ad2395c90 182
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "40ad8208f12bff910f9922170e475b3677816921",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
