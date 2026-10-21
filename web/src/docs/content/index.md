@@ -72,7 +72,27 @@ Claude, Claude Code, Codex, ChatGPT and other tools that speak MCP connect to `h
 
 ## Follow changes
 
-Every record added, corrected or withdrawn, and every text published, is recorded in order. Read the feed with a resume token to get only what is new, subscribe to the Atom or RSS feed, or set up a monitor in the console to be emailed or to receive webhooks. See [Follow changes](/docs/changes).
+Every record added, corrected or withdrawn, every text published, every checked legal effect such as a repeal, and every reviewed membership of a regional body, or suspension from one, is recorded in order. Read the feed with a resume token to get only what is new, subscribe to the Atom or RSS feed, or set up a monitor in the console to be emailed or to receive webhooks. See [Follow changes](/docs/changes).
+
+## Retrieve evidence for AI answers
+
+If your application writes answers with a language model, [Retrieve evidence](/docs/retrieval) gives it the parts of published texts that answer a question, each with its exact words, citation and hashes, and [Check cited parts](/docs/retrieval#check-before-you-answer) confirms them before an answer is shown. Open Alvary never writes the answer.
+
+## Key terms
+
+| Term | Means | In the API |
+|---|---|---|
+| Record | One law in the catalogue: its title, citation, type, legal status, official link and rights status. | A `source`: `/sources/{id}`, `source_id`. In the change feed, the `work`. |
+| Text version | One cleared text of a record, read from one official file, in one language. | A `version`: `/versions/{id}`, `version_id`. |
+| Edition | A record's texts in one language, with what that language's text is worth as law. | An `expression`: `expression_id`, written `<record id>:<language>`. |
+| Anchor | One part of a text version, such as a section or an article, with its own ID. | `anchor_id`: `/anchors/{id}`, and each part's `id` in a structure. |
+| Locator | A part's place in its text, such as `sec_23__subsec_1`. The same provision keeps it across versions. | `locator` |
+| `span_hash` | The SHA-256 of a part's bytes: check a quotation against it. | On anchors, evidence units and resolved citations. |
+| `content_hash` | The SHA-256 of a whole text version in UTF-8. | On versions, anchors and evidence units. |
+| ETag | A tag for an answer. Send it back as `If-None-Match` to learn whether your copy is unchanged. | The `ETag` header. |
+| Evidence unit | One part of a published text in a retrieval answer, with its exact words and everything needed to cite and check it. | An item of `evidence`. |
+| Evidence pack | The answer of Retrieve evidence: ranked evidence units, what was searched, and the revisions they depend on. | The whole `/retrieve` answer. |
+| Applicability label | How a record relates to a country on a date, such as `national` or `treaty_in_force_for_state`, and whether it binds there. | `applicability.relation` and `applicability.binds`, with `scope=applicable` or a check's `jurisdiction`. |
 
 ## Explore the docs
 
@@ -83,11 +103,15 @@ Every record added, corrected or withdrawn, and every text published, is recorde
 - [Plans and rate limits](/docs/plans) What each plan allows, and what to do at a limit.
 - [API reference](/docs/api) Every route, parameter and field, with examples.
 - [MCP tools](/docs/api/mcp) The tools AI tools use, and how to call them yourself.
-- [Find records](/docs/search) Search by words, list by country, and resolve citations.
+- [Find records](/docs/search) Search by words, search published texts, list by country, and resolve citations.
+- [Read a record and its text](/docs/records) A record's details, its history, its texts and one part exactly.
+- [Retrieve evidence for AI answers](/docs/retrieval) Ranked, citable evidence for a question, checked before you answer.
 - [Rights and reuse](/docs/rights) What you may do with each record and text.
 - [Follow changes](/docs/changes) Keep a copy current, or be told when the catalogue changes.
 - [Download and mirror the data](/docs/mirror) Releases, their checksums, and catching up with the change feed.
 - [Webhooks](/docs/webhooks) Signed deliveries of your monitors' matches.
+- [Connect AI tools](/docs/ai-tools) Ask Claude, ChatGPT or Codex about the catalogue, with no key.
+- [Pagination](/docs/pagination) Pages of records, and cursors through changes.
 :::
 
 ## Get unblocked
