@@ -8,6 +8,8 @@ Changes that affect how you use the API and the MCP server, newest first.
 ## 21 October 2026
 
 - [Retrieve evidence](/docs/api/retrieve-evidence) and [Resolve a citation](/docs/api/resolve-citation): French citations are read too. An article's alinéa is read as its `(2)` (`article 10, alinéa 2`, `art. 10 al. 2`), and the law may follow `de`, `du`, `de la`, `de l'` or `des` (`article 10, alinéa 2, de l'Acte uniforme …`). A citation is no longer also read as a shorter pinpoint in a law named by the rest (`article 10` in a law called `alinéa 2`).
+- [Search](/docs/api/search) (`GET /api/v1/search`, MCP `search_catalogue`) and the website's search match **whole words** from an index, no longer any run of letters. Every word must be in the record, in any order (it was a phrase, in order); `invest` no longer finds `Investments`. Words are looked for in a record's summary too, and in one part of a cleared text rather than anywhere in it. See [Find records](/docs/search#search).
+- Search answers may have `notices`: why published texts weren't searched (the index is being built, or that search took too long), or that the query has no letters or digits. A query of punctuation alone now finds nothing instead of matching it.
 
 ## 19 October 2026
 

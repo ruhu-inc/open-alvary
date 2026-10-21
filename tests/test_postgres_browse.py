@@ -1,6 +1,7 @@
-"""The website's catalogue on PostgreSQL gives what the former in-Python scan gave: the same matches,
-ranks, order, totals and filter counts, for titles with "nº", "ß", Greek and no year, and a source
-whose cleared text matches (api.catalogue.browse, api.repositories.browse_rows)."""
+"""The website's catalogue on PostgreSQL, read from the word index (G11), gives what reading every source
+in Python with the same word rule gives (api.search.has_every_word): the same matches, ranks, order,
+totals and filter counts, for titles with "nº", "ß", Greek and no year, and a source whose published
+text matches through the section index (api.catalogue.browse, api.repositories.browse_rows)."""
 
 from collections import Counter
 
@@ -10,7 +11,7 @@ from test_postgres import pg_engine as pg_engine
 
 from api.catalogue import FACETS, LegacyCatalogue
 from api.repositories import LegacyRepository
-from api.search import normalize_citation
+from api.search import has_every_word
 from api.store import Store
 from rights.policy import decide
 
@@ -29,22 +30,25 @@ TITLES = [
 
 
 def reference(service, *, query=None, filters=None, sort="relevance", limit=20, offset=0):
-    """The website's catalogue as it was computed before (every source read in Python)."""
+    """The website's catalogue with every source read in Python, by the same word rule."""
     filters = {k: v for k, v in (filters or {}).items() if v is not None}
-    term = normalize_citation(query) if query is not None else None
     candidates = []
     for source, rights in service.repository.sources():
         if not decide(rights, now=service.now).metadata:
             continue
         rank = 0
-        if term is not None:
-            if term in normalize_citation(source.title):
+        if query is not None:
+            if has_every_word(source.title, query):
                 rank = 3
-            elif term in normalize_citation(source.citation):
+            elif has_every_word(source.citation, query):
                 rank = 2
-            elif term in normalize_citation(source.summary or ""):
+            elif has_every_word(f"{source.title} {source.citation} {source.summary or ''}", query):
                 rank = 1
-            elif any(term in v.canonical_text.casefold() for v in service._approved(source, rights)):
+            elif any(
+                # The fixture's text is one part, and these queries read the same in English analysis.
+                has_every_word(f"{v.canonical_text} {source.title} {source.citation}", query)
+                for v in service._approved(source, rights)
+            ):
                 rank = 1
             else:
                 continue
@@ -84,7 +88,7 @@ def reference(service, *, query=None, filters=None, sort="relevance", limit=20, 
     )
 
 
-def test_the_database_catalogue_matches_the_former_scan(pg_engine, cleared):
+def test_the_database_catalogue_matches_words_as_python_does(pg_engine, cleared):
     migrate(pg_engine)
     base, rights = cleared.sources[1], cleared.rights[1]
     for n, title in enumerate(TITLES * 4):
@@ -102,13 +106,13 @@ def test_the_database_catalogue_matches_the_former_scan(pg_engine, cleared):
         cleared.sources.append(source)
         cleared.rights.append(rights.model_copy(update={"id": f"rights-{source.id}", "source_id": source.id}))
     Store(pg_engine).save(cleared)
-    queries = [None, "act", "nº 12", "no 12", "itegeko nº 5", "strasse", "STRASSE", "straße", "σίσυφο",
-               "spaced out", "mining", "synthetic fixture", "test only", "nothing at all", "cap 1"]  # fmt: skip
+    queries = [None, "act", "nº 12", "no 12", "12/2004", "itegeko nº 5", "strasse", "STRASSE", "straße",
+               "σίσυφο", "ΣΊΣΥΦΟ", "spaced out", "out spaced", "mining", "min", "mining cap", "synthetic fixture",
+               "test only", "nothing at all", "cap 1", "province cap 10", "n° 43/2016"]  # fmt: skip
     filter_sets = [{}, {"type": "act"}, {"status": "repealed", "type": "regulation"}, {"access": "open"},
                    {"year": "1995"}, {"jurisdiction": "ng", "language": "en"}]  # fmt: skip
     with pg_engine.connect() as conn:
         service = LegacyCatalogue(LegacyRepository(conn))
-        assert service.repository._unicode_lower()  # the database folds as Python does here
         for query in queries:
             for filters in filter_sets:
                 for sort in ("relevance", "title", "newest", "oldest"):

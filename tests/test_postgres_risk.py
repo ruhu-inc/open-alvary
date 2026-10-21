@@ -66,25 +66,30 @@ def test_sql_revision_refuses_unknown_body_edit_before_any_replacement(pg_engine
 
 
 @pytest.mark.parametrize(
-    "title,query",
+    "title,query,found",
     [
-        ("Straße", "STRASSE"),
-        ("ＦＯＯ  bar", "foo bar"),
-        ("Café", "Cafe\u0301"),
-        ("100%_literal", "%_"),
-        ("No\t\n amount", "no amount"),
+        ("Straße", "STRASSE", False),  # lower case, not case folding: as on SQLite (api.search)
+        ("Straße", "STRAßE", True),
+        ("ＦＯＯ  bar", "foo bar", True),
+        ("Café", "Cafe\u0301", True),
+        ("100%_literal", "literal 100", True),
+        ("100%_literal", "%_", False),
+        ("100%_literal", "liter", False),  # never part of a word
+        ("No\t\n amount", "amount no", True),
     ],
 )
-def test_postgresql_metadata_search_keeps_exact_unicode_semantics(pg_engine, catalogue, title, query):
+def test_postgresql_metadata_search_matches_whole_words(pg_engine, catalogue, title, query, found):
     from api.catalogue import LegacyCatalogue
     from api.repositories import LegacyRepository
+    from api.search import has_every_word
     from api.store import Store
 
     catalogue.sources[0].title = title
     Store(pg_engine).save(catalogue)
     with pg_engine.begin() as conn:
         page = LegacyCatalogue(LegacyRepository(conn)).search(query)
-        assert page.total == 1 and page.items[0].id == catalogue.sources[0].id
+        assert (catalogue.sources[0].id in {s.id for s in page.items}) is found
+    assert has_every_word(title, query) is found  # the same words in SQLite's Python
 
 
 def test_indexed_10000_metadata_workload_decodes_only_the_page(pg_engine, catalogue, monkeypatch):
@@ -117,13 +122,13 @@ def test_indexed_10000_metadata_workload_decodes_only_the_page(pg_engine, catalo
         ]
         assert len(decoded) == 25
         # Verify the real planner can use the exact expression index, not a different test query.
-        confirmed, _ = repo.search_predicates("cataloguebatch 09999")
-        statement = repo._select_sources().where(confirmed)
+        every, _, _ = repo.matching("cataloguebatch 09999")
+        statement = repo._select_sources().where(every)
         conn.exec_driver_sql("SET LOCAL enable_seqscan=off")
         compiled = statement.compile(conn)
         plan = conn.exec_driver_sql("EXPLAIN (FORMAT JSON) " + str(compiled), compiled.params).scalar_one()
-        assert "ix_sources_metadata_trigram" in json.dumps(plan)
-        print(f"S1 synthetic 10000-metadata page: {elapsed:.4f}s; decoded25; exact expression index verified")
+        assert "sources_catalogue_words" in json.dumps(plan)
+        print(f"S1 synthetic 10000-metadata page: {elapsed:.4f}s; decoded25; word index verified")
 
 
 def test_empty_search_rollback_removes_only_owned_extension_and_preserves_legacy_data(pg_engine, catalogue):

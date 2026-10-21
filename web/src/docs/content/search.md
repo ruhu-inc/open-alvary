@@ -7,7 +7,7 @@ There are four ways to find what you need: **search** records by words, **search
 
 ## Search
 
-[Search](/docs/api/search) finds records whose title or citation contains your words, and records whose cleared full text does.
+[Search](/docs/api/search) finds records with all your words in their title, citation or summary, and records with all of them in one part of their cleared full text.
 
 ```curl
 curl -G https://api.open.alvary.ai/api/v1/search \
@@ -43,9 +43,11 @@ for (const record of page.items) console.log(record.citation, "-", record.title)
 
 How words match:
 
-- Your words are found **as a phrase**, in that order: `central bank` finds the Central Bank of Nigeria Act; `bank central` doesn't.
-- Case and extra spaces don't matter, and letters are compared in a normalised form, so `ＦＯＩ` finds `FOI`.
-- Part of a word matches too: `invest` finds the Investments and Securities Act.
+- **Every word** must be in the record, in any order: `central bank` and `bank central` both find the Central Bank of Nigeria Act. The words can be spread over its title, citation and summary, but in a text they must all be in one part, such as a section.
+- **Whole words only**: `investments` finds the Investments and Securities Act; `invest` doesn't.
+- Case, punctuation and extra spaces don't matter, and letters are compared in a normalised form, so `ＦＯＩ` finds `FOI` and `43/2016` finds `n° 43/2016`. Accents count: `cafe` doesn't find `café`.
+- In a text, words are matched as [Search published texts](#search-published-texts) matches them (English texts in English, so `lends` finds `lend`). Quotes, `-word` and `OR` have no special meaning here.
+- Records come in ID order. A query with no letters or digits finds nothing, and `notices` says why; `notices` also says when published texts couldn't be searched, so you can try again.
 - A search covers catalogue details and **cleared** full text only. Text that isn't cleared for reuse here isn't searched.
 
 ### Filters

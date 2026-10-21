@@ -4,16 +4,15 @@ Legacy JSON remains authoritative. SQL limits row windows and never selects unap
 canonical bodies; the shared policy runs on gate fields before an individual body fetch.
 """
 
-import unicodedata
 from collections.abc import Iterator
 
 from sqlalchemy import (
+    Boolean,
     LargeBinary,
     Text,
     and_,
     case,
     cast,
-    false,
     func,
     literal,
     literal_column,
@@ -25,7 +24,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.engine import Connection
 
-from api.search import literal_pattern
+from api.search import FIELDS, fields_vector
 from api.store import RELATIONS, tables
 from schema.models import Amendment, Source
 from schema.public import RightsViewRecord, VersionGate, VersionViewRecord
@@ -33,13 +32,6 @@ from schema.public import RightsViewRecord, VersionGate, VersionViewRecord
 BATCH_SIZE = 100
 # The website's catalogue reads at most this many public sources' compact rows in one request.
 BROWSE_BOUND = 25000
-# Letters whose case folding is not their lower case (ß → ss, final ς → σ): the database lowers them
-# differently from normalize_citation, so a source holding one is matched in Python.
-_FOLDED_APART = "".join(
-    c
-    for c in map(chr, range(0x80, 0x10000))
-    if unicodedata.normalize("NFKC", c).casefold() != unicodedata.normalize("NFKC", c).lower()
-)
 # A stored link (newer → older) as each side sees it, and the order a reader asks about them in.
 EDGE_KINDS = {
     ("in", "repeals"): "repealed_by",
@@ -163,105 +155,70 @@ class LegacyRepository:
             return None
         return self._sources.c.id.in_(open_ids) if access == "open" else self._sources.c.id.not_in(open_ids)
 
-    def search_predicates(self, term):
-        if self._indexed_metadata is None:
-            self._indexed_metadata = self.connection.dialect.name != "postgresql" or bool(
-                self.connection.scalar(
-                    text("SELECT to_regprocedure('legacy_metadata_normalize(text)') IS NOT NULL")
-                )
-            )
-        if not self._indexed_metadata:
-            # Preserve legacy read compatibility while an older schema is upgrading.
-            return false(), true()
+    def matching(self, query: str):
+        """The catalogue search's word tests (api.search) as SQL: every word of ``query`` among a
+        source's title, citation and summary together, in its title alone, in its citation alone. On
+        PostgreSQL the first is the expression migration 0038 indexes, so it is read from the index."""
         payload = self._sources.c.payload
         if self.connection.dialect.name == "postgresql":
-            title = payload.op("->>", return_type=Text)("title")
-            citation = payload.op("->>", return_type=Text)("citation")
-        else:
-            title, citation = payload["title"].as_string(), payload["citation"].as_string()
-        value = func.coalesce(title, "") + literal(" ") + func.coalesce(citation, "")
-        metadata = func.legacy_metadata_normalize(value).like(literal_pattern(term), escape="\\")
-        if self.connection.dialect.name == "postgresql":
-            non_ascii = func.octet_length(value) != func.length(value)
-            confirmed = and_(~non_ascii, metadata)
-            fallback = and_(~confirmed, or_(non_ascii, self.potential_text()))
-        else:
-            confirmed = metadata
-            fallback = and_(~confirmed, self.potential_text())
-        return confirmed, fallback
+            wanted = func.plainto_tsquery(
+                literal_column("'simple'"),
+                func.regexp_replace(
+                    func.normalize(cast(literal(query), Text), literal_column("NFKC")),
+                    "[[:punct:]]+",
+                    " ",
+                    "g",
+                ),
+            )
 
-    def _unicode_lower(self) -> bool:
-        """Whether this PostgreSQL lowers letters beyond ASCII (a UTF-8 ctype), as Python does."""
-        if getattr(self, "_lowers_unicode", None) is None:
-            self._lowers_unicode = bool(self.connection.scalar(text("SELECT lower('ÉΣ') = 'éσ'")))
-        return self._lowers_unicode
+            def has(*fields):
+                vector = literal_column(fields_vector(self._sources.name, fields))
+                return vector.op("@@", return_type=Boolean)(wanted)
+        else:
 
-    def browse_rows(self, term: str | None):
+            def has(*fields):
+                value = func.coalesce(payload[fields[0]].as_string(), "")
+                for name in fields[1:]:
+                    value = value + " " + func.coalesce(payload[name].as_string(), "")
+                return func.catalogue_words_match(value, literal(query)) == 1
+
+        return has(*FIELDS), has("title"), has("citation")
+
+    def browse_rows(self, query: str | None, by_text=()):
         """Every public source as a compact row for the website's catalogue: its id, title, year,
-        filter values and, given a search term (normalize_citation's), its rank (3 title, 2
-        citation, 1 summary) where the database matches as normalize_citation does; `python` marks
-        a source to match in Python (one with text to read, or a letter the database folds apart).
-        Without a term every source comes back. Ordered by id; at most BROWSE_BOUND."""
+        filter values, whether it may have a cleared text and, given a search, its rank: 3 when its
+        title has every word (api.search), 2 its citation, else 1 (its summary, the three together, or
+        ``by_text``, the sources whose published text matched). Without a search every source comes
+        back; with one, only those that match. Ordered by id; at most BROWSE_BOUND."""
         payload = self._sources.c.payload
         if self.connection.dialect.name == "postgresql":
             field = lambda name: payload.op("->>", return_type=Text)(name)  # noqa: E731
         else:
             field = lambda name: payload[name].as_string()  # noqa: E731
-        title, citation, summary = field("title"), field("citation"), field("summary")
-        exact = self.connection.dialect.name != "postgresql"  # SQLite runs normalize_citation itself
-        if exact or not self._unicode_lower():
-            normal = lambda value: func.legacy_metadata_normalize(func.coalesce(value, ""))  # noqa: E731
-        else:
-            normal = lambda value: func.btrim(  # noqa: E731
-                func.regexp_replace(
-                    func.lower(func.normalize(func.coalesce(value, ""), literal_column("NFKC"))),
-                    r"\s+",
-                    " ",
-                    "g",
-                )
-            )
-        python = self.potential_text()
-        if not exact:
-            everything = (
-                func.coalesce(title, "")
-                + " "
-                + func.coalesce(citation, "")
-                + " "
-                + func.coalesce(summary, "")
-            )
-            if self._unicode_lower():
-                python = or_(python, everything.op("~")(f"[{_FOLDED_APART}]"))
-            else:
-                python = or_(python, func.octet_length(everything) != func.length(everything))
-        if term is None:
-            rank = literal(0)
-        else:
-            pattern = literal_pattern(term)
-            rank = case(
-                (normal(title).like(pattern, escape="\\"), 3),
-                (normal(citation).like(pattern, escape="\\"), 2),
-                (normal(summary).like(pattern, escape="\\"), 1),
-                else_=0,
-            )
+        found = rank = None
+        if query is not None:
+            every, in_title, in_citation = self.matching(query)
+            found = or_(every, self._sources.c.id.in_(sorted(by_text))) if by_text else every
+            rank = case((in_title, 3), (in_citation, 2), else_=1)
         statement = (
             select(
                 self._sources.c.id,
-                title.label("title"),
+                field("title").label("title"),
                 payload["year"].as_integer().label("year"),
                 self._sources.c.jurisdiction_id,
                 field("document_type").label("type"),
                 field("language").label("language"),
                 field("legal_status").label("status"),
-                rank.label("rank"),
-                python.label("python"),
+                (literal(0) if rank is None else rank).label("rank"),
+                self.potential_text().label("may_have_text"),
             )
             .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
             .where(self._visible())
             .order_by(self._sources.c.id)
             .limit(BROWSE_BOUND + 1)
         )
-        if term is not None:
-            statement = statement.where(or_(rank > 0, python))
+        if found is not None:
+            statement = statement.where(found)
         rows = self.connection.execute(statement).all()
         if len(rows) > BROWSE_BOUND:
             raise ResultTooLarge("Pilot catalogue browsing exceeds declared bound")
@@ -278,9 +235,11 @@ class LegacyRepository:
         )
         return dict(self.connection.execute(statement).all())
 
-    def search_page(self, term, matched_ids, *, jurisdiction, limit, offset, access_where=None):
-        confirmed, _ = self.search_predicates(term)
-        predicate = or_(confirmed, self._sources.c.id.in_(matched_ids))
+    def search_page(self, query, by_text, *, jurisdiction, limit, offset, access_where=None):
+        """A page of the public sources whose title, citation and summary have every word of
+        ``query``, or that are among ``by_text`` (their published text matched)."""
+        every, _, _ = self.matching(query)
+        predicate = or_(every, self._sources.c.id.in_(sorted(by_text))) if by_text else every
         if access_where is not None:
             predicate = and_(predicate, access_where)
         return self.source_page(limit=limit, offset=offset, jurisdiction=jurisdiction, where=predicate)
@@ -450,11 +409,17 @@ class LegacyRepository:
         """Every catalogued value that may read as ``term`` (normalize_citation's), as (source id, the
         alias, or None for the source's own citation or title). One query each for aliases and sources;
         the caller confirms each value, so a value the database folds differently is never matched."""
-        self.search_predicates(term)  # learns whether the indexed normaliser exists
+        if self._indexed_metadata is None:
+            self._indexed_metadata = self.connection.dialect.name != "postgresql" or bool(
+                self.connection.scalar(
+                    text("SELECT to_regprocedure('legacy_metadata_normalize(text)') IS NOT NULL")
+                )
+            )
         citations, sources = tables["citations"], self._sources
 
         def may_be(value):
             if not self._indexed_metadata:
+                # Preserve read compatibility while an older schema is upgrading.
                 return true()
             normal = func.legacy_metadata_normalize(func.coalesce(value, "")) == term
             if self.connection.dialect.name != "postgresql":

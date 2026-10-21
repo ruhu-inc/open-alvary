@@ -68,6 +68,9 @@ class SearchPage(SourcePage):
     scope: Literal["Catalogue metadata and cleared full text only"] = (
         "Catalogue metadata and cleared full text only"
     )
+    # Why published texts were not searched, or why nothing could be matched (API-04); absent when
+    # there is nothing to say, so such an answer is unchanged.
+    notices: tuple[str, ...] = Field(default=(), exclude_if=lambda value: not value)
 
 
 class ExpressionView(WireModel):

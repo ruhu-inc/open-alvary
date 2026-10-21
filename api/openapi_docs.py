@@ -75,10 +75,12 @@ OPERATIONS: dict[str, dict] = {
         "operationId": "search",
         "tag": "Catalogue",
         "summary": "Search the catalogue",
-        "description": "Records whose title or citation contains the words, or whose cleared full text "
-        "does, a page at a time. Without `jurisdiction`, a search covers your plan's countries.",
+        "description": "Records with every one of the words in their title, citation or summary, or in one "
+        "part of their cleared full text, a page at a time in record ID order. Whole words only, in any "
+        "order: `invest` doesn't find the Investments and Securities Act. Without `jurisdiction`, a search "
+        "covers your plan's countries.",
         "parameters": {
-            "q": "Words to find, 1 to 200 characters. Case and spacing don't matter.",
+            "q": "Words to find, 1 to 200 characters. Case, punctuation and spacing don't matter.",
             "jurisdiction": "One jurisdiction ID, such as `ng` or `rw`. A country outside your plan "
             "answers at the Starter rate.",
             "access": "`all` (default), `open` (records with cleared full text) or `metadata` (records "
@@ -1007,6 +1009,9 @@ FIELDS: dict[str, dict[str, str]] = {
         "total": "Records matching, across all pages.",
         "items": "This page's records.",
         "scope": "What a search covers: catalogue metadata and cleared full text only.",
+        "notices": "Present when there is something to know about this search: published texts were not "
+        "searched (the section index is being built, or that search took too long), or the query has no letters "
+        "or digits to match.",
     },
     "VersionPage": {
         "items": "The text versions cleared for reuse, each with its full text.",

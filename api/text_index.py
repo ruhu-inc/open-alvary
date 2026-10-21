@@ -810,6 +810,33 @@ def search(
     return Found("ok", list(rows), min(total, COUNT_BOUND), total <= COUNT_BOUND, common_only)
 
 
+def works(conn: Connection, query: str, filters: Filters, *, bound: int) -> Found:
+    """The works whose published text has every word of ``query`` (in that text's own analysis, with no
+    query syntax) in one unit or in its document unit: the catalogue search's text arm
+    (api.catalogue.search). Their IDs in ``rows``, unordered, at most ``bound`` + 1."""
+    if not available(conn):
+        return Found("unavailable")
+    if built(conn) is None:
+        return Found("building")
+    match = " OR ".join(
+        f"(u.config = '{c}' AND (u.document || u.context) @@ plainto_tsquery('{c}', :q))" for c in ANALYSES
+    )
+    where, params = replace(filters, kinds=()).where()
+    searched = [t for t in (_tables(conn)[0], _documents(conn)) if t is not None]
+    union = " UNION ".join(f"SELECT u.work_id FROM {t} u WHERE ({match}) AND {where}" for t in searched)
+    old = conn.scalar(text("SELECT current_setting('statement_timeout')"))
+    try:
+        with conn.begin_nested():
+            conn.execute(text("SELECT set_config('statement_timeout', :ms, true)"), {"ms": str(TIMEOUT_MS)})
+            rows = conn.scalars(text(f"{union} LIMIT {bound + 1}"), params | {"q": query}).all()
+            conn.execute(text("SELECT set_config('statement_timeout', :ms, true)"), {"ms": old})
+    except OperationalError as error:
+        if getattr(error.orig, "sqlstate", None) == "57014":  # query_canceled: the deadline passed
+            return Found("timeout")
+        raise
+    return Found("ok", list(rows), len(rows))
+
+
 def headlines(conn: Connection, query: str, items: list[tuple[str, str]]) -> list[str]:
     """For each (config, words), PostgreSQL's best fragment of the words for the query, terms marked."""
     if not items:

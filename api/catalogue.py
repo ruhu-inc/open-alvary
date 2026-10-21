@@ -20,6 +20,7 @@ from api.repositories import (
     ResultTooLarge,
 )
 from api.search import normalize_citation as normalize_citation
+from api.search import words
 from changes.record import namespace
 from rights.policy import decide
 from schema.models import Citation, Corpus
@@ -83,6 +84,18 @@ EDGES_PER_PAGE, MAX_EDGES_PER_PAGE, EDGE_BUDGET, MAX_SUCCESSION = 25, 100, 300, 
 MAX_ANCHOR_BYTES = 900 * 1024
 # A text search serves its first 1,000 hits, 25 a page by default and 100 at most (API-03).
 MAX_HIT_OFFSET = 1000
+# A catalogue search finds at most this many records by their published text (else 413, as before).
+MAX_TEXT_WORKS = 10_000
+NO_WORDS = "The search has no letters or digits to match. Search for words, such as a title or a citation."
+# Why a catalogue search found records by their details only (API-04: told apart from no result).
+TEXT_NOT_SEARCHED = {
+    "unavailable": "Published texts were not searched: this deployment has no section index. Records were "
+    "matched by their title, citation and summary only.",
+    "building": "Published texts were not searched: the section index is being built. Records were matched "
+    "by their title, citation and summary only; try again in a few minutes.",
+    "timeout": "Published texts were not searched: that took longer than ten seconds. Records were matched "
+    "by their title, citation and summary only.",
+}
 
 
 def expression_id(version) -> str:
@@ -568,36 +581,49 @@ class LegacyCatalogue:
             ).mappings()
         ]
 
+    def _by_text(self, query: str, jurisdiction) -> tuple[set[str], tuple[str, ...]]:
+        """The records whose published text has every word of ``query`` in one part (the section index,
+        api.text_index), and why none were looked for when the index could not answer. SQLite, the
+        metadata-only pilot, has no section index and no published texts to look in."""
+        if self.repository.connection.dialect.name != "postgresql":
+            return set(), ()
+        scope = (
+            None
+            if jurisdiction is None
+            else (jurisdiction,)
+            if isinstance(jurisdiction, str)
+            else tuple(sorted(jurisdiction))
+        )
+        found = text_index.works(
+            self.repository.connection, query, text_index.Filters(jurisdictions=scope), bound=MAX_TEXT_WORKS
+        )
+        if found.state in TEXT_NOT_SEARCHED:
+            return set(), (TEXT_NOT_SEARCHED[found.state],)
+        if len(found.rows) > MAX_TEXT_WORKS:
+            raise ResultTooLarge("Pilot full-text matching exceeds declared bound")
+        return set(found.rows), ()
+
     def search(self, query, *, jurisdiction=None, limit=25, offset=0, access="all"):
-        term = normalize_citation(query)
-        if not term:
+        """Records with every word of ``query`` in their title, citation and summary (a word index,
+        api.search) or in one part of a published text (the section index), in ID order. Nothing is
+        found by part of a word, and nothing is scanned for a substring (G11)."""
+        if not normalize_citation(query):
             raise InvalidSearch("Search term must not be blank")
         if not 1 <= limit <= 100 or offset < 0:
             raise InvalidSearch("Invalid page bounds")
         access_where = self._access(access, jurisdiction)
-        _, fallback = self.repository.search_predicates(term)
-        matched_ids = []
-        examined = 0
-        for source, rights in self.repository.sources(jurisdiction, where=fallback):
-            examined += 1
-            if examined > 10000:
-                raise ResultTooLarge("Pilot Unicode/full-text fallback exceeds declared bound")
-            matches = term in normalize_citation(source.title + " " + source.citation)
-            if not matches:
-                matches = any(
-                    term in version.canonical_text.casefold() for version in self._approved(source, rights)
-                )
-            if matches:
-                matched_ids.append(source.id)
+        if not words(query):
+            return SearchPage(total=0, items=(), notices=(NO_WORDS,))
+        by_text, notices = self._by_text(query, jurisdiction)
         total, pairs = self.repository.search_page(
-            term,
-            matched_ids,
+            query,
+            by_text,
             jurisdiction=jurisdiction,
             limit=limit,
             offset=offset,
             access_where=access_where,
         )
-        return SearchPage(total=total, items=tuple(self._view(pair) for pair in pairs))
+        return SearchPage(total=total, items=tuple(self._view(pair) for pair in pairs), notices=notices)
 
     def _open(self, pairs) -> set[str]:
         """Which of these sources have a text cleared for reuse now."""
@@ -608,41 +634,27 @@ class LegacyCatalogue:
     def browse(self, *, query=None, filters=None, sort="relevance", limit=20, offset=0):
         """The website's catalogue (MAC-01): an optional search, filters and sorting, with a count per
         filter value. Each count applies every other selected filter, so choosing a value never hides
-        the alternatives. The database matches and ranks each public source (title 3, citation 2,
-        summary 1, a cleared text 1) and returns a compact row for each; only the page's sources are
-        read in full. Bounded: at most BROWSE_BOUND public sources."""
+        the alternatives. A search matches words as search does; the database ranks each match (every
+        word in the title 3, in the citation 2, otherwise 1) and returns a compact row for each; only
+        the page's sources are read in full. Bounded: at most BROWSE_BOUND public sources."""
         filters = {k: v for k, v in (filters or {}).items() if v is not None}
         unknown = set(filters) - set(FACETS)
         if unknown or sort not in SORTS:
             raise InvalidSearch("Invalid filter or sort")
-        term = None
-        if query is not None:
-            term = normalize_citation(query)
-            if not term:
-                raise InvalidSearch("Search term must not be blank")
-        rows = self.repository.browse_rows(term)
-        # Sources the database leaves to Python: a text to search or read for access, or a letter it
-        # folds apart. Read in full (few), matched as before, and checked for a cleared text.
-        apart = self.repository.visible([row.id for row in rows if row.python])
-        opened = self._open(apart.values())
-        ranks = {}
-        if term is not None:
-            for source_id, (source, rights) in apart.items():
-                if term in normalize_citation(source.title):
-                    ranks[source_id] = 3
-                elif term in normalize_citation(source.citation):
-                    ranks[source_id] = 2
-                elif term in normalize_citation(source.summary or ""):
-                    ranks[source_id] = 1
-                elif any(term in v.canonical_text.casefold() for v in self._approved(source, rights)):
-                    ranks[source_id] = 1
-                else:
-                    ranks[source_id] = 0
+        if query is not None and not normalize_citation(query):
+            raise InvalidSearch("Search term must not be blank")
+        rows, notices = [], ()
+        if query is None:
+            rows = self.repository.browse_rows(None)
+        elif words(query):
+            by_text, notices = self._by_text(query, None)
+            rows = self.repository.browse_rows(query, by_text)
+        else:
+            notices = (NO_WORDS,)
+        # The few sources that may have a cleared text are read in full to tell open from metadata.
+        opened = self._open(self.repository.visible([row.id for row in rows if row.may_have_text]).values())
         candidates = []
         for row in rows:
-            rank = ranks.get(row.id, row.rank) if term is not None else 0
-            if term is not None and not rank:
-                continue
             values = {
                 "jurisdiction": row.jurisdiction_id,
                 "type": row.type,
@@ -651,7 +663,7 @@ class LegacyCatalogue:
                 "year": str(row.year) if row.year else None,
                 "access": "open" if row.id in opened else "metadata",
             }
-            candidates.append((rank, row, values))
+            candidates.append((row.rank, row, values))
 
         def selected(values, skip=None):
             return all(values[k] == v for k, v in filters.items() if k != skip)
@@ -675,7 +687,11 @@ class LegacyCatalogue:
         pairs = self.repository.visible(page)
         return (
             # A source withdrawn since its row was read is left out of the page.
-            SearchPage(total=len(results), items=tuple(self._view(pairs[i]) for i in page if i in pairs)),
+            SearchPage(
+                total=len(results),
+                items=tuple(self._view(pairs[i]) for i in page if i in pairs),
+                notices=notices,
+            ),
             {name: dict(counts.most_common()) for name, counts in facets.items()},
         )
 
