@@ -2068,6 +2068,17 @@
           ],
           "default": null
         },
+        "denounced": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Dated"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "reservations": {
           "anyOf": [
             {

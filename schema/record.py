@@ -702,6 +702,7 @@ class TreatyParty(RecordModel):
     signed: Dated | None = None
     ratified: Dated | None = None
     acceded: Dated | None = None
+    denounced: Dated | None = None  # the state's own denunciation or withdrawal, as it took effect
     reservations: Text | None = None
 
 
@@ -715,14 +716,15 @@ class TreatyProfile(Profile):
     authentic_languages: tuple[LanguageTag, ...] = ()
 
 
+LEGAL_EFFECTS = ("directly_applicable", "requires_transposition", "binding_on_addressees", "non_binding")
+
+
 class RegionalProfile(Profile):
     """Instruments of regional communities: ECOWAS, EAC, SADC, OHADA, UEMOA, CEMAC and others."""
 
     family: Literal["regional_instrument"]
     organ: Body  # the Assembly, Council of Ministers, Authority of Heads of State, Commission
-    legal_effect: Literal[
-        "directly_applicable", "requires_transposition", "binding_on_addressees", "non_binding"
-    ]
+    legal_effect: Literal[*LEGAL_EFFECTS]
     member_states: tuple[PlaceCode, ...] = ()  # empty: every member
     transposition_deadline: date | None = None
 
