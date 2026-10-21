@@ -1,0 +1,21 @@
+web/src/docs/content/quickstart.md
+  s_d665c62e07d76f::t_d53919edca70a2 157-158,160
+web/src/docs/content/index.md
+  s_d665c62e07d76f::t_d53919edca70a2 75-95,106-108,113-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "89d4d52261bd06aed1cf03ab2db2d330e33a6776",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
