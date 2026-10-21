@@ -2,6 +2,7 @@
   "$defs": {
     "Amendment": {
       "additionalProperties": false,
+      "description": "A link between two works, from the asserting (later) one to the one it concerns (EDT-01).",
       "properties": {
         "id": {
           "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
@@ -24,7 +25,13 @@
             "repeals",
             "supersedes",
             "made_under",
-            "cross_reference"
+            "cross_reference",
+            "commences",
+            "transposes",
+            "domesticates",
+            "implements",
+            "ratifies",
+            "cites"
           ],
           "title": "Kind",
           "type": "string"

@@ -49,7 +49,7 @@ Every field is listed in the [reference](/docs/api/get-source).
 
 ## Find what replaced a law
 
-[Get a record's history](/docs/api/get-relationships) tells you whether a record is current and how it relates to other records: the laws it repeals or amends and the law it is made under, the later laws that repealed or amended it, and the instruments made under it. When the record has been repealed or replaced, `current` names the record in force in its place now, at the end of its line of repeals.
+[Get a record's history](/docs/api/get-relationships) tells you whether a record is current and how it relates to other records: the laws it repeals, amends or brings into force and the law it is made under, the later laws that repealed, amended or commenced it, the treaty or directive it transposes, domesticates, implements or ratifies (and, for a treaty or directive, the laws that do so), the records it cites and that cite it, and the instruments made under it. When the record has been repealed or replaced, `current` names the record in force in its place now, at the end of its line of repeals.
 
 ```curl
 curl https://api.open.alvary.ai/api/v1/sources/ng-isa-2007/relationships \
@@ -84,7 +84,18 @@ for (const link of history.items) console.log(link.kind, link.title, link.eviden
 
 {{example:get_relationships}}
 
-Each link is seen from this record's side (`repeals`, `repealed_by`, `amends`, `amended_by`, `made_under`, `enables`, …) and cites the official text that makes it, usually the repealing or amending law. Links come 25 to a page (`limit` up to 100); pass `next_cursor` as `cursor` for the next, or ask for one `kind` only, such as `enables` for the instruments made under a law. Only links one step away are listed (depth 1), and only between public records that a reviewer has checked against that text, so a record may be repealed before its history shows by what.
+Each link is seen from this record's side and cites the official text that makes it, usually the repealing, amending or transposing law. A kind and its `_by` form are the same link seen from each end:
+
+| From this record's side | From the other record's side | Meaning |
+|---|---|---|
+| `repeals`, `amends`, `supersedes` | `repealed_by`, `amended_by`, `superseded_by` | It repealed, amended or replaced the other record. |
+| `commences` | `commenced_by` | It brought the other record into force. |
+| `made_under` | `enables` | It was made under the other record, its parent law. |
+| `transposes`, `domesticates`, `implements`, `ratifies` | `transposed_by`, `domesticated_by`, `implemented_by`, `ratified_by` | It gives effect, in national law, to a treaty or a regional community's directive or instrument. |
+| `cites` | `cited_by` | It refers to the other record. A citation says nothing about agreement or legal effect. |
+| `cross_reference` | `cross_reference` | A reference between the two, shown the same way from either side. |
+
+Links come 25 to a page (`limit` up to 100); pass `next_cursor` as `cursor` for the next, or ask for one `kind` only, such as `enables` for the instruments made under a law or `transposed_by` for the national laws that transpose a directive. Only links one step away are listed (depth 1), and only between public records that a reviewer has checked against that text, so a record may be repealed before its history shows by what. Judicial treatment, such as a judgment that follows or overrules another, is not listed yet.
 
 ## Read the text
 

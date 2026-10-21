@@ -279,7 +279,8 @@ class VersionGate(WireModel):
 
 LEGAL_STATUS = Literal["unknown", "current", "historical", "repealed", "superseded"]
 # How another source relates to this one, from this one's side: it "repeals" an earlier law, it is
-# "repealed_by" a later one, it is "made_under" its parent law, which "enables" it.
+# "repealed_by" a later one, it is "made_under" its parent law, which "enables" it; a national law
+# "transposes" a directive, which is "transposed_by" it. Judicial treatment is not served yet.
 RelationKind = Literal[
     "repeals",
     "repealed_by",
@@ -290,6 +291,18 @@ RelationKind = Literal[
     "made_under",
     "enables",
     "cross_reference",
+    "commences",
+    "commenced_by",
+    "transposes",
+    "transposed_by",
+    "domesticates",
+    "domesticated_by",
+    "implements",
+    "implemented_by",
+    "ratifies",
+    "ratified_by",
+    "cites",
+    "cited_by",
 ]
 
 
