@@ -1,0 +1,21 @@
+tests/test_memberships.py
+  s_d665c62e07d76f::t_3e46fe0f241af7 418-429
+schema/memberships.json
+  s_d665c62e07d76f::t_3e46fe0f241af7 1113-1119,1121,1133-1139,1141,1153-1159,1161,1173-1179,1181,1193-1199,1201,1213-1219,1221,1233-1259,1261,1273-1279,1281,1293-1299,1301,1313-1319,1321,1333-1339,1341,1351,1353-1359,1361,1373-1379,1381,1393-1399,1401,1413-1419,1421
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f3d99e3341f1f2e1b0e7b68bd759990b75cf9c88",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
