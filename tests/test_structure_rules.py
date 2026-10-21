@@ -68,6 +68,7 @@ def test_documents_with_rules_keep_exactly_the_structure_they_had(document, page
         ({"id": "ke-act-2019-24", "type": "act"}, "ke-act-1"),
         ({"id": "za-act-2013-4", "jurisdiction": "za", "type": "act"}, "za-act-1"),
         ({"id": "gh-act-2012-843", "jurisdiction": "gh", "type": "act"}, "gh-act-1"),
+        ({"id": "aa-ohada-auscgie-2014-fr", "jurisdiction": "aa-ohada", "type": "uniform_act"}, "ohada-uniform-act-1"),
     ],
 )  # fmt: skip
 def test_rules_are_chosen_by_jurisdiction_and_type(document, rules):
@@ -108,7 +109,7 @@ def test_a_document_with_no_rules_has_one_node_and_an_error_that_blocks_it(docum
     )
 
 
-def test_a_french_uniform_act_is_refused_not_read_as_a_nigerian_act():
+def test_a_french_uniform_act_is_read_by_its_own_rules_never_as_a_nigerian_act():
     pages = paged(
         [
             [
@@ -125,10 +126,19 @@ def test_a_french_uniform_act_is_refused_not_read_as_a_nigerian_act():
     # Read as a Nigerian Act it gave no error and no warning: it could have been approved.
     serialized = serialize.serialize(pages)
     assert not structure.derive(serialized, pages, structure.NG_FEDERAL_ACT).issues
+    # Typed "act", the OHADA row does not apply: refused.
     built = publication.build(
         {"id": "aa-ohada-auscgie-2014-fr", "jurisdiction": "aa-ohada", "type": "act"}, pages
     )
     assert [i.code for i in built.issues] == ["no_structure_rules"]
+    # Typed "uniform_act", its articles and their alinéas.
+    built = publication.build(
+        {"id": "aa-ohada-auscgie-2014-fr", "jurisdiction": "aa-ohada", "type": "uniform_act"}, pages
+    )
+    nodes = {n.locator: n for n in built.structure.nodes}
+    assert built.rules_id == "ohada-uniform-act-1" and not built.issues
+    assert nodes["book_1"].heading == "DISPOSITIONS GÉNÉRALES"
+    assert [n.locator for n in nodes["art_10"].children] == ["art_10__al_1", "art_10__al_2"]
 
 
 def test_derive_names_only_rules_that_exist():

@@ -18,6 +18,11 @@ structure rules for the document's jurisdiction and type (RULES):
                      inside them; a section's heading printed above it; definitions in ‘‘ ’’
   gh-act-1           Ghanaian Acts: unnumbered group headings, a section's heading printed above it,
                      and the first group heading after "PASSED by Parliament …" opening the body
+  ohada-uniform-act-1
+                     OHADA Uniform Acts in French, as the Journal officiel prints them: the
+                     SOMMAIRE, the Council of Ministers' preamble, PARTIE, LIVRE, TITRE, SOUS-TITRE,
+                     CHAPITRE and Section, articles numbered through the Act ("Article 2-1"
+                     inserted) and their alinéas, and the signatures
   rw-law-1           Rwandan laws, orders and the other instruments of the Official Gazette, one
                      language at a time: titles, chapters, divisions (a civil-law "section" groups
                      articles) and articles
@@ -44,6 +49,7 @@ text, half-open, covering a node's own leaves and its descendants (DAT-06).
 
 import hashlib
 import re
+import unicodedata
 from dataclasses import dataclass, field
 
 from workbench.serialize import Issue, Leaf, Serialized, clean
@@ -54,6 +60,7 @@ EAC_ACT = "eac-act-1"
 KE_ACT = "ke-act-1"
 ZA_ACT = "za-act-1"
 GH_ACT = "gh-act-1"
+OHADA_UNIFORM_ACT = "ohada-uniform-act-1"
 RW_LAW = "rw-law-1"
 JUDGMENT = "judgment-paragraphs-1"
 JUDGMENT_TYPES = {"judgment", "ruling"}
@@ -81,6 +88,7 @@ RULES = {
     ("ke", "act"): KE_ACT,
     ("za", "act"): ZA_ACT,
     ("gh", "act"): GH_ACT,
+    ("aa-ohada", "uniform_act"): OHADA_UNIFORM_ACT,
     **{("ng", kind): JUDGMENT for kind in JUDGMENT_TYPES},
     **{("rw", kind): RW_LAW for kind in RW_INSTRUMENTS},
 }
@@ -310,6 +318,8 @@ def derive(
         builder = JudgmentBuilder(serialized, units)
     elif rules_id in DRAFTING:
         builder = ActBuilder(serialized, units, DRAFTING[rules_id])
+    elif rules_id == OHADA_UNIFORM_ACT:
+        builder = UniformActBuilder(language, serialized, units)
     else:
         raise ValueError(f"No structure rules {rules_id!r}")
     builder.build()
@@ -917,6 +927,311 @@ class RwandaBuilder(Builder):
         self.article, self.region_node = None, None
         self.notes_to(node, False)
         self.hold(node, index)
+
+
+# --- ohada-uniform-act-1 -----------------------------------------------------------------------------
+
+# A division of a Uniform Act as the Journal officiel prints it (AUSCGIE, 2014): its name and number, then
+# its title on the same line or on the next heading: "TITRE 1 - DEFINITION DE LA SOCIETE", "LIVRE 1" then
+# "CONSTITUTION DE LA SOCIETE COMMERCIALE", "LIVRE 10 - (NOUVEAU) - CAPITAL VARIABLE", "Chapitre 1 -FORME
+# DES STATUTS" (the SOMMAIRE's case, which also prints "Chapitre1- ETATS FINANCIERS"); divisions inserted
+# by a revision number as articles do ("CHAPITRE 2-1 ATTRIBUTION GRATUITE D'ACTIONS", "LIVRE 4-2"). Each
+# name's rank, node kind and locator token.
+OHADA_DIVISIONS = {
+    "PARTIE": (0, "part", "part"),
+    "LIVRE": (1, "division", "book"),
+    "TITRE": (2, "title", "title"),
+    "SOUS-TITRE": (3, "division", "subtitle"),
+    "CHAPITRE": (4, "chapter", "chap"),
+    "SECTION": (5, "division", "dvs"),
+}
+OHADA_DIVISION = re.compile(
+    r"^(PARTIE|LIVRE|TITRE|SOUS-TITRE|CHAPITRE|Chapitre|SECTION|Section)(?:\s+|(?=\d))"
+    r"(\d{1,3}(?:-\d{1,2})?|PR[ÉE]LIMINAIRE|[IVXL]{1,6})"
+    r"(?!\w)\s*[-–—:.]?\s*(.*)$",
+    re.S,
+)
+# "Article 4", "Article 2-1" (inserted after article 2), "Article 626-1-1-1" (after 626-1-1), "Article
+# premier", "Article 1er". In a heading, the words after it ("Article 5 : Champ d'application") are the
+# article's heading; in a paragraph they are its first alinéa ("Article 198 : A peine de nullité, les
+# sociétés …", as articles the 2014 revision rewrote are printed).
+OHADA_ARTICLE = re.compile(
+    r"^(?:Article|ARTICLE|Art\.)\s+(premier|1er|\d{1,4}(?:-\d{1,3}){0,4})(?![\w-])\s*(?:[:.—–-]\s*(.*))?$",
+    re.S,
+)
+OHADA_ITEM = re.compile(r"^(\d{1,2}\s?°\)?|[a-z]\))(?=\s)")  # "1°)", "2°", "a)": an item's printed number
+
+
+def folded(text: str) -> str:
+    """Letters and digits only, without accents or case: a title as the SOMMAIRE and the body both
+    print it."""
+    plain = unicodedata.normalize("NFD", text)
+    return "".join(c for c in plain if c.isalnum() and not unicodedata.combining(c)).casefold()
+
+
+class UniformActBuilder(Builder):
+    """An OHADA Uniform Act in French. Before the body: the issue's cover and its SOMMAIRE, whose
+    division lines are contents entries pointing to the divisions they list; the Act's title ("ACTE
+    UNIFORME RELATIF …"); the Council of Ministers' preamble ("Le Conseil des Ministres …", "Vu …"), to
+    the words "… dont la teneur suit". Divisions nest by rank (PARTIE, LIVRE, TITRE, SOUS-TITRE,
+    CHAPITRE, Section) and are qualified by the divisions they are in, because each restarts its
+    numbering (part_1__book_1__title_3__chap_2); articles are numbered through the Act (art_12, and
+    art_2-1 inserted after it). Each unit of an article after its heading is an alinéa, numbered in
+    order (art_10__al_2): a list's items too, as French drafting counts alinéas, with their printed
+    number as label ("1°)"). A heading printed without its number that the SOMMAIRE lists, under
+    the division it is in, is that division (the Journal officiel numbers a chapter's first section
+    only: "Section 1 - Principe", then "Nature" for Section 2): its locator is the SOMMAIRE's, its
+    label empty, and a warning says so. Any other heading groups the articles after it. "Fait à …"
+    opens the signatures' notice."""
+
+    CONTENTS = re.compile(r"^(?:sommaire|table\s+des\s+mati[eè]res)\b", re.I)
+    TITLE = re.compile(r"^acte\s+uniforme\b", re.I)
+    PREAMBLE = re.compile(r"^(?:le\s+conseil\s+des\s+ministres\b|vu\b)", re.I)
+    ENACTING = re.compile(r"\bdont\s+la\s+teneur\s+suit\b", re.I)
+    SIGNATURE = re.compile(r"^fait\s+[àa]\b", re.I)
+
+    def __init__(self, language: str | None, *args):
+        super().__init__(*args)
+        self.region = "front"  # front, contents, preamble, body, endmatter
+        self.region_node: Node | None = None  # the open contents, preamble or notice
+        self.open: list[tuple[int, Node]] = []  # open divisions with their rank
+        self.listed: list[tuple[int, str]] = []  # the contents' divisions with their rank and locator
+        self.titled: dict[tuple[str, str], tuple[int, str, str, str]] = {}  # (parent, title) -> division
+        self.article: Node | None = None
+        self.awaiting: Node | None = None  # a division whose title may be on the next heading
+        self.caption: Node | None = None
+        self.named: set[int] = set()  # the leaves of division and article headings
+        self.enacted = False
+        self.last_article: tuple[tuple[int, ...], str] | None = None
+        self.counts: dict[str, int] = {}
+        if language not in (None, "fr"):
+            # French only, so far: another language's edition is refused, never read by these patterns.
+            message = (
+                f"No structure rules for aa-ohada/uniform_act in {language}: this layout is not supported yet"
+            )
+            self.issues.append(Issue("error", NO_RULES, None, None, message))
+
+    def next_number(self, key: str) -> int:
+        self.counts[key] = self.counts.get(key, 0) + 1
+        return self.counts[key]
+
+    def put(self, node: Node, index: int) -> None:
+        self.notes_to(node, False)
+        self.hold(node, index)
+
+    def owner(self) -> Node:
+        return self.article or (self.open[-1][1] if self.open else self.region_node or self.root)
+
+    def region_opens(self, region: str, kind: str, locator: str, leaf: Leaf) -> Node:
+        self.region, self.article, self.open = region, None, []
+        self.region_node = self.add(self.root, kind, locator, leaf)
+        return self.region_node
+
+    def division_of(self, text: str) -> re.Match | None:
+        """A division heading, never words in an alinéa ("Section 2 du présent chapitre …")."""
+        found = OHADA_DIVISION.match(text)
+        return found if found and len(text) <= 300 and not text.endswith((".", ";", ",")) else None
+
+    def locator(self, found: re.Match, within: list[tuple[int, str]]) -> tuple[int, str, str]:
+        """A division's rank, kind and locator, qualified by the division of lower rank it is in."""
+        rank, kind, token = OHADA_DIVISIONS[found.group(1).upper()]
+        parent = next((locator for r, locator in reversed(within) if r < rank), None)
+        number = found.group(2)
+        own = f"{token}_{number if re.fullmatch(r'[\d-]+', number) else slug(number)}"  # chap_2-1, as art_2-1
+        return rank, kind, f"{parent}__{own}" if parent else own
+
+    def place(self, index: int, leaf: Leaf) -> None:
+        unit, text = self.unit(leaf), clean(leaf.text)
+        heading_unit = unit.get("kind") == "heading"
+        awaiting, self.awaiting = self.awaiting, None
+        if leaf.role in ("caption", "table"):
+            self.table(index, leaf)
+            return
+        if self.region == "endmatter":
+            self.put(self.region_node, index)
+            return
+        if self.region == "body" and self.SIGNATURE.match(text):
+            node = self.region_opens("endmatter", "notice", f"notice_{self.next_number('notice')}", leaf)
+            self.put(node, index)
+            return
+        if self.region in ("front", "contents") and self.TITLE.match(text):
+            self.root.heading = self.root.heading or text  # the Act's title, which ends the contents
+            self.region, self.region_node = "front", None
+            self.named.add(index)  # on the cover and again before the preamble
+            self.put(self.root, index)
+            return
+        if self.region == "front" and self.CONTENTS.match(text):
+            self.region_opens("contents", "contents", "contents", leaf).heading = text
+            self.put(self.region_node, index)
+            return
+        if self.region in ("front", "contents") and self.PREAMBLE.match(text):
+            self.put(self.region_opens("preamble", "preamble", "preamble", leaf), index)
+            return
+        division = self.division_of(text)
+        article = OHADA_ARTICLE.match(text)
+        if self.region == "contents" and not article:
+            self.contents_entry(index, leaf, division)
+            return
+        if self.region in ("front", "preamble") and not (
+            division or article or (self.enacted and heading_unit)
+        ):
+            self.put(self.region_node or self.root, index)
+            self.enacted = self.enacted or (self.region == "preamble" and bool(self.ENACTING.search(text)))
+            return
+        if self.region != "body":
+            self.region, self.region_node = "body", None
+        if division:
+            self.division(index, leaf, division)
+        elif article:
+            self.open_article(index, leaf, article, heading_unit)
+        elif awaiting is not None and (heading_unit or unit.get("align") == "center"):
+            awaiting.heading = text  # "LIVRE 1" then "CONSTITUTION DE LA SOCIETE COMMERCIALE"
+            self.named.add(index)
+            self.put(awaiting, index)
+        elif heading_unit and (listed := self.listed_as(text)):
+            self.unnumbered(index, leaf, text, *listed)
+        elif heading_unit:
+            self.article = None  # a heading that groups the articles after it
+            self.put(self.owner(), index)
+        elif self.article is not None:
+            self.alinea(index, leaf, text)
+        else:
+            self.issue("warning", "outside_article", leaf, f"“{text[:40]}…” is outside any article")
+            self.put(self.owner(), index)
+
+    def contents_entry(self, index: int, leaf: Leaf, found: re.Match | None) -> None:
+        contents = self.region_node
+        if found is None:
+            self.put(contents, index)
+            return
+        rank, _, target = self.locator(found, self.listed)
+        while self.listed and self.listed[-1][0] >= rank:
+            self.listed.pop()
+        self.listed.append((rank, target))
+        entry = self.add(contents, "contents_entry", f"contents__entry_{len(contents.children) + 1}", leaf)
+        entry.label, entry.target = clean(leaf.text)[: found.end(2)], target
+        self.put(entry, index)
+        title = folded(re.sub(r"\s+\d{1,3}$", "", found.group(3)))  # without its page number
+        if title:
+            parent = target.rsplit("__", 1)[0] if "__" in target else ""
+            self.titled[(parent, title)] = (
+                rank,
+                OHADA_DIVISIONS[found.group(1).upper()][1],
+                target,
+                entry.label,
+            )
+
+    def listed_as(self, text: str) -> tuple[int, str, str, str] | None:
+        """The division the SOMMAIRE lists with this title, within one of the open divisions."""
+        title = folded(text)
+        for parent in [node.locator for _, node in reversed(self.open)] + [""]:
+            if (parent, title) in self.titled:
+                return self.titled[(parent, title)]
+        return None
+
+    def unnumbered(
+        self, index: int, leaf: Leaf, text: str, rank: int, kind: str, locator: str, listed: str
+    ) -> None:
+        while self.open and self.open[-1][0] >= rank:
+            self.open.pop()
+        parent = self.open[-1][1] if self.open else self.root
+        node = self.add(parent, kind, locator, leaf, heading=text)
+        self.open.append((rank, node))
+        self.article = None
+        self.named.add(index)
+        self.put(node, index)
+        message = f"“{text[:60]}” is printed without its number: the contents list it as {listed} ({locator})"
+        self.issue("warning", "number_from_contents", leaf, message)
+
+    def division(self, index: int, leaf: Leaf, found: re.Match) -> None:
+        rank, kind, locator = self.locator(found, [(r, node.locator) for r, node in self.open])
+        while self.open and self.open[-1][0] >= rank:
+            self.open.pop()
+        parent = self.open[-1][1] if self.open else self.root
+        node = self.add(parent, kind, locator, leaf, label=clean(leaf.text)[: found.end(2)])
+        node.heading = found.group(3).strip()
+        self.open.append((rank, node))
+        self.article = None
+        self.awaiting = None if node.heading else node
+        self.named.add(index)
+        self.put(node, index)
+
+    def open_article(self, index: int, leaf: Leaf, found: re.Match, heading_unit: bool) -> None:
+        number = "1" if found.group(1).casefold() in ("premier", "1er") else found.group(1)
+        label = leaf.text[: found.end(1)]
+        parent = self.open[-1][1] if self.open else self.root
+        self.article = self.add(parent, "article", f"art_{number}", leaf, label=label)
+        self.named.add(index)
+        self.notes_to(self.article, True)
+        if heading_unit or not found.group(2):
+            self.article.heading = (found.group(2) or "").strip()
+            self.hold(self.article, index)
+        else:  # "Article 198 : A peine de nullité …": the alinéa starts after the colon
+            item = OHADA_ITEM.match(found.group(2))
+            alinea = self.add(
+                self.article,
+                "paragraph",
+                f"{self.article.locator}__al_1",
+                leaf,
+                label=item.group(1) if item else "",
+            )
+            alinea.trim[index] = len(leaf.text[: found.start(2)].encode())
+            self.article.opens_at = leaf.start
+            self.hold(alinea, index)
+        order = tuple(int(n) for n in number.split("-"))
+        if self.last_article and order < self.last_article[0]:
+            self.issue("warning", "article_order", leaf, f"{label} follows {self.last_article[1]}")
+        self.last_article = (order, label)
+
+    def alinea(self, index: int, leaf: Leaf, text: str) -> None:
+        article = self.article
+        number = sum(1 for child in article.children if child.kind == "paragraph") + 1
+        item = OHADA_ITEM.match(text)
+        node = self.add(
+            article, "paragraph", f"{article.locator}__al_{number}", leaf, label=item.group(1) if item else ""
+        )
+        self.put(node, index)
+        if text[:1].islower() and not item:  # "a) dont …" is an item
+            self.issue(
+                "warning",
+                "lower_case_alinea",
+                leaf,
+                f"“{text[:40]}…” begins in lower case: if it goes on from the alinéa before it, join them, "
+                f"or the alinéas after it in {article.label} are numbered one too many",
+            )
+
+    def table(self, index: int, leaf: Leaf) -> None:
+        caption, self.caption = self.caption, None
+        if leaf.role == "table" and caption is not None:
+            first = self.leaves[caption.leaves[0]]
+            if (first.page, first.unit) == (leaf.page, leaf.unit):
+                self.hold(caption, index)
+                return
+        owner = self.owner()
+        self.notes_to(owner, False)
+        number = self.next_number("table:" + owner.locator)
+        node = self.add(owner, "table", f"{owner.locator}__table_{number}", leaf)
+        if leaf.role == "caption":
+            node.heading, self.caption = leaf.text, node
+        self.hold(node, index)
+
+    def repeatable(self) -> set[int]:
+        """Division and article headings repeat on other pages ("Section 1 - Dispositions générales"), and
+        so do the unnumbered headings between articles ("Principe", "Rémunération"): only a heading that
+        opens its page may be a running head."""
+        below = {i for i, leaf in enumerate(self.leaves) if leaf.unit != 0}
+        return super().repeatable() | self.named | below
+
+    def build(self) -> None:
+        super().build()
+        for node in self.root.walk():
+            if node.kind == "contents_entry" and node.target not in self.locators:
+                self.issue(
+                    "warning",
+                    "contents_unmatched",
+                    self.leaves[node.leaves[0]],
+                    f"The contents list {node.label}, but the text has no {node.target}",
+                )
 
 
 # --- judgment-paragraphs-1 ---------------------------------------------------------------------------
