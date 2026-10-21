@@ -305,6 +305,16 @@ def test_a_review_names_its_reviewer_and_role():
         review_cli.review(data, "high", "  ", "owner", "structural", REVIEWED_ON)
     with pytest.raises(review_cli.Refused, match="name the reviewer's role"):
         review_cli.review(data, "high", "A. Owner", " ", "structural", REVIEWED_ON)
+    # A placeholder left in a copied command, or an email address, is not a reviewer.
+    for by in ("YOUR NAME", "Full Name", "<name>", "owner@example.org"):
+        with pytest.raises(review_cli.Refused, match="name the reviewer"):
+            review_cli.review(data, "high", by, "owner", "structural", REVIEWED_ON)
+        with pytest.raises(review_cli.Refused, match="name the reviewer"):
+            review_cli.review_structural(data, by, "owner", REVIEWED_ON)
+    with pytest.raises(review_cli.Refused, match="name the reviewer's role"):
+        review_cli.review(data, "high", "A. Owner", "<role>", "structural", REVIEWED_ON)
+    with pytest.raises(review_cli.Refused, match="qualification itself, not a placeholder"):
+        review_cli.review(data, "apex-on-high", *ADVOCATE[:2], "doctrinal", REVIEWED_ON, "<qualification>")
     with pytest.raises(review_cli.Refused, match="has no entry nowhere"):
         review_cli.review(data, "nowhere", *OWNER, "structural", REVIEWED_ON)
     with pytest.raises(review_cli.Refused, match="no structural entry awaits review"):

@@ -30,6 +30,7 @@ from datetime import date
 from pathlib import Path
 
 from api.courts import CourtRegister, Entry, digest
+from operations.publish import PLACEHOLDER
 
 
 class Refused(Exception):
@@ -51,15 +52,18 @@ def recorded(
     register: CourtRegister, entry: Entry, by: str, role: str, on: date, qualification: str | None
 ) -> dict:
     """The review of ``entry`` as written: who, in what role, on which day, and what they reviewed."""
-    if not by.strip():
-        raise Refused("name the reviewer")
-    if not role.strip():
+    # A name, a role and a qualification, never an email address or a placeholder left in a command.
+    if not by.strip() or "@" in by or PLACEHOLDER.search(by):
+        raise Refused("name the reviewer (a name, not an email address or a placeholder)")
+    if not role.strip() or PLACEHOLDER.search(role):
         raise Refused("name the reviewer's role, such as owner or Kenyan advocate")
     if entry.LEVEL == "doctrinal" and not (qualification or "").strip():
         raise Refused(
             f"{entry.id} is doctrinal: state the reviewer's legal qualification for {register.jurisdiction} "
             "(--qualification)"
         )
+    if qualification and PLACEHOLDER.search(qualification):
+        raise Refused("state the reviewer's legal qualification itself, not a placeholder")
     review = {"review_level": entry.LEVEL, "reviewed_by": by.strip(), "reviewer_role": role.strip()}
     if (qualification or "").strip():
         review["reviewer_qualification"] = qualification.strip()
