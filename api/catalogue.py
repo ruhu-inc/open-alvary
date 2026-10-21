@@ -598,7 +598,8 @@ class LegacyCatalogue:
             self.repository.connection, query, text_index.Filters(jurisdictions=scope), bound=MAX_TEXT_WORKS
         )
         if found.state in TEXT_NOT_SEARCHED:
-            return set(), (TEXT_NOT_SEARCHED[found.state],)
+            # Nothing to say where no record has a text that may be published.
+            return set(), (TEXT_NOT_SEARCHED[found.state],) if self.repository.any_potential_text() else ()
         if len(found.rows) > MAX_TEXT_WORKS:
             raise ResultTooLarge("Pilot full-text matching exceeds declared bound")
         return set(found.rows), ()

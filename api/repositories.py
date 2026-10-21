@@ -150,6 +150,11 @@ class LegacyRepository:
         hashes = self._rights.c.payload["approved_content_hashes"].as_string()
         return and_(hashes.is_not(None), hashes.not_in(("[]", "", "null")))
 
+    def any_potential_text(self) -> bool:
+        """Whether any record has an approved text, which may be published."""
+        statement = select(literal(1)).select_from(self._rights).where(self.potential_text()).limit(1)
+        return self.connection.scalar(statement) is not None
+
     def access_predicate(self, open_ids, access):
         if access == "all":
             return None
