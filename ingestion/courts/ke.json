@@ -1,0 +1,662 @@
+{
+  "jurisdiction": "ke",
+  "review_state": "unreviewed",
+  "reviewed_by": null,
+  "reviewed_on": null,
+  "reviewed_sha256": null,
+  "precedent": {
+    "binds": true,
+    "note": "Art. 163(7) binds every court other than the Supreme Court to Supreme Court decisions. The Supreme Court treats the article as the constitutional form of the common-law doctrine of stare decisis. It says the provision is absolute and that judges must stay faithful to precedent (Asanyo, paras 26-28 and 34).",
+    "sources": [
+      "constitution-163-7",
+      "asanyo-2020"
+    ]
+  },
+  "courts": [
+    {
+      "id": "ke-sc",
+      "name": "Supreme Court of Kenya",
+      "kind": "court",
+      "level": "apex",
+      "rank": 1,
+      "valid_from": "2010-08-27",
+      "appeals_to": [],
+      "sources": [
+        "constitution-commencement",
+        "constitution-162-1",
+        "constitution-163-1",
+        "constitution-163-3",
+        "constitution-163-7",
+        "sca-3",
+        "constitution-sch6-21",
+        "senate-2022"
+      ],
+      "note": "Art. 163(1) establishes the court. Art. 162(1) makes it a superior court. Art. 163(3) gives it exclusive original jurisdiction over presidential election disputes and appellate jurisdiction over the Court of Appeal and other courts or tribunals that statute prescribes. SCA s. 3 calls it the court of final judicial authority. valid_from is the date of promulgation, as the brief instructs, but Sixth Schedule s. 21 allowed up to a year to set the court up and gave its jurisdiction to the Court of Appeal until then. The court has said it is not bound by its own decisions but departs from them only in exceptional cases (Senate v CoG, paras 77 and 81)."
+    },
+    {
+      "id": "ke-coa",
+      "name": "Court of Appeal",
+      "kind": "court",
+      "level": "appellate",
+      "rank": 2,
+      "appeals_to": [
+        "ke-sc"
+      ],
+      "sources": [
+        "constitution-162-1",
+        "constitution-164",
+        "coaa-5",
+        "constitution-163-4",
+        "sca-15",
+        "khp-coa-2020"
+      ],
+      "note": "Art. 164(1) establishes the court. Art. 164(3) gives it jurisdiction over appeals from the High Court and from other courts or tribunals that an Act prescribes; CoA (O&A) Act s. 5 refers back to art. 164(3). Appeals to the Supreme Court lie as of right where the Constitution is interpreted or applied, and otherwise on certification of a matter of general public importance (art. 163(4); SCA ss. 15-15B). The court also calls itself the High Court's elder sibling in a hierarchical system (KHP, para 37). It existed before 2010 (see its reported decisions of 1999 and 2009 below), so valid_from is left out."
+    },
+    {
+      "id": "ke-hc",
+      "name": "High Court of Kenya",
+      "kind": "court",
+      "level": "superior",
+      "rank": 3,
+      "appeals_to": [
+        "ke-coa"
+      ],
+      "sources": [
+        "constitution-162-1",
+        "constitution-165",
+        "constitution-165-6",
+        "hcaa-5",
+        "constitution-164-3",
+        "aja-3",
+        "cpa-66",
+        "cpc-379"
+      ],
+      "note": "Art. 165(1) establishes the court. Art. 165(3) gives it unlimited original civil and criminal jurisdiction, except for matters reserved to the Supreme Court and matters for the art. 162(2) courts (art. 165(5)). Art. 165(6) gives it supervisory jurisdiction over subordinate courts but not over superior courts. Appeals lie to the Court of Appeal (art. 164(3)(a); Appellate Jurisdiction Act s. 3(1); CPA s. 66; CPC s. 379). The court existed before 2010, so valid_from is left out."
+    },
+    {
+      "id": "ke-elc",
+      "name": "Environment and Land Court",
+      "kind": "court",
+      "level": "superior",
+      "rank": 3,
+      "valid_from": "2011-08-30",
+      "appeals_to": [
+        "ke-coa"
+      ],
+      "sources": [
+        "constitution-162-2",
+        "elca-4",
+        "elca-13-4",
+        "elca-16"
+      ],
+      "note": "ELC Act s. 4 establishes it under art. 162(2)(b) as a superior court of record with the status of the High Court; the Act commenced on 30 August 2011. Appeals lie to the Court of Appeal (s. 16). It also hears appeals from subordinate courts and local tribunals on matters within its jurisdiction (s. 13(4))."
+    },
+    {
+      "id": "ke-elrc",
+      "name": "Employment and Labour Relations Court",
+      "kind": "court",
+      "level": "superior",
+      "rank": 3,
+      "valid_from": "2011-08-30",
+      "appeals_to": [
+        "ke-coa"
+      ],
+      "sources": [
+        "constitution-162-2",
+        "ica-2011-4",
+        "elrca-4",
+        "elrca-17"
+      ],
+      "note": "Set up under art. 162(2)(a) by Act No. 20 of 2011, which was enacted as the Industrial Court Act, 2011. Its original s. 4 made the Industrial Court a superior court of record with the status of the High Court. Act No. 18 of 2014 renamed it (Kenya Law dates that amendment 8 December 2014). The Act commenced on 30 August 2011. Appeals lie to the Court of Appeal (s. 17(1))."
+    },
+    {
+      "id": "ke-mc",
+      "name": "Magistrates' courts",
+      "kind": "court",
+      "level": "subordinate",
+      "appeals_to": [
+        "ke-hc",
+        "ke-elc",
+        "ke-elrc"
+      ],
+      "sources": [
+        "constitution-162-4",
+        "constitution-169",
+        "mca-5",
+        "mca-9",
+        "cpa-65",
+        "cpc-347",
+        "elca-13-4",
+        "elca-26-5",
+        "elrc-rules-2"
+      ],
+      "note": "Subordinate courts under art. 169(1)(a). MCA s. 5 makes each one subordinate to the High Court. Civil appeals lie to the High Court (CPA s. 65(1)(b)). Criminal appeals from first- and second-class subordinate courts also go to the High Court (CPC s. 347(1)(a); s. 7(1) ties first-class courts to magistrates). In environment and land matters, appeals from designated magistrates go to the ELC (ELC Act ss. 13(4) and 26(5)). The ELRC route rests only on r. 2 of the ELRC (Procedure) Rules 2024, whose definition of an appeal includes one from a subordinate court; the Act's original s. 29(5) route was deleted in 2014. These courts predate 2010, and the MCA 2015 commenced on 2 January 2016, so valid_from is left out."
+    },
+    {
+      "id": "ke-kc",
+      "name": "Kadhis' courts",
+      "kind": "court",
+      "level": "subordinate",
+      "appeals_to": [
+        "ke-hc"
+      ],
+      "sources": [
+        "constitution-169",
+        "constitution-170",
+        "kca-4",
+        "cpa-65",
+        "kc-rules-86"
+      ],
+      "note": "Subordinate courts under arts 169(1)(b) and 170. Their jurisdiction covers questions of Muslim law on personal status, marriage, divorce and inheritance, where all parties are Muslim and submit to it (art. 170(5); KCA s. 5). KCA s. 4(3) makes each one subordinate to the High Court. Appeals lie to the High Court, with the Chief Kadhi or two Kadhis sitting as assessors (CPA s. 65(1)(c); Kadhis' Courts Rules 2020, r. 86(1)). The Act commenced in 1967, so valid_from is left out."
+    },
+    {
+      "id": "ke-cm",
+      "name": "Courts martial",
+      "kind": "court",
+      "level": "subordinate",
+      "appeals_to": [
+        "ke-hc"
+      ],
+      "sources": [
+        "constitution-169",
+        "kdfa-160",
+        "kdfa-186"
+      ],
+      "note": "Subordinate courts under art. 169(1)(c), constituted under KDF Act s. 160. A person convicted, or the DPP, may appeal to the High Court and then to other superior courts (s. 186, as amended by Act No. 44 of 2016)."
+    },
+    {
+      "id": "ke-scc",
+      "name": "Small Claims Court",
+      "kind": "court",
+      "level": "subordinate",
+      "valid_from": "2016-04-21",
+      "appeals_to": [
+        "ke-hc"
+      ],
+      "sources": [
+        "constitution-169",
+        "scca-4",
+        "scca-38"
+      ],
+      "note": "Small Claims Court Act s. 4(1) establishes it as a subordinate court under art. 169(1)(d). Kenya Law records the Act's commencement as 21 April 2016; the date of the court's first sittings is not evidenced. Appeals lie to the High Court on matters of law only, and that appeal is final (s. 38)."
+    },
+    {
+      "id": "ke-tat",
+      "name": "Tax Appeals Tribunal",
+      "kind": "tribunal",
+      "level": "specialised",
+      "valid_from": "2015-04-01",
+      "appeals_to": [
+        "ke-hc"
+      ],
+      "sources": [
+        "tata-3",
+        "tata-32"
+      ],
+      "note": "TAT Act s. 3 establishes it to hear appeals against tax decisions of the Commissioner; the Act commenced on 1 April 2015. Appeals lie to the High Court (s. 32(1))."
+    },
+    {
+      "id": "ke-ppdt",
+      "name": "Political Parties Disputes Tribunal",
+      "kind": "tribunal",
+      "level": "specialised",
+      "valid_from": "2011-11-01",
+      "appeals_to": [
+        "ke-hc"
+      ],
+      "sources": [
+        "ppa-39",
+        "ppa-41"
+      ],
+      "note": "Political Parties Act s. 39(1) establishes it; the Act commenced on 1 November 2011. Appeals lie to the High Court on law and fact, then to the Court of Appeal on law only, and the Court of Appeal's decision is final (s. 41(2))."
+    },
+    {
+      "id": "ke-net",
+      "name": "National Environment Tribunal",
+      "kind": "tribunal",
+      "level": "specialised",
+      "valid_from": "2000-01-14",
+      "appeals_to": [
+        "ke-elc"
+      ],
+      "sources": [
+        "emca-125",
+        "emca-130"
+      ],
+      "note": "EMCA s. 125(1) establishes it; the Act commenced on 14 January 2000. Appeals lie to the ELC within 30 days, and the ELC's decision is final (s. 130(1) and (5)). The ELC route as it now reads comes from 2015 amendments (Act No. 5 of 2015 and Act No. 25 of 2015)."
+    }
+  ],
+  "relations": [
+    {
+      "court": "ke-sc",
+      "bound": null,
+      "relation": "binding",
+      "sources": [
+        "constitution-163-7",
+        "asanyo-2020"
+      ],
+      "note": "Art. 163(7): all courts other than the Supreme Court are bound by its decisions. The Supreme Court calls the provision absolute (Asanyo, para 26)."
+    },
+    {
+      "court": "ke-coa",
+      "bound": "ke-hc",
+      "relation": "binding",
+      "sources": [
+        "khp-coa-2020",
+        "khp-sc-2022",
+        "ayah-2009",
+        "kibaki-1999"
+      ],
+      "note": "The Court of Appeal says its decisions bind the High Court (KHP, paras 38-39, quoted by the Supreme Court in [2022] KESC 62, para 49). It says the High Court has no discretion to refuse to follow them (Ayah, paras 25-26), and that the High Court must follow them unless it can distinguish them (Kibaki v Moi, para 13)."
+    },
+    {
+      "court": "ke-coa",
+      "bound": "ke-elc",
+      "relation": "binding",
+      "sources": [
+        "khp-coa-2020",
+        "constitution-162-2",
+        "elca-4"
+      ],
+      "note": "KHP, para 39: the Court of Appeal's decisions bind the High Court and \"all courts equal and inferior to it\". The ELC is a court with the status of the High Court (art. 162(2)(b); ELC Act s. 4(2)). The ELC is not named in the judgment."
+    },
+    {
+      "court": "ke-coa",
+      "bound": "ke-elrc",
+      "relation": "binding",
+      "sources": [
+        "khp-coa-2020",
+        "constitution-162-2",
+        "ica-2011-4"
+      ],
+      "note": "Same KHP passage (para 39): the Court of Appeal binds courts equal to the High Court. The ELRC has High Court status under art. 162(2)(a) and the original s. 4(2) of Act No. 20 of 2011. The ELRC is not named in the judgment."
+    },
+    {
+      "court": "ke-coa",
+      "bound": "ke-mc",
+      "relation": "binding",
+      "sources": [
+        "khp-coa-2020",
+        "mca-5",
+        "kagondu-2019"
+      ],
+      "note": "KHP, para 39: the Court of Appeal binds courts inferior to the High Court, and MCA s. 5 makes magistrates' courts subordinate to the High Court. Kagondu, para 17 (High Court) also says subordinate courts are bound by decisions of all superior courts."
+    },
+    {
+      "court": "ke-coa",
+      "bound": "ke-kc",
+      "relation": "binding",
+      "sources": [
+        "khp-coa-2020",
+        "kca-4"
+      ],
+      "note": "KHP, para 39: the Court of Appeal binds courts inferior to the High Court, and KCA s. 4(3) makes Kadhis' courts subordinate to the High Court. Kadhis' courts are not named in the judgment."
+    },
+    {
+      "court": "ke-hc",
+      "bound": "ke-mc",
+      "relation": "binding",
+      "sources": [
+        "mulinge-2009",
+        "kagondu-2019"
+      ],
+      "note": "High Court decisions say that, under stare decisis, magistrates' courts must follow and apply High Court decisions (Mulinge, 2009 ruling). They also say subordinate courts are bound by High Court decisions (Kagondu, para 17)."
+    },
+    {
+      "court": "ke-hc",
+      "bound": "ke-kc",
+      "relation": "binding",
+      "sources": [
+        "brek-2026"
+      ],
+      "note": "The Court of Appeal held that a Kadhi's court was bound by a decision of the High Court, the superior court, and called this the essence of stare decisis (Brek, paras 33 and 41). The High Court decision concerned the same estate dispute."
+    },
+    {
+      "court": "ke-hc",
+      "bound": "ke-sc",
+      "relation": "persuasive",
+      "sources": [
+        "rawal-2016"
+      ],
+      "note": "Mutunga CJ's individual ruling within the Supreme Court's consolidated order says a High Court decision is persuasive and does not bind the Supreme Court (para 48). This is a single judge's ruling, not a decision of the full bench."
+    }
+  ],
+  "sources": [
+    {
+      "id": "constitution-commencement",
+      "title": "Constitution of Kenya, 2010 (Kenya Law page: commenced 27 August 2010 by promulgation; Kenya Gazette Vol. CXII No. 88, 3 September 2010)",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03",
+      "pinpoint": "commencement note"
+    },
+    {
+      "id": "constitution-162-1",
+      "title": "Constitution of Kenya, 2010",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03",
+      "pinpoint": "art. 162(1)"
+    },
+    {
+      "id": "constitution-162-2",
+      "title": "Constitution of Kenya, 2010",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03",
+      "pinpoint": "art. 162(2)-(3)"
+    },
+    {
+      "id": "constitution-162-4",
+      "title": "Constitution of Kenya, 2010",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03",
+      "pinpoint": "art. 162(4)"
+    },
+    {
+      "id": "constitution-163-1",
+      "title": "Constitution of Kenya, 2010",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03",
+      "pinpoint": "art. 163(1)"
+    },
+    {
+      "id": "constitution-163-3",
+      "title": "Constitution of Kenya, 2010",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03",
+      "pinpoint": "art. 163(3)"
+    },
+    {
+      "id": "constitution-163-4",
+      "title": "Constitution of Kenya, 2010",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03",
+      "pinpoint": "art. 163(4)-(5)"
+    },
+    {
+      "id": "constitution-163-7",
+      "title": "Constitution of Kenya, 2010",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03",
+      "pinpoint": "art. 163(7)"
+    },
+    {
+      "id": "constitution-164",
+      "title": "Constitution of Kenya, 2010",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03",
+      "pinpoint": "art. 164(1), (3)"
+    },
+    {
+      "id": "constitution-164-3",
+      "title": "Constitution of Kenya, 2010",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03",
+      "pinpoint": "art. 164(3)(a)"
+    },
+    {
+      "id": "constitution-165",
+      "title": "Constitution of Kenya, 2010",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03",
+      "pinpoint": "art. 165(1), (3), (5)"
+    },
+    {
+      "id": "constitution-165-6",
+      "title": "Constitution of Kenya, 2010",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03",
+      "pinpoint": "art. 165(6)-(7)"
+    },
+    {
+      "id": "constitution-169",
+      "title": "Constitution of Kenya, 2010",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03",
+      "pinpoint": "art. 169(1)-(2)"
+    },
+    {
+      "id": "constitution-170",
+      "title": "Constitution of Kenya, 2010",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03",
+      "pinpoint": "art. 170(3)-(5)"
+    },
+    {
+      "id": "constitution-sch6-21",
+      "title": "Constitution of Kenya, 2010, Sixth Schedule (transitional provisions)",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03",
+      "pinpoint": "Sixth Schedule, s. 21"
+    },
+    {
+      "id": "sca-3",
+      "title": "Supreme Court Act (No. 7 of 2011), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2011/7/eng@2022-12-31",
+      "pinpoint": "s. 3"
+    },
+    {
+      "id": "sca-15",
+      "title": "Supreme Court Act (No. 7 of 2011), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2011/7/eng@2022-12-31",
+      "pinpoint": "ss. 15, 15A, 15B (15A-15B inserted by Act No. 26 of 2022)"
+    },
+    {
+      "id": "coaa-5",
+      "title": "Court of Appeal (Organization and Administration) Act (No. 28 of 2015), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2015/28/eng@2022-12-31",
+      "pinpoint": "s. 5"
+    },
+    {
+      "id": "aja-3",
+      "title": "Appellate Jurisdiction Act (Cap. 9), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/1977/15/eng@2022-12-31",
+      "pinpoint": "s. 3(1)"
+    },
+    {
+      "id": "hcaa-5",
+      "title": "High Court (Organization and Administration) Act (No. 27 of 2015), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2015/27/eng@2022-12-31",
+      "pinpoint": "s. 5"
+    },
+    {
+      "id": "mca-5",
+      "title": "Magistrates' Courts Act (No. 26 of 2015), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2015/26/eng@2022-12-31",
+      "pinpoint": "s. 5"
+    },
+    {
+      "id": "mca-9",
+      "title": "Magistrates' Courts Act (No. 26 of 2015), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2015/26/eng@2022-12-31",
+      "pinpoint": "s. 9"
+    },
+    {
+      "id": "cpa-65",
+      "title": "Civil Procedure Act (Cap. 21), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/1924/3/eng@2022-12-31",
+      "pinpoint": "s. 65(1)(b)-(c)"
+    },
+    {
+      "id": "cpa-66",
+      "title": "Civil Procedure Act (Cap. 21), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/1924/3/eng@2022-12-31",
+      "pinpoint": "s. 66"
+    },
+    {
+      "id": "cpc-347",
+      "title": "Criminal Procedure Code (Cap. 75), version of 11 December 2023",
+      "url": "https://new.kenyalaw.org/akn/ke/act/1930/11/eng@2023-12-11",
+      "pinpoint": "ss. 7(1), 347(1)(a)"
+    },
+    {
+      "id": "cpc-379",
+      "title": "Criminal Procedure Code (Cap. 75), version of 11 December 2023",
+      "url": "https://new.kenyalaw.org/akn/ke/act/1930/11/eng@2023-12-11",
+      "pinpoint": "s. 379(1)"
+    },
+    {
+      "id": "elca-4",
+      "title": "Environment and Land Court Act (No. 19 of 2011), as revised to 31 December 2022 (commenced 30 August 2011)",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2011/19/eng@2022-12-31",
+      "pinpoint": "s. 4(1)-(2); commencement note"
+    },
+    {
+      "id": "elca-13-4",
+      "title": "Environment and Land Court Act (No. 19 of 2011), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2011/19/eng@2022-12-31",
+      "pinpoint": "s. 13(1), (4)"
+    },
+    {
+      "id": "elca-16",
+      "title": "Environment and Land Court Act (No. 19 of 2011), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2011/19/eng@2022-12-31",
+      "pinpoint": "s. 16"
+    },
+    {
+      "id": "elca-26-5",
+      "title": "Environment and Land Court Act (No. 19 of 2011), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2011/19/eng@2022-12-31",
+      "pinpoint": "s. 26(3)-(5)"
+    },
+    {
+      "id": "ica-2011-4",
+      "title": "Industrial Court Act, 2011 (No. 20 of 2011), original enactment as published 9 September 2011 (now the Employment and Labour Relations Court Act)",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2011/20/eng@2011-09-09/publication",
+      "pinpoint": "ss. 1, 4(1)-(2)"
+    },
+    {
+      "id": "elrca-4",
+      "title": "Employment and Labour Relations Court Act (No. 20 of 2011), as revised to 31 December 2022 (commenced 30 August 2011)",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2011/20/eng@2022-12-31",
+      "pinpoint": "ss. 1, 4 (as amended by Act No. 18 of 2014); commencement note"
+    },
+    {
+      "id": "elrca-17",
+      "title": "Employment and Labour Relations Court Act (No. 20 of 2011), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2011/20/eng@2022-12-31",
+      "pinpoint": "s. 17(1)"
+    },
+    {
+      "id": "elrc-rules-2",
+      "title": "Employment and Labour Relations Court (Procedure) Rules, 2024 (L.N. 133 of 2024), version of 25 April 2025",
+      "url": "https://new.kenyalaw.org/akn/ke/act/ln/2024/133/eng@2025-04-25",
+      "pinpoint": "r. 2 (definition of \"appeal\")"
+    },
+    {
+      "id": "kca-4",
+      "title": "Kadhis' Courts Act (Cap. 11), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/1967/14/eng@2022-12-31",
+      "pinpoint": "ss. 4(1), 4(3), 5"
+    },
+    {
+      "id": "kc-rules-86",
+      "title": "Kadhis' Courts (Procedure and Practice) Rules, 2020 (L.N. 203 of 2020), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/ln/2020/203/eng@2022-12-31",
+      "pinpoint": "r. 86(1)"
+    },
+    {
+      "id": "kdfa-160",
+      "title": "Kenya Defence Forces Act (No. 25 of 2012), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2012/25/eng@2022-12-31",
+      "pinpoint": "s. 160(1)"
+    },
+    {
+      "id": "kdfa-186",
+      "title": "Kenya Defence Forces Act (No. 25 of 2012), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2012/25/eng@2022-12-31",
+      "pinpoint": "s. 186"
+    },
+    {
+      "id": "scca-4",
+      "title": "Small Claims Court Act (No. 2 of 2016), as revised to 31 December 2022 (commenced 21 April 2016)",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2016/2/eng@2022-12-31",
+      "pinpoint": "s. 4(1); commencement note"
+    },
+    {
+      "id": "scca-38",
+      "title": "Small Claims Court Act (No. 2 of 2016), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2016/2/eng@2022-12-31",
+      "pinpoint": "s. 38"
+    },
+    {
+      "id": "tata-3",
+      "title": "Tax Appeals Tribunal Act (Cap. 469A), version of 1 July 2023 (commenced 1 April 2015)",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2013/40/eng@2023-07-01",
+      "pinpoint": "s. 3; commencement note"
+    },
+    {
+      "id": "tata-32",
+      "title": "Tax Appeals Tribunal Act (Cap. 469A), version of 1 July 2023",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2013/40/eng@2023-07-01",
+      "pinpoint": "s. 32(1)"
+    },
+    {
+      "id": "ppa-39",
+      "title": "Political Parties Act (No. 11 of 2011), as revised to 31 December 2022 (commenced 1 November 2011)",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2011/11/eng@2022-12-31",
+      "pinpoint": "s. 39(1); commencement note"
+    },
+    {
+      "id": "ppa-41",
+      "title": "Political Parties Act (No. 11 of 2011), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/2011/11/eng@2022-12-31",
+      "pinpoint": "s. 41(2)"
+    },
+    {
+      "id": "emca-125",
+      "title": "Environmental Management and Co-ordination Act (Cap. 387), as revised to 31 December 2022 (commenced 14 January 2000)",
+      "url": "https://new.kenyalaw.org/akn/ke/act/1999/8/eng@2022-12-31",
+      "pinpoint": "s. 125(1); commencement note"
+    },
+    {
+      "id": "emca-130",
+      "title": "Environmental Management and Co-ordination Act (Cap. 387), as revised to 31 December 2022",
+      "url": "https://new.kenyalaw.org/akn/ke/act/1999/8/eng@2022-12-31",
+      "pinpoint": "s. 130(1), (5)"
+    },
+    {
+      "id": "asanyo-2020",
+      "title": "Asanyo & 3 others v Attorney-General (Petition 7 of 2019) [2020] KESC 62 (KLR) (10 January 2020)",
+      "url": "https://new.kenyalaw.org/akn/ke/judgment/kesc/2020/62/eng@2020-01-10",
+      "pinpoint": "paras 26-28, 34"
+    },
+    {
+      "id": "senate-2022",
+      "title": "Senate & 2 others v Council of County Governors & 8 others (Petition 25 of 2019) [2022] KESC 7 (KLR) (17 February 2022)",
+      "url": "https://new.kenyalaw.org/akn/ke/judgment/kesc/2022/7/eng@2022-02-17",
+      "pinpoint": "paras 76-77, 81"
+    },
+    {
+      "id": "khp-coa-2020",
+      "title": "Kenya Hotel Properties Limited v Attorney General & 5 others (Civil Appeal 404 of 2018) [2020] KECA 427 (KLR) (7 August 2020)",
+      "url": "https://new.kenyalaw.org/akn/ke/judgment/keca/2020/427/eng@2020-08-07",
+      "pinpoint": "paras 37-39"
+    },
+    {
+      "id": "khp-sc-2022",
+      "title": "Kenya Hotel Properties Ltd v Attorney General & 5 others (Petition 16 of 2020) [2022] KESC 62 (KLR) (7 October 2022)",
+      "url": "https://new.kenyalaw.org/akn/ke/judgment/kesc/2022/62/eng@2022-10-07",
+      "pinpoint": "para 49"
+    },
+    {
+      "id": "ayah-2009",
+      "title": "National Bank of Kenya Ltd v Ayah (Civil Appeal 119 of 2002) [2009] KECA 467 (KLR) (4 December 2009)",
+      "url": "https://new.kenyalaw.org/akn/ke/judgment/keca/2009/467/eng@2009-12-04",
+      "pinpoint": "paras 25-26"
+    },
+    {
+      "id": "kibaki-1999",
+      "title": "Kibaki v Moi & 2 others (Civil Appeal 172 & 173 of 1999 (Consolidated)) [1999] KECA 158 (KLR) (10 December 1999)",
+      "url": "https://new.kenyalaw.org/akn/ke/judgment/keca/1999/158/eng@1999-12-10",
+      "pinpoint": "paras 13, 17"
+    },
+    {
+      "id": "mulinge-2009",
+      "title": "Beth Wanjiru Mulinge v James Mutonga Mulinge (High Court at Mombasa, Civil Suit 542 of 2000) [2009] KEHC 1675 (KLR) (1 October 2009)",
+      "url": "https://new.kenyalaw.org/akn/ke/judgment/kehc/2009/1675/eng@2009-10-01",
+      "pinpoint": "ruling, passage on precedent and stare decisis following the quoted Taxing Master's ruling (paragraphs unnumbered)"
+    },
+    {
+      "id": "kagondu-2019",
+      "title": "Elijah Kagondu v Elias Kimani Gitau & 2 others [2019] KEHC 1071 (KLR) (14 November 2019)",
+      "url": "https://new.kenyalaw.org/akn/ke/judgment/kehc/2019/1071/eng@2019-11-14",
+      "pinpoint": "para 17"
+    },
+    {
+      "id": "brek-2026",
+      "title": "Brek v Principal Kadhi - Malindi & 2 others (Civil Appeal E051 of 2022) [2026] KECA 55 (KLR) (30 January 2026)",
+      "url": "https://new.kenyalaw.org/akn/ke/judgment/keca/2026/55/eng@2026-01-30",
+      "pinpoint": "paras 31-33, 41"
+    },
+    {
+      "id": "rawal-2016",
+      "title": "Rawal & 2 others v Judicial Service Commission & 2 others (Civil Application 11 & 12 of 2016 (Consolidated)) [2016] KESC 1 (KLR) (14 June 2016)",
+      "url": "https://new.kenyalaw.org/akn/ke/judgment/kesc/2016/1/eng@2016-06-14",
+      "pinpoint": "Ruling of Mutunga CJ & P, para 48"
+    }
+  ]
+}
