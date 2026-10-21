@@ -232,7 +232,11 @@ def test_keys_need_access_a_second_factor_and_a_fresh_sign_in(console):
     with accounts.engine.begin() as conn:
         table = accounts.namespace.qualified(conn, "accounts", "console_session")
         conn.execute(text(f"UPDATE {table} SET authenticated_at = authenticated_at - interval '11 minutes'"))
-    stale = browser.post(path, json={"name": "second"}, headers=headers)
+    # Creating a key needs no fresh sign-in (the owner, 2026-10-21): the second factor of this session
+    # is enough. A sensitive action, such as the organisation's export, still asks.
+    later = browser.post(path, json={"name": "second"}, headers=headers)
+    assert later.status_code == 201
+    stale = browser.post(f"/api/v1/organisations/{organisation}/export", headers=headers)
     assert stale.status_code == 401 and stale.json()["error"]["code"] == "reauthentication_required"
     # Revoking only removes access: no fresh sign-in needed.
     assert browser.post(f"{path}/{created.json()['id']}/revoke", headers=headers).status_code == 204

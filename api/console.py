@@ -474,13 +474,17 @@ def create_console_app(
                 raise AccountError("csrf_failed", 403, "Reload the page and try again.")
         return session
 
-    def fresh(session: dict, *, second_factor: bool) -> None:
-        """MAC-08: a sign-in within 10 minutes, and a second factor too where the role requires it."""
+    def fresh(session: dict, *, second_factor: bool, recent: bool = True) -> None:
+        """MAC-08: a sign-in within 10 minutes, and a second factor too where the role requires it.
+        recent=False, for creating and rotating keys (the owner, 2026-10-21): no fresh sign-in, and a
+        second factor once in the session where the role requires one. A key only reads the published
+        corpus, is listed in the console and is revoked there."""
         if second_factor and (
-            session["second_factor_at"] is None or session["now"] - session["second_factor_at"] > FRESH
+            session["second_factor_at"] is None
+            or (recent and session["now"] - session["second_factor_at"] > FRESH)
         ):
             raise AccountError("second_factor_required", 403, "Confirm with your second factor to continue.")
-        if session["now"] - session["authenticated_at"] > FRESH:
+        if recent and session["now"] - session["authenticated_at"] > FRESH:
             raise AccountError("reauthentication_required", 401, "Sign in again to confirm it's you.")
 
     def needs_second_factor(person_id: str, organisation_id: str) -> bool:
@@ -725,7 +729,7 @@ def create_console_app(
     async def create_key(request: Request, organisation_id: str):
         session = guard(request, write=True)
         data = await body(request)
-        fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id))
+        fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id), recent=False)
         created = accounts.create_key(
             session["person_id"],
             organisation_id,
@@ -740,7 +744,7 @@ def create_console_app(
     async def rotate_key(request: Request, organisation_id: str, key_id: str):
         session = guard(request, write=True)
         data = await body(request)
-        fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id))
+        fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id), recent=False)
         created = accounts.rotate_key(
             session["person_id"],
             organisation_id,
