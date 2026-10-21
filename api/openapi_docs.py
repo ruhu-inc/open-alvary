@@ -250,6 +250,12 @@ OPERATIONS: dict[str, dict] = {
             "year_to": "Only laws made in this year or earlier.",
             "source_id": "Only this record's texts.",
             "version_id": "Only this text version.",
+            "scope": "`applicable`, with one `jurisdiction`: also the law that binds there on `as_of` (today without it): the "
+            "instruments of the African Union and regional bodies it belonged to on that date, from reviewed "
+            "memberships only, and the treaties it had ratified or acceded to. Records that do not bind there "
+            "are left out and counted; those whose relation is unknown are kept. Each passage says how it "
+            "relates to the jurisdiction (`applicability`) and the answer states the widening. Without it, "
+            "nothing is added.",
             "limit": "Passages per page, 1 to 100. Default 25.",
             "cursor": "The `next_cursor` of the previous page, to continue it.",
         },
@@ -266,7 +272,8 @@ OPERATIONS: dict[str, dict] = {
         "on, and why it ranks where it does. A query that cites a part, names a law or asks what a term "
         "means is routed to that first (`query.routes`). The same request over the same revisions gives "
         "the same answer. Nothing is generated: only published texts' words. Without `jurisdiction`, it "
-        "covers your plan's countries.",
+        "covers your plan's countries. With `scope=applicable`, it also covers the regional and treaty law "
+        "that binds in the one jurisdiction asked about, and says how each unit relates to it.",
         "parameters": {
             "q": "The question or words, 1 to 2,000 characters. It may be a citation (`NDPA s. 24(1)(a)`, "
             "`section 24 of the Nigeria Data Protection Act`, `Part V of the NDPA`), a page of one law "
@@ -282,8 +289,15 @@ OPERATIONS: dict[str, dict] = {
             "it. Without it, nothing is assumed about the date.",
             "year_from": "Only laws made in this year or later.",
             "year_to": "Only laws made in this year or earlier.",
-            "source_id": "Only this record's texts.",
+            "source_id": "Only this record's texts. With `scope=applicable`, this record is answered whatever "
+            "its relation to the jurisdiction.",
             "version_id": "Only this text version.",
+            "scope": "`applicable`, with one `jurisdiction`: also the law that binds there on `as_of` (today without it): the "
+            "instruments of the African Union and regional bodies it belonged to on that date, from reviewed "
+            "memberships only, and the treaties it had ratified or acceded to. Records that do not bind there "
+            "are left out and counted; those whose relation is unknown are kept. Each unit says how it "
+            "relates to the jurisdiction (`applicability`) and the answer states the widening. Without it, "
+            "nothing is added.",
             "max_units": "How many evidence units, 1 to 25. Default 10.",
             "max_evidence_bytes": "The most bytes of words (evidence and definitions, each counted once), "
             "4,096 to 262,144. Default 49,152. A unit that does not fit is an excerpt, then units stop.",
@@ -300,10 +314,12 @@ OPERATIONS: dict[str, dict] = {
         "description": "Before showing an answer that cites the corpus: for each cited part (up to 100), "
         "whether it is still published with the same words, whether a newer text of the same edition "
         "exists (with the same part's anchor there and whether its words changed), and whether it was in "
-        "force on a date. A part that is not public now and one that never was get the same answer, "
-        "`unavailable`.",
+        "force on a date. Given a `jurisdiction`, also whether the record binds there on that date "
+        "(`applicability`): a regional instrument through the country's reviewed membership and the "
+        "instrument's legal effect, a treaty through the country's own ratification or accession. A part that "
+        "is not public now and one that never was get the same answer, `unavailable`.",
         "body": "The parts to check: `items`, each an `anchor_id`, or a `version_id` with a `locator`, "
-        "with the `span_hash` you hold and an optional `as_of` date.",
+        "with the `span_hash` you hold, an optional `as_of` date and an optional `jurisdiction`.",
         "errors": BAD,
     },
     "/citations/{citation}": {
@@ -808,13 +824,15 @@ FIELDS: dict[str, dict[str, str]] = {
         "catalogue": "Records that match but have no published text: identity and official link only.",
         "next_steps": "Hints for a follow-up request, such as an ambiguous citation's candidates.",
         "bytes": "The words sent: unique bytes (each span once), bytes as transmitted, and the budget.",
+        "applicability": "With `scope=applicable`: the widening applied, and what it rests on and left out.",
     },
     "EvidenceQuery": {
         "text": "The question, with spacing normalised.",
         "routes": "The routes taken, in order: `link` (the query is an Open Alvary or official address), "
         "`citation`, `page` (a page of one law's official file), `instrument`, `definition`, `topic`, and the "
         "modifiers `historical` and `comparative`.",
-        "filters": "The filters applied, as given or as your plan set them.",
+        "filters": "The filters applied, as given or as your plan set them; `scope` when asked for (the "
+        "widening it applied is in `applicability`).",
         "as_of": "The date asked about, when given.",
     },
     "EvidenceRevisions": {
@@ -888,6 +906,7 @@ FIELDS: dict[str, dict[str, str]] = {
         "its transposition deadline, as its record states them.",
         "treaty": "For a treaty: who adopted it, its depositary, when it entered into force and its authentic "
         "languages. Its parties are on the record (Get a record) and its anchors.",
+        "applicability": "With `scope=applicable`: how the record relates to the jurisdiction asked about, and what that rests on.",
         "ranking": "Why the unit ranks where it does.",
         "context": "What travels with the unit and is never part of its words.",
         "warnings": "Notes on the unit, such as an excerpt or a newer text.",
@@ -1126,6 +1145,8 @@ FIELDS: dict[str, dict[str, str]] = {
         "locator": "With `version_id`: the part's locator.",
         "span_hash": "The `span_hash` you hold; a different one answers `span_mismatch`.",
         "as_of": "The date to assess currentness at; today when absent.",
+        "jurisdiction": "A country, or a place within one, such as `sn`: the answer then says whether the record "
+        "binds there on `as_of` (`applicability`).",
     },
     "CheckPage": {
         "schema_version": "`oa-check-1`.",
@@ -1143,6 +1164,8 @@ FIELDS: dict[str, dict[str, str]] = {
         "newer_anchor_id": "The same locator's part in the newer text, when it has one.",
         "same_words": "Whether the part's words are identical in the newer text.",
         "currentness": "Whether the part (or, for `newer_version`, the newer text's part) was in force.",
+        "applicability": "With a `jurisdiction`: whether the record binds there on the date, and what that rests "
+        "on.",
     },
     "SourceView": {
         "id": "The record's ID, such as `ng-foi-act-2011`. It doesn't change.",
@@ -1451,6 +1474,7 @@ FIELDS: dict[str, dict[str, str]] = {
         "ranking": "The ranking used: `oa-rank-1`, as the search guide describes.",
         "index_built_at": "When the index was built.",
         "notices": "Anything that limits these results, in sentences.",
+        "applicability": "With `scope=applicable`: the widening applied, and what it rests on and left out.",
     },
     "TextHit": {
         "anchor_id": "The part the passage is in: `/anchors/{anchor_id}` gives it whole.",
@@ -1484,6 +1508,7 @@ FIELDS: dict[str, dict[str, str]] = {
         "licence": "The terms the text is published under.",
         "attribution_required": "Whether quoting it must credit the source.",
         "attribution_text": "The credit to give, when one is required.",
+        "applicability": "With `scope=applicable`: how the record relates to the jurisdiction asked about, and what that rests on.",
     },
     "SearchCoverage": {
         "records_in_scope": "Public records in the search's scope.",
@@ -1568,6 +1593,43 @@ FIELDS: dict[str, dict[str, str]] = {
         "denounced": "When its denunciation or withdrawal took effect.",
         "reservations": "Its reservations, as recorded.",
         "domesticated_by": "Acts of that state that a checked link records as domesticating the treaty.",
+    },
+    "MembershipBasis": {
+        "id": "The reviewed membership, such as `sn:aa-ecowas:1`; Get a jurisdiction gives its dates and evidence.",
+        "body_id": "The body.",
+        "held": "Whether the jurisdiction was a member on the date: `held`, `not_held`, or `unknown` when the "
+        "date falls in an uncertain window of the membership's dates.",
+    },
+    "Applicability": {
+        "jurisdiction_id": "The jurisdiction asked about.",
+        "as_of": "The date it was assessed for.",
+        "relation": "`national` (its own law); `regional_direct`, `regional_requires_transposition` or "
+        "`regional_binding_on_addressees` (an instrument of a body it belonged to on the date, by its legal "
+        "effect); `treaty_in_force_for_state` or `treaty_not_in_force_for_state` (by its own ratification or "
+        "accession, never by membership of a body); `non_binding`; `comparative` (another jurisdiction's law, "
+        "an instrument addressed to other states, or of a body it was not a member of on the date); or "
+        "`unknown` (the membership, legal effect or ratification is not reviewed, or its date cannot be "
+        "compared).",
+        "binds": "`bound`, `not_bound` or `unknown`. Whether the text was in force is `currentness`.",
+        "memberships": "The reviewed memberships it rests on.",
+        "regional": "The instrument's legal effect it rests on.",
+        "party": "The state's entry in the treaty's party list it rests on, with its domesticating acts.",
+        "entered_into_force": "When the treaty entered into force, when recorded.",
+        "transposed_by": "For a directive: the jurisdiction's acts that a checked link records as transposing it.",
+        "reasons": "Why, in sentences.",
+    },
+    "ApplicableScope": {
+        "jurisdiction_id": "The jurisdiction whose applicable law was asked for.",
+        "as_of": "The date memberships and treaties were assessed for.",
+        "date_basis": "`as_of` (the date asked) or `today` (none was given; texts were not limited by date).",
+        "membership": "`reviewed`, or `unknown` when no membership of the jurisdiction is reviewed yet (no "
+        "body's law was added, which never means it belongs to none).",
+        "bodies": "Each body it has a reviewed membership of, with whether it held on the date. Only the law of "
+        "bodies `held` was added.",
+        "admitted": "How many records of other jurisdictions were added.",
+        "left_out": "How many records of those bodies, or treaties naming the jurisdiction, were left out "
+        "because they do not bind there, by relation.",
+        "notices": "What the widening covered and did not, in sentences.",
     },
 }
 

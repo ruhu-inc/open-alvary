@@ -1,7 +1,9 @@
 """The check operation (RSV-08): before an answer that cites Open Alvary leaves a client, it confirms
 each cited part is still public with the same bytes, says when a newer text of the same expression
-exists (with the same locator's anchor there), and gives the part's currentness at a date. A part that
-is not public now and one that never was are the same answer: unavailable (DAT-06)."""
+exists (with the same locator's anchor there), and gives the part's currentness at a date; asked with a
+jurisdiction, also whether the record binds there on that date (api.applicable: bound, not_bound or
+unknown, with its basis). A part that is not public now and one that never was are the same answer:
+unavailable (DAT-06)."""
 
 import hashlib
 from datetime import UTC, date, datetime
@@ -20,6 +22,7 @@ class Checker:
         self.jurisdictions: set[str] = set()  # of the parts found, for the plan's admission
         self.served: set[tuple[str, str]] = set()  # (version, content hash) of every text read
         self.events = Events(service.repository.connection)
+        self._labellers: dict[tuple[str, date], object] = {}
 
     def _structure(self, version) -> list[NodeViewRecord]:
         if version.id not in self._nodes:
@@ -41,6 +44,15 @@ class Checker:
             return None
         node = next((n for n in self._structure(version) if n.locator == item.locator), None)
         return (version, source, node) if node is not None else None
+
+    def _applicability(self, item: CheckItem, source):
+        """Whether the record binds in the item's jurisdiction on its date (today without one)."""
+        if item.jurisdiction is None:
+            return None
+        key = (item.jurisdiction, item.as_of or self.today)
+        if key not in self._labellers:
+            self._labellers[key] = self.service.labeller(*key)
+        return self._labellers[key].label(source)
 
     def _newest(self, version, source) -> object:
         """The latest public text of the same expression that descends from ``version`` (by
@@ -84,9 +96,14 @@ class Checker:
             currentness = self.events.currentness(
                 source, version, node.locator, within, item.as_of, self.today
             )
+            applicability = self._applicability(item, source)
             newest = self._newest(version, source)
             if newest.id == version.id:
-                results.append(CheckResult(result="unchanged", currentness=currentness, **base))
+                results.append(
+                    CheckResult(
+                        result="unchanged", currentness=currentness, applicability=applicability, **base
+                    )
+                )
                 continue
             there = next((n for n in self._structure(newest) if n.locator == node.locator), None)
             newer = newest.canonical_text.encode()
@@ -99,6 +116,7 @@ class Checker:
                     currentness=self.events.currentness(
                         source, newest, node.locator, within, item.as_of, self.today
                     ),
+                    applicability=applicability,
                     **base,
                 )
             )

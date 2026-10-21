@@ -3,6 +3,7 @@
 import base64
 import hashlib
 from collections import Counter
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from functools import cache
 from typing import Protocol
@@ -40,6 +41,7 @@ from schema.public import (
     JurisdictionView,
     LanguageRuleView,
     LinkedAct,
+    MembershipBasis,
     MembershipList,
     MembershipView,
     NodeViewRecord,
@@ -90,6 +92,36 @@ def membership_list(
         ended=tuple(m for m in mine if m.valid_to is not None and m.valid_to < as_of),
         notice=MEMBERSHIP_NOTICE["reviewed"],
     )
+
+
+def _held_on(membership: MembershipView, day: date) -> bool | None:
+    """Whether a reviewed membership held on a day: True, False, or None when the day falls inside an
+    uncertain window of its dates (none yet: its dates are exact days, inclusive)."""
+    return membership.valid_from <= day and (membership.valid_to is None or day <= membership.valid_to)
+
+
+def bodies_on(
+    held: list[MembershipView], member_id: str, day: date
+) -> dict[str, tuple[MembershipBasis, ...]]:
+    """The bodies a jurisdiction has a reviewed membership of, each with whether it was a member on ``day``
+    and the memberships that rests on: ``held`` (the membership that held), ``unknown`` (the day falls in an
+    uncertain window of one) or ``not_held`` (none held: every one of them). A body with no reviewed
+    membership is absent, which is unknown, never "not a member". Applicable law reads membership dates
+    here only (api.applicable). A suspension from participation never ends membership: only membership
+    rows count."""
+    rows: dict[str, list[tuple[MembershipView, bool | None]]] = {}
+    for m in held:
+        if m.member_id == member_id and getattr(m, "kind", "member_of") == "member_of":
+            rows.setdefault(m.body_id, []).append((m, _held_on(m, day)))
+    found = {}
+    for body, mine in sorted(rows.items()):
+        state, relied = "not_held", [m for m, _ in mine]
+        if any(on is True for _, on in mine):
+            state, relied = "held", [m for m, on in mine if on is True]
+        elif any(on is None for _, on in mine):
+            state, relied = "unknown", [m for m, on in mine if on is None]
+        found[body] = tuple(MembershipBasis(id=m.id, body_id=body, held=state) for m in relied)
+    return found
 
 
 def _cursor(offset: int, kind: str = "edges") -> str:
@@ -355,6 +387,43 @@ class LegacyCatalogue:
                 if other in public
             )  # fmt: skip
         return self._linked[(source_id, kind)]
+
+    def labeller(self, jurisdiction: str, as_of: date) -> applicable.Labeller:
+        """Records' relation to a country's law on a date (api.applicable), from its reviewed memberships."""
+        if country(jurisdiction) is None:
+            raise InvalidSearch(
+                f"Applicable law is the law of a country or a place within one; {jurisdiction} is the "
+                "continent or a regional body."
+            )
+        return applicable.Labeller(
+            jurisdiction, as_of, bodies_on(self.memberships(jurisdiction), jurisdiction, as_of), self._acts
+        )
+
+    def applicable_scope(
+        self, jurisdiction: str, as_of: date | None, *, named: str | None = None
+    ) -> applicable.Scope:
+        """A search's applicable-law scope (scope=applicable): the jurisdiction's own law, and the public
+        records of the bodies it belonged to on the date (reviewed memberships only) and the public treaties
+        whose party list names it, those that bind there or whose relation is unknown (api.applicable).
+        Without a date, today's; ``named`` is the record a request names, answered whatever its relation."""
+        labeller = self.labeller(jurisdiction, as_of or self.now.date())
+        bodies = [body for body, basis in labeller.bodies.items() if basis[0].held == "held"]
+        state, found = country(jurisdiction), {}
+        for source, rights in self.repository.sources(bodies) if bodies else ():
+            if decide(rights, now=self.now).metadata:
+                found[source.id] = source
+        for source, rights in self.repository.treaties():
+            if any(p.place == state for p in source.treaty.parties) and decide(rights, now=self.now).metadata:
+                found.setdefault(source.id, source)
+        if len(found) > applicable.MAX_CANDIDATES:
+            raise ResultTooLarge("Applicable-law scope exceeds declared bound")
+        pair = self._public({named}).get(named) if named else None
+        return applicable.scope(
+            labeller,
+            [found[key] for key in sorted(found)],
+            date_basis="as_of" if as_of else "today",
+            named=pair[0] if pair else None,
+        )
 
     def relationships(self, source_id, *, kinds=None, limit=EDGES_PER_PAGE, cursor=None, current=True):
         """A page of a source's checked links to other public sources, as seen from its side: what it
@@ -988,12 +1057,13 @@ class LegacyCatalogue:
             statuses=filters.statuses,
             language=filters.language,
             years=(filters.year_from, filters.year_to),
+            works=filters.admitted,
         )
 
     @staticmethod
     def _within(source, version, filters: text_index.Filters) -> bool:
         return (
-            (filters.jurisdictions is None or source.jurisdiction_id in filters.jurisdictions)
+            filters.admits(source.jurisdiction_id, source.id)
             and (not filters.types or source.document_type in filters.types)
             and (not filters.statuses or source.legal_status in filters.statuses)
             and (filters.year_from is None or (source.year or 0) >= filters.year_from)
@@ -1004,7 +1074,7 @@ class LegacyCatalogue:
             and (filters.as_of is None or _in_force(version, filters.as_of))
         )
 
-    def _hit(self, version, source, rights, *, unit, snippet, matched_by, score) -> TextHit:
+    def _hit(self, version, source, rights, *, unit, snippet, matched_by, score, scope=None) -> TextHit:
         text_, start, end, marks = snippet
         return TextHit(
             anchor_id=unit["node_id"],
@@ -1036,14 +1106,21 @@ class LegacyCatalogue:
             licence=rights.licence,
             attribution_required=rights.attribution_required,
             attribution_text=rights.attribution_text,
+            applicability=scope.label(source) if scope is not None else None,
         )
 
-    def search_text(self, query: str, filters: text_index.Filters, *, limit: int = 25, cursor=None):
+    def search_text(
+        self, query: str, filters: text_index.Filters, *, limit: int = 25, cursor=None, scope=None
+    ):
         """A page of the passages of published texts that match ``query`` (OA-S1), best first by the
         documented ranking (api.text_index). A query that reads as a citation of a part is resolved, not
         searched: the part comes first (RET-02). Every hit's text is rechecked before its words are used;
         ``status`` says whether nothing matched, the scope has no published text, or the search could
-        not run, and ``coverage`` what was searched."""
+        not run, and ``coverage`` what was searched. With an applicable-law ``scope`` (api.applicable),
+        the records it admits join the jurisdiction's, each hit says how it relates to that jurisdiction,
+        and the page states the widening."""
+        if scope is not None:
+            filters = replace(filters, admitted=scope.admitted)
         query = " ".join(query.split())
         if not query:
             raise InvalidSearch("Search term must not be blank")
@@ -1054,10 +1131,7 @@ class LegacyCatalogue:
             raise InvalidSearch("Invalid cursor")
         conn, notices = self.repository.connection, []
         citation = self.citations(query, as_of=filters.as_of, language=filters.language)
-        if not citation.matches or any(
-            filters.jurisdictions is not None and m.jurisdiction_id not in filters.jurisdictions
-            for m in citation.matches
-        ):
+        if not citation.matches or any(not filters.admits(m.jurisdiction_id, m.id) for m in citation.matches):
             citation = None
         first = []
         if citation and citation.provision and citation.provision.status == "resolved":
@@ -1111,6 +1185,7 @@ class LegacyCatalogue:
                 self._hit(
                     version, source, rights, unit=unit,
                     snippet=text_index.place(span, "", match.start_byte), matched_by="citation", score=None,
+                    scope=scope,
                 )
             )  # fmt: skip
         for unit, words_, head in zip(units, words, heads, strict=True):
@@ -1119,7 +1194,7 @@ class LegacyCatalogue:
                 self._hit(
                     version, source, rights, unit=unit,
                     snippet=text_index.place(words_, head, unit["start_byte"]), matched_by="text",
-                    score=round(float(unit["score"]), 6),
+                    score=round(float(unit["score"]), 6), scope=scope,
                 )
             )  # fmt: skip
         searched = (
@@ -1177,6 +1252,7 @@ class LegacyCatalogue:
             ranking=text_index.RANKING,
             index_built_at=searched.built_at,
             notices=tuple(notices),
+            applicability=scope.statement if scope is not None else None,
         )
 
     def jurisdictions(self, as_of: date | None = None):

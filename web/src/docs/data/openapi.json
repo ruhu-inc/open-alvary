@@ -2439,6 +2439,24 @@
             "description": "Only this text version."
           },
           {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "applicable",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            },
+            "description": "`applicable`, with one `jurisdiction`: also the law that binds there on `as_of` (today without it): the instruments of the African Union and regional bodies it belonged to on that date, from reviewed memberships only, and the treaties it had ratified or acceded to. Records that do not bind there are left out and counted; those whose relation is unknown are kept. Each passage says how it relates to the jurisdiction (`applicability`) and the answer states the widening. Without it, nothing is added."
+          },
+          {
             "name": "limit",
             "in": "query",
             "required": false,
@@ -2706,7 +2724,7 @@
               ],
               "title": "Source Id"
             },
-            "description": "Only this record's texts."
+            "description": "Only this record's texts. With `scope=applicable`, this record is answered whatever its relation to the jurisdiction."
           },
           {
             "name": "version_id",
@@ -2726,6 +2744,24 @@
               "title": "Version Id"
             },
             "description": "Only this text version."
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "applicable",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
+            },
+            "description": "`applicable`, with one `jurisdiction`: also the law that binds there on `as_of` (today without it): the instruments of the African Union and regional bodies it belonged to on that date, from reviewed memberships only, and the treaties it had ratified or acceded to. Records that do not bind there are left out and counted; those whose relation is unknown are kept. Each unit says how it relates to the jurisdiction (`applicability`) and the answer states the widening. Without it, nothing is added."
           },
           {
             "name": "max_units",
@@ -2835,7 +2871,7 @@
             }
           }
         },
-        "description": "Ranked legal evidence for a question, for an application that writes answers: each unit is a provision (or the text a part holds between its provisions, or a whole law's title and preamble), with its exact words or an excerpt within `max_evidence_bytes`, its byte span and hashes to check it, what quoting it asks for, whether it was in force, the definitions it relies on, and why it ranks where it does. A query that cites a part, names a law or asks what a term means is routed to that first (`query.routes`). The same request over the same revisions gives the same answer. Nothing is generated: only published texts' words. Without `jurisdiction`, it covers your plan's countries.",
+        "description": "Ranked legal evidence for a question, for an application that writes answers: each unit is a provision (or the text a part holds between its provisions, or a whole law's title and preamble), with its exact words or an excerpt within `max_evidence_bytes`, its byte span and hashes to check it, what quoting it asks for, whether it was in force, the definitions it relies on, and why it ranks where it does. A query that cites a part, names a law or asks what a term means is routed to that first (`query.routes`). The same request over the same revisions gives the same answer. Nothing is generated: only published texts' words. Without `jurisdiction`, it covers your plan's countries. With `scope=applicable`, it also covers the regional and treaty law that binds in the one jurisdiction asked about, and says how each unit relates to it.",
         "tags": [
           "Retrieval"
         ]
@@ -2854,7 +2890,7 @@
             }
           },
           "required": true,
-          "description": "The parts to check: `items`, each an `anchor_id`, or a `version_id` with a `locator`, with the `span_hash` you hold and an optional `as_of` date."
+          "description": "The parts to check: `items`, each an `anchor_id`, or a `version_id` with a `locator`, with the `span_hash` you hold, an optional `as_of` date and an optional `jurisdiction`."
         },
         "responses": {
           "200": {
@@ -2918,7 +2954,7 @@
             }
           }
         },
-        "description": "Before showing an answer that cites the corpus: for each cited part (up to 100), whether it is still published with the same words, whether a newer text of the same edition exists (with the same part's anchor there and whether its words changed), and whether it was in force on a date. A part that is not public now and one that never was get the same answer, `unavailable`.",
+        "description": "Before showing an answer that cites the corpus: for each cited part (up to 100), whether it is still published with the same words, whether a newer text of the same edition exists (with the same part's anchor there and whether its words changed), and whether it was in force on a date. Given a `jurisdiction`, also whether the record binds there on that date (`applicability`): a regional instrument through the country's reviewed membership and the instrument's legal effect, a treaty through the country's own ratification or accession. A part that is not public now and one that never was get the same answer, `unavailable`.",
         "tags": [
           "Retrieval"
         ]
@@ -3829,6 +3865,195 @@
         "title": "AnchorView",
         "description": "One part of a text exactly (API-02 /anchors/{id}, DAT-06): its span, locator, hashes, offset unit,\ncitation and attribution, and the words of the span themselves."
       },
+      "Applicability": {
+        "properties": {
+          "jurisdiction_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Jurisdiction Id",
+            "description": "The jurisdiction asked about."
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of",
+            "description": "The date it was assessed for."
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "national",
+              "regional_direct",
+              "regional_requires_transposition",
+              "regional_binding_on_addressees",
+              "treaty_in_force_for_state",
+              "treaty_not_in_force_for_state",
+              "non_binding",
+              "comparative",
+              "unknown"
+            ],
+            "title": "Relation",
+            "description": "`national` (its own law); `regional_direct`, `regional_requires_transposition` or `regional_binding_on_addressees` (an instrument of a body it belonged to on the date, by its legal effect); `treaty_in_force_for_state` or `treaty_not_in_force_for_state` (by its own ratification or accession, never by membership of a body); `non_binding`; `comparative` (another jurisdiction's law, an instrument addressed to other states, or of a body it was not a member of on the date); or `unknown` (the membership, legal effect or ratification is not reviewed, or its date cannot be compared)."
+          },
+          "binds": {
+            "type": "string",
+            "enum": [
+              "bound",
+              "not_bound",
+              "unknown"
+            ],
+            "title": "Binds",
+            "description": "`bound`, `not_bound` or `unknown`. Whether the text was in force is `currentness`."
+          },
+          "memberships": {
+            "items": {
+              "$ref": "#/components/schemas/MembershipBasis"
+            },
+            "type": "array",
+            "title": "Memberships",
+            "default": [],
+            "description": "The reviewed memberships it rests on."
+          },
+          "regional": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegionalView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The instrument's legal effect it rests on."
+          },
+          "party": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TreatyPartyView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The state's entry in the treaty's party list it rests on, with its domesticating acts."
+          },
+          "entered_into_force": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StatedDateView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the treaty entered into force, when recorded."
+          },
+          "transposed_by": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedAct"
+            },
+            "type": "array",
+            "title": "Transposed By",
+            "default": [],
+            "description": "For a directive: the jurisdiction's acts that a checked link records as transposing it."
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Reasons",
+            "default": [],
+            "description": "Why, in sentences."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "jurisdiction_id",
+          "as_of",
+          "relation",
+          "binds"
+        ],
+        "title": "Applicability",
+        "description": "How a record relates to the law of a jurisdiction on a date (JUR-03, JUR-04), and what that rests on:\nthe reviewed memberships, the instrument's legal effect and the state's entry in the treaty's party\nlist. ``binds`` is ``bound``, ``not_bound`` or ``unknown``; whether the text is in force is\n``currentness``, a separate question. Never a decision of anyone's governing law."
+      },
+      "ApplicableScope": {
+        "properties": {
+          "jurisdiction_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Jurisdiction Id",
+            "description": "The jurisdiction whose applicable law was asked for."
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of",
+            "description": "The date memberships and treaties were assessed for."
+          },
+          "date_basis": {
+            "type": "string",
+            "enum": [
+              "as_of",
+              "today"
+            ],
+            "title": "Date Basis",
+            "description": "`as_of` (the date asked) or `today` (none was given; texts were not limited by date)."
+          },
+          "membership": {
+            "type": "string",
+            "enum": [
+              "reviewed",
+              "unknown"
+            ],
+            "title": "Membership",
+            "description": "`reviewed`, or `unknown` when no membership of the jurisdiction is reviewed yet (no body's law was added, which never means it belongs to none)."
+          },
+          "bodies": {
+            "items": {
+              "$ref": "#/components/schemas/MembershipBasis"
+            },
+            "type": "array",
+            "title": "Bodies",
+            "default": [],
+            "description": "Each body it has a reviewed membership of, with whether it held on the date. Only the law of bodies `held` was added."
+          },
+          "admitted": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Admitted",
+            "description": "How many records of other jurisdictions were added."
+          },
+          "left_out": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Left Out",
+            "description": "How many records of those bodies, or treaties naming the jurisdiction, were left out because they do not bind there, by relation."
+          },
+          "notices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notices",
+            "default": [],
+            "description": "What the widening covered and did not, in sentences."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "jurisdiction_id",
+          "as_of",
+          "date_basis",
+          "membership",
+          "admitted"
+        ],
+        "title": "ApplicableScope",
+        "description": "The applicable-law scope a request asked for (``scope=applicable``) and the widening it applied, so\nthat nothing is widened silently (RSV-03): each body the jurisdiction has a reviewed membership of, with\nwhether it held on the date (only the law of bodies ``held`` was added), how many records of other\njurisdictions were admitted, and how many were left out, by relation."
+      },
       "AuthorityEvidence": {
         "properties": {
           "source": {
@@ -4004,12 +4229,27 @@
             ],
             "title": "As Of",
             "description": "The date to assess currentness at; today when absent."
+          },
+          "jurisdiction": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 40,
+                "minLength": 2,
+                "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jurisdiction",
+            "description": "A country, or a place within one, such as `sn`: the answer then says whether the record binds there on `as_of` (`applicability`)."
           }
         },
         "additionalProperties": false,
         "type": "object",
         "title": "CheckItem",
-        "description": "A cited part to check (RSV-08): its anchor, or its text version and locator, with the span hash\nthe client holds and the date to assess it at."
+        "description": "A cited part to check (RSV-08): its anchor, or its text version and locator, with the span hash\nthe client holds, the date to assess it at and, to ask whether it binds there, a jurisdiction."
       },
       "CheckPage": {
         "properties": {
@@ -4167,6 +4407,17 @@
               }
             ],
             "description": "Whether the part (or, for `newer_version`, the newer text's part) was in force."
+          },
+          "applicability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Applicability"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With a `jurisdiction`: whether the record binds there on the date, and what that rests on."
           }
         },
         "additionalProperties": false,
@@ -4176,7 +4427,7 @@
           "result"
         ],
         "title": "CheckResult",
-        "description": "What became of a cited part: ``unchanged``; ``newer_version`` (a later text of the same expression,\nwith the same locator's anchor there and whether its words are identical); ``span_mismatch`` (the\nhash sent is not this part's); or ``unavailable`` (not public now, or never: not told apart)."
+        "description": "What became of a cited part: ``unchanged``; ``newer_version`` (a later text of the same expression,\nwith the same locator's anchor there and whether its words are identical); ``span_mismatch`` (the\nhash sent is not this part's); or ``unavailable`` (not public now, or never: not told apart). Asked with\na jurisdiction, ``applicability`` says whether the record binds there on the date (api.applicable)."
       },
       "CitationView": {
         "properties": {
@@ -5792,6 +6043,17 @@
           "bytes": {
             "$ref": "#/components/schemas/EvidenceBytes",
             "description": "The words sent: unique bytes (each span once), bytes as transmitted, and the budget."
+          },
+          "applicability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApplicableScope"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With `scope=applicable`: the widening applied, and what it rests on and left out."
           }
         },
         "additionalProperties": false,
@@ -5886,7 +6148,7 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Filters",
-            "description": "The filters applied, as given or as your plan set them."
+            "description": "The filters applied, as given or as your plan set them; `scope` when asked for (the widening it applied is in `applicability`)."
           },
           "as_of": {
             "anyOf": [
@@ -6294,6 +6556,17 @@
               }
             ],
             "description": "For a treaty: who adopted it, its depositary, when it entered into force and its authentic languages. Its parties are on the record (Get a record) and its anchors."
+          },
+          "applicability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Applicability"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With `scope=applicable`: how the record relates to the jurisdiction asked about, and what that rests on."
           },
           "ranking": {
             "anyOf": [
@@ -6795,6 +7068,41 @@
         ],
         "title": "LinkedAct",
         "description": "A public record a checked link names (EDT-01), such as a national act that domesticates a treaty or\ntransposes a directive."
+      },
+      "MembershipBasis": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Id",
+            "description": "The reviewed membership, such as `sn:aa-ecowas:1`; Get a jurisdiction gives its dates and evidence."
+          },
+          "body_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Body Id",
+            "description": "The body."
+          },
+          "held": {
+            "type": "string",
+            "enum": [
+              "held",
+              "not_held",
+              "unknown"
+            ],
+            "title": "Held",
+            "description": "Whether the jurisdiction was a member on the date: `held`, `not_held`, or `unknown` when the date falls in an uncertain window of the membership's dates."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "body_id",
+          "held"
+        ],
+        "title": "MembershipBasis",
+        "description": "A reviewed membership an applicable-law answer rests on: its ID, the body, and whether the\njurisdiction was a member of that body on the date asked about: ``held``, ``not_held``, or ``unknown``\nwhen the date falls in an uncertain window of the membership's dates. /jurisdictions/{id} gives its\ndates, evidence and review."
       },
       "MembershipList": {
         "properties": {
@@ -8739,6 +9047,17 @@
             ],
             "title": "Attribution Text",
             "description": "The credit to give, when one is required."
+          },
+          "applicability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Applicability"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With `scope=applicable`: how the record relates to the jurisdiction asked about, and what that rests on."
           }
         },
         "additionalProperties": false,
@@ -8870,6 +9189,17 @@
             "title": "Notices",
             "default": [],
             "description": "Anything that limits these results, in sentences."
+          },
+          "applicability": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApplicableScope"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "With `scope=applicable`: the widening applied, and what it rests on and left out."
           }
         },
         "additionalProperties": false,

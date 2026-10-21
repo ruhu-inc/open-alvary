@@ -172,6 +172,10 @@ class LegacyRepository:
                 return
             cursor = rows[-1].source["id"]
 
+    def treaties(self) -> Iterator:
+        """The public records that carry a treaty's status (schema.models.TreatyStatus), in ID order."""
+        return self.sources(where=self._field(self._sources, "treaty").is_not(None))
+
     def potential_text(self):
         hashes = self._rights.c.payload["approved_content_hashes"].as_string()
         return and_(hashes.is_not(None), hashes.not_in(("[]", "", "null")))
@@ -474,15 +478,21 @@ class LegacyRepository:
             raise ResultTooLarge("Citation candidates exceed pilot bound")
         return [(row.source_id, row.payload) for row in aliases] + [(row.id, None) for row in own]
 
-    def count_public(self, *, jurisdictions=None, types=(), statuses=(), language=None, years=(None, None)):
-        """How many public sources match a text search's record filters."""
+    def count_public(
+        self, *, jurisdictions=None, types=(), statuses=(), language=None, years=(None, None), works=()
+    ):
+        """How many public sources match a text search's record filters; ``works`` are records of other
+        jurisdictions an applicable-law scope admits besides ``jurisdictions``."""
         statement = (
             select(func.count())
             .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
             .where(self._visible())
         )
         if jurisdictions is not None:
-            statement = statement.where(self._sources.c.jurisdiction_id.in_(sorted(jurisdictions)))
+            within = self._sources.c.jurisdiction_id.in_(sorted(jurisdictions))
+            statement = statement.where(
+                or_(within, self._sources.c.id.in_(sorted(works))) if works else within
+            )
         if types:
             statement = statement.where(self._field(self._sources, "document_type").in_(sorted(types)))
         if statuses:

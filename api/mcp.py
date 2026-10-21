@@ -226,6 +226,15 @@ TOOLS = [
                     "maxLength": 200,
                     "description": "The next_cursor of the previous answer, for more passages.",
                 },
+                "scope": {
+                    "type": "string",
+                    "enum": ["applicable"],
+                    "description": "applicable: also the law that binds in the one jurisdiction given on as_of "
+                    "(today without it): instruments of the African Union and regional bodies it belonged to "
+                    "(reviewed memberships only) and treaties it ratified or acceded to. Each passage then "
+                    "says how it relates to that jurisdiction (applicability), and the answer states what "
+                    "was added and left out.",
+                },
             },
             "required": ["query"],
             "additionalProperties": False,
@@ -291,6 +300,16 @@ TOOLS = [
                     "maximum": 40960,
                     "description": "The most bytes of words, 4,096 to 40,960. The default is 24,576.",
                 },
+                "scope": {
+                    "type": "string",
+                    "enum": ["applicable"],
+                    "description": "applicable, with exactly one jurisdiction: also the law that binds there "
+                    "on as_of (today without it): instruments of the African Union and regional bodies it "
+                    "belonged to (reviewed memberships only) and treaties it ratified or acceded to. Each unit "
+                    "then says how it relates to that jurisdiction (applicability: national, regional_direct, "
+                    "treaty_in_force_for_state, unknown and others, with what that rests on), and the answer "
+                    "states what was added and left out.",
+                },
             },
             "required": ["query"],
             "additionalProperties": False,
@@ -303,8 +322,10 @@ TOOLS = [
         "description": "Before showing an answer that cites the corpus: for each cited part, whether it is "
         "still published with the same words (unchanged), whether a newer text of the same edition exists "
         "(newer_version, with the same part's anchor_id there and whether its words changed), whether the "
-        "span_hash sent is wrong (span_mismatch) or the part is not public (unavailable); and whether it "
-        "was in force on a date.",
+        "span_hash sent is wrong (span_mismatch) or the part is not public (unavailable); whether it "
+        "was in force on a date; and, given a jurisdiction, whether the record binds there on that date "
+        "(applicability: bound, not_bound or unknown, with the memberships, legal effect or treaty party "
+        "entry it rests on).",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -320,11 +341,16 @@ TOOLS = [
                             "locator": {"type": "string", "minLength": 1, "maxLength": 1000},
                             "span_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
                             "as_of": {"type": "string", "format": "date"},
+                            "jurisdiction": {
+                                "type": "string",
+                                "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?$",
+                            },
                         },
                         "additionalProperties": False,
                     },
                     "description": "The parts: each an anchor_id, or a version_id with a locator, with the "
-                    "span_hash you hold and an optional as_of date.",
+                    "span_hash you hold, an optional as_of date and, to ask whether the record binds in a "
+                    "country on that date, its jurisdiction, such as sn.",
                 },
             },
             "required": ["items"],
@@ -544,6 +570,13 @@ def create_router(
         if not isinstance(arguments, dict):
             return None
         with catalogue_factory() as service:
+
+            def applicable(jurisdiction, as_of, source_id):
+                """An applicable-law scope (api.applicable); its records are read under the plan as REST's."""
+                scope = service.applicable_scope(jurisdiction, as_of or None, named=source_id)
+                plan.admit(*sorted(scope.jurisdictions))
+                return scope
+
             if name == "search_catalogue" and set(arguments) <= {"query", "limit", "jurisdiction"}:
                 query, limit = arguments.get("query"), arguments.get("limit", 10)
                 jurisdiction = arguments.get("jurisdiction")
@@ -613,6 +646,7 @@ def create_router(
                 "as_of",
                 "limit",
                 "cursor",
+                "scope",
             }:
                 query, limit, cursor = arguments["query"], arguments.get("limit", 5), arguments.get("cursor")
                 as_of, language = _date(arguments.get("as_of")), _language(arguments.get("language"))
@@ -628,16 +662,21 @@ def create_router(
                     return None
                 if cursor is not None and (not isinstance(cursor, str) or len(cursor) > 200):
                     return None
+                if arguments.get("scope", "applicable") != "applicable":
+                    return None
                 if jurisdiction is not None:
                     if not isinstance(jurisdiction, str) or not 2 <= len(jurisdiction) <= 40:
                         return None
                     plan.admit(jurisdiction.lower())
                     jurisdictions = (jurisdiction.lower(),)
+                elif "scope" in arguments:
+                    return None
                 else:
                     scope = plan.within(j.id for j in service.jurisdictions())
                     jurisdictions = None if scope is None else tuple(sorted(scope))
+                widened = applicable(jurisdictions[0], as_of, None) if "scope" in arguments else None
                 filters = text_index.Filters(jurisdictions=jurisdictions, language=language, as_of=as_of)
-                page = service.search_text(query, filters, limit=limit, cursor=cursor)
+                page = service.search_text(query, filters, limit=limit, cursor=cursor, scope=widened)
                 return _bounded(page.model_dump(mode="json"))
             if name == "resolve_citation" and {"citation"} <= set(arguments) <= {
                 "citation",
@@ -664,6 +703,7 @@ def create_router(
                 "source_id",
                 "max_units",
                 "max_evidence_bytes",
+                "scope",
             }:
                 query = arguments["query"]
                 as_of, language = _date(arguments.get("as_of")), _language(arguments.get("language"))
@@ -698,11 +738,22 @@ def create_router(
                     not isinstance(source_id, str) or not 1 <= len(source_id) <= 160
                 ):
                     return None
+                if "scope" in arguments and (
+                    arguments["scope"] != "applicable" or named is None or len(jurisdictions) != 1
+                ):
+                    return None
+                widened = applicable(jurisdictions[0], as_of, source_id) if "scope" in arguments else None
                 filters = text_index.Filters(
                     jurisdictions=jurisdictions, language=language, as_of=as_of, source_id=source_id
                 )
                 pack = Retriever(service).retrieve(
-                    EvidenceRequest(query=query, filters=filters, max_units=units, max_evidence_bytes=budget)
+                    EvidenceRequest(
+                        query=query,
+                        filters=filters,
+                        max_units=units,
+                        max_evidence_bytes=budget,
+                        scope=widened,
+                    )
                 )
                 return _bounded(pack.model_dump(mode="json"))
             if name == "check_currentness" and set(arguments) == {"items"}:

@@ -2,7 +2,8 @@
 are fused, signalled and diversified (retrieval.ranking), and each selected unit is read from its
 public text after the rights check, with its exact words or an excerpt within the byte budget, its
 hashes, currentness (retrieval.legal_time), authority inputs, derived links and the explanation of its
-position. The same request over the same revisions gives the same pack."""
+position; in an applicable-law answer (api.applicable), also its relation to the jurisdiction asked about.
+The same request over the same revisions gives the same pack."""
 
 import hashlib
 import os
@@ -14,7 +15,7 @@ from urllib.parse import unquote, urlsplit
 from sqlalchemy import text as sql
 
 from api import text_index
-from api.applicable import regional_view, treaty_view
+from api.applicable import Scope, regional_view, treaty_view
 from api.catalogue import (
     InvalidSearch,
     LegacyCatalogue,
@@ -61,6 +62,9 @@ class Request:
     max_units: int = 10
     max_evidence_bytes: int = 49_152
     include: frozenset[str] = INCLUDE
+    # An applicable-law scope (scope=applicable, api.applicable): the records it admits join the filters'
+    # jurisdiction, each unit says how it relates to that jurisdiction, and the pack states the widening.
+    scope: Scope | None = None
 
 
 def unit_pages(start: int, end: int, node, nodes) -> tuple[int, int] | None:
@@ -593,14 +597,12 @@ class Retriever:
         if not 1 <= request.max_units <= 25 or not 4_096 <= request.max_evidence_bytes <= 262_144:
             raise InvalidSearch("Invalid evidence bounds")
         filters = request.filters
+        if request.scope is not None:
+            filters = replace(filters, admitted=request.scope.admitted)
         citation = self.service.citations(
             query, as_of=filters.as_of, language=filters.language, within=filters.source_id
         )
-        if (
-            citation.matches
-            and filters.jurisdictions is not None
-            and any(m.jurisdiction_id not in filters.jurisdictions for m in citation.matches)
-        ):
+        if citation.matches and any(not filters.admits(m.jurisdiction_id, m.id) for m in citation.matches):
             citation = None
         works = text_index.named_works(self.conn, query, filters)
         plan = router.plan(
@@ -638,7 +640,7 @@ class Retriever:
             status = "no_result"
         else:
             status = "results"
-        catalogue, next_steps = self._catalogue(query, citation, status, filters)
+        catalogue, next_steps = self._catalogue(query, citation, status, filters, request.scope)
         if citation and citation.provision and citation.provision.status == "ambiguous":
             next_steps.append(
                 NextStep(
@@ -656,7 +658,7 @@ class Retriever:
             query=EvidenceQuery(
                 text=query,
                 routes=plan.routes,
-                filters=self._filters(filters),
+                filters=self._filters(request.filters, request.scope),
                 as_of=filters.as_of,
             ),
             revisions=EvidenceRevisions(
@@ -684,6 +686,7 @@ class Retriever:
             catalogue=tuple(catalogue),
             next_steps=tuple(next_steps),
             bytes=EvidenceBytes(unique=used, transmitted=sent, budget=request.max_evidence_bytes),
+            applicability=request.scope.statement if request.scope is not None else None,
         )
 
     def _dense_coverage(self, filters) -> float | None:
@@ -703,7 +706,9 @@ class Retriever:
         return round(row.done / row.texts, 4) if row.texts else None
 
     @staticmethod
-    def _filters(filters: text_index.Filters) -> dict:
+    def _filters(filters: text_index.Filters, scope: Scope | None = None) -> dict:
+        """The filters as the caller gave them (or the plan set them): an applicable-law scope is shown as
+        asked for, and the widening it applied is stated in the pack's ``applicability`` (RSV-03)."""
         shown = {
             "jurisdictions": list(filters.jurisdictions) if filters.jurisdictions is not None else None,
             "language": filters.language,
@@ -713,19 +718,29 @@ class Retriever:
             "year_to": filters.year_to,
             "source_id": filters.source_id,
             "version_id": filters.version_id,
+            "scope": "applicable" if scope is not None else None,
         }
         return {k: v for k, v in shown.items() if v is not None}
 
-    def _catalogue(self, query, citation, status, filters) -> tuple[list[CatalogueMatch], list[NextStep]]:
+    def _catalogue(
+        self, query, citation, status, filters, scope: Scope | None = None
+    ) -> tuple[list[CatalogueMatch], list[NextStep]]:
         matches = [m for m in (citation.matches if citation else ()) if not m.has_full_text]
         if status != "results" and not matches:
             jurisdiction = None if filters.jurisdictions is None else set(filters.jurisdictions)
+            if scope is not None:
+                # The scope's records are looked for in their own jurisdictions, then kept by the scope.
+                jurisdiction |= scope.jurisdictions
             try:
                 matches = [
                     m
                     for m in self.service.search(
-                        query[:200], jurisdiction=jurisdiction, limit=5, access="metadata"
+                        query[:200],
+                        jurisdiction=jurisdiction,
+                        limit=5 if scope is None else 25,
+                        access="metadata",
                     ).items
+                    if filters.admits(m.jurisdiction_id, m.id)
                 ]
             except InvalidSearch:
                 matches = []
@@ -846,6 +861,7 @@ class Retriever:
                     ),
                     regional=regional_view(source),
                     treaty=treaty_view(source, self.service._acts, parties=False),
+                    applicability=request.scope.label(source) if request.scope is not None else None,
                     ranking=self._explain(candidate, plan, len(evidence) + 1)
                     if "ranking" in request.include
                     else None,

@@ -189,6 +189,65 @@ class JurisdictionDetail(JurisdictionView):
     members: MembershipList | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
+class MembershipBasis(WireModel):
+    """A reviewed membership an applicable-law answer rests on: its ID, the body, and whether the
+    jurisdiction was a member of that body on the date asked about: ``held``, ``not_held``, or ``unknown``
+    when the date falls in an uncertain window of the membership's dates. /jurisdictions/{id} gives its
+    dates, evidence and review."""
+
+    id: ID
+    body_id: ID
+    held: Literal["held", "not_held", "unknown"]
+
+
+# A record's relation to the law of the jurisdiction asked about, on a date (api.applicable).
+APPLICABILITY = Literal[
+    "national",
+    "regional_direct",
+    "regional_requires_transposition",
+    "regional_binding_on_addressees",
+    "treaty_in_force_for_state",
+    "treaty_not_in_force_for_state",
+    "non_binding",
+    "comparative",
+    "unknown",
+]
+
+
+class Applicability(WireModel):
+    """How a record relates to the law of a jurisdiction on a date (JUR-03, JUR-04), and what that rests on:
+    the reviewed memberships, the instrument's legal effect and the state's entry in the treaty's party
+    list. ``binds`` is ``bound``, ``not_bound`` or ``unknown``; whether the text is in force is
+    ``currentness``, a separate question. Never a decision of anyone's governing law."""
+
+    jurisdiction_id: ID
+    as_of: date
+    relation: APPLICABILITY
+    binds: Literal["bound", "not_bound", "unknown"]
+    memberships: tuple[MembershipBasis, ...] = ()
+    regional: RegionalView | None = Field(**OMIT)
+    party: TreatyPartyView | None = Field(**OMIT)
+    entered_into_force: StatedDateView | None = Field(**OMIT)
+    transposed_by: tuple[LinkedAct, ...] = ()
+    reasons: tuple[str, ...] = ()
+
+
+class ApplicableScope(WireModel):
+    """The applicable-law scope a request asked for (``scope=applicable``) and the widening it applied, so
+    that nothing is widened silently (RSV-03): each body the jurisdiction has a reviewed membership of, with
+    whether it held on the date (only the law of bodies ``held`` was added), how many records of other
+    jurisdictions were admitted, and how many were left out, by relation."""
+
+    jurisdiction_id: ID
+    as_of: date
+    date_basis: Literal["as_of", "today"]
+    membership: Literal["reviewed", "unknown"]
+    bodies: tuple[MembershipBasis, ...] = ()
+    admitted: int = Field(ge=0)
+    left_out: dict[str, int] = Field(default_factory=dict)
+    notices: tuple[str, ...] = ()
+
+
 class DecisionView(WireModel):
     metadata: bool
     full_text: bool
@@ -504,6 +563,8 @@ class TextHit(WireModel):
     licence: str | None = None
     attribution_required: bool | None = None
     attribution_text: str | None = None
+    # In an applicable-law search (scope=applicable): the record's relation to the jurisdiction asked about.
+    applicability: Applicability | None = Field(**OMIT)
 
 
 class SearchCoverage(WireModel):
@@ -532,6 +593,7 @@ class TextSearchPage(WireModel):
     ranking: str
     index_built_at: AwareDatetime | None = None
     notices: tuple[str, ...] = ()
+    applicability: ApplicableScope | None = Field(**OMIT)
 
 
 CURRENTNESS = Literal["in_force", "not_in_force", "partly_in_force", "unknown", "contested"]
@@ -720,9 +782,10 @@ class EvidenceUnit(WireModel):
     currentness: Currentness
     authority: EvidenceAuthority
     # A regional instrument's legal effect, or a treaty's status (its parties are on the record), from its
-    # record (JUR-04).
+    # record (JUR-04); and in an applicable-law answer, the unit's relation to the jurisdiction asked about.
     regional: RegionalView | None = Field(**OMIT)
     treaty: TreatyView | None = Field(**OMIT)
+    applicability: Applicability | None = Field(**OMIT)
     ranking: RankingExplanation | None = Field(**OMIT)
     context: EvidenceContext | None = Field(**OMIT)
     warnings: tuple[str, ...] = ()
@@ -795,17 +858,21 @@ class EvidencePack(WireModel):
     catalogue: tuple[CatalogueMatch, ...] = ()
     next_steps: tuple[NextStep, ...] = ()
     bytes: EvidenceBytes
+    applicability: ApplicableScope | None = Field(**OMIT)
 
 
 class CheckItem(WireModel):
     """A cited part to check (RSV-08): its anchor, or its text version and locator, with the span hash
-    the client holds and the date to assess it at."""
+    the client holds, the date to assess it at and, to ask whether it binds there, a jurisdiction."""
 
     anchor_id: ID | None = None
     version_id: ID | None = None
     locator: str | None = Field(None, min_length=1, max_length=1000)
     span_hash: Hash | None = None
     as_of: date | None = None
+    jurisdiction: str | None = Field(
+        None, min_length=2, max_length=40, pattern=r"^[a-z]{2}(?:-[a-z0-9]{1,12})?$"
+    )
 
     @model_validator(mode="after")
     def one_reference(self):
@@ -823,7 +890,8 @@ class CheckRequest(WireModel):
 class CheckResult(WireModel):
     """What became of a cited part: ``unchanged``; ``newer_version`` (a later text of the same expression,
     with the same locator's anchor there and whether its words are identical); ``span_mismatch`` (the
-    hash sent is not this part's); or ``unavailable`` (not public now, or never: not told apart)."""
+    hash sent is not this part's); or ``unavailable`` (not public now, or never: not told apart). Asked with
+    a jurisdiction, ``applicability`` says whether the record binds there on the date (api.applicable)."""
 
     index: int = Field(ge=0)
     result: Literal["unchanged", "newer_version", "span_mismatch", "unavailable"]
@@ -834,6 +902,7 @@ class CheckResult(WireModel):
     newer_anchor_id: ID | None = Field(**OMIT)
     same_words: bool | None = Field(**OMIT)
     currentness: Currentness | None = Field(**OMIT)
+    applicability: Applicability | None = Field(**OMIT)
 
 
 class CheckPage(WireModel):
