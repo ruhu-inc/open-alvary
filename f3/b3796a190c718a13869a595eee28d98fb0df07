@@ -1,0 +1,26 @@
+tests/test_structure_uniform_acts.py
+  s_d665c62e07d76f::t_956c13e55d0e3c 120-125,158-161,181-187,223-225
+  s_d665c62e07d76f::t_a3b73c724e8b2c 16-18,108,236
+  s_d665c62e07d76f::t_a8b05363fbadb4 1-15,19-107,109-119,126-157,162-180,188-222,226-235,237-275
+tests/test_structure_rules.py
+  s_d665c62e07d76f::t_992c50b8f742cf 71,112,129,134-141
+workbench/structure.py
+  s_d665c62e07d76f::t_992c50b8f742cf 21-25,52,63,91,321-322,932-1234
+  s_d665c62e07d76f::t_d6a3bc6fa903f1 1235-1236
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f3b3796a190c718a13869a595eee28d98fb0df07",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}

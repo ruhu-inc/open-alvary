@@ -1,0 +1,26 @@
+api/pinpoint.py
+  s_d665c62e07d76f::t_69625da0b33ac7 8-11,43-44,107-108,110,164-172
+tests/test_pinpoint.py
+  s_d665c62e07d76f::t_4c9940ed200f45 39-42,202-218
+  s_d665c62e07d76f::t_eb9c2396f6f005 219-220
+web/src/docs/content/changelog.md
+  s_d665c62e07d76f::t_5d50a56b46b568 16
+web/src/docs/content/retrieval.md
+  s_d665c62e07d76f::t_5d50a56b46b568 93
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "14275641746d8d18d0232264b36efa043a5066b7",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
