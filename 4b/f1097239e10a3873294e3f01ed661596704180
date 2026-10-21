@@ -1,0 +1,23 @@
+web/src/docs/content/changes.md
+  s_d665c62e07d76f::t_8490c327135353 29-30,136-137,144-145,149
+api/openapi_docs.py
+  s_d665c62e07d76f::t_c042e5db49041c 469-470
+web/src/docs/data/openapi.json
+  s_d665c62e07d76f::t_cde3acc2f0031c 100
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4bf1097239e10a3873294e3f01ed661596704180",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
