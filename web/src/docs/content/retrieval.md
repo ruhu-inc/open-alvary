@@ -60,7 +60,7 @@ Quote only `text`. A unit whose `unit` is `document` tells you which law is rele
 
 ## Court authority
 
-A decision's unit names its court in `authority.court`, as the [court register](/docs/api/get-court-register) of the jurisdiction asked about lists it. Once a reviewer has checked that register against its sources, `court.bears_on` says how the court's decisions bear on other courts on the date assessed (`as_of`, or today):
+A decision's unit names its court in `authority.court`, as the [court register](/docs/api/get-court-register) of the jurisdiction asked about lists it, with whether a reviewer has checked the court's entry. `court.bears_on` lists how the court's decisions bear on other courts on the date assessed (`as_of`, or today), each relation once someone legally qualified for the jurisdiction has reviewed it, with the words of its source:
 
 ```json
 "authority": {
@@ -73,18 +73,34 @@ A decision's unit names its court in `authority.court`, as the [court register](
     "review_state": "reviewed",
     "reviewed_on": "2026-10-01",
     "bears_on": [
-      {"court": "ke-mc", "relation": "binding", "evidence": ["https://…"]}
+      {
+        "id": "ke-hc-on-ke-mc",
+        "court": "ke-mc",
+        "relation": "binding",
+        "evidence": ["https://…"],
+        "rests_on": [{"quote": "…", "provision": "para 17", "title": "…", "url": "https://…"}]
+      }
     ]
   }
 }
 ```
 
-- `relation` is `binding`, `persuasive` or `not_applicable`, and `evidence` lists the official sources it rests on. `court` is the court bound, by its ID in the register; null means the jurisdiction's courts generally.
-- A regional court's bearing on member states' courts (`members`) is limited to the subject matter its treaty gives (`matter`), such as the Uniform Acts for the OHADA court: never a rank above national courts.
-- `court_relation` is the court's bearing on the jurisdiction's courts generally. Within a band, binding decisions rank first.
-- Nothing is guessed. Until a register is reviewed, `bears_on` is empty and `court_relation` is `unknown`. A relation the register does not record is `unknown` too: it is never inferred from a court's rank or appeal routes, and a bearing limited to a matter never becomes a general one.
+- `relation` says how the court's decisions bear, in its source's own terms:
 
-[List court registers](/docs/api/list-court-registers) says which jurisdictions have a register and whether it has been reviewed.
+  | `relation` | Meaning |
+  |---|---|
+  | `binding` | Precedent binds: the court bound must follow the decisions (stare decisis). |
+  | `prevails_on_matter` | On the subject matter in `matter` only, the court's decisions take precedence over national courts' decisions, as EAC Treaty art. 33(2) gives the East African Court of Justice's decisions on the Treaty. Not stare decisis, and not an appeal. |
+  | `binding_in_referred_case` | The ruling binds the court that referred the question to it, in that case only. |
+  | `persuasive` | The decisions may be followed, but need not be. |
+  | `not_applicable` | The decisions don't bear on that court. |
+
+- `rests_on` quotes the source verbatim, with the provision; `evidence` lists the official sources. `court` is the court bound, by its ID in the register; null means the jurisdiction's courts generally.
+- A regional court's bearing on member states' courts (`members`) is limited to the subject matter its treaty gives (`matter`), such as the Uniform Acts for the OHADA court: never a rank above national courts.
+- `court_relation` is the ranking signal: the court's bearing on the jurisdiction's courts generally. Within a band, `binding` decisions rank first, then `persuasive` ones; `binding_in_referred_case`, `not_applicable` and `unknown` rank alike. `prevails_on_matter` would rank with `binding`, but only on a question within its matter, and a request doesn't state a matter: it is never the `court_relation` here, only a bearing in `bears_on`.
+- Nothing is guessed. Each register entry is reviewed on its own. A relation answers once it has its own review by someone legally qualified for the jurisdiction, the courts it names have theirs and, for `binding`, `persuasive` and `not_applicable`, the register's precedent rule has its own; until then it is not in `bears_on`, and `court_relation` is `unknown`. An entry changed after its review is unreviewed again. A relation the register does not record is `unknown` too: it is never inferred from a court's rank or appeal routes, and a bearing limited to a matter never becomes a general one.
+
+[List court registers](/docs/api/list-court-registers) says which jurisdictions have a register and how many of its entries have been reviewed.
 
 ## Routes
 
