@@ -266,6 +266,50 @@ for (const node of answer.structure) {
 
 `parent_id` says which division a node sits in, and `page` which page of the official file it starts on, when known.
 
+## Read one text or one part
+
+Get a record's texts gives every text with its structure in one answer. To read one text, or one part of it, use these routes. Each takes an ID from an answer you already have:
+
+| Route | Answers | IDs from |
+|---|---|---|
+| [`/versions/{version_id}/text`](/docs/api/get-version-text) | The text alone, as `text/plain; charset=utf-8`: exactly the bytes whose SHA-256 is its `content_hash`, which every offset refers to. | A version's `id` in [Get a record's texts](/docs/api/get-versions), or `version.id` in a `text_version_published` change |
+| [`/versions/{version_id}/structure`](/docs/api/get-version-structure) | The text's parts in document order, 100 a page by default (`limit` up to 500), continued with `next_cursor`. Each part's `id` is its anchor. | The same |
+| [`/anchors/{anchor_id}`](/docs/api/get-anchor) | One part exactly: its `text`, its span (`start_byte`, `end_byte`), the `span_hash` of its bytes, a `citation` such as `s. 23(1)(a)`, the `official_url` and the attribution its rights record asks for. The words are never shortened. | A part's `id` in a structure, or `anchor_id` in a passage, an evidence unit or a resolved citation |
+
+```curl
+curl "https://api.open.alvary.ai/api/v1/anchors/$ANCHOR_ID" \
+  -H "Authorization: Bearer $OPEN_ALVARY_KEY"
+```
+
+{{example:get_anchor}}
+
+### Check a copy without downloading it again
+
+Each of these answers has an `ETag`. For a text, it is the text's `content_hash` in quotes. Keep it with your copy, and send it back as `If-None-Match`:
+
+```python
+import os
+
+import requests
+
+anchor_id = "nod_…"  # from a structure, a passage or an evidence unit
+etag = '"…"'  # the ETag you kept with your copy
+response = requests.get(
+    f"https://api.open.alvary.ai/api/v1/anchors/{anchor_id}",
+    headers={"Authorization": f"Bearer {os.environ['OPEN_ALVARY_KEY']}", "If-None-Match": etag},
+    timeout=30,
+)
+if response.status_code == 304:
+    print("Unchanged and still public")
+elif response.status_code == 404:
+    print("No longer public: stop serving it")
+else:
+    response.raise_for_status()
+    etag, part = response.headers["ETag"], response.json()
+```
+
+`304` means your copy is unchanged and still public: the same check runs as for a full answer. It counts as a request but sends no bytes, so it uses none of your [data a day](/docs/plans#how-limits-are-counted). `404` means the text or part is no longer public. A text or part too large for one answer is refused with `413` [`result_too_large`](/docs/errors#result_too_large): read a large text a part at a time.
+
 ## Language editions
 
 A law published in several languages has one **edition** per language, with the ID `<record id>:<language>`. [Get a record's editions](/docs/api/get-expressions) lists the editions that have a text, and says what each is worth as law, as the record states it:
