@@ -201,9 +201,27 @@ for result in check["results"]:
     print(result["index"], result["result"])
 ```
 
-`unchanged` means the part is still published with the same words. `newer_version` means a later text of the same edition exists: `newer_anchor_id` is the same part there and `same_words` says whether it changed. `unavailable` means the part is not public now: remove it from the answer.
+Each item names one part, in either of two ways:
 
-Add `jurisdiction` to an item, such as `{"anchor_id": "…", "as_of": "2026-01-01", "jurisdiction": "ke"}`, and its result also says whether the record binds in that country on that date: `applicability`, with the same labels and basis as [above](#the-law-that-applies-in-a-country). For a treaty, that is `treaty_in_force_for_state` only where the country's own ratification or accession is recorded.
+| Item | Use it when |
+|---|---|
+| `{"anchor_id": "…", "span_hash": "…"}` | You kept the unit's `anchor_id`, as an evidence unit, a passage or a citation gives it. |
+| `{"version_id": "…", "locator": "…", "span_hash": "…"}` | You kept the text version and the part's `locator`, such as `sec_40__subsec_2`, from a text's [structure](/docs/api/get-version-structure). |
+
+`span_hash` is the hash of the part's words you hold. Leave it out and the words aren't compared. Add `as_of` (`YYYY-MM-DD`) to assess `currentness` on that date; without it, currentness is assessed today.
+
+Each result has the item's `index` and one `result`:
+
+| `result` | Means | What to do |
+|---|---|---|
+| `unchanged` | The part is still published, and its words hash to your `span_hash`. | Show it. |
+| `newer_version` | A later text of the same edition exists. `newer_version_id` is that text, `newer_anchor_id` the same part in it (absent when the later text has no such part), and `same_words` whether its words are the same. | When `same_words` is false, get the part again from `newer_anchor_id` before you quote it. |
+| `span_mismatch` | The part is published, but its words don't hash to the `span_hash` you sent: your copy isn't these words. | Get the part again from its anchor; don't quote your copy. |
+| `unavailable` | The part is not public now. A part that never was gets the same answer. | Remove it from the answer. |
+
+`unchanged` and `newer_version` also give `currentness`, as an evidence unit does; for `newer_version`, it is the part's in the newer text.
+
+Add `jurisdiction` to an item, such as `{"anchor_id": "…", "as_of": "2026-01-01", "jurisdiction": "ke"}`, and its result also says whether the record binds in that country on that date (today without `as_of`): `applicability`, with the same labels and basis as [above](#the-law-that-applies-in-a-country). For a treaty, that is `treaty_in_force_for_state` only where the country's own ratification or accession is recorded.
 
 ## Caching and the change feed
 
