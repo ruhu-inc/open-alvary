@@ -1,0 +1,25 @@
+migrations/versions/0041_membership_dates.py
+  s_d665c62e07d76f::t_7009b9f96c7ebd 25
+rights/capabilities.py
+  s_d665c62e07d76f::t_56f6110f6230e3 11
+rights/sql/provision/manifest.json
+  s_d665c62e07d76f::t_69644701fff91e 297,299
+tests/test_postgres_memberships.py
+  s_d665c62e07d76f::t_3f6063f3768f97 444,479
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "aba828a7ea3eb6ba208fe91ce212984d88531bf2",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
