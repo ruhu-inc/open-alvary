@@ -1,0 +1,441 @@
+{
+  "jurisdiction": "aa-ohada",
+  "review_state": "unreviewed",
+  "reviewed_by": null,
+  "reviewed_on": null,
+  "reviewed_sha256": null,
+  "precedent": null,
+  "courts": [
+    {
+      "id": "aa-ohada-ccja",
+      "name": "Common Court of Justice and Arbitration (Cour Commune de Justice et d'Arbitrage, CCJA)",
+      "kind": "court",
+      "level": "regional",
+      "appeals_to": [],
+      "sources": [
+        "ohada-treaty-art14",
+        "ohada-treaty-art20",
+        "ohada-revision-2008-art1"
+      ],
+      "note": "Art. 14 as revised in 2008: ensures common interpretation and application of the Treaty, its regulations, the Uniform Acts and decisions; hears cassation from States Parties' courts in Uniform Act and regulation cases, and on quashing decides the merits itself. Art. 20: its judgments are res judicata and enforceable in every State Party like national decisions; in the same case no contrary decision may be enforced there. Art. 20 was not amended in 2008."
+    }
+  ],
+  "relations": [],
+  "matters": [
+    {
+      "id": "uniform-acts",
+      "name": "Application of the Uniform Acts and of the regulations provided for in the OHADA Treaty (cassation excludes decisions applying criminal sanctions)",
+      "sources": [
+        "ohada-treaty-art14"
+      ]
+    },
+    {
+      "id": "ohada-law",
+      "name": "Interpretation and application of the OHADA Treaty, its regulations, the Uniform Acts and decisions",
+      "sources": [
+        "ohada-treaty-art14"
+      ]
+    }
+  ],
+  "members": [
+    {
+      "state": "bj",
+      "court": null,
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-bj",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification/accession 8 March 1995, deposit 10 March 1995; it gives no entry-into-force date, so none is recorded."
+    },
+    {
+      "state": "bf",
+      "court": null,
+      "valid_from": "1995-09-18",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-bf",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification 6 March 1995, deposit 16 April 1995, entry into force 1995-09-18."
+    },
+    {
+      "state": "cm",
+      "court": null,
+      "valid_from": "1996-12-03",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-cm",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification 20 October 1995, deposit 4 October 1995, entry into force 1996-12-03. The page is internally inconsistent: deposit precedes ratification, and entry into force is over a year after deposit, although art. 52 gives sixty days. Check against the depositary."
+    },
+    {
+      "state": "cf",
+      "court": null,
+      "valid_from": "1995-09-18",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-cf",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification 13 January 1995, deposit 13 January 1995, entry into force 1995-09-18."
+    },
+    {
+      "state": "km",
+      "court": null,
+      "valid_from": "1995-09-10",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-km",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification 20 February 1995, deposit 10 April 1995, entry into force 1995-09-10. Burkina Faso, Centrafrique and Mali, which also deposited before September 1995, show 18 September 1995 on their ohada.org pages; check this date."
+    },
+    {
+      "state": "cg",
+      "court": null,
+      "valid_from": "1999-07-17",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-cg",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification 28 May 1997, deposit 18 May 1999, entry into force 1999-07-17."
+    },
+    {
+      "state": "ci",
+      "court": null,
+      "valid_from": "1996-02-11",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-ci",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification 29 September 1995, deposit 13 December 1995, entry into force 1996-02-11."
+    },
+    {
+      "state": "ga",
+      "court": null,
+      "valid_from": "1998-04-05",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-ga",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification 2 February 1998, deposit 4 February 1998, entry into force 1998-04-05."
+    },
+    {
+      "state": "gn",
+      "court": null,
+      "valid_from": "2000-11-21",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-gn",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification 5 May 2000, deposit 22 September 2000, entry into force 2000-11-21."
+    },
+    {
+      "state": "gw",
+      "court": null,
+      "valid_from": "1996-02-24",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-gw",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification 15 January 1994, deposit 26 December 1995, entry into force 1996-02-24."
+    },
+    {
+      "state": "gq",
+      "court": null,
+      "valid_from": "1999-08-14",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-gq",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification 16 April 1999, deposit 15 June 1999, entry into force 1999-08-14."
+    },
+    {
+      "state": "ml",
+      "court": null,
+      "valid_from": "1995-09-18",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-ml",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification 7 February 1995, deposit 23 March 1995, entry into force 1995-09-18."
+    },
+    {
+      "state": "ne",
+      "court": null,
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-ne",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification/accession 5 June 1995, deposit 18 July 1995; it gives no entry-into-force date, so none is recorded. These dates are identical to those on the Senegal page; check them against the depositary."
+    },
+    {
+      "state": "cd",
+      "court": null,
+      "valid_from": "2012-09-12",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-cd",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification 27 June 2012, deposit 13 July 2012, entry into force 2012-09-12."
+    },
+    {
+      "state": "sn",
+      "court": null,
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-sn",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification/accession 5 June 1995, deposit 18 July 1995; it gives no entry-into-force date, so none is recorded."
+    },
+    {
+      "state": "td",
+      "court": null,
+      "valid_from": "1996-07-02",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-td",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification 13 April 1996, deposit 3 May 1996, entry into force 1996-07-02."
+    },
+    {
+      "state": "tg",
+      "court": null,
+      "valid_from": "1996-01-19",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ohada-state-tg",
+        "ohada-member-list",
+        "ohada-history"
+      ],
+      "note": "ohada.org gives, for the 1993 Treaty: ratification 27 October 1995, deposit 20 November 1995, entry into force 1996-01-19."
+    }
+  ],
+  "member_routes": [
+    {
+      "court": "aa-ohada-ccja",
+      "kind": "cassation",
+      "matter": "uniform-acts",
+      "sources": [
+        "ohada-treaty-art13",
+        "ohada-treaty-art14",
+        "ohada-treaty-art15",
+        "ohada-treaty-art16",
+        "ohada-treaty-art18",
+        "ohada-revision-2008-art1"
+      ],
+      "note": "National courts try these cases at first instance and on appeal (art. 13). Cassation against their appellate or final decisions lies to the CCJA in place of the national cassation court, not for decisions applying criminal sanctions (art. 14). A party may apply directly, or a national cassation court may refer the case (art. 15). Referral suspends national cassation proceedings until the CCJA declines competence (art. 16). A party that contested a national cassation court's competence may apply within two months; a decision given without competence is void (art. 18)."
+    },
+    {
+      "court": "aa-ohada-ccja",
+      "kind": "reference",
+      "matter": "ohada-law",
+      "sources": [
+        "ohada-treaty-art14"
+      ],
+      "note": "Art. 14 para. 2: national courts hearing cases under art. 13 may ask the CCJA for an advisory opinion (avis consultatif). The Treaty says nothing about the opinion's effect on the court that asked."
+    }
+  ],
+  "sources": [
+    {
+      "id": "ohada-revision-2008-art1",
+      "title": "Traité portant révision du Traité relatif à l'harmonisation du droit des affaires en Afrique (Québec, 17 octobre 2008)",
+      "url": "https://www.ohada.org/traite-portant-revision-du-traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+      "pinpoint": "art. 1 (articles amended: 3, 4, 7, 9, 12, 14, 17, 27, 31, 39-43, 45, 49, 57, 59, 61, 63)"
+    },
+    {
+      "id": "ohada-treaty-art14",
+      "title": "Traité portant révision du Traité relatif à l'harmonisation du droit des affaires en Afrique (Québec, 17 octobre 2008)",
+      "url": "https://www.ohada.org/traite-portant-revision-du-traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+      "pinpoint": "art. 1, Treaty art. 14 as revised"
+    },
+    {
+      "id": "ohada-treaty-art13",
+      "title": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993), text published on ohada.org as 'Traité OHADA initial'",
+      "url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+      "pinpoint": "art. 13"
+    },
+    {
+      "id": "ohada-treaty-art15",
+      "title": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993), text published on ohada.org as 'Traité OHADA initial'",
+      "url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+      "pinpoint": "art. 15"
+    },
+    {
+      "id": "ohada-treaty-art16",
+      "title": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993), text published on ohada.org as 'Traité OHADA initial'",
+      "url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+      "pinpoint": "art. 16"
+    },
+    {
+      "id": "ohada-treaty-art18",
+      "title": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993), text published on ohada.org as 'Traité OHADA initial'",
+      "url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+      "pinpoint": "art. 18"
+    },
+    {
+      "id": "ohada-treaty-art20",
+      "title": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993), text published on ohada.org as 'Traité OHADA initial'",
+      "url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+      "pinpoint": "art. 20"
+    },
+    {
+      "id": "ohada-member-list",
+      "title": "OHADA, Les Etats membres de l'OHADA",
+      "url": "https://www.ohada.org/les-etats-membres-de-lohada/"
+    },
+    {
+      "id": "ohada-history",
+      "title": "OHADA, Historique de l'OHADA",
+      "url": "https://www.ohada.org/historique-de-lohada/"
+    },
+    {
+      "id": "ohada-state-bj",
+      "title": "OHADA, Etats Parties: Bénin",
+      "url": "https://www.ohada.org/etats-parties-benin/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-bf",
+      "title": "OHADA, Etats Parties: Burkina Faso",
+      "url": "https://www.ohada.org/etats-parties-burkin-faso/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-cm",
+      "title": "OHADA, Etats Parties: Cameroun",
+      "url": "https://www.ohada.org/etats-parties-cameroun/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-cf",
+      "title": "OHADA, Etats Parties: Centrafrique",
+      "url": "https://www.ohada.org/etats-parties-centrafrique/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-km",
+      "title": "OHADA, Etats Parties: Comores",
+      "url": "https://www.ohada.org/etats-parties-comores/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-cg",
+      "title": "OHADA, Etats Parties: Congo",
+      "url": "https://www.ohada.org/etats-parties-congo/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-ci",
+      "title": "OHADA, Etats Parties: Côte d'Ivoire",
+      "url": "https://www.ohada.org/etats-parties-cote-d-ivoire/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-ga",
+      "title": "OHADA, Etats Parties: Gabon",
+      "url": "https://www.ohada.org/etats-parties-gabon/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-gn",
+      "title": "OHADA, Etats Parties: Guinée",
+      "url": "https://www.ohada.org/etats-parties-guinee/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-gw",
+      "title": "OHADA, Etats Parties: Guinée Bissau",
+      "url": "https://www.ohada.org/etats-parties-guinee-bissau/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-gq",
+      "title": "OHADA, Etats Parties: Guinée Equatoriale",
+      "url": "https://www.ohada.org/etats-parties-guinee-equatoriale/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-ml",
+      "title": "OHADA, Etats Parties: Mali",
+      "url": "https://www.ohada.org/etats-parties-mali/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-ne",
+      "title": "OHADA, Etats Parties: Niger",
+      "url": "https://www.ohada.org/etats-parties-niger/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-cd",
+      "title": "OHADA, Etats Parties: RDC",
+      "url": "https://www.ohada.org/etats-parties-rdc/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-sn",
+      "title": "OHADA, Etats Parties: Sénégal",
+      "url": "https://www.ohada.org/etats-parties-senegal/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-td",
+      "title": "OHADA, Etats Parties: Tchad",
+      "url": "https://www.ohada.org/etats-parties-tchad/",
+      "pinpoint": "Adhésion à l'OHADA"
+    },
+    {
+      "id": "ohada-state-tg",
+      "title": "OHADA, Etats Parties: Togo",
+      "url": "https://www.ohada.org/togo/",
+      "pinpoint": "Adhésion à l'OHADA"
+    }
+  ]
+}
