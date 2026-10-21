@@ -361,6 +361,7 @@ const READING_ORDER = [
   "search",
   "list-sources",
   "get-source",
+  "get-expressions",
   "get-versions",
   "get-rights",
   "resolve-citation",

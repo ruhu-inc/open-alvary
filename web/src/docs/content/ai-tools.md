@@ -56,7 +56,7 @@ On a paid or approved plan, owners and admins also confirm a second factor here.
 
 ## What to ask
 
-The tool has nine [tools](/docs/api/mcp) and picks them itself. For example:
+The tool has twelve [tools](/docs/api/mcp) and picks them itself. For example:
 
 - "Find Nigeria's Freedom of Information Act. What is its official source, and may its text be reused?"
 - "Which published Nigerian texts say who may apply for information? Quote the sections."

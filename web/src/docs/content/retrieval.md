@@ -49,6 +49,7 @@ Each unit in `evidence` is one part of a published text, best first:
 | `links` | Where to read it: `web` on Open Alvary (at the part when the website shows this text), `api` for this exact part, `text` for the whole text. |
 | `official_url`, `original_sha256`, `retrieved_at` | The official file the text was read from, and the hash to check a copy of it. |
 | `page_start`, `page_end` | The pages of that file the part is on (1 is the file's first page, not a printed page number), when the text was read from a file with pages. |
+| `expression_id`, `expression_authority` | The language edition the words are from, and what it is worth as law as its record states it: `authoritative`, `equally_authentic`, `official_translation`, `unofficial_translation`, `machine_translation`, or `unknown` when nothing is recorded. [Get a record's editions](/docs/api/get-expressions) gives the law's rule for which version prevails where versions differ. |
 | `currentness` | Whether it was in force. Read `basis`: `record` means only the whole law's status is known, which says nothing about one section; `provision` means reviewed events for this part. |
 | `context.definitions` | The definitions the part relies on, with their own exact words. |
 | `licence`, `attribution_text` | What quoting it asks for. |
