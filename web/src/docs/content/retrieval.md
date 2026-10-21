@@ -39,6 +39,8 @@ const pack = await (
 ).json();
 ```
 
+> Note: A question can carry details of a client's matter. Remove confidential client or case details before you send it: ask about the law, not the case. See [Privacy of your requests](/docs/authentication#privacy-of-your-requests).
+
 Each unit in `evidence` is one part of a published text, best first:
 
 | Field | Use it for |
@@ -225,16 +227,17 @@ Add `jurisdiction` to an item, such as `{"anchor_id": "…", "as_of": "2026-01-0
 
 ## Caching and the change feed
 
-You may cache evidence for your own users, keyed by `anchor_id` and `content_hash`, and whole answers keyed by the request and `revisions.dataset`. Keep the cache honest with the [change feed](/docs/changes):
+If you cache evidence for your users, key each part by `anchor_id` and `content_hash`, and whole answers by the request and `revisions.dataset`. Keep the cache current with the [change feed](/docs/changes), and apply withdrawals and corrections promptly:
 
 | Change | What to do |
 |---|---|
-| `withdrawal` | Delete everything that cites that text, at once. |
+| `withdrawal` | Stop serving everything that cites that text, at once. |
 | `text_version_published` | Treat cached parts of that edition as stale: check them before reuse. |
+| `metadata_corrected` | Refresh the record's details you hold. |
 | `legal_effect_recorded` | Treat cached currentness for that law as stale. |
 | A feed reset | Check every cached part before reuse. |
 
-If Open Alvary cannot be reached, you may answer from your cache, but say that currentness was not checked, never serve a part whose withdrawal you have seen, and stop after seven days without reading the feed. Don't build your own index of the corpus for retrieval; the [releases](/docs/api/list-releases) are there for full copies.
+If Open Alvary can't be reached and you answer from your cache, say that currentness wasn't checked, and never serve a part whose withdrawal you have seen. For a full copy, start from a [data release](/docs/api/list-releases) and follow the change feed; releases with full text are granted by agreement.
 
 ## From an AI tool
 
