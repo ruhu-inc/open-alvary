@@ -21,7 +21,7 @@ resource "google_compute_address" "inference" {
 resource "google_compute_instance" "inference" {
   count                     = var.inference_enabled ? 1 : 0
   name                      = "${local.name_prefix}-inference"
-  zone                      = var.zone
+  zone                      = var.inference_zone != "" ? var.inference_zone : var.zone
   machine_type              = local.inference_vm_size
   tags                      = ["inference"]
   allow_stopping_for_update = true
