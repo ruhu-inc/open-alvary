@@ -112,7 +112,7 @@ def test_a_link_its_records_no_longer_state_is_withdrawn_and_judicial_links_are_
     assert report["links"] == 1 and report["links_withdrawn"] == []
     [withheld] = report["withheld"]
     assert (withheld["work"], withheld["kind"], withheld["other"]) == (law, "follows", "rw-judgment")
-    assert "case law" in withheld["reason"]
+    assert "reviewed citations" in withheld["reason"]  # treatment comes with its paragraph and review
     assert effects() == [(law, 1, None), (treaty, 1, None)]  # one on each work
     # Approved again without the link: it is withdrawn, and each work's event says so once.
     report = publish.publish_records(store, "rw", [item(law), item(treaty)], set(), decision)

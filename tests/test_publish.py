@@ -258,7 +258,8 @@ def test_reviewed_vocabulary_links_are_published_from_either_end_and_judicial_on
         ("order", "commences", "ng-act"),
         ("order", "implements", "dir"),
     ]
-    # Judicial treatment and appeal links wait for case law; nothing a record says is dropped unreported.
+    # Judicial treatment comes from a judgment's reviewed citations, never from its details, and appeal
+    # history waits for its own review; nothing a record says is dropped unreported.
     withheld = {(w["work"], w["kind"], w["other"]): w["reason"] for w in publish.withheld_relations(approved)}
     assert set(withheld) == {
         ("order", "overrules", "dir"),
@@ -266,7 +267,9 @@ def test_reviewed_vocabulary_links_are_published_from_either_end_and_judicial_on
         ("judgment", "follows", "judgment-2"),
         ("judgment", "appeal_from", "order"),
     }
-    assert "case law" in withheld[("order", "overrules", "dir")]
+    assert "reviewed citations" in withheld[("order", "overrules", "dir")]
+    assert "operations.citations" in withheld[("judgment", "follows", "judgment-2")]
+    assert "appeal history" in withheld[("judgment", "appeal_from", "order")]
     assert withheld[("order", "related", "treaty")] == publish.NOT_PUBLISHED
 
 

@@ -63,6 +63,18 @@ PARAGRAPH = re.compile(
     r"(?:\[\s*(\d{1,4}[a-z]?)\s*\]|(?:paras?|paragraphs?)\.?\s*(\d{1,4}[a-z]?))$",
     re.I,
 )
+# A section's or an article's pinpoint as running text writes it, "section 2(1)", "s. 23(1)(a)", "art. 10,
+# al. 2": where a judgment's words may cite a provision (operations.citations reads the work around it).
+IN_TEXT = re.compile(
+    rf"(?<![\w.])(?:{_SECTION_LEADS}|{_ARTICLE_LEADS})\.?\s*\d{{1,4}}(?:-\d{{1,3}}){{0,4}}[a-z]{{0,2}}\b\.?"
+    rf"\s*{_SUBS}{_ALINEA}",
+    re.I,
+)
+# A judgment's paragraph written right after its neutral citation: " at [12]", " [12]", ", para. 12".
+AFTER_NEUTRAL = re.compile(
+    r"\s*,?\s*(?:(?:op|opinion)\.?\s*\d{1,2}\s*,?\s*)?(?:at\s+)?(?:\[\s*\d{1,4}[a-z]?\s*\]|paras?\.?\s*\d{1,4}[a-z]?)",
+    re.I,
+)
 # Where a pinpoint may begin within a citation: "NDPA s. 23(1)(a)", "ISA 2025, First Schedule, para. 3".
 _STARTS = re.compile(
     rf"(?:^|(?<=[\s,;(]))(?:{_SECTION_LEADS}|{_ARTICLE_LEADS}|(?:{'|'.join(ORDINALS)}|\d{{1,2}}(?:st|nd|rd|th))\s+schedule"
