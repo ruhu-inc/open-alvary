@@ -13,6 +13,7 @@ must include bulk and the release's country must be within its plan (MAC-06; own
 """
 
 import hashlib
+import re
 from collections.abc import Callable
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
@@ -25,7 +26,7 @@ from fastapi.openapi.utils import get_openapi
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
-from api import text_index
+from api import courts, text_index
 from api.admission import AdmissionUnavailable
 from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable
 from api.credentials import NOT_INCLUDED, problem
@@ -45,6 +46,8 @@ from schema.public import (
     CheckPage,
     CheckRequest,
     CitationView,
+    CourtRegisters,
+    CourtRegisterView,
     CoverageView,
     EvidencePack,
     ExpressionPage,
@@ -68,6 +71,7 @@ CLASSES = (("/bulk/", "bulk"),)
 DocumentType = Literal["constitution", "act", "regulation", "judgment", "gazette", "guidance", "other"]
 # A BCP 47 language tag, such as en, fr or en-NG.
 LANGUAGE = Query(None, min_length=2, max_length=35, pattern=r"^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$")
+PLACE = re.compile(r"[a-z]{2}(?:-[a-z0-9]{1,12})?")  # a court register's jurisdiction (schema.record)
 
 
 def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]]) -> FastAPI:
@@ -493,6 +497,24 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
     @app.get("/coverage")
     def coverage(service: LegacyCatalogue = Depends(catalogue)) -> CoverageView:
         return service.coverage()
+
+    # Court registers (CPR-04) are reference data written in the repository, not corpus records: no plan
+    # narrows them. A register that fails to load (changed after its review) is unavailable, never stale.
+    @app.get("/courts")
+    def court_registers() -> CourtRegisters:
+        try:
+            return CourtRegisters(registers=[courts.summary(r) for r in courts.written()])
+        except ValueError as error:
+            raise PublicUnavailable("A court register is unavailable") from error
+
+    @app.get("/courts/{jurisdiction}")
+    def court_register(jurisdiction: str) -> CourtRegisterView:
+        if not PLACE.fullmatch(jurisdiction):
+            raise InvalidSearch("jurisdiction: a place code, such as `ke`, `ng-la` or `aa-ohada`")
+        try:
+            return courts.public(courts.load(jurisdiction))
+        except ValueError as error:
+            raise PublicUnavailable("This court register is unavailable") from error
 
     @app.get("/rights/{source_id}")
     def rights(request: Request, source_id: str, service: LegacyCatalogue = Depends(catalogue)) -> RightsView:
