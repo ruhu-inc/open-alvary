@@ -359,6 +359,7 @@
       "id": "gh-sc-on-gh-nhc",
       "court": "gh-sc",
       "bound": "gh-nhc",
+      "matter": "chieftaincy",
       "relation": "binding",
       "rests_on": [
         {
@@ -381,12 +382,13 @@
         "const-129-3",
         "courts-act-39"
       ],
-      "note": "Art. 129(3) binds all other courts; Courts Act s. 39(d) makes the House a lower court for chieftaincy causes. Reviewer to confirm art. 129(3) reaches it."
+      "note": "Art. 129(3) binds all other courts; Courts Act s. 39(d) makes the House a lower court only for a cause or matter affecting chieftaincy, so the relation is limited to that matter. Reviewer to confirm art. 129(3) reaches it."
     },
     {
       "id": "gh-sc-on-gh-rhc",
       "court": "gh-sc",
       "bound": "gh-rhc",
+      "matter": "chieftaincy",
       "relation": "binding",
       "rests_on": [
         {
@@ -409,12 +411,13 @@
         "const-129-3",
         "courts-act-39"
       ],
-      "note": "Art. 129(3) binds all other courts; Courts Act s. 39(d) makes Regional Houses lower courts for chieftaincy causes. Reviewer to confirm art. 129(3) reaches them."
+      "note": "Art. 129(3) binds all other courts; Courts Act s. 39(d) makes Regional Houses lower courts only for a cause or matter affecting chieftaincy, so the relation is limited to that matter. Reviewer to confirm art. 129(3) reaches them."
     },
     {
       "id": "gh-sc-on-gh-tc",
       "court": "gh-sc",
       "bound": "gh-tc",
+      "matter": "chieftaincy",
       "relation": "binding",
       "rests_on": [
         {
@@ -437,7 +440,7 @@
         "const-129-3",
         "courts-act-39"
       ],
-      "note": "Art. 129(3) binds all other courts; Courts Act s. 39(d) makes Traditional Councils lower courts for chieftaincy causes. Reviewer to confirm art. 129(3) reaches them."
+      "note": "Art. 129(3) binds all other courts; Courts Act s. 39(d) makes Traditional Councils lower courts only for a cause or matter affecting chieftaincy, so the relation is limited to that matter. Reviewer to confirm art. 129(3) reaches them."
     },
     {
       "id": "gh-ca-on-gh-ca",
@@ -651,6 +654,15 @@
         "courts-act-39"
       ],
       "note": "Art. 136(5): courts lower than the Court of Appeal follow its decisions on questions of law; Juvenile Courts are lower courts (art. 126(1)(b); Courts Act s. 39(c))."
+    }
+  ],
+  "matters": [
+    {
+      "id": "chieftaincy",
+      "name": "A cause or matter affecting chieftaincy, which a House of Chiefs or Traditional Council has jurisdiction to adjudicate over",
+      "sources": [
+        "courts-act-39"
+      ]
     }
   ],
   "sources": [
