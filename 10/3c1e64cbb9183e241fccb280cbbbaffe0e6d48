@@ -1,0 +1,36 @@
+web/src/docs/content/changelog.md
+  s_d665c62e07d76f::t_d0bad3d0524a1c 8-11
+api/pinpoint.py
+  s_d665c62e07d76f::t_5ea365c82f127d 180
+  s_d665c62e07d76f::t_6a70387739a709 192-193
+  s_d665c62e07d76f::t_a8dce5eac8b85b 31-33
+  s_d665c62e07d76f::t_4719f1cfc2e625 241,246,253-255
+  s_d665c62e07d76f::t_6cccb2bbe8c038 18
+  s_d665c62e07d76f::t_fa7f69ac614ef2 30
+  s_d665c62e07d76f::t_a7f4bd5edc7d43 194
+  s_d665c62e07d76f::t_0558d0419224d0 223-226,247,249
+  s_d665c62e07d76f::t_8ed0b6fbc32cd3 7-9
+  s_d665c62e07d76f::t_0c90adfac0153d 41
+web/src/docs/content/retrieval.md
+  s_d665c62e07d76f::t_d0bad3d0524a1c 63
+tests/test_pinpoint.py
+  s_d665c62e07d76f::t_b5e0d5f22c103e 32-38
+  s_d665c62e07d76f::t_001654dcc43cf5 113-163
+  s_d665c62e07d76f::t_3917bc63093779 164-166
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "103c1e64cbb9183e241fccb280cbbbaffe0e6d48",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
