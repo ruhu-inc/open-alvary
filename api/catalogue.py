@@ -25,6 +25,7 @@ from api.search import normalize_citation as normalize_citation
 from api.search import words
 from changes.record import namespace
 from rights.policy import decide
+from schema.dates import within
 from schema.jurisdictions import catalogue_entry, registry
 from schema.models import Citation, Corpus
 from schema.policy import MetadataPage, PublicMetadata
@@ -58,6 +59,7 @@ from schema.public import (
     SourceRelationships,
     SourceView,
     StructurePage,
+    SuspensionView,
     TextHit,
     TextSearchPage,
     VersionPage,
@@ -78,26 +80,44 @@ MEMBERSHIP_NOTICE = {
 }
 
 
+def _on(membership: MembershipView, as_of: date) -> MembershipView:
+    """A membership with each suspension's ``in_effect`` on the date: context, never whether it held."""
+    if not membership.suspensions:
+        return membership
+    return membership.model_copy(
+        update={
+            "suspensions": tuple(
+                s.model_copy(update={"in_effect": within(as_of, s.valid_from, s.valid_to)})
+                for s in membership.suspensions
+            )
+        }
+    )
+
+
 def membership_list(
     held: list[MembershipView], jurisdiction_id: str, side: str, as_of: date
 ) -> MembershipList:
     """The reviewed memberships on one side of a jurisdiction on a date: as ``member`` (the bodies it
-    belongs to) or as ``body`` (its members). Dates are inclusive; none reviewed is ``unknown``."""
-    mine = [m for m in held if getattr(m, f"{side}_id") == jurisdiction_id]
+    belongs to) or as ``body`` (its members). Dates are inclusive: held (``items``), ``uncertain`` when the
+    date falls inside an uncertain start or end, or ``ended`` before it; none reviewed is ``unknown``.
+    Suspensions are context and never move a membership between them."""
+    mine = [_on(m, as_of) for m in held if getattr(m, f"{side}_id") == jurisdiction_id]
     if not mine:
         return MembershipList(status="unknown", notice=MEMBERSHIP_NOTICE["unknown"])
+    answers = [(m, within(as_of, m.valid_from, m.valid_to)) for m in mine]
     return MembershipList(
         status="reviewed",
-        items=tuple(m for m in mine if m.valid_from <= as_of and (m.valid_to is None or as_of <= m.valid_to)),
-        ended=tuple(m for m in mine if m.valid_to is not None and m.valid_to < as_of),
+        items=tuple(m for m, held_then in answers if held_then is True),
+        uncertain=tuple(m for m, held_then in answers if held_then is None),
+        ended=tuple(m for m, _ in answers if m.valid_to is not None and m.valid_to.latest < as_of),
         notice=MEMBERSHIP_NOTICE["reviewed"],
     )
 
 
 def _held_on(membership: MembershipView, day: date) -> bool | None:
     """Whether a reviewed membership held on a day: True, False, or None when the day falls inside an
-    uncertain window of its dates (none yet: its dates are exact days, inclusive)."""
-    return membership.valid_from <= day and (membership.valid_to is None or day <= membership.valid_to)
+    uncertain window of its dates (schema.dates; inclusive)."""
+    return within(day, membership.valid_from, membership.valid_to)
 
 
 def bodies_on(
@@ -1291,24 +1311,27 @@ class LegacyCatalogue:
 
     def memberships(self, jurisdiction_id: str | None = None) -> list[MembershipView]:
         """The reviewed memberships published to the catalogue (corpus.membership, operations.memberships),
-        all or those of one member or body; none in SQLite or before migration 0040."""
+        all or those of one member or body, each with its reviewed suspensions; none in SQLite or before
+        migration 0042."""
         conn = self.repository.connection
         if conn.dialect.name != "postgresql":
             return []
-        table = namespace(conn).qualified(conn, "corpus", "membership")
-        if conn.scalar(text("SELECT to_regclass(:t)"), {"t": table}) is None:
+        ns = namespace(conn)
+        table = ns.qualified(conn, "corpus", "membership")
+        suspended = ns.qualified(conn, "corpus", "membership_suspension")
+        if conn.scalar(text("SELECT to_regclass(:t)"), {"t": suspended}) is None:
             return []
         rows = (
             conn.execute(
                 text(
-                    "SELECT m.membership_id AS id, m.member_id, m.body_id, m.valid_from, m.valid_to,"
+                    "SELECT m.membership_id AS id, m.member_id, m.body_id, m.valid_from, m.valid_to, m.basis,"
                     " m.evidence_url, m.note, m.reviewed_by, m.reviewed_at,"
                     " coalesce(mj.payload->>'name', m.member_id) AS member_name,"
                     " coalesce(bj.payload->>'name', m.body_id) AS body_name"
                     f" FROM {table} m JOIN jurisdictions mj ON mj.id = m.member_id"
                     " JOIN jurisdictions bj ON bj.id = m.body_id"
                     + ("" if jurisdiction_id is None else " WHERE m.member_id = :j OR m.body_id = :j")
-                    + " ORDER BY m.body_id, m.member_id, m.valid_from LIMIT :bound"
+                    + " ORDER BY m.body_id, m.member_id, m.valid_from_earliest LIMIT :bound"
                 ),
                 {"j": jurisdiction_id, "bound": MAX_UNPAGED_ROWS + 1},
             )
@@ -1317,9 +1340,31 @@ class LegacyCatalogue:
         )
         if len(rows) > MAX_UNPAGED_ROWS:
             raise ResultTooLarge("Pilot unpaged response exceeds row bound")
+        suspensions: dict[str, list] = {}
+        if rows:
+            for row in conn.execute(
+                text(
+                    "SELECT suspension_id AS id, membership_id, valid_from, valid_to, legal_basis, evidence_url,"
+                    f" lifted_evidence_url, note, reviewed_by, reviewed_at FROM {suspended}"
+                    " WHERE membership_id = ANY(:ids) ORDER BY membership_id, valid_from_earliest"
+                ),
+                {"ids": [row["id"] for row in rows]},
+            ).mappings():
+                suspensions.setdefault(row["membership_id"], []).append(
+                    SuspensionView.model_validate(
+                        {k: v for k, v in row.items() if k != "membership_id"}
+                        | {"reviewed_at": row["reviewed_at"].astimezone(UTC)}
+                    )
+                )
         # In UTC whatever the database session's time zone.
         return [
-            MembershipView.model_validate(dict(row) | {"reviewed_at": row["reviewed_at"].astimezone(UTC)})
+            MembershipView.model_validate(
+                dict(row)
+                | {
+                    "reviewed_at": row["reviewed_at"].astimezone(UTC),
+                    "suspensions": tuple(suspensions.get(row["id"], ())),
+                }
+            )
             for row in rows
         ]
 

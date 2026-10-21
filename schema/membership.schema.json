@@ -1,5 +1,62 @@
 {
   "$defs": {
+    "Basis": {
+      "additionalProperties": false,
+      "description": "Why a membership starts when it does: the kind of event, the article of the instrument that makes\nit the start (``pinpoint``, such as ``art. 28``), where that article was read and, optionally, its\nwords.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "entry_into_force",
+            "deposit",
+            "admission_decision",
+            "provisional_application_on_signature",
+            "signature"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "instrument": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Instrument",
+          "type": "string"
+        },
+        "pinpoint": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Pinpoint",
+          "type": "string"
+        },
+        "evidence_url": {
+          "maxLength": 2000,
+          "pattern": "^https://",
+          "title": "Evidence Url",
+          "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "maxLength": 400,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        }
+      },
+      "required": [
+        "kind",
+        "instrument",
+        "pinpoint",
+        "evidence_url"
+      ],
+      "title": "Basis",
+      "type": "object"
+    },
     "Membership": {
       "additionalProperties": false,
       "properties": {
@@ -35,7 +92,7 @@
         "valid_from": {
           "anyOf": [
             {
-              "format": "date",
+              "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$",
               "type": "string"
             },
             {
@@ -47,7 +104,7 @@
         "valid_to": {
           "anyOf": [
             {
-              "format": "date",
+              "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$",
               "type": "string"
             },
             {
@@ -55,6 +112,16 @@
             }
           ],
           "title": "Valid To"
+        },
+        "basis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Basis"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "evidence_url": {
           "maxLength": 2000,
@@ -103,18 +170,191 @@
         "status",
         "valid_from",
         "valid_to",
+        "basis",
         "evidence_url",
         "note"
       ],
       "title": "Membership",
+      "type": "object"
+    },
+    "Provision": {
+      "additionalProperties": false,
+      "description": "An article of an instrument, as cited: the instrument, the article (``pinpoint``), where it was\nread and, optionally, its words.",
+      "properties": {
+        "instrument": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Instrument",
+          "type": "string"
+        },
+        "pinpoint": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Pinpoint",
+          "type": "string"
+        },
+        "evidence_url": {
+          "maxLength": 2000,
+          "pattern": "^https://",
+          "title": "Evidence Url",
+          "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "maxLength": 400,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        }
+      },
+      "required": [
+        "instrument",
+        "pinpoint",
+        "evidence_url"
+      ],
+      "title": "Provision",
+      "type": "object"
+    },
+    "Suspension": {
+      "additionalProperties": false,
+      "description": "A member suspended from participating in a body's activities, overlaid on one membership: its first\nand last day (``valid_to`` null: not lifted), its legal basis, the decision that suspended it and the\none that lifted it. It never ends the membership.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?:aa-[a-z0-9]{1,12}:[1-9][0-9]{0,2}:s[1-9][0-9]{0,2}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "membership_id": {
+          "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?:aa-[a-z0-9]{1,12}:[1-9][0-9]{0,2}$",
+          "title": "Membership Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "suspended_from_participation",
+          "default": "suspended_from_participation",
+          "title": "Kind",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "proposal",
+            "reviewed"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "valid_from": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Valid From"
+        },
+        "valid_to": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Valid To"
+        },
+        "legal_basis": {
+          "items": {
+            "$ref": "#/$defs/Provision"
+          },
+          "maxItems": 5,
+          "title": "Legal Basis",
+          "type": "array"
+        },
+        "evidence_url": {
+          "maxLength": 2000,
+          "pattern": "^https://",
+          "title": "Evidence Url",
+          "type": "string"
+        },
+        "lifted_evidence_url": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "pattern": "^https://",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lifted Evidence Url"
+        },
+        "note": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Note",
+          "type": "string"
+        },
+        "reviewed_by": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed By"
+        },
+        "reviewed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed At"
+        }
+      },
+      "required": [
+        "id",
+        "membership_id",
+        "status",
+        "valid_from",
+        "valid_to",
+        "legal_basis",
+        "evidence_url",
+        "note"
+      ],
+      "title": "Suspension",
       "type": "object"
     }
   },
   "additionalProperties": false,
   "properties": {
     "standard": {
-      "const": "memberships-1",
-      "default": "memberships-1",
+      "const": "memberships-2",
+      "default": "memberships-2",
       "title": "Standard",
       "type": "string"
     },
@@ -130,6 +370,14 @@
         "$ref": "#/$defs/Membership"
       },
       "title": "Memberships",
+      "type": "array"
+    },
+    "suspensions": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/Suspension"
+      },
+      "title": "Suspensions",
       "type": "array"
     }
   },

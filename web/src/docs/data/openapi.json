@@ -106,7 +106,7 @@
             "name": "jurisdiction",
             "in": "query",
             "required": false,
-            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law, and a body such as `aa-ecowas` includes changes to its membership. Up to 50.",
+            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law, and a body such as `aa-ecowas` includes changes to its membership and its members' suspensions. Up to 50.",
             "schema": {
               "type": "array",
               "items": {
@@ -134,7 +134,7 @@
             "name": "type",
             "in": "query",
             "required": false,
-            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`.",
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`, `suspension_recorded`.",
             "schema": {
               "type": "array",
               "items": {
@@ -319,7 +319,7 @@
             "name": "jurisdiction",
             "in": "query",
             "required": false,
-            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law, and a body such as `aa-ecowas` includes changes to its membership. Up to 50.",
+            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law, and a body such as `aa-ecowas` includes changes to its membership and its members' suspensions. Up to 50.",
             "schema": {
               "type": "array",
               "items": {
@@ -347,7 +347,7 @@
             "name": "type",
             "in": "query",
             "required": false,
-            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`.",
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`, `suspension_recorded`.",
             "schema": {
               "type": "array",
               "items": {
@@ -492,7 +492,7 @@
             "name": "jurisdiction",
             "in": "query",
             "required": false,
-            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law, and a body such as `aa-ecowas` includes changes to its membership. Up to 50.",
+            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law, and a body such as `aa-ecowas` includes changes to its membership and its members' suspensions. Up to 50.",
             "schema": {
               "type": "array",
               "items": {
@@ -520,7 +520,7 @@
             "name": "type",
             "in": "query",
             "required": false,
-            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`.",
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`, `suspension_recorded`.",
             "schema": {
               "type": "array",
               "items": {
@@ -665,7 +665,7 @@
             "name": "jurisdiction",
             "in": "query",
             "required": false,
-            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law, and a body such as `aa-ecowas` includes changes to its membership. Up to 50.",
+            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law, and a body such as `aa-ecowas` includes changes to its membership and its members' suspensions. Up to 50.",
             "schema": {
               "type": "array",
               "items": {
@@ -693,7 +693,7 @@
             "name": "type",
             "in": "query",
             "required": false,
-            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`.",
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`, `suspension_recorded`.",
             "schema": {
               "type": "array",
               "items": {
@@ -1137,7 +1137,7 @@
             }
           }
         },
-        "description": "One jurisdiction on a date. For a country, `member_of`: the African Union and the regional bodies it belonged to on `as_of`, and in `ended` the memberships that had ended by then, each with its first and last day, evidence and review. For the African Union or a regional body, `members`: its member states on that date, and those that had left. Only reviewed memberships are listed; `status` is `unknown`, never an empty list, when none is reviewed. Membership alone never means a body's treaties apply to a member.",
+        "description": "One jurisdiction on a date. For a country, `member_of`: the African Union and the regional bodies it belonged to on `as_of`, in `uncertain` those it may or may not have belonged to (the date falls inside an uncertain first or last day), and in `ended` the memberships that had ended by then, each with its first and last day (as precisely as the evidence gives them, with their bounds), its basis, evidence and review, and its suspensions from participation as context. For the African Union or a regional body, `members`: its member states on that date, and those that had left. Only reviewed memberships are listed; `status` is `unknown`, never an empty list, when none is reviewed. A suspension never ends a membership. Membership alone never means a body's treaties apply to a member.",
         "tags": [
           "Catalogue"
         ]
@@ -4114,6 +4114,62 @@
         "title": "AuthorityEvidence",
         "description": "Where an edition's authority or a language rule is stated: a page and the words of the document\n(``document``), the address of another instrument (``external``), or the reviewer who recorded it."
       },
+      "BasisView": {
+        "properties": {
+          "instrument": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Instrument",
+            "description": "The instrument whose article sets the start."
+          },
+          "pinpoint": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Pinpoint",
+            "description": "The article, such as `art. 28`."
+          },
+          "evidence_url": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Evidence Url",
+            "description": "Where the article was read."
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote",
+            "description": "The article's words, when recorded."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "entry_into_force",
+              "deposit",
+              "admission_decision",
+              "provisional_application_on_signature",
+              "signature"
+            ],
+            "title": "Kind",
+            "description": "`entry_into_force` (the instrument entered into force for the member), `deposit` (the member deposited its instrument), `admission_decision` (the body decided to admit it), `provisional_application_on_signature` (the instrument applied from signature) or `signature` (where the instrument makes signature binding)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "instrument",
+          "pinpoint",
+          "evidence_url",
+          "kind"
+        ],
+        "title": "BasisView",
+        "description": "Why a membership starts when it does, and the article that makes that its start."
+      },
       "CatalogueMatch": {
         "properties": {
           "source_id": {
@@ -5954,6 +6010,42 @@
         "title": "Currentness",
         "description": "Whether a part was in force at a date (RSV-08, IDT-03). ``basis`` says what the state rests on:\nreviewed events covering this provision (``provision``), only the record's status for its whole text\n(``record``), or nothing (``none``). A record-level state is never a claim about one provision."
       },
+      "DateBounds": {
+        "properties": {
+          "earliest": {
+            "type": "string",
+            "format": "date",
+            "title": "Earliest",
+            "description": "The earliest day the date can be."
+          },
+          "latest": {
+            "type": "string",
+            "format": "date",
+            "title": "Latest",
+            "description": "The latest day the date can be (the same as `earliest` for a day)."
+          },
+          "precision": {
+            "type": "string",
+            "enum": [
+              "day",
+              "month",
+              "year",
+              "range"
+            ],
+            "title": "Precision",
+            "description": "`day`, `month`, `year` or `range` (a window holding the day)."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "earliest",
+          "latest",
+          "precision"
+        ],
+        "title": "DateBounds",
+        "description": "An uncertain date's bounds in an answer: the earliest and the latest day it can be (inclusive), and\nits precision (``day``, ``month``, ``year`` or ``range``)."
+      },
       "DecisionView": {
         "properties": {
           "metadata": {
@@ -7612,6 +7704,15 @@
             "default": [],
             "description": "The memberships held on the date."
           },
+          "uncertain": {
+            "items": {
+              "$ref": "#/components/schemas/MembershipView"
+            },
+            "type": "array",
+            "title": "Uncertain",
+            "default": [],
+            "description": "The memberships that may or may not have held on the date: it falls inside the window of an uncertain first or last day. Unknown, never guessed."
+          },
           "ended": {
             "items": {
               "$ref": "#/components/schemas/MembershipView"
@@ -7619,7 +7720,7 @@
             "type": "array",
             "title": "Ended",
             "default": [],
-            "description": "The reviewed memberships that had ended before the date, with their last day."
+            "description": "The reviewed memberships that had certainly ended before the date, with their last day."
           },
           "notice": {
             "type": "string",
@@ -7634,7 +7735,7 @@
           "notice"
         ],
         "title": "MembershipList",
-        "description": "Memberships in one direction on one date: the bodies a jurisdiction belongs to, or a body's members.\n``items`` held on the date; ``ended`` had ended by then. ``unknown`` when no membership in this\ndirection is reviewed: never an empty list read as \"none\"."
+        "description": "Memberships in one direction on one date: the bodies a jurisdiction belongs to, or a body's members.\n``items`` held on the date; ``uncertain`` may or may not have held (the date falls inside an uncertain\nstart or end); ``ended`` had ended by then. ``unknown`` when no membership in this direction is\nreviewed: never an empty list read as \"none\"."
       },
       "MembershipView": {
         "properties": {
@@ -7670,22 +7771,41 @@
           },
           "valid_from": {
             "type": "string",
-            "format": "date",
+            "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$",
             "title": "Valid From",
-            "description": "The membership's first day."
+            "description": "The membership's first day, as an EDTF date: a day (`2001-05-26`), a month (`2000-12`), a year (`1976`) or a window holding the day (`2016-08-15/2016-09-05`), as precisely as the evidence gives it."
+          },
+          "valid_from_bounds": {
+            "$ref": "#/components/schemas/DateBounds",
+            "description": "The earliest and latest day `valid_from` can be, and its precision."
           },
           "valid_to": {
             "anyOf": [
               {
                 "type": "string",
-                "format": "date"
+                "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$"
               },
               {
                 "type": "null"
               }
             ],
             "title": "Valid To",
-            "description": "Its last day, when it has ended (a withdrawal effective on 29 January ends it on the 28th); null when it has not."
+            "description": "Its last day, when it has ended (a withdrawal effective on 29 January ends it on the 28th), in the same forms; null when it has not."
+          },
+          "valid_to_bounds": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DateBounds"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The earliest and latest day `valid_to` can be, and its precision; null when it has not ended."
+          },
+          "basis": {
+            "$ref": "#/components/schemas/BasisView",
+            "description": "Why the membership starts when it does, with the article that makes that its start."
           },
           "evidence_url": {
             "type": "string",
@@ -7710,6 +7830,15 @@
             "format": "date-time",
             "title": "Reviewed At",
             "description": "When it was reviewed."
+          },
+          "suspensions": {
+            "items": {
+              "$ref": "#/components/schemas/SuspensionView"
+            },
+            "type": "array",
+            "title": "Suspensions",
+            "default": [],
+            "description": "The member's reviewed suspensions from participation in the body, as context. A suspension never ends a membership: a suspended member is still listed as holding it."
           }
         },
         "additionalProperties": false,
@@ -7721,13 +7850,15 @@
           "body_id",
           "body_name",
           "valid_from",
+          "valid_from_bounds",
+          "basis",
           "evidence_url",
           "note",
           "reviewed_by",
           "reviewed_at"
         ],
         "title": "MembershipView",
-        "description": "One reviewed membership of the African Union or a regional body (JUR-04): the member, the body, the\nfirst and last day it held (inclusive; no last day means it has not ended), the evidence and who\nreviewed it when. Membership alone never applies the body's treaties to the member."
+        "description": "One reviewed membership of the African Union or a regional body (JUR-04): the member, the body, the\nfirst and last day it held (inclusive; no last day means it has not ended), each an EDTF date (a day,\na month, a year or a window) with its bounds, why it starts then (``basis``), the evidence, who\nreviewed it when, and its suspensions from participation, as context. Membership alone never applies\nthe body's treaties to the member; a suspension never ends it."
       },
       "NextStep": {
         "properties": {
@@ -8170,6 +8301,49 @@
         ],
         "title": "ProvisionMatch",
         "description": "One part of a public text that a pinpoint names (API-04 provision lookup): its anchor, locator and\nexact span. /anchors/{anchor_id} gives its words."
+      },
+      "ProvisionView": {
+        "properties": {
+          "instrument": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Instrument",
+            "description": "The instrument, such as `Constitutive Act of the African Union`."
+          },
+          "pinpoint": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Pinpoint",
+            "description": "Its article, such as `art. 30`."
+          },
+          "evidence_url": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Evidence Url",
+            "description": "Where the article was read."
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote",
+            "description": "The article's words, when recorded."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "instrument",
+          "pinpoint",
+          "evidence_url"
+        ],
+        "title": "ProvisionView",
+        "description": "An article of an instrument, as cited: the instrument, the article, where it was read and its words\nwhen recorded."
       },
       "RankingExplanation": {
         "properties": {
@@ -9282,6 +9456,127 @@
         "title": "StructurePage",
         "description": "A page of one text version's structure in document order (API-02 /versions/{id}/structure)."
       },
+      "SuspensionView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Id",
+            "description": "The suspension's ID: its membership and its number, such as `ga:aa-au:1:s1`."
+          },
+          "kind": {
+            "type": "string",
+            "const": "suspended_from_participation",
+            "title": "Kind",
+            "default": "suspended_from_participation",
+            "description": "`suspended_from_participation`: the member may not take part in the body's activities. It remains a member."
+          },
+          "valid_from": {
+            "type": "string",
+            "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$",
+            "title": "Valid From",
+            "description": "The first day of the suspension, as an EDTF date."
+          },
+          "valid_from_bounds": {
+            "$ref": "#/components/schemas/DateBounds",
+            "description": "The earliest and latest day `valid_from` can be, and its precision."
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To",
+            "description": "Its last day, once lifted (a suspension lifted on 30 April ends on the 29th); null while it lasts."
+          },
+          "valid_to_bounds": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/DateBounds"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The earliest and latest day `valid_to` can be, and its precision; null while it lasts."
+          },
+          "in_effect": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "In Effect",
+            "description": "Whether it was in effect on `as_of`; null when that date falls inside an uncertain first or last day."
+          },
+          "legal_basis": {
+            "items": {
+              "$ref": "#/components/schemas/ProvisionView"
+            },
+            "type": "array",
+            "title": "Legal Basis",
+            "description": "The articles it rests on."
+          },
+          "evidence_url": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Evidence Url",
+            "description": "The decision that suspended the member."
+          },
+          "lifted_evidence_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifted Evidence Url",
+            "description": "The decision that lifted it, once lifted."
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Note",
+            "description": "What the evidence says, and anything a reader should know."
+          },
+          "reviewed_by": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reviewed By",
+            "description": "Who reviewed it."
+          },
+          "reviewed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Reviewed At",
+            "description": "When it was reviewed."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "valid_from",
+          "valid_from_bounds",
+          "legal_basis",
+          "evidence_url",
+          "note",
+          "reviewed_by",
+          "reviewed_at"
+        ],
+        "title": "SuspensionView",
+        "description": "A reviewed suspension of a member from participation in a body's activities: context for its\nmembership, which it never ends. Its first and last day (inclusive; none: not lifted), each an EDTF\ndate with its bounds, whether it was in effect on the date asked (``null``: the date falls inside an\nuncertain start or end), its legal basis, the decision that suspended it, the one that lifted it, and\nwho reviewed it when."
+      },
       "TextHit": {
         "properties": {
           "anchor_id": {
@@ -10322,7 +10617,7 @@
           },
           "event_type": {
             "type": "string",
-            "description": "What changed: `catalogue_added` (a record added: an old law newly catalogued, not a new law), `metadata_corrected` (its catalogue details corrected), `text_version_published`, `legal_effect_recorded` (a checked link with another public record that changes what law applies: a repeal, amendment, supersession, commencement, transposition, domestication or ratification; or a reviewed event on its provisions), `withdrawal` (a record or text), `coverage_changed` (a jurisdiction's coverage) or `membership_recorded` (a reviewed membership of the African Union or a regional body recorded, ended or corrected). More types may be added: ignore those you do not know; `/change-coverage` lists the ones recorded."
+            "description": "What changed: `catalogue_added` (a record added: an old law newly catalogued, not a new law), `metadata_corrected` (its catalogue details corrected), `text_version_published`, `legal_effect_recorded` (a checked link with another public record that changes what law applies: a repeal, amendment, supersession, commencement, transposition, domestication or ratification; or a reviewed event on its provisions), `withdrawal` (a record or text), `coverage_changed` (a jurisdiction's coverage), `membership_recorded` (a reviewed membership of the African Union or a regional body recorded, ended or corrected) or `suspension_recorded` (a reviewed suspension of a member from participation in a body's activities recorded, lifted or corrected; it remains a member). More types may be added: ignore those you do not know; `/change-coverage` lists the ones recorded."
           },
           "feed_epoch": {
             "type": "string",
@@ -10356,7 +10651,7 @@
               "string",
               "null"
             ],
-            "description": "When it takes legal effect, if known."
+            "description": "When it takes legal effect, if known: {from, until, precision}. A membership's or suspension's dates are EDTF dates, each stating its own precision (a window `FIRST/LAST` holds one day); `precision` is that of `from`."
           },
           "jurisdiction": {
             "type": [
@@ -10421,7 +10716,7 @@
               "string",
               "null"
             ],
-            "description": "Why, when known: `restored`, `first_text`, `source_revision`, `extraction_correction`, `redaction`, `corrected`, `ended` (a membership ended) or `unknown`."
+            "description": "Why, when known: `restored`, `first_text`, `source_revision`, `extraction_correction`, `redaction`, `corrected`, `ended` (a membership ended), `lifted` (a suspension lifted) or `unknown`."
           },
           "supersedes": {
             "type": [
@@ -10460,7 +10755,14 @@
               "object",
               "null"
             ],
-            "description": "For a membership: {id, member, body, valid_from, valid_to, evidence_url, retracted}. `member` and `body` are {id, name}; the dates are its first and last day (`valid_to` null: not ended), as a reviewer checked them against the evidence. A change with `change_reason` `ended` records its end; a later correction has the same `event_id`, and `retracted` true when the membership is no longer a reviewed fact."
+            "description": "For a membership: {id, member, body, valid_from, valid_from_bounds, valid_to, valid_to_bounds, basis, evidence_url, retracted}. `member` and `body` are {id, name}; the dates are its first and last day (`valid_to` null: not ended), each an EDTF date (a day, a month, a year or a window holding the day) with its bounds {earliest, latest, precision}, as a reviewer checked them against the evidence; `basis` {kind, instrument, pinpoint, evidence_url} says why it starts then. A change with `change_reason` `ended` records its end; a later correction has the same `event_id`, and `retracted` true when the membership is no longer a reviewed fact."
+          },
+          "suspension": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "For a suspension from participation: {id, kind, membership_id, member, body, valid_from, valid_from_bounds, valid_to, valid_to_bounds, legal_basis, evidence_url, lifted_evidence_url, retracted}. It never ends the membership, which no event changes. A change with `change_reason` `lifted` records its lifting; a later correction has the same `event_id`, and `retracted` true when it is no longer a reviewed fact."
           },
           "previous": {
             "type": "object",

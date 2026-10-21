@@ -23,11 +23,15 @@ def source(id_, jurisdiction, *, regional=None, treaty=None):
     )  # fmt: skip
 
 
+BASIS = {"kind": "entry_into_force", "instrument": "Treaty", "pinpoint": "art. 1",
+         "evidence_url": "https://www.example.org/treaty"}  # fmt: skip
+
+
 def membership(member, body, start, end=None, n=1):
     return MembershipView(
         id=f"{member}:{body}:{n}", member_id=member, member_name=member, body_id=body, body_name=body,
-        valid_from=start, valid_to=end, evidence_url="https://www.example.org/members", note="Fixture.",
-        reviewed_by="Test Reviewer", reviewed_at=datetime(2026, 10, 21, tzinfo=UTC),
+        valid_from=start, valid_to=end, basis=BASIS, evidence_url="https://www.example.org/members",
+        note="Fixture.", reviewed_by="Test Reviewer", reviewed_at=datetime(2026, 10, 21, tzinfo=UTC),
     )  # fmt: skip
 
 
@@ -220,6 +224,26 @@ def test_what_is_not_reviewed_is_unknown():
     assert uncertain.label(source("ecowas-act", "aa-ecowas", regional=regional())).relation == "unknown"
     # Places in one country: not assessed here.
     assert label(source("ng-la-law", "ng-la"), member="ng").relation == "unknown"
+
+
+def test_an_uncertain_membership_date_gives_the_unknown_label():
+    # A membership that ended in December 2000, its last day unknown (schema.dates): inside that month the
+    # body's instruments are unknown, never assumed either way; outside it, definite.
+    left = [membership("mr", "aa-ecowas", "1975-05-28", "2000-12")]
+    act = source("ecowas-act", "aa-ecowas", regional=regional())
+    inside = label(act, member="mr", day=date(2000, 12, 15), held=left)
+    assert (inside.relation, inside.binds) == ("unknown", "unknown")
+    assert [(m.id, m.held) for m in inside.memberships] == [("mr:aa-ecowas:1", "unknown")]
+    assert label(act, member="mr", day=date(2000, 11, 30), held=left).relation == "regional_direct"
+    assert label(act, member="mr", day=date(2001, 1, 1), held=left).relation == "comparative"
+    # A start known only to a window: the scope keeps the body's record, labelled unknown, and says why.
+    joined = [membership("ss", "aa-eac", "2016-08-15/2016-09-05")]
+    eac = source("eac-act", "aa-eac", regional=regional())
+    scope = applicable.scope(labeller("ss", date(2016, 8, 20), joined), [eac], date_basis="as_of")
+    assert scope.label(eac).relation == "unknown" and scope.admitted == ("eac-act",)
+    assert [(b.body_id, b.held) for b in scope.statement.bodies] == [("aa-eac", "unknown")]
+    assert any("cannot be told from the reviewed dates" in n for n in scope.statement.notices)
+    assert labeller("ss", date(2016, 9, 6), joined).label(eac).relation == "regional_direct"
 
 
 def test_membership_on_a_date_is_read_by_one_function():

@@ -292,5 +292,14 @@
       "changes.membership_state",
       "corpus.membership"
     ]
+  },
+  {
+    "revision": "0042",
+    "anchor": "corpus.membership_suspension",
+    "file": "v0042.sql",
+    "requires": [
+      "changes.suspension_state",
+      "corpus.membership_suspension"
+    ]
   }
 ]
