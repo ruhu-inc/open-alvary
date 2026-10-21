@@ -163,7 +163,7 @@ print(pack["applicability"]["left_out"])
 
 The search then also covers:
 
-- the instruments of the African Union and the regional bodies the country belonged to on `as_of` (today's date if you leave it out), from [reviewed memberships](/docs/records#find-which-bodies-a-country-belongs-to) only. A body whose membership is not reviewed yet is not added, which never means the country is not a member;
+- the instruments of the African Union and the regional bodies the country belonged to on `as_of` (today's date if you leave it out), from [reviewed memberships](/docs/jurisdictions#find-which-bodies-a-country-belongs-to) only. A body whose membership is not reviewed yet is not added, which never means the country is not a member;
 - the treaties whose party list records the country's own ratification or accession. Membership of a body never applies its treaties to a member.
 
 A place within a country, such as Lagos State (`jurisdiction=ng-la`), has its country's law too: national and federal law applies throughout a country's states and places, so the search also covers Nigeria's own law (`ng`), labelled `national`. The regional bodies and treaties are those of the country, the member state and party; another place's law within the country is `comparative`. Each label that rests on the country says so in its `reasons` (`ng-la is within ng: …`).

@@ -106,6 +106,7 @@ If your application writes answers with a language model, [Retrieve evidence](/d
 - [Find records](/docs/search) Search by words, search published texts, list by country, and resolve citations.
 - [Read a record and its text](/docs/records) A record's details, its history, its texts and one part exactly.
 - [Retrieve evidence for AI answers](/docs/retrieval) Ranked, citable evidence for a question, checked before you answer.
+- [Jurisdictions, bodies and courts](/docs/jurisdictions) Which regional bodies a country belongs to on a date, and court registers.
 - [Rights and reuse](/docs/rights) What you may do with each record and text.
 - [Follow changes](/docs/changes) Keep a copy current, or be told when the catalogue changes.
 - [Download and mirror the data](/docs/mirror) Releases, their checksums, and catching up with the change feed.
