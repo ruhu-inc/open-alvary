@@ -511,5 +511,39 @@ def test_the_suspension_proposal_is_evidenced_at_both_ends_and_never_served():
     assert gabon.evidence_url.endswith("1172.comm-en.pdf") and gabon.lifted_evidence_url.endswith(
         "1277.comm-en.pdf"
     )
-    assert [p.pinpoint for p in gabon.legal_basis] == ["art. 7(g)", "art. 30"]
+    # The basis the decision cites, in the communiqué's words, and the treaty's rule it applies, in the
+    # Act's own.
+    decision, rule = gabon.legal_basis
+    assert decision.instrument.startswith("Protocol Relating to the Establishment of the Peace and Security")
+    assert (decision.pinpoint, decision.role, decision.evidence_url) == (
+        "art. 7(g)",
+        "decision_basis",
+        gabon.evidence_url,
+    )
+    assert "particularly Article 7 (g)" in decision.quote
+    assert (rule.instrument, rule.pinpoint, rule.role) == (
+        "Constitutive Act of the African Union",
+        "art. 30",
+        "treaty_rule",
+    )
+    assert rule.quote.startswith("Governments which shall come to power through unconstitutional means")
     assert register().reviewed_suspensions() == ()
+
+
+def test_gabons_two_bases_are_served_once_reviewed(tmp_path):
+    """A fixture: Gabon's proposal, reviewed over a reviewed membership in a copy of the register, serves
+    both its bases with their roles and words. The register itself keeps it a proposal."""
+    [gabon] = register().suspensions
+    member = row("ga", "aa-au", "2001-05-26")
+    copy = tmp_path / "memberships.json"
+    copy.write_text(json.dumps(checked(member, suspensions=(gabon,)).model_dump(mode="json")))
+    reviewed = memberships.review(gabon.id, "Test Reviewer", source=copy, now=AT)
+    assert reviewed.status == "reviewed" and reviewed.legal_basis == gabon.legal_basis
+    [served] = membership_list([view(member, (reviewed,))], "ga", "member", date(2024, 1, 1)).items
+    [context] = served.model_dump(mode="json")["suspensions"]
+    assert context["in_effect"] is True
+    assert context["legal_basis"] == [p.model_dump(mode="json", exclude_none=True) for p in gabon.legal_basis]
+    assert [(p["pinpoint"], p["role"]) for p in context["legal_basis"]] == [
+        ("art. 7(g)", "decision_basis"),
+        ("art. 30", "treaty_rule"),
+    ]

@@ -22,6 +22,7 @@ from api.store import Store, seed
 from api.v1 import create_v1_app
 from changes.record import namespace
 from operations import memberships
+from schema.memberships import register as researched
 
 pytestmark = pytest.mark.postgres
 NOTE = "Synthetic fixture: not research."
@@ -302,6 +303,53 @@ def test_a_suspension_is_served_as_context_and_never_changes_whether_a_membershi
     au = client.get("/jurisdictions/aa-au", params={"as_of": "2024-01-01"}).json()["members"]
     assert "ga" in [m["member_id"] for m in au["items"]] and au["ended"] == []
     assert labels(store, "ga", date(2024, 1, 1)) == {"aa-au": "held"}
+
+
+def test_gabons_two_bases_are_served_once_reviewed_and_announced_without_their_words(published):
+    """A fixture: Gabon's suspension proposal from the register, reviewed here only, in place of the
+    synthetic one (its lifting is announced). Both its bases are served with their roles and words; the
+    feed carries them without the words. The register itself keeps it a proposal."""
+    store, register, _, client = published
+    [gabon] = researched().suspensions
+    reviewed = gabon.model_dump(mode="json") | {
+        "status": "reviewed",
+        "reviewed_by": "Test Reviewer",
+        "reviewed_at": "2026-10-21T09:00:00Z",
+    }
+    report = memberships.publish(store.engine, write(register, FIXTURE, [reviewed, *SUSPENSIONS[1:]]))
+    assert report["announced"] == 1 and report["suspensions"]["updated"] == 1
+    during = client.get("/jurisdictions/ga", params={"as_of": "2024-01-01"}).json()["member_of"]
+    [context] = during["items"][0]["suspensions"]
+    bases = [p.model_dump(mode="json", exclude_none=True) for p in gabon.legal_basis]
+    assert context["legal_basis"] == bases and context["in_effect"] is True
+    assert [(p["pinpoint"], p["role"]) for p in bases] == [
+        ("art. 7(g)", "decision_basis"),
+        ("art. 30", "treaty_rule"),
+    ]
+    assert all(p["quote"] for p in bases)
+    lifted = events(store, "suspension_recorded")[-1]
+    assert lifted["change_reason"] == "lifted" and "legal_basis" in lifted["payload"]["changed_fields"]
+    assert lifted["payload"]["suspension"]["legal_basis"] == [
+        {k: v for k, v in p.items() if k != "quote"} for p in bases
+    ]
+    page = client.get("/changes", params={"jurisdiction": "ga", "type": "suspension_recorded"}).json()
+    [served] = [e for e in page["events"] if e["change_reason"] == "lifted"]
+    assert served["suspension"]["legal_basis"] == lifted["payload"]["suspension"]["legal_basis"]
+    # The catalogue refuses a legal basis without the article its decision cites, or with a role unknown.
+    with store.engine.connect() as conn:
+        table = namespace(conn).qualified(conn, "corpus", "membership_suspension")
+        for basis in (
+            [bases[1]],
+            [bases[0] | {"role": "cited"}],
+            [{k: v for k, v in bases[0].items() if k != "role"}],
+        ):
+            with pytest.raises(IntegrityError, match="legal_basis"), conn.begin_nested():
+                conn.execute(
+                    text(
+                        f"UPDATE {table} SET legal_basis = CAST(:b AS jsonb) WHERE suspension_id = 'ga:aa-au:1:s1'"
+                    ),
+                    {"b": json.dumps(basis)},
+                )
 
 
 def test_each_membership_change_is_exactly_one_event(published):

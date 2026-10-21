@@ -2089,19 +2089,21 @@
         {
           "instrument": "Protocol Relating to the Establishment of the Peace and Security Council of the African Union",
           "pinpoint": "art. 7(g)",
+          "role": "decision_basis",
           "evidence_url": "https://www.peaceau.org/uploads/1172.comm-en.pdf",
-          "quote": null
+          "quote": "Upholding the AU Constitutive Act, the Protocol Relating to the Establishment of the Peace and Security Council of the African Union, particularly Article 7 (g)"
         },
         {
           "instrument": "Constitutive Act of the African Union",
           "pinpoint": "art. 30",
+          "role": "treaty_rule",
           "evidence_url": "https://au.int/sites/default/files/pages/34873-file-constitutiveact_en.pdf",
           "quote": "Governments which shall come to power through unconstitutional means shall not be allowed to participate in the activities of the Union."
         }
       ],
       "evidence_url": "https://www.peaceau.org/uploads/1172.comm-en.pdf",
       "lifted_evidence_url": "https://www.peaceau.org/uploads/1277.comm-en.pdf",
-      "note": "The Peace and Security Council, at its 1172nd meeting on 31 August 2023 (PSC/PR/COMM.1172 (2023), para. 3), decided to suspend immediately Gabon's participation in all activities of the AU, its organs and institutions until constitutional order is restored, after the coup of 30 August 2023. It cites the Constitutive Act and the PSC Protocol, in particular its Article 7 (g), but not Article 30 of the Act, the Act's rule that such governments shall not participate: whether Article 30 stays a basis is for the reviewer. At its 1277th meeting on 30 April 2025 (PSC/PR/COMM.1277 (2025), para. 4(i)) the Council lifted the suspension, under Article 26 of the African Charter on Democracy, Elections and Governance, and invited Gabon to resume its participation immediately: valid_to is the day before, 29 April 2025 (dates are inclusive). Gabon remained a member throughout.",
+      "note": "The Peace and Security Council, at its 1172nd meeting on 31 August 2023 (PSC/PR/COMM.1172 (2023), para. 3), decided to suspend immediately Gabon's participation in all activities of the AU, its organs and institutions until constitutional order is restored, after the coup of 30 August 2023, in line with the Constitutive Act and the PSC Protocol. The basis the decision cites is the Protocol's Article 7 (g), which its preamble upholds (quoted), the Council acting under the Protocol's Article 7. The treaty's rule the suspension applies is Article 30 of the Act, that governments which come to power through unconstitutional means shall not participate in the Union's activities; the communiqué does not name it (it names the Act's Article 4(p), the principle rejecting unconstitutional changes of government). At its 1277th meeting on 30 April 2025 (PSC/PR/COMM.1277 (2025), para. 4(i)) the Council lifted the suspension, under Article 26 of the African Charter on Democracy, Elections and Governance, and invited Gabon to resume its participation immediately: valid_to is the day before, 29 April 2025 (dates are inclusive). Gabon remained a member throughout.",
       "reviewed_by": null,
       "reviewed_at": null
     }
