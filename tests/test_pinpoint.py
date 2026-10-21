@@ -29,6 +29,13 @@ def part(kind, label=None, locator="x"):
         ("Article XIV", ("art:14",)),
         ("Ingingo ya mbere", ("art:1",)),
         ("Article 1er", ("art:1",)),
+        # An alinéa is keyed as a "(2)" after the article is.
+        ("article 10, alinéa 2", ("art:10", "2")),
+        ("art. 10 al. 2", ("art:10", "2")),
+        ("art. 10(2)", ("art:10", "2")),
+        ("Article 1er, alinéa premier", ("art:1", "1")),
+        ("article 10 alinea 1er", ("art:10", "1")),
+        ("article 10, alinéa 2".replace("é", "é"), ("art:10", "2")),  # the accent decomposed
         ("First Schedule, para. 3(a)", ("sch:1", "para:3", "a")),
         ("Schedule 2, Part II, paragraph 4", ("sch:2", "part:2", "para:4")),
         ("Sch. 1 para 3", ("sch:1", "para:3")),
@@ -101,6 +108,60 @@ def test_a_citation_is_split_into_a_work_and_a_pinpoint_in_either_order():
     ]
     assert pinpoint.split("Part V of the NDPA") == [("NDPA", "Part V", ("part:5",))]
     assert pinpoint.split("NDPA, Chapter III")[0] == ("NDPA", "Chapter III", ("chap:3",))
+
+
+@pytest.mark.parametrize(
+    "citation, work, shown, key",
+    [
+        ("art. 10 AUSCGIE", "AUSCGIE", "art. 10", ("art:10",)),
+        (
+            "article 10, alinéa 2, de l'Acte uniforme relatif au droit des sociétés commerciales",
+            "Acte uniforme relatif au droit des sociétés commerciales",
+            "article 10, alinéa 2",
+            ("art:10", "2"),
+        ),
+        (
+            "Article 3(2) of Supplementary Act A/SA.1/01/10",
+            "Supplementary Act A/SA.1/01/10",
+            "Article 3(2)",
+            ("art:3", "2"),
+        ),
+        (
+            "s. 4 of the East African Community Customs Management Act",
+            "East African Community Customs Management Act",
+            "s. 4",
+            ("s:4",),
+        ),
+        (
+            "Article 7 of the African Charter on Human and Peoples' Rights",
+            "African Charter on Human and Peoples' Rights",
+            "Article 7",
+            ("art:7",),
+        ),
+        ("art. 10 al. 2 AUSCGIE", "AUSCGIE", "art. 10 al. 2", ("art:10", "2")),
+        ("AUSCGIE, art. 10, al. 2", "AUSCGIE", "art. 10, al. 2", ("art:10", "2")),
+        ("article 10 du Code civil", "Code civil", "article 10", ("art:10",)),
+        ("article 10 des Actes uniformes", "Actes uniformes", "article 10", ("art:10",)),
+        ("article 10 de la loi n° 2", "loi n° 2", "article 10", ("art:10",)),
+        ("art. 10 de l’AUSCGIE", "AUSCGIE", "art. 10", ("art:10",)),
+        ("Article 1er, alinéa premier, de la Constitution", "Constitution", "Article 1er, alinéa premier", ("art:1", "1")),
+    ],
+)  # fmt: skip
+def test_regional_and_french_citations_split_into_one_work_and_pinpoint(citation, work, shown, key):
+    assert pinpoint.split(citation) == [(work, shown, key)]
+
+
+def test_only_the_longest_pinpoint_is_read_and_a_title_beginning_de_stays_whole():
+    # Never also "article 10" in a work called "alinéa 2, de l'Acte …" or "(2) of Supplementary Act …".
+    assert (
+        len(pinpoint.split("article 10, alinéa 2, de l'Acte uniforme relatif au droit commercial général"))
+        == 1
+    )
+    assert pinpoint.split("Article 3 (2) of Supplementary Act A/SA.1/01/10") == [
+        ("Supplementary Act A/SA.1/01/10", "Article 3 (2)", ("art:3", "2"))
+    ]
+    assert pinpoint.split("article 10, alinéa 2") == [] and pinpoint.split("section 23 (1)") == []
+    assert pinpoint.split("s. 5 De Beers Act") == [("De Beers Act", "s. 5", ("s:5",))]
 
 
 def test_a_part_is_cited_from_its_printed_numbers_and_read_back_to_the_same_key():

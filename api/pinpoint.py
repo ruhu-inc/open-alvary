@@ -4,7 +4,9 @@ cited pinpoint read into the same key, so the citation an anchor gives resolves 
 
 A key compares numbers as printed, case aside ("23A" is "23a"); schedule and part numbers compare as
 numbers ("Second Schedule", "Schedule 2" and "Schedule II" are one schedule). Paragraph letters are
-never read as Roman numerals: "(i)" is "i" wherever it is printed.
+never read as Roman numerals: "(i)" is "i" wherever it is printed. An article's alinéa, "article 10,
+alinéa 2" or "art. 10 al. 2", is keyed as "article 10(2)" is. A work may follow its pinpoint after
+"of" or the French "de", "du", "de la", "de l'" or "des": "article 10, alinéa 2, de l'Acte uniforme …".
 
 A judgment's paragraph (judgment-paragraphs-1) is cited by its number in brackets after the neutral
 citation, "[2019] NGSC 4 [12]" or "[2019] NGSC 4 at [12]", or "[2019] NGSC 4, para. 12"; a paragraph
@@ -13,6 +15,7 @@ after a neutral citation: in an Act it would be a schedule's paragraph.
 """
 
 import re
+import unicodedata
 from typing import Protocol
 
 ORDINALS = "first second third fourth fifth sixth seventh eighth ninth tenth eleventh twelfth".split()
@@ -24,6 +27,10 @@ _WORD_ONE = {"mbere", "premier", "one", "first"}
 _SECTION_LEADS = r"ss?|secs?|sects?|sections?|§§?|regs?|regulations?|r|rr|rules?"
 _ARTICLE_LEADS = r"arts?|articles?|ingingo(?:\s+ya)?"
 _SUBS = r"((?:\(\s*[0-9a-z]{1,5}\s*\)\s*)*)"
+_ALINEA = r"(?:,?\s*(?:alin[ée]a|al)\.?\s*(\d{1,3}|premier)(?:er)?\.?)?"  # "alinéa 2", "al. 2", "alinéa 1er"
+# Between a pinpoint and the work it is in: "s. 23 of the NDPA", "article 10 de l'Acte uniforme …". The
+# French words in lower case only, as they are written, so "s. 5 De Beers Act" keeps its title whole.
+_OF = r"(?:of\s+(?:the\s+)?|(?-i:de\s+la\s+|de\s+l['’]\s*|des\s+|du\s+|de\s+))"
 _QUOTE = r"[\"“”'‘’]"
 SECTION = re.compile(
     rf"^(?:{_SECTION_LEADS})\.?\s*(\d{{1,4}}[a-z]{{0,2}})\.?\s*{_SUBS}"
@@ -31,7 +38,7 @@ SECTION = re.compile(
     re.I,
 )
 ARTICLE = re.compile(
-    rf"^(?:{_ARTICLE_LEADS})\.?\s*(\d{{1,4}}|[ivxlc]{{1,8}}|mbere|premier|one|first)(?:er|ère)?\.?\s*{_SUBS}$",
+    rf"^(?:{_ARTICLE_LEADS})\.?\s*(\d{{1,4}}|[ivxlc]{{1,8}}|mbere|premier|one|first)(?:er|ère)?\.?\s*{_SUBS}{_ALINEA}$",
     re.I,
 )
 SCHEDULE = re.compile(
@@ -170,7 +177,7 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
 
 def read(pinpoint: str) -> tuple[str, ...] | None:
     """The key of a cited pinpoint, or None when it is not one this module reads."""
-    value = " ".join(pinpoint.split()).strip(" ,;")
+    value = unicodedata.normalize("NFC", " ".join(pinpoint.split())).strip(" ,;")
     subs = lambda group: [_plain(s) for s in re.findall(r"\(\s*([0-9a-z]{1,5})\s*\)", group or "", re.I)]  # noqa: E731
     found = SECTION.match(value)
     if found:
@@ -182,7 +189,9 @@ def read(pinpoint: str) -> tuple[str, ...] | None:
     if found:
         number = found.group(1).casefold()
         number = "1" if number in _WORD_ONE else str(_roman(number)) if _ROMAN.fullmatch(number) else number
-        return (f"art:{number.lstrip('0') or number}", *subs(found.group(2)))
+        alinea = (found.group(3) or "").casefold()
+        alinea = "1" if alinea == "premier" else _plain(alinea)
+        return (f"art:{number.lstrip('0') or number}", *subs(found.group(2)), *([alinea] if alinea else []))
     found = CONTAINER.match(value)
     if found:
         lead = found.group(1).casefold()
@@ -211,9 +220,10 @@ def _paragraph(pinpoint: str, worded: bool = False) -> tuple[str, ...] | None:
 
 def split(citation: str) -> list[tuple[str, str, tuple[str, ...]]]:
     """Each way to read a citation as a work and a pinpoint within it, longest pinpoint first:
-    "NDPA s. 23(1)(a)" → ("NDPA", "s. 23(1)(a)", key); "section 23 of the NDPA" and "s. 23 NDPA" likewise; a judgment
-    by its neutral citation, alone and with the words before it: "Okafor v State [2019] NGSC 4 at
-    [12]" → ("Okafor v State [2019] NGSC 4", "[12]", key), then ("[2019] NGSC 4", "[12]", key)."""
+    "NDPA s. 23(1)(a)" → ("NDPA", "s. 23(1)(a)", key); "section 23 of the NDPA", "article 10, alinéa 2,
+    de l'Acte uniforme …" and "s. 23 NDPA" likewise; a judgment by its neutral citation, alone and with
+    the words before it: "Okafor v State [2019] NGSC 4 at [12]" → ("Okafor v State [2019] NGSC 4",
+    "[12]", key), then ("[2019] NGSC 4", "[12]", key)."""
     value = " ".join(citation.split())
     found = []
     for neutral in NEUTRAL.finditer(value):
@@ -228,19 +238,20 @@ def split(citation: str) -> list[tuple[str, str, tuple[str, ...]]]:
         key = read(pin)
         if work and key:
             found.append((work, pin.strip(" ,;"), key))
-    for of in re.finditer(r"\s+of\s+(?:the\s+)?", value, re.I):
+    for of in re.finditer(rf"\s+{_OF}", value, re.I):
         pin, work = value[: of.start()], value[of.end() :].strip(" ,;")
         key = read(pin)
         if work and key:
             found.append((work, pin.strip(" ,;"), key))
-    # The pinpoint first, then the work: "s 24(1)(a) Nigeria Data Protection Act 2023".
+    # The pinpoint first, then the work: "s 24(1)(a) Nigeria Data Protection Act 2023". Only the longest
+    # pinpoint, the whole citation included: "article 10" is not a reading of "article 10, alinéa 2".
     words = value.split(" ")
-    for n in range(len(words) - 1, 0, -1):
+    for n in range(len(words), 0, -1):
         pin = " ".join(words[:n]).strip(" ,;")
         work = re.sub(r"^(?:of\s+)?(?:the\s+)?", "", " ".join(words[n:]).strip(" ,;"), flags=re.I)
         key = read(pin)
-        statute = key is not None and key[0].split(":")[0] in ("s", "art", "sch", "part", "chap")
-        if statute and work and all(f[1] != pin for f in found):
-            found.append((work, pin, key))
+        if key is not None and key[0].split(":")[0] in ("s", "art", "sch", "part", "chap"):
+            if work and all(f[1] != pin for f in found):
+                found.append((work, pin, key))
             break
     return found

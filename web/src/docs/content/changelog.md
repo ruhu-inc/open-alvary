@@ -5,6 +5,10 @@ description: Changes to the API, the MCP server and these docs.
 
 Changes that affect how you use the API and the MCP server, newest first.
 
+## 21 October 2026
+
+- [Retrieve evidence](/docs/api/retrieve-evidence) and [Resolve a citation](/docs/api/resolve-citation): French citations are read too. An article's alinéa is read as its `(2)` (`article 10, alinéa 2`, `art. 10 al. 2`), and the law may follow `de`, `du`, `de la`, `de l'` or `des` (`article 10, alinéa 2, de l'Acte uniforme …`). A citation is no longer also read as a shorter pinpoint in a law named by the rest (`article 10` in a law called `alinéa 2`).
+
 ## 19 October 2026
 
 - [Retrieve evidence](/docs/api/retrieve-evidence): each unit now gives the pages of the official file it is on (`page_start`, `page_end`), that file's hash and when it was fetched (`original_sha256`, `retrieved_at`), and `links` to read it on Open Alvary or by the API. Questions may cite a part as people write it (`section 23 of the Nigeria Data Protection Act`, `NDPA s. 23`, `Part V of the NDPA`), ask for a page (`page 18 of the NDPA`) or be an Open Alvary or official address; `source_id` reads a pinpoint alone within one record (also on MCP). Routes `link` and `page` are new (`oa-route-2`); the ranking profile is `oa-rank-3`.
