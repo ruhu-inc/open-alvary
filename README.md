@@ -1,10 +1,10 @@
 # Open Alvary
 
 A rights-aware, machine-readable public legal corpus for African jurisdictions.
-Nigeria is the first catalogue. Open Alvary is shared public data infrastructure;
-**Alvary is a separate proprietary legal-AI product** that may consume the same
-public interfaces as researchers, legal-aid organisations and other developers.
-No commercial Alvary code, customer material, private annotations, prompts,
+Nigeria is the first catalogue. Open Alvary is shared public data infrastructure.
+Downstream clients, a commercial client among them, may consume the same public
+interfaces as researchers, legal-aid organisations and other developers.
+No commercial client's code, customer material, private annotations, prompts,
 playbooks, or proprietary workflows are included here.
 
 ## v0.1 reality
@@ -284,10 +284,9 @@ Raw-file and normalized-text SHA-256 values are separate. Nodes refer to source,
 version, structural locator, optional page and UTF-8 byte offsets. Generic ingestion
 creates a document root; jurisdiction-specific legal segmentation is not claimed.
 
-Compatible *concepts* were informed by the existing Alvary schema documentation:
-stable source identity, immutable versions, normalized UTF-8 anchors, explicit
-currentness and ambiguous citation resolution. All implementation is new. No
-proprietary code was copied.
+The design follows common concepts for legal data: stable source identity,
+immutable versions, normalized UTF-8 anchors, explicit currentness and ambiguous
+citation resolution. All implementation is new. No proprietary code was copied.
 
 ## Rights decision flow
 
