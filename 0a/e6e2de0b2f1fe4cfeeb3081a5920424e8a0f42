@@ -1,0 +1,42 @@
+retrieval/engine.py
+  s_d665c62e07d76f::t_ac4fcc8dcae447 414-415,422-424
+  s_d665c62e07d76f::t_d0e706d4253cb0 45-48
+  s_d665c62e07d76f::t_900c73fae7f764 83-86,91,99-101
+  s_d665c62e07d76f::t_eff43adcbacb89 54-58
+  s_d665c62e07d76f::t_e3e68d7346be52 6-8
+  s_d665c62e07d76f::t_5677ff45aff2f0 378-381,387
+  s_d665c62e07d76f::t_258301b2d87a16 233-241
+  s_d665c62e07d76f::t_67eec47ec684db 42-44
+  s_d665c62e07d76f::t_ea43fc745de6b3 242-243
+tests/test_retrieval.py
+  s_d665c62e07d76f::t_70fef4793d174b 362-494
+retrieval/pack.py
+  s_d665c62e07d76f::t_ff6507adeab5b8 640-641
+retrieval/projector.py
+  s_d665c62e07d76f::t_616aefc16de567 58-60
+  s_d665c62e07d76f::t_b0abf698578672 159-162,166-169,172-180
+  s_d665c62e07d76f::t_1f64f3411d5e34 123
+  s_d665c62e07d76f::t_58ad06d090a763 9-11
+  s_d665c62e07d76f::t_4d311c74647c67 124-125
+  s_d665c62e07d76f::t_731685ef94e659 54-57
+tests/test_engine_vespa.py
+  s_d665c62e07d76f::t_d05c0a187b1edc 132,134-135
+  s_d665c62e07d76f::t_7c59593116452a 152
+  s_d665c62e07d76f::t_4b2bb1c75279a3 119-131,133,136-151,153-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0ae6e2de0b2f1fe4cfeeb3081a5920424e8a0f42",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
