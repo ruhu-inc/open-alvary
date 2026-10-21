@@ -1,17 +1,20 @@
-"""Dates known to a day, a month, a year or a window of days: an ISO 8601-2 (EDTF level 1) subset.
+"""Dates known to a day, a month, a year or a window of them: an ISO 8601-2 (EDTF) subset.
 
 A legal date is often known only to a month or a year, or its sources disagree by a few weeks. Such a
 date is still one day, unknown which, between its earliest and latest bounds (both inclusive):
 
-  ``2001-05-26``             day: that day
-  ``2000-12``                month: a day of December 2000
-  ``1976``                   year: a day of 1976
-  ``2016-08-15/2016-09-05``  range: a day from 15 August to 5 September 2016, unknown which
+  ``2001-05-26``                day: that day
+  ``2000-12``                   month: a day of December 2000
+  ``1976``                      year: a day of 1976
+  ``[2016-08-15..2016-09-05]``  range: one day from 15 August to 5 September 2016, unknown which
 
-The range's slash names a window holding one day, not a period lasting from one day to the other.
+The first three are EDTF level 0. The window is EDTF's "one of a set" (level 2) holding a single run of
+consecutive values, both ends of one precision: one of the days, months or years from the first to the
+last. ``A/B`` is refused: in EDTF it is an interval, every day from A to B, not one day within it.
 Nothing is filled in: compared with a day, an uncertain date answers True, False, or None (unknown) when
-the day falls inside its window. Qualified (``?``, ``~``), open (``..``) and unspecified (``X``) forms
-are not in the subset. Serialised as the EDTF string; ``bounds()`` gives the bounds for API answers.
+the day falls inside its window. Qualified (``?``, ``~``), open (``..``), unspecified (``X``) and other
+set forms are not in the subset. Serialised as the EDTF string; ``bounds()`` gives the bounds for API
+answers.
 """
 
 import calendar
@@ -26,7 +29,8 @@ from pydantic_core import core_schema
 PRECISIONS = ("day", "month", "year", "range")
 Precision = Literal[*PRECISIONS]
 _PART = r"[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?"
-PATTERN = rf"^{_PART}(?:/{_PART})?$"
+PATTERN = rf"^(?:{_PART}|\[{_PART}\.\.{_PART}\])$"
+INTERVAL = "A/B is an EDTF interval; write one day within a window as [A..B]"
 
 
 def _part(text: str) -> tuple[date, date, Precision]:
@@ -40,11 +44,13 @@ def _part(text: str) -> tuple[date, date, Precision]:
 
 
 def _bounds(text: str) -> tuple[date, date, Precision]:
+    if isinstance(text, str) and "/" in text:
+        raise ValueError(f"{text!r}: {INTERVAL}")
     if not isinstance(text, str) or not re.fullmatch(PATTERN, text):
         raise ValueError(
-            f"{text!r} is not a date of the subset: YYYY-MM-DD, YYYY-MM, YYYY, or a window FIRST/LAST of them"
+            f"{text!r} is not a date of the subset: YYYY-MM-DD, YYYY-MM, YYYY, or a window [FIRST..LAST] of them"
         )
-    first, _, last = text.partition("/")
+    first, _, last = text.strip("[]").partition("..")
     try:
         start = _part(first)
         end = _part(last) if last else None
@@ -52,6 +58,8 @@ def _bounds(text: str) -> tuple[date, date, Precision]:
         raise ValueError(f"{text!r} is not a calendar date") from None
     if end is None:
         return start
+    if start[2] != end[2]:
+        raise ValueError(f"{text!r}: a window's ends are of one precision, both days, months or years")
     if not start[1] < end[0]:
         raise ValueError(f"{text!r}: a window's first date precedes its last")
     return start[0], end[1], "range"

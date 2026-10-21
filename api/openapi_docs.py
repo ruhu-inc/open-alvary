@@ -621,8 +621,8 @@ SCHEMAS: dict[str, dict] = {
             "legal_effective": NULL_S
             | {
                 "description": "When it takes legal effect, if known: {from, until, precision}. A membership's or "
-                "suspension's dates are EDTF dates, each stating its own precision (a window `FIRST/LAST` holds "
-                "one day); `precision` is that of `from`."
+                "suspension's dates are EDTF dates, each stating its own precision (a window `[FIRST..LAST]` "
+                "holds one day); `precision` is that of `from`."
             },
             "jurisdiction": {
                 "type": ["object", "null"],
@@ -1602,8 +1602,8 @@ FIELDS: dict[str, dict[str, str]] = {
         "body_id": "The body's jurisdiction ID, such as `aa-ecowas`.",
         "body_name": "The body's name.",
         "valid_from": "The membership's first day, as an EDTF date: a day (`2001-05-26`), a month (`2000-12`), "
-        "a year (`1976`) or a window holding the day (`2016-08-15/2016-09-05`), as precisely as the "
-        "evidence gives it.",
+        "a year (`1976`) or a window holding the day (`[2016-08-15..2016-09-05]`: one day, unknown which, "
+        "never a period), as precisely as the evidence gives it.",
         "valid_from_bounds": "The earliest and latest day `valid_from` can be, and its precision.",
         "valid_to": "Its last day, when it has ended (a withdrawal effective on 29 January ends it on the 28th), "
         "in the same forms; null when it has not.",
@@ -1621,7 +1621,7 @@ FIELDS: dict[str, dict[str, str]] = {
     "DateBounds": {
         "earliest": "The earliest day the date can be.",
         "latest": "The latest day the date can be (the same as `earliest` for a day).",
-        "precision": "`day`, `month`, `year` or `range` (a window holding the day).",
+        "precision": "`day`, `month`, `year` or `range` (a window `[FIRST..LAST]` holding the day).",
     },
     "ProvisionView": {
         "instrument": "The instrument, such as `Constitutive Act of the African Union`.",

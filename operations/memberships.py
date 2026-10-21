@@ -8,15 +8,15 @@ the membership register (schema/memberships.json), approved by the reviewer, pub
       [--valid-to DATE --lifted-evidence URL | --ongoing] [--evidence URL] [--note TEXT]
   python -m operations.memberships publish [--dry-run]
 
-A DATE is a day (2001-05-26), a month (2000-12), a year (1976) or a window holding the day (2016-08-15/
-2016-09-05), as schema.dates reads it. ``review`` approves one row of the register, a membership or a
-suspension from participation: it records who reviewed it and when, with the start date (a reviewed row
-is dated) and any end, evidence or note the reviewer sets. A reviewed membership states its basis, why
-it starts when it does, with the article that says so: from the proposal, or given here. A reviewed
-suspension states its legal basis (from the proposal) and, once lifted, the decision that lifted it.
-Run it again on a reviewed row to record its end or a correction; it is then reviewed again. One person
-may review (single-reviewer rule). Commit the register: it is the public record of what was reviewed,
-by whom.
+A DATE is a day (2001-05-26), a month (2000-12), a year (1976) or a window holding the day
+([2016-08-15..2016-09-05]), as schema.dates reads it; FIRST/LAST, an EDTF interval, is refused.
+``review`` approves one row of the register, a membership or a suspension from participation: it records
+who reviewed it and when, with the start date (a reviewed row is dated) and any end, evidence or note the
+reviewer sets. A reviewed membership states its basis, why it starts when it does, with the article that
+says so: from the proposal, or given here. A reviewed suspension states its legal basis (from the
+proposal) and, once lifted, the decision that lifted it. Run it again on a reviewed row to record its end
+or a correction; it is then reviewed again. One person may review (single-reviewer rule). Commit the
+register: it is the public record of what was reviewed, by whom.
 
 ``publish`` writes the reviewed memberships and suspensions to the catalogue (corpus.membership and
 corpus.membership_suspension, PostgreSQL), adds the catalogue rows of the members and bodies it lacks,
@@ -241,7 +241,7 @@ def main(argv=None) -> int:
     reviewing = commands.add_parser("review")
     reviewing.add_argument("record_id", help="A membership (ml:aa-ecowas:1) or a suspension (ml:aa-au:1:s1)")
     reviewing.add_argument("--by", required=True, help="Who reviews: a full name")
-    reviewing.add_argument("--valid-from", help="The first day: YYYY-MM-DD, YYYY-MM, YYYY or FIRST/LAST")
+    reviewing.add_argument("--valid-from", help="The first day: YYYY-MM-DD, YYYY-MM, YYYY or [FIRST..LAST]")
     reviewing.add_argument("--valid-to", help="The last day, in the same forms")
     reviewing.add_argument("--ongoing", action="store_true", help="It has not ended (or not been lifted)")
     reviewing.add_argument("--basis", choices=BASES, help="Why the membership starts when it does")

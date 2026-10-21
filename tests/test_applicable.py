@@ -264,7 +264,7 @@ def test_an_uncertain_membership_date_gives_the_unknown_label():
     assert label(act, member="mr", day=date(2000, 11, 30), held=left).relation == "regional_direct"
     assert label(act, member="mr", day=date(2001, 1, 1), held=left).relation == "comparative"
     # A start known only to a window: the scope keeps the body's record, labelled unknown, and says why.
-    joined = [membership("ss", "aa-eac", "2016-08-15/2016-09-05")]
+    joined = [membership("ss", "aa-eac", "[2016-08-15..2016-09-05]")]
     eac = source("eac-act", "aa-eac", regional=regional())
     scope = applicable.scope(labeller("ss", date(2016, 8, 20), joined), [eac], date_basis="as_of")
     assert scope.label(eac).relation == "unknown" and scope.admitted == ("eac-act",)

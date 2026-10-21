@@ -11,6 +11,7 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
 
@@ -78,7 +79,7 @@ FIXTURE = [
     row("ml", "aa-ecowas", "1975-05-28", "2025-01-28"),
     row("ml", "aa-ohada", "1995-09-18"),
     row("mr", "aa-ecowas", "1975-05-28", "2000-12"),  # an end known to the month
-    row("ss", "aa-eac", "2016-08-15/2016-09-05"),  # a start known to a window
+    row("ss", "aa-eac", "[2016-08-15..2016-09-05]"),  # a start known to a window
     row("ga", "aa-au", "2001-05-26"),
     row("sn", "aa-censad", None, status="proposal"),
     row("gh", "aa-ecowas", None, status="proposal"),
@@ -211,7 +212,17 @@ def test_a_range_start_is_unknown_inside_its_window(published):
     assert bodies(south_sudan("2016-08-20"), "uncertain") == ["aa-eac"]
     assert bodies(south_sudan("2016-09-05")) == ["aa-eac"]
     [eac] = south_sudan("2016-09-05")["items"]
-    assert eac["valid_from"] == "2016-08-15/2016-09-05" and eac["valid_from_bounds"]["precision"] == "range"
+    assert (
+        eac["valid_from"] == "[2016-08-15..2016-09-05]" and eac["valid_from_bounds"]["precision"] == "range"
+    )
+    # The catalogue stores the window as written, and refuses A/B, an EDTF interval, as the register does.
+    with store.engine.connect() as conn, pytest.raises(IntegrityError, match="membership_valid_from"):
+        conn.execute(
+            text(
+                f"UPDATE {namespace(conn).qualified(conn, 'corpus', 'membership')}"
+                " SET valid_from = '2016-08-15/2016-09-05' WHERE membership_id = 'ss:aa-eac:1'"
+            )
+        )
     # The one answer the applicable-law scope reads: held, not held or unknown per body.
     assert labels(store, "ss", date(2016, 8, 20)) == {"aa-eac": "unknown"}
     assert labels(store, "ss", date(2016, 9, 6)) == {"aa-eac": "held"}  # AU: none reviewed, absent
