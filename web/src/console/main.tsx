@@ -566,7 +566,7 @@ function SignIn() {
 function Welcome({ me, onDone }: { me: Me; onDone: () => void }) {
   const pending = new Set(me.policies.pending);
   const [name, setName] = useState(me.person.display_name ?? "");
-  const [orgName, setOrgName] = useState(me.person.display_name ?? "");
+  const [orgName, setOrgName] = useState(""); // blank: the person's name is used (submit)
   const [agree, setAgree] = useState({ terms: !pending.has("terms") && !pending.has("acceptable_use"), privacy: !pending.has("privacy") });
   const [error, setError] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
@@ -577,7 +577,7 @@ function Welcome({ me, onDone }: { me: Me; onDone: () => void }) {
     setError(null);
     try {
       if (pending.size) await api("/me/policies", { method: "POST", body: { versions: me.policies.current } });
-      if (firstTime) await api("/me/welcome", { method: "POST", body: { display_name: name, organisation_name: orgName || name } });
+      if (firstTime) await api("/me/welcome", { method: "POST", body: { display_name: name, organisation_name: orgName.trim() || name } });
       onDone();
     } catch (e) {
       setError(e);
@@ -605,16 +605,24 @@ function Welcome({ me, onDone }: { me: Me; onDone: () => void }) {
                   required
                   maxLength={100}
                   value={name}
-                  onChange={(e) => {
-                    if (orgName === name) setOrgName(e.target.value);
-                    setName(e.target.value);
-                  }}
+                  onChange={(e) => setName(e.target.value)}
                 />
               </div>
               <div className="field">
                 <label htmlFor="welcome-org">Organisation name</label>
-                <input id="welcome-org" type="text" required maxLength={120} value={orgName} onChange={(e) => setOrgName(e.target.value)} />
-                <small>Access, keys and usage belong to an organisation. This one is yours; rename it or invite colleagues any time.</small>
+                <input
+                  id="welcome-org"
+                  type="text"
+                  maxLength={120}
+                  placeholder={name.trim() || "Your company"}
+                  aria-describedby="welcome-org-hint"
+                  value={orgName}
+                  onChange={(e) => setOrgName(e.target.value)}
+                />
+                <small id="welcome-org-hint">
+                  Your company, or leave it blank to use your own name. Access, keys and usage belong to an organisation;
+                  rename it or invite colleagues any time.
+                </small>
               </div>
             </>
           ) : null}
