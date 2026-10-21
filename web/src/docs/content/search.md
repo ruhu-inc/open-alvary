@@ -101,7 +101,7 @@ for (const hit of page.items) console.log(hit.citation, "-", hit.snippet);
 How words match:
 
 - Every word must be in the passage, in any order. `"exact phrase"` keeps words together, `-word` leaves passages with it out, and `OR` between words accepts either.
-- English texts are matched in English: `lends` finds `lend`, and common words such as `the` are left out. French texts are matched in French the same way (`prêter` finds `prête`; accents count). Texts in other languages, such as Kinyarwanda, are matched word for word until each passes our search tests; `analysis` says which applies.
+- English texts are matched in English: `lends` finds `lend`, and common words such as `the` are left out. French, Portuguese and Spanish texts are matched in their language the same way (`prêter` finds `prête`, with accents counting; `trabalhador` finds `trabalhadores`; `trabajador` finds `trabajadores`). Arabic texts are matched by word stems too (`موظف` finds `للموظفين`), but every word is kept, as there is no list of common Arabic words. Texts in other languages, such as Kiswahili and Kinyarwanda, are matched word for word until each passes our search tests: `mkataba` doesn't find `mikataba`, and `notices` says so. `analysis` says which applies.
 - A citation of a part, such as `NDPA s. 23(1)(a)`, is resolved rather than searched: that part comes first, marked `matched_by: citation`.
 
 Each hit's `snippet` is the text's own bytes from `snippet_start_byte` to `snippet_end_byte`, so it can be quoted exactly; `highlights` gives the matching words as byte offsets. Check the hit's `licence` and `attribution_text` before you quote it.

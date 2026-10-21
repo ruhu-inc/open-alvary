@@ -12,6 +12,7 @@ Changes that affect how you use the API and the MCP server, newest first.
 - Search answers may have `notices`: why published texts weren't searched (the index is being built, or that search took too long), or that the query has no letters or digits. A query of punctuation alone now finds nothing instead of matching it.
 - [Get a record's editions](/docs/api/get-expressions) (`GET /api/v1/sources/{id}/expressions`, and the new MCP tool `list_expressions`): each edition's `authority` is now what the record states (`authoritative`, `equally_authentic`, `official_translation`, `unofficial_translation`, `machine_translation`, or `unknown` when nothing is recorded), with `authority_evidence` saying where it is stated. The answer adds `language_rule`: the law's own rule for which version prevails where its language versions differ. See [Language editions](/docs/records#language-editions).
 - [Get a record's texts](/docs/api/get-versions) and [Retrieve evidence](/docs/api/retrieve-evidence): each text and each unit carries its edition's `expression_authority`, with `expression_authority_evidence` when recorded.
+- [Search texts](/docs/search) and [Retrieve evidence](/docs/retrieval): Portuguese and Spanish texts are matched by word stems with their common words left out, and Arabic texts by word stems with every word kept (`analysis` gives `portuguese`, `spanish` or `arabic`). Other languages, such as Kiswahili, are still matched word for word, and both answers say so in their notices, now in the same words. The analysis is `oa-search-5`.
 
 ## 19 October 2026
 

@@ -66,6 +66,18 @@ A question that cites a part, names a law or asks what a term means (`meaning of
 - **A page:** `page 18 of the NDPA` gives the provisions on that page of the official file.
 - **An address:** paste an Open Alvary page or API address of a record or part, or a law's official address, and the pack holds what it addresses. Add `as_of` for the law on a date: only texts in force then, and currentness assessed at it. Without `as_of`, nothing is assumed about the date.
 
+## Languages
+
+A question's words are matched against each text in the text's own language:
+
+| Texts in | How words match |
+|---|---|
+| English, French, Portuguese, Spanish | By word stems, so `lends` finds `lend` and `trabalhador` finds `trabalhadores`. Common words such as `the`, `le`, `os` and `los` are left out. |
+| Arabic | By word stems, so `موظف` finds `للموظفين`. Every word is kept: there is no list of common Arabic words. |
+| Any other language, such as Kiswahili or Kinyarwanda | Word for word: `mkataba` doesn't match `mikataba`. `coverage.notices` says so for each such language in your scope. |
+
+These are rules for matching word forms, not a measure of how well questions are answered in each language. `revisions.analyzer` names the rules that ran (`oa-search-5`). Add `language` to search texts in one language only; `en` also matches `en-NG`. Questions aren't translated, so matching words finds only texts in the question's language.
+
 ## Budgets
 
 `max_units` (default 10, at most 25) and `max_evidence_bytes` (default 49,152) bound the answer. Definitions count towards the bytes once each. When the budget runs out, the last unit is an excerpt and later ones are left out: `coverage.incomplete_evidence` says so. The answer counts towards your organisation's [data a day](/docs/plans).
