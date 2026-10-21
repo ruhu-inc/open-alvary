@@ -439,3 +439,14 @@ def test_a_basis_is_set_only_where_its_source_states_it():
         assert all(m.basis is None and "Basis not evidenced" in m.note for m in researched(body).values())
     # Every row without a basis says why in its note.
     assert all(m.basis or "basis" in m.note.lower() for m in register().memberships)
+
+
+def test_the_suspension_proposal_is_evidenced_at_both_ends_and_never_served():
+    [gabon] = register().suspensions
+    assert gabon.status == "proposal" and gabon.membership_id == "ga:aa-au:1"
+    assert (str(gabon.valid_from), str(gabon.valid_to)) == ("2023-08-31", "2025-04-29")
+    assert gabon.evidence_url.endswith("1172.comm-en.pdf") and gabon.lifted_evidence_url.endswith(
+        "1277.comm-en.pdf"
+    )
+    assert [p.pinpoint for p in gabon.legal_basis] == ["art. 7(g)", "art. 30"]
+    assert register().reviewed_suspensions() == ()
