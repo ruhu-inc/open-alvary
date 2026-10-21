@@ -19,7 +19,7 @@ Open Alvary is a public catalogue of African law: what each law is, where its of
 
 ## Make your first call
 
-1. Sign in to [the console](/console) with Google or an email code. Your organisation gets the free Starter plan at once, with no card.
+1. Sign in to [the console](/console) with Google or an email code. The first time, give your name; an organisation name is optional (left blank, your own name is used). Your organisation gets the free Starter plan at once, with no card.
 2. Under **API keys**, choose **Create key**, copy the key and keep it in an environment variable:
 
 ```bash

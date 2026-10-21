@@ -166,7 +166,7 @@ Each label carries what it rests on: `memberships` (the reviewed memberships, ea
 
 The pack's `applicability` states the widening: for a place, `within` names the country whose law was added whole; `bodies` lists each body the country has a reviewed membership of, with whether it held on the date (only `held` bodies' law was added), `admitted` how many records of other jurisdictions were added besides, and `left_out` how many were left out because they don't bind there, by relation. `query.filters` shows `scope` as you asked for it. A record you name with `source_id` is answered whatever its relation, so you can ask whether a particular treaty binds a country. Without `scope`, nothing is added and no unit has `applicability`.
 
-[Search texts](/docs/api/search-text) takes `scope=applicable` too, with the same `applicability` on each passage and on the page.
+[Search published texts](/docs/api/search-text) takes `scope=applicable` too, with the same `applicability` on each passage and on the page.
 
 ## Languages
 

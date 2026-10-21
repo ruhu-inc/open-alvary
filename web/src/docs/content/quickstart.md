@@ -3,13 +3,13 @@ title: Quickstart
 description: Get a key, make your first request and read the answer, in about five minutes.
 ---
 
-You will create an API key, search the catalogue and read one record. You need a terminal; the Python examples need Python 3 with `requests` (`pip install requests`), and the JavaScript ones Node.js 18 or later.
+You will create an API key, search the catalogue and read one record. You need a terminal; the Python examples need Python 3 with `requests` (`pip install requests`), and the JavaScript ones Node.js 18 or later. The JavaScript examples use `await` at the top level, so save them in a `.mjs` file (or set `"type": "module"` in `package.json`) and run them with `node`.
 
 > Tip: Only using an AI tool such as Claude? You don't need a key: see [Connect AI tools](/docs/ai-tools).
 
 ## 1. Get an API key
 
-1. Sign in at [open.alvary.ai/console](/console) with Google or an email code. The first time, give your name and your organisation's name. Your organisation starts on the free Starter plan.
+1. Sign in at [open.alvary.ai/console](/console) with Google or an email code. The first time, give your name. Your organisation's name is optional: left blank, your own name is used, and you can rename it later. Your organisation starts on the free Starter plan.
 2. Open **API keys** and choose **Create key**.
 
 ![The Create an API key form: name, type, expiry and Create key](/guide/key-create.webp)
@@ -59,6 +59,7 @@ print(page["total"], "found")
 ```
 
 ```javascript
+// node search.mjs: top-level await needs an ES module (.mjs, or "type": "module" in package.json)
 const url = new URL("https://api.open.alvary.ai/api/v1/search");
 url.searchParams.append("q", "freedom of information");
 url.searchParams.append("jurisdiction", "ng");
