@@ -1684,6 +1684,10 @@ FIELDS: dict[str, dict[str, str]] = {
         "authentic_languages": "The languages in which its text is authentic.",
         "parties": "On a record and its anchors: each party as its record lists it. Empty means none is "
         "recorded, never that it has none.",
+        "parties_complete_as_of": "On a record and its anchors: the date the party list is complete as of, "
+        "by the depositary's status list, when recorded. Until a list is complete on a date, a state missing "
+        "from it is `unknown` on that date, never not a party.",
+        "parties_complete_evidence": "Where the list is shown complete: the depositary's status list.",
     },
     "TreatyPartyView": {
         "party": "The party, as listed.",
@@ -1707,10 +1711,11 @@ FIELDS: dict[str, dict[str, str]] = {
         "relation": "`national` (its own law); `regional_direct`, `regional_requires_transposition` or "
         "`regional_binding_on_addressees` (an instrument of a body it belonged to on the date, by its legal "
         "effect); `treaty_in_force_for_state` or `treaty_not_in_force_for_state` (by its own ratification or "
-        "accession, never by membership of a body); `non_binding`; `comparative` (another jurisdiction's law, "
-        "an instrument addressed to other states, or of a body it was not a member of on the date); or "
-        "`unknown` (the membership, legal effect or ratification is not reviewed, or its date cannot be "
-        "compared).",
+        "accession, never by membership of a body; missing from the party list, only when the list is "
+        "complete on the date); `non_binding`; `comparative` (another jurisdiction's law, an instrument "
+        "addressed to other states, or of a body it was not a member of on the date); or `unknown` (the "
+        "membership, legal effect or ratification is not reviewed, the state is missing from a party list not "
+        "known to be complete, or a date cannot be compared).",
         "binds": "`bound`, `not_bound` or `unknown`. Whether the text was in force is `currentness`.",
         "memberships": "The reviewed memberships it rests on.",
         "regional": "The instrument's legal effect it rests on.",

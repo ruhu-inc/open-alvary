@@ -391,8 +391,9 @@ def _date(dated) -> StatedDate | None:
 
 def treaty_status(record) -> TreatyStatus | None:
     """A treaty's status as its reviewed record states it (JUR-04): each party's signature, ratification,
-    accession and denunciation, dated, and its reservations; and when the treaty entered into force, from
-    its one entry-into-force event for the whole treaty (none, or several dates: not recorded)."""
+    accession and denunciation, dated, and its reservations; the date the party list is complete as of,
+    with its evidence, when recorded; and when the treaty entered into force, from its one
+    entry-into-force event for the whole treaty (none, or several dates: not recorded)."""
     profile = record.profile
     if profile.family != "treaty":
         return None
@@ -421,6 +422,8 @@ def treaty_status(record) -> TreatyStatus | None:
             )
             for p in profile.parties
         ],
+        parties_complete_as_of=profile.parties_complete_as_of,
+        parties_complete_evidence=_stated(profile.parties_complete_evidence),
     )
 
 

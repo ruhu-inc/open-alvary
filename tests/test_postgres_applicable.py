@@ -102,6 +102,8 @@ WORKS = {
                               ratified=R.Dated(value=date(2005, 3, 1))),
                 R.TreatyParty(party="Ghana", place="gh", signed=R.Dated(value=date(2004, 2, 2))),
             ),
+            parties_complete_as_of=date(2026, 6, 1),
+            parties_complete_evidence=R.Evidence(source="external", url="https://www.example.org/status-list.pdf"),
         ),
         "1. States Parties shall simplify customs procedures for commercial cooperation.", (),
         (R.Event(kind="entered_into_force", when=R.Dated(value=date(2005, 1, 1))),),
@@ -215,6 +217,10 @@ def test_the_record_and_its_anchors_carry_the_regional_effect_and_the_treaty_par
     assert [a["source_id"] for a in kenya["domesticated_by"]] == ["ke-customs-act"]
     assert ghana == {"party": "Ghana", "place": "gh", "signed": {"value": "2004-02-02", "precision": "day"},
                      "domesticated_by": []}  # fmt: skip
+    assert charter["parties_complete_as_of"] == "2026-06-01"
+    assert charter["parties_complete_evidence"] == {
+        "source": "external", "url": "https://www.example.org/status-list.pdf"
+    }  # fmt: skip
     part = client.get(f"/anchors/{anchor(store, 'au-trade-charter')}").json()
     assert part["treaty"] == charter and "regional" not in part
     national = client.get("/sources/sn-company-accounts-act").json()
@@ -229,7 +235,8 @@ def test_each_unit_carries_its_records_legal_effect_or_treaty_status(published):
                                  "member_states": []}  # fmt: skip
     assert "treaty" not in ohada and "applicability" not in ohada
     charter = by_source(retrieve(client, "customs procedures")["evidence"])["au-trade-charter"]
-    # A treaty's parties are on the record and its anchors, not on each unit.
+    # A treaty's parties, and whether the list is complete, are on the record and its anchors, not on each
+    # unit.
     assert charter["treaty"] == {
         "adopted_by": "Assembly of the Union", "depositary": "African Union Commission",
         "entered_into_force": {"value": "2005-01-01", "precision": "day"}, "authentic_languages": ["en", "fr"],
@@ -315,7 +322,8 @@ def test_an_ecowas_directive_requires_transposition_with_its_deadline_and_transp
 
 def test_an_au_treaty_binds_the_state_that_ratified_it_and_not_one_without_a_ratification(published):
     store, client, _ = published
-    # Named by source_id, the treaty is answered for Senegal with its relation: no ratification recorded.
+    # Named by source_id, the treaty is answered for Senegal with its relation: missing from a party list
+    # complete as of 2026-06-01, so not a party on 2026-01-01.
     pack = retrieve(
         client,
         "customs procedures",
@@ -340,6 +348,15 @@ def test_an_au_treaty_binds_the_state_that_ratified_it_and_not_one_without_a_rat
     ]
     assert results[0]["currentness"]["state"] == "in_force" and results[0]["result"] == "unchanged"
     assert "signature alone" in results[2]["applicability"]["reasons"][0]
+    # After the date the list is complete as of, Senegal's absence proves nothing: unknown. Ghana's own
+    # entry, its signature alone, still does not bind.
+    later = [{"anchor_id": part, "as_of": "2026-09-01", "jurisdiction": j} for j in ("sn", "gh")]
+    senegal, ghana = client.post("/currentness", json={"items": later}).json()["results"]
+    assert (senegal["applicability"]["relation"], senegal["applicability"]["binds"]) == ("unknown", "unknown")
+    assert (
+        "the party list is not known to be complete on 2026-09-01" in senegal["applicability"]["reasons"][0]
+    )
+    assert ghana["applicability"]["relation"] == "treaty_not_in_force_for_state"
     # Before the treaty entered into force, it bound no one.
     [early] = client.post(
         "/currentness", json={"items": [{"anchor_id": part, "as_of": "2004-06-01", "jurisdiction": "ke"}]}

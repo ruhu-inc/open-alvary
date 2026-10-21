@@ -377,7 +377,7 @@
     },
     "AuthorityEvidence": {
       "additionalProperties": false,
-      "description": "Where an edition's authority or a language rule is stated: a page and the words of the document\n(``document``), the address of another instrument (``external``), or the reviewer who recorded it.",
+      "description": "Where an edition's authority or a language rule is stated, or a treaty's party list is shown\ncomplete: a page and the words of the document (``document``), the address of another instrument\n(``external``), or the reviewer who recorded it.",
       "properties": {
         "source": {
           "enum": [
@@ -3001,7 +3001,7 @@
     },
     "TreatyView": {
       "additionalProperties": false,
-      "description": "A treaty's status, as its reviewed record states it (JUR-04, DAT-03). ``parties`` is on the record\nand its anchors, never on an evidence unit; an empty list means none is recorded, never none exists.",
+      "description": "A treaty's status, as its reviewed record states it (JUR-04, DAT-03). ``parties`` is on the record\nand its anchors, never on an evidence unit; an empty list means none is recorded, never none exists.\nBeside it, the date the list is complete as of and where that is shown, when recorded: without it, a\nstate missing from the list is unknown, never not a party.",
       "properties": {
         "adopted_by": {
           "anyOf": [
@@ -3061,6 +3061,30 @@
           ],
           "default": null,
           "title": "Parties"
+        },
+        "parties_complete_as_of": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parties Complete As Of"
+        },
+        "parties_complete_evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuthorityEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "title": "TreatyView",

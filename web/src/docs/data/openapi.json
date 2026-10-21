@@ -3893,7 +3893,7 @@
               "unknown"
             ],
             "title": "Relation",
-            "description": "`national` (its own law); `regional_direct`, `regional_requires_transposition` or `regional_binding_on_addressees` (an instrument of a body it belonged to on the date, by its legal effect); `treaty_in_force_for_state` or `treaty_not_in_force_for_state` (by its own ratification or accession, never by membership of a body); `non_binding`; `comparative` (another jurisdiction's law, an instrument addressed to other states, or of a body it was not a member of on the date); or `unknown` (the membership, legal effect or ratification is not reviewed, or its date cannot be compared)."
+            "description": "`national` (its own law); `regional_direct`, `regional_requires_transposition` or `regional_binding_on_addressees` (an instrument of a body it belonged to on the date, by its legal effect); `treaty_in_force_for_state` or `treaty_not_in_force_for_state` (by its own ratification or accession, never by membership of a body; missing from the party list, only when the list is complete on the date); `non_binding`; `comparative` (another jurisdiction's law, an instrument addressed to other states, or of a body it was not a member of on the date); or `unknown` (the membership, legal effect or ratification is not reviewed, the state is missing from a party list not known to be complete, or a date cannot be compared)."
           },
           "binds": {
             "type": "string",
@@ -4112,7 +4112,7 @@
           "source"
         ],
         "title": "AuthorityEvidence",
-        "description": "Where an edition's authority or a language rule is stated: a page and the words of the document\n(``document``), the address of another instrument (``external``), or the reviewer who recorded it."
+        "description": "Where an edition's authority or a language rule is stated, or a treaty's party list is shown\ncomplete: a page and the words of the document (``document``), the address of another instrument\n(``external``), or the reviewer who recorded it."
       },
       "BasisView": {
         "properties": {
@@ -10155,12 +10155,36 @@
             ],
             "title": "Parties",
             "description": "On a record and its anchors: each party as its record lists it. Empty means none is recorded, never that it has none."
+          },
+          "parties_complete_as_of": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parties Complete As Of",
+            "description": "On a record and its anchors: the date the party list is complete as of, by the depositary's status list, when recorded. Until a list is complete on a date, a state missing from it is `unknown` on that date, never not a party."
+          },
+          "parties_complete_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorityEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the list is shown complete: the depositary's status list."
           }
         },
         "additionalProperties": false,
         "type": "object",
         "title": "TreatyView",
-        "description": "A treaty's status, as its reviewed record states it (JUR-04, DAT-03). ``parties`` is on the record\nand its anchors, never on an evidence unit; an empty list means none is recorded, never none exists."
+        "description": "A treaty's status, as its reviewed record states it (JUR-04, DAT-03). ``parties`` is on the record\nand its anchors, never on an evidence unit; an empty list means none is recorded, never none exists.\nBeside it, the date the list is complete as of and where that is shown, when recorded: without it, a\nstate missing from the list is unknown, never not a party."
       },
       "VersionPage": {
         "properties": {
