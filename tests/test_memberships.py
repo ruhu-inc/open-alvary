@@ -427,3 +427,15 @@ def test_ecowas_founders_start_on_signature_under_article_62_and_mauritania_left
     assert mauritania.holds_on(date(2000, 12, 15)) is None and mauritania.holds_on(date(2001, 1, 1)) is False
     assert str(ecowas["cv"].valid_from) == "1976/1977" and ecowas["cv"].basis.pinpoint == "art. 62(2)"
     assert all(m.status == "proposal" for m in ecowas.values())
+
+
+def test_a_basis_is_set_only_where_its_source_states_it():
+    eac, ohada = researched("aa-eac"), researched("aa-ohada")
+    assert str(eac["ss"].valid_from) == "2016-08-15/2016-09-05" and eac["ss"].basis is None
+    assert {k for k, m in eac.items() if m.basis} == {"ke", "tz", "ug", "cd"}
+    assert all(m.basis.kind == "entry_into_force" for m in ohada.values() if m.valid_from is not None)
+    assert all(m.basis is None for m in ohada.values() if m.valid_from is None)
+    for body in ("aa-uemoa", "aa-cemac"):
+        assert all(m.basis is None and "Basis not evidenced" in m.note for m in researched(body).values())
+    # Every row without a basis says why in its note.
+    assert all(m.basis or "basis" in m.note.lower() for m in register().memberships)

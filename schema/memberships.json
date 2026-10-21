@@ -1430,7 +1430,13 @@
       "status": "proposal",
       "valid_from": "2000-07-07",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Treaty for the Establishment of the East African Community",
+        "pinpoint": "art. 152",
+        "evidence_url": "https://repository.eac.int/server/api/core/bitstreams/c3cb9cef-c236-495e-9585-218f6aab1e03/content",
+        "quote": "This Treaty shall enter into force upon ratification and deposit of instruments of ratification with the Secretary General by all Partner States."
+      },
       "evidence_url": "https://www.eac.int/eac-history",
       "note": "One of the three original Partner States: the EAC Treaty entered into force on 7 July 2000, once all three had ratified it and deposited their instruments.",
       "reviewed_by": null,
@@ -1444,7 +1450,13 @@
       "status": "proposal",
       "valid_from": "2000-07-07",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Treaty for the Establishment of the East African Community",
+        "pinpoint": "art. 152",
+        "evidence_url": "https://repository.eac.int/server/api/core/bitstreams/c3cb9cef-c236-495e-9585-218f6aab1e03/content",
+        "quote": "This Treaty shall enter into force upon ratification and deposit of instruments of ratification with the Secretary General by all Partner States."
+      },
       "evidence_url": "https://www.eac.int/eac-history",
       "note": "One of the three original Partner States: the EAC Treaty entered into force on 7 July 2000, once all three had ratified it and deposited their instruments.",
       "reviewed_by": null,
@@ -1458,7 +1470,13 @@
       "status": "proposal",
       "valid_from": "2000-07-07",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Treaty for the Establishment of the East African Community",
+        "pinpoint": "art. 152",
+        "evidence_url": "https://repository.eac.int/server/api/core/bitstreams/c3cb9cef-c236-495e-9585-218f6aab1e03/content",
+        "quote": "This Treaty shall enter into force upon ratification and deposit of instruments of ratification with the Secretary General by all Partner States."
+      },
       "evidence_url": "https://www.eac.int/eac-history",
       "note": "One of the three original Partner States: the EAC Treaty entered into force on 7 July 2000, once all three had ratified it and deposited their instruments.",
       "reviewed_by": null,
@@ -1474,7 +1492,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.eac.int/overview-of-eac",
-      "note": "Acceded to the EAC Treaty on 18 June 2007 and became a full member from 1 July 2007, as the EAC says.",
+      "note": "Acceded to the EAC Treaty on 18 June 2007 and became a full member from 1 July 2007, as the EAC says. Basis not evidenced: the article of its Treaty of Accession that sets 1 July 2007 has not been read.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1488,7 +1506,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.eac.int/overview-of-eac",
-      "note": "Acceded to the EAC Treaty on 18 June 2007 and became a full member from 1 July 2007, as the EAC says.",
+      "note": "Acceded to the EAC Treaty on 18 June 2007 and became a full member from 1 July 2007, as the EAC says. Basis not evidenced: the article of its Treaty of Accession that sets 1 July 2007 has not been read.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1500,9 +1518,15 @@
       "status": "proposal",
       "valid_from": "2022-07-11",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Treaty of Accession of the Democratic Republic of the Congo to the Treaty for the Establishment of the East African Community",
+        "pinpoint": "art. 11",
+        "evidence_url": "https://www.eac.int/press-releases/2526-the-democratic-republic-of-the-congo-finally-becomes-the-7th-eac-partner-state",
+        "quote": "Article 11 of the Treaty of Accession by the Democratic Republic of Congo … provides that the Accession Treaty shall enter into force on the date the Democratic Republic of Congo deposits the instrument of ratification with the Secretary General"
+      },
       "evidence_url": "https://www.eac.int/overview-of-eac",
-      "note": "Acceded to the EAC Treaty on 8 April 2022 and became a full member on 11 July 2022, the day it deposited its instrument of ratification (EAC press release of that day, https://www.eac.int/press-releases/2526-the-democratic-republic-of-the-congo-finally-becomes-the-7th-eac-partner-state).",
+      "note": "Acceded to the EAC Treaty on 8 April 2022 and became a full member on 11 July 2022, the day it deposited its instrument of ratification (EAC press release of that day, https://www.eac.int/press-releases/2526-the-democratic-republic-of-the-congo-finally-becomes-the-7th-eac-partner-state). Basis: the Treaty of Accession entered into force on its deposit (Article 11, as the EAC's press release quotes it; the treaty's text has not been read).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1516,7 +1540,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.eac.int/overview-of-eac",
-      "note": "Acceded to the EAC Treaty on 15 December 2023 and became a full member on 4 March 2024, the day it deposited its instrument of ratification of the Treaty of Accession (EAC press release of that day, https://www.eac.int/press-releases/3049-somalia-finally-joins-eac-as-the-bloc-s-8th-partner-state).",
+      "note": "Acceded to the EAC Treaty on 15 December 2023 and became a full member on 4 March 2024, the day it deposited its instrument of ratification of the Treaty of Accession (EAC press release of that day, https://www.eac.int/press-releases/3049-somalia-finally-joins-eac-as-the-bloc-s-8th-partner-state). Basis not evidenced: the press release cites Article 153(1) of the EAC Treaty, but the article of Somalia's Treaty of Accession on its entry into force has not been read.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1526,11 +1550,11 @@
       "target_id": "aa-eac",
       "kind": "member_of",
       "status": "proposal",
-      "valid_from": null,
+      "valid_from": "2016-08-15/2016-09-05",
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.eac.int/overview-of-eac",
-      "note": "A Partner State. EAC pages disagree on when it became a full member: 15 August 2016 on this page, 5 September 2016 (the day it deposited its instrument of ratification) on https://www.eac.int/eac-history and in the EAC's press release of that day. Start not yet decided.",
+      "note": "A Partner State; it signed its Treaty of Accession on 15 April 2016. EAC pages disagree on when it became a full member: 15 August 2016 on this page; 5 September 2016, the day it deposited its instrument of ratification, on https://www.eac.int/eac-history and in the EAC's press release of that day (https://www.eac.int/press-releases/550-951-449-republic-of-south-sudan-deposits-instruments-of-ratification-on-the-accession-of-the-treaty-for-the-establishment-of-the-east-african-community-to-the-secretary-general), which the Summit's communiqué of 8 September 2016 confirms. The window holds the day. Basis not evidenced: the entry-into-force article of its Treaty of Accession has not been read (the DRC's entered into force on deposit).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1542,9 +1566,15 @@
       "status": "proposal",
       "valid_from": "1995-09-18",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
       "evidence_url": "https://www.ohada.org/etats-parties-burkin-faso/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-03-06, deposit 1995-04-16, entry into force 1995-09-18.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-03-06, deposit 1995-04-16, entry into force 1995-09-18. Basis: the entry into force the page gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1558,7 +1588,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.ohada.org/etats-parties-benin/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-03-08, deposit 1995-03-10, and no entry into force: start not yet evidenced.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-03-08, deposit 1995-03-10, and no entry into force: start not yet evidenced. Basis not evidenced while the page gives no entry into force.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1570,9 +1600,15 @@
       "status": "proposal",
       "valid_from": "2012-09-12",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
       "evidence_url": "https://www.ohada.org/etats-parties-rdc/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 2012-06-27, deposit 2012-07-13, entry into force 2012-09-12.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 2012-06-27, deposit 2012-07-13, entry into force 2012-09-12. Basis: the entry into force the page gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1584,9 +1620,15 @@
       "status": "proposal",
       "valid_from": "1995-09-18",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
       "evidence_url": "https://www.ohada.org/etats-parties-centrafrique/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-01-13, deposit 1995-01-13, entry into force 1995-09-18.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-01-13, deposit 1995-01-13, entry into force 1995-09-18. Basis: the entry into force the page gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1598,9 +1640,15 @@
       "status": "proposal",
       "valid_from": "1999-07-17",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
       "evidence_url": "https://www.ohada.org/etats-parties-congo/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1997-05-28, deposit 1999-05-18, entry into force 1999-07-17.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1997-05-28, deposit 1999-05-18, entry into force 1999-07-17. Basis: the entry into force the page gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1612,9 +1660,15 @@
       "status": "proposal",
       "valid_from": "1996-02-11",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
       "evidence_url": "https://www.ohada.org/etats-parties-cote-d-ivoire/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-09-29, deposit 1995-12-13, entry into force 1996-02-11.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-09-29, deposit 1995-12-13, entry into force 1996-02-11. Basis: the entry into force the page gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1626,9 +1680,15 @@
       "status": "proposal",
       "valid_from": "1996-12-03",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
       "evidence_url": "https://www.ohada.org/etats-parties-cameroun/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-10-20, deposit 1995-10-04, entry into force 1996-12-03. The page gives a deposit before the ratification and an entry into force some fourteen months after deposit (others follow within about sixty days): check the dates against the depositary.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-10-20, deposit 1995-10-04, entry into force 1996-12-03. The page gives a deposit before the ratification and an entry into force some fourteen months after deposit (others follow within about sixty days): check the dates against the depositary. Basis: the entry into force the page gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1640,9 +1700,15 @@
       "status": "proposal",
       "valid_from": "1998-04-05",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
       "evidence_url": "https://www.ohada.org/etats-parties-gabon/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1998-02-02, deposit 1998-02-04, entry into force 1998-04-05.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1998-02-02, deposit 1998-02-04, entry into force 1998-04-05. Basis: the entry into force the page gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1654,9 +1720,15 @@
       "status": "proposal",
       "valid_from": "2000-11-21",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
       "evidence_url": "https://www.ohada.org/etats-parties-guinee/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 2000-05-05, deposit 2000-09-22, entry into force 2000-11-21.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 2000-05-05, deposit 2000-09-22, entry into force 2000-11-21. Basis: the entry into force the page gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1668,9 +1740,15 @@
       "status": "proposal",
       "valid_from": "1999-08-14",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
       "evidence_url": "https://www.ohada.org/etats-parties-guinee-equatoriale/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1999-04-16, deposit 1999-06-15, entry into force 1999-08-14.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1999-04-16, deposit 1999-06-15, entry into force 1999-08-14. Basis: the entry into force the page gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1682,9 +1760,15 @@
       "status": "proposal",
       "valid_from": "1996-02-24",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
       "evidence_url": "https://www.ohada.org/etats-parties-guinee-bissau/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1994-01-15, deposit 1995-12-26, entry into force 1996-02-24.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1994-01-15, deposit 1995-12-26, entry into force 1996-02-24. Basis: the entry into force the page gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1696,9 +1780,15 @@
       "status": "proposal",
       "valid_from": "1995-09-10",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
       "evidence_url": "https://www.ohada.org/etats-parties-comores/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-02-20, deposit 1995-04-10, entry into force 1995-09-10. The entry into force given is earlier than the 18 September 1995 of the other first parties: check.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-02-20, deposit 1995-04-10, entry into force 1995-09-10. The entry into force given is earlier than the 18 September 1995 of the other first parties: check. Basis: the entry into force the page gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1710,9 +1800,15 @@
       "status": "proposal",
       "valid_from": "1995-09-18",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
       "evidence_url": "https://www.ohada.org/etats-parties-mali/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-02-07, deposit 1995-03-23, entry into force 1995-09-18.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-02-07, deposit 1995-03-23, entry into force 1995-09-18. Basis: the entry into force the page gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1726,7 +1822,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.ohada.org/etats-parties-niger/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-06-05, deposit 1995-07-18, and no entry into force: start not yet evidenced. Niger's and Senegal's pages give identical dates, which may be a copying error on the site.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-06-05, deposit 1995-07-18, and no entry into force: start not yet evidenced. Niger's and Senegal's pages give identical dates, which may be a copying error on the site. Basis not evidenced while the page gives no entry into force.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1740,7 +1836,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.ohada.org/etats-parties-senegal/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-06-05, deposit 1995-07-18, and no entry into force: start not yet evidenced. Senegal's and Niger's pages give identical dates, which may be a copying error on the site.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-06-05, deposit 1995-07-18, and no entry into force: start not yet evidenced. Senegal's and Niger's pages give identical dates, which may be a copying error on the site. Basis not evidenced while the page gives no entry into force.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1752,9 +1848,15 @@
       "status": "proposal",
       "valid_from": "1996-07-02",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
       "evidence_url": "https://www.ohada.org/etats-parties-tchad/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1996-04-13, deposit 1996-05-03, entry into force 1996-07-02.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1996-04-13, deposit 1996-05-03, entry into force 1996-07-02. Basis: the entry into force the page gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1766,9 +1868,15 @@
       "status": "proposal",
       "valid_from": "1996-01-19",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
       "evidence_url": "https://www.ohada.org/togo/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-10-27, deposit 1995-11-20, entry into force 1996-01-19. The same page names Porto-Novo as the capital, Benin's: check the page against the depositary.",
+      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-10-27, deposit 1995-11-20, entry into force 1996-01-19. The same page names Porto-Novo as the capital, Benin's: check the page against the depositary. Basis: the entry into force the page gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1782,7 +1890,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced.",
+      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1796,7 +1904,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced.",
+      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1810,7 +1918,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced.",
+      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1824,7 +1932,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. The BCEAO's annual report for 1997 says Guinea-Bissau's accession took effect on 2 May 1997; the central bank is not UEMOA, so the reviewer decides whether that evidences the start.",
+      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. The BCEAO's annual report for 1997 says Guinea-Bissau's accession took effect on 2 May 1997; the central bank is not UEMOA, so the reviewer decides whether that evidences the start. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1838,7 +1946,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced.",
+      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1852,7 +1960,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced.",
+      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1866,7 +1974,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced.",
+      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1880,7 +1988,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced.",
+      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1894,7 +2002,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://cemac.int/about/",
-      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced.",
+      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced. Basis not evidenced: CEMAC's site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification); no source read gives the 1994 Treaty's entry into force for each state (a WTO fact sheet gives 24 June 1999).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1908,7 +2016,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://cemac.int/about/",
-      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced.",
+      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced. Basis not evidenced: CEMAC's site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification); no source read gives the 1994 Treaty's entry into force for each state (a WTO fact sheet gives 24 June 1999).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1922,7 +2030,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://cemac.int/about/",
-      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced.",
+      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced. Basis not evidenced: CEMAC's site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification); no source read gives the 1994 Treaty's entry into force for each state (a WTO fact sheet gives 24 June 1999).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1936,7 +2044,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://cemac.int/about/",
-      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced.",
+      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced. Basis not evidenced: CEMAC's site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification); no source read gives the 1994 Treaty's entry into force for each state (a WTO fact sheet gives 24 June 1999).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1950,7 +2058,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://cemac.int/about/",
-      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced.",
+      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced. Basis not evidenced: CEMAC's site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification); no source read gives the 1994 Treaty's entry into force for each state (a WTO fact sheet gives 24 June 1999).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1964,7 +2072,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://cemac.int/about/",
-      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced.",
+      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced. Basis not evidenced: CEMAC's site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification); no source read gives the 1994 Treaty's entry into force for each state (a WTO fact sheet gives 24 June 1999).",
       "reviewed_by": null,
       "reviewed_at": null
     }
