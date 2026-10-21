@@ -320,7 +320,7 @@ function operationPage(path: string, methods: Methods, spec: Spec, examples: Exa
 
 function toolsPage(tools: Tool[], examples: Examples): ReferencePage {
   const lines = [
-    `The MCP server at \`${API_ORIGIN}/mcp\` gives AI tools these read-only tools. They answer exactly what the REST API answers for the same request, under the same limits. To connect a tool, see [Connect AI tools](/docs/ai-tools).`,
+    `The MCP server at \`${API_ORIGIN}/mcp\` gives AI tools these read-only tools. Each answers what the REST API answers for the same request, within your organisation's plan and the same shared limits, but in smaller pages: at most 25 records or changes, 10 passages, and 15 evidence units with 40,960 bytes of words. An answer larger than 60 KiB is refused with \`result_too_large\`, never shortened. To connect a tool, see [Connect AI tools](/docs/ai-tools).`,
     "AI tools call them for you when you ask a question. To call one yourself, send a JSON-RPC `tools/call` with a key; no session is needed:",
     fence(
       "curl",
@@ -332,7 +332,27 @@ function toolsPage(tools: Tool[], examples: Examples): ReferencePage {
         `-d '{"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "search_catalogue", "arguments": {"query": "constitution", "limit": 3}}}'`,
       ].join(" \\\n  "),
     ),
-    "The answer's `result.content[0].text` holds the same JSON as the REST answer. A refusal (no key, no access, over a limit) is a JSON-RPC error whose `data.code` is one of the [error codes](/docs/errors).",
+    "The answer's `result.content[0].text` holds the same JSON as the REST answer. A refusal comes one of three ways, each with one of the [error codes](/docs/errors):",
+    table(
+      ["When", "The answer", "The code"],
+      [
+        [
+          "Before a tool runs: no key or an invalid one, no access, or an organisation limit used up (requests a minute, at once, data a day)",
+          "A JSON-RPC `error`, at the same HTTP status as REST. `error.code` is `10001` (401), `10002` (403), `10003` (429) or `10004` (503); a 401 also has `WWW-Authenticate`.",
+          "`error.data.code`, with `error.data.retry_after_seconds` when you should wait",
+        ],
+        [
+          "The tool ran and failed: not found, an answer too large, the Starter-rate allowance outside your plan used up, or a cursor that is invalid or expired",
+          "A `result` with `isError: true` and a message in `content[0].text`.",
+          "`result.structuredContent.code`, with `retry_after_seconds` when you should wait",
+        ],
+        [
+          "An unknown tool, or arguments it doesn't take",
+          "A JSON-RPC `error` with `error.code` `-32602`.",
+          "None: fix the call.",
+        ],
+      ],
+    ),
   ];
   for (const tool of tools) {
     lines.push(`## \`${tool.name}\` {#${tool.name}}`, `**${tool.title}.** ${tool.description}`);
