@@ -32,6 +32,12 @@ variable "zone" {
   default     = "europe-west1-b"
 }
 
+variable "inference_zone" {
+  description = "The GPU machine's zone, when it differs from the engine's (empty: zone). GPUs run out zone by zone (a stockout); the machine's private address is regional, so the services reach it from any zone of the region."
+  type        = string
+  default     = ""
+}
+
 variable "operator_email" {
   description = "Where alerts and budget warnings go."
   type        = string
