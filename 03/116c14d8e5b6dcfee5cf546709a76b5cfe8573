@@ -1,0 +1,22 @@
+tests/test_postgres_retrieval.py
+  s_d665c62e07d76f::t_a21f5b3f3d73a1 378
+  s_d665c62e07d76f::t_fc0dc76d0d2f45 349
+  s_d665c62e07d76f::t_9e89a3613e25e5 299-303
+  s_d665c62e07d76f::t_39fed00a7253b1 24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "03116c14d8e5b6dcfee5cf546709a76b5cfe8573",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
