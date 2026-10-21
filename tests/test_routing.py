@@ -68,6 +68,26 @@ def test_each_page_gets_one_route_from_its_evidence():
     assert routing.route(page(5, "ARRANGEMENT OF SECTIONS"), first=False, structure_issues=0)[0] == "full"
 
 
+def test_a_page_read_only_once_is_never_agreed():
+    # A Gazette page read from its own text layer has no flag because nothing was compared.
+    once = {**page(2, "2. Plain words."), "checks": {}}
+    assert routing.route(once, first=False, structure_issues=0, compared=False) == (
+        "full",
+        ["one reading only: nothing was compared"],
+    )
+    gazette = {
+        **reading(page(1, "Ingingo ya 1."), page(2, "Ingingo ya 2."), page(3, "Ingingo ya 3.")),
+        "checks": {},
+    }
+    for p in gazette["pages"]:
+        p["checks"] = {}
+    assert {n: r[0] for n, r in routing.routes(gazette).items()} == {1: "full", 2: "full", 3: "full"}
+    # A scanned page both Google's OCR and the Layout Parser read was compared.
+    gazette["checks"] = {"scans_read_by_ocr": [1, 2, 3], "scans_read_by_docai": [2, 3]}
+    assert routing.compared(gazette) == {2, 3}
+    assert {n: r[0] for n, r in routing.routes(gazette).items()} == {1: "full", 2: "agreed", 3: "agreed"}
+
+
 def layer_page(number, text, flags=(), passed=True, supported=(), unflagged=0, **extra):
     """A page with text-layer evidence (ingestion/native.py) as the library attaches it."""
     found = {**page(number, text, flags, **extra)}
