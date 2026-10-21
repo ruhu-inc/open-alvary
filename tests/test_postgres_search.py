@@ -2,18 +2,20 @@
 catalogue, and the text search answers ranked passages with exact snippets, telling no result apart
 from a scope with no published text and from a search that could not run."""
 
+import json
+import re
 import time
 from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
 from test_v1_text import UNITS, WORK, publish_act, withdraw
 
 from api import text_index
-from api.catalogue import LegacyCatalogue
+from api.catalogue import TEXT_NOT_SEARCHED, LegacyCatalogue
 from api.store import Store
 from api.v1 import create_v1_app
 from changes.record import namespace
@@ -256,6 +258,54 @@ def test_the_mcp_tools_search_texts_and_resolve_a_pinpoint(store, tmp_path):
     invalid = {"name": "search_text", "arguments": {"query": "salary", "as_of": "yesterday"}}
     answer = client.post("/mcp", json={"jsonrpc": "2.0", "method": "tools/call", "id": 2, "params": invalid})
     assert answer.json()["error"]["code"] == -32602
+
+
+def test_record_search_reads_whole_words_from_the_indexes_on_every_entry_point(store, client, tmp_path):
+    """G11: /search, the website's search and MCP search_catalogue find a record by the words of its
+    title and citation (the word index on sources) and of one part of its published text (the section
+    index), never by part of a word, and no statement they send compares by substring."""
+    from api.main import create_app
+    from api.site import create_site_app
+
+    publish_act(store, UNITS)
+    legacy, site = TestClient(create_app(store, tmp_path)), TestClient(create_site_app(store, tmp_path))
+    statements = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    def found(q):
+        tool = {"name": "search_catalogue", "arguments": {"query": q}}
+        reply = legacy.post("/mcp", json={"jsonrpc": "2.0", "method": "tools/call", "id": 1, "params": tool})
+        answers = [
+            client.get("/search", params={"q": q}).json(),
+            legacy.get("/search", params={"q": q}).json(),
+            site.get("/search", params={"q": q}).json(),  # the website's, at /site/v1/search
+            json.loads(reply.json()["result"]["content"][0]["text"]),
+        ]
+        ids = {frozenset(s["id"] for s in answer["items"]) for answer in answers}
+        assert len(ids) == 1 and not any("notices" in answer for answer in answers), (q, answers)
+        return set(ids.pop())
+
+    event.listen(store.engine, "before_cursor_execute", capture)
+    try:
+        assert found("example act") == found("2023 EXAMPLE") == {WORK}  # its title and citation
+        assert found("salary") == {WORK}  # only in its text
+        assert found("lends students") == {WORK}  # the text's English analysis, in one section
+        assert found("sal") == found("exam") == set()  # never part of a word (a stem may match)
+        assert found("salary lagos") == set()  # in two parts of the text, never one
+    finally:
+        event.remove(store.engine, "before_cursor_execute", capture)
+    assert statements and not [
+        s for s in statements if re.search(r"(?i)\b(i?like|similar to|strpos|position)\b", s)
+    ]
+    withdraw(store)  # its text stops being public: the words of the text no longer find it
+    assert found("salary") == set() and found("example act") == {WORK}
+    with store.engine.begin() as conn:
+        state = namespace(conn).qualified(conn, "changes", "text_index_state")
+        conn.execute(text(f"UPDATE {state} SET built = false"))
+    page = client.get("/search", params={"q": "example"}).json()
+    assert page["total"] == 1 and page["notices"] == [TEXT_NOT_SEARCHED["building"]]
 
 
 def test_the_integration_acceptance_checks_pass_on_a_published_text(store, client, capsys):
