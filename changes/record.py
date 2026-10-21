@@ -66,7 +66,8 @@ DIFF_CAP = 200
 # What a reviewed membership asserts (JUR-04): a change to any of these is announced; its note, and the
 # words its basis quotes, are not. Dates are EDTF strings (schema.dates).
 MEMBERSHIP_FIELDS = ("member_id", "body_id", "valid_from", "valid_to", "basis", "evidence_url")
-# What a reviewed suspension from participation asserts; it never ends its membership.
+# What a reviewed suspension from participation asserts, each article of its legal basis with its role;
+# its note, and the words its legal basis quotes, are not announced. It never ends its membership.
 SUSPENSION_FIELDS = ("membership_id", "member_id", "body_id", "valid_from", "valid_to", "legal_basis",
                      "evidence_url", "lifted_evidence_url")  # fmt: skip
 
