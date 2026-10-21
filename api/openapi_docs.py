@@ -819,7 +819,7 @@ FIELDS: dict[str, dict[str, str]] = {
     },
     "EvidenceRevisions": {
         "dataset": "The change log's epoch and latest publication revision: any published change moves it.",
-        "router": "The routing rules, such as `oa-route-2`.",
+        "router": "The routing rules, such as `oa-route-3`.",
         "ranking": "The ranking profile, such as `oa-rank-3`.",
         "analyzer": "The text analysis, such as `oa-search-5`.",
         "engine": "The search engine that ran the word and meaning searches (`vespa`), when one is configured; "

@@ -67,7 +67,7 @@ def test_a_topic_query_answers_an_evidence_pack(store, client):
     pack = retrieve(client, "repaid from salary")
     assert pack["schema_version"] == "oa-evidence-1" and pack["status"] == "results"
     assert pack["query"]["routes"] == ["topic"] and pack["revisions"]["ranking"] == "oa-rank-3"
-    assert pack["revisions"]["router"] == "oa-route-2" and pack["revisions"]["dataset"].count(":") == 1
+    assert pack["revisions"]["router"] == "oa-route-3" and pack["revisions"]["dataset"].count(":") == 1
     first = pack["evidence"][0]
     assert first["anchor_id"] == nodes["sec_1"].id and first["unit"] == "provision"
     assert first["citation"] == "Example Act, 2023, s. 1" and first["complete"] is True

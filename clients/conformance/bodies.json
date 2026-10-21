@@ -273,7 +273,7 @@
     },
     "revisions": {
       "dataset": "1:40",
-      "router": "oa-route-2",
+      "router": "oa-route-3",
       "ranking": "oa-rank-3",
       "analyzer": "oa-search-5"
     },
@@ -339,7 +339,7 @@
         },
         "ranking": {
           "position": 1,
-          "router": "oa-route-2",
+          "router": "oa-route-3",
           "routes": [
             "topic"
           ],
@@ -402,7 +402,7 @@
         },
         "ranking": {
           "position": 2,
-          "router": "oa-route-2",
+          "router": "oa-route-3",
           "routes": [
             "topic"
           ],
@@ -442,7 +442,7 @@
     },
     "revisions": {
       "dataset": "1:41",
-      "router": "oa-route-2",
+      "router": "oa-route-3",
       "ranking": "oa-rank-3",
       "analyzer": "oa-search-5"
     },
@@ -508,7 +508,7 @@
         },
         "ranking": {
           "position": 1,
-          "router": "oa-route-2",
+          "router": "oa-route-3",
           "routes": [
             "topic"
           ],
@@ -548,7 +548,7 @@
     },
     "revisions": {
       "dataset": "1:41",
-      "router": "oa-route-2",
+      "router": "oa-route-3",
       "ranking": "oa-rank-3",
       "analyzer": "oa-search-5"
     },
@@ -614,7 +614,7 @@
         },
         "ranking": {
           "position": 1,
-          "router": "oa-route-2",
+          "router": "oa-route-3",
           "routes": [
             "topic"
           ],
@@ -677,7 +677,7 @@
         },
         "ranking": {
           "position": 2,
-          "router": "oa-route-2",
+          "router": "oa-route-3",
           "routes": [
             "topic"
           ],

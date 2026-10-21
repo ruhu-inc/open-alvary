@@ -570,6 +570,25 @@ known-good revision when schema-compatible. Never blindly downgrade a live schem
 For destructive migration failure, stop writes and plan restoration from the verified
 backup with the operator; this requires an explicit data-loss assessment.
 
+### Retiring the catalogue's trigram index (expand, then contract)
+
+Catalogue search reads whole words from `sources_catalogue_words` (migration 0038, 2026-10-21) and no
+longer reads migration 0012's trigram index, `ix_sources_metadata_trigram` on `sources` (a GIN index
+of `legacy_metadata_normalize(title || ' ' || citation)` with `gin_trgm_ops`). The index and the
+`pg_trgm` extension stay until production shows nothing uses them:
+
+1. After the release that stops using the trigram index is live, read its scan count on the
+   production database (Cloud SQL Studio, or `psql` as the service's user):
+   `SELECT idx_scan, last_idx_scan FROM pg_stat_user_indexes WHERE indexrelname = 'ix_sources_metadata_trigram';`
+   Note the value and the date.
+2. A week later, read it again. `idx_scan` must stay 0 (where it was already counting before that
+   release, it must not have grown, and `last_idx_scan` must be older than the release). If it moved,
+   find the query that still uses the index before going on.
+3. Only then drop the index and `pg_trgm` in a later migration of their own (contract). Drop the
+   extension only where `legacy_search_migration_state.owns_trigram` is true; otherwise it existed
+   before 0012 and is not ours. `legacy_metadata_normalize` stays: citation lookups still call it
+   (`api/repositories.py`). The migration's downgrade recreates both.
+
 ## Rights complaint or incident
 
 Do not publish private evidence. The maintainer first records the affected source/version

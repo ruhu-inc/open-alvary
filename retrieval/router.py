@@ -1,10 +1,15 @@
-"""Query routes (RSV-03, router profile oa-route-2): deterministic rules decide which plans run; the
+"""Query routes (RSV-03, router profile oa-route-3): deterministic rules decide which plans run; the
 router records them and never changes the caller's filters or assumes a jurisdiction or date.
 
 oa-route-2 adds two routes. ``link``: the query is one address, an Open Alvary page or API address of a
 record or part, or a text's official address, and the evidence is what it addresses. ``page``: the
 query names a page of one work ("page 18 of the NDPA", "NDPA p. 18"), or of the record a request is
-limited to, and the evidence is the provisions on that page of the original file."""
+limited to, and the evidence is the provisions on that page of the original file.
+
+oa-route-3 reads citations as api.pinpoint does since 2026-10-21 (API-04: a change in how citations
+are read is a new profile). An article's alinéa is its subsection ("article 10, alinéa 2", "art. 10
+al. 2"), the work may follow "de", "du", "de la", "de l'" or "des" as it follows "of", and a citation
+is read at its longest pinpoint only, never also as a shorter one in a work named by the rest."""
 
 import re
 from dataclasses import dataclass
@@ -12,7 +17,7 @@ from datetime import date
 
 from api.text_index import fold
 
-ROUTER = "oa-route-2"
+ROUTER = "oa-route-3"
 
 # "meaning of 'personal data'", "definition of data controller in the NDPA", "what is a "data subject"?"
 _DEFINITION = re.compile(
