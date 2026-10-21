@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from api.admission import GLOBAL_KEY, AdmissionMiddleware, pseudonym
-from api.service import create_service
+from api.service import SECURITY_HEADERS, create_service
 from exports.release import write_release
 from tests.test_admission import SECRET, FakeStore, config
 
@@ -227,6 +227,39 @@ def test_every_response_carries_the_websites_security_headers(client):
         assert headers["strict-transport-security"].startswith("max-age="), path
         assert headers["referrer-policy"] == "strict-origin-when-cross-origin", path
         assert headers["x-content-type-options"] == "nosniff", path
+
+
+def test_no_answer_lets_a_page_address_such_as_a_search_reach_another_site(catalogue, store, tmp_path):
+    """Referrer-Policy on every answer the public service sends: the website's pages (a search page's
+    address holds its ?q=), refusals and failures included (owner, 2026-10-21)."""
+    store.save(catalogue)
+    (tmp_path / "web").mkdir()
+    (tmp_path / "web" / "index.html").write_text("<h1>Open Alvary</h1>")
+    app = create_service(store, tmp_path, frontend=tmp_path / "web")
+
+    @app.get("/failing")
+    def failing():
+        raise RuntimeError("private-error-content")
+
+    app.router.routes.insert(0, app.router.routes.pop())  # ahead of the website's catch-all
+    client = TestClient(app, raise_server_exceptions=False)
+    paths = {
+        "/": 200,
+        "/search?q=data+protection": 200,
+        f"/sources/{SOURCE}": 200,
+        "/missing.js": 404,
+        "/site/v1/search?q=data+protection": 200,
+        "/site/v1/missing": 404,
+        "/robots.txt": 200,
+        "/failing": 500,
+    }
+    answers = {path: client.get(path) for path in paths} | {"POST /": client.post("/")}
+    assert {path: answer.status_code for path, answer in answers.items()} == paths | {"POST /": 405}
+    policies = {path: answer.headers.get("referrer-policy") for path, answer in answers.items()}
+    assert policies == {path: "strict-origin-when-cross-origin" for path in answers}
+    failed = answers["/failing"]
+    assert {name: failed.headers.get(name) for name in SECURITY_HEADERS} == SECURITY_HEADERS
+    assert "private-error-content" not in failed.text
 
 
 def test_the_built_website_is_served_beside_the_data(catalogue, store, tmp_path):

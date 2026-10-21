@@ -14,6 +14,7 @@ import logging
 from urllib.parse import quote, urlencode
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import text
 from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
@@ -130,3 +131,27 @@ def test_no_log_carries_a_query_or_a_citation_even_when_the_request_fails(servic
     assert {"uvicorn.error", "sqlalchemy.engine.Engine.open_alvary", "httpcore.connection"} <= names, names
     assert "uvicorn.access" not in names
     assert [(r.name, logging.Formatter().format(r)) for r in records if carried(r)] == []
+
+
+def test_rest_v1_mcp_and_the_console_keep_a_pages_address_from_other_sites(service):
+    """Nor may a browser pass a page's address, with its query, to a site it links to: activation B's
+    answers carry Referrer-Policy as the website's do (tests/test_site.py; owner, 2026-10-21)."""
+    app, credential, _ = service
+    client = TestClient(app)
+    search = "/api/v1/search?" + urlencode({"q": MARKER})
+    answers = {
+        "REST v1": client.get(search, headers=credential),
+        "REST v1, refused": client.get(search),
+        "MCP": client.post("/mcp", json=rpc("tools/list"), headers=credential),
+        "console, signed out": client.get("/console/api/v1/me"),
+        "resource metadata": client.get("/.well-known/oauth-protected-resource/mcp"),
+    }
+    assert {name: answer.status_code for name, answer in answers.items()} == {
+        "REST v1": 200,
+        "REST v1, refused": 401,
+        "MCP": 200,
+        "console, signed out": 401,
+        "resource metadata": 200,
+    }
+    policies = {name: answer.headers.get("referrer-policy") for name, answer in answers.items()}
+    assert policies == dict.fromkeys(answers, "strict-origin-when-cross-origin")
