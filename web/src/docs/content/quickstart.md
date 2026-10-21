@@ -154,7 +154,10 @@ More answers in [Help](/docs/help).
 
 :::cards
 - [Find records](/docs/search) Filters, pages and citations.
+- [Read a record and its text](/docs/records) Its history, its texts and one part exactly.
+- [Retrieve evidence for AI answers](/docs/retrieval) Ranked, citable evidence for a question.
 - [Follow changes](/docs/changes) Keep up with what is added or corrected.
+- [Download and mirror the data](/docs/mirror) A whole release, checked, and kept current.
 - [Connect AI tools](/docs/ai-tools) Ask Claude or ChatGPT about the catalogue.
 - [API reference](/docs/api) Every route and field.
 :::
