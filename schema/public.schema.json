@@ -434,6 +434,58 @@
       "title": "AuthorityEvidence",
       "type": "object"
     },
+    "BasisView": {
+      "additionalProperties": false,
+      "description": "Why a membership starts when it does, and the article that makes that its start.",
+      "properties": {
+        "instrument": {
+          "minLength": 1,
+          "title": "Instrument",
+          "type": "string"
+        },
+        "pinpoint": {
+          "minLength": 1,
+          "title": "Pinpoint",
+          "type": "string"
+        },
+        "evidence_url": {
+          "minLength": 1,
+          "title": "Evidence Url",
+          "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "kind": {
+          "enum": [
+            "entry_into_force",
+            "deposit",
+            "admission_decision",
+            "provisional_application_on_signature",
+            "signature"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "instrument",
+        "pinpoint",
+        "evidence_url",
+        "kind"
+      ],
+      "title": "BasisView",
+      "type": "object"
+    },
     "CitationView": {
       "additionalProperties": false,
       "properties": {
@@ -543,6 +595,39 @@
         "citation"
       ],
       "title": "CurrentSource",
+      "type": "object"
+    },
+    "DateBounds": {
+      "additionalProperties": false,
+      "description": "An uncertain date's bounds in an answer: the earliest and the latest day it can be (inclusive), and\nits precision (``day``, ``month``, ``year`` or ``range``).",
+      "properties": {
+        "earliest": {
+          "format": "date",
+          "title": "Earliest",
+          "type": "string"
+        },
+        "latest": {
+          "format": "date",
+          "title": "Latest",
+          "type": "string"
+        },
+        "precision": {
+          "enum": [
+            "day",
+            "month",
+            "year",
+            "range"
+          ],
+          "title": "Precision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "earliest",
+        "latest",
+        "precision"
+      ],
+      "title": "DateBounds",
       "type": "object"
     },
     "DecisionView": {
@@ -836,7 +921,7 @@
     },
     "MembershipList": {
       "additionalProperties": false,
-      "description": "Memberships in one direction on one date: the bodies a jurisdiction belongs to, or a body's members.\n``items`` held on the date; ``ended`` had ended by then. ``unknown`` when no membership in this\ndirection is reviewed: never an empty list read as \"none\".",
+      "description": "Memberships in one direction on one date: the bodies a jurisdiction belongs to, or a body's members.\n``items`` held on the date; ``uncertain`` may or may not have held (the date falls inside an uncertain\nstart or end); ``ended`` had ended by then. ``unknown`` when no membership in this direction is\nreviewed: never an empty list read as \"none\".",
       "properties": {
         "status": {
           "enum": [
@@ -852,6 +937,14 @@
             "$ref": "#/$defs/MembershipView"
           },
           "title": "Items",
+          "type": "array"
+        },
+        "uncertain": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MembershipView"
+          },
+          "title": "Uncertain",
           "type": "array"
         },
         "ended": {
@@ -876,7 +969,7 @@
     },
     "MembershipView": {
       "additionalProperties": false,
-      "description": "One reviewed membership of the African Union or a regional body (JUR-04): the member, the body, the\nfirst and last day it held (inclusive; no last day means it has not ended), the evidence and who\nreviewed it when. Membership alone never applies the body's treaties to the member.",
+      "description": "One reviewed membership of the African Union or a regional body (JUR-04): the member, the body, the\nfirst and last day it held (inclusive; no last day means it has not ended), each an EDTF date (a day,\na month, a year or a window) with its bounds, why it starts then (``basis``), the evidence, who\nreviewed it when, and its suspensions from participation, as context. Membership alone never applies\nthe body's treaties to the member; a suspension never ends it.",
       "properties": {
         "id": {
           "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
@@ -904,14 +997,17 @@
           "type": "string"
         },
         "valid_from": {
-          "format": "date",
+          "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$",
           "title": "Valid From",
           "type": "string"
+        },
+        "valid_from_bounds": {
+          "$ref": "#/$defs/DateBounds"
         },
         "valid_to": {
           "anyOf": [
             {
-              "format": "date",
+              "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$",
               "type": "string"
             },
             {
@@ -920,6 +1016,20 @@
           ],
           "default": null,
           "title": "Valid To"
+        },
+        "valid_to_bounds": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DateBounds"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "basis": {
+          "$ref": "#/$defs/BasisView"
         },
         "evidence_url": {
           "minLength": 1,
@@ -940,6 +1050,14 @@
           "format": "date-time",
           "title": "Reviewed At",
           "type": "string"
+        },
+        "suspensions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/SuspensionView"
+          },
+          "title": "Suspensions",
+          "type": "array"
         }
       },
       "required": [
@@ -949,6 +1067,8 @@
         "body_id",
         "body_name",
         "valid_from",
+        "valid_from_bounds",
+        "basis",
         "evidence_url",
         "note",
         "reviewed_by",
@@ -1336,6 +1456,46 @@
         "content_hash"
       ],
       "title": "ProvisionMatch",
+      "type": "object"
+    },
+    "ProvisionView": {
+      "additionalProperties": false,
+      "description": "An article of an instrument, as cited: the instrument, the article, where it was read and its words\nwhen recorded.",
+      "properties": {
+        "instrument": {
+          "minLength": 1,
+          "title": "Instrument",
+          "type": "string"
+        },
+        "pinpoint": {
+          "minLength": 1,
+          "title": "Pinpoint",
+          "type": "string"
+        },
+        "evidence_url": {
+          "minLength": 1,
+          "title": "Evidence Url",
+          "type": "string"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        }
+      },
+      "required": [
+        "instrument",
+        "pinpoint",
+        "evidence_url"
+      ],
+      "title": "ProvisionView",
       "type": "object"
     },
     "RegionalView": {
@@ -2241,6 +2401,118 @@
         "items"
       ],
       "title": "StructurePage",
+      "type": "object"
+    },
+    "SuspensionView": {
+      "additionalProperties": false,
+      "description": "A reviewed suspension of a member from participation in a body's activities: context for its\nmembership, which it never ends. Its first and last day (inclusive; none: not lifted), each an EDTF\ndate with its bounds, whether it was in effect on the date asked (``null``: the date falls inside an\nuncertain start or end), its legal basis, the decision that suspended it, the one that lifted it, and\nwho reviewed it when.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "const": "suspended_from_participation",
+          "default": "suspended_from_participation",
+          "title": "Kind",
+          "type": "string"
+        },
+        "valid_from": {
+          "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "valid_from_bounds": {
+          "$ref": "#/$defs/DateBounds"
+        },
+        "valid_to": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Valid To"
+        },
+        "valid_to_bounds": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DateBounds"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "in_effect": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "In Effect"
+        },
+        "legal_basis": {
+          "items": {
+            "$ref": "#/$defs/ProvisionView"
+          },
+          "title": "Legal Basis",
+          "type": "array"
+        },
+        "evidence_url": {
+          "minLength": 1,
+          "title": "Evidence Url",
+          "type": "string"
+        },
+        "lifted_evidence_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lifted Evidence Url"
+        },
+        "note": {
+          "minLength": 1,
+          "title": "Note",
+          "type": "string"
+        },
+        "reviewed_by": {
+          "minLength": 1,
+          "title": "Reviewed By",
+          "type": "string"
+        },
+        "reviewed_at": {
+          "format": "date-time",
+          "title": "Reviewed At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "valid_from",
+        "valid_from_bounds",
+        "legal_basis",
+        "evidence_url",
+        "note",
+        "reviewed_by",
+        "reviewed_at"
+      ],
+      "title": "SuspensionView",
       "type": "object"
     },
     "TextHit": {

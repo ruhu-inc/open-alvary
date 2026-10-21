@@ -396,8 +396,9 @@ TOOLS = [
         "title": "List catalogue changes",
         "description": "Changes to the catalogue in commit order: records added, corrected or withdrawn, text "
         "published, legal effects (repeals, amendments, commencements, transpositions and others a "
-        "reviewer checked) recorded or withdrawn, and reviewed memberships of the African Union and the "
-        "regional bodies recorded, ended or corrected. Filter by jurisdiction, work, type, document class, "
+        "reviewer checked) recorded or withdrawn, reviewed memberships of the African Union and the "
+        "regional bodies recorded, ended or corrected, and members' suspensions from participation recorded "
+        "or lifted (a suspended member remains one). Filter by jurisdiction, work, type, document class, "
         "language or keyword. Pass the returned resume_token next time to get only newer changes. Changes "
         "to what Open Alvary holds, not every change in a country's law.",
         "inputSchema": {
@@ -408,7 +409,7 @@ TOOLS = [
                     "items": {"type": "string"},
                     "maxItems": 50,
                     "description": "Jurisdiction IDs, such as ng or rw; a country includes its states, and a "
-                    "body such as aa-ecowas includes changes to its membership.",
+                    "body such as aa-ecowas includes changes to its membership and its members' suspensions.",
                 },
                 "work": {
                     "type": "array",
@@ -422,7 +423,7 @@ TOOLS = [
                     "maxItems": 10,
                     "description": "Kinds of change: catalogue_added, metadata_corrected, "
                     "text_version_published, legal_effect_recorded, withdrawal, coverage_changed, "
-                    "membership_recorded.",
+                    "membership_recorded, suspension_recorded.",
                 },
                 "class": {
                     "type": "array",

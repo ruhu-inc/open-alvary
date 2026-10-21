@@ -35,13 +35,14 @@ FILTERS = [
     (
         "jurisdiction",
         "Jurisdiction IDs, such as `ng`; a country includes its states and local law, and a body such as "
-        "`aa-ecowas` includes changes to its membership. Up to 50.",
+        "`aa-ecowas` includes changes to its membership and its members' suspensions. Up to 50.",
     ),
     ("work", "Record IDs, such as `ng-foi-act-2011`. Up to 50."),
     (
         "type",
         "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, "
-        "`legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`.",
+        "`legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`, "
+        "`suspension_recorded`.",
     ),
     ("class", "Document types, such as `act` or `regulation`. Up to 50."),
     ("language", "Languages of the affected text, such as `en`. Up to 50."),
@@ -354,11 +355,14 @@ OPERATIONS: dict[str, dict] = {
         "tag": "Catalogue",
         "summary": "Get a jurisdiction and its memberships",
         "description": "One jurisdiction on a date. For a country, `member_of`: the African Union and the "
-        "regional bodies it belonged to on `as_of`, and in `ended` the memberships that had ended by then, "
-        "each with its first and last day, evidence and review. For the African Union or a regional body, "
-        "`members`: its member states on that date, and those that had left. Only reviewed memberships are "
-        "listed; `status` is `unknown`, never an empty list, when none is reviewed. Membership alone never "
-        "means a body's treaties apply to a member.",
+        "regional bodies it belonged to on `as_of`, in `uncertain` those it may or may not have belonged to "
+        "(the date falls inside an uncertain first or last day), and in `ended` the memberships that had "
+        "ended by then, each with its first and last day (as precisely as the evidence gives them, with "
+        "their bounds), its basis, evidence and review, and its suspensions from participation as context. "
+        "For the African Union or a regional body, `members`: its member states on that date, and those that "
+        "had left. Only reviewed memberships are listed; `status` is `unknown`, never an empty list, when "
+        "none is reviewed. A suspension never ends a membership. Membership alone never means a body's "
+        "treaties apply to a member.",
         "parameters": {
             "jurisdiction_id": "The jurisdiction's ID, such as `sn` (Senegal) or `aa-ecowas` (ECOWAS).",
             "as_of": "A date, such as `2026-01-01`: the memberships held on it. Default today.",
@@ -593,9 +597,11 @@ SCHEMAS: dict[str, dict] = {
                 "`text_version_published`, `legal_effect_recorded` (a checked link with another public "
                 "record that changes what law applies: a repeal, amendment, supersession, commencement, "
                 "transposition, domestication or ratification; or a reviewed event on its provisions), "
-                "`withdrawal` (a record or text), `coverage_changed` (a jurisdiction's coverage) or "
+                "`withdrawal` (a record or text), `coverage_changed` (a jurisdiction's coverage), "
                 "`membership_recorded` (a reviewed membership of the African Union or a regional body "
-                "recorded, ended or corrected). More types "
+                "recorded, ended or corrected) or `suspension_recorded` (a reviewed suspension of a member from "
+                "participation in a body's activities recorded, lifted or corrected; it remains a member). "
+                "More types "
                 "may be added: ignore those you do not know; `/change-coverage` lists the ones recorded.",
             },
             "feed_epoch": {
@@ -610,7 +616,12 @@ SCHEMAS: dict[str, dict] = {
             "observed_at": NULL_S
             | {"description": "When the change was seen at the official source, if known."},
             "publisher_published_at": NULL_S | {"description": "When the publisher published it, if known."},
-            "legal_effective": NULL_S | {"description": "When it takes legal effect, if known."},
+            "legal_effective": NULL_S
+            | {
+                "description": "When it takes legal effect, if known: {from, until, precision}. A membership's or "
+                "suspension's dates are EDTF dates, each stating its own precision (a window `FIRST/LAST` holds "
+                "one day); `precision` is that of `from`."
+            },
             "jurisdiction": {
                 "type": ["object", "null"],
                 "description": "The jurisdiction: {id, name}.",
@@ -638,7 +649,8 @@ SCHEMAS: dict[str, dict] = {
             "change_reason": NULL_S
             | {
                 "description": "Why, when known: `restored`, `first_text`, `source_revision`, "
-                "`extraction_correction`, `redaction`, `corrected`, `ended` (a membership ended) or `unknown`."
+                "`extraction_correction`, `redaction`, `corrected`, `ended` (a membership ended), `lifted` (a "
+                "suspension lifted) or `unknown`."
             },
             "supersedes": {
                 "type": ["object", "null"],
@@ -675,11 +687,21 @@ SCHEMAS: dict[str, dict] = {
             },
             "membership": {
                 "type": ["object", "null"],
-                "description": "For a membership: {id, member, body, valid_from, valid_to, evidence_url, "
-                "retracted}. `member` and `body` are {id, name}; the dates are its first and last day "
-                "(`valid_to` null: not ended), as a reviewer checked them against the evidence. A change with "
-                "`change_reason` `ended` records its end; a later correction has the same `event_id`, and "
-                "`retracted` true when the membership is no longer a reviewed fact.",
+                "description": "For a membership: {id, member, body, valid_from, valid_from_bounds, valid_to, "
+                "valid_to_bounds, basis, evidence_url, retracted}. `member` and `body` are {id, name}; the dates "
+                "are its first and last day (`valid_to` null: not ended), each an EDTF date (a day, a month, a "
+                "year or a window holding the day) with its bounds {earliest, latest, precision}, as a reviewer "
+                "checked them against the evidence; `basis` {kind, instrument, pinpoint, evidence_url} says why "
+                "it starts then. A change with `change_reason` `ended` records its end; a later correction has "
+                "the same `event_id`, and `retracted` true when the membership is no longer a reviewed fact.",
+            },
+            "suspension": {
+                "type": ["object", "null"],
+                "description": "For a suspension from participation: {id, kind, membership_id, member, body, "
+                "valid_from, valid_from_bounds, valid_to, valid_to_bounds, legal_basis, evidence_url, "
+                "lifted_evidence_url, retracted}. It never ends the membership, which no event changes. A change "
+                "with `change_reason` `lifted` records its lifting; a later correction has the same `event_id`, "
+                "and `retracted` true when it is no longer a reviewed fact.",
             },
             "previous": {
                 "type": "object",
@@ -1566,7 +1588,9 @@ FIELDS: dict[str, dict[str, str]] = {
         "status": "`reviewed`: the memberships listed are reviewed facts. `unknown`: none is reviewed yet, "
         "which never means none exists.",
         "items": "The memberships held on the date.",
-        "ended": "The reviewed memberships that had ended before the date, with their last day.",
+        "uncertain": "The memberships that may or may not have held on the date: it falls inside the window "
+        "of an uncertain first or last day. Unknown, never guessed.",
+        "ended": "The reviewed memberships that had certainly ended before the date, with their last day.",
         "notice": "What the list covers, in a sentence.",
     },
     "MembershipView": {
@@ -1575,12 +1599,60 @@ FIELDS: dict[str, dict[str, str]] = {
         "member_name": "The member's name.",
         "body_id": "The body's jurisdiction ID, such as `aa-ecowas`.",
         "body_name": "The body's name.",
-        "valid_from": "The membership's first day.",
-        "valid_to": "Its last day, when it has ended (a withdrawal effective on 29 January ends it on the 28th); "
-        "null when it has not.",
+        "valid_from": "The membership's first day, as an EDTF date: a day (`2001-05-26`), a month (`2000-12`), "
+        "a year (`1976`) or a window holding the day (`2016-08-15/2016-09-05`), as precisely as the "
+        "evidence gives it.",
+        "valid_from_bounds": "The earliest and latest day `valid_from` can be, and its precision.",
+        "valid_to": "Its last day, when it has ended (a withdrawal effective on 29 January ends it on the 28th), "
+        "in the same forms; null when it has not.",
+        "valid_to_bounds": "The earliest and latest day `valid_to` can be, and its precision; null when it has "
+        "not ended.",
+        "basis": "Why the membership starts when it does, with the article that makes that its start.",
         "evidence_url": "The official source the dates were checked against: the body's own site or the "
         "treaty's depositary.",
         "note": "What the evidence says, and anything a reader should know about the dates.",
+        "reviewed_by": "Who reviewed it.",
+        "reviewed_at": "When it was reviewed.",
+        "suspensions": "The member's reviewed suspensions from participation in the body, as context. A "
+        "suspension never ends a membership: a suspended member is still listed as holding it.",
+    },
+    "DateBounds": {
+        "earliest": "The earliest day the date can be.",
+        "latest": "The latest day the date can be (the same as `earliest` for a day).",
+        "precision": "`day`, `month`, `year` or `range` (a window holding the day).",
+    },
+    "ProvisionView": {
+        "instrument": "The instrument, such as `Constitutive Act of the African Union`.",
+        "pinpoint": "Its article, such as `art. 30`.",
+        "evidence_url": "Where the article was read.",
+        "quote": "The article's words, when recorded.",
+    },
+    "BasisView": {
+        "kind": "`entry_into_force` (the instrument entered into force for the member), `deposit` (the "
+        "member deposited its instrument), `admission_decision` (the body decided to admit it), "
+        "`provisional_application_on_signature` (the instrument applied from signature) or `signature` "
+        "(where the instrument makes signature binding).",
+        "instrument": "The instrument whose article sets the start.",
+        "pinpoint": "The article, such as `art. 28`.",
+        "evidence_url": "Where the article was read.",
+        "quote": "The article's words, when recorded.",
+    },
+    "SuspensionView": {
+        "id": "The suspension's ID: its membership and its number, such as `ga:aa-au:1:s1`.",
+        "kind": "`suspended_from_participation`: the member may not take part in the body's activities. It "
+        "remains a member.",
+        "valid_from": "The first day of the suspension, as an EDTF date.",
+        "valid_from_bounds": "The earliest and latest day `valid_from` can be, and its precision.",
+        "valid_to": "Its last day, once lifted (a suspension lifted on 30 April ends on the 29th); null while it "
+        "lasts.",
+        "valid_to_bounds": "The earliest and latest day `valid_to` can be, and its precision; null while it "
+        "lasts.",
+        "in_effect": "Whether it was in effect on `as_of`; null when that date falls inside an uncertain first "
+        "or last day.",
+        "legal_basis": "The articles it rests on.",
+        "evidence_url": "The decision that suspended the member.",
+        "lifted_evidence_url": "The decision that lifted it, once lifted.",
+        "note": "What the evidence says, and anything a reader should know.",
         "reviewed_by": "Who reviewed it.",
         "reviewed_at": "When it was reviewed.",
     },

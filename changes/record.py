@@ -21,6 +21,7 @@ from api.repositories import LegacyRepository
 from api.store import tables
 from rights.database import PolicyNamespace
 from rights.policy import decide
+from schema.dates import UncertainDate
 
 # The public fields a correction compares; text availability is reported by text events instead.
 PUBLIC_FIELDS = (
@@ -62,8 +63,12 @@ OF = ":of"  # after a link's ID, the state (and event) key of its event on the a
 # A version diff names provisions, not the containers around a text (TXP-04); each list is capped.
 DIFF_SKIPPED = frozenset({"document", "contents", "contents_entry", "notice"})
 DIFF_CAP = 200
-# What a reviewed membership asserts (JUR-04): a change to any of these is announced; its note is not.
-MEMBERSHIP_FIELDS = ("member_id", "body_id", "valid_from", "valid_to", "evidence_url")
+# What a reviewed membership asserts (JUR-04): a change to any of these is announced; its note, and the
+# words its basis quotes, are not. Dates are EDTF strings (schema.dates).
+MEMBERSHIP_FIELDS = ("member_id", "body_id", "valid_from", "valid_to", "basis", "evidence_url")
+# What a reviewed suspension from participation asserts; it never ends its membership.
+SUSPENSION_FIELDS = ("membership_id", "member_id", "body_id", "valid_from", "valid_to", "legal_basis",
+                     "evidence_url", "lifted_evidence_url")  # fmt: skip
 
 
 def digest(value) -> str:
@@ -136,10 +141,12 @@ class _Recorder:
                 "link_state",
                 "event_state",
                 "membership_state",
+                "suspension_state",
             )
         }
         self.t["legal_event"] = ns.qualified(conn, "corpus", "legal_event")
         self.t["membership"] = ns.qualified(conn, "corpus", "membership")
+        self.t["membership_suspension"] = ns.qualified(conn, "corpus", "membership_suspension")
         self.allocate = ns.qualified(conn, "policy", "allocate_publication_revision") + "()"
         self.events: list[dict] = []
         self.rights_revision: dict[str, int] = {}  # work -> the rights revision in force after this write
@@ -220,8 +227,9 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
         return 0  # a database before migration 0023 has no change log
     keeps_links = conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["link_state"]}) is not None
     keeps_events = conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["event_state"]}) is not None
+    # Memberships as migration 0042 stores them (dates with their bounds, a basis), and their suspensions.
     keeps_memberships = (
-        conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["membership_state"]}) is not None
+        conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["suspension_state"]}) is not None
     )
     state = (
         conn.execute(
@@ -269,13 +277,15 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
         if keeps_events
         else []
     )
-    # Memberships are few and change only by publishing the register: always compared whole.
+    # Memberships and suspensions are few and change only by publishing the register: compared whole.
     memberships = _memberships(rec, announce=bool(state["baselined"])) if keeps_memberships else []
+    suspensions = _suspensions(rec, announce=bool(state["baselined"])) if keeps_memberships else []
     if not state["baselined"]:
         _record_rights(rec, revisions, 0)
         _record_links(rec, links, baseline=True)
         _record_provision_events(rec, provision_events)
         _record_memberships(rec, memberships)
+        _record_suspensions(rec, suspensions)
         conn.execute(
             text(f"UPDATE {rec.t['feed_state']} SET baselined = true, baseline_at = statement_timestamp()")
         )
@@ -284,6 +294,7 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
         _record_links(rec, links, baseline=not state["links_baselined"])
     _record_provision_events(rec, provision_events)
     _record_memberships(rec, memberships)
+    _record_suspensions(rec, suspensions)
     if rec.events or revisions:
         revision = conn.scalar(text(f"SELECT {rec.allocate}"))
         _record_rights(rec, revisions, revision)
@@ -622,52 +633,101 @@ def _record_provision_events(rec: _Recorder, states: list[tuple]) -> None:
         )
 
 
+def _spoken(value: str) -> str:
+    """A date of schema.dates in a summary: a day as it is, otherwise the window the day lies in."""
+    found = UncertainDate(value)
+    if found.precision == "day":
+        return value
+    if found.precision == "range":
+        return f"a day between {found.earliest} and {found.latest}"
+    return f"a day in {value}"
+
+
+def _bounded(projection: dict) -> dict:
+    """A dated projection's dates for an event: each EDTF string with its bounds (schema.dates)."""
+    found = {}
+    for name in ("valid_from", "valid_to"):
+        value = projection[name]
+        found[name] = value
+        found[f"{name}_bounds"] = value and UncertainDate(value).bounds().model_dump(mode="json")
+    return found
+
+
+def _occasion(key: str, now: dict, was, retracted: bool, end: str) -> tuple:
+    """Which event a change of a dated assertion is: (key, reason, corrects, case). Its first
+    announcement; its end (``valid_to`` set: reason ``end``, a new event keyed ``{key}:{end}``); or a
+    correction of the latest, or its retraction, which keeps that event's ID."""
+    before = was.projection if was is not None and was.event_id else None
+    if before is None:
+        return key, None, None, "new"
+    if not retracted and before["valid_to"] is None and now["valid_to"] is not None:
+        return f"{key}:{end}", end, None, end
+    return was.event_key, None, (was.event_id, was.event_revision), "retracted" if retracted else "corrected"
+
+
+def _compare_dated(public: dict, held: dict, announce, *, announced: bool) -> list[tuple]:
+    """Reviewed dated assertions (memberships, suspensions) compared with their last announced form: the
+    state to record, each change planned as an event by ``announce`` (key, now, was, retracted=)."""
+    states = []
+    for key, now in sorted(public.items()):
+        now_hash, was = digest(now), held.get(key)
+        if was is not None and was.projection_hash == now_hash:
+            continue
+        planned = announce(key, now, was) if announced else None
+        states.append(("put", key, now, now_hash, planned))
+    for key in sorted(held.keys() - public.keys()):
+        was = held[key]
+        if announced and was.event_id:
+            announce(key, was.projection, was, retracted=True)
+        states.append(("drop", key, None, None, None))
+    return states
+
+
+def _held(rec: _Recorder, state: str, key: str) -> dict:
+    return {
+        row[0]: row
+        for row in rec.conn.execute(
+            text(
+                f"SELECT {key}, projection, projection_hash, event_id, event_revision, event_key"
+                f" FROM {rec.t[state]}"
+            )
+        )
+    }
+
+
 def _memberships(rec: _Recorder, *, announce: bool) -> list[tuple]:
     """The reviewed memberships published to the catalogue (corpus.membership), compared with their last
     announced form: a new one is a membership_recorded event; its end (valid_to set) is another, with the
     reason ``ended``; any other change, or its retraction, corrects the latest of them (SUB C1, JUR-04).
     Returns the state to record. Without ``announce`` (before the feed's baseline) nothing is announced."""
     rows = rec.conn.execute(
-        text(f"SELECT {', '.join(('membership_id', *MEMBERSHIP_FIELDS))} FROM {rec.t['membership']}")
-    ).mappings()
-    public = {
-        r["membership_id"]: {
-            k: (r[k].isoformat() if hasattr(r[k], "isoformat") else r[k]) for k in MEMBERSHIP_FIELDS
-        }
-        for r in rows
-    }
-    held = {
-        row.membership_id: row
-        for row in rec.conn.execute(
-            text(
-                "SELECT membership_id, projection, projection_hash, event_id, event_revision, event_key"
-                f" FROM {rec.t['membership_state']}"
-            )
+        text(
+            "SELECT membership_id, member_id, body_id, valid_from, valid_to, basis - 'quote' AS basis,"
+            f" evidence_url FROM {rec.t['membership']}"
         )
-    }
+    ).mappings()
+    public = {r["membership_id"]: {k: r[k] for k in MEMBERSHIP_FIELDS} for r in rows}
+    held = _held(rec, "membership_state", "membership_id")
     places = {m[k] for m in public.values() for k in ("member_id", "body_id")}
     places |= {row.projection[k] for row in held.values() for k in ("member_id", "body_id")}
     names = _names(rec.conn, sorted(places)) if announce else {}
 
     def announce_one(membership_id, now, was, *, retracted=False):
         member, body = (names.get(now[k], now[k]) for k in ("member_id", "body_id"))
-        before = was.projection if was is not None and was.event_id else None
-        if before is None:
-            key, reason, corrects = membership_id, None, None
-            summary = f"{member} is a member of {body}, from {now['valid_from']}."
+        key, reason, corrects, case = _occasion(membership_id, now, was, retracted, "ended")
+        start = _spoken(now["valid_from"])
+        if case == "new":
+            summary = f"{member} is a member of {body}, from {start}."
             if now["valid_to"]:
-                summary = f"{member} was a member of {body} from {now['valid_from']} until {now['valid_to']}."
-        elif not retracted and before["valid_to"] is None and now["valid_to"] is not None:
-            key, reason, corrects = f"{membership_id}:ended", "ended", None
-            summary = f"{member}'s membership of {body} ended; its last day was {now['valid_to']}."
-        else:
-            key, reason, corrects = was.event_key, None, (was.event_id, was.event_revision)
+                summary = f"{member} was a member of {body} from {start} until {_spoken(now['valid_to'])}."
+        elif case == "ended":
+            summary = f"{member}'s membership of {body} ended; its last day was {_spoken(now['valid_to'])}."
+        elif case == "corrected":
             summary = f"The record of {member}'s membership of {body} was corrected."
-            if retracted:
-                summary = (
-                    f"The record of {member}'s membership of {body} was withdrawn; it is not a fact now."
-                )
-        changed = [] if before is None else [k for k in MEMBERSHIP_FIELDS if now[k] != before.get(k)]
+        else:
+            summary = f"The record of {member}'s membership of {body} was withdrawn; it is not a fact now."
+        before = None if case == "new" else was.projection
+        changed = [] if before is None else [k for k in MEMBERSHIP_FIELDS if now.get(k) != before.get(k)]
         return rec.add(
             "membership_recorded",
             key,
@@ -687,60 +747,142 @@ def _memberships(rec: _Recorder, *, announce: bool) -> list[tuple]:
                     "id": membership_id,
                     "member": {"id": now["member_id"], "name": member},
                     "body": {"id": now["body_id"], "name": body},
-                    "valid_from": now["valid_from"],
-                    "valid_to": now["valid_to"],
+                    **_bounded(now),
+                    "basis": now.get("basis"),
                     "evidence_url": now["evidence_url"],
                     "retracted": retracted,
                 }
             },
             corrects=corrects,
-            legal_effective={"from": now["valid_from"], "until": now["valid_to"], "precision": "day"},
+            legal_effective={
+                "from": now["valid_from"],
+                "until": now["valid_to"],
+                "precision": UncertainDate(now["valid_from"]).precision,
+            },
         )
 
-    states = []
-    for membership_id, now in sorted(public.items()):
-        now_hash, was = digest(now), held.get(membership_id)
-        if was is not None and was.projection_hash == now_hash:
-            continue
-        planned = announce_one(membership_id, now, was) if announce else None
-        states.append(("put", membership_id, now, now_hash, planned))
-    for membership_id in sorted(held.keys() - public.keys()):
-        was = held[membership_id]
-        if announce and was.event_id:
-            announce_one(membership_id, was.projection, was, retracted=True)
-        states.append(("drop", membership_id, None, None, None))
-    return states
+    return _compare_dated(public, held, announce_one, announced=announce)
 
 
-def _record_memberships(rec: _Recorder, states: list[tuple]) -> None:
-    table = rec.t["membership_state"]
-    for action, membership_id, membership, membership_hash, planned in states:
+def _suspensions(rec: _Recorder, *, announce: bool) -> list[tuple]:
+    """The reviewed suspensions from participation published to the catalogue
+    (corpus.membership_suspension), compared with their last announced form: a new one is a
+    suspension_recorded event; its lifting (valid_to set) is another, with the reason ``lifted``; any
+    other change, or its retraction, corrects the latest of them. A suspension never ends its membership:
+    it is announced apart from it, under its own type. Returns the state to record."""
+    rows = rec.conn.execute(
+        text(
+            "SELECT s.suspension_id, s.membership_id, m.member_id, m.body_id, s.valid_from, s.valid_to,"
+            " (SELECT jsonb_agg(p - 'quote') FROM jsonb_array_elements(s.legal_basis) p) AS legal_basis,"
+            f" s.evidence_url, s.lifted_evidence_url FROM {rec.t['membership_suspension']} s"
+            f" JOIN {rec.t['membership']} m ON m.membership_id = s.membership_id"
+        )
+    ).mappings()
+    public = {r["suspension_id"]: {k: r[k] for k in SUSPENSION_FIELDS} for r in rows}
+    held = _held(rec, "suspension_state", "suspension_id")
+    places = {m[k] for m in public.values() for k in ("member_id", "body_id")}
+    places |= {row.projection[k] for row in held.values() for k in ("member_id", "body_id")}
+    names = _names(rec.conn, sorted(places)) if announce else {}
+
+    def announce_one(suspension_id, now, was, *, retracted=False):
+        member, body = (names.get(now[k], now[k]) for k in ("member_id", "body_id"))
+        key, reason, corrects, case = _occasion(suspension_id, now, was, retracted, "lifted")
+        what = f"{member}'s suspension from participation in {body}"
+        start = _spoken(now["valid_from"])
+        if case == "new":
+            summary = f"{member} is suspended from participation in {body} from {start}; it remains a member."
+            if now["valid_to"]:
+                summary = (
+                    f"{member} was suspended from participation in {body} from {start} until "
+                    f"{_spoken(now['valid_to'])}; it remained a member."
+                )
+        elif case == "lifted":
+            summary = f"{what} was lifted; its last day was {_spoken(now['valid_to'])}."
+        elif case == "corrected":
+            summary = f"The record of {what} was corrected."
+        else:
+            summary = f"The record of {what} was withdrawn; it is not a fact now."
+        before = None if case == "new" else was.projection
+        changed = [] if before is None else [k for k in SUSPENSION_FIELDS if now.get(k) != before.get(k)]
+        return rec.add(
+            "suspension_recorded",
+            key,
+            suspension_id,
+            {
+                "projection": {
+                    "title": f"{member}: suspension from participation in {body}",
+                    "canonical_url": now["evidence_url"],
+                    "jurisdiction_id": now["member_id"],
+                }
+            },
+            summary=summary,
+            reason=reason,
+            changed=changed,
+            extra={
+                "suspension": {
+                    "id": suspension_id,
+                    "kind": "suspended_from_participation",
+                    "membership_id": now["membership_id"],
+                    "member": {"id": now["member_id"], "name": member},
+                    "body": {"id": now["body_id"], "name": body},
+                    **_bounded(now),
+                    "legal_basis": now["legal_basis"],
+                    "evidence_url": now["evidence_url"],
+                    "lifted_evidence_url": now["lifted_evidence_url"],
+                    "retracted": retracted,
+                }
+            },
+            corrects=corrects,
+            legal_effective={
+                "from": now["valid_from"],
+                "until": now["valid_to"],
+                "precision": UncertainDate(now["valid_from"]).precision,
+            },
+        )
+
+    return _compare_dated(public, held, announce_one, announced=announce)
+
+
+def _record_dated(
+    rec: _Recorder, state: str, key: str, columns: tuple[str, ...], states: list[tuple]
+) -> None:
+    """Record the announced form of each changed membership or suspension in its state table, with the
+    columns copied from it, and drop those no longer published."""
+    table = rec.t[state]
+    for action, record_id, projection, projection_hash, planned in states:
         if action == "drop":
-            rec.conn.execute(text(f"DELETE FROM {table} WHERE membership_id = :m"), {"m": membership_id})
+            rec.conn.execute(text(f"DELETE FROM {table} WHERE {key} = :m"), {"m": record_id})
             continue
         rec.conn.execute(
             text(
-                f"INSERT INTO {table} (membership_id, member_id, body_id, projection, projection_hash, event_id,"
-                " event_revision, event_key) VALUES (:m, :member, :body, CAST(:p AS jsonb), :h, :e, :r, :k)"
-                " ON CONFLICT (membership_id) DO UPDATE SET member_id = EXCLUDED.member_id,"
-                " body_id = EXCLUDED.body_id, projection = EXCLUDED.projection,"
-                " projection_hash = EXCLUDED.projection_hash,"
+                f"INSERT INTO {table} ({key}, {', '.join(columns)}, projection, projection_hash, event_id,"
+                f" event_revision, event_key) VALUES (:m, {', '.join(':' + c for c in columns)},"
+                f" CAST(:p AS jsonb), :h, :e, :r, :k) ON CONFLICT ({key}) DO UPDATE SET"
+                + "".join(f" {c} = EXCLUDED.{c}," for c in columns)
+                + " projection = EXCLUDED.projection, projection_hash = EXCLUDED.projection_hash,"
                 f" event_id = coalesce(EXCLUDED.event_id, {table}.event_id),"
                 f" event_revision = coalesce(EXCLUDED.event_revision, {table}.event_revision),"
                 f" event_key = coalesce(EXCLUDED.event_key, {table}.event_key),"
                 " updated_at = statement_timestamp()"
             ),
             {
-                "m": membership_id,
-                "member": membership["member_id"],
-                "body": membership["body_id"],
-                "p": json.dumps(membership, ensure_ascii=False),
-                "h": membership_hash,
+                "m": record_id,
+                **{c: projection[c] for c in columns},
+                "p": json.dumps(projection, ensure_ascii=False),
+                "h": projection_hash,
                 "e": planned and planned["event_id"],
                 "r": planned and planned["event_revision"],
                 "k": planned and planned["logical_event_key"],
             },
         )
+
+
+def _record_memberships(rec: _Recorder, states: list[tuple]) -> None:
+    _record_dated(rec, "membership_state", "membership_id", ("member_id", "body_id"), states)
+
+
+def _record_suspensions(rec: _Recorder, states: list[tuple]) -> None:
+    _record_dated(rec, "suspension_state", "suspension_id", ("membership_id",), states)
 
 
 def _version_diff(conn: Connection, version_id: str) -> dict | None:

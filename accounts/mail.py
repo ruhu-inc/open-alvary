@@ -257,4 +257,5 @@ LABELS = {
     "withdrawal": "Withdrawn",
     "coverage_changed": "Coverage",
     "membership_recorded": "Membership",
+    "suspension_recorded": "Suspension",
 }

@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, field_serializer, model_validator
 
+from schema.dates import DateBounds, UncertainDate
+from schema.memberships import BASES
 from schema.models import (
     ID,
     Edition,
@@ -143,31 +145,96 @@ class NodeViewRecord(StructureNode):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+def _with_bounds(data, names=("valid_from", "valid_to")):
+    """An answer's dates of schema.dates with their bounds, ``{name}_bounds``, always from the date."""
+    if isinstance(data, dict):
+        data = data | {
+            f"{name}_bounds": data.get(name) and UncertainDate.parse(data[name]).bounds() for name in names
+        }
+    return data
+
+
+class ProvisionView(WireModel):
+    """An article of an instrument, as cited: the instrument, the article, where it was read and its words
+    when recorded."""
+
+    instrument: Nonempty
+    pinpoint: Nonempty
+    evidence_url: Nonempty
+    quote: str | None = Field(**OMIT)
+
+
+class BasisView(ProvisionView):
+    """Why a membership starts when it does, and the article that makes that its start."""
+
+    kind: Literal[*BASES]
+
+
+class SuspensionView(WireModel):
+    """A reviewed suspension of a member from participation in a body's activities: context for its
+    membership, which it never ends. Its first and last day (inclusive; none: not lifted), each an EDTF
+    date with its bounds, whether it was in effect on the date asked (``null``: the date falls inside an
+    uncertain start or end), its legal basis, the decision that suspended it, the one that lifted it, and
+    who reviewed it when."""
+
+    id: ID
+    kind: Literal["suspended_from_participation"] = "suspended_from_participation"
+    valid_from: UncertainDate
+    valid_from_bounds: DateBounds
+    valid_to: UncertainDate | None = None
+    valid_to_bounds: DateBounds | None = None
+    in_effect: bool | None = None
+    legal_basis: tuple[ProvisionView, ...]
+    evidence_url: Nonempty
+    lifted_evidence_url: str | None = None
+    note: Nonempty
+    reviewed_by: Nonempty
+    reviewed_at: AwareDatetime
+
+    @model_validator(mode="before")
+    @classmethod
+    def bounded(cls, data):
+        return _with_bounds(data)
+
+
 class MembershipView(WireModel):
     """One reviewed membership of the African Union or a regional body (JUR-04): the member, the body, the
-    first and last day it held (inclusive; no last day means it has not ended), the evidence and who
-    reviewed it when. Membership alone never applies the body's treaties to the member."""
+    first and last day it held (inclusive; no last day means it has not ended), each an EDTF date (a day,
+    a month, a year or a window) with its bounds, why it starts then (``basis``), the evidence, who
+    reviewed it when, and its suspensions from participation, as context. Membership alone never applies
+    the body's treaties to the member; a suspension never ends it."""
 
     id: ID
     member_id: ID
     member_name: Nonempty
     body_id: ID
     body_name: Nonempty
-    valid_from: date
-    valid_to: date | None = None
+    valid_from: UncertainDate
+    valid_from_bounds: DateBounds
+    valid_to: UncertainDate | None = None
+    valid_to_bounds: DateBounds | None = None
+    basis: BasisView
     evidence_url: Nonempty
     note: Nonempty
     reviewed_by: Nonempty
     reviewed_at: AwareDatetime
+    suspensions: tuple[SuspensionView, ...] = ()
+
+    @model_validator(mode="before")
+    @classmethod
+    def bounded(cls, data):
+        return _with_bounds(data)
 
 
 class MembershipList(WireModel):
     """Memberships in one direction on one date: the bodies a jurisdiction belongs to, or a body's members.
-    ``items`` held on the date; ``ended`` had ended by then. ``unknown`` when no membership in this
-    direction is reviewed: never an empty list read as "none"."""
+    ``items`` held on the date; ``uncertain`` may or may not have held (the date falls inside an uncertain
+    start or end); ``ended`` had ended by then. ``unknown`` when no membership in this direction is
+    reviewed: never an empty list read as "none"."""
 
     status: Literal["reviewed", "unknown"]
     items: tuple[MembershipView, ...] = ()
+    uncertain: tuple[MembershipView, ...] = ()
     ended: tuple[MembershipView, ...] = ()
     notice: str
 
