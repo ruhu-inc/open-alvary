@@ -120,10 +120,13 @@ function fields(root: string, spec: Spec): string[] {
       continue;
     }
     out.push(`### ${name}`);
-    if (schema.description) out.push(linkCodes(schema.description));
+    // Only a refusal's own fields name error codes; elsewhere `unavailable` or `withdrawn` is a result or
+    // a state, never a refusal.
+    const codes = name === "Problem" ? linkCodes : (text: string) => text;
+    if (schema.description) out.push(codes(schema.description));
     const rows: string[][] = [];
     for (const [field, value] of Object.entries(schema.properties)) {
-      rows.push([`\`${field}\``, cell(typeOf(value, spec)), cell(linkCodes(value.description ?? ""))]);
+      rows.push([`\`${field}\``, cell(typeOf(value, spec)), cell(codes(value.description ?? ""))]);
       queue.push(...referenced(value).filter((n) => spec.components.schemas[n]));
     }
     out.push(table(["Field", "Type", "Description"], rows));
@@ -226,7 +229,13 @@ function requestExamples(
     "    timeout=30,",
     ")",
     "response.raise_for_status()",
-    json ? "answer = response.json()" : "feed = response.text",
+    json
+      ? "answer = response.json()"
+      : media?.startsWith("text/plain")
+        ? "text = response.text"
+        : media?.includes("xml")
+          ? "feed = response.text"
+          : "data = response.content",
   ].filter((line) => line !== null);
   const javascript = [
     `const url = new URL(${quote(url)});`,
@@ -236,7 +245,12 @@ function requestExamples(
       : "const response = await fetch(url);",
     json
       ? "if (!response.ok) throw new Error((await response.json()).detail);\nconst answer = await response.json();"
-      : "if (!response.ok) throw new Error(`HTTP ${response.status}`);\nconst feed = await response.text();",
+      : "if (!response.ok) throw new Error(`HTTP ${response.status}`);\n" +
+        (media?.startsWith("text/plain")
+          ? "const text = await response.text();"
+          : media?.includes("xml")
+            ? "const feed = await response.text();"
+            : "const data = new Uint8Array(await response.arrayBuffer());"),
   ];
   const placeholder = [...new Set([...filled.matchAll(/\{(\w+)\}/g)].map((m) => m[1]))].map(
     (name) => `Replace \`{${name}}\` with ${PLACEHOLDERS[name] ?? "its value, as the parameters above describe"}.`,
@@ -281,7 +295,7 @@ function operationPage(path: string, methods: Methods, spec: Spec, examples: Exa
   }
   const requestBody = operation.requestBody?.content["application/json"]?.schema;
   if (operation.requestBody && requestBody?.$ref) {
-    lines.push("## Request body", linkCodes(operation.requestBody.description), ...fields(refName(requestBody.$ref), spec));
+    lines.push("## Request body", operation.requestBody.description, ...fields(refName(requestBody.$ref), spec));
   }
   const ok = operation.responses["200"];
   const [media, content] = Object.entries(ok?.content ?? {})[0] ?? [];
@@ -394,14 +408,23 @@ const READING_ORDER = [
   "retrieve-evidence",
   "check-currentness",
   "search",
+  "search-text",
   "list-sources",
   "get-source",
+  "get-relationships",
   "get-expressions",
   "get-versions",
+  "get-version-text",
+  "get-version-structure",
+  "get-anchor",
   "get-rights",
+  "get-rights-history",
   "resolve-citation",
   "list-jurisdictions",
+  "get-jurisdiction",
   "get-coverage",
+  "list-court-registers",
+  "get-court-register",
   "list-changes",
   "get-change",
   "list-recent-changes",

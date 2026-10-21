@@ -13,9 +13,8 @@ PROBLEM = {"$ref": "#/components/schemas/Problem"}
 GATE = {
     "401": "No key or token, or one that is unknown, revoked, expired or for another resource "
     "(`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
-    "403": "The organisation has no access, or the record is outside it (`entitlement_required`, "
-    "`entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, "
-    "`organisation_suspended`).",
+    "403": "The organisation has no access, or its access does not include this (`entitlement_required`, "
+    "`entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
     "429": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
     "503": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, "
     "`capacity_exhausted`). Try again after Retry-After.",
@@ -438,6 +437,7 @@ OPERATIONS: dict[str, dict] = {
             "filename": "A file the manifest lists, such as `versions.jsonl`, or `manifest.json`.",
         },
         "errors": {
+            "403": "Or the release's country is outside your plan (`jurisdiction_not_included`).",
             "404": "There is no such release or file (`unavailable`).",
             "410": "The release was withdrawn: a record in it changed or stopped being public (`withdrawn`).",
         },
@@ -1827,7 +1827,10 @@ def describe(generated: dict) -> dict:
         parameters += deepcopy(words.get("extra", []))
         if parameters:
             operation["parameters"] = parameters
-        errors = dict(words["errors"]) | ({} if words.get("public") else GATE)
+        # A route's own refusal at a status the gate also gives is added to the gate's words.
+        errors = {} if words.get("public") else dict(GATE)
+        for status, text in words["errors"].items():
+            errors[status] = f"{errors[status]} {text}" if status in errors else text
         operation["responses"] = _responses(operation.get("responses", {}), words.get("answer"), errors)
     for name, fields in FIELDS.items():
         for field, text in fields.items():
