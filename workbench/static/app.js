@@ -817,6 +817,8 @@ async function detailsView(actId) {
   const applicable = standard.fields.filter((f) => !f.types || f.types.includes(data.document_type));
 
   const isEmpty = (v) => v === undefined || v === null || v === "" || (Array.isArray(v) && !v.length);
+  const pageLink = (page, text = `p. ${page}`) => el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${page}`, text, title: "Show this page beside the details",
+    on: { click: (event) => { event.preventDefault(); original.show(page); } } });
   const refresh = () => {
     let gaps = 0;
     for (const field of applicable) {
@@ -857,8 +859,8 @@ async function detailsView(actId) {
       input.value = (value || []).join(", ");
     } else if (field.kind === "relations") {
       input = relationsEditor(standard, value || [], (links) => set(links), related);
-    } else if (field.kind === "rows") {
-      input = rowsEditor(field.columns, structuredClone(value || []), (rows) => set(rows));
+    } else if (field.kind === "rows") {  // its suggestions are by row: a version's authority, by its language
+      input = rowsEditor(field.columns, structuredClone(value || []), (rows) => set(rows), { suggested: suggestions[field.key] || {}, pageLink, canEdit });
     } else {
       const type = field.kind === "date" ? "date" : field.kind === "url" ? "url" : "text";
       input = el("input", { type, inputmode: field.kind === "year" ? "numeric" : undefined, on: { input: () => set(input.value) } });
@@ -869,16 +871,16 @@ async function detailsView(actId) {
       on: { change: () => { if (why.value) { absent[field.key] = why.value; delete values[field.key]; if (input.tagName !== "DIV") input.value = ""; } else delete absent[field.key]; touched(); } } },
       el("option", { value: "", text: "given" }), Object.entries(standard.absent).map(([k, label]) => el("option", { value: k, text: label })));
     why.value = absent[field.key] || "";
-    const hint = suggestions[field.key];
+    const hint = field.kind === "rows" ? null : suggestions[field.key];
     let note = null;
     if (hint) {
       const shown = hint.absent ? standard.absent[hint.absent]
         : Array.isArray(hint.value) ? hint.value.map((l) => (typeof l === "object" ? Object.values(l).join(" ") : l)).join("; ")
+        : field.kind === "choice" ? (field.choices.find((c) => c.value === hint.value) || { label: String(hint.value) }).label
         : String(hint.value);
       const differs = hint.absent ? absent[field.key] !== hint.absent : JSON.stringify(hint.value) !== JSON.stringify(values[field.key]);
       note = el("div", { class: "hint" },
-        hint.page ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${hint.page}`, text: `p. ${hint.page}`, title: "Show this page beside the details",
-          on: { click: (event) => { event.preventDefault(); original.show(hint.page); } } }) : el("span", { text: "From the collection" }), " · ",
+        hint.page ? pageLink(hint.page) : el("span", { text: "From the collection" }), " · ",
         el("span", { class: "evidence", text: `“${hint.evidence}”` }),
         differs && canEdit ? el("button", { class: "small", text: `Use: ${shown.length > 60 ? shown.slice(0, 60) + "…" : shown}`, on: { click: () => {
           if (hint.absent) { absent[field.key] = hint.absent; delete values[field.key]; why.value = hint.absent; }
@@ -923,7 +925,7 @@ async function detailsView(actId) {
       el("div", { class: "details-form" },
         el("div", { class: "card details-head" },
           el("h2", { text: `${title}: details` }),
-          el("p", { class: "muted", text: "Each detail was read from the document where it is printed; the page and words are shown beside it. Check each against the original beside the form (a page number opens that page there), correct it, or say why it is not given. Confirmed details are approved with the text and shown to the public." }),
+          el("p", { class: "muted", text: "Each detail was read from the document where it is printed; the page and words are shown beside it. Check each against the original beside the form (a page number opens that page there), correct it, or say why it is not given. Legal facts (what each language version is worth as law, when it commences, whether it is current, the laws it affects) are only suggested: none is filled in until you use the suggestion or give it yourself, and an authority left empty is published as unknown. Confirmed details are approved with the text and shown to the public." }),
           el("p", {}, pill(record.status === "confirmed" ? "ok" : record.status === "draft" ? "warn" : "medium", DETAIL_STATUS[record.status] + (record.revision ? ` · revision ${record.revision} by ${record.author}` : "")), " ", counter),
           canEdit ? el("p", {}, el("button", { text: "Save draft", on: { click: () => save("draft") } }), " ", confirmButton, " ", previewLink(actId)) : el("p", { class: "muted", text: "Editing needs the reviewer role." }),
           canEdit ? comment : null),
@@ -1002,16 +1004,37 @@ function relationsEditor(standard, links, onChange, related = {}) {
   return box;
 }
 
-// A small table of rows (language versions, parties, bench): one input per column.
-function rowsEditor(columns, rows, onChange) {
+// A small table of rows (language versions, parties, bench): one input per column. A column may have
+// suggestions by row (a version's authority, by its language): each is shown under its row with the
+// words that state it and their page, and is applied only when the reviewer presses "Use suggestion".
+function rowsEditor(columns, rows, onChange, { suggested = {}, pageLink = null, canEdit = false } = {}) {
   const box = el("div", { class: "rows-editor" });
+  const use = (row, key, hint) => {
+    row[key] = hint.value;
+    if (key === "authority") {  // with where it is stated: its page and words in this document
+      row.authority_page = hint.page ? String(hint.page) : "";
+      row.authority_words = hint.evidence || "";
+      delete row.authority_url;
+    }
+  };
+  const suggestion = (row) => columns.filter((column) => suggested[column.key] && suggested[column.key][row.language]).map((column) => {
+    const hint = suggested[column.key][row.language];
+    const label = ((column.choices || []).find((c) => c.value === hint.value) || { label: String(hint.value) }).label;
+    return el("div", { class: "hint row-suggestion", "data-column": column.key, "data-language": row.language },
+      el("span", { text: `Suggested: ${label.toLowerCase()} —` }),
+      el("span", { class: "evidence", text: `“${hint.evidence}”` }),
+      hint.page && pageLink ? pageLink(hint.page, `(p. ${hint.page})`) : null,
+      canEdit && row[column.key] !== hint.value
+        ? el("button", { class: "small", text: "Use suggestion", on: { click: () => { use(row, column.key, hint); onChange(rows); draw(); } } })
+        : null);
+  });
   const draw = () => {
     box.replaceChildren(
-      ...rows.map((row, i) => el("div", { class: "row-line" },
+      ...rows.flatMap((row, i) => [el("div", { class: "row-line" },
         ...columns.map((column) => {
           let cell;
           if (column.choices && column.choices.length) {
-            cell = el("select", { title: column.label, on: { change: () => { row[column.key] = cell.value; onChange(rows); } } },
+            cell = el("select", { title: column.label, on: { change: () => { row[column.key] = cell.value; onChange(rows); if (suggested[column.key]) draw(); } } },
               el("option", { value: "", text: column.label }), column.choices.map((c) => el("option", { value: c.value, text: c.label })));
           } else {
             cell = el("input", { type: column.kind === "date" ? "date" : "text", placeholder: column.label, title: column.label,
@@ -1020,7 +1043,7 @@ function rowsEditor(columns, rows, onChange) {
           cell.value = row[column.key] || "";
           return cell;
         }),
-        el("button", { class: "small", text: "Remove", on: { click: () => { rows.splice(i, 1); onChange(rows); draw(); } } }))),
+        el("button", { class: "small", text: "Remove", on: { click: () => { rows.splice(i, 1); onChange(rows); draw(); } } })), ...suggestion(row)]),
       el("button", { class: "small", text: "+ Add", on: { click: () => { rows.push({}); onChange(rows); draw(); } } }));
   };
   draw();
