@@ -110,7 +110,7 @@ export function errorsMarkdown(): string {
         2,
       ) +
       "\n```",
-    "`retryable` says whether the same request may succeed later; when it is true, wait for `Retry-After` (seconds) before trying again. Quote `request_id` when you write to us about a request. MCP tools give the same codes in the JSON-RPC error's `data.code`.",
+    "`retryable` says whether the same request may succeed later; when it is true, wait for `Retry-After` (seconds) before trying again. Quote `request_id` when you write to us about a request. MCP gives the same codes: a refusal before a tool runs in the JSON-RPC error's `data.code`, and a tool that ran and failed in its result's `structuredContent.code` (see [MCP tools](/docs/api/mcp)).",
     ...statuses.flatMap((status) => [
       `## ${status} ${STATUS_NAMES[status] ?? ""}`.trimEnd(),
       ...CODES.filter(([s]) => s === status).flatMap(([, code, meaning]) => [`### \`${code}\` {#${code}}`, meaning]),

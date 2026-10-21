@@ -1,11 +1,17 @@
 """Read-only MCP endpoint: lifecycle, tools, policy parity and safety checks."""
 
 import json
+from contextlib import contextmanager
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from api.catalogue import LegacyCatalogue
 from api.main import create_app
+from api.mcp import create_router
+from api.reach import OutsidePlanLimited, Reach
+from api.repositories import LegacyRepository, PublicUnavailable
 
 
 @pytest.fixture
@@ -63,6 +69,37 @@ def test_withdrawn_or_missing_sources_are_not_disclosed(client, store, catalogue
     params = {"name": "get_source", "arguments": {"source_id": catalogue.sources[0].id}}
     result = rpc(client, "tools/call", params).json()["result"]
     assert result["isError"] and result["content"][0]["text"] == "Source not available"
+    assert result["structuredContent"] == {"code": "unavailable"}
+
+
+def test_a_tool_that_fails_gives_the_rest_code_beside_its_message(store, catalogue):
+    # A tool that ran and failed is a result with isError, its message as text (as before) and the code
+    # REST would give in structuredContent; a successful answer has none.
+    store.save(catalogue)
+
+    @contextmanager
+    def session():
+        with store.engine.begin() as connection:
+            yield LegacyCatalogue(LegacyRepository(connection))
+
+    def outside():
+        raise OutsidePlanLimited(17)
+
+    app = FastAPI()
+    app.include_router(
+        create_router(session, (PublicUnavailable,), lambda request: Reach(frozenset({"rw"}), outside))
+    )
+    client = TestClient(app)
+    source = catalogue.sources[0]
+    limited = rpc(client, "tools/call", {"name": "get_source", "arguments": {"source_id": source.id}})
+    result = limited.json()["result"]
+    assert result["isError"] and "Retry after 17 seconds" in result["content"][0]["text"]
+    assert result["structuredContent"] == {"code": "rate_limited", "retry_after_seconds": 17}
+    coverage = rpc(client, "tools/call", {"name": "get_coverage", "arguments": {}}).json()["result"]
+    assert not coverage["isError"] and "structuredContent" not in coverage
+    # Invalid arguments stay a JSON-RPC error, -32602.
+    invalid = rpc(client, "tools/call", {"name": "get_source", "arguments": {"source_id": 7}}).json()
+    assert invalid["error"]["code"] == -32602
 
 
 @pytest.mark.parametrize(

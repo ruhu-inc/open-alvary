@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse, Response
 
 from api import text_index
 from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
-from api.repositories import EDGE_ORDER
+from api.repositories import EDGE_ORDER, ResultTooLarge
 from changes.feed import Feed, FeedError, Filters
 from changes.routes import tokens
 from retrieval.check import Checker
@@ -560,6 +560,16 @@ def _tool_result(payload, is_error=False):
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
 
 
+def _tool_error(code: str, message: str, retry_after: int | None = None) -> dict:
+    """A tool that ran and failed: the message for the model as text, as before, and the same machine-
+    readable code as the REST refusal's in structuredContent (MCP 2025-06-18), which clients that don't
+    know it ignore."""
+    structured: dict = {"code": code}
+    if retry_after is not None:
+        structured["retry_after_seconds"] = retry_after
+    return _tool_result(message, is_error=True) | {"structuredContent": structured}
+
+
 def create_router(
     catalogue_factory: Callable,
     unavailable: tuple[type[Exception], ...],
@@ -817,17 +827,21 @@ def create_router(
                     call_tool, params["name"], params.get("arguments", {}), reach(request)
                 )
             except TooLarge as refused:
-                return _result(id_, _tool_result(str(refused), is_error=True))
+                return _result(id_, _tool_error("result_too_large", str(refused)))
             except unavailable:
-                return _result(id_, _tool_result("Catalogue authority unavailable", is_error=True))
+                return _result(id_, _tool_error("temporarily_unavailable", "Catalogue authority unavailable"))
             except FeedError as refused:
-                return _result(id_, _tool_result(f"{refused.code}: {refused.detail}", is_error=True))
-            except OutsidePlanLimited as outside:
                 return _result(
-                    id_, _tool_result(f"{outside} Retry after {outside.retry_after} seconds.", is_error=True)
+                    id_, _tool_error(refused.code, f"{refused.code}: {refused.detail}", refused.retry_after)
                 )
+            except OutsidePlanLimited as outside:
+                message = f"{outside} Retry after {outside.retry_after} seconds."
+                return _result(id_, _tool_error("rate_limited", message, outside.retry_after))
             except LookupError:
-                return _result(id_, _tool_result("Source not available", is_error=True))
+                return _result(id_, _tool_error("unavailable", "Source not available"))
+            except ResultTooLarge:
+                message = "result_too_large: the answer would be larger than one response may be."
+                return _result(id_, _tool_error("result_too_large", message))
             except ValueError:
                 return _error(id_, -32602, "Invalid arguments")
             if payload is None:

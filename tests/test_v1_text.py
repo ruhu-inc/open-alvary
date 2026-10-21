@@ -304,6 +304,7 @@ def test_the_mcp_tool_answers_the_same_anchor_and_refuses_one_too_large(publishe
     monkeypatch.setattr(mcp, "MAX_TOOL_BYTES", 100)
     refused = call(nodes["sec_1"].id).json()["result"]
     assert refused["isError"] and refused["content"][0]["text"].startswith("result_too_large")
+    assert refused["structuredContent"] == {"code": "result_too_large"}
     assert call("nod_unknown").json()["result"]["isError"]
 
 
