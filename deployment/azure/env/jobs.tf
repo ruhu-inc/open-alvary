@@ -28,6 +28,15 @@ locals {
         secrets = {}
         env     = {}
       }
+      # The semantic index's operator commands, run by hand: start it with the command of each run
+      # (az containerapp job start --command / --args; README of deployment/gcp-terraform, "Semantic index").
+      indexer = {
+        command = ["python", "-m", "retrieval.indexer", "status"]
+        cron    = null
+        timeout = 900
+        secrets = {}
+        env     = {}
+      }
     },
     var.accounts_enabled ? {
       worker = {

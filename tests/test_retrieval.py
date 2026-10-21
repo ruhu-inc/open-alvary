@@ -320,6 +320,42 @@ def test_every_input_is_embedded_whole_within_the_servers_limit():
     assert not seen
 
 
+def test_the_production_profile_is_the_model_the_screen_measured_and_the_gpu_machines_serve():
+    import json
+    import re
+    from pathlib import Path
+
+    from retrieval.vectors import WINDOW_CHARS, Profile
+
+    root = Path(__file__).resolve().parents[1]
+    profile = Profile.from_dict(
+        json.loads((root / "retrieval/profiles/qwen3-embedding-0.6b-1.json").read_text())
+    )
+    screened = next(
+        c
+        for c in json.loads((root / "experiments/embeddings/candidates.json").read_text())["embedders"]
+        if c["id"] == "qwen3-embedding-0.6b"
+    )
+    assert (profile.model, profile.revision, profile.dims) == (
+        screened["model"],
+        screened["revision"],
+        screened["dims"],
+    )
+    assert (profile.query_prompt, profile.document_prompt) == (
+        screened["query_prompt"],
+        screened["document_prompt"],
+    )
+    assert profile.window_chars == WINDOW_CHARS and not profile.test
+    for cloud in ("gcp-terraform", "azure"):
+        variables = (root / "deployment" / cloud / "env" / "variables.tf").read_text()
+        served = re.search(
+            r'variable "embedder" \{.*?default\s*=\s*\{ model = "([^"]+)", revision = "([^"]+)" \}',
+            variables,
+            re.S,
+        )
+        assert served.groups() == (profile.model, profile.revision), cloud
+
+
 def test_a_long_unit_is_reranked_by_its_opening_and_the_windows_with_the_query_words():
     from retrieval import rerank
 

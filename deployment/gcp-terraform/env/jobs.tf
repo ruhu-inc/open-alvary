@@ -3,6 +3,7 @@
 # - migrate: launch checks, migrations and the seed, run by release.sh before each new revision;
 # - retrieval: every minute, the engine catches up with the change log, embedding jobs run and the
 #   section index is rebuilt when its analyzer changed (python -m retrieval.worker run);
+# - indexer: the semantic index's operator commands, run by hand (python -m retrieval.indexer);
 # - worker and daily (activation B): monitors, digests and webhooks every five minutes; audit seals,
 #   sweeps and purges once a day at 03:15 UTC, as today. Their schedules stay paused until the
 #   public domains point here (domain_live): only the live environment writes to the outside world.
@@ -12,6 +13,7 @@ locals {
     {
       migrate = {
         command = ["sh", "-c", "python -m scripts.check_launch && alembic upgrade head && python -m scripts.seed"]
+        args    = []
         cron    = null
         timeout = 900
         secrets = { POSTGRES_PASSWORD = "database-password" } # scripts.check_launch checks it
@@ -22,20 +24,32 @@ locals {
     var.retrieval_enabled ? {
       retrieval = {
         command = ["python", "-m", "retrieval.worker", "run"]
+        args    = []
         cron    = "* * * * *"
         timeout = 55
+        secrets = {}
+      }
+      # The semantic index's operator commands, run by hand with the arguments of each run (README,
+      # "Semantic index"): prepare, validate, activate, rollback, purge, status.
+      indexer = {
+        command = ["python", "-m", "retrieval.indexer"]
+        args    = ["status"]
+        cron    = null
+        timeout = 900
         secrets = {}
       }
     } : {},
     var.accounts_enabled ? {
       worker = {
         command = ["python", "-m", "changes.worker", "run"]
+        args    = []
         cron    = "*/5 * * * *"
         timeout = 280
         secrets = {}
       }
       daily = {
         command = ["sh", "-c", "python -m accounts.seals seal && python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge && python -m accounts.seals verify"]
+        args    = []
         cron    = "15 3 * * *"
         timeout = 600
         secrets = {}
@@ -72,6 +86,7 @@ resource "google_cloud_run_v2_job" "public" {
         name    = each.key
         image   = var.public_image
         command = each.value.command
+        args    = each.value.args
 
         resources {
           limits = {

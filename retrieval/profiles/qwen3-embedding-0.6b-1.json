@@ -1,0 +1,14 @@
+{
+  "id": "qwen3-embedding-0.6b-1",
+  "model": "Qwen/Qwen3-Embedding-0.6B",
+  "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+  "dims": 1024,
+  "embedder": "http",
+  "metric": "cosine",
+  "precision": "halfvec",
+  "query_prompt": "Instruct: Given a legal question, retrieve the provisions of law that answer it\nQuery: ",
+  "document_prompt": "",
+  "window_chars": 2000,
+  "window_overlap": 200,
+  "test": false
+}
