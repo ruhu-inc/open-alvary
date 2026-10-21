@@ -3782,6 +3782,28 @@
             "title": "Attribution Text",
             "description": "The credit to give, when one is required."
           },
+          "regional": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegionalView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a regional instrument: the organ that adopted it, its legal effect, the member states it binds and its transposition deadline, as its record states them."
+          },
+          "treaty": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TreatyView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a treaty: its status and parties, as on the record."
+          },
           "text": {
             "type": "string",
             "title": "Text",
@@ -6251,6 +6273,28 @@
             "$ref": "#/components/schemas/EvidenceAuthority",
             "description": "The inputs to the authority signals."
           },
+          "regional": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegionalView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a regional instrument: the organ that adopted it, its legal effect, the member states it binds and its transposition deadline, as its record states them."
+          },
+          "treaty": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TreatyView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a treaty: who adopted it, its depositary, when it entered into force and its authentic languages. Its parties are on the record (Get a record) and its anchors."
+          },
           "ranking": {
             "anyOf": [
               {
@@ -6702,6 +6746,55 @@
         ],
         "title": "LanguageRuleView",
         "description": "The instrument's own rule for divergence between its language versions (LNG-03, DAT-07), as its\nrecord states it: ``stated``, with the rule, the language whose version prevails when it names one,\nwhere it is stated and the evidence; ``not_stated``, the reviewed copy states none;\n``not_applicable``; or ``unknown``, nothing is recorded."
+      },
+      "LinkedAct": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Source Id",
+            "description": "The other record."
+          },
+          "jurisdiction_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Jurisdiction Id",
+            "description": "Its jurisdiction."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Its title."
+          },
+          "citation": {
+            "type": "string",
+            "title": "Citation",
+            "description": "How it is cited."
+          },
+          "effective_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Date",
+            "description": "When the link took effect, when known."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_id",
+          "jurisdiction_id",
+          "title",
+          "citation"
+        ],
+        "title": "LinkedAct",
+        "description": "A public record a checked link names (EDT-01), such as a national act that domesticates a treaty or\ntransposes a directive."
       },
       "MembershipList": {
         "properties": {
@@ -7425,6 +7518,57 @@
         ],
         "title": "RankingSignal",
         "description": "One documented signal that moved a unit (RSV-05), with its value and effect."
+      },
+      "RegionalView": {
+        "properties": {
+          "organ": {
+            "type": "string",
+            "title": "Organ",
+            "description": "The organ that adopted it, such as the Council of Ministers."
+          },
+          "legal_effect": {
+            "type": "string",
+            "enum": [
+              "directly_applicable",
+              "requires_transposition",
+              "binding_on_addressees",
+              "non_binding"
+            ],
+            "title": "Legal Effect",
+            "description": "`directly_applicable` (applies in the members as it stands), `requires_transposition` (binds the members as to its result, through national law), `binding_on_addressees` (binds the member states it is addressed to) or `non_binding`."
+          },
+          "member_states": {
+            "items": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+            },
+            "type": "array",
+            "title": "Member States",
+            "default": [],
+            "description": "The member states it binds; empty means every member."
+          },
+          "transposition_deadline": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transposition Deadline",
+            "description": "The date by which members must transpose it, when one is set."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "organ",
+          "legal_effect"
+        ],
+        "title": "RegionalView",
+        "description": "A regional instrument's legal effect, as its reviewed record states it (JUR-04, DAT-03)."
       },
       "RelatedSource": {
         "properties": {
@@ -8189,6 +8333,28 @@
             "title": "Year",
             "description": "The year it was made, when known."
           },
+          "regional": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RegionalView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a regional instrument: the organ that adopted it, its legal effect, the member states it binds and its transposition deadline, as its record states them."
+          },
+          "treaty": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TreatyView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a treaty: its status as its record states it, with each party's signature, ratification, accession and denunciation, its reservations and the acts that domesticate it."
+          },
           "access_mode": {
             "type": "string",
             "enum": [
@@ -8223,6 +8389,50 @@
           "has_full_text"
         ],
         "title": "SourceView"
+      },
+      "StatedDateView": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value",
+            "description": "The date (for a month or a year, its first day), when the record gives one."
+          },
+          "precision": {
+            "type": "string",
+            "enum": [
+              "day",
+              "month",
+              "year"
+            ],
+            "title": "Precision",
+            "default": "day",
+            "description": "How precise it is: `day`, `month` or `year`. A date is compared with another only where its precision allows."
+          },
+          "printed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Printed",
+            "description": "The date as printed, when the record keeps it."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "StatedDateView",
+        "description": "A reviewed date as its record gives it: the date, how precise it is, and as printed when the record\nkeeps that. A date with no normalised value is never compared with another."
       },
       "StructurePage": {
         "properties": {
@@ -8676,6 +8886,168 @@
         ],
         "title": "TextSearchPage",
         "description": "A page of a search over published texts' provisions (OA-S1). ``status`` tells no result apart from\na scope with no published text and from a search that could not run."
+      },
+      "TreatyPartyView": {
+        "properties": {
+          "party": {
+            "type": "string",
+            "title": "Party",
+            "description": "The party, as listed."
+          },
+          "place": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Place",
+            "description": "Its jurisdiction ID, such as `ke`."
+          },
+          "signed": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StatedDateView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it signed. Signature alone never binds."
+          },
+          "ratified": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StatedDateView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it ratified."
+          },
+          "acceded": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StatedDateView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it acceded."
+          },
+          "denounced": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StatedDateView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When its denunciation or withdrawal took effect."
+          },
+          "reservations": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reservations",
+            "description": "Its reservations, as recorded."
+          },
+          "domesticated_by": {
+            "items": {
+              "$ref": "#/components/schemas/LinkedAct"
+            },
+            "type": "array",
+            "title": "Domesticated By",
+            "default": [],
+            "description": "Acts of that state that a checked link records as domesticating the treaty."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "party"
+        ],
+        "title": "TreatyPartyView",
+        "description": "One party to a treaty as its reviewed record lists it, with the acts of that state that a checked\nlink records as domesticating the treaty. Signature alone never binds (COR-01)."
+      },
+      "TreatyView": {
+        "properties": {
+          "adopted_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adopted By",
+            "description": "The body that adopted it, when recorded."
+          },
+          "depositary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Depositary",
+            "description": "Its depositary, when recorded."
+          },
+          "entered_into_force": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StatedDateView"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it entered into force, when the record gives one date for the whole treaty."
+          },
+          "authentic_languages": {
+            "items": {
+              "type": "string",
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+            },
+            "type": "array",
+            "title": "Authentic Languages",
+            "default": [],
+            "description": "The languages in which its text is authentic."
+          },
+          "parties": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TreatyPartyView"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parties",
+            "description": "On a record and its anchors: each party as its record lists it. Empty means none is recorded, never that it has none."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "TreatyView",
+        "description": "A treaty's status, as its reviewed record states it (JUR-04, DAT-03). ``parties`` is on the record\nand its anchors, never on an evidence unit; an empty list means none is recorded, never none exists."
       },
       "VersionPage": {
         "properties": {

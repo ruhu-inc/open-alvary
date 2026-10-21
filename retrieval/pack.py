@@ -14,6 +14,7 @@ from urllib.parse import unquote, urlsplit
 from sqlalchemy import text as sql
 
 from api import text_index
+from api.applicable import regional_view, treaty_view
 from api.catalogue import (
     InvalidSearch,
     LegacyCatalogue,
@@ -843,6 +844,8 @@ class Retriever:
                         else "not_applicable",
                         court=candidate.court if source.document_type == "judgment" else None,
                     ),
+                    regional=regional_view(source),
+                    treaty=treaty_view(source, self.service._acts, parties=False),
                     ranking=self._explain(candidate, plan, len(evidence) + 1)
                     if "ranking" in request.include
                     else None,

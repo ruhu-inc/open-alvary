@@ -1,17 +1,19 @@
 """Publishing approved works as catalogue records: the owner's decision gates it, and a validated
 record maps to a catalogue entry without any text (operations.publish)."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
 from operations import publish
-from schema.models import Source
+from schema.models import RegionalEffect, Source, StatedDate
 from schema.record import (
     Absent,
     Body,
     Classification,
+    Dated,
     DocumentRecord,
+    Event,
     Evidence,
     Expression,
     Identity,
@@ -21,9 +23,12 @@ from schema.record import (
     Place,
     Publication,
     Reference,
+    RegionalProfile,
     Relation,
     Status,
     TextInfo,
+    TreatyParty,
+    TreatyProfile,
     Version,
 )
 from schema.record import Citation as RecordCitation
@@ -246,6 +251,74 @@ def test_reviewed_vocabulary_links_are_published_from_either_end_and_judicial_on
     }
     assert "case law" in withheld[("order", "overrules", "dir")]
     assert withheld[("order", "related", "treaty")] == publish.NOT_PUBLISHED
+
+
+def regional_record(family, type_, place, uri, profile, events=()) -> DocumentRecord:
+    """A fictional instrument of a regional body, to carry a legal effect or a party list."""
+    return rwanda_law(
+        identity=Identity(family=family, type=type_, work_uri=uri, title="Example instrument"),
+        place=Place(code=place, name=place, level="regional"),
+        events=events,
+        classification=Classification(hierarchy="regional"),
+        profile=profile,
+    )
+
+
+def test_a_regional_instruments_effect_and_a_treatys_parties_reach_the_catalogue(decisions):
+    decision = publish.decide("rw", "Ijidai Lassa", 12, [], "", "")
+
+    def source(work, record):
+        item = publish.Approved(work, record, ["en"], "Ijidai Lassa", datetime.now(UTC))
+        return publish.catalogue_entries(item, decision)["source"]
+
+    directive = regional_record(
+        "regional_instrument", "directive", "aa-ecowas", "/akn/aa-ecowas/act/directive/2008/1",
+        RegionalProfile(
+            family="regional_instrument", organ=Body(name="Council of Ministers", kind="regional_body"),
+            legal_effect="requires_transposition", member_states=("sn", "ml"),
+            transposition_deadline=date(2010, 12, 31),
+        ),
+    )  # fmt: skip
+    found = source("ecowas-directive", directive)
+    assert found.jurisdiction_id == "aa-ecowas" and found.treaty is None
+    assert found.regional == RegionalEffect(
+        organ="Council of Ministers", legal_effect="requires_transposition", member_states=["sn", "ml"],
+        transposition_deadline=date(2010, 12, 31),
+    )  # fmt: skip
+    treaty = regional_record(
+        "treaty", "charter", "aa-au", "/akn/aa-au/act/charter/2003/1",
+        TreatyProfile(
+            family="treaty", adopted_by=Body(name="Assembly of the Union", kind="international_organisation"),
+            depositary="AU Commission", authentic_languages=("en", "fr"),
+            parties=(
+                TreatyParty(party="Kenya", place="ke", signed=Dated(value=date(2003, 1, 1)),
+                            ratified=Dated(value=date(2005, 3, 1)), reservations="Article 4"),
+                TreatyParty(party="Mali", place="ml", ratified=Dated(value=date(2004, 1, 1)),
+                            denounced=Dated(value=date(2024, 1, 1), printed="1er janvier 2024")),
+            ),
+        ),
+        events=(Event(kind="entered_into_force", when=Dated(value=date(2005, 1, 1))),),
+    )  # fmt: skip
+    status = source("au-charter", treaty).treaty
+    assert status.adopted_by == "Assembly of the Union" and status.depositary == "AU Commission"
+    assert status.entered_into_force == StatedDate(value=date(2005, 1, 1))
+    assert [(p.place, p.ratified.value, p.reservations) for p in status.parties] == [
+        ("ke", date(2005, 3, 1), "Article 4"), ("ml", date(2004, 1, 1), None),
+    ]  # fmt: skip
+    assert status.parties[1].denounced == StatedDate(value=date(2024, 1, 1), printed="1er janvier 2024")
+    assert Source.model_validate(source("au-charter", treaty).model_dump(mode="json")).treaty == status
+    # Two different entry-into-force dates for the whole treaty: none is chosen.
+    later = Event(kind="entered_into_force", when=Dated(value=date(2006, 1, 1)))
+    assert (
+        source(
+            "au-charter", treaty.model_copy(update={"events": (*treaty.events, later)})
+        ).treaty.entered_into_force
+        is None
+    )
+    # Any other record's row is unchanged: neither field is written (DAT-08).
+    law = source("rw-example-law", example_law())
+    assert law.regional is None and law.treaty is None
+    assert not {"regional", "treaty"} & set(law.model_dump(mode="json"))
 
 
 # --- texts (TXP-07) ----------------------------------------------------------------------------------

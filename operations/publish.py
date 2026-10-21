@@ -3,7 +3,8 @@ published), catalogue records first (owner decision, 2026-10-16).
 
 Only the record is published: title, number, year, citation, legal status, issuer, the official
 publication link, what each language version is worth as law and the work's rule where they differ,
-from the work's confirmed details. No text: republishing official texts waits for
+a regional instrument's legal effect and a treaty's parties and entry into force, from the work's
+confirmed details. No text: republishing official texts waits for
 the copyright check (Rwanda: Law N° 055/2024) and the public reader (MAC-01). A work is published
 when the latest approval of at least one of its language versions still covers its current pages and
 its confirmed details (the workbench's own test, workbench.review). A work whose approval lapses is
@@ -54,13 +55,17 @@ from schema.models import (
     Edition,
     Language,
     LanguageRule,
+    PartyStatus,
     Permission,
+    RegionalEffect,
     RightsRecord,
     RightsStatus,
     Source,
     SourceVersion,
+    StatedDate,
     StatedEvidence,
     StructureNode,
+    TreatyStatus,
 )
 from workbench.content import Library
 from workbench.review import Review
@@ -305,6 +310,8 @@ def catalogue_entries(item: Approved, decision: dict) -> dict:
         year=record.identity.year,
         editions=editions(record),
         language_rule=language_rule(record),
+        regional=regional_effect(record),
+        treaty=treaty_status(record),
     )
     rights = RightsRecord(
         id=f"rights-{item.work}",
@@ -359,6 +366,61 @@ def language_rule(record) -> LanguageRule | None:
 
 def _stated(evidence) -> StatedEvidence | None:
     return StatedEvidence.model_validate(evidence.model_dump(mode="json")) if evidence else None
+
+
+def regional_effect(record) -> RegionalEffect | None:
+    """A regional instrument's legal effect as its reviewed record states it (JUR-04): the adopting organ,
+    the effect, the member states it binds (none listed: every member) and its transposition deadline."""
+    profile = record.profile
+    if profile.family != "regional_instrument":
+        return None
+    return RegionalEffect(
+        organ=profile.organ.name,
+        legal_effect=profile.legal_effect,
+        member_states=list(profile.member_states),
+        transposition_deadline=profile.transposition_deadline,
+    )
+
+
+def _date(dated) -> StatedDate | None:
+    if dated is None:
+        return None
+    return StatedDate(value=dated.value, precision=dated.precision, printed=dated.printed)
+
+
+def treaty_status(record) -> TreatyStatus | None:
+    """A treaty's status as its reviewed record states it (JUR-04): each party's signature, ratification,
+    accession and denunciation, dated, and its reservations; and when the treaty entered into force, from
+    its one entry-into-force event for the whole treaty (none, or several dates: not recorded)."""
+    profile = record.profile
+    if profile.family != "treaty":
+        return None
+    entries = {
+        (e.when.value, e.when.precision, e.when.printed)
+        for e in record.events
+        if e.kind == "entered_into_force" and e.scope is None
+    }
+    entered = next(iter(entries)) if len(entries) == 1 else None
+    return TreatyStatus(
+        adopted_by=profile.adopted_by.name if profile.adopted_by else None,
+        depositary=profile.depositary,
+        entered_into_force=StatedDate(value=entered[0], precision=entered[1], printed=entered[2])
+        if entered
+        else None,
+        authentic_languages=list(profile.authentic_languages),
+        parties=[
+            PartyStatus(
+                party=p.party,
+                place=p.place,
+                signed=_date(p.signed),
+                ratified=_date(p.ratified),
+                acceded=_date(p.acceded),
+                denounced=_date(p.denounced),
+                reservations=p.reservations,
+            )
+            for p in profile.parties
+        ],
+    )
 
 
 def aliases(work: str, citation: str, identity) -> list[Citation]:

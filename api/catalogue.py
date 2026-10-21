@@ -9,7 +9,7 @@ from typing import Protocol
 
 from sqlalchemy import text
 
-from api import pinpoint, text_index
+from api import applicable, pinpoint, text_index
 from api.reach import country
 from api.repositories import (
     EDGE_ORDER,
@@ -39,6 +39,7 @@ from schema.public import (
     JurisdictionDetail,
     JurisdictionView,
     LanguageRuleView,
+    LinkedAct,
     MembershipList,
     MembershipView,
     NodeViewRecord,
@@ -259,6 +260,7 @@ class LegacyCatalogue:
     def __init__(self, repository: LegacyRepository):
         self.repository = repository
         self.now = datetime.now(UTC)
+        self._linked: dict[tuple[str, str], tuple[LinkedAct, ...]] = {}
 
     def _require(self, source_id):
         pair = self.repository.source(source_id)
@@ -278,7 +280,8 @@ class LegacyCatalogue:
         source, rights = pair
         has_text = next(self._approved(source, rights), None) is not None
         return SourceView(
-            **source.model_dump(mode="json"),
+            **source.model_dump(mode="json", exclude={"treaty"}),
+            treaty=applicable.treaty_view(source, self._acts),
             has_full_text=has_text,
             access_mode="open_full_text" if has_text else "metadata_link_only",
             rights_status=rights.status,
@@ -334,6 +337,24 @@ class LegacyCatalogue:
         return (
             CurrentSource(source_id=found.id, title=found.title, citation=found.citation) if found else None
         )
+
+    def _acts(self, source_id: str, kind: str) -> tuple[LinkedAct, ...]:
+        """The public records a checked link records as ``kind`` of this one (``domesticated_by``,
+        ``transposed_by``): the national acts that domesticate a treaty or transpose a directive, a page
+        at most."""
+        if (source_id, kind) not in self._linked:
+            _, edges = self.repository.edges(source_id, {kind}, limit=MAX_EDGES_PER_PAGE, offset=0)
+            public = self._public({other for _, other, _ in edges})
+            self._linked[(source_id, kind)] = tuple(
+                LinkedAct(
+                    source_id=other, jurisdiction_id=public[other][0].jurisdiction_id,
+                    title=public[other][0].title, citation=public[other][0].citation,
+                    effective_date=link.effective_date,
+                )
+                for _, other, link in edges
+                if other in public
+            )  # fmt: skip
+        return self._linked[(source_id, kind)]
 
     def relationships(self, source_id, *, kinds=None, limit=EDGES_PER_PAGE, cursor=None, current=True):
         """A page of a source's checked links to other public sources, as seen from its side: what it
@@ -599,6 +620,8 @@ class LegacyCatalogue:
             licence=rights.licence,
             attribution_required=rights.attribution_required,
             attribution_text=rights.attribution_text,
+            regional=applicable.regional_view(source),
+            treaty=applicable.treaty_view(source, self._acts),
             text=span.decode("utf-8"),
         )
 
