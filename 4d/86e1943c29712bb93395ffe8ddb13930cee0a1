@@ -1,0 +1,60 @@
+schema/public.py
+  s_d665c62e07d76f::t_33b45919ef9612 590-592
+  s_d665c62e07d76f::t_dbb0e6763d101d 557-568,579-589,593
+  s_d665c62e07d76f::t_02c3a86782155f 520-521,523-532
+tests/test_postgres_citations.py
+  s_d665c62e07d76f::t_f900fbdb6a3bbf 1-128,133-220,224,233-234,240-255,260-311
+  s_d665c62e07d76f::t_33b45919ef9612 129-132,221-223,225-232,235-239,256-259
+web/src/docs/data/openapi.json
+  s_d665c62e07d76f::t_8e8aab1d5aac9d 137,350,523,696,1395-1404,1435-1453,1559,4098-4150,8652-8661,8685,8748,8754-8868,9371,10873,11006-11012
+api/mcp.py
+  s_d665c62e07d76f::t_b83660bd73f5f7 631,637,642-643,649-653,656
+  s_d665c62e07d76f::t_eb45c76d7fa84c 102-106,119-128
+  s_d665c62e07d76f::t_5f77475e48672f 556,558
+  s_d665c62e07d76f::t_e30a59be33ec52 439-440
+  s_d665c62e07d76f::t_091c5b63c4c17f 654-655
+schema/public.schema.json
+  s_d665c62e07d76f::t_8e8aab1d5aac9d 391-439,1625-1634,1721-1835
+api/repositories.py
+  s_d665c62e07d76f::t_3dea6e2e50e424 64-75,77-81
+  s_d665c62e07d76f::t_2943373f93fbfe 407,409-413,422,429-430,432,446,452-455,463,466-475,479-494,500-553
+  s_d665c62e07d76f::t_2d861f68dde9e0 109-118
+  s_d665c62e07d76f::t_33b45919ef9612 458-462,476-478,495-499
+  s_d665c62e07d76f::t_9d1aae1ca0f337 10,17,27,32
+  s_d665c62e07d76f::t_e4441102cef56f 140
+  s_d665c62e07d76f::t_cbd7cfe37c56ba 99-103
+  s_d665c62e07d76f::t_e6fb3a7da80d44 554
+api/v1.py
+  s_d665c62e07d76f::t_89ead9e089d332 249,255-257
+api/catalogue.py
+  s_d665c62e07d76f::t_4bf2f7fdbc2286 167-193
+  s_d665c62e07d76f::t_33b45919ef9612 194-195,501
+  s_d665c62e07d76f::t_27f410e8b28cc9 5
+  s_d665c62e07d76f::t_6cb7ca7140eca9 480-482,485-488,493-494,496,498-500,502,511-519
+web/src/docs/data/mcp-tools.json
+  s_d665c62e07d76f::t_8e8aab1d5aac9d 65,78-82,100-104,110-116,438
+api/openapi_docs.py
+  s_d665c62e07d76f::t_31023f047166ca 701-714
+  s_d665c62e07d76f::t_76d367e1b0c3b1 43-44
+  s_d665c62e07d76f::t_28e17817efb28f 197-201,204-209
+  s_d665c62e07d76f::t_2be9f0f9358fc1 1334-1339
+  s_d665c62e07d76f::t_f3452c7ddaffe7 1348,1350-1374
+  s_d665c62e07d76f::t_a559bb2199b813 611-612
+  s_d665c62e07d76f::t_e240ce197f2813 1318-1326
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4d86e1943c29712bb93395ffe8ddb13930cee0a1",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}

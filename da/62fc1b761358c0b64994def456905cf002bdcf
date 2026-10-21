@@ -1,0 +1,28 @@
+changes/feed.py
+  s_d665c62e07d76f::t_904d2b5834cf74 49,463-466,468-474,479,481,486,545-546,703
+accounts/mail.py
+  s_d665c62e07d76f::t_904d2b5834cf74 261
+changes/record.py
+  s_d665c62e07d76f::t_2891342f8d2956 659-698,702-794,796
+  s_d665c62e07d76f::t_fd39e3d5a7df0b 299-303,310,320
+  s_d665c62e07d76f::t_904d2b5834cf74 247-249,699-701
+  s_d665c62e07d76f::t_804f13e2bb8f25 158,161-162
+  s_d665c62e07d76f::t_e151d931dd5d7e 73-84
+  s_d665c62e07d76f::t_115686591d7eae 795,797-798
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "da62fc1b761358c0b64994def456905cf002bdcf",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
