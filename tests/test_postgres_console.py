@@ -283,9 +283,14 @@ def test_rotating_a_key_in_the_console_keeps_the_old_one_for_the_overlap_without
     listed = {k["id"]: k for k in browser.get(path).json()["keys"]}
     assert listed[old["id"]]["state"] == listed[new["id"]]["state"] == "active"
     assert "secret" not in listed[new["id"]]
-    # The default overlap is 24 hours.
+    # The replaced key is not offered for rotation again, and is refused if asked.
+    assert listed[old["id"]]["replaced"] and not listed[new["id"]]["replaced"]
+    twice = browser.post(f"{path}/{old['id']}/rotate", json={}, headers=headers)
+    assert twice.status_code == 409 and twice.json()["error"]["code"] == "already_rotated"
+    # The default overlap is 24 hours. Rotating during the first overlap stops the oldest key now.
     again = browser.post(f"{path}/{new['id']}/rotate", json={}, headers=headers)
     assert again.status_code == 201
+    assert checked(old["secret"])["code"] == "invalid_credentials"
     with accounts.engine.begin() as conn:
         table = accounts.namespace.qualified(conn, "accounts", "api_key")
         left = conn.scalar(

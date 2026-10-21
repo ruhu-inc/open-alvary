@@ -828,9 +828,11 @@ type Key = {
   revoked_at: string | null;
   created_by: string | null;
   mine: boolean;
+  // Rotated: a new key has its place, and this one works only until expires_at (at most 24 hours).
+  replaced: boolean;
   state: "active" | "expired" | "revoked";
 };
-type NewKey = { id: string; name: string; secret: string; expires_at: string };
+type NewKey ={ id: string; name: string; secret: string; expires_at: string };
 
 export function Keys({ org }: PageProps) {
   const list = useAsync(() => api<{ keys: Key[] }>(`/organisations/${org.id}/keys`), [org.id]);
@@ -912,12 +914,24 @@ export function Keys({ org }: PageProps) {
                     <Pill>{key.kind === "personal" ? "Personal" : "Shared, for servers"}</Pill>
                   </td>
                   <td>{key.created_by ?? "—"}</td>
-                  <td>{key.state === "revoked" ? <Pill tone="bad">Revoked</Pill> : key.state === "expired" ? <Pill tone="bad">Expired</Pill> : when(key.expires_at)}</td>
+                  <td>
+                    {key.state === "revoked" ? (
+                      <Pill tone="bad">Revoked</Pill>
+                    ) : key.state === "expired" ? (
+                      <Pill tone="bad">Expired</Pill>
+                    ) : key.replaced ? (
+                      <>
+                        <Pill tone="warn">Replaced</Pill> until {when(key.expires_at, true)}
+                      </>
+                    ) : (
+                      when(key.expires_at)
+                    )}
+                  </td>
                   <td>{active || key.state !== "active" ? ago(key.last_used_at) : <Pill tone="bad">Paused</Pill>}</td>
                   <td className="actions">
                     {key.state === "active" && (key.mine || MANAGERS.has(org.role)) ? (
                       <>
-                        {active && (key.mine || key.kind === "service") ? (
+                        {active && !key.replaced && (key.mine || key.kind === "service") ? (
                           <button className="link" type="button" onClick={() => rotate(key)}>
                             Rotate
                           </button>
