@@ -54,11 +54,13 @@ How words match:
 
 | Parameter | Use |
 |---|---|
-| `jurisdiction` | One jurisdiction ID, such as `ng`. A country includes its states and local law. Without it, a search covers your plan's countries. |
+| `jurisdiction` | One jurisdiction ID, such as `ng`. It matches that jurisdiction only: `ng` finds Nigeria's national records, not Lagos State's (`ng-la`). Without it, a search covers every jurisdiction in your plan, its countries' states and local law included. |
 | `access` | `open` for records with cleared full text, `metadata` for records without, `all` (default) for both. |
 | `limit`, `offset` | Page size (1 to 100, default 25) and where to start. See [Pagination](/docs/pagination). |
 
 Asking about a country outside your plan works, at the Starter rate; see [Plans and rate limits](/docs/plans#how-limits-are-counted).
+
+The same goes for `jurisdiction` in [Search published texts](#search-published-texts), [List records](#list-records) and [Retrieve evidence](/docs/retrieval). Two places work differently: the [change feed](/docs/changes#filters)'s `jurisdiction` filter matches by prefix, so a country there includes its states and local law; and the [applicable-law scope](/docs/retrieval#the-law-that-applies-in-a-country) (`scope=applicable`) adds a place's country, with the regional and treaty law that binds there.
 
 ## Search published texts
 
