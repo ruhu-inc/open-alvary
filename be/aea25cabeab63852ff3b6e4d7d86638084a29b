@@ -1,0 +1,21 @@
+tests/test_courts.py
+  s_d665c62e07d76f::t_b1eedf85a46ce3 584-597
+ingestion/courts/aa-eac.json
+  s_d665c62e07d76f::t_b1eedf85a46ce3 45,66-67,69,77,94,244,257,319,325
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "beaea25cabeab63852ff3b6e4d7d86638084a29b",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
