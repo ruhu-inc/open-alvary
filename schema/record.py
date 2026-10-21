@@ -711,9 +711,19 @@ class TreatyProfile(Profile):
     adopted_by: Body | None = None
     adopted_at: Short | None = None  # place of adoption
     parties: tuple[TreatyParty, ...] = ()
+    # The date the party list is complete as of, with where that is shown (the depositary's status list
+    # of that date). Without it, a state missing from the list is unknown, never "not a party".
+    parties_complete_as_of: date | None = None
+    parties_complete_evidence: Evidence | None = None
     depositary: Short | None = None
     entry_into_force_rule: Text | None = None  # "thirty days after the fifteenth ratification"
     authentic_languages: tuple[LanguageTag, ...] = ()
+
+    @model_validator(mode="after")
+    def complete_with_evidence(self):
+        if (self.parties_complete_as_of is None) != (self.parties_complete_evidence is None):
+            raise ValueError("a party list complete as of a date says where that is shown, and only then")
+        return self
 
 
 LEGAL_EFFECTS = ("directly_applicable", "requires_transposition", "binding_on_addressees", "non_binding")

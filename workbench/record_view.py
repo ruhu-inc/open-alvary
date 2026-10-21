@@ -340,6 +340,22 @@ def _profile_fields(family: str) -> list[FieldSpec]:
                     {"key": "reservations", "label": "Reservations", "kind": "text"},
                 ),
             ),
+            FieldSpec(
+                "profile.parties_complete_as_of",
+                "Party list complete as of",
+                g,
+                "date",
+                help="Only from the depositary's status list of that date, listing every party; until then, "
+                "a state missing from the list is unknown, never not a party",
+            ),
+            FieldSpec(
+                "profile.parties_complete_evidence.url",
+                "Party list: depositary's status list",
+                g,
+                "text",
+                help="https:// address of the status list that shows every party on that date",
+            ),
+            FieldSpec("profile.parties_complete_evidence.quote", "Party list: words as printed", g, "text"),
             FieldSpec("profile.depositary", "Depositary", g, "text", required=True),
             FieldSpec("profile.entry_into_force_rule", "When it enters into force", g, "long"),
             FieldSpec("profile.authentic_languages", "Authentic languages", g, "list"),
@@ -787,6 +803,25 @@ def _language_rule(values: dict):
     )
 
 
+def _parties_complete(values: dict) -> dict:
+    """The date a treaty's party list is complete as of, with the depositary's status list that shows it;
+    neither when not given."""
+    when = values.get("profile.parties_complete_as_of") or None
+    url = values.get("profile.parties_complete_evidence.url") or None
+    words = values.get("profile.parties_complete_evidence.quote") or None
+    if not (when or url or words):
+        return {}
+    if not (when and url):
+        raise ValueError(
+            "a party list complete as of a date needs the date and the address of the depositary's status "
+            "list that shows it"
+        )
+    return {
+        "parties_complete_as_of": when,
+        "parties_complete_evidence": R.Evidence(source="external", quote=words, url=url),
+    }
+
+
 def _with_step_events(absent: dict, steps: list, events: list) -> dict:
     """A step accounted for also accounts for its event (an Act whose commencement is not stated in
     this copy has no commencement event to show either)."""
@@ -897,6 +932,7 @@ def _profile(family: str, v: dict):
                 )
                 for p in v.get("profile.parties") or []
             ),
+            **_parties_complete(v),
             depositary=v.get("profile.depositary") or None,
             entry_into_force_rule=v.get("profile.entry_into_force_rule") or None,
             authentic_languages=tuple(v.get("profile.authentic_languages") or ()),
@@ -1146,10 +1182,10 @@ def suggestions_view(suggestions: dict) -> dict:
 # --- first drafts: legal facts suggested, never filled in ------------------------------------------------
 
 # What a document is worth as law and when: each language version's authority, its rule where they
-# differ, when it commences, what it does to other laws, whether it is current. A reader may suggest
-# each, with the words that state it; none is a field's value until a reviewer chooses it (owner
-# decision 2026-10-21). The details as printed (titles, numbers, the dates of each step of its making,
-# the gazette and its pages) are filled in for the reviewer to check.
+# differ, when it commences, what it does to other laws, whether it is current, whether a treaty's party
+# list is complete. A reader may suggest each, with the words that state it; none is a field's value
+# until a reviewer chooses it (owner decision 2026-10-21). The details as printed (titles, numbers, the
+# dates of each step of its making, the gazette and its pages) are filled in for the reviewer to check.
 LEGAL = {
     "step:commenced.date",
     "event:commenced.date",
@@ -1158,6 +1194,9 @@ LEGAL = {
     "status.legal",
     "status.as_of",
     "status.note",
+    "profile.parties_complete_as_of",
+    "profile.parties_complete_evidence.url",
+    "profile.parties_complete_evidence.quote",
 }
 AUTHORITY = ("authority", "authority_page", "authority_words", "authority_url")
 

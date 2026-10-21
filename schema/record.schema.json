@@ -2141,6 +2141,30 @@
           "title": "Parties",
           "type": "array"
         },
+        "parties_complete_as_of": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parties Complete As Of"
+        },
+        "parties_complete_evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Evidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "depositary": {
           "anyOf": [
             {

@@ -260,6 +260,47 @@ def test_the_details_screen_records_each_partys_denunciation_and_reservations():
     assert second.denounced is None and second.reservations is None and second.ratified is None
 
 
+def test_a_party_list_is_complete_only_as_of_a_date_its_status_list_shows():
+    from workbench import record_view as V
+
+    keys = [s.key for s in V.fields("treaty", "charter", None)]
+    beside = keys[keys.index("profile.parties") + 1 : keys.index("profile.parties") + 4]
+    assert beside == [
+        "profile.parties_complete_as_of",
+        "profile.parties_complete_evidence.url",
+        "profile.parties_complete_evidence.quote",
+    ]
+    place, profile = V.place_for({"jurisdiction": "aa-au"}, {}, registry())
+    values = {
+        "identity.family": "treaty", "identity.type": "charter", "identity.title": "Example Charter",
+        "text.form": "official_website", "text.version.label": "As adopted", "status.legal": "unknown",
+        "expressions": [{"language": "en", "this_text": "yes"}], "profile.depositary": "Example Commission",
+        "profile.parties": [{"party": "Example Republic", "place": "gh", "ratified": "2005-03-01"}],
+    }  # fmt: skip
+    listed = {
+        "profile.parties_complete_as_of": "2026-06-01",
+        "profile.parties_complete_evidence.url": "https://www.example.org/status-list.pdf",
+        "profile.parties_complete_evidence.quote": "Status list as at 1 June 2026",
+    }
+    treaty = V.to_record(values | listed, {}, place, profile, "example-charter").profile
+    assert treaty.parties_complete_as_of == date(2026, 6, 1)
+    assert treaty.parties_complete_evidence == R.Evidence(
+        source="external",
+        quote="Status list as at 1 June 2026",
+        url="https://www.example.org/status-list.pdf",
+    )
+    # Not given: not complete. A date without its status list, or a list without its date, is refused.
+    unknown = V.to_record(values, {}, place, profile, "example-charter").profile
+    assert unknown.parties_complete_as_of is None and unknown.parties_complete_evidence is None
+    for key in ("profile.parties_complete_as_of", "profile.parties_complete_evidence.url"):
+        with pytest.raises(ValueError, match="status list"):
+            V.to_record(values | {key: listed[key]}, {}, place, profile, "example-charter")
+    with pytest.raises(ValidationError):
+        R.TreatyProfile(family="treaty", parties_complete_as_of=date(2026, 6, 1))
+    # Whether a list is complete is a legal fact: a reader's draft never fills it in.
+    assert not set(listed) & set(V.first_draft(values | listed, {})[0])
+
+
 def test_records_refuse_inconsistent_identity():
     with pytest.raises(ValidationError):  # a judgment is an Akoma Ntoso judgment, not an act
         R.Identity(family="judgment", type="judgment", work_uri="/akn/ke/act/2019/5", title="x")
