@@ -439,14 +439,18 @@ class Feed:
         if kind == "legal_effect_recorded":
             told = payload.get("legal_effect") or {}
             legal_effect = dict(told)
-            if "by" in told:  # a provision event (CPR-02) may have no asserting law
-                by = visible.work((told.get("by") or {}).get("id"))
-                if by is None:  # the law that had the effect is not public: say nothing of it
+            # The other law: `by` the one that had the effect (a provision event, CPR-02, may have none),
+            # or `of` the instrument a law gives effect to (changes.record.BOTH_SIDES).
+            for role in ("by", "of"):
+                if role not in told:
+                    continue
+                other = visible.work((told.get(role) or {}).get("id"))
+                if other is None:  # the other law is not public: say nothing of it
                     return None
-                legal_effect["by"] = {
-                    "id": told["by"]["id"],
-                    "title": by["projection"].get("title"),
-                    "citation": by["projection"].get("citation"),
+                legal_effect[role] = {
+                    "id": told[role]["id"],
+                    "title": other["projection"].get("title"),
+                    "citation": other["projection"].get("citation"),
                 }
         if kind == "text_version_published" and (not named or row["version_id"] not in work["versions"]):
             return None

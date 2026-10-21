@@ -442,6 +442,166 @@ def test_a_checked_repeal_or_amendment_is_a_legal_effect_and_its_correction_keep
         ),
     )
     assert of_type(client, "legal_effect_recorded") == []
+    # The link left public view with its law: recorded as the event's withdrawal, shown only while public.
+    [*_, gone] = [e for e in events(store) if e["event_type"] == "legal_effect_recorded"]
+    assert gone["event_revision"] == 3 and gone["payload"]["legal_effect"]["review_state"] == "withdrawn"
+
+
+DIRECTIVE = "aa-ecowas-synthetic-directive"
+TRANSPOSITION = f"link-ng-foi-act-2011-transposes-{DIRECTIVE}"
+
+
+def with_directive(corpus):
+    """A synthetic ECOWAS directive (test only, not a real instrument), public like the Nigerian records,
+    and a checked link saying the Freedom of Information Act transposes it."""
+    from datetime import date
+
+    from schema.models import Amendment, Authority, Jurisdiction, Source
+
+    corpus.jurisdictions.append(
+        Jurisdiction(id="aa-ecowas", name="Economic Community of West African States", country_code="AA")
+    )
+    corpus.authorities.append(
+        Authority(
+            id="aa-ecowas-synthetic",
+            jurisdiction_id="aa-ecowas",
+            name="Synthetic regional authority",
+            kind="other",
+            official_url="https://example.org/synthetic-authority",
+        )
+    )
+    corpus.sources.append(
+        Source(
+            id=DIRECTIVE,
+            jurisdiction_id="aa-ecowas",
+            authority_id="aa-ecowas-synthetic",
+            title="Synthetic Directive on Access to Information",
+            document_type="other",
+            canonical_url="https://example.org/synthetic-directive",
+            citation="Synthetic Directive 1/2010",
+        )
+    )
+    rights = next(r for r in corpus.rights if r.source_id == "ng-foi-act-2011")
+    corpus.rights.append(rights.model_copy(update={"id": f"rights-{DIRECTIVE}", "source_id": DIRECTIVE}))
+    corpus.amendments.append(
+        Amendment(
+            id=TRANSPOSITION,
+            source_id="ng-foi-act-2011",
+            target_source_id=DIRECTIVE,
+            kind="transposes",
+            effective_date=date(2011, 5, 28),
+            evidence_url="https://example.org/synthetic-transposition",
+            verified=True,
+        )
+    )
+
+
+def test_a_transposition_is_an_effect_on_each_work_and_its_withdrawal_corrects_both(feed, tmp_path):
+    from api.v1 import create_v1_app
+
+    store, client = feed
+    edit(store, with_directive)
+    effects = of_type(client, "legal_effect_recorded")
+    assert sorted(e["work"]["id"] for e in effects) == [DIRECTIVE, "ng-foi-act-2011"]  # one each
+    on = {e["work"]["id"]: e for e in effects}
+    assert on[DIRECTIVE]["legal_effect"]["kind"] == "transposition"
+    assert on[DIRECTIVE]["legal_effect"]["by"]["id"] == "ng-foi-act-2011"
+    assert on[DIRECTIVE]["summary"].endswith("was transposed by Freedom of Information Act 2011.")
+    assert on["ng-foi-act-2011"]["legal_effect"]["of"] == {
+        "id": DIRECTIVE,
+        "title": "Synthetic Directive on Access to Information",
+        "citation": "Synthetic Directive 1/2010",
+    }
+    assert "by" not in on["ng-foi-act-2011"]["legal_effect"]
+    assert all(e["legal_effective"] == {"from": "2011-05-28", "precision": "day"} for e in effects)
+    # Each side lists the other.
+    api = TestClient(create_v1_app(store, tmp_path, lambda: []))
+
+    def related(work):
+        page = api.get(f"/sources/{work}/relationships").json()
+        return [(i["kind"], i["source_id"]) for i in page["items"]]
+
+    assert related("ng-foi-act-2011") == [("transposes", DIRECTIVE)]
+    assert related(DIRECTIVE) == [("transposed_by", "ng-foi-act-2011")]
+    assert api.get(f"/sources/{DIRECTIVE}/relationships", params={"kind": "transposes"}).json()["items"] == []
+
+    # Withdrawn (no longer checked), each work's event is corrected once, naming the link.
+    edit(store, lambda c: setattr(next(a for a in c.amendments if a.id == TRANSPOSITION), "verified", False))
+    corrections = of_type(client, "legal_effect_recorded")[2:]
+    assert sorted(e["work"]["id"] for e in corrections) == [DIRECTIVE, "ng-foi-act-2011"]
+    for correction in corrections:
+        first = on[correction["work"]["id"]]
+        assert correction["event_id"] == first["event_id"] and correction["event_revision"] == 2
+        assert correction["change_reason"] == "corrected"
+        assert correction["supersedes"] == {"event_id": first["event_id"], "event_revision": 1}
+        assert correction["legal_effect"]["review_state"] == "withdrawn"
+        assert correction["legal_effect"]["kind"] == "transposition"
+        assert correction["summary"] == (
+            "The recorded transposition of Synthetic Directive on Access to Information by Freedom of"
+            " Information Act 2011 was withdrawn."
+        )
+    assert {
+        e["work"]["id"]: e["legal_effect"].get("by", e["legal_effect"].get("of"))["id"] for e in corrections
+    } == {
+        DIRECTIVE: "ng-foi-act-2011",
+        "ng-foi-act-2011": DIRECTIVE,
+    }
+    assert related("ng-foi-act-2011") == [] and related(DIRECTIVE) == []
+    assert sweep_count(store) == 0  # announced once
+    # Checked again, the same events are corrected again.
+    edit(store, lambda c: setattr(next(a for a in c.amendments if a.id == TRANSPOSITION), "verified", True))
+    restored = of_type(client, "legal_effect_recorded")[4:]
+    assert sorted((e["work"]["id"], e["event_revision"]) for e in restored) == [
+        (DIRECTIVE, 3),
+        ("ng-foi-act-2011", 3),
+    ]
+    assert all("review_state" not in e["legal_effect"] for e in restored)
+
+
+def test_a_withdrawn_repeal_corrects_its_one_event_whatever_withdrew_it(feed):
+    from datetime import date
+
+    from schema.models import Amendment
+
+    store, client = feed
+    link = Amendment(
+        id="link-ng-foi-act-2011-repeals-ng-cbn-act-2007",
+        source_id="ng-foi-act-2011",
+        target_source_id="ng-cbn-act-2007",
+        kind="repeals",
+        effective_date=date(2011, 5, 28),
+        evidence_url="https://example.org/synthetic-repeal",
+        verified=True,
+    )
+    edit(store, lambda c: c.amendments.append(link))
+    [first] = of_type(client, "legal_effect_recorded")
+    assert first["work"]["id"] == "ng-cbn-act-2007" and first["legal_effect"]["kind"] == "repeal"
+    assert (
+        first["summary"]
+        == "Central Bank of Nigeria Act 2007 was repealed by Freedom of Information Act 2011."
+    )
+    assert "review_state" not in first["legal_effect"]
+    # Deleted outright, the link's event is corrected on the repealed law only.
+    with store.engine.begin() as conn:
+        conn.execute(text("DELETE FROM amendments WHERE id = :id"), {"id": link.id})
+        sweep(conn)
+    [_, withdrawn] = of_type(client, "legal_effect_recorded")
+    assert withdrawn["event_id"] == first["event_id"] and withdrawn["event_revision"] == 2
+    assert (
+        withdrawn["work"]["id"] == "ng-cbn-act-2007"
+        and withdrawn["legal_effect"]["review_state"] == "withdrawn"
+    )
+    assert withdrawn["legal_effect"]["by"]["id"] == "ng-foi-act-2011"
+    assert withdrawn["summary"] == (
+        "The recorded repeal of Central Bank of Nigeria Act 2007 by Freedom of Information Act 2011 was withdrawn."
+    )
+    # Recorded again as an amendment instead: a new link, with its own event.
+    edit(
+        store, lambda c: c.amendments.append(link.model_copy(update={"id": "link-amends", "kind": "amends"}))
+    )
+    *_, amended = of_type(client, "legal_effect_recorded")
+    assert amended["event_id"] != first["event_id"] and amended["legal_effect"]["kind"] == "amendment"
+    assert len(of_type(client, "legal_effect_recorded")) == 3
 
 
 def test_a_status_correction_says_what_it_was_and_only_for_fields_never_withheld(feed):

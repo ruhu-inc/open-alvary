@@ -44,12 +44,21 @@ PUBLIC_FIELDS = (
 SCHEMA_VERSION = "change-event-1"
 # A correction may show a field's previous value only where it can never have been withheld (SUB C1).
 SAFE_PREVIOUS = ("legal_status", "rights_status", "document_type", "year")
-# Checked links between works that change the law of the affected work (legal_effect_recorded).
+# Checked links between works that change what law applies (legal_effect_recorded): the effect, and
+# how the affected work's summary says it.
 EFFECTS = {
     "repeals": ("repeal", "repealed"),
     "amends": ("amendment", "amended"),
     "supersedes": ("supersession", "superseded"),
+    "commences": ("commencement", "commenced"),
+    "transposes": ("transposition", "transposed"),
+    "domesticates": ("domestication", "domesticated"),
+    "ratifies": ("ratification", "ratified"),
 }
+# A law that transposes, domesticates or ratifies an instrument carries it into national law: the law
+# itself is affected too, so each work has its own event, the law's naming the instrument in `of`.
+BOTH_SIDES = frozenset({"transposes", "domesticates", "ratifies"})
+OF = ":of"  # after a link's ID, the state (and event) key of its event on the asserting work
 # A version diff names provisions, not the containers around a text (TXP-04); each list is capped.
 DIFF_SKIPPED = frozenset({"document", "contents", "contents_entry", "notice"})
 DIFF_CAP = 200
@@ -333,11 +342,26 @@ def _record_rights(rec: _Recorder, revisions: list[dict], publication_revision: 
         )
 
 
+def _as_public(rec: _Recorder, known: dict, work_id: str) -> dict:
+    """A work's public facts now or, when it is no longer public, as it last was (published_state): what
+    the announcement of a withdrawn link or event names. The feed shows it only while they are public."""
+    if work_id not in known:
+        known[work_id] = current(rec.conn, [work_id]).get(work_id) or {
+            "projection": rec.conn.scalar(
+                text(f"SELECT projection FROM {rec.t['published_state']} WHERE work_id = :w"), {"w": work_id}
+            )
+            or {}
+        }
+    return known[work_id]
+
+
 def _links(rec: _Recorder, scope, *, announce: bool) -> list[tuple]:
-    """The checked repeals, amendments and supersessions between two public works that concern these
-    works (all when None), compared with the last recorded state: a new one is a legal_effect_recorded
-    event on the affected work, a changed one a correction of its event (SUB C1; OA-R2). Returns the
-    state to record. Without ``announce`` (the first comparison) nothing is announced."""
+    """The checked links that change what law applies (EFFECTS) between two public works that concern
+    these works (all when None), compared with the last recorded state of each affected work's event
+    (both works' for BOTH_SIDES): a new one is a legal_effect_recorded event on the work, a changed one a
+    correction of its event, and one no longer public (deleted, unchecked, of another kind, or a work no
+    longer public) a correction marked withdrawn that names the link (SUB C1; OA-R2). Returns the state
+    to record. Without ``announce`` (the first comparison) nothing is announced."""
     amendments = tables["amendments"]
     query = select(
         amendments.c.id, amendments.c.source_id, amendments.c.target_source_id, amendments.c.payload
@@ -350,68 +374,98 @@ def _links(rec: _Recorder, scope, *, announce: bool) -> list[tuple]:
     ]
     works = sorted({w for r in rows for w in (r.source_id, r.target_source_id)})
     visible = current(rec.conn, works) if works else {}
-    public = {
-        r.id: {
+    public = {}  # state key -> (the work the event is on, the link)
+    for r in rows:
+        if r.source_id not in visible or r.target_source_id not in visible:
+            continue
+        link = {
             "kind": r.payload["kind"],
             "affected": r.target_source_id,
             "by": r.source_id,
             "effective_date": r.payload.get("effective_date"),
             "evidence_url": r.payload.get("evidence_url"),
         }
-        for r in rows
-        if r.source_id in visible and r.target_source_id in visible
-    }
+        public[r.id] = (r.target_source_id, link)
+        if link["kind"] in BOTH_SIDES:
+            public[r.id + OF] = (r.source_id, link)
     table = rec.t["link_state"]
-    held_query = f"SELECT link_id, projection_hash, event_id, event_revision FROM {table}"
+    held_query = (
+        f"SELECT link_id, work_id, projection, projection_hash, event_id, event_revision FROM {table}"
+    )
     params = {}
     if scope is not None:
-        held_query += " WHERE link_id = ANY(:links) OR work_id = ANY(:ids) OR projection->>'by' = ANY(:ids)"
+        held_query += (
+            " WHERE link_id = ANY(:links) OR work_id = ANY(:ids) OR projection->>'by' = ANY(:ids)"
+            " OR projection->>'affected' = ANY(:ids)"
+        )
         params = {"links": sorted(public), "ids": sorted(scope)}
     held = {row.link_id: row for row in rec.conn.execute(text(held_query), params)}
-    states = []
-    for link_id, link in sorted(public.items()):
-        link_hash, was = digest(link), held.get(link_id)
+    states, known = [], dict(visible)
+    for key, (work, link) in sorted(public.items()):
+        link_hash, was = digest(link), held.get(key)
         if was is not None and was.projection_hash == link_hash:
             continue
-        event = None
-        if announce:
-            affected, by = visible[link["affected"]], visible[link["by"]]["projection"]
-            noun, verb = EFFECTS[link["kind"]]
-            corrects = (was.event_id, was.event_revision) if was is not None and was.event_id else None
-            title = affected["projection"].get("title")
-            event = rec.add(
-                "legal_effect_recorded",
-                link_id,
-                link["affected"],
-                affected,
-                summary=f"The record of how {by.get('title')} {verb} {title} was corrected."
-                if corrects
-                else f"{title} was {verb} by {by.get('title')}.",
-                extra={
-                    "legal_effect": {
-                        "kind": noun,
-                        "by": {"id": link["by"], "title": by.get("title"), "citation": by.get("citation")},
-                        "effective_date": link["effective_date"],
-                        "evidence_url": link["evidence_url"],
-                    }
-                },
-                corrects=corrects,
-                legal_effective={"from": link["effective_date"], "precision": "day"}
-                if link["effective_date"]
-                else None,
-            )
-        states.append(("put", link_id, link, link_hash, event))
-    for link_id in sorted(held.keys() - public.keys()):
-        states.append(("drop", link_id, None, None, None))
+        event = _link_event(rec, known, key, work, link, was) if announce else None
+        states.append((key, work, link, link_hash, event))
+    for key in sorted(held.keys() - public.keys()):
+        was = held[key]
+        if was.projection.get("review_state") == "withdrawn":
+            continue  # announced as withdrawn already
+        link = was.projection | {"review_state": "withdrawn"}
+        event = _link_event(rec, known, key, was.work_id, link, was) if announce else None
+        states.append((key, was.work_id, link, digest(link), event))
     return states
+
+
+def _link_event(rec: _Recorder, known: dict, key: str, work: str, link: dict, was) -> dict:
+    """Plan the event on ``work`` (the affected work, or the asserting one of a BOTH_SIDES link) for a
+    link that is new, changed, or withdrawn (``review_state``): the next revision of the event announced
+    before, when there is one."""
+    noun, verb = EFFECTS[link["kind"]]
+    affected = _as_public(rec, known, link["affected"])["projection"]
+    by = _as_public(rec, known, link["by"])["projection"]
+    title = affected.get("title")
+    corrects = (was.event_id, was.event_revision) if was is not None and was.event_id else None
+    withdrawn = link.get("review_state") == "withdrawn"
+    on_affected = work == link["affected"]
+    if withdrawn:
+        summary = f"The recorded {noun} of {title} by {by.get('title')} was withdrawn."
+    elif corrects:
+        summary = f"The record of how {by.get('title')} {verb} {title} was corrected."
+    elif on_affected:
+        summary = f"{title} was {verb} by {by.get('title')}."
+    else:
+        summary = f"{by.get('title')} {link['kind']} {title}."
+    other, named = (link["by"], by) if on_affected else (link["affected"], affected)
+    return rec.add(
+        "legal_effect_recorded",
+        key,
+        work,
+        _as_public(rec, known, work),
+        summary=summary,
+        extra={
+            "legal_effect": {
+                "kind": noun,
+                ("by" if on_affected else "of"): {
+                    "id": other,
+                    "title": named.get("title"),
+                    "citation": named.get("citation"),
+                },
+                "effective_date": link["effective_date"],
+                "evidence_url": link["evidence_url"],
+                **({"review_state": "withdrawn"} if withdrawn else {}),
+            }
+        },
+        corrects=corrects,
+        legal_effective={"from": link["effective_date"], "precision": "day"}
+        if link["effective_date"]
+        else None,
+    )
 
 
 def _record_links(rec: _Recorder, states: list[tuple], *, baseline: bool) -> None:
     table = rec.t["link_state"]
-    for action, link_id, link, link_hash, event in states:
-        if action == "drop":
-            rec.conn.execute(text(f"DELETE FROM {table} WHERE link_id = :l"), {"l": link_id})
-            continue
+    for key, work, link, link_hash, event in states:
         rec.conn.execute(
             text(
                 f"INSERT INTO {table} (link_id, work_id, projection, projection_hash, event_id, event_revision)"
@@ -423,8 +477,8 @@ def _record_links(rec: _Recorder, states: list[tuple], *, baseline: bool) -> Non
                 " updated_at = statement_timestamp()"
             ),
             {
-                "l": link_id,
-                "w": link["affected"],
+                "l": key,
+                "w": work,
                 "p": json.dumps(link, ensure_ascii=False),
                 "h": link_hash,
                 "e": event and event["event_id"],
@@ -443,7 +497,9 @@ EVENT_FIELDS = ("event_type", "scope", "locators", "date_from", "date_to", "prec
 def _provision_events(rec: _Recorder, scope, *, announce: bool) -> list[tuple]:
     """Reviewed events on public works that concern these works (all when None), compared with their
     last announced form: a new one is a legal_effect_recorded event on the affected work, a changed one
-    (corrected, superseded or withdrawn) its correction (SUB C1). Returns the state to record."""
+    (corrected, superseded or withdrawn) its correction, and one no longer public (its row deleted, or
+    its work no longer public) a correction marked withdrawn that names it (SUB C1). Returns the state
+    to record."""
     query = f"SELECT event_id, affected_work, {', '.join(EVENT_FIELDS)} FROM {rec.t['legal_event']}"
     params = {}
     if scope is not None:
@@ -464,69 +520,76 @@ def _provision_events(rec: _Recorder, scope, *, announce: bool) -> list[tuple]:
         for r in rows
         if r["affected_work"] in visible
     }
-    held_query = f"SELECT event_id, projection_hash, change_event_id, change_event_revision FROM {rec.t['event_state']}"
+    held_query = (
+        "SELECT event_id, projection, projection_hash, change_event_id, change_event_revision"
+        f" FROM {rec.t['event_state']}"
+    )
     if scope is not None:
         held_query += " WHERE event_id = ANY(:events) OR work_id = ANY(:ids)"
         params = {"events": sorted(public), "ids": sorted(scope)}
     held = {row.event_id: row for row in rec.conn.execute(text(held_query), params)}
-    states = []
+    states, known = [], dict(visible)
     for event_id, event in sorted(public.items()):
         event_hash, was = digest(event), held.get(event_id)
         if was is not None and was.projection_hash == event_hash:
             continue
         if was is None and event["review_state"] != "reviewed":
-            states.append(("put", event_id, event, event_hash, None))  # withdrawn before it was announced
+            states.append((event_id, event, event_hash, None))  # withdrawn before it was announced
             continue
-        planned = None
-        if announce:
-            affected = visible[event["work"]]
-            title = affected["projection"].get("title")
-            corrects = (
-                (was.change_event_id, was.change_event_revision)
-                if was is not None and was.change_event_id
-                else None
-            )
-            what = "the whole work" if event["scope"] == "whole" else ", ".join(event["locators"])
-            if event["review_state"] == "withdrawn":
-                summary = f"The recorded {event['event_type']} of {title} ({what}) was withdrawn."
-            elif corrects:
-                summary = f"The record of when {title} ({what}) was {event['event_type']} was corrected."
-            else:
-                summary = f"{title} ({what}): {event['event_type']}."
-            planned = rec.add(
-                "legal_effect_recorded",
-                event_id,
-                event["work"],
-                affected,
-                summary=summary,
-                extra={
-                    "legal_effect": {
-                        "kind": event["event_type"],
-                        "scope": event["scope"],
-                        "provisions": event["locators"],
-                        "effective_date": event["date_from"],
-                        "precision": event["precision"],
-                        "review_state": event["review_state"],
-                        **({"by": {"id": event["asserting_work"]}} if event["asserting_work"] else {}),
-                    }
-                },
-                corrects=corrects,
-                legal_effective={"from": event["date_from"], "precision": event["precision"]}
-                if event["date_from"]
-                else None,
-            )
-        states.append(("put", event_id, event, event_hash, planned))
+        planned = _provision_event(rec, known, event_id, event, was) if announce else None
+        states.append((event_id, event, event_hash, planned))
     for event_id in sorted(held.keys() - public.keys()):
-        states.append(("drop", event_id, None, None, None))
+        was = held[event_id]
+        if was.projection.get("review_state") == "withdrawn":
+            continue  # announced as withdrawn already, or never announced
+        event = was.projection | {"review_state": "withdrawn"}
+        planned = _provision_event(rec, known, event_id, event, was) if announce else None
+        states.append((event_id, event, digest(event), planned))
     return states
+
+
+def _provision_event(rec: _Recorder, known: dict, event_id: str, event: dict, was) -> dict:
+    """Plan the event for a provision event that is new, changed or withdrawn: the next revision of the
+    one announced before, when there is one."""
+    affected = _as_public(rec, known, event["work"])
+    title = affected["projection"].get("title")
+    corrects = (
+        (was.change_event_id, was.change_event_revision) if was is not None and was.change_event_id else None
+    )
+    what = "the whole work" if event["scope"] == "whole" else ", ".join(event["locators"])
+    if event["review_state"] == "withdrawn":
+        summary = f"The recorded {event['event_type']} of {title} ({what}) was withdrawn."
+    elif corrects:
+        summary = f"The record of when {title} ({what}) was {event['event_type']} was corrected."
+    else:
+        summary = f"{title} ({what}): {event['event_type']}."
+    return rec.add(
+        "legal_effect_recorded",
+        event_id,
+        event["work"],
+        affected,
+        summary=summary,
+        extra={
+            "legal_effect": {
+                "kind": event["event_type"],
+                "scope": event["scope"],
+                "provisions": event["locators"],
+                "effective_date": event["date_from"],
+                "precision": event["precision"],
+                "review_state": event["review_state"],
+                **({"by": {"id": event["asserting_work"]}} if event["asserting_work"] else {}),
+            }
+        },
+        corrects=corrects,
+        legal_effective={"from": event["date_from"], "precision": event["precision"]}
+        if event["date_from"]
+        else None,
+    )
 
 
 def _record_provision_events(rec: _Recorder, states: list[tuple]) -> None:
     table = rec.t["event_state"]
-    for action, event_id, event, event_hash, planned in states:
-        if action == "drop":
-            rec.conn.execute(text(f"DELETE FROM {table} WHERE event_id = :e"), {"e": event_id})
-            continue
+    for event_id, event, event_hash, planned in states:
         rec.conn.execute(
             text(
                 f"INSERT INTO {table} (event_id, work_id, projection, projection_hash, change_event_id,"

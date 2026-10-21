@@ -375,7 +375,7 @@
   {
     "name": "list_changes",
     "title": "List catalogue changes",
-    "description": "Changes to the catalogue in commit order: records added, corrected or withdrawn, and text published. Filter by jurisdiction, work, type, document class, language or keyword. Pass the returned resume_token next time to get only newer changes. Changes to what Open Alvary holds, not every change in a country's law.",
+    "description": "Changes to the catalogue in commit order: records added, corrected or withdrawn, text published, and legal effects (repeals, amendments, commencements, transpositions and others a reviewer checked) recorded or withdrawn. Filter by jurisdiction, work, type, document class, language or keyword. Pass the returned resume_token next time to get only newer changes. Changes to what Open Alvary holds, not every change in a country's law.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -401,7 +401,7 @@
             "type": "string"
           },
           "maxItems": 9,
-          "description": "Kinds of change: catalogue_added, metadata_corrected, text_version_published, withdrawal, coverage_changed."
+          "description": "Kinds of change: catalogue_added, metadata_corrected, text_version_published, legal_effect_recorded, withdrawal, coverage_changed."
         },
         "class": {
           "type": "array",
