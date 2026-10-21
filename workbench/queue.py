@@ -11,7 +11,10 @@
 
 A task is one document's work of one kind and priority: pages with an open high flag first, then
 pages to review whole, then flags to resolve, then proposals. Work in documents already started comes
-before documents nobody has opened; within each, the longest waiting first. A task waits from its
+before documents nobody has opened; within it, the longest waiting first. Documents nobody has opened
+come by importance (IMPORTANCE), so the first texts published are the most needed: the constitution,
+organic laws, laws, then orders and the rest; within a kind, those in force before those of unknown
+currency and the repealed last, the newest first, and a work's language versions together. A task waits from its
 pages' latest revisions (a page never saved: from when its document's review began) or its proposals'.
 """
 
@@ -21,6 +24,18 @@ from workbench.editorial import histories
 from workbench.review import to_do
 
 PRIORITIES = ("high", "full", "flags", "proposal")
+# The order of documents nobody has opened, by their kind (owner, 2026-10-21): any kind not listed
+# comes after these.
+IMPORTANCE = (
+    ("constitution", "constitutional_amendment"),
+    ("organic_law",),
+    ("law", "act", "decree_law", "code"),
+    ("presidential_order", "prime_ministers_order"),
+    ("ministerial_order", "regulations", "instructions", "practice_direction"),
+    ("ordinance", "decree", "royal_decree"),
+    ("treaty", "convention", "protocol", "charter", "agreement"),
+)
+CURRENCY = {"in_force": 0, "unknown": 1, "repealed": 2}
 WAITING = {  # the statuses a proposal waits in, and for what
     "events": ("event_id", {"proposed": "review"}),
     "instructions": ("instruction_id", {"proposed": "review", "reviewed": "second_review"}),
@@ -63,11 +78,32 @@ def page_tasks(
     return tasks
 
 
+def importance(document: dict) -> tuple:
+    """Where a document nobody has opened comes: its kind's rank, its currency (in force, unknown,
+    repealed), the newest first, then its work, so a work's language versions come together."""
+    kind = str(document.get("type") or document.get("document_type") or "").casefold()
+    rank = next((n for n, kinds in enumerate(IMPORTANCE) if kind in kinds), len(IMPORTANCE))
+    currency = document.get("currency")
+    status = currency.get("status") if isinstance(currency, dict) else currency
+    year = document.get("year")
+    newest = -int(year) if isinstance(year, int) or str(year or "").isdigit() else 0
+    return rank, CURRENCY.get(status, 1), newest, str(document.get("work") or document["id"]), document["id"]
+
+
 def not_started(document: dict) -> dict:
     """A document nobody has opened, from its manifest entry alone (a corpus collection lists tens of
-    thousands; their readings are not opened): its pages, first if its reading has high flags."""
+    thousands; their readings are not opened): its pages, and where it comes by importance; of two
+    alike, first the one whose reading has high flags."""
     priority = "high" if (document.get("flag_counts") or {}).get("high") else "full"
-    return task(document, "review", priority, document["page_count"], None, started=False)
+    return task(
+        document,
+        "review",
+        priority,
+        document["page_count"],
+        None,
+        started=False,
+        importance=importance(document),
+    )
 
 
 def proposal_tasks(events: list[dict], instructions: list[dict], document_of, citations=()) -> list[dict]:
@@ -92,6 +128,7 @@ def ordered(tasks: list[dict]) -> list[dict]:
         tasks,
         key=lambda t: (
             not t["started"],
+            t.get("importance") or (),  # documents nobody has opened: by importance, before priority
             PRIORITIES.index(t["priority"]),
             t["since"] is None,
             t["since"] or datetime.min,
