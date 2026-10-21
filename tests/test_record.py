@@ -232,6 +232,34 @@ def test_regional_instruments_and_treaties_have_their_own_profiles():
     assert treaty.parties[0].place == "gh"
 
 
+def test_the_details_screen_records_each_partys_denunciation_and_reservations():
+    from workbench import record_view as V
+
+    columns = {
+        c["key"] for c in {s.key: s for s in V.fields("treaty", "charter", None)}["profile.parties"].columns
+    }
+    assert {"signed", "ratified", "acceded", "denounced", "reservations"} <= columns
+    place, profile = V.place_for({"jurisdiction": "aa-au"}, {}, registry())
+    values = {
+        "identity.family": "treaty",
+        "identity.type": "charter",
+        "identity.title": "Example Charter",
+        "text.form": "official_website",
+        "text.version.label": "As adopted",
+        "status.legal": "unknown",
+        "expressions": [{"language": "en", "this_text": "yes"}],
+        "profile.depositary": "Example Commission",
+        "profile.parties": [
+            {"party": "Example Republic", "place": "gh", "ratified": "2005-03-01", "denounced": "2020-01-01",
+             "reservations": "Article 4"},
+            {"party": "Other Republic", "place": "ke", "signed": "2004-01-01"},
+        ],
+    }  # fmt: skip
+    first, second = V.to_record(values, {}, place, profile, "example-charter").profile.parties
+    assert first.denounced == R.Dated(value=date(2020, 1, 1)) and first.reservations == "Article 4"
+    assert second.denounced is None and second.reservations is None and second.ratified is None
+
+
 def test_records_refuse_inconsistent_identity():
     with pytest.raises(ValidationError):  # a judgment is an Akoma Ntoso judgment, not an act
         R.Identity(family="judgment", type="judgment", work_uri="/akn/ke/act/2019/5", title="x")

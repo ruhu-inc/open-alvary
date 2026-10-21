@@ -336,6 +336,8 @@ def _profile_fields(family: str) -> list[FieldSpec]:
                     {"key": "signed", "label": "Signed", "kind": "date"},
                     {"key": "ratified", "label": "Ratified", "kind": "date"},
                     {"key": "acceded", "label": "Acceded", "kind": "date"},
+                    {"key": "denounced", "label": "Denounced", "kind": "date"},
+                    {"key": "reservations", "label": "Reservations", "kind": "text"},
                 ),
             ),
             FieldSpec("profile.depositary", "Depositary", g, "text", required=True),
@@ -890,6 +892,8 @@ def _profile(family: str, v: dict):
                     signed=_dated(p.get("signed")),
                     ratified=_dated(p.get("ratified")),
                     acceded=_dated(p.get("acceded")),
+                    denounced=_dated(p.get("denounced")),
+                    reservations=p.get("reservations") or None,
                 )
                 for p in v.get("profile.parties") or []
             ),
