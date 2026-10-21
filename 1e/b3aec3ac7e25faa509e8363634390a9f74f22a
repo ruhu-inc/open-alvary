@@ -1,0 +1,27 @@
+web/src/history.tsx
+  s_d665c62e07d76f::t_8faeb79a8f1ab9 60-64
+  s_d665c62e07d76f::t_d24307dc8c196f 38-42
+  s_d665c62e07d76f::t_ca5a1e0a86ee9f 4-6,20-24
+  s_d665c62e07d76f::t_422741eef1be98 156-159
+  s_d665c62e07d76f::t_6b0042018ac7a3 81-91,97
+web/src/console/watches.tsx
+  s_d665c62e07d76f::t_86b635f5cb95fe 42
+web/src/changes.tsx
+  s_d665c62e07d76f::t_90f41077dfc658 35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1eb3aec3ac7e25faa509e8363634390a9f74f22a",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
