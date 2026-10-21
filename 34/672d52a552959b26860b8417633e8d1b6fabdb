@@ -1,0 +1,57 @@
+operations/memberships.py
+  s_d665c62e07d76f::t_5b47cf71f06714 1-195
+schema/public.schema.json
+  s_d665c62e07d76f::t_5b47cf71f06714 320-430,485-495,505-627,2511-2516,2518
+  s_d665c62e07d76f::t_da339daa52630f 2517
+changes/feed.py
+  s_d665c62e07d76f::t_5b47cf71f06714 41,50,52-53,136-139,177-180,445,447-453,485,515,524,527,679
+rights/sql/provision/manifest.json
+  s_d665c62e07d76f::t_5b47cf71f06714 286-294
+rights/sql/provision/vg1_memberships.sql
+  s_d665c62e07d76f::t_5b47cf71f06714 1-3
+tests/test_memberships.py
+  s_d665c62e07d76f::t_5b47cf71f06714 1-172
+accounts/mail.py
+  s_d665c62e07d76f::t_5b47cf71f06714 259
+api/openapi_docs.py
+  s_d665c62e07d76f::t_5b47cf71f06714 37-38,44,321-342,536-539,581,612-619,745-752,1266-1295
+api/mcp.py
+  s_d665c62e07d76f::t_5b47cf71f06714 343-345,355-356,367,369-370
+changes/record.py
+  s_d665c62e07d76f::t_5b47cf71f06714 56-57,129,133,214-216,263-264,269,277,562-680
+  s_d665c62e07d76f::t_70d9eaa733ce20 681-682
+api/v1.py
+  s_d665c62e07d76f::t_5b47cf71f06714 18,51,195,198,200-209
+api/catalogue.py
+  s_d665c62e07d76f::t_5b47cf71f06714 6-7,26,37,39-40,67-90,1106-1172
+schema/public.py
+  s_d665c62e07d76f::t_5b47cf71f06714 50-78,83-93,698
+migrations/versions/0038_memberships.py
+  s_d665c62e07d76f::t_5b47cf71f06714 1-118
+tests/test_postgres_memberships.py
+  s_d665c62e07d76f::t_5b47cf71f06714 1-222
+web/src/docs/data/openapi.json
+  s_d665c62e07d76f::t_5b47cf71f06714 109,137,322,350,495,523,668,696,942-961,968,977-1088,1109-1118,1140,5154-5269,5276,5295,5327-5337,5348-5484,7725,7824,7858-7864
+web/src/docs/data/mcp-tools.json
+  s_d665c62e07d76f::t_5b47cf71f06714 342,352,367-368
+tests/test_postgres_changes.py
+  s_d665c62e07d76f::t_5b47cf71f06714 545,547-551
+rights/capabilities.py
+  s_d665c62e07d76f::t_5b47cf71f06714 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "34672d52a552959b26860b8417633e8d1b6fabdb",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
