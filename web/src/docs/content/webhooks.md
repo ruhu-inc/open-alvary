@@ -36,7 +36,7 @@ Every delivery is a `POST` with a JSON body and these headers:
 |---|---|
 | `Open-Alvary-Delivery` | The delivery's ID. It stays the same when we retry. |
 | `Open-Alvary-Timestamp` | When it was signed, in Unix seconds. |
-| `Open-Alvary-Key` | The ID of the signing key. |
+| `Open-Alvary-Key` | The ID of the signing key. During a rotation there are two, separated by a comma, in the same order as the signatures. |
 | `Open-Alvary-Signature` | `v1=` and the hex HMAC-SHA256, keyed with your secret, of the timestamp, a full stop, and the body as sent. During a rotation there are two, separated by a comma. |
 
 The body's `type` is one of:
@@ -140,7 +140,7 @@ Put the receiver behind HTTPS (your host's proxy or load balancer), at the addre
 | Any other `4xx` | Stop that delivery, and show the error under **Deliveries**. |
 | `3xx`, `5xx`, nothing within 10 seconds, or a network error | Retry after 1 minute, 5 minutes, 30 minutes, 2 hours and 8 hours, then give up after 24 hours. |
 
-Each retry is signed afresh, with the same delivery ID. After 20 failed deliveries in a row, or 24 hours of failures, the endpoint is marked failing and then paused; resume it in the console, which verifies it again. **Deliveries** shows each attempt for 7 days.
+Each retry is signed afresh, with the same delivery ID. After 3 failed attempts in a row, the endpoint is marked **failing**; it still receives deliveries, and a success makes it active again. After 20 failed attempts in a row, or 24 hours of failures, it is **paused** and we email your organisation's owners; resume it in the console, which verifies it again. **Deliveries** shows each attempt for 7 days.
 
 ## Rotate the secret
 
