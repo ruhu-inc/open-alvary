@@ -915,6 +915,103 @@ def test_a_second_collection_reviews_each_language_version_and_shares_the_laws_d
     assert [row["this_text"] for row in french["record"]["details"]["expressions"]] == ["no", "no", "yes"]
 
 
+def test_a_rwandan_laws_authority_is_suggested_with_its_words_and_stays_blank_until_the_reviewer_uses_it(
+    tmp_path, monkeypatch
+):
+    """Owner decision 2026-10-21: machines may suggest legal facts, never pre-fill them. The gazette reader
+    suggests what each language version is worth as law, with the sentence that says so and its page; the
+    field stays empty until the reviewer presses "Use suggestion", and a record confirmed without it
+    publishes the authority as unknown."""
+    from test_rw_gazette import read_law
+
+    from operations import publish
+    from schema.jurisdictions import registry
+    from workbench.review import Review
+
+    values, legal = read_law()
+    folder = tmp_path / "rw"
+    rwanda_collection(folder, monkeypatch)
+    manifest = json.loads((folder / "manifest.json").read_text())
+    for document in manifest["documents"]:
+        document |= {"suggested": values, "suggested_legal": legal}
+    (folder / "manifest.json").write_text(json.dumps(manifest))
+    (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(reading()))
+    store = Store(connect(f"sqlite:///{tmp_path / 'workbench.db'}"))
+    store.add_operator("reviewer@example.org", "Rev", {"reviewer"})
+    library = content.Library(tmp_path)
+    reviewer = signed_in((store, library), "reviewer@example.org")
+    shown = reviewer.get("/api/documents/rw-law-009-2026-en/details").json()
+    draft = shown["record"]["details"]
+    # The details as printed are filled in; the legal facts are not.
+    assert draft["identity.number.printed"] == "Law n° 009/2026" and draft["publication.date"] == "2026-03-16"
+    assert [{k for k in row if k.startswith("authority")} for row in draft["expressions"]] == [set()] * 3
+    assert "step:commenced.date" not in draft and "profile.commencement" not in draft
+    assert "step:commenced.date" in shown["missing"]  # to give or account for, not taken from the reader
+    # Beside the empty fields, what the editor shows: each suggestion with its words and page.
+    adopted = "This Law was drafted in English, considered and adopted in Ikinyarwanda."
+    authorities = shown["suggestions"]["expressions"]["authority"]
+    assert authorities["en"] == {"value": "official_translation", "page": 2, "evidence": adopted}
+    assert authorities["rw"]["value"] == "authoritative"
+    assert shown["suggestions"]["step:commenced.date"] == {
+        "value": "2026-03-16",
+        "page": 2,
+        "evidence": "This Law comes into force on the date of its publication.",
+    }
+    columns = next(f for f in shown["standard"]["fields"] if f["key"] == "expressions")["columns"]
+    assert "authority" in {c["key"] for c in columns}  # the column the suggestion belongs to
+
+    act = library.act("rw-law-009-2026-en")
+    review = Review(store, library, registry())
+
+    def confirm(details: dict, expected: int):
+        current = reviewer.get("/api/documents/rw-law-009-2026-en/details").json()
+        given = {**details, "step:commenced.date": "2026-03-16"}
+        absent = {**current["record"]["absent"], **dict.fromkeys(current["missing"], "unknown")}
+        absent = {key: reason for key, reason in absent.items() if key not in given}
+        body = {"expected_revision": expected, "status": "confirmed", "details": given, "absent": absent}
+        assert reviewer.post("/api/documents/rw-law-009-2026-en/details", json=body).json() == {
+            "revision": expected + 1
+        }
+        return review.built(act, review.state(act)["view"])
+
+    # Confirmed without pressing "Use suggestion": every authority unknown, none published.
+    record = confirm(draft, 0)
+    assert [e.authority for e in record.expressions] == [None, None, None]
+    assert publish.editions(record) == []
+    # Pressing it (what the button does to the row): the authority, with its page and words as evidence.
+    evidence = {"authority_page": "2", "authority_words": adopted}
+    used = [
+        {**row, "authority": authorities[row["language"]]["value"], **evidence}
+        for row in draft["expressions"]
+    ]
+    record = confirm({**draft, "expressions": used}, 1)
+    english = next(e for e in record.expressions if e.language == "en")
+    assert (english.authority, english.authority_evidence.page, english.authority_evidence.quote) == (
+        "official_translation",
+        2,
+        adopted,
+    )
+    assert {e.language: e.authority for e in publish.editions(record)} == {
+        "rw": "authoritative",
+        "en": "official_translation",
+        "fr": "official_translation",
+    }
+
+
+def test_a_nigerian_first_draft_leaves_the_legal_facts_to_the_reviewer(world):
+    """The Nigerian reader's suggestions fill in the first draft, but not its legal facts: what the text is
+    worth as law, when it commences, the laws it affects. Those stay beside their fields."""
+    reviewer = signed_in(world, "reviewer@example.org")
+    shown = reviewer.get(f"/api/documents/{ACT}/details").json()
+    draft, absent = shown["record"]["details"], shown["record"]["absent"]
+    assert draft["expressions"] == [{"language": "en", "direction": "ltr", "this_text": "yes"}]  # unknown
+    assert draft["status.legal"] == "unknown"  # not yet checked, which states nothing
+    # The reader found no commencement date; it suggests "not stated in this copy" but does not say so for you.
+    assert "step:commenced.date" not in draft and "step:commenced.date" not in absent
+    assert shown["suggestions"]["step:commenced.date"]["absent"] == "not_in_source"
+    assert "step:commenced.date" in shown["missing"]
+
+
 def test_the_public_preview_of_a_language_version_lists_the_others(tmp_path, monkeypatch):
     rwanda_collection(tmp_path / "rw", monkeypatch)
     manifest = json.loads((tmp_path / "rw" / "manifest.json").read_text())
@@ -1279,7 +1376,11 @@ def test_a_document_says_where_it_stands_and_opens_the_laws_that_repealed_or_wer
         "shown": [{"id": f"{order['work']}-en", "title": order["title"]}],
     }
     details = reviewer.get("/api/documents/rw-law-009-2026-en/details").json()
-    assert details["record"]["details"]["status.legal"] == "repealed"
+    # Suggested as repealed, never filled in: its status is not yet checked, its links not yet given.
+    assert details["record"]["details"]["status.legal"] == "unknown"
+    assert "relations" not in details["record"]["details"]
+    assert details["suggestions"]["status.legal"]["value"] == "repealed"
+    assert details["suggestions"]["status.legal"]["evidence"].startswith(f"Repealed by {later['title']}")
     assert details["related"] == {later["work"]: "rw-law-010-2027-en"}
     assert details["suggestions"]["relations"]["value"][0]["kind"] == "repealed_by"
     assert reviewer.get("/api/documents/rw-law-010-2027-en").json()["standing"] is None  # not linked yet

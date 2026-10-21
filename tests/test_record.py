@@ -342,16 +342,20 @@ def test_a_rwandan_organic_law_follows_rwandas_procedure_into_a_complete_record(
     values = V.base_values(document, {})
     assert (values["identity.family"], values["identity.type"]) == ("legislation", "organic_law")
     assert V.base_values({"type": "presidential_order"}, {})["identity.family"] == "executive_instrument"
-    # A later law in the collection repeals it: suggested as repealed, or noted where its listing disagrees.
+    # A later law in the collection repeals it: suggested as repealed, or noted where its listing disagrees;
+    # never filled in (owner decision 2026-10-21), the status left not yet checked.
     repealer = {"kind": "repealed_by", "target": "Law n° 1/2027 of 01/01/2027", "target_id": "rw-law-1-2027"}
-    later = V.base_values({**document, "relations": [repealer]}, {})
-    assert later["relations"] == [repealer] and later["status.legal"] == "repealed"
-    assert later["status.note"] == "Repealed by Law n° 1/2027 of 01/01/2027, as its text says."
+    later = {**document, "relations": [repealer]}
+    drafted = V.base_values(later, {})
+    assert "relations" not in drafted and drafted["status.legal"] == "unknown"
+    repealed = "Repealed by Law n° 1/2027 of 01/01/2027, as its text says."
+    assert V.suggestions(later) == {
+        "status.legal": {"value": "repealed", "page": None, "evidence": repealed},
+        "status.note": {"value": repealed, "page": None, "evidence": repealed},
+    }
     listed = {
-        "identity.family": "legislation",
-        "identity.type": "organic_law",
-        "status.legal": "in_force",
-        "status.note": "Listed in force.",
+        "status.legal": {"value": "in_force", "page": None, "evidence": "Listed in force."},
+        "status.note": {"value": "Listed in force.", "page": None, "evidence": "Listed in force."},
     }
     line = {
         "status": "repealed",
@@ -359,18 +363,33 @@ def test_a_rwandan_organic_law_follows_rwandas_procedure_into_a_complete_record(
         "latest": {"work": "rw-law-3-2030", "title": "Law n° 3/2030 of 01/01/2030"},
         "parents_repealed": [{"work": "rw-law-5-2020", "title": "Law n° 5/2020", "repealed_by": [{"work": "rw-law-9-2025", "title": "Law n° 9/2025"}]}],
     }  # fmt: skip
-    chain = V.base_values({**document, "relations": [repealer], "currency": line}, {})
-    assert chain["status.note"] == (
+    chain = V.suggestions({**document, "relations": [repealer], "currency": line})
+    assert chain["status.note"]["value"] == (
         "Repealed by Law n° 1/2027 of 01/01/2027, as its text says. That law was repealed in turn; the law in "
         "force now is Law n° 3/2030 of 01/01/2030. Made under Law n° 5/2020, which Law n° 9/2025 has since "
         "repealed: check it is still in force."
     )
-    disagree = V.base_values({**document, "suggested": listed, "relations": [repealer]}, {})
-    assert disagree["status.legal"] == "in_force"
-    assert (
-        disagree["status.note"]
-        == "Listed in force. But Law n° 1/2027 of 01/01/2027 says it repeals this: check which is right."
-    )
+    disagree = V.suggestions({**document, "suggested_legal": listed, "relations": [repealer]})
+    noted = "Listed in force. But Law n° 1/2027 of 01/01/2027 says it repeals this: check which is right."
+    assert disagree["status.legal"] == {"value": "in_force", "page": None, "evidence": noted}
+    assert disagree["status.note"]["value"] == noted
+    # A document prepared before legal facts were kept apart: its reader's authorities, commencement and
+    # status are not filled in either.
+    older = {
+        **document,
+        "suggested": {
+            "identity.family": "legislation",
+            "identity.type": "organic_law",
+            "identity.number.value": "009/2026.OL",
+            "step:commenced.date": "2026-03-12",
+            "profile.commencement": "on_publication",
+            "status.legal": "in_force",
+            "status.note": "Listed in force.",
+            "expressions": [{"language": "rw", "authority": "authoritative", "authority_page": "2"}],
+        },
+    }
+    assert V.base_values(older, {}) == {**values, "identity.number.value": "009/2026.OL",
+                                        "expressions": [{"language": "rw"}]}  # fmt: skip
     specs = V.fields("legislation", "organic_law", rwanda)
     keys = {s.key for s in specs}
     assert {"step:adopted:senate.date", "step:countersigned.person", "step:sealed.person"} <= keys

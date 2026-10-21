@@ -889,13 +889,15 @@ def create_app(
         act = act_or_404(act_id)
         reading, record = library.reading(act_id), store.latest_details(details_key(act))
         view = described(act, record, reading)
+        # Each detail as read, with its page and words, beside its field; the legal facts are only ever
+        # here, never in the first draft, until the reviewer chooses them.
         suggestions = (
             record_view.suggestions_view(details.suggest(reading, act, library.manifest_for(act_id)))
             if view["place"].code == "ng"
-            else {}
+            else record_view.suggestions(act)
         )
         links = act.get("relations") or []
-        if links:  # what the collection's texts say, beside details saved before they were linked
+        if links:  # the laws it affects, as the collection's texts say: suggested, never filled in
             suggestions["relations"] = {
                 "value": links,
                 "evidence": "the laws this text repeals or amends, and the later ones that repeal or amend it",

@@ -1139,8 +1139,83 @@ def suggestions_view(suggestions: dict) -> dict:
     return out
 
 
+# --- first drafts: legal facts suggested, never filled in ------------------------------------------------
+
+# What a document is worth as law and when: each language version's authority, its rule where they
+# differ, when it commences, what it does to other laws, whether it is current. A reader may suggest
+# each, with the words that state it; none is a field's value until a reviewer chooses it (owner
+# decision 2026-10-21). The details as printed (titles, numbers, the dates of each step of its making,
+# the gazette and its pages) are filled in for the reviewer to check.
+LEGAL = {
+    "step:commenced.date",
+    "event:commenced.date",
+    "profile.commencement",
+    "relations",
+    "status.legal",
+    "status.as_of",
+    "status.note",
+}
+AUTHORITY = ("authority", "authority_page", "authority_words", "authority_url")
+
+
+def is_legal(key: str) -> bool:
+    return key in LEGAL or key.startswith("language_rule.")
+
+
+def first_draft(values: dict, absent: dict) -> tuple[dict, dict]:
+    """A first draft from what a reader filled in: the details as printed, for the reviewer to check;
+    the legal facts, a version's authority among them, left for the reviewer to choose; the legal
+    status not yet checked (unknown, which states nothing)."""
+    draft = {key: value for key, value in values.items() if not is_legal(key)}
+    if isinstance(draft.get("expressions"), list):
+        draft["expressions"] = [
+            {key: cell for key, cell in row.items() if key not in AUTHORITY} for row in draft["expressions"]
+        ]
+    draft["status.legal"] = "unknown"
+    return draft, {key: reason for key, reason in absent.items() if not is_legal(key)}
+
+
+def suggestions(document: dict) -> dict:
+    """The legal facts suggested for a document, keyed as its fields are, each with the words that state
+    it and their page, or where else it was read: when it commences and what each language version is
+    worth (under "expressions", the authority by language), read from its text; whether it is current,
+    as a later text of its collection or its listing says. Shown beside the empty fields for the reviewer
+    to choose; never filled in."""
+    out = dict(document.get("suggested_legal") or {})
+    listed = (out.get("status.legal") or {}).get("value")
+    said = [(out.get("status.note") or {}).get("value")]
+    links = document.get("relations") or []
+    current = document.get("currency") or {}
+    repealers = current.get("repealed_by") or [
+        {"title": link["target"]} for link in links if link["kind"] == "repealed_by"
+    ]
+    if repealers:
+        names = "; ".join(r["title"] for r in repealers)
+        if listed in (None, "unknown"):
+            said = [f"Repealed by {names}, as its text says."]
+            out["status.legal"] = {"value": "repealed", "page": None}
+        elif listed != "repealed":
+            said.append(f"But {names} says it repeals this: check which is right.")
+        if current.get("latest"):
+            said.append(
+                f"That law was repealed in turn; the law in force now is {current['latest']['title']}."
+            )
+    for parent in current.get("parents_repealed") or []:
+        names = "; ".join(r["title"] for r in parent["repealed_by"])
+        said.append(
+            f"Made under {parent['title']}, which {names} has since repealed: check it is still in force."
+        )
+    note = " ".join(filter(None, said))
+    if note:
+        out["status.note"] = {"value": note, "page": None, "evidence": note}
+        if "status.legal" in out:
+            out["status.legal"] = {**out["status.legal"], "evidence": note}
+    return out
+
+
 def base_values(document: dict, manifest: dict) -> dict:
-    """A starting point for a document from a jurisdiction we have no extractor for yet."""
+    """A first draft for a document from a jurisdiction we have no extractor for yet, with the details
+    its collection's reader filled in, if any (Rwanda's gazette reader); never its legal facts."""
     kind = document.get("type", "act")
     listed_in = [f for f, (_, kinds) in R.FAMILIES.items() if kind in kinds]
     family = FAMILY_OF_TYPE.get(kind) or (listed_in[0] if len(listed_in) == 1 else "official_document")
@@ -1156,47 +1231,19 @@ def base_values(document: dict, manifest: dict) -> dict:
     if document.get("year"):
         values["identity.year"] = str(document["year"])
     # Details read from the document itself by its collection's extractor (Rwanda's gazette reader).
+    # Its links to other laws and whether it is current are legal facts: suggestions(), not values.
     suggested = {k: v for k, v in (document.get("suggested") or {}).items() if v not in (None, "", [])}
     if (
         suggested.get("identity.family") in R.FAMILIES
         and suggested.get("identity.type") in R.FAMILIES[suggested["identity.family"]][1]
     ):
         values.update(suggested)
-    # Its links to the earlier documents of the collection it repeals, amends or is made under, and
-    # from the later ones that repeal or amend it; and whether it is current (found when the
-    # collection was prepared).
-    links = [dict(link) for link in document.get("relations") or []]
-    if links:
-        values["relations"] = links
-    current = document.get("currency") or {}
-    repealers = current.get("repealed_by") or [
-        {"title": link["target"]} for link in links if link["kind"] == "repealed_by"
-    ]
-    notes = []
-    if repealers:
-        names = "; ".join(r["title"] for r in repealers)
-        if values.get("status.legal") in (None, "", "unknown"):
-            values["status.legal"] = "repealed"
-            values["status.note"] = f"Repealed by {names}, as its text says."
-        elif values.get("status.legal") != "repealed":
-            notes.append(f"But {names} says it repeals this: check which is right.")
-        if current.get("latest"):
-            notes.append(
-                f"That law was repealed in turn; the law in force now is {current['latest']['title']}."
-            )
-    for parent in current.get("parents_repealed") or []:
-        names = "; ".join(r["title"] for r in parent["repealed_by"])
-        notes.append(
-            f"Made under {parent['title']}, which {names} has since repealed: check it is still in force."
-        )
-    if notes:
-        values["status.note"] = " ".join(filter(None, [values.get("status.note"), *notes]))
     if document.get("language") and isinstance(values.get("expressions"), list):
         values["expressions"] = [
             {**row, "this_text": "yes" if row.get("language") == document["language"] else "no"}
             for row in values["expressions"]
         ]
-    return {k: v for k, v in values.items() if v}
+    return first_draft({k: v for k, v in values.items() if v}, {})[0]
 
 
 def place_for(document: dict, manifest: dict, profiles: dict) -> tuple[R.Place, JurisdictionProfile | None]:
