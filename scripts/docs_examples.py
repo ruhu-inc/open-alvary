@@ -119,8 +119,9 @@ def change_examples(url: str) -> dict[str, dict]:
 
 
 COURTS_NOTE = (
-    "Shortened to its first courts and relations. The register is a proposal awaiting review, so every "
-    "`relation` is `unknown`; `recorded` is what the reviewer will check against the sources."
+    "Shortened to its first courts and relations. The register is a proposal: no entry has been reviewed "
+    "yet, so every `relation` is `unknown`; `recorded` is what a legally qualified reviewer will check "
+    "against the words in `rests_on`."
 )
 RELATIONS_NOTE = (
     "An example, with the repeal marked as checked by a reviewer: a link is listed once a reviewer has "

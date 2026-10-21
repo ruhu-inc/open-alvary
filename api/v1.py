@@ -521,7 +521,8 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
         return service.coverage()
 
     # Court registers (CPR-04) are reference data written in the repository, not corpus records: no plan
-    # narrows them. A register that fails to load (changed after its review) is unavailable, never stale.
+    # narrows them. A register that fails to load is unavailable, never stale; an entry changed after its
+    # review loads, and is served as unreviewed.
     @app.get("/courts")
     def court_registers() -> CourtRegisters:
         try:

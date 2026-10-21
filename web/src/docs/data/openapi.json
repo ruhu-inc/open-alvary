@@ -3200,7 +3200,7 @@
             }
           }
         },
-        "description": "The jurisdictions with a court register, each with whether it has been reviewed and how many courts and relations it records. A jurisdiction not listed has no register: every court relation there is `unknown`.",
+        "description": "The jurisdictions with a court register, each with how many courts, relations and entries it records and how many entries have been reviewed. A jurisdiction not listed has no register: every court relation there is `unknown`.",
         "tags": [
           "Courts"
         ]
@@ -3284,7 +3284,7 @@
             }
           }
         },
-        "description": "A jurisdiction's courts and tribunals with their levels, appeal routes and the dates their roles apply; how each court's decisions bear on the others (`binding`, `persuasive` or `not_applicable`); and whether precedent binds there at all. A regional or continental body's register also gives the states its courts reach, the routes from their courts to its own and declarations admitting cases from individuals; its bearing on a member state's courts is limited to the subject matter its sources give. Every entry has its sources. Until a reviewer has checked the register against them, every `relation` is `unknown`, and `recorded` shows what awaits review. A jurisdiction with no register answers an empty one.",
+        "description": "A jurisdiction's courts and tribunals with their levels, appeal routes and the dates their roles apply; how each court's decisions bear on the others (`binding`, `prevails_on_matter`, `binding_in_referred_case`, `persuasive` or `not_applicable`), each in the words of its source; and whether precedent binds there at all. A regional or continental body's register also gives the states its courts reach, the routes from their courts to its own and declarations admitting cases from individuals; its bearing on a member state's courts is limited to the subject matter its sources give. Every entry has its sources and its own review: `structural` for courts, matters, members, routes and declarations, `doctrinal` (by a legally qualified reviewer) for relations and the precedent rule. Until a relation has its own doctrinal review its `relation` is `unknown`, and `recorded` shows what awaits review. A jurisdiction with no register answers an empty one.",
         "tags": [
           "Courts"
         ]
@@ -4471,6 +4471,11 @@
       },
       "CourtDeclarationView": {
         "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The declaration's ID in the register."
+          },
           "review_state": {
             "type": "string",
             "enum": [
@@ -4478,7 +4483,65 @@
               "reviewed"
             ],
             "title": "Review State",
-            "description": "`reviewed` once a reviewer has checked the register against its sources."
+            "description": "`reviewed` once a reviewer has checked this entry against its sources, and it is unchanged since; else `unreviewed`."
+          },
+          "review_level": {
+            "type": "string",
+            "enum": [
+              "structural",
+              "doctrinal"
+            ],
+            "title": "Review Level",
+            "description": "The review the entry needs: `structural` (which courts there are, from when, where an appeal or reference lies) or `doctrinal` (how decisions bind, prevail or persuade, reviewed by someone legally qualified for the jurisdiction)."
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By",
+            "description": "Who reviewed it."
+          },
+          "reviewer_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Role",
+            "description": "Their role, such as `owner` or `Kenyan advocate`."
+          },
+          "reviewer_qualification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Qualification",
+            "description": "Their legal qualification for the jurisdiction, which a doctrinal review states."
+          },
+          "reviewed_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed On",
+            "description": "The day they reviewed it."
           },
           "evidence": {
             "items": {
@@ -4553,7 +4616,9 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
+          "id",
           "review_state",
+          "review_level",
           "evidence",
           "state",
           "court"
@@ -4596,6 +4661,11 @@
       },
       "CourtLevelView": {
         "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The court's ID, as evidence units give it in `authority.court.id`."
+          },
           "review_state": {
             "type": "string",
             "enum": [
@@ -4603,7 +4673,65 @@
               "reviewed"
             ],
             "title": "Review State",
-            "description": "`reviewed` once a reviewer has checked the register against its sources."
+            "description": "`reviewed` once a reviewer has checked this entry against its sources, and it is unchanged since; else `unreviewed`."
+          },
+          "review_level": {
+            "type": "string",
+            "enum": [
+              "structural",
+              "doctrinal"
+            ],
+            "title": "Review Level",
+            "description": "The review the entry needs: `structural` (which courts there are, from when, where an appeal or reference lies) or `doctrinal` (how decisions bind, prevail or persuade, reviewed by someone legally qualified for the jurisdiction)."
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By",
+            "description": "Who reviewed it."
+          },
+          "reviewer_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Role",
+            "description": "Their role, such as `owner` or `Kenyan advocate`."
+          },
+          "reviewer_qualification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Qualification",
+            "description": "Their legal qualification for the jurisdiction, which a doctrinal review states."
+          },
+          "reviewed_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed On",
+            "description": "The day they reviewed it."
           },
           "evidence": {
             "items": {
@@ -4624,11 +4752,6 @@
             ],
             "title": "Note",
             "description": "What the sources say, in brief."
-          },
-          "id": {
-            "type": "string",
-            "title": "Id",
-            "description": "The court's ID, as evidence units give it in `authority.court.id`."
           },
           "name": {
             "type": "string",
@@ -4713,9 +4836,10 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "review_state",
-          "evidence",
           "id",
+          "review_state",
+          "review_level",
+          "evidence",
           "name",
           "kind",
           "level"
@@ -4724,6 +4848,11 @@
       },
       "CourtMatterView": {
         "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The matter's ID, as relations and routes name it."
+          },
           "review_state": {
             "type": "string",
             "enum": [
@@ -4731,7 +4860,65 @@
               "reviewed"
             ],
             "title": "Review State",
-            "description": "`reviewed` once a reviewer has checked the register against its sources."
+            "description": "`reviewed` once a reviewer has checked this entry against its sources, and it is unchanged since; else `unreviewed`."
+          },
+          "review_level": {
+            "type": "string",
+            "enum": [
+              "structural",
+              "doctrinal"
+            ],
+            "title": "Review Level",
+            "description": "The review the entry needs: `structural` (which courts there are, from when, where an appeal or reference lies) or `doctrinal` (how decisions bind, prevail or persuade, reviewed by someone legally qualified for the jurisdiction)."
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By",
+            "description": "Who reviewed it."
+          },
+          "reviewer_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Role",
+            "description": "Their role, such as `owner` or `Kenyan advocate`."
+          },
+          "reviewer_qualification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Qualification",
+            "description": "Their legal qualification for the jurisdiction, which a doctrinal review states."
+          },
+          "reviewed_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed On",
+            "description": "The day they reviewed it."
           },
           "evidence": {
             "items": {
@@ -4753,11 +4940,6 @@
             "title": "Note",
             "description": "What the sources say, in brief."
           },
-          "id": {
-            "type": "string",
-            "title": "Id",
-            "description": "The matter's ID, as relations and routes name it."
-          },
           "name": {
             "type": "string",
             "title": "Name",
@@ -4767,15 +4949,21 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "review_state",
-          "evidence",
           "id",
+          "review_state",
+          "review_level",
+          "evidence",
           "name"
         ],
         "title": "CourtMatterView"
       },
       "CourtMemberView": {
         "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The membership's ID in the register."
+          },
           "review_state": {
             "type": "string",
             "enum": [
@@ -4783,7 +4971,65 @@
               "reviewed"
             ],
             "title": "Review State",
-            "description": "`reviewed` once a reviewer has checked the register against its sources."
+            "description": "`reviewed` once a reviewer has checked this entry against its sources, and it is unchanged since; else `unreviewed`."
+          },
+          "review_level": {
+            "type": "string",
+            "enum": [
+              "structural",
+              "doctrinal"
+            ],
+            "title": "Review Level",
+            "description": "The review the entry needs: `structural` (which courts there are, from when, where an appeal or reference lies) or `doctrinal` (how decisions bind, prevail or persuade, reviewed by someone legally qualified for the jurisdiction)."
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By",
+            "description": "Who reviewed it."
+          },
+          "reviewer_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Role",
+            "description": "Their role, such as `owner` or `Kenyan advocate`."
+          },
+          "reviewer_qualification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Qualification",
+            "description": "Their legal qualification for the jurisdiction, which a doctrinal review states."
+          },
+          "reviewed_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed On",
+            "description": "The day they reviewed it."
           },
           "evidence": {
             "items": {
@@ -4865,7 +5111,9 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
+          "id",
           "review_state",
+          "review_level",
           "evidence",
           "state"
         ],
@@ -4873,6 +5121,12 @@
       },
       "CourtPrecedentView": {
         "properties": {
+          "id": {
+            "type": "string",
+            "const": "precedent",
+            "title": "Id",
+            "description": "`precedent`, the entry's ID for review."
+          },
           "review_state": {
             "type": "string",
             "enum": [
@@ -4880,7 +5134,65 @@
               "reviewed"
             ],
             "title": "Review State",
-            "description": "`reviewed` once a reviewer has checked the register against its sources."
+            "description": "`reviewed` once a reviewer has checked this entry against its sources, and it is unchanged since; else `unreviewed`."
+          },
+          "review_level": {
+            "type": "string",
+            "enum": [
+              "structural",
+              "doctrinal"
+            ],
+            "title": "Review Level",
+            "description": "The review the entry needs: `structural` (which courts there are, from when, where an appeal or reference lies) or `doctrinal` (how decisions bind, prevail or persuade, reviewed by someone legally qualified for the jurisdiction)."
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By",
+            "description": "Who reviewed it."
+          },
+          "reviewer_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Role",
+            "description": "Their role, such as `owner` or `Kenyan advocate`."
+          },
+          "reviewer_qualification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Qualification",
+            "description": "Their legal qualification for the jurisdiction, which a doctrinal review states."
+          },
+          "reviewed_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed On",
+            "description": "The day they reviewed it."
           },
           "evidence": {
             "items": {
@@ -4911,11 +5223,47 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
+          "id",
           "review_state",
+          "review_level",
           "evidence",
           "binds"
         ],
         "title": "CourtPrecedentView"
+      },
+      "CourtQuote": {
+        "properties": {
+          "quote": {
+            "type": "string",
+            "title": "Quote",
+            "description": "The source's words, verbatim."
+          },
+          "provision": {
+            "type": "string",
+            "title": "Provision",
+            "description": "Where they are, such as `art. 33(2)` or `para 39`."
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "The source, such as `Constitution of Kenya, 2010`."
+          },
+          "url": {
+            "type": "string",
+            "title": "Url",
+            "description": "Its official text."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "quote",
+          "provision",
+          "title",
+          "url"
+        ],
+        "title": "CourtQuote",
+        "description": "The words a court relation rests on, verbatim from its source, with the provision they are in."
       },
       "CourtRegisterSummary": {
         "properties": {
@@ -4928,23 +5276,11 @@
             "type": "string",
             "enum": [
               "unreviewed",
+              "partly_reviewed",
               "reviewed"
             ],
             "title": "Review State",
-            "description": "`reviewed`, or `unreviewed`: every relation is then `unknown`."
-          },
-          "reviewed_on": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reviewed On",
-            "description": "The day a reviewer checked it against its sources."
+            "description": "`reviewed` when every entry has its review, `partly_reviewed` when some have, `unreviewed` when none has."
           },
           "courts": {
             "type": "integer",
@@ -4957,6 +5293,18 @@
             "minimum": 0.0,
             "title": "Relations",
             "description": "How many relations between courts it records."
+          },
+          "entries": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Entries",
+            "description": "How many entries it holds, each reviewed on its own."
+          },
+          "reviewed_entries": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Reviewed Entries",
+            "description": "How many of them have a review that covers them as they are."
           }
         },
         "additionalProperties": false,
@@ -4965,7 +5313,9 @@
           "jurisdiction",
           "review_state",
           "courts",
-          "relations"
+          "relations",
+          "entries",
+          "reviewed_entries"
         ],
         "title": "CourtRegisterSummary"
       },
@@ -4980,35 +5330,11 @@
             "type": "string",
             "enum": [
               "unreviewed",
+              "partly_reviewed",
               "reviewed"
             ],
             "title": "Review State",
-            "description": "`reviewed`, or `unreviewed`: a proposal awaiting review, whose relations are all `unknown`."
-          },
-          "reviewed_by": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reviewed By",
-            "description": "Who checked every entry against its sources."
-          },
-          "reviewed_on": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reviewed On",
-            "description": "The day they did."
+            "description": "`reviewed` when every entry has its review, `partly_reviewed` when some have, `unreviewed` when none has: a proposal awaiting review."
           },
           "precedent": {
             "anyOf": [
@@ -5019,7 +5345,7 @@
                 "type": "null"
               }
             ],
-            "description": "Whether decisions bind later courts there at all, as its law says; null when not recorded, and then every relation is `unknown`."
+            "description": "Whether decisions bind later courts there at all, as its law says; null when not recorded, and then every `binding`, `persuasive` or `not_applicable` relation is `unknown`."
           },
           "courts": {
             "items": {
@@ -5084,7 +5410,7 @@
           "precedent"
         ],
         "title": "CourtRegisterView",
-        "description": "A jurisdiction's court register (CPR-04, JUR-03, JUR-04): its courts with their levels and appeal\nroutes, how each court's decisions bear on the others, whether precedent binds there at all, and for\na regional or continental body the states its courts reach. Every entry with its sources. Until the\nregister is reviewed every ``relation`` answers ``unknown``; ``recorded`` is what awaits review."
+        "description": "A jurisdiction's court register (CPR-04, JUR-03, JUR-04): its courts with their levels and appeal\nroutes, how each court's decisions bear on the others, whether precedent binds there at all, and for\na regional or continental body the states its courts reach. Every entry with its own review and its\nsources. A relation answers ``unknown`` until it has its own doctrinal review; ``recorded`` is what\nawaits review, and ``rests_on`` the words it rests on."
       },
       "CourtRegisters": {
         "properties": {
@@ -5106,6 +5432,11 @@
       },
       "CourtRelationView": {
         "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The relation's ID in the register."
+          },
           "review_state": {
             "type": "string",
             "enum": [
@@ -5113,7 +5444,65 @@
               "reviewed"
             ],
             "title": "Review State",
-            "description": "`reviewed` once a reviewer has checked the register against its sources."
+            "description": "`reviewed` once a reviewer has checked this entry against its sources, and it is unchanged since; else `unreviewed`."
+          },
+          "review_level": {
+            "type": "string",
+            "enum": [
+              "structural",
+              "doctrinal"
+            ],
+            "title": "Review Level",
+            "description": "The review the entry needs: `structural` (which courts there are, from when, where an appeal or reference lies) or `doctrinal` (how decisions bind, prevail or persuade, reviewed by someone legally qualified for the jurisdiction)."
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By",
+            "description": "Who reviewed it."
+          },
+          "reviewer_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Role",
+            "description": "Their role, such as `owner` or `Kenyan advocate`."
+          },
+          "reviewer_qualification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Qualification",
+            "description": "Their legal qualification for the jurisdiction, which a doctrinal review states."
+          },
+          "reviewed_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed On",
+            "description": "The day they reviewed it."
           },
           "evidence": {
             "items": {
@@ -5173,22 +5562,34 @@
             "type": "string",
             "enum": [
               "binding",
+              "prevails_on_matter",
+              "binding_in_referred_case",
               "persuasive",
               "not_applicable",
               "unknown"
             ],
             "title": "Relation",
-            "description": "What Open Alvary answers: the recorded relation once the register is reviewed (and records whether precedent binds), `unknown` until then."
+            "description": "What Open Alvary answers: the recorded relation once it has its own doctrinal review (and, for `binding`, `persuasive` and `not_applicable`, once the precedent rule has its own), `unknown` until then."
           },
           "recorded": {
             "type": "string",
             "enum": [
               "binding",
+              "prevails_on_matter",
+              "binding_in_referred_case",
               "persuasive",
               "not_applicable"
             ],
             "title": "Recorded",
-            "description": "The relation the register records: `binding`, `persuasive` or `not_applicable`."
+            "description": "The relation the register records, in its source's terms: `binding` (precedent binds), `prevails_on_matter` (precedence on `matter` over national courts' decisions: not stare decisis), `binding_in_referred_case` (the ruling binds the court that referred the question, in that case only), `persuasive` or `not_applicable`."
+          },
+          "rests_on": {
+            "items": {
+              "$ref": "#/components/schemas/CourtQuote"
+            },
+            "type": "array",
+            "title": "Rests On",
+            "description": "The words of its sources it rests on, verbatim."
           },
           "valid_from": {
             "anyOf": [
@@ -5220,18 +5621,26 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
+          "id",
           "review_state",
+          "review_level",
           "evidence",
           "court",
           "bound",
           "members",
           "relation",
-          "recorded"
+          "recorded",
+          "rests_on"
         ],
         "title": "CourtRelationView"
       },
       "CourtRouteView": {
         "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The route's ID in the register."
+          },
           "review_state": {
             "type": "string",
             "enum": [
@@ -5239,7 +5648,65 @@
               "reviewed"
             ],
             "title": "Review State",
-            "description": "`reviewed` once a reviewer has checked the register against its sources."
+            "description": "`reviewed` once a reviewer has checked this entry against its sources, and it is unchanged since; else `unreviewed`."
+          },
+          "review_level": {
+            "type": "string",
+            "enum": [
+              "structural",
+              "doctrinal"
+            ],
+            "title": "Review Level",
+            "description": "The review the entry needs: `structural` (which courts there are, from when, where an appeal or reference lies) or `doctrinal` (how decisions bind, prevail or persuade, reviewed by someone legally qualified for the jurisdiction)."
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By",
+            "description": "Who reviewed it."
+          },
+          "reviewer_role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Role",
+            "description": "Their role, such as `owner` or `Kenyan advocate`."
+          },
+          "reviewer_qualification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Qualification",
+            "description": "Their legal qualification for the jurisdiction, which a doctrinal review states."
+          },
+          "reviewed_on": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed On",
+            "description": "The day they reviewed it."
           },
           "evidence": {
             "items": {
@@ -5318,7 +5785,9 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
+          "id",
           "review_state",
+          "review_level",
           "evidence",
           "court",
           "kind"
@@ -5538,13 +6007,15 @@
             "type": "string",
             "enum": [
               "binding",
+              "prevails_on_matter",
+              "binding_in_referred_case",
               "persuasive",
               "not_applicable",
               "unknown"
             ],
             "title": "Court Relation",
             "default": "not_applicable",
-            "description": "For a decision, how its court's decisions bear on the courts of the jurisdiction asked about generally, from a reviewed court register: `binding`, `persuasive`, `not_applicable` or `unknown` (no reviewed register says, or only on a subject matter: see `court.bears_on`); `not_applicable` for anything but a decision."
+            "description": "For a decision, the ranking signal: how its court's decisions bear on the courts of the jurisdiction asked about generally, from a reviewed relation of its court register. `binding` (precedent binds) ranks first within a band; `prevails_on_matter` (precedence on a subject matter, not stare decisis) is given only on a question of that matter, and then ranks with `binding`: a request states no matter, so it is never given here; `persuasive` ranks next; `binding_in_referred_case` (the ruling binds only the court that referred the question, in that case), `not_applicable` and `unknown` (no reviewed relation says, or only on a subject matter: see `court.bears_on`) rank alike. `not_applicable` for anything but a decision."
           },
           "court": {
             "anyOf": [
@@ -5564,10 +6035,15 @@
           "document_type"
         ],
         "title": "EvidenceAuthority",
-        "description": "The inputs to the authority signals (RSV-05): the instrument's place in its jurisdiction's\nhierarchy (0 is highest), and for decisions the court's relation to the queried jurisdiction's\ncourts generally, with the court and its bearing on other courts as its register records them."
+        "description": "The inputs to the authority signals (RSV-05): the instrument's place in its jurisdiction's\nhierarchy (0 is highest), and for decisions the court's relation to the queried jurisdiction's\ncourts generally (on the question's matter, where it is known), with the court and its bearing on\nother courts as its register records them."
       },
       "EvidenceBearing": {
         "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The relation's ID in the register."
+          },
           "court": {
             "anyOf": [
               {
@@ -5608,11 +6084,13 @@
             "type": "string",
             "enum": [
               "binding",
+              "prevails_on_matter",
+              "binding_in_referred_case",
               "persuasive",
               "not_applicable"
             ],
             "title": "Relation",
-            "description": "`binding`, `persuasive` or `not_applicable`."
+            "description": "`binding` (precedent binds), `prevails_on_matter` (the court's decisions on `matter` take precedence over national courts' decisions: not stare decisis), `binding_in_referred_case` (the ruling binds the court that referred the question, in that case only), `persuasive` or `not_applicable`."
           },
           "valid_from": {
             "anyOf": [
@@ -5647,17 +6125,27 @@
             "type": "array",
             "title": "Evidence",
             "description": "The official sources the relation rests on."
+          },
+          "rests_on": {
+            "items": {
+              "$ref": "#/components/schemas/CourtQuote"
+            },
+            "type": "array",
+            "title": "Rests On",
+            "default": [],
+            "description": "The words of those sources it rests on, verbatim."
           }
         },
         "additionalProperties": false,
         "type": "object",
         "required": [
+          "id",
           "court",
           "relation",
           "evidence"
         ],
         "title": "EvidenceBearing",
-        "description": "How the decision's court bears on another court, as a reviewed court register records it: on\n``court``, on the jurisdiction's courts generally (null), or with ``members`` on the courts of each\nmember state of a regional body; only on ``matter`` where one is given."
+        "description": "How the decision's court bears on another court, as a reviewed relation of its court register records\nit: on ``court``, on the jurisdiction's courts generally (null), or with ``members`` on the courts of\neach member state of a regional body; only on ``matter`` where one is given."
       },
       "EvidenceBytes": {
         "properties": {
@@ -5771,7 +6259,7 @@
           "jurisdiction": {
             "type": "string",
             "title": "Jurisdiction",
-            "description": "The jurisdiction whose court register answers: the one asked about or, for a regional or continental court when one of its member states is asked about, that body's (`aa-ohada`, `aa-eac`, …)."
+            "description": "The jurisdiction whose court register answers: the one asked about or, for a regional or continental court when one of its member states is asked about (by a reviewed membership), that body's (`aa-ohada`, `aa-eac`, …)."
           },
           "review_state": {
             "type": "string",
@@ -5780,7 +6268,7 @@
               "reviewed"
             ],
             "title": "Review State",
-            "description": "`reviewed`, or `unreviewed`: then `bears_on` is empty and nothing is answered."
+            "description": "`reviewed` once a reviewer has checked the court's entry against its sources, else `unreviewed`."
           },
           "reviewed_on": {
             "anyOf": [
@@ -5793,7 +6281,7 @@
               }
             ],
             "title": "Reviewed On",
-            "description": "The day a reviewer checked the register against its sources."
+            "description": "The day they did."
           },
           "bears_on": {
             "items": {
@@ -5802,7 +6290,7 @@
             "type": "array",
             "title": "Bears On",
             "default": [],
-            "description": "Each relation of the court's decisions to other courts on the date assessed (`as_of`, or today), as the reviewed register records it."
+            "description": "Each relation of the court's decisions to other courts on the date assessed (`as_of`, or today) that has its own doctrinal review; none until then."
           }
         },
         "additionalProperties": false,
@@ -5814,7 +6302,7 @@
           "review_state"
         ],
         "title": "EvidenceCourt",
-        "description": "For a decision: its court in the court register that answers for the jurisdiction asked about\n(CPR-04), and how its decisions bear on other courts on the date assessed. ``bears_on`` is empty\nuntil the register is reviewed: nothing is guessed."
+        "description": "For a decision: its court in the court register that answers for the jurisdiction asked about\n(CPR-04), with the court's own review, and how its decisions bear on other courts on the date assessed.\n``bears_on`` lists only reviewed relations: nothing is guessed."
       },
       "EvidenceCoverage": {
         "properties": {

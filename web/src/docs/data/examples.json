@@ -341,49 +341,65 @@
           "jurisdiction": "aa-au",
           "review_state": "unreviewed",
           "courts": 2,
-          "relations": 0
+          "relations": 0,
+          "entries": 48,
+          "reviewed_entries": 0
         },
         {
           "jurisdiction": "aa-eac",
           "review_state": "unreviewed",
           "courts": 2,
-          "relations": 2
+          "relations": 2,
+          "entries": 16,
+          "reviewed_entries": 0
         },
         {
           "jurisdiction": "aa-ecowas",
           "review_state": "unreviewed",
           "courts": 1,
-          "relations": 0
+          "relations": 0,
+          "entries": 20,
+          "reviewed_entries": 0
         },
         {
           "jurisdiction": "aa-ohada",
           "review_state": "unreviewed",
           "courts": 1,
-          "relations": 0
+          "relations": 0,
+          "entries": 22,
+          "reviewed_entries": 0
         },
         {
           "jurisdiction": "gh",
           "review_state": "unreviewed",
           "courts": 10,
-          "relations": 16
+          "relations": 16,
+          "entries": 27,
+          "reviewed_entries": 0
         },
         {
           "jurisdiction": "ke",
           "review_state": "unreviewed",
           "courts": 12,
-          "relations": 9
+          "relations": 9,
+          "entries": 22,
+          "reviewed_entries": 0
         },
         {
           "jurisdiction": "ng",
           "review_state": "unreviewed",
           "courts": 11,
-          "relations": 2
+          "relations": 2,
+          "entries": 14,
+          "reviewed_entries": 0
         },
         {
           "jurisdiction": "za",
           "review_state": "unreviewed",
           "courts": 11,
-          "relations": 5
+          "relations": 5,
+          "entries": 17,
+          "reviewed_entries": 0
         }
       ]
     }
@@ -397,7 +413,9 @@
       "jurisdiction": "ke",
       "review_state": "unreviewed",
       "precedent": {
+        "id": "precedent",
         "review_state": "unreviewed",
+        "review_level": "doctrinal",
         "evidence": [
           {
             "title": "Constitution of Kenya, 2010",
@@ -415,7 +433,9 @@
       },
       "courts": [
         {
+          "id": "ke-sc",
           "review_state": "unreviewed",
+          "review_level": "structural",
           "evidence": [
             {
               "title": "Constitution of Kenya, 2010 (Kenya Law page: commenced 27 August 2010 by promulgation; Kenya Gazette Vol. CXII No. 88, 3 September 2010)",
@@ -459,7 +479,6 @@
             }
           ],
           "note": "Art. 163(1) establishes the court. Art. 162(1) makes it a superior court. Art. 163(3) gives it exclusive original jurisdiction over presidential election disputes and appellate jurisdiction over the Court of Appeal and other courts or tribunals that statute prescribes. SCA s. 3 calls it the court of final judicial authority. valid_from is the date of promulgation, as the brief instructs, but Sixth Schedule s. 21 allowed up to a year to set the court up and gave its jurisdiction to the Court of Appeal until then. The court has said it is not bound by its own decisions but departs from them only in exceptional cases (Senate v CoG, paras 77 and 81).",
-          "id": "ke-sc",
           "name": "Supreme Court of Kenya",
           "kind": "court",
           "level": "apex",
@@ -468,7 +487,9 @@
           "appeals_to": []
         },
         {
+          "id": "ke-coa",
           "review_state": "unreviewed",
+          "review_level": "structural",
           "evidence": [
             {
               "title": "Constitution of Kenya, 2010",
@@ -502,7 +523,6 @@
             }
           ],
           "note": "Art. 164(1) establishes the court. Art. 164(3) gives it jurisdiction over appeals from the High Court and from other courts or tribunals that an Act prescribes; CoA (O&A) Act s. 5 refers back to art. 164(3). Appeals to the Supreme Court lie as of right where the Constitution is interpreted or applied, and otherwise on certification of a matter of general public importance (art. 163(4); SCA ss. 15-15B). The court also calls itself the High Court's elder sibling in a hierarchical system (KHP, para 37). It existed before 2010 (see its reported decisions of 1999 and 2009 below), so valid_from is left out.",
-          "id": "ke-coa",
           "name": "Court of Appeal",
           "kind": "court",
           "level": "appellate",
@@ -514,7 +534,9 @@
       ],
       "relations": [
         {
+          "id": "ke-sc-on-courts",
           "review_state": "unreviewed",
+          "review_level": "doctrinal",
           "evidence": [
             {
               "title": "Constitution of Kenya, 2010",
@@ -532,10 +554,26 @@
           "bound": null,
           "members": false,
           "relation": "unknown",
-          "recorded": "binding"
+          "recorded": "binding",
+          "rests_on": [
+            {
+              "quote": "All courts, other than the Supreme Court, are bound by the decisions of the Supreme Court.",
+              "provision": "art. 163(7)",
+              "title": "Constitution of Kenya, 2010",
+              "url": "https://new.kenyalaw.org/akn/ke/act/2010/constitution/eng@2010-09-03"
+            },
+            {
+              "quote": "The nature of that provision is absolute.",
+              "provision": "para 26",
+              "title": "Asanyo & 3 others v Attorney-General (Petition 7 of 2019) [2020] KESC 62 (KLR) (10 January 2020)",
+              "url": "https://new.kenyalaw.org/akn/ke/judgment/kesc/2020/62/eng@2020-01-10"
+            }
+          ]
         },
         {
+          "id": "ke-coa-on-ke-hc",
           "review_state": "unreviewed",
+          "review_level": "doctrinal",
           "evidence": [
             {
               "title": "Kenya Hotel Properties Limited v Attorney General & 5 others (Civil Appeal 404 of 2018) [2020] KECA 427 (KLR) (7 August 2020)",
@@ -563,7 +601,39 @@
           "bound": "ke-hc",
           "members": false,
           "relation": "unknown",
-          "recorded": "binding"
+          "recorded": "binding",
+          "rests_on": [
+            {
+              "quote": "Moreover, under Article 164(3) of the Constitution, this Court has jurisdiction to hear and determine appeals from the High Court. Its decisions are binding on the High Court and all courts equal and inferior to it.",
+              "provision": "paras 38-39 (the number of para 39, mid-sentence, omitted)",
+              "title": "Kenya Hotel Properties Limited v Attorney General & 5 others (Civil Appeal 404 of 2018) [2020] KECA 427 (KLR) (7 August 2020)",
+              "url": "https://new.kenyalaw.org/akn/ke/judgment/keca/2020/427/eng@2020-08-07"
+            },
+            {
+              "quote": "Its decisions are binding on the High Court and all courts equal and inferior to it.",
+              "provision": "para 49",
+              "title": "Kenya Hotel Properties Ltd v Attorney General & 5 others (Petition 16 of 2020) [2022] KESC 62 (KLR) (7 October 2022)",
+              "url": "https://new.kenyalaw.org/akn/ke/judgment/kesc/2022/62/eng@2022-10-07"
+            },
+            {
+              "quote": "The latter decisions appear to us to be departing from the doctrine of precedent, as the High Court in this country is bound by decisions of the Court of Appeal.",
+              "provision": "para 25",
+              "title": "National Bank of Kenya Ltd v Ayah (Civil Appeal 119 of 2002) [2009] KECA 467 (KLR) (4 December 2009)",
+              "url": "https://new.kenyalaw.org/akn/ke/judgment/keca/2009/467/eng@2009-12-04"
+            },
+            {
+              "quote": "The High Court has no discretion in the matter.",
+              "provision": "para 26",
+              "title": "National Bank of Kenya Ltd v Ayah (Civil Appeal 119 of 2002) [2009] KECA 467 (KLR) (4 December 2009)",
+              "url": "https://new.kenyalaw.org/akn/ke/judgment/keca/2009/467/eng@2009-12-04"
+            },
+            {
+              "quote": "That the High Court, while it has the right and indeed the duty to critically examine the decisions of this Court must in the end follow those decisions unless they can be distinguished from the case under review on some other principle such as that obiter dictum if applicable.",
+              "provision": "para 13",
+              "title": "Kibaki v Moi & 2 others (Civil Appeal 172 & 173 of 1999 (Consolidated)) [1999] KECA 158 (KLR) (10 December 1999)",
+              "url": "https://new.kenyalaw.org/akn/ke/judgment/keca/1999/158/eng@1999-12-10"
+            }
+          ]
         }
       ],
       "matters": [],
@@ -571,7 +641,7 @@
       "member_routes": [],
       "declarations": []
     },
-    "note": "Shortened to its first courts and relations. The register is a proposal awaiting review, so every `relation` is `unknown`; `recorded` is what the reviewer will check against the sources."
+    "note": "Shortened to its first courts and relations. The register is a proposal: no entry has been reviewed yet, so every `relation` is `unknown`; `recorded` is what a legally qualified reviewer will check against the words in `rests_on`."
   },
   "list_releases": {
     "path": {},

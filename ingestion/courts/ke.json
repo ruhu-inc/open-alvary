@@ -1,9 +1,5 @@
 {
   "jurisdiction": "ke",
-  "review_state": "unreviewed",
-  "reviewed_by": null,
-  "reviewed_on": null,
-  "reviewed_sha256": null,
   "precedent": {
     "binds": true,
     "note": "Art. 163(7) binds every court other than the Supreme Court to Supreme Court decisions. The Supreme Court treats the article as the constitutional form of the common-law doctrine of stare decisis. It says the provision is absolute and that judges must stay faithful to precedent (Asanyo, paras 26-28 and 34).",
@@ -228,9 +224,22 @@
   ],
   "relations": [
     {
+      "id": "ke-sc-on-courts",
       "court": "ke-sc",
       "bound": null,
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "constitution-163-7",
+          "provision": "art. 163(7)",
+          "quote": "All courts, other than the Supreme Court, are bound by the decisions of the Supreme Court."
+        },
+        {
+          "source": "asanyo-2020",
+          "provision": "para 26",
+          "quote": "The nature of that provision is absolute."
+        }
+      ],
       "sources": [
         "constitution-163-7",
         "asanyo-2020"
@@ -238,9 +247,37 @@
       "note": "Art. 163(7): all courts other than the Supreme Court are bound by its decisions. The Supreme Court calls the provision absolute (Asanyo, para 26)."
     },
     {
+      "id": "ke-coa-on-ke-hc",
       "court": "ke-coa",
       "bound": "ke-hc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "khp-coa-2020",
+          "provision": "paras 38-39 (the number of para 39, mid-sentence, omitted)",
+          "quote": "Moreover, under Article 164(3) of the Constitution, this Court has jurisdiction to hear and determine appeals from the High Court. Its decisions are binding on the High Court and all courts equal and inferior to it."
+        },
+        {
+          "source": "khp-sc-2022",
+          "provision": "para 49",
+          "quote": "Its decisions are binding on the High Court and all courts equal and inferior to it."
+        },
+        {
+          "source": "ayah-2009",
+          "provision": "para 25",
+          "quote": "The latter decisions appear to us to be departing from the doctrine of precedent, as the High Court in this country is bound by decisions of the Court of Appeal."
+        },
+        {
+          "source": "ayah-2009",
+          "provision": "para 26",
+          "quote": "The High Court has no discretion in the matter."
+        },
+        {
+          "source": "kibaki-1999",
+          "provision": "para 13",
+          "quote": "That the High Court, while it has the right and indeed the duty to critically examine the decisions of this Court must in the end follow those decisions unless they can be distinguished from the case under review on some other principle such as that obiter dictum if applicable."
+        }
+      ],
       "sources": [
         "khp-coa-2020",
         "khp-sc-2022",
@@ -250,9 +287,32 @@
       "note": "The Court of Appeal says its decisions bind the High Court (KHP, paras 38-39, quoted by the Supreme Court in [2022] KESC 62, para 49). It says the High Court has no discretion to refuse to follow them (Ayah, paras 25-26), and that the High Court must follow them unless it can distinguish them (Kibaki v Moi, para 13)."
     },
     {
+      "id": "ke-coa-on-ke-elc",
       "court": "ke-coa",
       "bound": "ke-elc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "khp-coa-2020",
+          "provision": "paras 38-39 (the number of para 39, mid-sentence, omitted)",
+          "quote": "Moreover, under Article 164(3) of the Constitution, this Court has jurisdiction to hear and determine appeals from the High Court. Its decisions are binding on the High Court and all courts equal and inferior to it."
+        },
+        {
+          "source": "constitution-162-2",
+          "provision": "art. 162(2)",
+          "quote": "Parliament shall establish courts with the status of the High Court to hear and determine disputes relating to—"
+        },
+        {
+          "source": "constitution-162-2",
+          "provision": "art. 162(2)(b)",
+          "quote": "the environment and the use and occupation of, and title to, land."
+        },
+        {
+          "source": "elca-4",
+          "provision": "s. 4(2)",
+          "quote": "The Court shall be a superior court of record with the status of the High Court."
+        }
+      ],
       "sources": [
         "khp-coa-2020",
         "constitution-162-2",
@@ -261,9 +321,32 @@
       "note": "KHP, para 39: the Court of Appeal's decisions bind the High Court and \"all courts equal and inferior to it\". The ELC is a court with the status of the High Court (art. 162(2)(b); ELC Act s. 4(2)). The ELC is not named in the judgment."
     },
     {
+      "id": "ke-coa-on-ke-elrc",
       "court": "ke-coa",
       "bound": "ke-elrc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "khp-coa-2020",
+          "provision": "paras 38-39 (the number of para 39, mid-sentence, omitted)",
+          "quote": "Moreover, under Article 164(3) of the Constitution, this Court has jurisdiction to hear and determine appeals from the High Court. Its decisions are binding on the High Court and all courts equal and inferior to it."
+        },
+        {
+          "source": "constitution-162-2",
+          "provision": "art. 162(2)",
+          "quote": "Parliament shall establish courts with the status of the High Court to hear and determine disputes relating to—"
+        },
+        {
+          "source": "constitution-162-2",
+          "provision": "art. 162(2)(a)",
+          "quote": "employment and labour relations; and"
+        },
+        {
+          "source": "ica-2011-4",
+          "provision": "s. 4(2)",
+          "quote": "The Court shall be a superior court of record with the status of the High Court."
+        }
+      ],
       "sources": [
         "khp-coa-2020",
         "constitution-162-2",
@@ -272,9 +355,27 @@
       "note": "Same KHP passage (para 39): the Court of Appeal binds courts equal to the High Court. The ELRC has High Court status under art. 162(2)(a) and the original s. 4(2) of Act No. 20 of 2011. The ELRC is not named in the judgment."
     },
     {
+      "id": "ke-coa-on-ke-mc",
       "court": "ke-coa",
       "bound": "ke-mc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "khp-coa-2020",
+          "provision": "paras 38-39 (the number of para 39, mid-sentence, omitted)",
+          "quote": "Moreover, under Article 164(3) of the Constitution, this Court has jurisdiction to hear and determine appeals from the High Court. Its decisions are binding on the High Court and all courts equal and inferior to it."
+        },
+        {
+          "source": "mca-5",
+          "provision": "s. 5",
+          "quote": "A magistrate's court shall be subordinate to the High Court and shall be duly constituted when presided over by a chief magistrate, a senior principal magistrate, a principal magistrate, a senior resident magistrate or a resident magistrate."
+        },
+        {
+          "source": "kagondu-2019",
+          "provision": "para 17",
+          "quote": "In answering this question, I wish to start by pointing out that as a general principle of law and in accordance with the doctrine of stare decisis, the subordinate courts are bound by all decisions of the High Court and all other superior courts in the same way that the High Court is bound by decisions of the Court of Appeal and the Supreme Court."
+        }
+      ],
       "sources": [
         "khp-coa-2020",
         "mca-5",
@@ -283,9 +384,22 @@
       "note": "KHP, para 39: the Court of Appeal binds courts inferior to the High Court, and MCA s. 5 makes magistrates' courts subordinate to the High Court. Kagondu, para 17 (High Court) also says subordinate courts are bound by decisions of all superior courts."
     },
     {
+      "id": "ke-coa-on-ke-kc",
       "court": "ke-coa",
       "bound": "ke-kc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "khp-coa-2020",
+          "provision": "paras 38-39 (the number of para 39, mid-sentence, omitted)",
+          "quote": "Moreover, under Article 164(3) of the Constitution, this Court has jurisdiction to hear and determine appeals from the High Court. Its decisions are binding on the High Court and all courts equal and inferior to it."
+        },
+        {
+          "source": "kca-4",
+          "provision": "s. 4(3)",
+          "quote": "Each of the Kadhis' Courts shall be a court subordinate to the High Court and shall be duly constituted when held by the Chief Kadhi or a Kadhi."
+        }
+      ],
       "sources": [
         "khp-coa-2020",
         "kca-4"
@@ -293,9 +407,22 @@
       "note": "KHP, para 39: the Court of Appeal binds courts inferior to the High Court, and KCA s. 4(3) makes Kadhis' courts subordinate to the High Court. Kadhis' courts are not named in the judgment."
     },
     {
+      "id": "ke-hc-on-ke-mc",
       "court": "ke-hc",
       "bound": "ke-mc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "mulinge-2009",
+          "provision": "ruling, passage on precedent and stare decisis",
+          "quote": "Secondly, a court of law is bound by the doctrines of precedent and stare decisis. In the Kenyan context the Magistrates’ courts are bound to follow and apply the decisions of the High court."
+        },
+        {
+          "source": "kagondu-2019",
+          "provision": "para 17",
+          "quote": "In answering this question, I wish to start by pointing out that as a general principle of law and in accordance with the doctrine of stare decisis, the subordinate courts are bound by all decisions of the High Court and all other superior courts in the same way that the High Court is bound by decisions of the Court of Appeal and the Supreme Court."
+        }
+      ],
       "sources": [
         "mulinge-2009",
         "kagondu-2019"
@@ -303,18 +430,34 @@
       "note": "High Court decisions say that, under stare decisis, magistrates' courts must follow and apply High Court decisions (Mulinge, 2009 ruling). They also say subordinate courts are bound by High Court decisions (Kagondu, para 17)."
     },
     {
+      "id": "ke-hc-on-ke-kc",
       "court": "ke-hc",
       "bound": "ke-kc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "brek-2026",
+          "provision": "para 33",
+          "quote": "It matters not how strongly the Kadhi Court felt about the dispute that would have motivated it to correct a perceived wrong made by the High Court. The fact is that it was bound by the decision of the High Court, which is superior to it. This is the essence and letter and spirit of the principle of stare decisis."
+        }
+      ],
       "sources": [
         "brek-2026"
       ],
       "note": "The Court of Appeal held that a Kadhi's court was bound by a decision of the High Court, the superior court, and called this the essence of stare decisis (Brek, paras 33 and 41). The High Court decision concerned the same estate dispute."
     },
     {
+      "id": "ke-hc-on-ke-sc",
       "court": "ke-hc",
       "bound": "ke-sc",
       "relation": "persuasive",
+      "rests_on": [
+        {
+          "source": "rawal-2016",
+          "provision": "Ruling of Mutunga CJ & P, para 48",
+          "quote": "One, the decision is a High Court decision which is persuasive and does not bind this Court."
+        }
+      ],
       "sources": [
         "rawal-2016"
       ],

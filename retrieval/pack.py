@@ -476,7 +476,9 @@ class Retriever:
     def _courts(self, candidates: list[Candidate], filters) -> None:
         """Each decision's court relation to the jurisdiction asked about (CPR-04): its own jurisdiction's
         when the query names none or several, on ``as_of`` or today. The court is the record's issuing
-        authority; a regional or continental court's register answers for a member state's courts."""
+        authority; a regional or continental court's register answers for a member state's courts. A
+        request states no subject matter, so a relation limited to one (``prevails_on_matter`` always is)
+        is never the answer here: it shows in ``court.bears_on`` and never raises a decision's rank."""
         from api.courts import answering, evidence_court, relation
 
         on = filters.as_of or self.today

@@ -1,9 +1,5 @@
 {
   "jurisdiction": "gh",
-  "review_state": "unreviewed",
-  "reviewed_by": null,
-  "reviewed_on": null,
-  "reviewed_sha256": null,
   "precedent": {
     "binds": true,
     "note": "The Constitution states the rule: art. 129(3) binds all other courts to follow Supreme Court decisions on questions of law, and art. 136(5) binds the Court of Appeal to its own decisions and courts below it to its decisions on questions of law. Courts Act ss. 2(3) and 10(5) restate both. No provision was found on how High Court decisions bear on lower courts. The Supreme Court treats its own previous decisions as normally binding but may depart from one when it appears right to do so (art. 129(3)); neither binding nor persuasive states that, so no relation of the Court to itself is recorded.",
@@ -199,9 +195,22 @@
   ],
   "relations": [
     {
+      "id": "gh-sc-on-courts",
       "court": "gh-sc",
       "bound": null,
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-129-3",
+          "provision": "art. 129(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and all other courts shall be bound to follow the decisions of the Supreme Court on questions of law."
+        },
+        {
+          "source": "courts-act-2",
+          "provision": "s. 2(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and the Courts lower than the Supreme Court shall follow the decisions of the Supreme Court on questions of law."
+        }
+      ],
       "sources": [
         "const-129-3",
         "courts-act-2"
@@ -209,9 +218,22 @@
       "note": "Art. 129(3): all other courts are bound to follow its decisions on questions of law (restated in Courts Act s. 2(3))."
     },
     {
+      "id": "gh-sc-on-gh-ca",
       "court": "gh-sc",
       "bound": "gh-ca",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-129-3",
+          "provision": "art. 129(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and all other courts shall be bound to follow the decisions of the Supreme Court on questions of law."
+        },
+        {
+          "source": "courts-act-2",
+          "provision": "s. 2(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and the Courts lower than the Supreme Court shall follow the decisions of the Supreme Court on questions of law."
+        }
+      ],
       "sources": [
         "const-129-3",
         "courts-act-2"
@@ -219,9 +241,22 @@
       "note": "Art. 129(3): all other courts follow its decisions on questions of law."
     },
     {
+      "id": "gh-sc-on-gh-hc",
       "court": "gh-sc",
       "bound": "gh-hc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-129-3",
+          "provision": "art. 129(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and all other courts shall be bound to follow the decisions of the Supreme Court on questions of law."
+        },
+        {
+          "source": "courts-act-2",
+          "provision": "s. 2(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and the Courts lower than the Supreme Court shall follow the decisions of the Supreme Court on questions of law."
+        }
+      ],
       "sources": [
         "const-129-3",
         "courts-act-2"
@@ -229,9 +264,22 @@
       "note": "Art. 129(3): all other courts follow its decisions on questions of law."
     },
     {
+      "id": "gh-sc-on-gh-rt",
       "court": "gh-sc",
       "bound": "gh-rt",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-129-3",
+          "provision": "art. 129(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and all other courts shall be bound to follow the decisions of the Supreme Court on questions of law."
+        },
+        {
+          "source": "courts-act-2",
+          "provision": "s. 2(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and the Courts lower than the Supreme Court shall follow the decisions of the Supreme Court on questions of law."
+        }
+      ],
       "sources": [
         "const-129-3",
         "courts-act-2"
@@ -239,9 +287,22 @@
       "note": "Art. 129(3): all other courts follow its decisions on questions of law."
     },
     {
+      "id": "gh-sc-on-gh-cc",
       "court": "gh-sc",
       "bound": "gh-cc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-129-3",
+          "provision": "art. 129(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and all other courts shall be bound to follow the decisions of the Supreme Court on questions of law."
+        },
+        {
+          "source": "courts-act-2",
+          "provision": "s. 2(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and the Courts lower than the Supreme Court shall follow the decisions of the Supreme Court on questions of law."
+        }
+      ],
       "sources": [
         "const-129-3",
         "courts-act-2"
@@ -249,9 +310,22 @@
       "note": "Art. 129(3): all other courts follow its decisions on questions of law."
     },
     {
+      "id": "gh-sc-on-gh-dc",
       "court": "gh-sc",
       "bound": "gh-dc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-129-3",
+          "provision": "art. 129(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and all other courts shall be bound to follow the decisions of the Supreme Court on questions of law."
+        },
+        {
+          "source": "courts-act-2",
+          "provision": "s. 2(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and the Courts lower than the Supreme Court shall follow the decisions of the Supreme Court on questions of law."
+        }
+      ],
       "sources": [
         "const-129-3",
         "courts-act-2"
@@ -259,9 +333,22 @@
       "note": "Art. 129(3): all other courts follow its decisions on questions of law."
     },
     {
+      "id": "gh-sc-on-gh-jc",
       "court": "gh-sc",
       "bound": "gh-jc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-129-3",
+          "provision": "art. 129(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and all other courts shall be bound to follow the decisions of the Supreme Court on questions of law."
+        },
+        {
+          "source": "courts-act-2",
+          "provision": "s. 2(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and the Courts lower than the Supreme Court shall follow the decisions of the Supreme Court on questions of law."
+        }
+      ],
       "sources": [
         "const-129-3",
         "courts-act-2"
@@ -269,9 +356,27 @@
       "note": "Art. 129(3): all other courts follow its decisions on questions of law."
     },
     {
+      "id": "gh-sc-on-gh-nhc",
       "court": "gh-sc",
       "bound": "gh-nhc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-129-3",
+          "provision": "art. 129(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and all other courts shall be bound to follow the decisions of the Supreme Court on questions of law."
+        },
+        {
+          "source": "courts-act-39",
+          "provision": "s. 39",
+          "quote": "Pursuant to paragraph (b) of clause (1) of article 126 of the Constitution, the following are by this Act established as the lower courts:"
+        },
+        {
+          "source": "courts-act-39",
+          "provision": "s. 39(d)",
+          "quote": "the National House of Chiefs, Regional Houses of Chiefs and every Traditional Council, in respect of the jurisdiction of that House or Council to adjudicate over a cause or matter affecting chieftaincy."
+        }
+      ],
       "sources": [
         "const-129-3",
         "courts-act-39"
@@ -279,9 +384,27 @@
       "note": "Art. 129(3) binds all other courts; Courts Act s. 39(d) makes the House a lower court for chieftaincy causes. Reviewer to confirm art. 129(3) reaches it."
     },
     {
+      "id": "gh-sc-on-gh-rhc",
       "court": "gh-sc",
       "bound": "gh-rhc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-129-3",
+          "provision": "art. 129(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and all other courts shall be bound to follow the decisions of the Supreme Court on questions of law."
+        },
+        {
+          "source": "courts-act-39",
+          "provision": "s. 39",
+          "quote": "Pursuant to paragraph (b) of clause (1) of article 126 of the Constitution, the following are by this Act established as the lower courts:"
+        },
+        {
+          "source": "courts-act-39",
+          "provision": "s. 39(d)",
+          "quote": "the National House of Chiefs, Regional Houses of Chiefs and every Traditional Council, in respect of the jurisdiction of that House or Council to adjudicate over a cause or matter affecting chieftaincy."
+        }
+      ],
       "sources": [
         "const-129-3",
         "courts-act-39"
@@ -289,9 +412,27 @@
       "note": "Art. 129(3) binds all other courts; Courts Act s. 39(d) makes Regional Houses lower courts for chieftaincy causes. Reviewer to confirm art. 129(3) reaches them."
     },
     {
+      "id": "gh-sc-on-gh-tc",
       "court": "gh-sc",
       "bound": "gh-tc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-129-3",
+          "provision": "art. 129(3)",
+          "quote": "The Supreme Court may, while treating its own previous decisions as normally binding, depart from a previous decision when it appears to it right to do so; and all other courts shall be bound to follow the decisions of the Supreme Court on questions of law."
+        },
+        {
+          "source": "courts-act-39",
+          "provision": "s. 39",
+          "quote": "Pursuant to paragraph (b) of clause (1) of article 126 of the Constitution, the following are by this Act established as the lower courts:"
+        },
+        {
+          "source": "courts-act-39",
+          "provision": "s. 39(d)",
+          "quote": "the National House of Chiefs, Regional Houses of Chiefs and every Traditional Council, in respect of the jurisdiction of that House or Council to adjudicate over a cause or matter affecting chieftaincy."
+        }
+      ],
       "sources": [
         "const-129-3",
         "courts-act-39"
@@ -299,9 +440,22 @@
       "note": "Art. 129(3) binds all other courts; Courts Act s. 39(d) makes Traditional Councils lower courts for chieftaincy causes. Reviewer to confirm art. 129(3) reaches them."
     },
     {
+      "id": "gh-ca-on-gh-ca",
       "court": "gh-ca",
       "bound": "gh-ca",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-136-5",
+          "provision": "art. 136(5)",
+          "quote": "Subject to clause (3) of article 129 of this Constitution, the Court of Appeal shall be bound by its own previous decisions; and all courts lower than the Court of Appeal shall follow the decisions of the Court of Appeal on questions of law."
+        },
+        {
+          "source": "courts-act-10-5",
+          "provision": "s. 10(5)",
+          "quote": "Subject to clause (3) of article 129 of the Constitution, the Court of Appeal is bound by its own previous decisions; and the Courts lower than the Court of Appeal shall follow the decisions of the Court of Appeal on questions of law."
+        }
+      ],
       "sources": [
         "const-136-5",
         "courts-act-10-5"
@@ -309,9 +463,32 @@
       "note": "Art. 136(5): bound by its own previous decisions, subject to the Supreme Court's power under art. 129(3) (restated in Courts Act s. 10(5))."
     },
     {
+      "id": "gh-ca-on-gh-hc",
       "court": "gh-ca",
       "bound": "gh-hc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-136-5",
+          "provision": "art. 136(5)",
+          "quote": "Subject to clause (3) of article 129 of this Constitution, the Court of Appeal shall be bound by its own previous decisions; and all courts lower than the Court of Appeal shall follow the decisions of the Court of Appeal on questions of law."
+        },
+        {
+          "source": "courts-act-10-5",
+          "provision": "s. 10(5)",
+          "quote": "Subject to clause (3) of article 129 of the Constitution, the Court of Appeal is bound by its own previous decisions; and the Courts lower than the Court of Appeal shall follow the decisions of the Court of Appeal on questions of law."
+        },
+        {
+          "source": "js-court-of-appeal",
+          "provision": "The Court of Appeal",
+          "quote": "As the name implies, all appeal cases from the High Courts, Regional Tribunals and Civil appeals from Circuit Courts are brought to the Court of Appeal."
+        },
+        {
+          "source": "js-high-court",
+          "provision": "The High Court",
+          "quote": "The High Court is the third highest Court in the hierarchy of the Superior Courts."
+        }
+      ],
       "sources": [
         "const-136-5",
         "courts-act-10-5",
@@ -321,9 +498,32 @@
       "note": "Art. 136(5): courts lower than the Court of Appeal follow its decisions on questions of law; the Judicial Service site places the High Court below it."
     },
     {
+      "id": "gh-ca-on-gh-rt",
       "court": "gh-ca",
       "bound": "gh-rt",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-136-5",
+          "provision": "art. 136(5)",
+          "quote": "Subject to clause (3) of article 129 of this Constitution, the Court of Appeal shall be bound by its own previous decisions; and all courts lower than the Court of Appeal shall follow the decisions of the Court of Appeal on questions of law."
+        },
+        {
+          "source": "courts-act-10-5",
+          "provision": "s. 10(5)",
+          "quote": "Subject to clause (3) of article 129 of the Constitution, the Court of Appeal is bound by its own previous decisions; and the Courts lower than the Court of Appeal shall follow the decisions of the Court of Appeal on questions of law."
+        },
+        {
+          "source": "js-court-of-appeal",
+          "provision": "The Court of Appeal",
+          "quote": "As the name implies, all appeal cases from the High Courts, Regional Tribunals and Civil appeals from Circuit Courts are brought to the Court of Appeal."
+        },
+        {
+          "source": "js-high-court",
+          "provision": "Regional Tribunals",
+          "quote": "Regional Tribunals are of the same status as the High Court."
+        }
+      ],
       "sources": [
         "const-136-5",
         "courts-act-10-5",
@@ -333,9 +533,37 @@
       "note": "Art. 136(5): courts lower than the Court of Appeal follow its decisions on questions of law; the Judicial Service site gives Regional Tribunals the High Court's status."
     },
     {
+      "id": "gh-ca-on-gh-cc",
       "court": "gh-ca",
       "bound": "gh-cc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-136-5",
+          "provision": "art. 136(5)",
+          "quote": "Subject to clause (3) of article 129 of this Constitution, the Court of Appeal shall be bound by its own previous decisions; and all courts lower than the Court of Appeal shall follow the decisions of the Court of Appeal on questions of law."
+        },
+        {
+          "source": "courts-act-10-5",
+          "provision": "s. 10(5)",
+          "quote": "Subject to clause (3) of article 129 of the Constitution, the Court of Appeal is bound by its own previous decisions; and the Courts lower than the Court of Appeal shall follow the decisions of the Court of Appeal on questions of law."
+        },
+        {
+          "source": "const-126",
+          "provision": "art. 126(1)(b)",
+          "quote": "such lower courts or tribunals as Parliament may by law establish."
+        },
+        {
+          "source": "courts-act-39",
+          "provision": "s. 39",
+          "quote": "Pursuant to paragraph (b) of clause (1) of article 126 of the Constitution, the following are by this Act established as the lower courts:"
+        },
+        {
+          "source": "courts-act-39",
+          "provision": "s. 39(a)",
+          "quote": "Circuit Courts;"
+        }
+      ],
       "sources": [
         "const-136-5",
         "courts-act-10-5",
@@ -345,9 +573,37 @@
       "note": "Art. 136(5): courts lower than the Court of Appeal follow its decisions on questions of law; Circuit Courts are lower courts (art. 126(1)(b); Courts Act s. 39(a))."
     },
     {
+      "id": "gh-ca-on-gh-dc",
       "court": "gh-ca",
       "bound": "gh-dc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-136-5",
+          "provision": "art. 136(5)",
+          "quote": "Subject to clause (3) of article 129 of this Constitution, the Court of Appeal shall be bound by its own previous decisions; and all courts lower than the Court of Appeal shall follow the decisions of the Court of Appeal on questions of law."
+        },
+        {
+          "source": "courts-act-10-5",
+          "provision": "s. 10(5)",
+          "quote": "Subject to clause (3) of article 129 of the Constitution, the Court of Appeal is bound by its own previous decisions; and the Courts lower than the Court of Appeal shall follow the decisions of the Court of Appeal on questions of law."
+        },
+        {
+          "source": "const-126",
+          "provision": "art. 126(1)(b)",
+          "quote": "such lower courts or tribunals as Parliament may by law establish."
+        },
+        {
+          "source": "courts-act-39",
+          "provision": "s. 39",
+          "quote": "Pursuant to paragraph (b) of clause (1) of article 126 of the Constitution, the following are by this Act established as the lower courts:"
+        },
+        {
+          "source": "courts-act-39",
+          "provision": "s. 39(b)",
+          "quote": "District Courts;"
+        }
+      ],
       "sources": [
         "const-136-5",
         "courts-act-10-5",
@@ -357,9 +613,37 @@
       "note": "Art. 136(5): courts lower than the Court of Appeal follow its decisions on questions of law; District Courts are lower courts (art. 126(1)(b); Courts Act s. 39(b))."
     },
     {
+      "id": "gh-ca-on-gh-jc",
       "court": "gh-ca",
       "bound": "gh-jc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "const-136-5",
+          "provision": "art. 136(5)",
+          "quote": "Subject to clause (3) of article 129 of this Constitution, the Court of Appeal shall be bound by its own previous decisions; and all courts lower than the Court of Appeal shall follow the decisions of the Court of Appeal on questions of law."
+        },
+        {
+          "source": "courts-act-10-5",
+          "provision": "s. 10(5)",
+          "quote": "Subject to clause (3) of article 129 of the Constitution, the Court of Appeal is bound by its own previous decisions; and the Courts lower than the Court of Appeal shall follow the decisions of the Court of Appeal on questions of law."
+        },
+        {
+          "source": "const-126",
+          "provision": "art. 126(1)(b)",
+          "quote": "such lower courts or tribunals as Parliament may by law establish."
+        },
+        {
+          "source": "courts-act-39",
+          "provision": "s. 39",
+          "quote": "Pursuant to paragraph (b) of clause (1) of article 126 of the Constitution, the following are by this Act established as the lower courts:"
+        },
+        {
+          "source": "courts-act-39",
+          "provision": "s. 39(c)",
+          "quote": "Juvenile Courts; and"
+        }
+      ],
       "sources": [
         "const-136-5",
         "courts-act-10-5",

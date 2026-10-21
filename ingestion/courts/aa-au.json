@@ -1,9 +1,5 @@
 {
   "jurisdiction": "aa-au",
-  "review_state": "unreviewed",
-  "reviewed_by": null,
-  "reviewed_on": null,
-  "reviewed_sha256": null,
   "precedent": null,
   "courts": [
     {
@@ -52,6 +48,7 @@
   "relations": [],
   "members": [
     {
+      "id": "member-dz-aa-au-afchpr",
       "state": "dz",
       "court": "aa-au-afchpr",
       "valid_from": "2004-01-25",
@@ -65,6 +62,7 @@
       "note": "Algeria. AU status list (as at 14/02/2023): signed 1999-07-13, ratified 2003-04-22, deposited 2003-06-03; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
     },
     {
+      "id": "member-bj-aa-au-afchpr",
       "state": "bj",
       "court": "aa-au-afchpr",
       "valid_from": "2014-08-22",
@@ -79,6 +77,7 @@
       "note": "Benin. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2014-06-10, deposited 2014-08-22; in force for it on the deposit date (art. 34(4)). Court Table 1 (2025 report) gives ratification 2014-08-22; the Court's order of 5 May 2020 (§ 2) also dates Benin's party status from 2014-08-22."
     },
     {
+      "id": "member-bf-aa-au-afchpr",
       "state": "bf",
       "court": "aa-au-afchpr",
       "valid_from": "2004-01-25",
@@ -92,6 +91,7 @@
       "note": "Burkina Faso. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 1998-12-31, deposited 1999-02-23; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
     },
     {
+      "id": "member-bi-aa-au-afchpr",
       "state": "bi",
       "court": "aa-au-afchpr",
       "valid_from": "2004-01-25",
@@ -105,6 +105,7 @@
       "note": "Burundi. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2003-04-02, deposited 2003-05-12; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
     },
     {
+      "id": "member-cm-aa-au-afchpr",
       "state": "cm",
       "court": "aa-au-afchpr",
       "valid_from": "2015-08-17",
@@ -118,6 +119,7 @@
       "note": "Cameroon. AU status list (as at 14/02/2023): signed 2006-07-25, ratified 2014-12-09, deposited 2015-08-17; in force for it on the deposit date (art. 34(4)). Court Table 1 (2025 report) gives ratification 2015-08-17."
     },
     {
+      "id": "member-td-aa-au-afchpr",
       "state": "td",
       "court": "aa-au-afchpr",
       "valid_from": "2016-02-08",
@@ -131,6 +133,7 @@
       "note": "Chad. AU status list (as at 14/02/2023): signed 2004-12-06, ratified 2016-01-27, deposited 2016-02-08; in force for it on the deposit date (art. 34(4))."
     },
     {
+      "id": "member-ci-aa-au-afchpr",
       "state": "ci",
       "court": "aa-au-afchpr",
       "valid_from": "2004-01-25",
@@ -145,6 +148,7 @@
       "note": "Côte d'Ivoire. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2003-01-07, deposited 2003-03-21; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3)). Fory judgment § 2 dates its party status from 2004-01-25, consistent with art. 34(3)."
     },
     {
+      "id": "member-km-aa-au-afchpr",
       "state": "km",
       "court": "aa-au-afchpr",
       "valid_from": "2004-01-25",
@@ -158,6 +162,7 @@
       "note": "Comoros. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2003-12-23, deposited 2003-12-26; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
     },
     {
+      "id": "member-cg-aa-au-afchpr",
       "state": "cg",
       "court": "aa-au-afchpr",
       "valid_from": "2010-10-06",
@@ -171,6 +176,7 @@
       "note": "Congo. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2010-08-10, deposited 2010-10-06; in force for it on the deposit date (art. 34(4))."
     },
     {
+      "id": "member-cd-aa-au-afchpr",
       "state": "cd",
       "court": "aa-au-afchpr",
       "valid_from": "2020-12-08",
@@ -184,6 +190,7 @@
       "note": "Democratic Republic of Congo. AU status list (as at 14/02/2023): signed 1999-09-09, ratified 2017-01-31, deposited 2020-12-08; in force for it on the deposit date (art. 34(4)). Court Table 1 (2025 report) gives ratification 2020-12-08."
     },
     {
+      "id": "member-ga-aa-au-afchpr",
       "state": "ga",
       "court": "aa-au-afchpr",
       "valid_from": "2004-06-29",
@@ -197,6 +204,7 @@
       "note": "Gabon. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2000-08-14, deposited 2004-06-29; in force for it on the deposit date (art. 34(4))."
     },
     {
+      "id": "member-gm-aa-au-afchpr",
       "state": "gm",
       "court": "aa-au-afchpr",
       "valid_from": "2004-01-25",
@@ -210,6 +218,7 @@
       "note": "Gambia. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 1999-06-30, deposited 1999-10-15; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
     },
     {
+      "id": "member-gh-aa-au-afchpr",
       "state": "gh",
       "court": "aa-au-afchpr",
       "valid_from": "2005-08-16",
@@ -223,6 +232,7 @@
       "note": "Ghana. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2004-08-25, deposited 2005-08-16; in force for it on the deposit date (art. 34(4))."
     },
     {
+      "id": "member-gw-aa-au-afchpr",
       "state": "gw",
       "court": "aa-au-afchpr",
       "valid_from": "2021-11-02",
@@ -236,6 +246,7 @@
       "note": "Guinea-Bissau. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2021-10-14, deposited 2021-11-02; in force for it on the deposit date (art. 34(4)). Conflict: Court Table 1 (2025 report) gives ratification and deposit 2021-11-03."
     },
     {
+      "id": "member-ke-aa-au-afchpr",
       "state": "ke",
       "court": "aa-au-afchpr",
       "valid_from": "2005-02-18",
@@ -249,6 +260,7 @@
       "note": "Kenya. AU status list (as at 14/02/2023): signed 2003-07-07, ratified 2004-02-04, deposited 2005-02-18; in force for it on the deposit date (art. 34(4))."
     },
     {
+      "id": "member-ly-aa-au-afchpr",
       "state": "ly",
       "court": "aa-au-afchpr",
       "valid_from": "2004-01-25",
@@ -262,6 +274,7 @@
       "note": "Libya. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2003-11-19, deposited 2003-12-08; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
     },
     {
+      "id": "member-ls-aa-au-afchpr",
       "state": "ls",
       "court": "aa-au-afchpr",
       "valid_from": "2004-01-25",
@@ -275,6 +288,7 @@
       "note": "Lesotho. AU status list (as at 14/02/2023): signed 1999-10-29, ratified 2003-10-28, deposited 2003-12-23; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
     },
     {
+      "id": "member-mg-aa-au-afchpr",
       "state": "mg",
       "court": "aa-au-afchpr",
       "valid_from": "2022-01-12",
@@ -288,6 +302,7 @@
       "note": "Madagascar. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2021-10-12, deposited 2022-01-12; in force for it on the deposit date (art. 34(4)). Conflict: Court Table 1 (2025 report) gives deposit 2021-10-12."
     },
     {
+      "id": "member-ml-aa-au-afchpr",
       "state": "ml",
       "court": "aa-au-afchpr",
       "valid_from": "2004-01-25",
@@ -301,6 +316,7 @@
       "note": "Mali. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2000-05-10, deposited 2000-06-20; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
     },
     {
+      "id": "member-mw-aa-au-afchpr",
       "state": "mw",
       "court": "aa-au-afchpr",
       "valid_from": "2008-10-09",
@@ -314,6 +330,7 @@
       "note": "Malawi. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2008-09-09, deposited 2008-10-09; in force for it on the deposit date (art. 34(4))."
     },
     {
+      "id": "member-mz-aa-au-afchpr",
       "state": "mz",
       "court": "aa-au-afchpr",
       "valid_from": "2004-07-20",
@@ -327,6 +344,7 @@
       "note": "Mozambique. AU status list (as at 14/02/2023): signed 2003-05-23, ratified 2004-07-17, deposited 2004-07-20; in force for it on the deposit date (art. 34(4))."
     },
     {
+      "id": "member-mr-aa-au-afchpr",
       "state": "mr",
       "court": "aa-au-afchpr",
       "valid_from": "2005-12-14",
@@ -340,6 +358,7 @@
       "note": "Mauritania. AU status list (as at 14/02/2023): signed 1999-03-22, ratified 2005-05-19, deposited 2005-12-14; in force for it on the deposit date (art. 34(4))."
     },
     {
+      "id": "member-mu-aa-au-afchpr",
       "state": "mu",
       "court": "aa-au-afchpr",
       "valid_from": "2004-01-25",
@@ -353,6 +372,7 @@
       "note": "Mauritius. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2003-03-03, deposited 2003-03-24; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
     },
     {
+      "id": "member-ng-aa-au-afchpr",
       "state": "ng",
       "court": "aa-au-afchpr",
       "valid_from": "2004-06-09",
@@ -366,6 +386,7 @@
       "note": "Nigeria. AU status list (as at 14/02/2023): signed 2004-06-09, ratified 2004-05-20, deposited 2004-06-09; in force for it on the deposit date (art. 34(4)). The AU list prints the signature date after the ratification date; recorded as printed."
     },
     {
+      "id": "member-ne-aa-au-afchpr",
       "state": "ne",
       "court": "aa-au-afchpr",
       "valid_from": "2004-06-26",
@@ -379,6 +400,7 @@
       "note": "Niger. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2004-05-17, deposited 2004-06-26; in force for it on the deposit date (art. 34(4))."
     },
     {
+      "id": "member-rw-aa-au-afchpr",
       "state": "rw",
       "court": "aa-au-afchpr",
       "valid_from": "2004-01-25",
@@ -393,6 +415,7 @@
       "note": "Rwanda. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2003-05-05, deposited 2003-05-06; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3)). Ingabire ruling § 51 says the ratification was deposited on 2003-06-06 (AU list: 2003-05-06); either way before entry into force."
     },
     {
+      "id": "member-za-aa-au-afchpr",
       "state": "za",
       "court": "aa-au-afchpr",
       "valid_from": "2004-01-25",
@@ -406,6 +429,7 @@
       "note": "South Africa. AU status list (as at 14/02/2023): signed 1999-06-09, ratified 2002-07-03, deposited 2002-07-03; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
     },
     {
+      "id": "member-eh-aa-au-afchpr",
       "state": "eh",
       "court": "aa-au-afchpr",
       "valid_from": "2014-01-27",
@@ -419,6 +443,7 @@
       "note": "Sahrawi Arab Democratic Republic. AU status list (as at 14/02/2023): signed 2010-07-25, ratified 2013-11-27, deposited 2014-01-27; in force for it on the deposit date (art. 34(4)). Code 'eh' (ISO 3166-1 Western Sahara) used for the Sahrawi Arab Democratic Republic; reviewer to confirm."
     },
     {
+      "id": "member-sn-aa-au-afchpr",
       "state": "sn",
       "court": "aa-au-afchpr",
       "valid_from": "2004-01-25",
@@ -432,6 +457,7 @@
       "note": "Senegal. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 1998-09-29, deposited 1998-10-30; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
     },
     {
+      "id": "member-tz-aa-au-afchpr",
       "state": "tz",
       "court": "aa-au-afchpr",
       "valid_from": "2006-02-10",
@@ -446,6 +472,7 @@
       "note": "Tanzania. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2006-02-07, deposited 2006-02-10; in force for it on the deposit date (art. 34(4)). Cheusi judgment § 2 dates its party status from 2006-02-10, consistent."
     },
     {
+      "id": "member-tg-aa-au-afchpr",
       "state": "tg",
       "court": "aa-au-afchpr",
       "valid_from": "2004-01-25",
@@ -459,6 +486,7 @@
       "note": "Togo. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2003-06-23, deposited 2003-07-06; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
     },
     {
+      "id": "member-tn-aa-au-afchpr",
       "state": "tn",
       "court": "aa-au-afchpr",
       "valid_from": "2007-10-05",
@@ -473,6 +501,7 @@
       "note": "Tunisia. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2007-08-21, deposited 2007-10-05; in force for it on the deposit date (art. 34(4)). Conflict: Belgeith ruling § 2 dates its party status from 2007-08-21 (the ratification date), not the deposit date."
     },
     {
+      "id": "member-ug-aa-au-afchpr",
       "state": "ug",
       "court": "aa-au-afchpr",
       "valid_from": "2004-01-25",
@@ -486,6 +515,7 @@
       "note": "Uganda. AU status list (as at 14/02/2023): signed 2001-02-01, ratified 2001-02-16, deposited 2001-06-06; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
     },
     {
+      "id": "member-zm-aa-au-afchpr",
       "state": "zm",
       "court": "aa-au-afchpr",
       "valid_from": "2023-01-10",
@@ -501,6 +531,7 @@
   ],
   "declarations": [
     {
+      "id": "declaration-bf",
       "state": "bf",
       "court": "aa-au-afchpr",
       "valid_from": "1998-07-28",
@@ -515,6 +546,7 @@
       "note": "Signed 1998-07-14, deposited 1998-07-28 (Court page and AU list agree), before the Protocol entered into force on 2004-01-25. Listed as in effect in the Court's 2025 report and on its Basic Information page."
     },
     {
+      "id": "declaration-mw",
       "state": "mw",
       "court": "aa-au-afchpr",
       "valid_from": "2008-10-09",
@@ -529,6 +561,7 @@
       "note": "Signed 2008-09-09, deposited 2008-10-09 (Court page and AU list agree). Listed as in effect in the Court's 2025 report and on its Basic Information page."
     },
     {
+      "id": "declaration-ml",
       "state": "ml",
       "court": "aa-au-afchpr",
       "valid_from": "2010-02-19",
@@ -543,6 +576,7 @@
       "note": "Signed 2010-02-05, deposited 2010-02-19 (Court page and AU list agree). Listed as in effect in the Court's 2025 report and on its Basic Information page."
     },
     {
+      "id": "declaration-tz",
       "state": "tz",
       "court": "aa-au-afchpr",
       "valid_from": "2010-03-29",
@@ -557,6 +591,7 @@
       "note": "Signed 2010-03-09, deposited 2010-03-29 (Court page; Cheusi § 2). Withdrawal deposited with the AU Commission Chairperson on 2019-11-21; applying Ingabire's 12-month rule, the Court held it takes effect on 2020-11-22 (Cheusi §§ 36-39). The Court page gives 14 Nov 2019 against the withdrawal without saying what that date is."
     },
     {
+      "id": "declaration-gh",
       "state": "gh",
       "court": "aa-au-afchpr",
       "valid_from": "2011-03-10",
@@ -571,6 +606,7 @@
       "note": "Signed 2011-02-09, deposited 2011-03-10 (Court page and AU list agree). Listed as in effect in the Court's 2025 report and on its Basic Information page."
     },
     {
+      "id": "declaration-rw",
       "state": "rw",
       "court": "aa-au-afchpr",
       "valid_from": "2013-02-06",
@@ -585,6 +621,7 @@
       "note": "Court page: signed 2013-01-22, deposited 2013-02-06; conflict: Ingabire ruling § 51 says deposited 2013-06-22. Withdrawal received at the AU Commission on 2016-02-29 (Ingabire § 21). Ruling of 3 June 2016 (retitled by corrigendum as the ruling on the effects of the withdrawal): one-year notice applies, effect from 2017-03-01, no effect on pending cases (§§ 66-68, operative iii). Court page gives 24 Feb 2016 for the withdrawal."
     },
     {
+      "id": "declaration-ci",
       "state": "ci",
       "court": "aa-au-afchpr",
       "valid_from": "2013-07-23",
@@ -599,6 +636,7 @@
       "note": "Signed 2013-06-19, deposited 2013-07-23 (Court page; Fory § 2). Withdrawal deposited with the AU Commission Chairperson on 2020-04-29; the Court held it took effect one year later, on 2021-04-30 (Fory §§ 2, 27-28). The Court page gives 28 Apr 2020 against the withdrawal."
     },
     {
+      "id": "declaration-bj",
       "state": "bj",
       "court": "aa-au-afchpr",
       "valid_from": "2016-02-08",
@@ -614,6 +652,7 @@
       "note": "Signed 2014-05-22, deposited 2016-02-08 (Court page; order of 5 May 2020 § 2). Withdrawal deposited with the AU Commission on 2020-03-25 (§ 3). The order (§ 5) first gave 25 March 2021 as the effective date; the erratum of 29 July 2020 corrected it to 2021-03-26. The Court page gives 24 Mar 2020 against the withdrawal."
     },
     {
+      "id": "declaration-tn",
       "state": "tn",
       "court": "aa-au-afchpr",
       "valid_from": "2017-06-02",
@@ -630,6 +669,7 @@
       "note": "Signed 2017-04-13, deposited 2017-06-02 (Court page and AU list); conflict: 2025 report Table 2 gives 2017-05-29, Belgeith § 2 gives 2017-04-16. Withdrawal deposited with the AU Commission on 2025-03-07 (Ghannouchi §§ 7, 11; Belgeith §§ 2, 14; 2025 report § 8). The Court held it takes effect on 2026-03-08, 12 months after filing (Ghannouchi § 13). The Court page does not yet show it."
     },
     {
+      "id": "declaration-gm",
       "state": "gm",
       "court": "aa-au-afchpr",
       "valid_from": "2020-02-03",
@@ -644,6 +684,7 @@
       "note": "Declaration dated 2018-10-23 at Banjul (Court copy); deposited 2020-02-03 (Court page; 2025 report Table 2). Conflict: the Court's May 2020 table gives 2020-02-02, and the AU list gives a 2011-02-09 signature date and no deposit date. Listed as in effect in the 2025 report and on the Basic Information page."
     },
     {
+      "id": "declaration-ne",
       "state": "ne",
       "court": "aa-au-afchpr",
       "valid_from": "2022-04-07",
@@ -658,6 +699,7 @@
       "note": "Signed 2021-10-28, deposited 2022-04-07 (Court page and AU list agree). Conflict: the Court's 2025 report Table 2 gives 2021-10-28 as the deposit date. Listed as in effect in the 2025 report and on the Basic Information page."
     },
     {
+      "id": "declaration-gw",
       "state": "gw",
       "court": "aa-au-afchpr",
       "valid_from": "2021-11-02",

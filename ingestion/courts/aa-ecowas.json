@@ -1,9 +1,5 @@
 {
   "jurisdiction": "aa-ecowas",
-  "review_state": "unreviewed",
-  "reviewed_by": null,
-  "reviewed_on": null,
-  "reviewed_sha256": null,
   "precedent": {
     "binds": false,
     "note": "Protocol art. 25(5), now art. 27(5): a decision of the Court binds only the parties, and only in that case. In the English text it sits in the article on applications for revision.",
@@ -51,6 +47,7 @@
   ],
   "members": [
     {
+      "id": "member-bj",
       "state": "bj",
       "court": null,
       "valid_until": null,
@@ -63,6 +60,7 @@
       "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 14/03/2000 (status at 31/10/2022)."
     },
     {
+      "id": "member-cv",
       "state": "cv",
       "court": null,
       "valid_until": null,
@@ -75,6 +73,7 @@
       "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. ECOWAS says Cabo Verde joined in 1977 (no day given). The Court lists it as yet to ratify the Court Protocol (status at 31/10/2022)."
     },
     {
+      "id": "member-ci",
       "state": "ci",
       "court": null,
       "valid_until": null,
@@ -87,6 +86,7 @@
       "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 05/11/1996 (status at 31/10/2022)."
     },
     {
+      "id": "member-gm",
       "state": "gm",
       "court": null,
       "valid_until": null,
@@ -99,6 +99,7 @@
       "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 26/08/1997 (status at 31/10/2022)."
     },
     {
+      "id": "member-gh",
       "state": "gh",
       "court": null,
       "valid_until": null,
@@ -111,6 +112,7 @@
       "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 07/12/1992 (status at 31/10/2022)."
     },
     {
+      "id": "member-gn",
       "state": "gn",
       "court": null,
       "valid_until": null,
@@ -123,6 +125,7 @@
       "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 18/07/1992 (status at 31/10/2022)."
     },
     {
+      "id": "member-gw",
       "state": "gw",
       "court": null,
       "valid_until": null,
@@ -135,6 +138,7 @@
       "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists it as yet to ratify the Court Protocol (status at 31/10/2022)."
     },
     {
+      "id": "member-lr",
       "state": "lr",
       "court": null,
       "valid_until": null,
@@ -147,6 +151,7 @@
       "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 25/10/2016 (status at 31/10/2022)."
     },
     {
+      "id": "member-ng",
       "state": "ng",
       "court": null,
       "valid_until": null,
@@ -159,6 +164,7 @@
       "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 01/07/1994 (status at 31/10/2022)."
     },
     {
+      "id": "member-sn",
       "state": "sn",
       "court": null,
       "valid_until": null,
@@ -171,6 +177,7 @@
       "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 30/06/1994 (status at 31/10/2022)."
     },
     {
+      "id": "member-sl",
       "state": "sl",
       "court": null,
       "valid_until": null,
@@ -183,6 +190,7 @@
       "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 07/11/2000 (status at 31/10/2022)."
     },
     {
+      "id": "member-tg",
       "state": "tg",
       "court": null,
       "valid_until": null,
@@ -195,6 +203,7 @@
       "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 01/12/1999 (status at 31/10/2022)."
     },
     {
+      "id": "member-bf",
       "state": "bf",
       "court": null,
       "valid_until": "2025-01-29",
@@ -209,6 +218,7 @@
       "note": "ECOWAS states the withdrawal took effect on 29 January 2025. No official ECOWAS text found gives the date notice was given, so withdrawal_notified is empty. The Court lists its ratification of the Court Protocol as 16/01/1996 (status at 31/10/2022)."
     },
     {
+      "id": "member-ml",
       "state": "ml",
       "court": null,
       "valid_until": "2025-01-29",
@@ -223,6 +233,7 @@
       "note": "ECOWAS states the withdrawal took effect on 29 January 2025. No official ECOWAS text found gives the date notice was given, so withdrawal_notified is empty. The Court lists its ratification of the Court Protocol as 23/05/1992 (status at 31/10/2022)."
     },
     {
+      "id": "member-ne",
       "state": "ne",
       "court": null,
       "valid_until": "2025-01-29",
@@ -239,6 +250,7 @@
   ],
   "member_routes": [
     {
+      "id": "route-reference-aa-ecowas-ccj-community-law",
       "court": "aa-ecowas-ccj",
       "kind": "reference",
       "matter": "community-law",

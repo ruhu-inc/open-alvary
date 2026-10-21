@@ -20,8 +20,9 @@ Then, in order:
 3. Instrument match: when the query names instruments, their units come next.
 4. Bands: the other positions fall into bands of BAND_WIDTH. Within a band, legislation is reordered
    among its own positions by instrument (constitution, Act, subsidiary legislation, guidance), and
-   decisions among theirs by their court's relation to the queried jurisdiction (binding, persuasive,
-   then not applicable or unknown), so neither displaces the other. A unit never moves out of its band.
+   decisions among theirs by their court's relation to the queried jurisdiction (COURT_ORDER: binding,
+   or prevailing on the question's own matter; then persuasive; then the rest), so neither displaces
+   the other. A unit never moves out of its band.
 5. Diversification: a unit overlapping one already kept from the same text collapses into it; the
    same locator in another text of the same work and language collapses into the first (``also_in``);
    unless the query is scoped to one instrument or citation, units beyond the first PER_WORK of one
@@ -43,8 +44,14 @@ NOT_IN_FORCE_STATUSES = frozenset({"repealed", "superseded", "historical"})
 # The instrument hierarchy shared by the jurisdiction profiles assessed so far (0 is highest). A
 # judgment's authority is its court's (CPR-04), not a document type's.
 INSTRUMENT_RANK = {"constitution": 0, "act": 1, "regulation": 2, "guidance": 3, "gazette": 4, "other": 5}
-# A decision's court relation to the queried jurisdiction (CPR-04 court register): binding first.
-COURT_ORDER = {"binding": 0, "persuasive": 1, "not_applicable": 2, "unknown": 2}
+# A decision's court relation to the queried jurisdiction (CPR-04 court register, api.courts.relation):
+# binding first, and with it a rule of precedence on a matter, which the relation answers only on a
+# question of that matter; then persuasive. A ruling that binds only the court that referred a question,
+# in that case, says nothing of other cases: it ranks as unknown, as not applicable does.
+COURT_ORDER = {
+    "binding": 0, "prevails_on_matter": 0, "persuasive": 1,
+    "binding_in_referred_case": 2, "not_applicable": 2, "unknown": 2,
+}  # fmt: skip
 
 
 @dataclass
@@ -77,7 +84,7 @@ class Candidate:
     arms: dict[str, int] = field(default_factory=dict)
     fused: float = 0.0
     rerank_score: float | None = None  # 0 to 1 when the reranker scored it
-    court_relation: str | None = None  # for a decision: binding, persuasive, not_applicable or unknown
+    court_relation: str | None = None  # for a decision: one of COURT_ORDER
     court: object | None = None  # for a decision: its court as its register gives it (EvidenceCourt)
     expanded_from: str | None = None  # the seed unit whose reference added it (RSV-06)
     features: dict[str, dict[str, float]] = field(default_factory=dict)  # arm → its features
