@@ -11,11 +11,13 @@ code, name and region, and documents from it are reviewed against the common sta
 """
 
 import json
+from collections.abc import Iterable
 from importlib.resources import files
 from typing import Annotated, Literal
 
 from pydantic import Field, HttpUrl, model_validator
 
+from schema.models import Jurisdiction
 from schema.record import (
     COURT_LEVELS,
     EVENTS,
@@ -82,7 +84,7 @@ class JurisdictionProfile(RecordModel):
     level: Literal["continental", "regional", "national", "subnational", "local"]
     parent: PlaceCode | None = None
     au_region: Literal["central", "eastern", "northern", "southern", "western"] | None = None
-    member_of: tuple[PlaceCode, ...] = ()
+    # Membership of the AU and the regional bodies is dated and reviewed: schema/memberships.py.
     researched: bool = False
     sources: tuple[HttpUrl, ...] = ()
     legal_systems: tuple[Literal[*LEGAL_SYSTEMS], ...] = ()
@@ -115,10 +117,25 @@ def registry() -> dict[str, JurisdictionProfile]:
     if len(out) != len(profiles):
         raise ValueError("jurisdiction codes must be unique")
     for p in profiles:
-        for code in (p.parent, *p.member_of):
-            if code and code not in out:
-                raise ValueError(f"{p.code} refers to unknown jurisdiction {code}")
+        if p.parent and p.parent not in out:
+            raise ValueError(f"{p.code} refers to unknown jurisdiction {p.parent}")
     return out
+
+
+def catalogue_entry(
+    code: str, *, name: str | None = None, languages: Iterable[str] = (), profiles=None
+) -> Jurisdiction:
+    """The public catalogue's row for a jurisdiction, from its profile. A country, or a place within one,
+    carries its ISO country code; the continent and the regional bodies carry none (DAT-02)."""
+    profile = (profiles if profiles is not None else registry()).get(code)
+    regional = code == "aa" or code.startswith("aa-")
+    return Jurisdiction(
+        id=code,
+        name=profile.name if profile else name or code.upper(),
+        country_code=None if regional else code.split("-", 1)[0].upper(),
+        legal_systems=[s.replace("_", " ") for s in profile.legal_systems] if profile else [],
+        languages=sorted(languages),
+    )
 
 
 def expected_steps(profile: JurisdictionProfile | None, document_type: str) -> tuple[str, ...]:

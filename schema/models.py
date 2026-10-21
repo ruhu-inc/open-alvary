@@ -36,10 +36,17 @@ class Permission(StrEnum):
 class Jurisdiction(Model):
     id: ID
     name: Nonempty
-    country_code: Annotated[str, Field(pattern=r"^[A-Z]{2}$")]
+    # Optional only for the continent and the regional bodies (AKN "aa-…"), which are no country (DAT-02).
+    country_code: Annotated[str, Field(pattern=r"^[A-Z]{2}$")] | None = None
     parent_id: ID | None = None
     legal_systems: list[str] = Field(default_factory=list)
     languages: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def coded(self):
+        if self.country_code is None and not (self.id == "aa" or self.id.startswith("aa-")):
+            raise ValueError(f"{self.id}: a country, or a place within one, has an ISO country code")
+        return self
 
 
 class Authority(Model):

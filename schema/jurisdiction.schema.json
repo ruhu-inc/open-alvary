@@ -393,15 +393,6 @@
       "default": null,
       "title": "Au Region"
     },
-    "member_of": {
-      "default": [],
-      "items": {
-        "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?$",
-        "type": "string"
-      },
-      "title": "Member Of",
-      "type": "array"
-    },
     "researched": {
       "default": false,
       "title": "Researched",
