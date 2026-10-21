@@ -84,3 +84,41 @@ def test_work_already_started_comes_before_documents_nobody_has_opened():
     assert (untouched["kind"], untouched["priority"], untouched["count"]) == ("review", "high", 40)
     assert [t["id"] for t in queue.ordered([untouched, started, older])] == ["ng-b", "ng-a", "ng-c"]
     assert queue.shown(older, now)["age_days"] == 5.0 and queue.shown(untouched, now)["age_days"] is None
+
+
+def test_documents_nobody_has_opened_come_by_importance_with_a_works_languages_together():
+    def doc(id, kind, work, currency=None, year=None, high=0):
+        entry = {
+            "id": id,
+            "title": id,
+            "page_count": 2,
+            "type": kind,
+            "work": work,
+            "flag_counts": {"high": high},
+        }
+        return queue.not_started(
+            entry | {"currency": {"status": currency} if currency else None, "year": year}
+        )
+
+    tasks = [
+        doc("rw-ministerial-order-1-en", "ministerial_order", "mo-1", high=3),  # high flags, still after laws
+        doc("rw-law-old-fr", "law", "law-old", "repealed", 1999),
+        doc("rw-law-12-fr", "law", "law-12", "in_force", 2018),
+        doc("rw-law-12-en", "law", "law-12", "in_force", 2018),
+        doc("rw-organic-law-1-rw", "organic_law", "ol-1", None, 2013),
+        doc("rw-law-20-en", "law", "law-20", "in_force", 2021),
+        doc("rw-other-1-fr", "other", "other-1"),
+        doc("rw-law-unknown-en", "law", "law-unknown", "unknown", 2020),
+    ]
+    started = queue.task({"id": "ng-a", "title": "A"}, "flags", "flags", 1, datetime(2026, 10, 1, tzinfo=UTC))
+    assert [t["id"] for t in queue.ordered([*tasks, started])] == [
+        "ng-a",  # work already started
+        "rw-organic-law-1-rw",
+        "rw-law-20-en",  # in force, newest first
+        "rw-law-12-en",  # a work's language versions together
+        "rw-law-12-fr",
+        "rw-law-unknown-en",  # currency unknown
+        "rw-law-old-fr",  # repealed
+        "rw-ministerial-order-1-en",
+        "rw-other-1-fr",  # a kind not listed
+    ]
