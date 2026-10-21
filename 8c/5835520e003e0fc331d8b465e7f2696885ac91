@@ -1,0 +1,39 @@
+tests/test_workbench.py
+  s_d665c62e07d76f::t_72acd41c16b1f2 983-986
+  s_d665c62e07d76f::t_b3fbae91dabace 1007
+  s_d665c62e07d76f::t_037844a9d8a3be 1379-1383
+  s_d665c62e07d76f::t_9a51bdbfc29b5b 918-968,971-981,987-1006,1008-1014
+  s_d665c62e07d76f::t_d20ebd8bdcac58 969-970
+  s_d665c62e07d76f::t_cda0b78f949319 982
+tests/test_rw_gazette.py
+  s_d665c62e07d76f::t_b9e5f36d457fba 257-260,291-295
+workbench/app.py
+  s_d665c62e07d76f::t_a1b067a09e1fd6 892-893,897
+  s_d665c62e07d76f::t_51339bdfc8999b 900
+tests/test_record.py
+  s_d665c62e07d76f::t_71de1073cd1d66 345-346,348,351-355,357-358,366-367,372-392
+  s_d665c62e07d76f::t_9d84f01992825e 349-350
+workbench/review.py
+  s_d665c62e07d76f::t_849cb423ebcc3f 41-45
+workbench/record_view.py
+  s_d665c62e07d76f::t_3c96233ea960d0 1142
+  s_d665c62e07d76f::t_a03f5e11ca6efb 1234,1246
+  s_d665c62e07d76f::t_0dd02658446df5 1143-1199,1203-1215,1217-1218
+  s_d665c62e07d76f::t_ffb5274fa29c85 1200-1202
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8c5835520e003e0fc331d8b465e7f2696885ac91",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "unknown"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
