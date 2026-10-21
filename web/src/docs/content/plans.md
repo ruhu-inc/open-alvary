@@ -16,7 +16,7 @@ The current plans are also published, without a key, at [`/api/v1/tiers`](/docs/
 - **Requests a minute** is a steady rate, and **burst** is how many requests you can make at once after a pause. The organisation's allowance refills continuously (a token bucket).
 - **At once** is how many requests can be in progress together. One key or app can use at most half of them, so one busy script can't block the others.
 - **Data a day** is how many bytes of answers your organisation can receive. It holds one day's worth and refills evenly over 24 hours, so it never resets all at once at midnight. Each answer's body counts as sent, before compression. An answer that would go over it is refused, and `Retry-After` says when enough has refilled for it.
-- **Countries.** On a plan that names countries, requests about those countries run at the plan's limits. Every other country still answers, at the Starter rate (60 a minute, burst 30). A search or list without `jurisdiction` covers your plan's countries.
+- **Countries.** On a plan that names countries, requests about those countries, with their states and local law, run at the plan's limits. The law of the African Union and the regional bodies (IDs starting `aa-`, such as `aa-ecowas`) is within every plan. Every other country still answers, at the Starter rate (60 a minute, burst 30). A search or list without `jurisdiction` covers your plan's countries.
 - The change feed isn't narrowed by your plan's countries.
 
 You can see today's requests and data, by key and app, under **Usage** in the console.
