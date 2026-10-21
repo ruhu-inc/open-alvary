@@ -1,0 +1,25 @@
+compose.yaml
+  s_d665c62e07d76f::t_7709a4fb27887e 20
+tests/test_request_logging.py
+  s_d665c62e07d76f::t_83acad4c045a29 53-54,93-94
+  s_d665c62e07d76f::t_bf5d4ee91354de 1,4-5,8-14,18-20,25-52,55-92,95-128,161-204
+  s_d665c62e07d76f::t_ac7017b7d30f1b 2-3
+Dockerfile
+  s_d665c62e07d76f::t_7709a4fb27887e 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3eb2bea9f1ab5d5d41dfab446f536f9a77a944f8",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
