@@ -31,12 +31,14 @@ export type Plan = {
 export const docPath = (slug: string) => (slug ? `/docs/${slug}` : "/docs");
 
 const n = (v: number) => v.toLocaleString("en");
+// Data a day in decimal units, as the plans publish it: 200 MB, 2 GB.
+const data = (v?: number) => (!v ? "" : v >= 1e9 ? `${n(v / 1e9)} GB` : `${n(v / 1e6)} MB`);
 
 function plansTable(plans: Plan[]): string {
   const rows = [...plans].sort((a, b) => a.listing.order - b.listing.order);
   return [
-    "| Plan | Price | Requests a minute | Burst | At once | Countries | Monitors | Webhooks |",
-    "|---|---|---|---|---|---|---|---|",
+    "| Plan | Price | Requests a minute | Burst | At once | Data a day | Countries | Monitors | Webhooks |",
+    "|---|---|---|---|---|---|---|---|---|",
     ...rows.map((p) => {
       const a = p.allowance;
       const custom = p.listing.limits;
@@ -46,8 +48,9 @@ function plansTable(plans: Plan[]): string {
         custom ?? n(a.requests_per_minute),
         custom ? "" : n(a.burst ?? a.requests_per_minute),
         custom ? "" : n(a.concurrency),
+        custom ? "" : data(a.bytes_per_day),
         a.jurisdictions ? `${a.jurisdictions} of your choice` : "All",
-        `${n(a.watches)}, ${a.digest} email${a.shared_watches ? ", shared" : ""}`,
+        `${n(a.watches)}, ${a.digest === "daily" ? "daily or weekly" : a.digest} email${a.shared_watches ? ", shared" : ""}`,
         a.webhook_endpoints ? n(a.webhook_endpoints) : "None",
       ]
         .join(" | ")
