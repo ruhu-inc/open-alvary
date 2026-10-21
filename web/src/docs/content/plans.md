@@ -76,4 +76,4 @@ async function get(url, params = {}) {
 }
 ```
 
-To stay within your limits, keep a local copy of what you need and refresh it from the [change feed](/docs/changes), rather than asking for the same records again.
+To stay within your limits, keep a local copy of what you need and refresh it from the [change feed](/docs/changes), rather than asking for the same records again. The [acceptable use policy](/acceptable-use) lets you keep and index copies, and asks you to apply withdrawals and corrections within 7 days.

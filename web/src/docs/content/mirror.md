@@ -97,7 +97,7 @@ Changes made between the release's day and your token aren't in what you read fr
 
 ## Apply withdrawals and corrections
 
-Apply these promptly, so your copy never serves what Open Alvary no longer does:
+You may keep and index copies of what your organisation is entitled to. The [acceptable use policy](/acceptable-use) asks you to apply withdrawals and corrections within 7 days of their publication, and to stop showing a withdrawn text from then on:
 
 | Change | What to do |
 |---|---|

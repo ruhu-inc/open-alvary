@@ -247,7 +247,7 @@ Add `jurisdiction` to an item, such as `{"anchor_id": "…", "as_of": "2026-01-0
 
 ## Caching and the change feed
 
-If you cache evidence for your users, key each part by `anchor_id` and `content_hash`, and whole answers by the request and `revisions` (`dataset`, `router`, `ranking` and the rest). Keep the cache current with the [change feed](/docs/changes), and apply withdrawals and corrections promptly:
+If you cache evidence for your users, key each part by `anchor_id` and `content_hash`, and whole answers by the request and `revisions` (`dataset`, `router`, `ranking` and the rest). Keep the cache current with the [change feed](/docs/changes), and apply withdrawals and corrections within 7 days of their publication, as the [acceptable use policy](/acceptable-use) asks:
 
 | Change | What to do |
 |---|---|

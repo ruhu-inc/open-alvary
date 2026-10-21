@@ -2,8 +2,8 @@
 accept it at their next sign-in before using the console."""
 
 CURRENT = {
-    "terms": "2026-10-18",
-    "acceptable_use": "2026-10-18",
-    "privacy": "2026-10-18",
+    "terms": "2026-10-21",
+    "acceptable_use": "2026-10-21",
+    "privacy": "2026-10-21",
 }
 PATHS = {"terms": "/terms", "acceptable_use": "/acceptable-use", "privacy": "/privacy"}
