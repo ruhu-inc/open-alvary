@@ -1,0 +1,22 @@
+workbench/static/app.js
+  s_d665c62e07d76f::t_2c036c2ce08b4d 940-942,944-947,952
+  s_d665c62e07d76f::t_16a2140b767862 961-962
+  s_d665c62e07d76f::t_39dbb8c06ed9e6 977,979
+  s_d665c62e07d76f::t_e47485ca308aff 812,1180,1283
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "282b3a006b75fd7d9ec355fe85478c615bfdb76a",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
