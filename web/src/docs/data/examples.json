@@ -284,6 +284,7 @@
         "member_of": {
           "status": "unknown",
           "items": [],
+          "uncertain": [],
           "ended": [],
           "notice": "No membership here has been reviewed yet: unknown, not none."
         }
@@ -310,13 +311,14 @@
       "member_of": {
         "status": "unknown",
         "items": [],
+        "uncertain": [],
         "ended": [],
         "notice": "No membership here has been reviewed yet: unknown, not none."
       },
       "level": "national",
       "as_of": "2026-01-01"
     },
-    "note": "No membership has been reviewed yet, so the answer is `unknown`. Once one is, `items` lists it with its first and last day, its evidence and who reviewed it."
+    "note": "No membership has been reviewed yet, so the answer is `unknown`. Once one is, `items` lists it with its first and last day and their bounds, its basis, its evidence, who reviewed it and any suspensions; `uncertain` lists one whose uncertain first or last day may fall on `as_of`."
   },
   "get_coverage": {
     "path": {},
