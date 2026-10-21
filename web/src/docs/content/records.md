@@ -117,6 +117,7 @@ To find records with a text, search or list with `access=open`, or watch [covera
 | `canonical_url`, `retrieved_at` | The official file it was read from, and when. |
 | `effective_from`, `effective_until` | When this text applies, when known. |
 | `verification_status`, `content_verifier`, `content_verified_at` | Whether, by whom and when it was checked against the official file. |
+| `expression_id`, `expression_authority` | The language edition the text belongs to, and what that edition is worth as law ([below](#language-editions)). |
 
 ### Parts, chapters and sections
 
@@ -167,6 +168,55 @@ for (const node of answer.structure) {
 
 `parent_id` says which division a node sits in, and `page` which page of the official file it starts on, when known.
 
+## Language editions
+
+A law published in several languages has one **edition** per language, with the ID `<record id>:<language>`. [Get a record's editions](/docs/api/get-expressions) lists the editions that have a text, and says what each is worth as law, as the record states it:
+
+```curl
+curl https://api.open.alvary.ai/api/v1/sources/ng-constitution-1999/expressions \
+  -H "Authorization: Bearer $OPEN_ALVARY_KEY"
+```
+
+```python
+import os
+
+import requests
+
+editions = requests.get(
+    "https://api.open.alvary.ai/api/v1/sources/ng-constitution-1999/expressions",
+    headers={"Authorization": f"Bearer {os.environ['OPEN_ALVARY_KEY']}"},
+    timeout=30,
+).json()
+for edition in editions["items"]:
+    print(edition["language"], edition["authority"], edition["preferred_version_id"])
+if editions["language_rule"]["status"] == "stated":
+    print("Where the versions differ:", editions["language_rule"]["rule"])
+```
+
+```javascript
+const editions = await (
+  await fetch("https://api.open.alvary.ai/api/v1/sources/ng-constitution-1999/expressions", {
+    headers: { Authorization: `Bearer ${process.env.OPEN_ALVARY_KEY}` },
+  })
+).json();
+for (const edition of editions.items) console.log(edition.language, edition.authority);
+```
+
+| `authority` | Meaning |
+|---|---|
+| `authoritative` | The only authoritative text. |
+| `equally_authentic` | One of several equally authentic texts. |
+| `official_translation` | A translation published officially. It is not the authoritative text. |
+| `unofficial_translation` | A translation with no official standing. |
+| `machine_translation` | A machine translation. |
+| `unknown` | Nothing recorded says. Don't assume either way. |
+
+`authority_evidence` says where the authority is stated, when that is recorded: the page and words of the official file, or the address of another instrument.
+
+`language_rule` is the law's own rule for which version prevails where its language versions differ. When `status` is `stated`, `rule` gives it as the law states it, `prevails` names the language whose version prevails (absent when the rule names none, as when every version is equally authentic), and `provision` and `evidence` say where it is stated. `not_stated` means the reviewed copy states no such rule; `unknown` means nothing is recorded.
+
+`preferred_version_id` is the text to read when you give no date. It is a reading default, never a claim that its edition is authoritative. Every text from [Get a record's texts](/docs/api/get-versions) carries its `expression_id` and `expression_authority`; pass `expression_id` there to get one edition's texts.
+
 ## Cite and link
 
-When you show a record, link the official source (`canonical_url`) and the record's page on the website, and give the citation as recorded. If you show a text, follow its rights: see [Rights and reuse](/docs/rights).
+When you show a record, link the official source (`canonical_url`) and the record's page on the website, and give the citation as recorded. If you show a text, follow its rights: see [Rights and reuse](/docs/rights). If it is a translation, or its authority is `unknown`, say so beside it.
