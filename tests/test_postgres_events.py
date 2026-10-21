@@ -114,6 +114,37 @@ def test_published_events_are_superseded_or_withdrawn_never_edited(store):
         publish(store, an_event("repealed", "2024-01-01", affected_work="ng-no-such-act"))
 
 
+def test_an_announced_event_no_longer_public_is_corrected_as_withdrawn_never_dropped(store):
+    from changes.record import publish as record
+
+    publish_act(store, UNITS)
+    commenced, repealed = an_event("commenced", "2023-06-12"), an_event("repealed", "2024-03-01")
+    publish(store, commenced, repealed)
+    first = {c["payload"]["legal_effect"]["kind"]: c for c in changes(store)}
+    with store.engine.begin() as conn:  # its row deleted (only the database's owner can)
+        legal_event = namespace(conn).qualified(conn, "corpus", "legal_event")
+        conn.execute(text(f"DELETE FROM {legal_event} WHERE event_id = :e"), {"e": commenced["id"]})
+        assert record(conn, [WORK]) == 1
+    [withdrawn] = changes(store)[2:]
+    assert withdrawn["event_id"] == first["commenced"]["event_id"] and withdrawn["event_revision"] == 2
+    effect = withdrawn["payload"]["legal_effect"]
+    assert effect["kind"] == "commenced" and effect["review_state"] == "withdrawn"
+    assert effect["effective_date"] == "2023-06-12" and effect["scope"] == "whole"
+    assert (
+        withdrawn["payload"]["summary"]
+        == "The recorded commenced of Example Act, 2023 (the whole work) was withdrawn."
+    )
+    with store.engine.begin() as conn:
+        assert record(conn, [WORK]) == 0  # said once
+    # Its work no longer public, the other event is corrected too (the feed shows neither while hidden).
+    corpus = store.load()
+    next(r for r in corpus.rights if r.source_id == WORK).metadata_public = False
+    store.save(corpus)
+    [gone] = changes(store)[3:]
+    assert gone["event_id"] == first["repealed"]["event_id"] and gone["event_revision"] == 2
+    assert gone["payload"]["legal_effect"]["review_state"] == "withdrawn"
+
+
 def test_commencement_and_repeal_are_proposed_from_the_text(store):
     publish_act(store, UNITS)
     with store.engine.connect() as conn:

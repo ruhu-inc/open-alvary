@@ -40,7 +40,7 @@ FILTERS = [
     (
         "type",
         "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, "
-        "`withdrawal`, `coverage_changed`.",
+        "`legal_effect_recorded`, `withdrawal`, `coverage_changed`.",
     ),
     ("class", "Document types, such as `act` or `regulation`. Up to 50."),
     ("language", "Languages of the affected text, such as `en`. Up to 50."),
@@ -394,9 +394,9 @@ OPERATIONS: dict[str, dict] = {
         "tag": "Changes",
         "summary": "List changes",
         "description": "Changes in the order they were made, oldest first: records added, corrected or "
-        "withdrawn, texts published and coverage changes. Keep the `resume_token` and send it next time "
-        "for only newer changes. Send at most one of `cursor`, `resume_token` and `start`. The same "
-        "route answers without a key at https://open.alvary.ai/api/changes.",
+        "withdrawn, texts published, legal effects recorded and coverage changes. Keep the `resume_token` "
+        "and send it next time for only newer changes. Send at most one of `cursor`, `resume_token` and "
+        "`start`. The same route answers without a key at https://open.alvary.ai/api/changes.",
         "extra": FILTER_PARAMETERS + PAGING,
         "errors": FEED,
         "answer": "ChangePage",
@@ -520,10 +520,11 @@ SCHEMAS: dict[str, dict] = {
                 "type": S,
                 "description": "What changed: `catalogue_added` (a record added: an old law newly catalogued, "
                 "not a new law), `metadata_corrected` (its catalogue details corrected), "
-                "`text_version_published`, `legal_effect_recorded` (a checked repeal, amendment or "
-                "supersession of the record by another public record), `withdrawal` (a record or text) or "
-                "`coverage_changed` (a jurisdiction's coverage). More types may be added: ignore those you "
-                "do not know; `/change-coverage` lists the ones recorded.",
+                "`text_version_published`, `legal_effect_recorded` (a checked link with another public "
+                "record that changes what law applies: a repeal, amendment, supersession, commencement, "
+                "transposition, domestication or ratification; or a reviewed event on its provisions), "
+                "`withdrawal` (a record or text) or `coverage_changed` (a jurisdiction's coverage). More types "
+                "may be added: ignore those you do not know; `/change-coverage` lists the ones recorded.",
             },
             "feed_epoch": {
                 "type": S,
@@ -588,13 +589,17 @@ SCHEMAS: dict[str, dict] = {
             "legal_effect": {
                 "type": ["object", "null"],
                 "description": "For a legal effect: {kind, by, effective_date, evidence_url}. `kind` is `repeal`, "
-                "`amendment` or `supersession` of the record in `work`; `by` is the record that had the effect "
-                "{id, title, citation}; the date is when it took effect, when known. A reviewer checked it "
-                "against the official text. A later correction of it has the same `event_id`. For a reviewed "
-                "event on provisions, `kind` is the event (`commenced`, `repealed`, `suspended`, `revived`, "
-                "…), with `scope` (`whole` or `explicit_nodes`), `provisions` (their locators), `precision` "
-                "of the date and `review_state` (`withdrawn` when the event was withdrawn); `by` is present "
-                "when another law asserted it.",
+                "`amendment`, `supersession`, `commencement`, `transposition`, `domestication` or "
+                "`ratification` of the record in `work`; `by` is the record that had the effect {id, title, "
+                "citation}; the date is when it took effect, when known. A reviewer checked it against the "
+                "official text. A transposition, domestication or ratification changes the law on both sides, "
+                "so the law that gives effect to the instrument has its own change, naming the instrument in "
+                "`of` {id, title, citation} instead of `by`. A later correction of it has the same `event_id`; "
+                "when the link was withdrawn, the correction says `review_state` `withdrawn` and names the "
+                "link it withdraws. For a reviewed event on provisions, `kind` is the event (`commenced`, "
+                "`repealed`, `suspended`, `revived`, …), with `scope` (`whole` or `explicit_nodes`), "
+                "`provisions` (their locators), `precision` of the date and `review_state` (`withdrawn` when "
+                "the event was withdrawn, or is no longer public); `by` is present when another law asserted it.",
             },
             "previous": {
                 "type": "object",

@@ -20,7 +20,7 @@ Changes cover what Open Alvary holds, not every change in a country's law. [Chan
 | `catalogue_added` | A record became public: an existing law newly catalogued (not necessarily a new law), or one restored after a withdrawal. |
 | `metadata_corrected` | A record's catalogue details were corrected; `changed_fields` lists which. A correction never changes legal text. |
 | `text_version_published` | A text was cleared and published; `change_reason` says whether it is the first text, a revision at the source, or a correction. A text that replaces another lists in `version_diff` the provisions it adds, removes and changes. |
-| `legal_effect_recorded` | A reviewer checked, against the official text, that another public record repeals, amends or supersedes this one. `legal_effect` names the record that had the effect and the date it took effect, when known. It may describe a past effect recorded late. |
+| `legal_effect_recorded` | A reviewer checked, against the official text, that another public record repeals, amends, supersedes or brings into force this one, or that a law transposes, domesticates or ratifies a treaty or directive. `legal_effect` names the record that had the effect (`by`) and the date it took effect, when known. A transposition, domestication or ratification changes the law on both sides, so each record has its own change; the law's names the instrument it gives effect to (`of`). It may describe a past effect recorded late. If the link is withdrawn, the same change is corrected with `review_state` `withdrawn`, still naming the link. |
 | `withdrawal` | A record or a text stopped being public. |
 | `coverage_changed` | A country's coverage changed, for example its first record. |
 
@@ -30,7 +30,7 @@ Each change carries `schema_version` (`change-event-1`). New kinds of change and
 
 {{example:list_changes}}
 
-If we correct a change itself, for example the date of a legal effect, it keeps its `event_id`, its `event_revision` goes up, `change_reason` is `corrected`, and `supersedes` names the revision it replaces. So store changes by **(`feed_epoch`, `event_id`, `event_revision`)**, keep the highest revision of each change, and never apply the same one twice.
+If we correct a change itself, for example the date of a legal effect, or withdraw a legal effect we recorded, it keeps its `event_id`, its `event_revision` goes up, `change_reason` is `corrected`, and `supersedes` names the revision it replaces. So store changes by **(`feed_epoch`, `event_id`, `event_revision`)**, keep the highest revision of each change, and never apply the same one twice.
 
 ## Keep a copy current
 
