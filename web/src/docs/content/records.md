@@ -353,9 +353,9 @@ for (const edition of editions.items) console.log(edition.language, edition.auth
 | `machine_translation` | A machine translation. |
 | `unknown` | Nothing recorded says. Don't assume either way. |
 
-`authority_evidence` says where the authority is stated, when that is recorded: the page and words of the official file, or the address of another instrument.
+`authority_evidence` says where the authority is stated, when that is recorded. Its `source` is `document` (the official file itself, with the `page` and the words in `quote`), `external` (another instrument, at `url`), `registry` (a registry), `manifest` (the manifest of the collection the file came from) or `reviewer` (the reviewer recorded it).
 
-`language_rule` is the law's own rule for which version prevails where its language versions differ. When `status` is `stated`, `rule` gives it as the law states it, `prevails` names the language whose version prevails (absent when the rule names none, as when every version is equally authentic), and `provision` and `evidence` say where it is stated. `not_stated` means the reviewed copy states no such rule; `unknown` means nothing is recorded.
+`language_rule` is the law's own rule for which version prevails where its language versions differ. When `status` is `stated`, `rule` gives it as the law states it, `prevails` names the language whose version prevails (absent when the rule names none, as when every version is equally authentic), and `provision` and `evidence` say where it is stated. `not_stated` means the reviewed copy states no such rule; `not_applicable` means the reviewer recorded that no such rule applies to this instrument; `unknown` means nothing is recorded. `evidence` takes the same form as `authority_evidence`.
 
 `preferred_version_id` is the text to read when you give no date. It is a reading default, never a claim that its edition is authoritative. Every text from [Get a record's texts](/docs/api/get-versions) carries its `expression_id` and `expression_authority`; pass `expression_id` there to get one edition's texts.
 
