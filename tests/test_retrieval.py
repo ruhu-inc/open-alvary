@@ -294,6 +294,10 @@ def test_every_input_is_embedded_whole_within_the_servers_limit():
         template = (root / "deployment" / cloud / "env" / "inference-cloud-init.yaml.tftpl").read_text()
         args = re.search(r'embedder = \{[^}]*args = "([^"]*)"', template).group(1)
         assert args == f"--max-batch-tokens {vectors.MAX_INPUT_TOKENS} --auto-truncate"
+        # The reranker warms up on one input of its model's 8,192 tokens, and never truncates.
+        assert (
+            re.search(r'reranker = \{[^}]*args = "([^"]*)"', template).group(1) == "--max-batch-tokens 8192"
+        )
     # The longest window, even in four-byte characters, fits an input whole; a longer one is refused.
     base = {"id": "p", "model": "m", "revision": "1", "dims": 8, "embedder": "http"}
     longest = (vectors.INPUT_BYTES - 2) // 4
