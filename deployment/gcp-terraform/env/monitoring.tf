@@ -1,7 +1,8 @@
 # Logs, the operator's alerts and the budget, as deployment/gcp/public_service.sh sets them up today.
-# Request logs never carry a query or legal text: the service writes none (RSV-01), and the request
-# logs Cloud Run and the load balancer write for REST v1 and MCP are dropped before they are stored
-# (OA-A2). Cloud Logging keeps the rest 30 days (its default bucket), as Log Analytics does on Azure.
+# Request logs never carry a query or legal text: the service writes none (RSV-01), and of the request
+# logs Cloud Run and the load balancer write, those for REST v1 and MCP (OA-A2) and every one whose
+# address has a query string (owner, 2026-10-21) are dropped before they are stored. Cloud Logging
+# keeps the rest 30 days (its default bucket), as Log Analytics does on Azure.
 
 resource "google_monitoring_notification_channel" "operator" {
   display_name = "Open Alvary operator (${var.environment})"
@@ -24,6 +25,22 @@ resource "google_logging_project_exclusion" "api_request_urls" {
     "(log_id(\"run.googleapis.com/requests\") OR resource.type=\"http_load_balancer\")",
     "AND (httpRequest.requestUrl:\"/api/v1\" OR httpRequest.requestUrl:\"/mcp\"",
     "OR httpRequest.requestUrl:\"//${var.api_domain}/\")",
+  ])
+
+  depends_on = [google_project_service.main]
+}
+
+# No query string in any request log (owner, 2026-10-21): a website search (/site/v1/search?q=), a
+# page's filters or anything else after a `?` can show what someone is researching. Request counts,
+# latency and status stay in Cloud Run's and the load balancer's own metrics, which need no logs.
+# api_request_urls stays: REST v1's and MCP's paths carry research without a query string too
+# (/citations/{citation}). The same test checks this filter and the live project's.
+resource "google_logging_project_exclusion" "request_query_strings" {
+  name        = "open-alvary-request-query-strings"
+  description = "Request logs whose address has a query string, such as a website search: never stored"
+  filter = join(" ", [
+    "(log_id(\"run.googleapis.com/requests\") OR resource.type=\"http_load_balancer\")",
+    "AND (httpRequest.requestUrl:\"?\")",
   ])
 
   depends_on = [google_project_service.main]

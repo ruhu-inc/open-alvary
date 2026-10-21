@@ -1,7 +1,8 @@
 """Request logs never carry what a caller sent: queries reveal what someone is researching (RSV-01,
 ACS-06, OA-A2). The legacy API's own request log holds no input; every image runs uvicorn without its
-access log; Front Door's request logs go nowhere on Azure, and Google Cloud drops REST v1's and MCP's
-before they are stored. tests/test_postgres_request_logging.py runs the public service itself."""
+access log; Front Door's request logs go nowhere on Azure, and Google Cloud drops REST v1's and MCP's,
+and every one with a query string, before they are stored. tests/test_postgres_request_logging.py runs
+the public service itself."""
 
 import http.client
 import json
@@ -296,22 +297,102 @@ def exclusion_groups(text: str) -> list[set[str]]:
     return [set(group.split(" OR ")) for group in matched.groups()]
 
 
-def test_google_clouds_exclusion_still_drops_the_request_logs_of_rest_v1_mcp_and_the_api_host():
-    # Cloud Run and the load balancer log each request's full address: these entries are never stored.
+def drops(groups: list[set[str]], entry: dict[str, str]) -> bool:
+    """Whether Cloud Logging would match an entry to a filter of exclusion_groups' form. Its clauses are
+    log_id("…"), field="…" (equal) and field:"…" (has: the value anywhere in the field, ignoring case)."""
+
+    def holds(clause: str) -> bool:
+        if named := re.fullmatch(r'log_id\("(.+)"\)', clause):
+            return entry.get("log_id") == named.group(1)
+        field, operator, value = re.fullmatch(r'([\w.]+)([=:])"(.*)"', clause).groups()
+        found = entry.get(field, "")
+        return found == value if operator == "=" else value.lower() in found.lower()
+
+    return all(any(holds(clause) for clause in group) for group in groups)
+
+
+GOOGLE_EXCLUSIONS = ("api_request_urls", "request_query_strings")
+# What Cloud Run and the load balancer each log about one request (logs/requests is the load
+# balancer's log).
+REQUEST_LOGS = (
+    {"log_id": "run.googleapis.com/requests", "resource.type": "cloud_run_revision"},
+    {"log_id": "requests", "resource.type": "http_load_balancer"},
+)
+WITH_QUERIES = (
+    "https://open.alvary.ai/site/v1/search?q=data+protection",  # the website's search
+    "https://open.alvary.ai/search?q=data+protection",  # the search page itself
+    "https://open.alvary.ai/browse?jurisdiction=ng&type=act",
+    "https://open.alvary.ai/console/sign-in?error=wrong_account",
+    "https://open.alvary.ai/downloads/2026-10-05/ng/catalogue.json?x=1",
+    "https://open.alvary.ai/?",
+)
+API = (
+    "https://api.open.alvary.ai/api/v1/citations/NDPA%20s.%2023",  # research in the path itself
+    "https://open.alvary.ai/api/v1/sources/ng-foi-act-2011",
+    "https://api.open.alvary.ai/mcp",
+    "https://api.open.alvary.ai/.well-known/oauth-protected-resource/mcp",
+)
+KEPT = (
+    "https://open.alvary.ai/",
+    "https://open.alvary.ai/sources/ng-foi-act-2011",
+    "https://open.alvary.ai/healthz",
+)
+
+
+def google_filters() -> dict[str, str]:
+    """Each exclusion's filter in deployment/gcp-terraform/env/monitoring.tf, which none disables."""
     monitoring = (ROOT / "deployment" / "gcp-terraform" / "env" / "monitoring.tf").read_text()
-    body = resources("google_logging_project_exclusion", monitoring)["api_request_urls"]
-    assert not re.search(r"\bdisabled\s*=\s*true", body)
-    [listed] = re.findall(r'\bfilter\s*=\s*join\(" ",\s*\[(.*?)\]\s*\)', body, re.S)
-    terraform = " ".join(json.loads(f'"{part}"') for part in re.findall(STRING, listed))
-    logs, addresses = exclusion_groups(terraform)
-    assert logs >= {'log_id("run.googleapis.com/requests")', 'resource.type="http_load_balancer"'}
-    assert addresses >= {
-        'httpRequest.requestUrl:"/api/v1"',
-        'httpRequest.requestUrl:"/mcp"',
-        'httpRequest.requestUrl:"//${var.api_domain}/"',
-    }
-    # The script that set it on the live project (public_service.sh request_logs) drops the same.
+    found = {}
+    for name in GOOGLE_EXCLUSIONS:
+        body = resources("google_logging_project_exclusion", monitoring)[name]
+        assert not re.search(r"\bdisabled\s*=\s*true", body), name
+        assert f'"open-alvary-{name.replace("_", "-")}"' in body, name
+        [listed] = re.findall(r'\bfilter\s*=\s*join\(" ",\s*\[(.*?)\]\s*\)', body, re.S)
+        found[name] = " ".join(json.loads(f'"{part}"') for part in re.findall(STRING, listed))
+    return found
+
+
+def test_google_cloud_stores_no_request_log_with_a_query_string_nor_any_for_rest_v1_and_mcp():
+    # Cloud Run and the load balancer log each request's full address, query string included. Every
+    # entry with a query string, such as a website search, is dropped before storage (owner,
+    # 2026-10-21), and so is every request to REST v1, MCP and the API host, whose paths carry research
+    # without one.
+    api_host = "api.open.alvary.ai"
+    groups = [exclusion_groups(f.replace("${var.api_domain}", api_host)) for f in google_filters().values()]
+    for logs, _ in groups:
+        assert logs >= {'log_id("run.googleapis.com/requests")', 'resource.type="http_load_balancer"'}
+
+    def stored(url: str) -> list[str]:
+        entries = [log | {"httpRequest.requestUrl": url} for log in REQUEST_LOGS]
+        return [e["resource.type"] for e in entries if not any(drops(g, e) for g in groups)]
+
+    assert {url: stored(url) for url in WITH_QUERIES + API} == {url: [] for url in WITH_QUERIES + API}
+    # Pages without a query string are still logged, with their status and latency, for diagnosis.
+    both = ["cloud_run_revision", "http_load_balancer"]
+    assert {url: stored(url) for url in KEPT} == {url: both for url in KEPT}
+    # The check sees a filter that would let a query string through.
+    api_only = [exclusion_groups(google_filters()["api_request_urls"].replace("${var.api_domain}", api_host))]
+    entry = REQUEST_LOGS[0] | {"httpRequest.requestUrl": WITH_QUERIES[0]}
+    assert not drops(api_only[0], entry)
+
+
+def test_the_live_projects_script_sets_the_same_exclusions_as_terraform():
+    # deployment/gcp/public_service.sh request_logs sets them on a project Terraform does not manage.
     script = (ROOT / "deployment" / "gcp" / "public_service.sh").read_text()
     function = script.split("\nrequest_logs() {", 1)[1].split("\n}\n", 1)[0]
-    live = "".join(json.loads(f'"{part}"') for part in re.findall(r"\bfilter\+?=" + STRING, function))
-    assert exclusion_groups(live.replace("$API_DOMAIN", "${var.api_domain}")) == [logs, addresses]
+
+    def value(variable: str) -> str:
+        # As the function builds it: `local variable="…"`, then each `variable+="…"`.
+        parts = re.findall(rf"\b{variable}\+?=" + STRING, function)
+        return "".join(json.loads(f'"{part}"') for part in parts).replace("$API_DOMAIN", "${var.api_domain}")
+
+    named = dict(re.findall(r'\bexclude_logs\s+(open-alvary-[\w-]+)\s+"\$(\w+)"', function))
+    assert set(named) == {f"open-alvary-{name.replace('_', '-')}" for name in GOOGLE_EXCLUSIONS}
+    live = {
+        name: value(named[f"open-alvary-{name.replace('_', '-')}"]).replace("$logs", value("logs"))
+        for name in GOOGLE_EXCLUSIONS
+    }
+    terraform = google_filters()
+    assert {name: exclusion_groups(live[name]) for name in live} == {
+        name: exclusion_groups(terraform[name]) for name in terraform
+    }

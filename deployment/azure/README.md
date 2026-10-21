@@ -70,7 +70,8 @@ Unchanged: Auth0 (sign-in), Resend (email), DNS (records change at switchover), 
   what the service writes, never a query or a text, and the service sends Application Insights
   nothing. `tests/test_request_logging.py` fails on a Terraform setting that would send Front Door's
   request logs; phase 3 checks that none was added outside Terraform. On Google Cloud the same
-  entries are excluded before they are stored (`google_logging_project_exclusion.api_request_urls`).
+  entries are excluded before they are stored: all of REST v1's and MCP's, and every one with a query
+  string (`google_logging_project_exclusion.api_request_urls` and `.request_query_strings`).
 - **The workbench has its own database server**, apart from the public service's, as on Google
   Cloud.
 - **No vector profile is active** until a generation passes its gates (RSV-12): `vector_profile`

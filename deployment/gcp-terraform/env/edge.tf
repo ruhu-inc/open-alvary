@@ -121,8 +121,9 @@ resource "google_compute_backend_service" "public" {
     group = google_compute_region_network_endpoint_group.public[0].id
   }
 
-  # Requests are logged (Cloud Armor's decisions are in these logs); those for REST v1 and MCP are
-  # dropped before they are stored, so their queries are never kept (monitoring.tf, OA-A2).
+  # Requests are logged (Cloud Armor's decisions are in these logs); those for REST v1 and MCP, and
+  # every one with a query string, are dropped before they are stored, so no query is ever kept
+  # (monitoring.tf, OA-A2).
   log_config {
     enable      = true
     sample_rate = 1

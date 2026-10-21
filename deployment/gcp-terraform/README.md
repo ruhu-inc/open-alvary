@@ -115,7 +115,8 @@ switchover), GitHub.
   has no Cost Management). This one measures cost before credits, so it shows what the credits are
   paying for.
 - **Also kept from today's live system**, which Azure lacks:
-  - REST v1 and MCP request logs are dropped before storage (OA-A2);
+  - REST v1 and MCP request logs, and every request log with a query string such as a website
+    search, are dropped before storage (OA-A2; query strings, owner, 2026-10-21);
   - the audit-seal log bucket (MAC-13.7, 800 days, unlocked);
   - the failed-job alert.
 - **The daily job runs at 03:15 UTC**, as today; Azure's runs at 03:00.

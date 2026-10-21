@@ -148,10 +148,12 @@ and, once Resend's webhook exists, `RESEND_WEBHOOK_SECRET`:
    the worker jobs. Every later deploy must keep `ACCOUNTS=1`, or the console and keys go dark.
 4. `deployment/gcp/public_service.sh api_edge`, then add its two DNS records for `api.<domain>`.
    Then `deployment/gcp/public_service.sh request_logs` (once): Cloud Logging stops storing Cloud Run's
-   and the load balancer's request logs for REST v1 and MCP, so their queries are never kept (the
-   privacy notice's promise; OA-A2). It changes the project's logging configuration, so nothing
-   changes until it is run; a deployment from before 2026-10-18 needs it once. `status` lists the
-   exclusion.
+   and the load balancer's request logs for REST v1 and MCP, and every one whose address has a query
+   string, such as a website search, so no query is ever kept (the privacy notice's promise; OA-A2).
+   It changes the project's logging configuration, so nothing changes until it is run; a deployment
+   from before 2026-10-21 needs it once more, for the query-string exclusion. `status` lists both
+   exclusions. On the Terraform-managed environment (`deployment/gcp-terraform`) `monitoring.tf`
+   holds the same two, and an apply adds them.
 5. `deployment/gcp/public_service.sh schedule` (once): the worker every 5 minutes, the daily sweep.
 6. In Resend, a webhook to `https://<domain>/console/mail-events` for `email.bounced` and
    `email.complained`; its signing secret into `.env`, then step 2 again and a deploy.

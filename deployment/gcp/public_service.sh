@@ -435,19 +435,28 @@ schedule() {  # once, after the first ACCOUNTS=1 deploy: the worker every 5 minu
   echo "Scheduled: $WORKER_JOB every 5 minutes, $DAILY_JOB daily at 03:15 UTC."
 }
 
-request_logs() {  # once: no request logs for the API and MCP, so their queries are never kept (OA-A2)
-  # The app writes no access log (--no-access-log), but Cloud Run and the load balancer each log every
-  # request with its full address, query included. This drops those entries for REST v1 and MCP
-  # before they are stored; what stays is the daily usage totals in the database (privacy notice).
-  local name=open-alvary-api-request-urls
-  local filter="(log_id(\"run.googleapis.com/requests\") OR resource.type=\"http_load_balancer\")"
-  filter+=" AND (httpRequest.requestUrl:\"/api/v1\" OR httpRequest.requestUrl:\"/mcp\""
-  filter+=" OR httpRequest.requestUrl:\"//$API_DOMAIN/\")"
-  local verb=--add-exclusion
+exclude_logs() {  # a named exclusion on the _Default sink, added or brought up to date
+  local name="$1" filter="$2" verb=--add-exclusion
   "${GC[@]}" logging sinks describe _Default --format='value(exclusions[].name)' | tr ';' '\n' \
     | grep -qx "$name" && verb=--update-exclusion
   "${GC[@]}" logging sinks update _Default "$verb=name=$name,filter=$filter"
-  echo "Request logs for REST v1 and MCP are no longer stored. Check: "$0 status" lists it under log exclusions."
+}
+
+request_logs() {  # once: no request log keeps a query string, nor any request to the API and MCP (OA-A2)
+  # The app writes no access log (--no-access-log), but Cloud Run and the load balancer each log every
+  # request with its full address, query included. These drop, before they are stored, the entries for
+  # REST v1 and MCP, whose paths carry research too (/citations/{citation}), and every entry whose
+  # address has a query string, such as a website search (owner, 2026-10-21). Counts, latency and
+  # status stay in Cloud Run's and the load balancer's metrics, and the daily usage totals in the
+  # database (privacy notice). gcp-terraform/env/monitoring.tf sets the same two.
+  local logs="(log_id(\"run.googleapis.com/requests\") OR resource.type=\"http_load_balancer\")"
+  local api="$logs AND (httpRequest.requestUrl:\"/api/v1\" OR httpRequest.requestUrl:\"/mcp\""
+  api+=" OR httpRequest.requestUrl:\"//$API_DOMAIN/\")"
+  local queries="$logs AND (httpRequest.requestUrl:\"?\")"
+  exclude_logs open-alvary-api-request-urls "$api"
+  exclude_logs open-alvary-request-query-strings "$queries"
+  echo "Request logs for REST v1 and MCP, and any with a query string, are no longer stored."
+  echo "Check: '$0 status' lists both under log exclusions."
 }
 
 audit_seals() {  # once: the seals' copy outside the database (MAC-13.7), kept 800 days
