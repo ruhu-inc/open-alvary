@@ -1,0 +1,47 @@
+workbench/review.py
+  s_d665c62e07d76f::t_db36a8d1b73497 47-48
+ingestion/rwanda.py
+  s_d665c62e07d76f::t_90c420fcfdaa8c 659
+  s_d665c62e07d76f::t_da2e87221414c3 1204-1205,1207
+  s_d665c62e07d76f::t_62c0b9cd99becb 1147
+workbench/record_view.py
+  s_d665c62e07d76f::t_d8a259731814df 1187-1191
+  s_d665c62e07d76f::t_3898cb55ba3ba0 1151-1153
+tests/test_rw_gazette.py
+  s_d665c62e07d76f::t_4b91af74e23b3f 295,299,301
+  s_d665c62e07d76f::t_3ad0e5d2a22f72 343,346-347
+  s_d665c62e07d76f::t_962d285fc937c4 327-328
+  s_d665c62e07d76f::t_4bfe95b0ebc05b 257,260
+  s_d665c62e07d76f::t_320a50b1dd17a3 321-326,329-342,344-345,348-354
+ingestion/rw_gazette.py
+  s_d665c62e07d76f::t_a0dc0948180b7b 1532-1533,1536,1538
+  s_d665c62e07d76f::t_28ab8bf2400c0e 1516-1519,1526,1528-1529,1534
+  s_d665c62e07d76f::t_10639b627b600c 1477-1480,1482-1488,1491
+  s_d665c62e07d76f::t_89791cbbd11d23 1527
+  s_d665c62e07d76f::t_21f8589b8bbba8 1588
+  s_d665c62e07d76f::t_06b7c8dda29855 25
+  s_d665c62e07d76f::t_b6f23bad2341ed 1461,1463-1464,1470-1472
+  s_d665c62e07d76f::t_8a2c0c8dfaa3e0 1159-1161
+  s_d665c62e07d76f::t_ec98f46d7664dc 1524-1525,1535,1537
+  s_d665c62e07d76f::t_f4ad8767b5034b 1530-1531
+tests/test_workbench.py
+  s_d665c62e07d76f::t_2822ec828bc407 959,961
+  s_d665c62e07d76f::t_0b2f2cd807a06a 931,936
+  s_d665c62e07d76f::t_5a7c7648f9f2e2 955-958,960,962-967
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2c7beac77321e4138fb2c3a753d0df6d7e29a186",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
