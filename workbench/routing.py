@@ -196,7 +196,8 @@ def flags_resolved(page: dict, revision: dict | None) -> bool:
 
 def calibrate(library, store, document_ids: list[str]) -> dict:
     """For documents already reviewed page by page: each page's route, and what its review changed. The
-    material-change rate of the routes that would skip review is the evidence D28 needs (CPR-01)."""
+    material-change rate of the routes that would skip review is the evidence D28 needs (CPR-01). Each
+    document's structure is derived as the workbench derives it, by the rules for its type."""
     from workbench import publication
 
     totals: dict[str, dict[str, int]] = {}
@@ -204,7 +205,7 @@ def calibrate(library, store, document_ids: list[str]) -> dict:
     for document_id in document_ids:
         reading, latest = library.reading(document_id), store.latest_pages(document_id)
         final = content.final_pages(reading, latest)
-        built = publication.build({"id": document_id, "jurisdiction": document_id[:2]}, final, reading)
+        built = publication.build(library.act(document_id), final, reading)
         issues: dict[int, int] = {}
         for issue in [*built.errors, *built.warnings]:
             if issue.page is not None:

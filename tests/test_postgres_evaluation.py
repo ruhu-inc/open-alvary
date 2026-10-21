@@ -67,7 +67,7 @@ def publish_synthetic(store):
     items = [
         publish.ApprovedText(
             document_id=t["work"], work=t["work"], language="en", document_type=t.get("document_type", "act"),
-            text=publication.build({"id": t["work"], "jurisdiction": "ng"}, [{"page": 1, "units": t["units"]}]),
+            text=publication.build({"id": t["work"], "jurisdiction": "ng", "type": "act"}, [{"page": 1, "units": t["units"]}]),
             approver="Benchmark", approved_at=now - timedelta(minutes=5),
             effective_from=date.fromisoformat(t["effective_from"]),
             provenance={"url": f"https://example.org/{t['work']}.pdf", "retrieved_at": "2030-01-01T00:00:00+00:00",

@@ -239,7 +239,7 @@ def main(argv=None) -> int:
     final = content.final_pages(reading, latest)
     with open(args.instructions) as handle:
         instructions = [Instruction.model_validate(i) for i in json.load(handle)["instructions"]]
-    document = {"id": args.document, "jurisdiction": args.document[:2]}
+    document = library.act(args.document)  # its type decides the structure rules, as in the workbench
     try:
         result = apply(document, final, instructions, args.as_at)
     except Refused as error:

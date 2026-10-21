@@ -259,7 +259,7 @@ def approved_text(words="The Fund shall lend to students.", raw="7" * 64):
             ],
         }
     ]
-    built = publication.build({"id": "ng-example-act-2023", "jurisdiction": "ng"}, pages)
+    built = publication.build({"id": "ng-example-act-2023", "jurisdiction": "ng", "type": "act"}, pages)
     return publish.ApprovedText(
         document_id="ng-example-act-2023",
         work="ng-example-act-2023",

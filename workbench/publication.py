@@ -3,6 +3,7 @@
 Built from the document's final pages each time it is asked for (15 ms for a 152-page Act), so
 what the reviewer sees before approving, what the approval records and what publishing writes
 come from the same code. Errors block approval; warnings are shown beside the pages they concern.
+A document of a jurisdiction and type with no structure rules has an error for that alone.
 """
 
 import re
@@ -43,14 +44,14 @@ class Text:
         return self.serialized.profile_id
 
     @property
-    def rules_id(self) -> str:
+    def rules_id(self) -> str | None:
         return self.structure.rules_id
 
 
 def build(document: dict, final: list[dict], reading: dict | None = None) -> Text:
     pages = [{"page": page["page"], "units": page["units"]} for page in final]
     serialized = serialize.serialize(pages)
-    derived = structure.derive(serialized, pages, structure.rules_for(document), document.get("language"))
+    derived = structure.for_document(document, serialized, pages)
     issues = serialized.issues + derived.issues
     if reading is not None:
         issues += doubled_words(pages, reading)

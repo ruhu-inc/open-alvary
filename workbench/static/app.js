@@ -471,7 +471,8 @@ function approvalChecklist(actId, data, current, head) {
       ready.stale_pages.length ? el("span", {}, "first: ", page(ready.stale_pages[0])) : null, ready.stale_pages.length ? "warn" : ""),
     ready.missing_checks.length ? step(false, `Check readings missing: ${ready.missing_checks.join(", ")}`, "rerun the batch", "warn") : null,
     text ? step(!text.errors.length,
-      text.errors.length ? `${text.errors.length} problem${text.errors.length === 1 ? "" : "s"} in the text's structure to fix` : `Text and structure: ${describeCounts(text.counts)}`,
+      !text.rules ? "No structure rules for this kind of document: it cannot be approved until they are written"
+        : text.errors.length ? `${text.errors.length} problem${text.errors.length === 1 ? "" : "s"} in the text's structure to fix` : `Text and structure: ${describeCounts(text.counts)}`,
       text.errors.length ? toText("See them") : text.warnings.length ? toText(`${text.warnings.length} to look at`) : null) : null,
     step(ready.details.confirmed, ready.details.confirmed ? "Details confirmed" : ready.details.status ? "Details not yet confirmed" : "Details not yet reviewed",
       ready.details.confirmed ? null : el("a", { href: `#/doc/${encodeURIComponent(actId)}/details`, text: "review the details" })),
@@ -485,6 +486,7 @@ function approvalChecklist(actId, data, current, head) {
 // What publishing will write: the parts, sections and schedules found in the text as it now stands, and
 // what to fix (errors block approval) or look at (warnings) first, each with its page.
 const ISSUES = { // most consequential first
+  no_structure_rules: "Layout not supported yet",
   join: "Page-break joins refused",
   note_without_words: "Margin notes beside no words",
   two_numbers: "Two numbers in a row",
@@ -524,7 +526,7 @@ function textCheckCard(actId, text) {
   return el("div", { class: "card", id: "text-check" },
     el("h3", { text: "Text and structure" }),
     el("p", { class: "muted", text: "What publishing will write from the pages as they now stand. Errors must be fixed before approval; warnings are worth a look, because nobody reads the whole text." }),
-    el("p", {}, `${describeCounts(text.counts)} · ${Math.max(1, Math.round(text.bytes / 1024))} KB of text · rules ${text.rules}`),
+    el("p", {}, `${describeCounts(text.counts)} · ${Math.max(1, Math.round(text.bytes / 1024))} KB of text · ${text.rules ? `rules ${text.rules}` : "no structure rules for this kind of document"}`),
     text.errors.length ? el("div", {}, el("h4", { text: "To fix before approval" }), grouped(text.errors, "high")) : null,
     text.warnings.length ? el("div", {}, el("h4", { text: "To look at" }), grouped(text.warnings, "warn")) : el("p", {}, pill("ok", "Nothing to look at")),
     el("p", {}, el("a", { href: `/api/documents/${encodeURIComponent(actId)}/canonical`, target: "_blank", rel: "noopener", text: "The text and structure as they would be published (JSON)" })));

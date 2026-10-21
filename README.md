@@ -357,8 +357,10 @@ history (`/api/v1/rights/{id}/history`) and withdrawals that name the version wi
 
 Limited: the website's search, browse and coverage read every public record on each request; the
 S1 benchmark (`scripts/benchmark_catalogue.py`: 10,000 records, 10 clients) misses its two-second
-p95 there, while the API meets it. A record's history goes one link deep. Section and article
-structure has rules for two collections only (`ng-federal-act-1`, `rw-law-1`). No legal text has
+p95 there, while the API meets it. A record's history goes one link deep. Structure has rules
+for Nigerian federal Acts (`ng-federal-act-1`), the instruments of Rwanda's Official Gazette
+(`rw-law-1`) and Nigerian judgments (`judgment-paragraphs-1`) only; the workbench refuses to
+approve any other kind of document until rules are written for its layout. No legal text has
 been cleared, so no text is published, and no Rwandan record is public yet.
 
 Deferred: the S1 monitoring exercise (alert delivery, a recorded outage and recovery), signed
