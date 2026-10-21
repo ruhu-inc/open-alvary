@@ -1,0 +1,32 @@
+web/src/changes.tsx
+  s_d665c62e07d76f::t_cf1fbc0b7b0b4d 33
+web/src/docs/content/changes.md
+  s_d665c62e07d76f::t_cf1fbc0b7b0b4d 26,126
+web/src/docs/data/examples.json
+  s_d665c62e07d76f::t_cf1fbc0b7b0b4d 283-289,293-319
+  s_d665c62e07d76f::t_3520eec9820cb9 320
+web/src/docs/content/records.md
+  s_d665c62e07d76f::t_cf1fbc0b7b0b4d 89-141
+web/src/console/watches.tsx
+  s_d665c62e07d76f::t_cf1fbc0b7b0b4d 40
+scripts/docs_examples.py
+  s_d665c62e07d76f::t_cf1fbc0b7b0b4d 40,55-60,148-149
+web/src/docs/content/changelog.md
+  s_d665c62e07d76f::t_cf1fbc0b7b0b4d 8-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d885d21b2fbe83d3febbc7eabe1b7b28d94035bb",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
