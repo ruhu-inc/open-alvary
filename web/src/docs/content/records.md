@@ -146,7 +146,7 @@ What the answer means:
 | `valid_from`, `valid_to` | The first and last day of the membership, as precisely as the evidence gives them (see below). `valid_to` is null if it has not ended. |
 | `valid_from_bounds`, `valid_to_bounds` | The earliest and latest day each date can be, and its `precision`: `day`, `month`, `year` or `range`. |
 | `basis` | Why the membership starts when it does: `entry_into_force`, `deposit` (of the country's instrument), `admission_decision`, `provisional_application_on_signature` or `signature`, with the article that says so (`instrument`, `pinpoint`), where it was read and, when recorded, its words. |
-| `suspensions` | The country's suspensions from taking part in the body's activities, with their dates, legal basis and decisions, and `in_effect` on `as_of`. A suspended country is still a member: it stays in `items`. |
+| `suspensions` | The country's suspensions from taking part in the body's activities, with their dates, legal basis and decisions, and `in_effect` on `as_of`. Each article of the `legal_basis` has a `role`: `decision_basis` is the article the decision itself cites, with the decision's words; `treaty_rule` is the treaty's rule the suspension applies, with the article's words, whether or not the decision names it. A suspended country is still a member: it stays in `items`. |
 | `evidence_url`, `note` | The body's own source, or the treaty depositary's, that the dates were checked against, and what it says. |
 | `status` | `reviewed`, or `unknown` when no membership has been reviewed. `unknown` never means "none". |
 
