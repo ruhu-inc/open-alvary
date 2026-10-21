@@ -3,6 +3,7 @@
 import base64
 import json
 import time
+from datetime import timedelta
 from urllib.parse import parse_qs, urlparse
 
 import httpx
@@ -13,7 +14,7 @@ from sqlalchemy import text
 from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
 
-from accounts import policies
+from accounts import keys, policies
 from accounts.store import Accounts
 from api.console import ConsoleConfig, Provider, create_console_app
 from rights.database import PolicyNamespace
@@ -240,6 +241,59 @@ def test_keys_need_access_a_second_factor_and_a_fresh_sign_in(console):
     assert stale.status_code == 401 and stale.json()["error"]["code"] == "reauthentication_required"
     # Revoking only removes access: no fresh sign-in needed.
     assert browser.post(f"{path}/{created.json()['id']}/revoke", headers=headers).status_code == 204
+
+
+def test_rotating_a_key_in_the_console_keeps_the_old_one_for_the_overlap_without_a_fresh_sign_in(console):
+    """MAC-05 and MAC-03: the console's rotate route answers a new key once, with the old one working for
+    the overlap asked (24 hours by default, at most 24), and asks for no fresh sign-in (owner,
+    2026-10-21); the role's second factor, once in the session, is enough."""
+    accounts, fake, app = console
+    browser = client(app)
+    organisation, headers, _ = onboard(browser, fake)
+    accounts.grant_access(
+        "op", organisation, tier="pilot", scope={"all": True}, source="manual", ends_at=None, reason="Pilot"
+    )
+    sign_in(browser, fake, purpose="second_factor", return_to="/console/keys", amr=["mfa"], code="m")
+    path = f"/api/v1/organisations/{organisation}/keys"
+    old = browser.post(path, json={"name": "laptop"}, headers=headers).json()
+    with accounts.engine.begin() as conn:
+        table = accounts.namespace.qualified(conn, "accounts", "console_session")
+        conn.execute(text(f"UPDATE {table} SET authenticated_at = authenticated_at - interval '11 minutes'"))
+
+    def checked(secret):
+        with accounts.engine.begin() as conn:
+            fn = accounts.namespace.qualified(conn, "policy", "check_credential")
+            request = {
+                "kind": "key",
+                "key_id": keys.parse(secret),
+                "secret_hash": keys.secret_hash(secret, b"k" * 32).hex(),
+            }
+            return conn.scalar(text(f"SELECT {fn}(CAST(:r AS jsonb))"), {"r": json.dumps(request)})
+
+    too_long = browser.post(f"{path}/{old['id']}/rotate", json={"overlap_hours": 25}, headers=headers)
+    assert too_long.status_code == 400 and too_long.json()["error"]["code"] == "invalid_input"
+    rotated = browser.post(f"{path}/{old['id']}/rotate", json={"overlap_hours": 2}, headers=headers)
+    assert rotated.status_code == 201 and rotated.headers["cache-control"] == "no-store"
+    new = rotated.json()
+    assert new["secret"].startswith("oa_live_") and new["name"] == "laptop" and new["id"] != old["id"]
+    assert (
+        checked(old["secret"])["credential"] == old["id"]
+        and checked(new["secret"])["credential"] == new["id"]
+    )
+    listed = {k["id"]: k for k in browser.get(path).json()["keys"]}
+    assert listed[old["id"]]["state"] == listed[new["id"]]["state"] == "active"
+    assert "secret" not in listed[new["id"]]
+    # The default overlap is 24 hours.
+    again = browser.post(f"{path}/{new['id']}/rotate", json={}, headers=headers)
+    assert again.status_code == 201
+    with accounts.engine.begin() as conn:
+        table = accounts.namespace.qualified(conn, "accounts", "api_key")
+        left = conn.scalar(
+            text(f"SELECT expires_at - statement_timestamp() FROM {table} WHERE key_id = :k"),
+            {"k": new["id"].removeprefix("key_")},
+        )
+    assert timedelta(hours=23, minutes=59) < left <= timedelta(hours=24)
+    assert checked(new["secret"])["ok"] and checked(again.json()["secret"])["ok"]
 
 
 def test_a_fresh_sign_in_must_be_the_same_person(console):

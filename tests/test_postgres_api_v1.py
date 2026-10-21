@@ -107,6 +107,39 @@ def test_public_documents_need_no_credential_and_allow_any_origin(api):
     assert canonical[-1] == "Canonical: https://api.open.alvary.ai/.well-known/security.txt"
 
 
+def test_both_keys_read_through_a_rotation_overlap_and_only_the_new_one_after_it(api):
+    """MAC-05: a rotated key keeps reading REST and MCP beside its replacement for the overlap (at most
+    24 hours), then is refused as any expired key is."""
+    client, accounts, person, organisation = api
+    grant(accounts, organisation)
+    old = accounts.create_key(person, organisation, kind="personal", name="laptop")
+    new = accounts.rotate_key(person, organisation, old["id"], overlap_hours=3)
+    tools = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+    for secret in (old["secret"], new["secret"]):
+        headers = {"Authorization": f"Bearer {secret}"}
+        assert client.get("/api/v1/sources", headers=headers).status_code == 200
+        assert client.post("/mcp", json=tools, headers=headers).status_code == 200
+    # Three hours and a second later, for the old key.
+    with accounts.engine.begin() as conn:
+        table = accounts.namespace.qualified(conn, "accounts", "api_key")
+        conn.execute(
+            text(
+                f"UPDATE {table} SET created_at = created_at - interval '3 hours 1 second',"
+                " expires_at = expires_at - interval '3 hours 1 second' WHERE key_id = :k"
+            ),
+            {"k": old["id"].removeprefix("key_")},
+        )
+    refused = client.get("/api/v1/sources", headers={"Authorization": f"Bearer {old['secret']}"})
+    assert refused.status_code == 401 and refused.json()["code"] == "invalid_credentials"
+    assert (
+        client.post("/mcp", json=tools, headers={"Authorization": f"Bearer {old['secret']}"}).status_code
+        == 401
+    )
+    assert (
+        client.get("/api/v1/sources", headers={"Authorization": f"Bearer {new['secret']}"}).status_code == 200
+    )
+
+
 def test_no_access_lapse_and_revocation_answer_403_without_a_challenge(api):
     client, accounts, person, organisation = api
     grant(accounts, organisation)

@@ -275,6 +275,71 @@ def test_keys_are_checked_by_hash_and_refused_when_revoked_expired_or_malformed(
     assert check_key(accounts, expiring["secret"])["code"] == "invalid_credentials"
 
 
+def test_a_rotated_key_works_beside_its_replacement_through_the_overlap_and_then_stops(accounts):
+    """MAC-05: rotation with at most 24 hours' overlap. Both keys authenticate during it; after it the
+    old key is refused and the new one goes on."""
+    owner, organisation = person(accounts)
+    grant(accounts, organisation)
+    key = accounts.create_key(owner, organisation, kind="service", name="server")
+    rotated = accounts.rotate_key(owner, organisation, key["id"], overlap_hours=6)
+    assert rotated["name"] == "server" and rotated["kind"] == "service" and rotated["secret"] != key["secret"]
+    assert check_key(accounts, key["secret"])["credential"] == key["id"]
+    assert check_key(accounts, rotated["secret"])["credential"] == rotated["id"]
+    old = key["id"].removeprefix("key_")
+    left = sql(
+        accounts, "SELECT expires_at - statement_timestamp() FROM {api_key} WHERE key_id = :k", k=old
+    ).scalar()
+    assert timedelta(hours=5, minutes=59) < left <= timedelta(hours=6)  # the old key ends with the overlap
+    assert {k["id"]: k["state"] for k in accounts.list_keys(owner, organisation)} == {
+        key["id"]: "active",
+        rotated["id"]: "active",
+    }
+    # Six hours and a second later: the old key's times move back by that much.
+    sql(
+        accounts,
+        "UPDATE {api_key} SET created_at = created_at - interval '6 hours 1 second',"
+        " expires_at = expires_at - interval '6 hours 1 second' WHERE key_id = :k",
+        k=old,
+    )
+    assert check_key(accounts, key["secret"])["code"] == "invalid_credentials"
+    assert check_key(accounts, rotated["secret"])["credential"] == rotated["id"]
+    assert {k["id"]: k["state"] for k in accounts.list_keys(owner, organisation)}[key["id"]] == "expired"
+    [audit] = sql(accounts, "SELECT summary FROM {audit_event} WHERE action = 'key.rotated'").scalars().all()
+    assert audit == {"replacement": rotated["id"], "overlap_hours": 6}
+
+
+def test_a_rotation_overlap_is_at_most_24_hours_and_never_lengthens_a_key(accounts):
+    owner, organisation = person(accounts)
+    grant(accounts, organisation)
+    key = accounts.create_key(owner, organisation, kind="service", name="server")
+    for hours in (25, -1):
+        with pytest.raises(AccountError) as refused:
+            accounts.rotate_key(owner, organisation, key["id"], overlap_hours=hours)
+        assert refused.value.code == "invalid_input"
+    assert check_key(accounts, key["secret"])["credential"] == key["id"]  # a refused rotation changes nothing
+    longest = accounts.rotate_key(owner, organisation, key["id"], overlap_hours=24)
+    left = sql(
+        accounts,
+        "SELECT expires_at - statement_timestamp() FROM {api_key} WHERE key_id = :k",
+        k=key["id"].removeprefix("key_"),
+    ).scalar()
+    assert timedelta(hours=23, minutes=59) < left <= timedelta(hours=24)
+    assert check_key(accounts, key["secret"])["ok"] and check_key(accounts, longest["secret"])["ok"]
+    # A key with two hours left keeps those two hours, not the overlap's 24.
+    short = accounts.create_key(owner, organisation, kind="service", name="short", days=1)
+    sql(
+        accounts,
+        "UPDATE {api_key} SET expires_at = statement_timestamp() + interval '2 hours' WHERE name = 'short'",
+    )
+    accounts.rotate_key(owner, organisation, short["id"], overlap_hours=24)
+    left = sql(
+        accounts,
+        "SELECT expires_at - statement_timestamp() FROM {api_key} WHERE key_id = :k",
+        k=short["id"].removeprefix("key_"),
+    ).scalar()
+    assert left <= timedelta(hours=2)
+
+
 def test_roles_limit_keys_and_leaving_revokes_personal_keys_and_apps(accounts):
     owner, organisation = person(accounts)
     grant(accounts, organisation)
