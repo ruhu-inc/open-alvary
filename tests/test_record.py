@@ -109,6 +109,100 @@ def test_languages_say_which_text_is_authoritative_and_which_way_it_is_written()
         core(expressions=(R.Expression(language="en", authority="authoritative"),))  # which one is this text?
 
 
+def test_an_authority_nothing_states_stays_unknown_and_a_language_rule_comes_with_its_evidence():
+    assert R.Expression(language="fr").authority is None  # not recorded: the catalogue answers unknown
+    with pytest.raises(ValidationError):  # evidence of an authority needs the authority
+        R.Expression(language="fr", authority_evidence=R.Evidence(source="document", page=2))
+    stated = R.Evidence(
+        source="document", page=4, quote="En cas de divergence, la version française fait foi."
+    )
+    record = core(
+        expressions=(
+            R.Expression(language="fr", authority="authoritative", authority_evidence=stated, this_text=True),
+            R.Expression(language="en"),
+        ),
+        language_rule=R.LanguageRule(
+            rule="Where the versions differ, the French version prevails.",
+            prevails="fr",
+            provision="Article 9",
+            evidence=stated,
+        ),
+    )
+    assert record.language_rule.prevails == "fr" and record.expressions[1].authority is None
+    with pytest.raises(ValidationError):
+        R.LanguageRule(rule="The French version prevails.")  # and where it is stated
+    none_stated = core(absent={"language_rule": R.Absent(reason="not_in_source")})
+    assert none_stated.language_rule is None and none_stated.absent["language_rule"].reason == "not_in_source"
+
+
+def test_the_details_screen_edits_each_versions_authority_and_the_language_rule():
+    from workbench import record_view as V
+
+    rwanda = registry()["rw"]
+    specs = V.fields("legislation", "law", rwanda)
+    by_key = {s.key: s for s in specs}
+    assert {"authority", "authority_page", "authority_words", "authority_url"} <= {
+        c["key"] for c in by_key["expressions"].columns
+    }
+    rule = by_key["language_rule.rule"].as_dict()
+    assert rule["accountable"] and not rule["required"]  # optional, yet a reviewer may say why not given
+    place, _ = V.place_for({"jurisdiction": "rw"}, {}, registry())
+    words = "This Law was drafted in English, considered and adopted in Ikinyarwanda."
+    values = {
+        "identity.family": "legislation",
+        "identity.type": "law",
+        "identity.title": "Example Law",
+        "text.form": "gazette_publication",
+        "text.version.label": "As published",
+        "status.legal": "unknown",
+        "expressions": [
+            {"language": "rw", "authority": "authoritative", "authority_page": "12", "authority_words": words,
+             "this_text": "yes"},
+            {"language": "fr", "this_text": "no"},  # nothing states it: unknown, never assumed
+        ],
+    }  # fmt: skip
+
+    def build(changes=None, absent=None):
+        return V.to_record(values | (changes or {}), absent or {}, place, rwanda, "rw-example")
+
+    rw, fr = build().expressions
+    assert rw.authority_evidence == R.Evidence(source="document", page=12, quote=words)
+    assert fr.authority is None and fr.authority_evidence is None and build().language_rule is None
+    ruled = build(
+        {
+            "language_rule.rule": "Where the versions differ, the Kinyarwanda version prevails.",
+            "language_rule.prevails": "rw",
+            "language_rule.provision": "Article 9",
+            "language_rule.evidence.page": "3",
+            "language_rule.evidence.quote": "the Kinyarwanda version prevails",
+        }
+    ).language_rule
+    assert (ruled.prevails, ruled.provision, ruled.evidence) == (
+        "rw",
+        "Article 9",
+        R.Evidence(source="document", page=3, quote="the Kinyarwanda version prevails"),
+    )
+    elsewhere = build({"language_rule.rule": "The versions are equally authentic.",
+                       "language_rule.evidence.url": "https://www.example.org/official-languages-law"})  # fmt: skip
+    assert elsewhere.language_rule.evidence.source == "external" and elsewhere.language_rule.prevails is None
+    with pytest.raises(ValueError, match="where the language rule is stated"):
+        build({"language_rule.rule": "The Kinyarwanda version prevails."})
+    with pytest.raises(ValueError, match="give the rule"):
+        build({"language_rule.prevails": "rw"})
+    with pytest.raises(ValueError, match="needs the authority"):
+        build({"expressions": [{"language": "rw", "authority_page": "2", "this_text": "yes"}]})
+    with pytest.raises(ValueError, match="page's number"):
+        build({"expressions": [{"language": "rw", "authority": "authoritative", "authority_page": "p. 2",
+                                "this_text": "yes"}]})  # fmt: skip
+    # The reviewer may say the copy states no rule: the record accounts for it.
+    _, absent = V.validate(values, {"language_rule.rule": "not_in_source"}, specs)
+    assert build(absent=absent).absent["language_rule"].reason == "not_in_source"
+    # A Nigerian DETAILS-1 record that does not say its language's status: unknown, never "original".
+    assert "authority" not in V.from_legacy({"language": "en"}, {})[0]["expressions"][0]
+    original = V.from_legacy({"language": "en", "language_status": "original"}, {})[0]
+    assert original["expressions"][0]["authority"] == "authoritative"
+
+
 def test_regional_instruments_and_treaties_have_their_own_profiles():
     regional = core(
         identity=R.Identity(

@@ -645,7 +645,7 @@
     },
     "Expression": {
       "additionalProperties": false,
-      "description": "A language version of the document.",
+      "description": "A language version of the document, and what its text is worth as law where that is recorded.",
       "properties": {
         "language": {
           "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
@@ -675,15 +675,34 @@
           "type": "string"
         },
         "authority": {
-          "enum": [
-            "authoritative",
-            "equally_authentic",
-            "official_translation",
-            "unofficial_translation",
-            "machine_translation"
+          "anyOf": [
+            {
+              "enum": [
+                "authoritative",
+                "equally_authentic",
+                "official_translation",
+                "unofficial_translation",
+                "machine_translation"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
           ],
-          "title": "Authority",
-          "type": "string"
+          "default": null,
+          "title": "Authority"
+        },
+        "authority_evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Evidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "this_text": {
           "default": false,
@@ -718,8 +737,7 @@
         }
       },
       "required": [
-        "language",
-        "authority"
+        "language"
       ],
       "title": "Expression",
       "type": "object"
@@ -1069,6 +1087,54 @@
         "court"
       ],
       "title": "JudgmentProfile",
+      "type": "object"
+    },
+    "LanguageRule": {
+      "additionalProperties": false,
+      "description": "The instrument's own rule for divergence between its language versions, where it states one: the\nOHADA Treaty (art. 42) has documents take effect in French before translation and the French version\nprevail where versions differ. ``prevails`` is the language whose version prevails, when the rule\nnames one; a rule making every version equally authentic names none.",
+      "properties": {
+        "rule": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Rule",
+          "type": "string"
+        },
+        "prevails": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prevails"
+        },
+        "provision": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provision"
+        },
+        "evidence": {
+          "$ref": "#/$defs/Evidence"
+        }
+      },
+      "required": [
+        "rule",
+        "evidence"
+      ],
+      "title": "LanguageRule",
       "type": "object"
     },
     "LegislationProfile": {
@@ -2172,6 +2238,17 @@
       "minItems": 1,
       "title": "Expressions",
       "type": "array"
+    },
+    "language_rule": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/LanguageRule"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "events": {
       "default": [],

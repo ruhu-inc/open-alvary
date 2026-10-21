@@ -590,6 +590,11 @@ FORM_TO_RECORD = {
     "other": "unofficial",
 }
 RELATION_TO_RECORD = {"cross_reference": "related"}
+LANGUAGE_AUTHORITY = {
+    "original": "authoritative",
+    "official_translation": "official_translation",
+    "unofficial_translation": "unofficial_translation",
+}
 FAMILY_OF_TYPE = {
     "act": "legislation",
     "bill": "bill",
@@ -726,9 +731,7 @@ def to_record(details: dict, absent: dict, document: dict, manifest: dict, profi
         expressions=(
             R.Expression(
                 language=language,
-                authority="authoritative"
-                if details.get("language_status", "original") == "original"
-                else "official_translation",
+                authority=LANGUAGE_AUTHORITY.get(details.get("language_status")),  # not given: unknown
                 this_text=True,
             ),
         ),

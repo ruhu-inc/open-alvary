@@ -50,6 +50,7 @@ class FieldSpec:
     required: bool = False
     help: str = ""
     columns: tuple[dict, ...] = ()  # for rows: {key, label, kind, choices}
+    accountable: bool = False  # optional, yet a reviewer may say why it is not given
 
     def as_dict(self) -> dict:
         return {
@@ -59,6 +60,7 @@ class FieldSpec:
             "kind": self.kind,
             "choices": [{"value": c, "label": label_of(c)} for c in self.choices],
             "required": self.required,
+            "accountable": self.accountable,
             "essential": self.key in ESSENTIAL,
             "help": self.help,
             "columns": [
@@ -506,8 +508,37 @@ def fields(family: str, kind: str, profile: JurisdictionProfile | None) -> list[
                     "kind": "choice",
                     "choices": R.EXPRESSION_AUTHORITY,
                 },
+                {"key": "authority_page", "label": "Authority: page", "kind": "text"},
+                {"key": "authority_words", "label": "Authority: words as printed", "kind": "text"},
+                {"key": "authority_url", "label": "Authority: address, if stated elsewhere", "kind": "text"},
                 {"key": "this_text", "label": "This text", "kind": "choice", "choices": YES_NO},
             ),
+            help="Leave the authority empty when nothing states it: it is published as unknown.",
+        ),
+        FieldSpec(
+            "language_rule.rule",
+            "Rule where language versions differ",
+            "language",
+            "long",
+            accountable=True,
+            help="As the document states it, e.g. the French version prevails (OHADA Treaty, art. 42)",
+        ),
+        FieldSpec(
+            "language_rule.prevails",
+            "Version that prevails",
+            "language",
+            "text",
+            help="BCP 47, e.g. fr; empty when the rule names none",
+        ),
+        FieldSpec("language_rule.provision", "Rule stated in", "language", "text", help="e.g. Article 42"),
+        FieldSpec("language_rule.evidence.page", "Rule: page", "language", "text"),
+        FieldSpec("language_rule.evidence.quote", "Rule: words as printed", "language", "long"),
+        FieldSpec(
+            "language_rule.evidence.url",
+            "Rule: address, if stated elsewhere",
+            "language",
+            "text",
+            help="https:// address of the instrument that states it",
         ),
         FieldSpec(
             "classification.hierarchy",
@@ -562,6 +593,7 @@ ABSENT_TO_RECORD = {
     "identity.citation": "identity.citations",
     "publication.name": "publications",
     "text.summary.text": "text.summary",
+    "language_rule.rule": "language_rule",
 }
 
 
@@ -628,11 +660,15 @@ def to_record(values: dict, absent: dict, place: R.Place, profile: JurisdictionP
             language=row["language"],
             script=row.get("script") or None,
             direction=row.get("direction") or "ltr",
-            authority=row.get("authority") or "authoritative",
+            authority=row.get("authority") or None,  # not given: unknown, never assumed
+            authority_evidence=_evidence(
+                row.get("authority_page"), row.get("authority_words"), row.get("authority_url")
+            ),
             this_text=_yes(row.get("this_text")),
         )
         for row in values.get("expressions") or []
     )
+    language_rule = _language_rule(values)
     summary = None
     if values.get("text.summary.text"):
         summary = R.Summary(
@@ -673,6 +709,7 @@ def to_record(values: dict, absent: dict, place: R.Place, profile: JurisdictionP
         if values.get("issued_by")
         else (),
         expressions=expressions,
+        language_rule=language_rule,
         events=tuple(events),
         publications=(publication,) if publication else (),
         status=R.Status(
@@ -707,6 +744,44 @@ def to_record(values: dict, absent: dict, place: R.Place, profile: JurisdictionP
         ),
         profile=_profile(family, values),
         absent=_with_step_events(_record_absent(absent), steps_for(profile, kind), events),
+    )
+
+
+def _evidence(page, words, url):
+    """Where a detail is stated, from what the reviewer gave: a page and the words of this document, or of
+    another instrument at the address given; None when nothing is given."""
+    if not (page or words or url):
+        return None
+    if page and not str(page).strip().isdigit():
+        raise ValueError(f"page {page!r}: give the page's number, such as 3")
+    return R.Evidence(
+        source="external" if url else "document",
+        page=int(page) if page else None,
+        quote=words or None,
+        url=url or None,
+    )
+
+
+def _language_rule(values: dict):
+    """The document's rule where its language versions differ, with where it is stated; None when not
+    given (the reviewer may say why: not stated in this copy, not applicable)."""
+    keys = [k for k in values if k.startswith("language_rule.") and values[k]]
+    if not values.get("language_rule.rule"):
+        if keys:
+            raise ValueError("give the rule where language versions differ, or leave its details empty")
+        return None
+    evidence = _evidence(
+        values.get("language_rule.evidence.page"),
+        values.get("language_rule.evidence.quote"),
+        values.get("language_rule.evidence.url"),
+    )
+    if evidence is None:
+        raise ValueError("say where the language rule is stated: its page, its words or an address")
+    return R.LanguageRule(
+        rule=values["language_rule.rule"],
+        prevails=values.get("language_rule.prevails") or None,
+        provision=values.get("language_rule.provision") or None,
+        evidence=evidence,
     )
 
 
@@ -941,14 +1016,15 @@ def from_legacy(details: dict, absent: dict) -> tuple[dict, dict]:
         values["text.summary.official"] = "yes"
     language = details.get("language")
     if language:
-        authority = {
+        authority = {  # as the reviewer gave it; not given, unknown
             "original": "authoritative",
             "official_translation": "official_translation",
             "unofficial_translation": "unofficial_translation",
-        }.get(details.get("language_status", "original"))
-        values["expressions"] = [
-            {"language": language, "direction": "ltr", "authority": authority, "this_text": "yes"}
-        ]
+        }.get(details.get("language_status"))
+        row = {"language": language, "direction": "ltr", "this_text": "yes"}
+        if authority:
+            row["authority"] = authority
+        values["expressions"] = [row]
     values["classification.hierarchy"] = HIERARCHY[values["identity.family"]]
     if values["identity.family"] == "legislation" and "profile.revised_edition" not in values:
         gaps.setdefault("profile.revised_edition", "not_applicable")

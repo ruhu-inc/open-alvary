@@ -299,6 +299,10 @@ def test_a_law_suggests_its_record_details_from_the_text_and_the_issue():
         ("en", "official_translation"),
         ("fr", "official_translation"),
     ]
+    # With the paragraph that says so and its page, for the reviewer to check.
+    assert {(e["authority_page"], e["authority_words"]) for e in values["expressions"]} == {
+        ("2", "This Law was drafted in English, considered and adopted in Ikinyarwanda.")
+    }
 
 
 def test_numbered_items_within_an_article_keep_their_numbers():
