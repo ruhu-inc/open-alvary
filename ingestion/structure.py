@@ -39,6 +39,12 @@ SPLIT = re.compile(
     r"|\([ivxl]{1,6}\)\s+\S"  # sub-paragraph
     r"|\d{1,3}[A-Z]?\.\s*(?:[—–-]\s*)?\(\d{1,3}[A-Z]?\)\s+[A-Z]"  # section with first subsection
     r"|\d{1,3}[A-Z]?\.\s+[A-Z]"  # section without subsections
+    # An article of civil-law and treaty drafting, by the separator printed after its number, so a
+    # sentence citing one ("Article 5 of the Charter") is never cut: "SECTION 7: Whoever …",
+    # "ARTICLE 4.- Le …", "Article 5 : …", "Article premier. — …", "Art. 2. — …", "ARTIGO 6.º …".
+    r"|(?:SECTION|ARTICLE|Article|ARTIGO|Artigo)\s+(?:\d{1,4}(?:-\d{1,3})*|premier|1er)"
+    r"(?:\s*[:]|\.\s*[-–—]|\s+[-–—]\s|\.?\s*º)"
+    r"|Art\.\s*\d{1,4}(?:-\d{1,3})*\.\s*[—–]"
     r")"
 )
 LEVEL = [

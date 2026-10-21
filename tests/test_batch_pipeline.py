@@ -475,6 +475,26 @@ def test_a_note_glued_into_the_next_section_returns_to_the_section_printed_besid
     ]
 
 
+def test_merged_articles_of_civil_law_and_treaty_drafting_are_split_but_citations_of_them_are_not():
+    # As the Layout Parser runs them together in Cameroon's, Côte d'Ivoire's and Angola's laws and the
+    # AU's treaties; the separator printed after an article's number is what marks a new one.
+    text = (
+        "shall respect individual privacy. SECTION 7: Whoever processes personal data shall comply with "
+        "Article 5 of the Charter and section 41 of the Act. ARTICLE 4.- Le traitement est licite ; "
+        "Art. 5. — Sont exclus : ARTIGO 6.º (Objecto) A presente lei aplica-se. Article 7 : Saisine de la Cour"
+    )
+    out = structure.split_units([node(text, "paragraph")])
+    assert [n["text"][:14] for n in out] == [
+        "shall respect ",
+        "SECTION 7: Who",
+        "ARTICLE 4.- Le",
+        "Art. 5. — Sont",
+        "ARTIGO 6.º (Ob",
+        "Article 7 : Sa",
+    ]
+    assert " ".join(n["text"] for n in out) == text
+
+
 def test_a_section_after_a_closing_quotation_mark_is_split():
     out = structure.split_units(
         [
