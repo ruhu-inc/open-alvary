@@ -7,6 +7,8 @@ from typing import Annotated, Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, StringConstraints, model_validator
 
+from schema.record import EXPRESSION_AUTHORITY
+
 ID = Annotated[str, Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$")]
 Hash = Annotated[str, Field(pattern=r"^[a-f0-9]{64}$")]
 Nonempty = Annotated[str, Field(min_length=1)]
@@ -80,6 +82,46 @@ class RightsRecord(Model):
     metadata_basis: Nonempty | None = None
 
 
+class StatedEvidence(Model):
+    """Where a reviewed detail is stated (schema.record.Evidence): a page and the words of the document,
+    the address of another instrument that states it, or the reviewer who recorded it."""
+
+    source: Literal["document", "reviewer", "registry", "manifest", "external"]
+    page: int | None = Field(default=None, ge=1)
+    quote: Annotated[str, Field(min_length=1, max_length=400)] | None = None
+    url: HttpUrl | None = None
+
+
+class Edition(Model):
+    """What one language edition of a work is worth as law, as its reviewed record states it (API-02,
+    DAT-07), with where that is stated when recorded."""
+
+    language: ID
+    authority: Literal[*EXPRESSION_AUTHORITY]
+    evidence: StatedEvidence | None = None
+
+
+class LanguageRule(Model):
+    """The work's own rule for divergence between its language versions (LNG-03), from its reviewed
+    record: ``stated``, with the rule as stated, the language whose version prevails when it names one,
+    where it is stated and the evidence; ``not_stated``, the reviewed copy states none;
+    ``not_applicable``, as the reviewer recorded."""
+
+    status: Literal["stated", "not_stated", "not_applicable"]
+    rule: Nonempty | None = None
+    prevails: ID | None = None
+    provision: Nonempty | None = None
+    evidence: StatedEvidence | None = None
+
+    @model_validator(mode="after")
+    def stated_with_evidence(self):
+        if (self.status == "stated") != (self.rule is not None and self.evidence is not None):
+            raise ValueError("a stated language rule has its words and evidence; no other has either")
+        if self.status != "stated" and (self.prevails or self.provision):
+            raise ValueError("only a stated language rule names a prevailing version or a provision")
+        return self
+
+
 class Source(Model):
     id: ID
     jurisdiction_id: ID
@@ -97,6 +139,17 @@ class Source(Model):
     # catalogue note above is a public caveat about the record, never an internal instruction.
     summary: Nonempty | None = None
     year: int | None = Field(default=None, ge=1800, le=2200)
+    # What each language edition is worth as law, and the work's own rule where they differ, from its
+    # reviewed record (API-02, DAT-07, LNG-03); an edition not listed is of unknown authority. Left out
+    # of the row when not recorded, so rows stored before them are unchanged (DAT-08).
+    editions: list[Edition] = Field(default_factory=list, exclude_if=lambda value: not value)
+    language_rule: LanguageRule | None = Field(default=None, exclude_if=lambda value: value is None)
+
+    @model_validator(mode="after")
+    def one_authority_per_edition(self):
+        if len({e.language.casefold() for e in self.editions}) != len(self.editions):
+            raise ValueError("one authority per language edition")
+        return self
 
 
 class SourceVersion(Model):

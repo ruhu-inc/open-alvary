@@ -27,6 +27,7 @@ from schema.models import Citation, Corpus
 from schema.policy import MetadataPage, PublicMetadata
 from schema.public import (
     AnchorView,
+    AuthorityEvidence,
     CitationView,
     CoverageView,
     CurrentSource,
@@ -34,6 +35,7 @@ from schema.public import (
     ExpressionPage,
     ExpressionView,
     JurisdictionView,
+    LanguageRuleView,
     NodeViewRecord,
     ProvisionLookup,
     ProvisionMatch,
@@ -101,6 +103,28 @@ TEXT_NOT_SEARCHED = {
 def expression_id(version) -> str:
     """A text's language edition (API-02): its record and language, `{source_id}:{language}`."""
     return f"{version.source_id}:{version.language}"
+
+
+def edition_authority(source, language: str) -> tuple[str, AuthorityEvidence | None]:
+    """What a language edition is worth as law, as the record states it, and where (API-02, DAT-07):
+    ``unknown`` when it states nothing. Never inferred from a preferred or selected text, the record's
+    own language or another edition; the language matches exactly (BCP 47 ignores case)."""
+    for edition in source.editions:
+        if edition.language.casefold() == language.casefold():
+            evidence = edition.evidence
+            return edition.authority, (
+                AuthorityEvidence.model_validate(evidence.model_dump(mode="json", exclude_none=True))
+                if evidence
+                else None
+            )
+    return "unknown", None
+
+
+def language_rule(source) -> LanguageRuleView:
+    """The record's own rule for divergence between its language versions (LNG-03), or ``unknown``."""
+    if source.language_rule is None:
+        return LanguageRuleView(status="unknown")
+    return LanguageRuleView.model_validate(source.language_rule.model_dump(mode="json", exclude_none=True))
 
 
 def _speaks(version, language: str | None) -> bool:
@@ -320,7 +344,7 @@ class LegacyCatalogue:
     def versions(self, source_id, *, as_of=None, language=None, expression=None, editions=False):
         """A source's public texts with their structure; given a date, a language or an edition
         (``expression``, `{source_id}:{language}`), only the text they select, or the alternatives and
-        why (``selection``). ``editions`` labels each text with its edition's ID."""
+        why (``selection``). ``editions`` labels each text with its edition's ID and authority."""
         source, rights = self._require(source_id)
         if expression is not None:
             owner, _, edition = expression.rpartition(":")
@@ -382,14 +406,27 @@ class LegacyCatalogue:
                 else "No public text matches that date and language."
             )
         if editions:
-            versions = [v.model_copy(update={"expression_id": expression_id(v)}) for v in versions]
+            labelled = []
+            for v in versions:
+                authority, evidence = edition_authority(source, v.language)
+                labelled.append(
+                    v.model_copy(
+                        update={
+                            "expression_id": expression_id(v),
+                            "expression_authority": authority,
+                            "expression_authority_evidence": evidence,
+                        }
+                    )
+                )
+            versions = labelled
         return VersionPage(
             items=tuple(versions), rights=rights, structure=nodes, notice=notice, selection=selection
         )
 
     def expressions(self, source_id) -> ExpressionPage:
-        """A source's language editions with public texts (API-02): each edition's texts and the one to
-        read when no date is given, when one can be named without guessing."""
+        """A source's language editions with public texts (API-02): each edition's texts, the one to read
+        when no date is given (when one can be named without guessing) and its authority as the record
+        states it; and the record's own rule where its language versions differ."""
         source, rights = self._require(source_id)
         editions: dict[str, list] = {}
         for version in self._approved(source, rights):
@@ -406,17 +443,20 @@ class LegacyCatalogue:
             else:
                 undated = any(v.effective_from is None for v in readings)
                 preferred, reason = None, "dates_unknown" if undated else "several_texts"
+            authority, evidence = edition_authority(source, language)
             items.append(
                 ExpressionView(
                     expression_id=f"{source.id}:{language}",
                     source_id=source.id,
                     language=language,
+                    authority=authority,
+                    authority_evidence=evidence,
                     version_ids=tuple(v.id for v in versions),
                     preferred_version_id=preferred,
                     preferred_reason=reason,
                 )
             )
-        return ExpressionPage(source_id=source.id, items=tuple(items))
+        return ExpressionPage(source_id=source.id, language_rule=language_rule(source), items=tuple(items))
 
     # --- one version, its structure and its anchors (API-02), each rechecked for eligibility ---------
 

@@ -179,6 +179,65 @@
       "title": "AnchorView",
       "type": "object"
     },
+    "AuthorityEvidence": {
+      "additionalProperties": false,
+      "description": "Where an edition's authority or a language rule is stated: a page and the words of the document\n(``document``), the address of another instrument (``external``), or the reviewer who recorded it.",
+      "properties": {
+        "source": {
+          "enum": [
+            "document",
+            "reviewer",
+            "registry",
+            "manifest",
+            "external"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "AuthorityEvidence",
+      "type": "object"
+    },
     "CitationView": {
       "additionalProperties": false,
       "properties": {
@@ -2192,6 +2251,37 @@
           ],
           "default": null,
           "title": "Expression Id"
+        },
+        "expression_authority": {
+          "anyOf": [
+            {
+              "enum": [
+                "authoritative",
+                "equally_authentic",
+                "official_translation",
+                "unofficial_translation",
+                "machine_translation",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expression Authority"
+        },
+        "expression_authority_evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AuthorityEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
