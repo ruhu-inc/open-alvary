@@ -1,0 +1,28 @@
+tests/test_postgres_publish.py
+  s_d665c62e07d76f::t_2e50f4fc8081ff 83-126
+operations/publish.py
+  s_d665c62e07d76f::t_dc427a4a910396 504-506,509-522,524-525
+  s_d665c62e07d76f::t_3932c8a3839767 381-401,406,411-414
+  s_d665c62e07d76f::t_1043b5ab1f24c5 402-405
+  s_d665c62e07d76f::t_85b30cc0ddcfc5 439-454
+tests/test_publish.py
+  s_d665c62e07d76f::t_2e50f4fc8081ff 215-217
+  s_d665c62e07d76f::t_3dc5a63898f501 151,211-214,218-248
+  s_d665c62e07d76f::t_f6e7646cec9c58 249-250
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "250173067ad8b2d0bace7b11875e550fa3f556a6",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
