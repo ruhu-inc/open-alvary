@@ -637,11 +637,7 @@ class Retriever:
                     candidates=tuple(c.anchor_id for c in citation.provision.candidates),
                 )
             )
-        notices += [
-            f"Texts in {language} are matched word for word until the language passes the search tests."
-            for language in searched.languages
-            if text_index.config_for(language) == "simple"
-        ]
+        notices += text_index.word_for_word(searched.languages)
         return EvidencePack(
             status=status,
             query=EvidenceQuery(

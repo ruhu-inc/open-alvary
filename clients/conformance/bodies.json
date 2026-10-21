@@ -275,7 +275,7 @@
       "dataset": "1:40",
       "router": "oa-route-2",
       "ranking": "oa-rank-3",
-      "analyzer": "oa-search-4"
+      "analyzer": "oa-search-5"
     },
     "coverage": {
       "records_in_scope": 2,
@@ -444,7 +444,7 @@
       "dataset": "1:41",
       "router": "oa-route-2",
       "ranking": "oa-rank-3",
-      "analyzer": "oa-search-4"
+      "analyzer": "oa-search-5"
     },
     "coverage": {
       "records_in_scope": 2,
@@ -550,7 +550,7 @@
       "dataset": "1:41",
       "router": "oa-route-2",
       "ranking": "oa-rank-3",
-      "analyzer": "oa-search-4"
+      "analyzer": "oa-search-5"
     },
     "coverage": {
       "records_in_scope": 2,

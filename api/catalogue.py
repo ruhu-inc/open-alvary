@@ -1094,12 +1094,7 @@ class LegacyCatalogue:
         else:
             status = "results"
         analysis = {language: text_index.config_for(language) for language in searched.languages}
-        notices += [
-            f"Texts in {language} are matched word for word (no stemming or common words) until the language "
-            "passes the search tests."
-            for language, config in analysis.items()
-            if config == "simple"
-        ]
+        notices += text_index.word_for_word(searched.languages)
         next_offset = offset + limit
         if next_offset < total and next_offset > MAX_HIT_OFFSET:
             notices.append(

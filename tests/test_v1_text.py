@@ -46,7 +46,10 @@ def catalogue(store, work, title, language):
             ],
             languages=[
                 Language(id=code, name=name, tag=code)
-                for code, name in (("en", "English"), ("fr", "French"), ("rw", "Kinyarwanda"))
+                for code, name in (
+                    ("en", "English"), ("fr", "French"), ("rw", "Kinyarwanda"), ("pt", "Portuguese"),
+                    ("es", "Spanish"), ("ar", "Arabic"), ("sw", "Kiswahili"),
+                )
             ],
             sources=[
                 Source(

@@ -211,6 +211,54 @@ def test_a_french_text_is_searched_in_french_and_other_languages_word_for_word(s
     )
 
 
+def test_portuguese_spanish_and_arabic_texts_are_searched_by_their_stems(store, client):
+    # The regional languages' search tests (MIN-02, LNG-02): plural and inflected forms find each other
+    # through PostgreSQL's portuguese, spanish and arabic configurations; Portuguese and Spanish common
+    # words alone find nothing, and Arabic has no list of them.
+    publish_act(store, UNITS)
+    portuguese = [
+        {"kind": "paragraph", "text": "1. Os trabalhadores têm direito a contratos escritos."},
+        {"kind": "paragraph", "text": "2. Os dados pessoais são tratados de forma lícita."},
+    ]
+    publish_act(store, portuguese, work="ng-lei-exemplo-2023", title="Lei exemplo, 2023", language="pt")
+    page = search(client, "trabalhador contrato escrito")  # each word singular, the text's plural
+    assert page["items"][0]["citation"] == "Lei exemplo, 2023, s. 1"
+    assert page["analysis"]["pt"] == "portuguese" and not any("Texts in pt" in n for n in page["notices"])
+    common = search(client, "os de a", language="pt")
+    assert common["status"] == "no_result" and "common words" in common["notices"][0]
+    spanish = [{"kind": "paragraph", "text": "1. Los trabajadores tienen derecho a vacaciones pagadas."}]
+    publish_act(store, spanish, work="ng-ley-ejemplo-2023", title="Ley ejemplo, 2023", language="es")
+    page = search(client, "trabajador vacación pagada", language="es")
+    assert page["total"] == 1 and page["analysis"] == {"es": "spanish"}
+    # "the employees" with its article and preposition, "the personal" and "the government": the
+    # query's bare singular forms share their stems.
+    arabic = [{"kind": "paragraph", "text": "1. يحق للموظفين الحصول على البيانات الشخصية لدى الحكومة."}]
+    publish_act(store, arabic, work="ng-qanun-mithal-2023", title="قانون مثال، 2023", language="ar")
+    page = search(client, "موظف شخصي حكومة")
+    assert [h["language"] for h in page["items"]] == ["ar"] and page["analysis"]["ar"] == "arabic"
+    assert not any("Texts in ar" in n for n in page["notices"])
+    with store.engine.connect() as conn:  # word for word, the same query finds nothing
+        simple = conn.scalar(
+            text("SELECT to_tsvector('simple', :t) @@ websearch_to_tsquery('simple', :q)"),
+            {"t": arabic[0]["text"], "q": "موظف شخصي حكومة"},
+        )
+    assert simple is False
+
+
+def test_a_kiswahili_text_is_matched_word_for_word_and_says_so(store, client):
+    # PostgreSQL has no analysis for Kiswahili (MIN-02's simple fallback, RSV-03): its words match as
+    # written, a plural does not find its singular, and every answer says so.
+    kiswahili = [{"kind": "paragraph", "text": "1. Wafanyakazi wana haki ya mikataba ya maandishi."}]
+    publish_act(store, kiswahili, work="ng-sheria-mfano-2023", title="Sheria ya Mfano, 2023", language="sw")
+    page = search(client, "mikataba")
+    assert page["total"] == 1 and page["analysis"] == {"sw": "simple"}
+    assert page["notices"] == [
+        "Texts in sw are matched word for word (no stemming or common words) until the language passes "
+        "the search tests."
+    ]
+    assert search(client, "mkataba")["status"] == "no_result"  # the singular of mikataba
+
+
 def test_a_date_searches_only_texts_in_force_on_it(store, client):
     publish_act(store, UNITS, effective_from=date(2023, 6, 1))
     assert search(client, "salary", as_of="2024-01-01")["total"] == 1

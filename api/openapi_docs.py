@@ -743,7 +743,7 @@ FIELDS: dict[str, dict[str, str]] = {
         "dataset": "The change log's epoch and latest publication revision: any published change moves it.",
         "router": "The routing rules, such as `oa-route-2`.",
         "ranking": "The ranking profile, such as `oa-rank-3`.",
-        "analyzer": "The text analysis, such as `oa-search-4`.",
+        "analyzer": "The text analysis, such as `oa-search-5`.",
         "engine": "The search engine that ran the word and meaning searches (`vespa`), when one is configured; "
         "otherwise the system of record's own search ran them.",
         "vector": "The semantic index profile, when one is active.",
@@ -1215,8 +1215,9 @@ FIELDS: dict[str, dict[str, str]] = {
         "are served.",
         "citation": "When the words read as a citation of a public record: what it resolves to.",
         "coverage": "What was searched.",
-        "analysis": "How each language's texts are matched: `english` (stemming and common words) or "
-        "`simple` (word for word).",
+        "analysis": "How each language's texts are matched: `english`, `french`, `portuguese` or `spanish` "
+        "(by word stems, common words left out), `arabic` (by word stems, every word kept) or `simple` (word "
+        "for word).",
         "analyzer": "The version of the index's analysis.",
         "ranking": "The ranking used: `oa-rank-1`, as the search guide describes.",
         "index_built_at": "When the index was built.",
