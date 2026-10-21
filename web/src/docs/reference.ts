@@ -352,7 +352,7 @@ function toolsPage(tools: Tool[], examples: Examples): ReferencePage {
       [
         [
           "Before a tool runs: no key or an invalid one, no access, or an organisation limit used up (requests a minute, at once, data a day)",
-          "A JSON-RPC `error`, at the same HTTP status as REST. `error.code` is `10001` (401), `10002` (403), `10003` (429) or `10004` (503); a 401 also has `WWW-Authenticate`.",
+          "A JSON-RPC `error`, at the same HTTP status as REST. `error.code` is `-32600` (400), `10001` (401), `10002` (403), `10003` (429) or `10004` (503); a 401 also has `WWW-Authenticate`.",
           "`error.data.code`, with `error.data.retry_after_seconds` when you should wait",
         ],
         [
