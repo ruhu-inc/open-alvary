@@ -93,9 +93,51 @@ Each link is seen from this record's side and cites the official text that makes
 | `made_under` | `enables` | It was made under the other record, its parent law. |
 | `transposes`, `domesticates`, `implements`, `ratifies` | `transposed_by`, `domesticated_by`, `implemented_by`, `ratified_by` | It gives effect, in national law, to a treaty or a regional community's directive or instrument. |
 | `cites` | `cited_by` | It refers to the other record. A citation says nothing about agreement or legal effect. |
+| `follows`, `applies`, `distinguishes`, `doubts`, `overrules` | `followed_by`, `applied_by`, `distinguished_by`, `doubted_by`, `overruled_by` | A judgment's paragraph treats the other judgment so, as a legally qualified reviewer recorded it. See [Case law](#case-law-citations-and-treatment). |
 | `cross_reference` | `cross_reference` | A reference between the two, shown the same way from either side. |
 
-Links come 25 to a page (`limit` up to 100); pass `next_cursor` as `cursor` for the next, or ask for one `kind` only, such as `enables` for the instruments made under a law or `transposed_by` for the national laws that transpose a directive. Only links one step away are listed (depth 1), and only between public records that a reviewer has checked against that text, so a record may be repealed before its history shows by what. Judicial treatment, such as a judgment that follows or overrules another, is not listed yet.
+Links come 25 to a page (`limit` up to 100); pass `next_cursor` as `cursor` for the next, or ask for one `kind` only, such as `enables` for the instruments made under a law or `transposed_by` for the national laws that transpose a directive. Only links one step away are listed (depth 1), and only between public records that a reviewer has checked against that text, so a record may be repealed before its history shows by what.
+
+## Case law: citations and treatment
+
+A judgment's history also lists, paragraph by paragraph, the provisions and the judgments it cites, and how later judgments treated it. Each comes from the judgment's published text: we read the citations in each numbered paragraph, and a reviewer confirms each one against the paragraph before it is listed. Nothing is guessed: a citation we read but no one has confirmed is not listed.
+
+To find the judgments that cite a provision, ask the provision's record for `cited_by` with the provision's `locator` (from the text's [structure](#parts-chapters-and-sections)). A locator includes the parts within it, so `sec_2` also finds citations of `sec_2__subsec_1`:
+
+```curl
+curl "https://api.open.alvary.ai/api/v1/sources/ng-data-protection-act-2023/relationships?kind=cited_by&locator=sec_2" \
+  -H "Authorization: Bearer $OPEN_ALVARY_KEY"
+```
+
+```python
+import os
+
+import requests
+
+citing = requests.get(
+    "https://api.open.alvary.ai/api/v1/sources/ng-data-protection-act-2023/relationships",
+    params={"kind": "cited_by", "locator": "sec_2"},
+    headers={"Authorization": f"Bearer {os.environ['OPEN_ALVARY_KEY']}"},
+    timeout=30,
+).json()
+for link in citing["items"]:
+    print(link["title"], link["citing_pinpoint"], "cites", link["cited_pinpoint"])
+```
+
+```javascript
+const url = new URL("https://api.open.alvary.ai/api/v1/sources/ng-data-protection-act-2023/relationships");
+url.search = new URLSearchParams({ kind: "cited_by", locator: "sec_2" });
+const citing = await (await fetch(url, { headers: { Authorization: `Bearer ${process.env.OPEN_ALVARY_KEY}` } })).json();
+for (const link of citing.items) console.log(link.title, link.citing_pinpoint, "cites", link.cited_pinpoint);
+```
+
+Each citation names the citing paragraph (`citing_locator`, and `citing_pinpoint` such as `[12]` or `op. 2 [4]` for a later opinion's paragraph) and the part it cites (`cited_locator` and `cited_pinpoint`, such as `s. 2(1)`; absent when the paragraph cites the record as a whole, or its pinpoint names no part of a public text). While the citing judgment's text is public, `printed` gives the citation as the paragraph writes it and `quote` the paragraph's words (the sentences around the citation, for a long paragraph). `review` says who confirmed it, in what role and when; confirming a citation is a check of fact, so its `level` is `structural`. On a judgment, `kind=cites` lists what it cites, and `locator=para_12` what one paragraph cites.
+
+A judgment's treatment of another judgment is listed only where a legally qualified reviewer has recorded it: `follows`, `applies`, `distinguishes`, `doubts` or `overrules` from the treating judgment's side, and `followed_by`, `applied_by`, `distinguished_by`, `doubted_by` or `overruled_by` from the judgment treated, which lists them first. Each gives the treating paragraph, the passage that does it (`quote`), the `opinion` the paragraph is in (`majority`, `concurrence`, `dissent`, `plurality`, `order` or `unknown`: a dissent's words are not the court's holding) and a `review` whose `level` is `doctrinal`, with the reviewer's `reviewer_qualification`.
+
+> Note: No treatment listed means none has been recorded, not that the judgment is good law. A treatment is never inferred from a citation: a judgment that cites another may agree with it, disagree or neither. An overruled judgment is not repealed, so `current` stays empty and its `legal_status` is unchanged.
+
+Changes to treatments are in the [change feed](/docs/changes) as `treatment_recorded`. Appeals between courts in the same case (appealed from, affirmed, reversed) are not listed yet.
 
 ## Regional instruments and treaties
 

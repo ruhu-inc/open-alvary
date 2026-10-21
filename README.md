@@ -351,7 +351,10 @@ API (`/api/v1`) and MCP, with no anonymous tier (D22), and the developer documen
 a record's history (`/sources/{id}/relationships`: what it repeals, amends, commences or is made
 under, what repealed, amended or commenced it, the treaty or directive it transposes, domesticates,
 implements or ratifies and the laws that do so for it, what it cites and is cited by, and the record
-in force in its place). The review workbench and the Rwanda
+in force in its place); a judgment's citations paragraph by paragraph, proposed from its published
+text (`operations.citations`) and confirmed in the workbench, and its treatment of other judgments
+(follows, applies, distinguishes, doubts, overrules) where a legally qualified reviewer recorded it,
+served from both ends and announced as `treatment_recorded`. The review workbench and the Rwanda
 collection: Gazette and RLRC acquisition, OCR, reading into articles in three languages, links
 between instruments, reviewer approval and sealed audit logs. The text-publication path (owner text
 decisions, `operations.publish texts`), the text, structure and anchor routes, the append-only rights
