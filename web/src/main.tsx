@@ -1060,7 +1060,16 @@ function Releases() {
 type Tier = {
   id: string;
   name: string;
-  allowance: { requests_per_minute: number; concurrency: number; jurisdictions?: number; watches: number; digest: string; webhook_endpoints: number };
+  allowance: {
+    requests_per_minute: number;
+    burst?: number;
+    concurrency: number;
+    bytes_per_day?: number;
+    jurisdictions?: number;
+    watches: number;
+    digest: string;
+    webhook_endpoints: number;
+  };
   listing: { order: number; price: string; action?: string; limits?: string };
 };
 
@@ -1081,6 +1090,8 @@ function Plans() {
   if (failed) return <p>See Plan and limits in the console for the current plans.</p>;
   if (!tiers) return <p>Loading the plans…</p>;
   const n = (v: number) => v.toLocaleString("en");
+  // Data a day in decimal units, as the plans publish it: 200 MB, 2 GB.
+  const data = (v?: number) => (!v ? "" : v >= 1e9 ? `${n(v / 1e9)} GB` : `${n(v / 1e6)} MB`);
   return (
     <div className="plan-table-wrap">
       <table className="plan-table">
@@ -1089,7 +1100,9 @@ function Plans() {
             <th>Plan</th>
             <th>Price</th>
             <th>Requests a minute</th>
+            <th>Burst</th>
             <th>At once</th>
+            <th>Data a day</th>
             <th>Countries</th>
             <th>Monitors</th>
             <th>Webhooks</th>
@@ -1101,10 +1114,12 @@ function Plans() {
               <th scope="row">{t.name}</th>
               <td>{t.listing.price}</td>
               <td>{t.listing.limits ?? n(t.allowance.requests_per_minute)}</td>
+              <td>{t.listing.limits ? "" : n(t.allowance.burst ?? t.allowance.requests_per_minute)}</td>
               <td>{t.listing.limits ? "" : n(t.allowance.concurrency)}</td>
+              <td>{t.listing.limits ? "" : data(t.allowance.bytes_per_day)}</td>
               <td>{t.allowance.jurisdictions ? `${t.allowance.jurisdictions} of your choice` : "All"}</td>
               <td>
-                {n(t.allowance.watches)}, {t.allowance.digest} email
+                {n(t.allowance.watches)}, {t.allowance.digest === "daily" ? "daily or weekly" : t.allowance.digest} email
               </td>
               <td>{t.allowance.webhook_endpoints ? n(t.allowance.webhook_endpoints) : "None"}</td>
             </tr>
@@ -1124,7 +1139,7 @@ function Developers() {
       >
         Search and read the published corpus from your own code and AI tools,
         through a REST API and an MCP server. Reading this website and
-        downloading the releases need no account.
+        downloading the catalogue releases need no account.
       </PageTitle>
 
       <section className="start-steps" aria-labelledby="start">
@@ -1167,15 +1182,23 @@ function Developers() {
   -H "Authorization: Bearer $OPEN_ALVARY_KEY"`}</pre>
           <dl className="endpoints">
             <dt><code>GET /api/v1/search?q=</code></dt>
-            <dd>Search titles and citations. Filter with <code>jurisdiction</code> and <code>access</code>; page with <code>limit</code> and <code>offset</code>.</dd>
+            <dd>Search records by whole words in their title, citation, summary or cleared text. Filter with <code>jurisdiction</code> and <code>access</code>; page with <code>limit</code> and <code>offset</code>.</dd>
+            <dt><code>GET /api/v1/search/text?q=</code></dt>
+            <dd>Search the words of published texts: matching sections and articles, each with its exact words and citation.</dd>
             <dt><code>GET /api/v1/sources</code></dt>
             <dd>List records, with the same filters.</dd>
             <dt><code>GET /api/v1/sources/{"{id}"}</code></dt>
-            <dd>One record: metadata, rights status and official links. <code>/versions</code> lists its texts; <code>/api/v1/rights/{"{id}"}</code> explains its rights decision.</dd>
+            <dd>One record: metadata, rights status and official links. <code>/versions</code> gives its published texts, <code>/expressions</code> its language editions, <code>/relationships</code> what it repeals or amends and what replaced it; <code>/api/v1/rights/{"{id}"}</code> explains its rights decision.</dd>
+            <dt><code>GET /api/v1/anchors/{"{id}"}</code></dt>
+            <dd>One part of a published text, such as a section, exactly: its words, its hash and a citation.</dd>
             <dt><code>GET /api/v1/citations/{"{citation}"}</code></dt>
-            <dd>The records a citation points to.</dd>
-            <dt><code>GET /api/v1/jurisdictions</code>, <code>/coverage</code></dt>
-            <dd>The countries held, and counts for each.</dd>
+            <dd>The records a citation points to and, for a citation of a part such as <code>s. 1(1)</code>, that part.</dd>
+            <dt><code>GET /api/v1/retrieve?q=</code>, <code>POST /api/v1/currentness</code></dt>
+            <dd>Ranked, citable evidence for a question, and a check that cited parts are still published with the same words.</dd>
+            <dt><code>GET /api/v1/jurisdictions</code>, <code>/jurisdictions/{"{id}"}</code>, <code>/coverage</code></dt>
+            <dd>The jurisdictions held, the regional bodies a country belongs to, and counts for each.</dd>
+            <dt><code>GET /api/v1/courts</code></dt>
+            <dd>Court registers: courts, appeal routes and how their decisions bear on each other.</dd>
             <dt><code>GET /api/v1/changes</code></dt>
             <dd>What changed, in order (below).</dd>
           </dl>
@@ -1204,9 +1227,9 @@ function Developers() {
             <dd>The same address, in the tool's settings for MCP connectors.</dd>
           </dl>
           <p>
-            Tools: <code>search_catalogue</code>, <code>get_source</code>,{" "}
-            <code>get_relationships</code>, <code>list_changes</code>,{" "}
-            <code>get_change</code> and <code>get_coverage</code>.
+            Twelve read-only tools search records and published texts,
+            retrieve and check evidence, resolve citations and read changes:{" "}
+            <Link to="/docs/api/mcp">the MCP tools</Link>.
           </p>
           <Link className="text-link" to="/docs/console#apps">
             Connecting a tool, with pictures <ArrowRight size={16} aria-hidden="true" />
@@ -1233,13 +1256,15 @@ function Developers() {
       <section className="info-panel developer-changes">
         <h2>Follow changes</h2>
         <p>
-          Every record added, corrected or withdrawn, and every text published,
-          is recorded in order. No account is needed.
+          Every record added, corrected or withdrawn, every text published,
+          every checked legal effect such as a repeal, and every reviewed
+          membership of a regional body or suspension from one is recorded in
+          order. No account is needed.
         </p>
         <dl>
           <dt>Replay and keep up</dt>
           <dd>
-            <code>GET /api/changes</code> answers changes oldest first with a{" "}
+            <code>GET https://open.alvary.ai/api/changes</code> answers changes oldest first with a{" "}
             <code>resume_token</code>; send it back to get only newer ones.
             Filter with <code>jurisdiction</code>, <code>work</code>,{" "}
             <code>type</code>, <code>class</code>, <code>language</code> and{" "}
@@ -1250,8 +1275,8 @@ function Developers() {
           <dt>Feeds</dt>
           <dd>
             <code>/api/changes/feed.atom</code> and{" "}
-            <code>/api/changes/feed.rss</code>, with the same filters: the last
-            90 days, newest first.
+            <code>/api/changes/feed.rss</code>, with the same filters: the latest
+            50 of the last 90 days, newest first.
           </dd>
           <dt>MCP</dt>
           <dd>
@@ -1260,8 +1285,8 @@ function Developers() {
           <dt>Monitors and webhooks</dt>
           <dd>
             In the console, monitors follow countries, records and kinds of
-            change, with an inbox and daily or weekly email. On paid plans they
-            can also POST each match to your HTTPS endpoint, signed with
+            change, with an inbox and daily or weekly email. On every plan
+            except Starter they can also POST each match to your HTTPS endpoint, signed with
             HMAC-SHA256 over <code>timestamp.body</code> (headers{" "}
             <code>Open-Alvary-Timestamp</code> and{" "}
             <code>Open-Alvary-Signature</code>), retried for 24 hours.{" "}
@@ -1269,7 +1294,7 @@ function Developers() {
           </dd>
           <dt>What it covers</dt>
           <dd>
-            <code>/api/change-coverage</code>: when recording began and what is
+            <code>https://open.alvary.ai/api/change-coverage</code>: when recording began and what is
             held for each country. Changes cover what Open Alvary holds, not
             every change in a country's law.
           </dd>

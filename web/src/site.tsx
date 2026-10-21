@@ -245,6 +245,7 @@ export function SiteFooter() {
       <p>Public legal data. Clear provenance. Open possibilities.</p>
       <div className="footer-links">
         <Link to="/about">About & contribute</Link>
+        <Link to="/docs">Docs</Link>
         <Link to="/privacy">Privacy</Link>
         <Link to="/terms">Terms</Link>
         <Link to="/security">Security</Link>
