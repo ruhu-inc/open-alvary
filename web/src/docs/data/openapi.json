@@ -6046,7 +6046,7 @@
               "range"
             ],
             "title": "Precision",
-            "description": "`day`, `month`, `year` or `range` (a window holding the day)."
+            "description": "`day`, `month`, `year` or `range` (a window `[FIRST..LAST]` holding the day)."
           }
         },
         "additionalProperties": false,
@@ -7784,9 +7784,9 @@
           },
           "valid_from": {
             "type": "string",
-            "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$",
+            "pattern": "^(?:[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?|\\[[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?\\.\\.[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?\\])$",
             "title": "Valid From",
-            "description": "The membership's first day, as an EDTF date: a day (`2001-05-26`), a month (`2000-12`), a year (`1976`) or a window holding the day (`2016-08-15/2016-09-05`), as precisely as the evidence gives it."
+            "description": "The membership's first day, as an EDTF date: a day (`2001-05-26`), a month (`2000-12`), a year (`1976`) or a window holding the day (`[2016-08-15..2016-09-05]`: one day, unknown which, never a period), as precisely as the evidence gives it."
           },
           "valid_from_bounds": {
             "$ref": "#/components/schemas/DateBounds",
@@ -7796,7 +7796,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$"
+                "pattern": "^(?:[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?|\\[[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?\\.\\.[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?\\])$"
               },
               {
                 "type": "null"
@@ -9486,7 +9486,7 @@
           },
           "valid_from": {
             "type": "string",
-            "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$",
+            "pattern": "^(?:[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?|\\[[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?\\.\\.[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?\\])$",
             "title": "Valid From",
             "description": "The first day of the suspension, as an EDTF date."
           },
@@ -9498,7 +9498,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "pattern": "^[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?(?:/[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?)?$"
+                "pattern": "^(?:[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?|\\[[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?\\.\\.[0-9]{4}(?:-[0-9]{2}(?:-[0-9]{2})?)?\\])$"
               },
               {
                 "type": "null"
@@ -10688,7 +10688,7 @@
               "string",
               "null"
             ],
-            "description": "When it takes legal effect, if known: {from, until, precision}. A membership's or suspension's dates are EDTF dates, each stating its own precision (a window `FIRST/LAST` holds one day); `precision` is that of `from`."
+            "description": "When it takes legal effect, if known: {from, until, precision}. A membership's or suspension's dates are EDTF dates, each stating its own precision (a window `[FIRST..LAST]` holds one day); `precision` is that of `from`."
           },
           "jurisdiction": {
             "type": [

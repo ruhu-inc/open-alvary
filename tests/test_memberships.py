@@ -5,6 +5,7 @@ participation is context: it never changes whether a membership is held. The exa
 their dates and evidence are fixtures, not research."""
 
 import json
+import re
 from datetime import UTC, date, datetime
 
 import pytest
@@ -14,7 +15,7 @@ from api.catalogue import bodies_on, membership_list
 from operations import memberships
 from operations.publish import Refused
 from schema.jurisdictions import catalogue_entry
-from schema.memberships import Membership, MembershipRegister, Suspension, register
+from schema.memberships import Membership, MembershipRegister, Suspension, path, register
 from schema.models import Jurisdiction
 from schema.public import MembershipView, SuspensionView
 
@@ -106,7 +107,7 @@ def test_an_uncertain_date_is_kept_as_written_with_its_bounds():
     assert left.holds_on(date(2000, 11, 30)) is True
     assert left.holds_on(date(2000, 12, 15)) is None  # inside the uncertain end: unknown
     assert left.holds_on(date(2001, 1, 1)) is False
-    joined = row("ss", "aa-eac", "2016-08-15/2016-09-05")  # a range start
+    joined = row("ss", "aa-eac", "[2016-08-15..2016-09-05]")  # a range start
     assert joined.holds_on(date(2016, 8, 20)) is None and joined.holds_on(date(2016, 9, 5)) is True
     assert joined.holds_on(date(2016, 8, 14)) is False
     with pytest.raises(ValidationError):
@@ -142,6 +143,35 @@ def test_the_register_cites_evidence_and_replaces_the_undated_au_arrays():
     assert len(au) == 55 and all(m.evidence_url.startswith("https://") and m.note for m in held.memberships)
     # A reviewed row is a dated fact with its reviewer; an undated row is a proposal.
     assert all(m.status == "proposal" for m in held.memberships if m.valid_from is None)
+
+
+def test_the_registers_windows_are_written_as_edtf_sets_and_match_its_published_schema():
+    """A window is [A..B], one day within it (EDTF's one of a set), never A/B, an EDTF interval: every date
+    of the register matches the pattern membership.schema.json publishes, which refuses a slash."""
+    held = register()
+    windows = {
+        m.id: str(m.valid_from)
+        for m in held.memberships
+        if m.valid_from is not None and m.valid_from.precision == "range"
+    }
+    assert windows == {
+        "ss:aa-au:1": "[2011-07-26..2011-07-27]",
+        "cv:aa-ecowas:1": "[1976..1977]",
+        "ss:aa-eac:1": "[2016-08-15..2016-09-05]",
+    }
+    published = json.loads((path().parent / "membership.schema.json").read_text())
+    pattern = re.compile(published["$defs"]["Membership"]["properties"]["valid_from"]["anyOf"][0]["pattern"])
+    dates = [d for r in (*held.memberships, *held.suspensions) for d in (r.valid_from, r.valid_to) if d]
+    assert dates and all(pattern.match(str(d)) for d in dates) and not pattern.match("1976/1977")
+    data = json.loads(path().read_text())
+    data["memberships"] = [
+        m | {"valid_from": "2016-08-15/2016-09-05"} if m["id"] == "ss:aa-eac:1" else m
+        for m in data["memberships"]
+    ]
+    with pytest.raises(
+        ValidationError, match=re.escape("A/B is an EDTF interval; write one day within a window as [A..B]")
+    ):
+        MembershipRegister.model_validate(data)
 
 
 def test_a_regional_bodys_catalogue_row_has_no_country_code():
@@ -214,7 +244,7 @@ def test_an_uncertain_end_is_unknown_inside_its_window_and_definite_outside_it()
 
 
 def test_a_range_start_is_unknown_inside_its_window():
-    held = [view(row("ss", "aa-eac", "2016-08-15/2016-09-05"))]
+    held = [view(row("ss", "aa-eac", "[2016-08-15..2016-09-05]"))]
     assert membership_list(held, "ss", "member", date(2016, 8, 31)).uncertain[0].id == "ss:aa-eac:1"
     assert membership_list(held, "ss", "member", date(2016, 9, 6)).items[0].id == "ss:aa-eac:1"
     early = membership_list(held, "ss", "member", date(2016, 8, 1))
@@ -313,6 +343,10 @@ def test_the_reviewer_approves_a_proposal_into_a_dated_reviewed_fact(proposals):
     with pytest.raises(Refused, match="Name the person"):
         memberships.review("sn:aa-ecowas:1", "Your Full Name", valid_from="1975-05-28", source=proposals)
     official = BASIS | {"evidence_url": "https://www.ecowas.int/treaty/"}
+    with pytest.raises(Refused, match="EDTF interval"):  # a window is [A..B]; A/B is an interval
+        memberships.review(
+            "sn:aa-ecowas:1", "Test Reviewer", valid_from="1975/1976", basis=official, source=proposals
+        )
     with pytest.raises(Refused, match="real https"):  # evidence is a real address, not a placeholder host
         memberships.review(
             "sn:aa-ecowas:1", "Test Reviewer", valid_from="1975-05-28", basis=official, source=proposals
@@ -425,13 +459,13 @@ def test_ecowas_founders_start_on_signature_under_article_62_and_mauritania_left
     mauritania = ecowas["mr"]
     assert mauritania.status == "proposal" and str(mauritania.valid_to) == "2000-12"
     assert mauritania.holds_on(date(2000, 12, 15)) is None and mauritania.holds_on(date(2001, 1, 1)) is False
-    assert str(ecowas["cv"].valid_from) == "1976/1977" and ecowas["cv"].basis.pinpoint == "art. 62(2)"
+    assert str(ecowas["cv"].valid_from) == "[1976..1977]" and ecowas["cv"].basis.pinpoint == "art. 62(2)"
     assert all(m.status == "proposal" for m in ecowas.values())
 
 
 def test_a_basis_is_set_only_where_its_source_states_it():
     eac, ohada = researched("aa-eac"), researched("aa-ohada")
-    assert str(eac["ss"].valid_from) == "2016-08-15/2016-09-05" and eac["ss"].basis is None
+    assert str(eac["ss"].valid_from) == "[2016-08-15..2016-09-05]" and eac["ss"].basis is None
     assert {k for k, m in eac.items() if m.basis} == {"ke", "tz", "ug", "cd"}
     assert all(m.basis.kind == "entry_into_force" for m in ohada.values() if m.valid_from is not None)
     assert all(m.basis is None for m in ohada.values() if m.valid_from is None)

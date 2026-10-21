@@ -888,7 +888,7 @@
       "target_id": "aa-au",
       "kind": "member_of",
       "status": "proposal",
-      "valid_from": "2011-07-26/2011-07-27",
+      "valid_from": "[2011-07-26..2011-07-27]",
       "valid_to": null,
       "basis": {
         "kind": "admission_decision",
@@ -1348,7 +1348,7 @@
       "target_id": "aa-ecowas",
       "kind": "member_of",
       "status": "proposal",
-      "valid_from": "1976/1977",
+      "valid_from": "[1976..1977]",
       "valid_to": null,
       "basis": {
         "kind": "deposit",
@@ -1550,7 +1550,7 @@
       "target_id": "aa-eac",
       "kind": "member_of",
       "status": "proposal",
-      "valid_from": "2016-08-15/2016-09-05",
+      "valid_from": "[2016-08-15..2016-09-05]",
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.eac.int/overview-of-eac",

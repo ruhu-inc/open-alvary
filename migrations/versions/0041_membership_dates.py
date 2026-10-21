@@ -1,9 +1,9 @@
 """Memberships: dates with their precision, a basis, and suspensions from participation (JUR-04).
 
 corpus.membership's valid_from and valid_to become dates of the schema.dates subset (a day, a month, a
-year, or a window holding the day), each stored as its EDTF string with its inclusive earliest and latest
-bounds; ``basis`` records why the membership starts when it does (its kind, the instrument's article and
-the evidence). corpus.membership_suspension holds the reviewed suspensions from participation, each
+year, or a window [FIRST..LAST] holding the day), each stored as its EDTF string with its inclusive
+earliest and latest bounds, which only schema.dates computes; ``basis`` records why the membership starts
+when it does (its kind, the instrument's article and the evidence). corpus.membership_suspension holds the reviewed suspensions from participation, each
 overlaid on one published membership, which it never ends. changes.suspension_state is the last announced
 form of each, so changes.record.publish announces a newly published suspension as suspension_recorded,
 its lifting (valid_to set) as another with the reason ``lifted``, and any other change, or its
@@ -27,8 +27,10 @@ down_revision = "0040"
 branch_labels = None
 depends_on = None
 
-# schema.dates.PATTERN, as of this revision: YYYY-MM-DD, YYYY-MM, YYYY, or a window FIRST/LAST of them.
-EDTF = "^[0-9]{4}(-[0-9]{2}(-[0-9]{2})?)?(/[0-9]{4}(-[0-9]{2}(-[0-9]{2})?)?)?$"
+# schema.dates.PATTERN, as of this revision: YYYY-MM-DD, YYYY-MM, YYYY, or a window [FIRST..LAST] of them
+# (never FIRST/LAST, an EDTF interval). Only the shape: schema.dates computes the bounds stored beside it.
+_PART = "[0-9]{4}(-[0-9]{2}(-[0-9]{2})?)?"
+EDTF = rf"^({_PART}|\[{_PART}\.\.{_PART}\])$"
 DAY = "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
 BASES = (
     "entry_into_force",
