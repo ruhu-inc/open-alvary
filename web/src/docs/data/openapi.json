@@ -2454,7 +2454,7 @@
               ],
               "title": "Scope"
             },
-            "description": "`applicable`, with one `jurisdiction`: also the law that binds there on `as_of` (today without it): the instruments of the African Union and regional bodies it belonged to on that date, from reviewed memberships only, and the treaties it had ratified or acceded to. Records that do not bind there are left out and counted; those whose relation is unknown are kept. Each passage says how it relates to the jurisdiction (`applicability`) and the answer states the widening. Without it, nothing is added."
+            "description": "`applicable`, with one `jurisdiction`: also the law that binds there on `as_of` (today without it): the instruments of the African Union and regional bodies it belonged to on that date, from reviewed memberships only, and the treaties it had ratified or acceded to. Records that do not bind there are left out and counted; those whose relation is unknown are kept. Each passage says how it relates to the jurisdiction (`applicability`) and the answer states the widening. For a place within a country, such as `ng-la`, the country's own law is added too, and its memberships and treaties are the country's. Without it, nothing is added."
           },
           {
             "name": "limit",
@@ -2761,7 +2761,7 @@
               ],
               "title": "Scope"
             },
-            "description": "`applicable`, with one `jurisdiction`: also the law that binds there on `as_of` (today without it): the instruments of the African Union and regional bodies it belonged to on that date, from reviewed memberships only, and the treaties it had ratified or acceded to. Records that do not bind there are left out and counted; those whose relation is unknown are kept. Each unit says how it relates to the jurisdiction (`applicability`) and the answer states the widening. Without it, nothing is added."
+            "description": "`applicable`, with one `jurisdiction`: also the law that binds there on `as_of` (today without it): the instruments of the African Union and regional bodies it belonged to on that date, from reviewed memberships only, and the treaties it had ratified or acceded to. Records that do not bind there are left out and counted; those whose relation is unknown are kept. Each unit says how it relates to the jurisdiction (`applicability`) and the answer states the widening. For a place within a country, such as `ng-la`, the country's own law is added too, and its memberships and treaties are the country's. Without it, nothing is added."
           },
           {
             "name": "max_units",
@@ -3893,7 +3893,7 @@
               "unknown"
             ],
             "title": "Relation",
-            "description": "`national` (its own law); `regional_direct`, `regional_requires_transposition` or `regional_binding_on_addressees` (an instrument of a body it belonged to on the date, by its legal effect); `treaty_in_force_for_state` or `treaty_not_in_force_for_state` (by its own ratification or accession, never by membership of a body; missing from the party list, only when the list is complete on the date); `non_binding`; `comparative` (another jurisdiction's law, an instrument addressed to other states, or of a body it was not a member of on the date); or `unknown` (the membership, legal effect or ratification is not reviewed, the state is missing from a party list not known to be complete, or a date cannot be compared)."
+            "description": "`national` (its own law; for a place within a country, such as `ng-la`, its country's law too); `regional_direct`, `regional_requires_transposition` or `regional_binding_on_addressees` (an instrument of a body it belonged to on the date, by its legal effect); `treaty_in_force_for_state` or `treaty_not_in_force_for_state` (by its own ratification or accession, never by membership of a body; missing from the party list, only when the list is complete on the date); `non_binding`; `comparative` (another jurisdiction's law, an instrument addressed to other states, or of a body it was not a member of on the date); or `unknown` (the membership, legal effect or ratification is not reviewed, the state is missing from a party list not known to be complete, or a date cannot be compared)."
           },
           "binds": {
             "type": "string",
@@ -3985,6 +3985,19 @@
             "title": "Jurisdiction Id",
             "description": "The jurisdiction whose applicable law was asked for."
           },
+          "within": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Within",
+            "description": "For a place within a country, such as `ng-la`, the country (`ng`): its law applies throughout the place and was added whole, and its memberships and treaty consents were assessed. Absent for a country."
+          },
           "as_of": {
             "type": "string",
             "format": "date",
@@ -4022,7 +4035,7 @@
             "type": "integer",
             "minimum": 0.0,
             "title": "Admitted",
-            "description": "How many records of other jurisdictions were added."
+            "description": "How many records of other jurisdictions were added, besides the law of `within`."
           },
           "left_out": {
             "additionalProperties": {
@@ -4052,7 +4065,7 @@
           "admitted"
         ],
         "title": "ApplicableScope",
-        "description": "The applicable-law scope a request asked for (``scope=applicable``) and the widening it applied, so\nthat nothing is widened silently (RSV-03): each body the jurisdiction has a reviewed membership of, with\nwhether it held on the date (only the law of bodies ``held`` was added), how many records of other\njurisdictions were admitted, and how many were left out, by relation."
+        "description": "The applicable-law scope a request asked for (``scope=applicable``) and the widening it applied, so\nthat nothing is widened silently (RSV-03): for a place within a country, the country (``within``) whose\nlaw it added whole and whose memberships and treaty consents it assessed; each body the country has a\nreviewed membership of, with whether it held on the date (only the law of bodies ``held`` was added),\nhow many records of regional bodies and treaties were admitted, and how many were left out, by\nrelation."
       },
       "AuthorityEvidence": {
         "properties": {

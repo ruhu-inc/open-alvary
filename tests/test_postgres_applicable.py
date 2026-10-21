@@ -30,6 +30,7 @@ MEMBERSHIPS = [
     row("sn", "aa-ohada", "1995-09-18"),
     row("ke", "aa-au", "2001-05-26"),
     row("ke", "aa-eac", "2000-07-07"),
+    row("ng", "aa-ecowas", "1975-05-28"),  # Lagos State (ng-la) belongs to no body itself: Nigeria does
     row("cm", "aa-ohada", None, status="proposal"),  # not reviewed: never served, never applied
 ]
 NOW = datetime.now(UTC).replace(microsecond=0)
@@ -54,7 +55,7 @@ TEXT_DECISION = {
     "decided_at": (NOW - timedelta(minutes=1)).isoformat(),
     "expires_at": (NOW + timedelta(days=365)).isoformat(),
 }
-LEVELS = {"aa-au": "continental"}
+LEVELS = {"aa-au": "continental", "ng-la": "subnational"}
 ORGAN = R.Body(name="Council of Ministers", kind="regional_body")
 
 
@@ -127,6 +128,16 @@ WORKS = {
         "gh", "legislation", "act", "Companies Act",
         R.LegislationProfile(family="legislation"), "1. A commercial company shall file returns.", (), (),
     ),
+    "ng-companies-act": (
+        "ng", "legislation", "act", "Federal Companies Act",
+        R.LegislationProfile(family="legislation"),
+        "1. Every commercial company in the Federation shall keep a register of its members.", (), (),
+    ),
+    "ng-la-companies-law": (
+        "ng-la", "legislation", "law", "Lagos State Companies Premises Law",
+        R.LegislationProfile(family="legislation"),
+        "1. A commercial company trading in the State shall register its premises.", (), (),
+    ),
 }  # fmt: skip
 FIRST = ("aa-ohada", "aa-ecowas", "aa-eac", "aa-au")  # published before the national acts that link to them
 
@@ -155,7 +166,7 @@ def document(work):
 
 def publish_fixture(store):
     """The records, through operations.publish, then a reviewed text of each in force from 2000."""
-    for place in (*FIRST, "sn", "ke", "gh"):
+    for place in (*FIRST, "sn", "ke", "gh", "ng", "ng-la"):
         items = [
             publish.Approved(work, document(work), ["en"], "Test Reviewer", NOW - timedelta(minutes=10))
             for work, spec in WORKS.items()
@@ -365,6 +376,56 @@ def test_an_au_treaty_binds_the_state_that_ratified_it_and_not_one_without_a_rat
     # Without a jurisdiction, the check is as before.
     [plain] = client.post("/currentness", json={"items": [{"anchor_id": part}]}).json()["results"]
     assert "applicability" not in plain
+
+
+def test_a_lagos_state_applicable_query_admits_federal_law_and_ecowas_law_through_nigeria(published):
+    store, client, _ = published
+    pack = retrieve(client, "commercial company", jurisdiction="ng-la", scope="applicable", as_of=AS_OF)
+    units = by_source(pack["evidence"])
+    # Nigeria's federal Act applies throughout Lagos State: national, and the basis says why.
+    federal = units["ng-companies-act"]["applicability"]
+    assert (federal["relation"], federal["binds"], federal["jurisdiction_id"]) == (
+        "national",
+        "bound",
+        "ng-la",
+    )
+    assert federal["reasons"] == ["ng-la is within ng: the law of ng applies throughout it."]
+    assert units["ng-la-companies-law"]["applicability"]["relation"] == "national"
+    # The ECOWAS directive reaches Lagos State through Nigeria's reviewed membership.
+    directive = units["ecowas-company-accounts-directive"]["applicability"]
+    assert directive["relation"] == "regional_requires_transposition"
+    assert directive["memberships"] == [{"id": "ng:aa-ecowas:1", "body_id": "aa-ecowas", "held": "held"}]
+    assert directive["reasons"][0] == "ng-la is within ng: regional bodies and treaties reach it through ng."
+    # Not Senegal's law, nor OHADA's (no Nigerian membership is reviewed), nor what binds Senegal only.
+    assert not {
+        "sn-company-accounts-act",
+        "ohada-commercial-companies-act",
+        "ecowas-register-decision",
+    } & set(units)
+    scope = pack["applicability"]
+    assert (scope["jurisdiction_id"], scope["within"], scope["admitted"]) == ("ng-la", "ng", 1)
+    assert [(b["body_id"], b["held"]) for b in scope["bodies"]] == [("aa-ecowas", "held")]
+    assert scope["left_out"] == {"comparative": 1, "non_binding": 1}
+    assert scope["notices"][0].startswith("ng-la is within ng: the law of ng applies throughout it")
+    assert pack["query"]["filters"] == {"jurisdictions": ["ng-la"], "scope": "applicable"}
+    # Text search answers the same; without the scope, Lagos State's own law only.
+    page = client.get(
+        "/search/text",
+        params={"q": "commercial company", "jurisdiction": "ng-la", "scope": "applicable", "as_of": AS_OF},
+    ).json()
+    assert {h["source_id"] for h in page["items"]} == set(units) and page["applicability"] == scope
+    plain = retrieve(client, "commercial company", jurisdiction="ng-la", as_of=AS_OF)
+    assert {u["source_id"] for u in plain["evidence"]} == {"ng-la-companies-law"}
+    # The check says the same of the federal Act.
+    [checked] = client.post(
+        "/currentness",
+        json={
+            "items": [
+                {"anchor_id": anchor(store, "ng-companies-act"), "as_of": AS_OF, "jurisdiction": "ng-la"}
+            ]
+        },
+    ).json()["results"]
+    assert checked["applicability"]["relation"] == "national"
 
 
 def test_regional_instruments_bind_through_membership_on_the_date(published):

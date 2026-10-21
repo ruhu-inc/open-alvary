@@ -255,8 +255,9 @@ OPERATIONS: dict[str, dict] = {
             "instruments of the African Union and regional bodies it belonged to on that date, from reviewed "
             "memberships only, and the treaties it had ratified or acceded to. Records that do not bind there "
             "are left out and counted; those whose relation is unknown are kept. Each passage says how it "
-            "relates to the jurisdiction (`applicability`) and the answer states the widening. Without it, "
-            "nothing is added.",
+            "relates to the jurisdiction (`applicability`) and the answer states the widening. For a place "
+            "within a country, such as `ng-la`, the country's own law is added too, and its memberships and "
+            "treaties are the country's. Without it, nothing is added.",
             "limit": "Passages per page, 1 to 100. Default 25.",
             "cursor": "The `next_cursor` of the previous page, to continue it.",
         },
@@ -297,8 +298,9 @@ OPERATIONS: dict[str, dict] = {
             "instruments of the African Union and regional bodies it belonged to on that date, from reviewed "
             "memberships only, and the treaties it had ratified or acceded to. Records that do not bind there "
             "are left out and counted; those whose relation is unknown are kept. Each unit says how it "
-            "relates to the jurisdiction (`applicability`) and the answer states the widening. Without it, "
-            "nothing is added.",
+            "relates to the jurisdiction (`applicability`) and the answer states the widening. For a place "
+            "within a country, such as `ng-la`, the country's own law is added too, and its memberships and "
+            "treaties are the country's. Without it, nothing is added.",
             "max_units": "How many evidence units, 1 to 25. Default 10.",
             "max_evidence_bytes": "The most bytes of words (evidence and definitions, each counted once), "
             "4,096 to 262,144. Default 49,152. A unit that does not fit is an excerpt, then units stop.",
@@ -1708,7 +1710,8 @@ FIELDS: dict[str, dict[str, str]] = {
     "Applicability": {
         "jurisdiction_id": "The jurisdiction asked about.",
         "as_of": "The date it was assessed for.",
-        "relation": "`national` (its own law); `regional_direct`, `regional_requires_transposition` or "
+        "relation": "`national` (its own law; for a place within a country, such as `ng-la`, its country's "
+        "law too); `regional_direct`, `regional_requires_transposition` or "
         "`regional_binding_on_addressees` (an instrument of a body it belonged to on the date, by its legal "
         "effect); `treaty_in_force_for_state` or `treaty_not_in_force_for_state` (by its own ratification or "
         "accession, never by membership of a body; missing from the party list, only when the list is "
@@ -1726,13 +1729,16 @@ FIELDS: dict[str, dict[str, str]] = {
     },
     "ApplicableScope": {
         "jurisdiction_id": "The jurisdiction whose applicable law was asked for.",
+        "within": "For a place within a country, such as `ng-la`, the country (`ng`): its law applies "
+        "throughout the place and was added whole, and its memberships and treaty consents were assessed. "
+        "Absent for a country.",
         "as_of": "The date memberships and treaties were assessed for.",
         "date_basis": "`as_of` (the date asked) or `today` (none was given; texts were not limited by date).",
         "membership": "`reviewed`, or `unknown` when no membership of the jurisdiction is reviewed yet (no "
         "body's law was added, which never means it belongs to none).",
         "bodies": "Each body it has a reviewed membership of, with whether it held on the date. Only the law of "
         "bodies `held` was added.",
-        "admitted": "How many records of other jurisdictions were added.",
+        "admitted": "How many records of other jurisdictions were added, besides the law of `within`.",
         "left_out": "How many records of those bodies, or treaties naming the jurisdiction, were left out "
         "because they do not bind there, by relation.",
         "notices": "What the widening covered and did not, in sentences.",
