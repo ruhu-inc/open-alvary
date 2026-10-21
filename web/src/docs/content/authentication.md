@@ -11,7 +11,7 @@ Authorization: Bearer <credential>
 
 The credential is either an **API key**, for your own code, or an **access token** that an AI tool gets when you connect it. Both read the same published corpus, within your organisation's plan, and share its limits. Neither can change anything: the API is read-only.
 
-Three things need no credential: the change feed at `https://open.alvary.ai/api/changes`, the [plans](/docs/api/list-plans) and the [OpenAPI document](https://api.open.alvary.ai/api/v1/openapi.json).
+Four things need no credential: the change feed at `https://open.alvary.ai/api/changes`, the [plans](/docs/api/list-plans), the [quota policy](/docs/api/get-quota-policy) and the [OpenAPI document](https://api.open.alvary.ai/api/v1/openapi.json).
 
 ## API keys
 
@@ -26,7 +26,7 @@ Create keys in the console under **API keys** ([pictures](/docs/console#keys)). 
 
 Every key expires: after 90 days unless you choose otherwise, and after at most 365. The console shows when each key was last used.
 
-- **Rotate** a key to replace it: you get a new key in its place, and the old one keeps working for 24 hours so you can switch over. You can rotate even when you have as many keys as allowed, because the old key isn't counted during those 24 hours. If you rotate the new key before they are up, the old one stops at once.
+- **Rotate** a key to replace it. The new key has the old one's name, type and lifetime: a key made for 90 days is replaced by one that lasts 90 days from now. The old key keeps working for an overlap of at most 24 hours, or until its own expiry if that comes sooner, so you can switch over; the console marks it **Replaced**. Rotation is never refused because you have as many keys as allowed: the new key takes the old one's place, and a replaced key isn't counted. A replaced key can't be rotated again: that answers `409` with the code `already_rotated`, so rotate or revoke its replacement. Rotating the replacement during the overlap stops the old key at once.
 - **Revoke** a key to stop it at once.
 - If your organisation's access ends, its keys are kept and refused with [`entitlement_lapsed`](/docs/errors#entitlement_lapsed) until access is renewed.
 
@@ -74,4 +74,7 @@ Invite people under **Members** ([pictures](/docs/console#members)).
 
 ## Second factor
 
-Owners and admins of an organisation with a paid or approved plan confirm a second factor (Touch ID, a security key or an authenticator app) before creating keys, connecting apps and other sensitive changes. On the free Starter plan it's recommended. Set one up under **Security and profile** in the console ([pictures](/docs/console#security)); keep the recovery code it shows.
+Owners and admins of an organisation with a paid or approved plan confirm a second factor (Touch ID, a security key or an authenticator app) before creating keys, connecting apps and other sensitive changes. On the free Starter plan it's recommended.
+
+- **Creating or rotating a key** never asks you to sign in again. Where a second factor is needed, it is asked once in your session.
+- **Changing a member's role, removing a member, transferring ownership, ending access, exporting or deleting the organisation**, and adding a webhook endpoint or rotating its secret, ask for a sign-in within the last 10 minutes, and, where a second factor is needed, one within the same 10 minutes. Downloading or deleting your own data, and removing a sign-in method, ask for a recent sign-in too. Set one up under **Security and profile** in the console ([pictures](/docs/console#security)); keep the recovery code it shows.
