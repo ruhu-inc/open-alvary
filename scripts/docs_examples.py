@@ -41,6 +41,16 @@ REQUESTS: dict[str, tuple[dict[str, str], list[tuple[str, str]]]] = {
     "get_coverage": ({}, []),
     "list_court_registers": ({}, []),
     "get_court_register": ({"jurisdiction": "ke"}, []),
+    "search_text": ({}, [("q", "personal data consent"), ("jurisdiction", "ng")]),
+    "retrieve_evidence": ({}, [("q", "when must a data controller report a breach"), ("jurisdiction", "ng")]),
+    "check_currentness": ({}, []),
+    "get_expressions": ({"source_id": "ng-foi-act-2011"}, []),
+    # No public text exists yet to name, so these leave {version_id} and {anchor_id} in the address, and
+    # the reference says where to find one.
+    "get_version_text": ({}, []),
+    "get_version_structure": ({}, [("limit", "100")]),
+    "get_anchor": ({}, []),
+    "get_rights_history": ({"source_id": "ng-foi-act-2011"}, []),
     "list_releases": ({}, []),
     "get_bulk_file": (
         {"release_id": "2026-10-05", "jurisdiction": "ng", "mode": "corpus", "filename": "manifest.json"},
@@ -53,9 +63,28 @@ REQUESTS: dict[str, tuple[dict[str, str], list[tuple[str, str]]]] = {
     "get_atom_feed": ({}, [("jurisdiction", "ng")]),
     "get_rss_feed": ({}, [("jurisdiction", "ng")]),
 }
+# operation ID → an example request body, valid for the route's request model (tests/test_docs.py). The
+# IDs and hash are examples, in the form the API gives them.
+BODIES: dict[str, dict] = {
+    "check_currentness": {
+        "items": [
+            {
+                "anchor_id": "nod_5b1d2c3e-8f4a-4d6b-9c7e-1a2b3c4d5e6f",
+                "span_hash": "50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c",
+            },
+            {
+                "version_id": "ver_0c9e8d7f-6a5b-4c3d-8e2f-1a0b9c8d7e6f",
+                "locator": "sec_40__subsec_2",
+                "as_of": "2026-01-01",
+                "jurisdiction": "ng",
+            },
+        ]
+    }
+}
 RECORDED = {"search", "list_sources", "get_source", "get_versions", "get_rights", "get_relationships",
             "resolve_citation", "list_jurisdictions", "get_jurisdiction", "get_coverage", "list_releases",
-            "list_plans", "get_quota_policy", "list_court_registers", "get_court_register"}  # fmt: skip
+            "list_plans", "get_quota_policy", "list_court_registers", "get_court_register", "get_expressions",
+            "get_rights_history"}  # fmt: skip
 MEMBERSHIP_NOTE = (
     "No membership has been reviewed yet, so the answer is `unknown`. Once one is, `items` lists it with its "
     "first and last day and their bounds, its basis, its evidence, who reviewed it and any suspensions; "
@@ -146,6 +175,8 @@ def main() -> None:
     examples: dict[str, dict] = {}
     for operation, (values, query) in REQUESTS.items():
         example: dict = {"path": values, "query": [list(pair) for pair in query]}
+        if operation in BODIES:
+            example["body"] = BODIES[operation]
         if operation in RECORDED:
             path = paths[operation]
             for name, value in values.items():
