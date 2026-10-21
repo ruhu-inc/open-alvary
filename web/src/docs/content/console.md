@@ -17,7 +17,7 @@ Open [the console](/console). There is no separate sign-up: the first time you s
 The first time, the console asks two things before you start.
 
 - {1} Your full name, as colleagues will see it.
-- {2} A name for your organisation. Access, keys and usage belong to an organisation; this one is yours, and you can rename it or invite colleagues later.
+- {2} A name for your organisation, such as your company's. Leave it blank to use your own name. Access, keys and usage belong to an organisation; this one is yours, and you can rename it or invite colleagues later.
 - {3} Agree to the [terms of service](/terms) and [acceptable use policy](/acceptable-use), and confirm you have read the [privacy notice](/privacy).
 - {4} **Continue to the console**.
 
