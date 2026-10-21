@@ -99,8 +99,11 @@ TOOLS = [
         "away: what it repeals, amends or commences and the law it is made under, what repealed, amended "
         "or commenced it, the treaty or directive it transposes, domesticates, implements or ratifies and "
         "the laws that do so for it, what it cites and is cited by, the instruments made under it, and the "
-        "source in force in its place now when it has been repealed. Only links a reviewer has checked "
-        "against the official text; judicial treatment is not included yet. A page at a time.",
+        "source in force in its place now when it has been repealed. For case law: each judgment paragraph "
+        "that cites a provision or another judgment, with the paragraph's words, and how a judgment follows, "
+        "applies, distinguishes, doubts or overrules another, or was so treated, where a legally qualified "
+        "reviewer recorded it (no treatment recorded means none is known, not that there is none). Only "
+        "links a reviewer has checked against the official text. A page at a time.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -113,7 +116,16 @@ TOOLS = [
                 "relation_type": {
                     "type": "string",
                     "enum": list(EDGE_ORDER),
-                    "description": "Only links of this kind, such as repealed_by or enables.",
+                    "description": "Only links of this kind, such as repealed_by, enables, cited_by or "
+                    "overruled_by.",
+                },
+                "locator": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 300,
+                    "description": "Only the citations and treatments of this part of the source, or of a "
+                    "part within it: a provision's locator, such as sec_2__subsec_1, for the judgment "
+                    "paragraphs citing it (relation_type cited_by), or a judgment paragraph's, such as para_12.",
                 },
                 "limit": {
                     "type": "integer",
@@ -424,8 +436,8 @@ TOOLS = [
                     "items": {"type": "string"},
                     "maxItems": 10,
                     "description": "Kinds of change: catalogue_added, metadata_corrected, "
-                    "text_version_published, legal_effect_recorded, withdrawal, coverage_changed, "
-                    "membership_recorded, suspension_recorded.",
+                    "text_version_published, legal_effect_recorded, treatment_recorded, withdrawal, "
+                    "coverage_changed, membership_recorded, suspension_recorded.",
                 },
                 "class": {
                     "type": "array",
@@ -541,9 +553,9 @@ def _language(value) -> str | None | bool:
     return value if isinstance(value, str) and LANGUAGE.match(value) and len(value) <= 35 else False
 
 
-def _bounded(payload: dict) -> dict:
+def _bounded(payload: dict, fewer: str = "passages") -> dict:
     if len(json.dumps(payload, ensure_ascii=False).encode()) > MAX_TOOL_BYTES:
-        raise TooLarge("result_too_large: ask for fewer passages")
+        raise TooLarge(f"result_too_large: ask for fewer {fewer}")
     return payload
 
 
@@ -616,23 +628,32 @@ def create_router(
             if name == "get_relationships" and {"source_id"} <= set(arguments) <= {
                 "source_id",
                 "relation_type",
+                "locator",
                 "limit",
                 "cursor",
             }:
                 source_id, kind = arguments["source_id"], arguments.get("relation_type")
                 limit, cursor = arguments.get("limit", 25), arguments.get("cursor")
+                locator = arguments.get("locator")
                 if not isinstance(source_id, str) or not 1 <= len(source_id) <= 160:
                     return None
                 if kind is not None and kind not in EDGE_ORDER:
+                    return None
+                if locator is not None and (not isinstance(locator, str) or not 1 <= len(locator) <= 300):
                     return None
                 if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 100:
                     return None
                 if cursor is not None and (not isinstance(cursor, str) or len(cursor) > 200):
                     return None
                 plan.admit(service.source(source_id).jurisdiction_id)
-                return service.relationships(
-                    source_id, kinds=[kind] if kind else None, limit=limit, cursor=cursor
-                ).model_dump(mode="json")
+                # Each citation carries its paragraph's words: a page larger than a tool answer is refused,
+                # never shortened (BUD-01).
+                return _bounded(
+                    service.relationships(
+                        source_id, kinds=[kind] if kind else None, limit=limit, cursor=cursor, locator=locator
+                    ).model_dump(mode="json"),
+                    "links (a smaller limit)",
+                )
             if name == "list_expressions" and set(arguments) == {"source_id"}:
                 source_id = arguments["source_id"]
                 if not isinstance(source_id, str) or not 1 <= len(source_id) <= 160:

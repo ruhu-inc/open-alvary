@@ -517,8 +517,19 @@ class VersionGate(WireModel):
 LEGAL_STATUS = Literal["unknown", "current", "historical", "repealed", "superseded"]
 # How another source relates to this one, from this one's side: it "repeals" an earlier law, it is
 # "repealed_by" a later one, it is "made_under" its parent law, which "enables" it; a national law
-# "transposes" a directive, which is "transposed_by" it. Judicial treatment is not served yet.
+# "transposes" a directive, which is "transposed_by" it; a judgment "overrules" another, which is
+# "overruled_by" it (a reviewed treatment, never inferred from a citation).
 RelationKind = Literal[
+    "overruled_by",
+    "doubted_by",
+    "distinguished_by",
+    "applied_by",
+    "followed_by",
+    "overrules",
+    "doubts",
+    "distinguishes",
+    "applies",
+    "follows",
     "repeals",
     "repealed_by",
     "amends",
@@ -543,6 +554,18 @@ RelationKind = Literal[
 ]
 
 
+class AssertionReview(WireModel):
+    """Who confirmed a judgment's citation, or recorded its treatment, at what level, in what role and when:
+    a citation's review is structural (the paragraph cites it), a treatment's doctrinal, which states the
+    reviewer's legal qualification (EDT-01)."""
+
+    level: Literal["structural", "doctrinal"]
+    reviewed_by: Nonempty
+    reviewer_role: Nonempty
+    reviewer_qualification: str | None = Field(**OMIT)
+    reviewed_at: AwareDatetime
+
+
 class RelatedSource(WireModel):
     kind: RelationKind
     source_id: ID
@@ -553,6 +576,21 @@ class RelatedSource(WireModel):
     effective_date: date | None = None
     evidence_url: HttpUrl
     verified: bool
+    # A judgment's reviewed citation or treatment (EDT-01, DAT-06), absent on a link between records: the
+    # assertion; the citing paragraph and the part cited (none: the work as a whole); the citation as the
+    # paragraph writes it and the paragraph's words (or a treatment's passage), only while the citing
+    # judgment's text is public; the opinion a treatment is in; and the review.
+    assertion_id: str | None = Field(**OMIT)
+    citing_locator: str | None = Field(**OMIT)
+    citing_pinpoint: str | None = Field(**OMIT)
+    cited_locator: str | None = Field(**OMIT)
+    cited_pinpoint: str | None = Field(**OMIT)
+    printed: str | None = Field(**OMIT)
+    quote: str | None = Field(**OMIT)
+    opinion: Literal["majority", "concurrence", "dissent", "plurality", "order", "unknown"] | None = Field(
+        **OMIT
+    )
+    review: AssertionReview | None = Field(**OMIT)
 
 
 class CurrentSource(WireModel):

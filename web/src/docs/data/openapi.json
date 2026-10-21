@@ -134,7 +134,7 @@
             "name": "type",
             "in": "query",
             "required": false,
-            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`, `suspension_recorded`.",
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `treatment_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`, `suspension_recorded`.",
             "schema": {
               "type": "array",
               "items": {
@@ -347,7 +347,7 @@
             "name": "type",
             "in": "query",
             "required": false,
-            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`, `suspension_recorded`.",
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `treatment_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`, `suspension_recorded`.",
             "schema": {
               "type": "array",
               "items": {
@@ -520,7 +520,7 @@
             "name": "type",
             "in": "query",
             "required": false,
-            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`, `suspension_recorded`.",
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `treatment_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`, `suspension_recorded`.",
             "schema": {
               "type": "array",
               "items": {
@@ -693,7 +693,7 @@
             "name": "type",
             "in": "query",
             "required": false,
-            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`, `suspension_recorded`.",
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `treatment_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`, `suspension_recorded`.",
             "schema": {
               "type": "array",
               "items": {
@@ -1392,6 +1392,16 @@
               "anyOf": [
                 {
                   "enum": [
+                    "overruled_by",
+                    "doubted_by",
+                    "distinguished_by",
+                    "applied_by",
+                    "followed_by",
+                    "overrules",
+                    "doubts",
+                    "distinguishes",
+                    "applies",
+                    "follows",
                     "repeals",
                     "repealed_by",
                     "amends",
@@ -1422,7 +1432,25 @@
               ],
               "title": "Kind"
             },
-            "description": "Only links of this kind, such as `repealed_by`, `transposed_by` or `enables`."
+            "description": "Only links of this kind, such as `repealed_by`, `transposed_by`, `enables`, `cited_by` or `overruled_by`."
+          },
+          {
+            "name": "locator",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 300
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Locator"
+            },
+            "description": "Only the judgment citations and treatments of this part of the record, or of a part within it: a provision's locator, such as `sec_2__subsec_1`, for the judgment paragraphs that cite it (with `kind=cited_by`), or a judgment paragraph's, such as `para_12`, for what it cites. Links between whole records are left out."
           },
           {
             "name": "limit",
@@ -1528,7 +1556,7 @@
             }
           }
         },
-        "description": "Whether the record is current, and how it relates to other records, a page at a time: the laws it repeals, amends or commences and the law it is made under; the later laws that repealed, amended or commenced it; the treaty or directive it transposes, domesticates, implements or ratifies, and the laws that do so for it; the records it cites and that cite it; the instruments made under it; and, when it has been repealed or replaced, the record in force in its place now. Links one step away only (depth 1), between public records that a reviewer has checked against the official text. Judicial treatment (a judgment following or overruling another) is not listed yet.",
+        "description": "Whether the record is current, and how it relates to other records, a page at a time: the laws it repeals, amends or commences and the law it is made under; the later laws that repealed, amended or commenced it; the treaty or directive it transposes, domesticates, implements or ratifies, and the laws that do so for it; the records it cites and that cite it; the instruments made under it; and, when it has been repealed or replaced, the record in force in its place now. For case law, each judgment paragraph that cites a provision or another judgment, with the part it cites, and how a judgment follows, applies, distinguishes, doubts or overrules another, or was so treated, once a legally qualified reviewer has recorded it; no treatment listed means none is recorded, never that the judgment is good law. Links one step away only (depth 1), between public records that a reviewer has checked against the official text.",
         "tags": [
           "Catalogue"
         ]
@@ -4066,6 +4094,59 @@
         ],
         "title": "ApplicableScope",
         "description": "The applicable-law scope a request asked for (``scope=applicable``) and the widening it applied, so\nthat nothing is widened silently (RSV-03): for a place within a country, the country (``within``) whose\nlaw it added whole and whose memberships and treaty consents it assessed; each body the country has a\nreviewed membership of, with whether it held on the date (only the law of bodies ``held`` was added),\nhow many records of regional bodies and treaties were admitted, and how many were left out, by\nrelation."
+      },
+      "AssertionReview": {
+        "properties": {
+          "level": {
+            "type": "string",
+            "enum": [
+              "structural",
+              "doctrinal"
+            ],
+            "title": "Level",
+            "description": "`structural` for a citation (the paragraph cites that record or part), `doctrinal` for a treatment (how the paragraph treats the other judgment)."
+          },
+          "reviewed_by": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reviewed By",
+            "description": "The reviewer."
+          },
+          "reviewer_role": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reviewer Role",
+            "description": "The reviewer's role, such as `owner` or `Nigerian advocate`."
+          },
+          "reviewer_qualification": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewer Qualification",
+            "description": "For a treatment: the reviewer's legal qualification for the jurisdiction, which a treatment is never recorded without."
+          },
+          "reviewed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Reviewed At",
+            "description": "When it was reviewed."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "level",
+          "reviewed_by",
+          "reviewer_role",
+          "reviewed_at"
+        ],
+        "title": "AssertionReview",
+        "description": "Who confirmed a judgment's citation, or recorded its treatment, at what level, in what role and when:\na citation's review is structural (the paragraph cites it), a treatment's doctrinal, which states the\nreviewer's legal qualification (EDT-01)."
       },
       "AuthorityEvidence": {
         "properties": {
@@ -8568,6 +8649,16 @@
           "kind": {
             "type": "string",
             "enum": [
+              "overruled_by",
+              "doubted_by",
+              "distinguished_by",
+              "applied_by",
+              "followed_by",
+              "overrules",
+              "doubts",
+              "distinguishes",
+              "applies",
+              "follows",
               "repeals",
               "repealed_by",
               "amends",
@@ -8591,7 +8682,7 @@
               "cited_by"
             ],
             "title": "Kind",
-            "description": "How the other record relates to this one, from this one's side: `repeals`, `repealed_by`, `amends`, `amended_by`, `supersedes`, `superseded_by`, `commences`, `commenced_by`, `made_under`, `enables`, `transposes`, `transposed_by`, `domesticates`, `domesticated_by`, `implements`, `implemented_by`, `ratifies`, `ratified_by`, `cites`, `cited_by` or `cross_reference`. A kind and its `_by` form are the same link seen from each end. `cites` says only that one record refers to the other, never that it agrees with it or changes it."
+            "description": "How the other record relates to this one, from this one's side: `repeals`, `repealed_by`, `amends`, `amended_by`, `supersedes`, `superseded_by`, `commences`, `commenced_by`, `made_under`, `enables`, `transposes`, `transposed_by`, `domesticates`, `domesticated_by`, `implements`, `implemented_by`, `ratifies`, `ratified_by`, `cites`, `cited_by` or `cross_reference`; for judgments, `follows`, `applies`, `distinguishes`, `doubts` or `overrules` and `followed_by`, `applied_by`, `distinguished_by`, `doubted_by` or `overruled_by`. A kind and its `_by` form are the same link seen from each end. `cites` says only that one record refers to the other, never that it agrees with it or changes it. A treatment is a reviewer's reading of one paragraph, in the opinion it is in; it is never inferred from a citation, and overruling is not repeal."
           },
           "source_id": {
             "type": "string",
@@ -8654,12 +8745,127 @@
             "minLength": 1,
             "format": "uri",
             "title": "Evidence Url",
-            "description": "The official text that makes the link (the repealing, amending, commencing or transposing law, for example)."
+            "description": "The official text that makes the link (the repealing, amending, commencing or transposing law, for example; for a judgment's citation or treatment, the citing judgment)."
           },
           "verified": {
             "type": "boolean",
             "title": "Verified",
             "description": "Whether a reviewer checked the link against that text."
+          },
+          "assertion_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assertion Id",
+            "description": "For a judgment's citation or treatment: its ID. Absent on a link between whole records."
+          },
+          "citing_locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citing Locator",
+            "description": "The citing judgment's paragraph, by locator, such as `para_12` or `op_2__para_4`."
+          },
+          "citing_pinpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citing Pinpoint",
+            "description": "That paragraph as it is cited, such as `[12]` or `op. 2 [4]`."
+          },
+          "cited_locator": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cited Locator",
+            "description": "The part of the cited record the paragraph cites, by locator, such as `sec_2__subsec_1`; absent when it cites the record as a whole, or its pinpoint names no part of a public text."
+          },
+          "cited_pinpoint": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cited Pinpoint",
+            "description": "That part as it is cited, such as `s. 2(1)` or `[4]`."
+          },
+          "printed": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Printed",
+            "description": "The citation as the paragraph writes it. Present only while the citing judgment's text is public."
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote",
+            "description": "The paragraph's words (or, for a long paragraph, the sentences around the citation); for a treatment, the passage that treats the other judgment. Present only while the citing judgment's text is public."
+          },
+          "opinion": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "majority",
+                  "concurrence",
+                  "dissent",
+                  "plurality",
+                  "order",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opinion",
+            "description": "For a treatment: the opinion its paragraph is in, as the reviewer recorded it: `majority`, `concurrence`, `dissent`, `plurality`, `order` or `unknown`. A dissent's words are not the court's holding."
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AssertionReview"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who checked it against the paragraph, at what level and when."
           }
         },
         "additionalProperties": false,
@@ -9162,7 +9368,7 @@
             },
             "type": "array",
             "title": "Items",
-            "description": "This page's links, from the record's side, in this order: it is `repealed_by`, `superseded_by`, `amended_by` or `commenced_by` a later record; it is `made_under` a parent law, or `transposes`, `domesticates`, `implements` or `ratifies` a treaty or directive; it `repeals`, `supersedes`, `amends` or `commences` another record; a treaty or directive is `transposed_by`, `domesticated_by`, `implemented_by` or `ratified_by` a law; a `cross_reference`; it `cites` or is `cited_by` another record; it `enables` an instrument made under it. Then by ID."
+            "description": "This page's links, from the record's side, in this order: a judgment is `overruled_by`, `doubted_by`, `distinguished_by`, `applied_by` or `followed_by` a later judgment; it is `repealed_by`, `superseded_by`, `amended_by` or `commenced_by` a later record; it is `made_under` a parent law, or `transposes`, `domesticates`, `implements` or `ratifies` a treaty or directive; it `repeals`, `supersedes`, `amends` or `commences` another record; a treaty or directive is `transposed_by`, `domesticated_by`, `implemented_by` or `ratified_by` a law; a judgment `overrules`, `doubts`, `distinguishes`, `applies` or `follows` another; a `cross_reference`; it `cites` or is `cited_by` another record; it `enables` an instrument made under it. Then by ID, and a judgment's citations in the order of its paragraphs."
           },
           "next_cursor": {
             "anyOf": [
@@ -10664,7 +10870,7 @@
           },
           "event_type": {
             "type": "string",
-            "description": "What changed: `catalogue_added` (a record added: an old law newly catalogued, not a new law), `metadata_corrected` (its catalogue details corrected), `text_version_published`, `legal_effect_recorded` (a checked link with another public record that changes what law applies: a repeal, amendment, supersession, commencement, transposition, domestication or ratification; or a reviewed event on its provisions), `withdrawal` (a record or text), `coverage_changed` (a jurisdiction's coverage), `membership_recorded` (a reviewed membership of the African Union or a regional body recorded, ended or corrected) or `suspension_recorded` (a reviewed suspension of a member from participation in a body's activities recorded, lifted or corrected; it remains a member). More types may be added: ignore those you do not know; `/change-coverage` lists the ones recorded."
+            "description": "What changed: `catalogue_added` (a record added: an old law newly catalogued, not a new law), `metadata_corrected` (its catalogue details corrected), `text_version_published`, `legal_effect_recorded` (a checked link with another public record that changes what law applies: a repeal, amendment, supersession, commencement, transposition, domestication or ratification; or a reviewed event on its provisions), `treatment_recorded` (a reviewed judicial treatment: how a judgment's paragraph follows, applies, distinguishes, doubts or overrules another judgment), `withdrawal` (a record or text), `coverage_changed` (a jurisdiction's coverage), `membership_recorded` (a reviewed membership of the African Union or a regional body recorded, ended or corrected) or `suspension_recorded` (a reviewed suspension of a member from participation in a body's activities recorded, lifted or corrected; it remains a member). More types may be added: ignore those you do not know; `/change-coverage` lists the ones recorded."
           },
           "feed_epoch": {
             "type": "string",
@@ -10796,6 +11002,13 @@
               "null"
             ],
             "description": "For a legal effect: {kind, by, effective_date, evidence_url}. `kind` is `repeal`, `amendment`, `supersession`, `commencement`, `transposition`, `domestication` or `ratification` of the record in `work`; `by` is the record that had the effect {id, title, citation}; the date is when it took effect, when known. A reviewer checked it against the official text. A transposition, domestication or ratification changes the law on both sides, so the law that gives effect to the instrument has its own change, naming the instrument in `of` {id, title, citation} instead of `by`. A later correction of it has the same `event_id`; when the link was withdrawn, the correction says `review_state` `withdrawn` and names the link it withdraws. For a reviewed event on provisions, `kind` is the event (`commenced`, `repealed`, `suspended`, `revived`, …), with `scope` (`whole` or `explicit_nodes`), `provisions` (their locators), `precision` of the date and `review_state` (`withdrawn` when the event was withdrawn, or is no longer public); `by` is present when another law asserted it."
+          },
+          "treatment": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "For a judicial treatment: {id, kind, assertion, of or by, citing_locator, citing_pinpoint, cited_locator, cited_pinpoint, opinion, review_level, evidence_url}. `kind` is `follows`, `applies`, `distinguishes`, `doubts` or `overrules`; `assertion` is `direct_treatment`, a reviewer's reading of the treating paragraph, never an inferred risk. The treating judgment's change names the judgment treated in `of` {id, title, citation}; an overruling has a change on the overruled judgment too, naming the overruling one in `by`. `citing_pinpoint` is the treating paragraph and `cited_pinpoint` the part treated; `opinion` is the one the paragraph is in (`majority`, `concurrence`, `dissent`, `plurality`, `order` or `unknown`); `review_level` is `doctrinal`. The passage itself is on the record's history. A later correction has the same `event_id`; when the treatment was withdrawn, it says `review_state` `withdrawn`."
           },
           "membership": {
             "type": [

@@ -246,12 +246,15 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
         request: Request,
         source_id: str,
         kind: RelationKind | None = None,
+        locator: str | None = Query(None, max_length=300),
         limit: int = Query(25, ge=1, le=100),
         cursor: str | None = Query(None, max_length=200),
         service: LegacyCatalogue = Depends(catalogue),
     ) -> SourceRelationships:
         check_source(request, service, source_id)
-        return service.relationships(source_id, kinds=[kind] if kind else None, limit=limit, cursor=cursor)
+        return service.relationships(
+            source_id, kinds=[kind] if kind else None, limit=limit, cursor=cursor, locator=locator
+        )
 
     @app.get("/sources/{source_id}/expressions")
     def expressions(

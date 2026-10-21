@@ -2,6 +2,7 @@
 
 import base64
 import hashlib
+import re
 from collections import Counter
 from datetime import UTC, date, datetime
 from functools import cache
@@ -163,6 +164,35 @@ def _offset(cursor: str | None, expected: str = "edges") -> int:
 # Graph bounds (API-04, BUD-01): links one step away, a page of 25 by default and 100 at most, and
 # at most 300 links examined in a request (the walk to the source in force now, three steps at most).
 EDGES_PER_PAGE, MAX_EDGES_PER_PAGE, EDGE_BUDGET, MAX_SUCCESSION = 25, 100, 300, 3
+LOCATOR = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,299}")
+
+
+def _asserted(row: dict, readable: bool) -> dict:
+    """A judgment's reviewed citation or treatment as a relationship's fields: its paragraph, the part it
+    cites, the review, and the words only while the citing judgment's text is public."""
+    review = {
+        "level": row["level"],
+        "reviewed_by": row["reviewed_by"],
+        "reviewer_role": row["reviewer_role"],
+        "reviewer_qualification": row.get("reviewer_qualification"),
+        # In UTC whatever the database session's time zone.
+        "reviewed_at": datetime.fromisoformat(row["reviewed_at"]).astimezone(UTC),
+    }
+    return {
+        "evidence_url": row["evidence_url"],
+        "verified": True,
+        "assertion_id": row["assertion_id"],
+        "citing_locator": row["citing_locator"],
+        "citing_pinpoint": row["citing_pinpoint"],
+        "cited_locator": row["cited_locator"],
+        "cited_pinpoint": row["cited_pinpoint"],
+        "printed": row["printed"] if readable else None,
+        "quote": row["quote"] if readable else None,
+        "opinion": row.get("opinion"),
+        "review": review,
+    }
+
+
 # An anchor answers with its whole span, never silently shortened (BUD-01), inside the 1 MiB JSON cap.
 MAX_ANCHOR_BYTES = 900 * 1024
 # A text search serves its first 1,000 hits, 25 a page by default and 100 at most (API-03).
@@ -447,18 +477,29 @@ class LegacyCatalogue:
             named=pair[0] if pair else None,
         )
 
-    def relationships(self, source_id, *, kinds=None, limit=EDGES_PER_PAGE, cursor=None, current=True):
+    def relationships(
+        self, source_id, *, kinds=None, limit=EDGES_PER_PAGE, cursor=None, current=True, locator=None
+    ):
         """A page of a source's checked links to other public sources, as seen from its side: what it
         repeals, amends, commences, gives effect to or is made under, what repealed, amended, commenced
-        or gave effect to it, what it cites and is cited by, the instruments made under it; and, when it
-        has been repealed or replaced, the source in force in its place now."""
+        or gave effect to it, what it cites and is cited by, the instruments made under it; a judgment's
+        reviewed citations at paragraph level, and how later judgments treated it and it treats others;
+        and, when it has been repealed or replaced, the source in force in its place now. With
+        ``locator``, only the citations and treatments of that part of it (or of a part within it)."""
         source, _ = self._require(source_id)
         kinds = set(EDGE_ORDER) if kinds is None else set(kinds)
         if not kinds <= set(EDGE_ORDER) or not 1 <= limit <= MAX_EDGES_PER_PAGE:
             raise InvalidSearch("Invalid relationship filter or page size")
+        if locator is not None and not LOCATOR.fullmatch(locator):
+            raise InvalidSearch("Invalid locator")
         offset = _offset(cursor)
-        total, edges = self.repository.edges(source_id, kinds, limit=limit, offset=offset)
+        total, edges = self.repository.edges(source_id, kinds, limit=limit, offset=offset, locator=locator)
         public = self._public({other for _, other, _ in edges})
+        # A citation's words are the citing judgment's text: shown only while that text is public.
+        citing = {link["citing_work"] for _, _, link in edges if isinstance(link, dict)}
+        readable = {
+            work: next(self._approved(*pair), None) is not None for work, pair in self._public(citing).items()
+        }
         items = tuple(
             RelatedSource(
                 kind=seen,
@@ -467,9 +508,15 @@ class LegacyCatalogue:
                 citation=public[other][0].citation,
                 legal_status=public[other][0].legal_status,
                 year=public[other][0].year,
-                effective_date=link.effective_date,
-                evidence_url=link.evidence_url,
-                verified=link.verified,
+                **(
+                    _asserted(link, readable.get(link["citing_work"], False))
+                    if isinstance(link, dict)
+                    else {
+                        "effective_date": link.effective_date,
+                        "evidence_url": link.evidence_url,
+                        "verified": link.verified,
+                    }
+                ),
             )
             for seen, other, link in edges
             if other in public

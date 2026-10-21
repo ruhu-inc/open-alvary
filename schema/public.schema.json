@@ -388,6 +388,55 @@
       "title": "ApplicableScope",
       "type": "object"
     },
+    "AssertionReview": {
+      "additionalProperties": false,
+      "description": "Who confirmed a judgment's citation, or recorded its treatment, at what level, in what role and when:\na citation's review is structural (the paragraph cites it), a treatment's doctrinal, which states the\nreviewer's legal qualification (EDT-01).",
+      "properties": {
+        "level": {
+          "enum": [
+            "structural",
+            "doctrinal"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "reviewed_by": {
+          "minLength": 1,
+          "title": "Reviewed By",
+          "type": "string"
+        },
+        "reviewer_role": {
+          "minLength": 1,
+          "title": "Reviewer Role",
+          "type": "string"
+        },
+        "reviewer_qualification": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewer Qualification"
+        },
+        "reviewed_at": {
+          "format": "date-time",
+          "title": "Reviewed At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "level",
+        "reviewed_by",
+        "reviewer_role",
+        "reviewed_at"
+      ],
+      "title": "AssertionReview",
+      "type": "object"
+    },
     "AuthorityEvidence": {
       "additionalProperties": false,
       "description": "Where an edition's authority or a language rule is stated, or a treaty's party list is shown\ncomplete: a page and the words of the document (``document``), the address of another instrument\n(``external``), or the reviewer who recorded it.",
@@ -1573,6 +1622,16 @@
       "properties": {
         "kind": {
           "enum": [
+            "overruled_by",
+            "doubted_by",
+            "distinguished_by",
+            "applied_by",
+            "followed_by",
+            "overrules",
+            "doubts",
+            "distinguishes",
+            "applies",
+            "follows",
             "repeals",
             "repealed_by",
             "amends",
@@ -1659,6 +1718,121 @@
         "verified": {
           "title": "Verified",
           "type": "boolean"
+        },
+        "assertion_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Assertion Id"
+        },
+        "citing_locator": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Citing Locator"
+        },
+        "citing_pinpoint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Citing Pinpoint"
+        },
+        "cited_locator": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cited Locator"
+        },
+        "cited_pinpoint": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cited Pinpoint"
+        },
+        "printed": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Printed"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "opinion": {
+          "anyOf": [
+            {
+              "enum": [
+                "majority",
+                "concurrence",
+                "dissent",
+                "plurality",
+                "order",
+                "unknown"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Opinion"
+        },
+        "review": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AssertionReview"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [

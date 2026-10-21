@@ -40,8 +40,8 @@ FILTERS = [
     (
         "type",
         "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, "
-        "`legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`, "
-        "`suspension_recorded`.",
+        "`legal_effect_recorded`, `treatment_recorded`, `withdrawal`, `coverage_changed`, "
+        "`membership_recorded`, `suspension_recorded`.",
     ),
     ("class", "Document types, such as `act` or `regulation`. Up to 50."),
     ("language", "Languages of the affected text, such as `en`. Up to 50."),
@@ -194,12 +194,19 @@ OPERATIONS: dict[str, dict] = {
         "repealed, amended or commenced it; the treaty or directive it transposes, domesticates, implements "
         "or ratifies, and the laws that do so for it; the records it cites and that cite it; the "
         "instruments made under it; and, when it has been repealed or replaced, the record in force in its "
-        "place now. Links one step away only (depth 1), between public records that a reviewer has checked "
-        "against the official text. Judicial treatment (a judgment following or overruling another) is not "
-        "listed yet.",
+        "place now. For case law, each judgment paragraph that cites a provision or another judgment, with "
+        "the part it cites, and how a judgment follows, applies, distinguishes, doubts or overrules another, "
+        "or was so treated, once a legally qualified reviewer has recorded it; no treatment listed means "
+        "none is recorded, never that the judgment is good law. Links one step away only (depth 1), between "
+        "public records that a reviewer has checked against the official text.",
         "parameters": {
             "source_id": "The record's ID.",
-            "kind": "Only links of this kind, such as `repealed_by`, `transposed_by` or `enables`.",
+            "kind": "Only links of this kind, such as `repealed_by`, `transposed_by`, `enables`, `cited_by` "
+            "or `overruled_by`.",
+            "locator": "Only the judgment citations and treatments of this part of the record, or of a part "
+            "within it: a provision's locator, such as `sec_2__subsec_1`, for the judgment paragraphs that "
+            "cite it (with `kind=cited_by`), or a judgment paragraph's, such as `para_12`, for what it cites. "
+            "Links between whole records are left out.",
             "limit": "Links per page, 1 to 100. The default is 25.",
             "cursor": "The `next_cursor` of the previous page, to continue it.",
         },
@@ -601,6 +608,8 @@ SCHEMAS: dict[str, dict] = {
                 "`text_version_published`, `legal_effect_recorded` (a checked link with another public "
                 "record that changes what law applies: a repeal, amendment, supersession, commencement, "
                 "transposition, domestication or ratification; or a reviewed event on its provisions), "
+                "`treatment_recorded` (a reviewed judicial treatment: how a judgment's paragraph follows, "
+                "applies, distinguishes, doubts or overrules another judgment), "
                 "`withdrawal` (a record or text), `coverage_changed` (a jurisdiction's coverage), "
                 "`membership_recorded` (a reviewed membership of the African Union or a regional body "
                 "recorded, ended or corrected) or `suspension_recorded` (a reviewed suspension of a member from "
@@ -688,6 +697,20 @@ SCHEMAS: dict[str, dict] = {
                 "`repealed`, `suspended`, `revived`, …), with `scope` (`whole` or `explicit_nodes`), "
                 "`provisions` (their locators), `precision` of the date and `review_state` (`withdrawn` when "
                 "the event was withdrawn, or is no longer public); `by` is present when another law asserted it.",
+            },
+            "treatment": {
+                "type": ["object", "null"],
+                "description": "For a judicial treatment: {id, kind, assertion, of or by, citing_locator, "
+                "citing_pinpoint, cited_locator, cited_pinpoint, opinion, review_level, evidence_url}. `kind` is "
+                "`follows`, `applies`, `distinguishes`, `doubts` or `overrules`; `assertion` is "
+                "`direct_treatment`, a reviewer's reading of the treating paragraph, never an inferred risk. The "
+                "treating judgment's change names the judgment treated in `of` {id, title, citation}; an "
+                "overruling has a change on the overruled judgment too, naming the overruling one in `by`. "
+                "`citing_pinpoint` is the treating paragraph and `cited_pinpoint` the part treated; `opinion` is "
+                "the one the paragraph is in (`majority`, `concurrence`, `dissent`, `plurality`, `order` or "
+                "`unknown`); `review_level` is `doctrinal`. The passage itself is on the record's history. A "
+                "later correction has the same `event_id`; when the treatment was withdrawn, it says "
+                "`review_state` `withdrawn`.",
             },
             "membership": {
                 "type": ["object", "null"],
@@ -1292,12 +1315,15 @@ FIELDS: dict[str, dict[str, str]] = {
         "current": "When it has been repealed or replaced: the record in force in its place now, at the "
         "end of its line of repeals (up to three steps). Absent when nothing in the catalogue repealed it.",
         "total": "Links matching, across all pages.",
-        "items": "This page's links, from the record's side, in this order: it is `repealed_by`, "
-        "`superseded_by`, `amended_by` or `commenced_by` a later record; it is `made_under` a parent law, or "
-        "`transposes`, `domesticates`, `implements` or `ratifies` a treaty or directive; it `repeals`, "
-        "`supersedes`, `amends` or `commences` another record; a treaty or directive is `transposed_by`, "
-        "`domesticated_by`, `implemented_by` or `ratified_by` a law; a `cross_reference`; it `cites` or is "
-        "`cited_by` another record; it `enables` an instrument made under it. Then by ID.",
+        "items": "This page's links, from the record's side, in this order: a judgment is `overruled_by`, "
+        "`doubted_by`, `distinguished_by`, `applied_by` or `followed_by` a later judgment; it is "
+        "`repealed_by`, `superseded_by`, `amended_by` or `commenced_by` a later record; it is `made_under` a "
+        "parent law, or `transposes`, `domesticates`, `implements` or `ratifies` a treaty or directive; it "
+        "`repeals`, `supersedes`, `amends` or `commences` another record; a treaty or directive is "
+        "`transposed_by`, `domesticated_by`, `implemented_by` or `ratified_by` a law; a judgment "
+        "`overrules`, `doubts`, `distinguishes`, `applies` or `follows` another; a `cross_reference`; it "
+        "`cites` or is `cited_by` another record; it `enables` an instrument made under it. Then by ID, and "
+        "a judgment's citations in the order of its paragraphs.",
         "next_cursor": "Pass it as `cursor` for the next page; absent on the last.",
     },
     "RelatedSource": {
@@ -1305,8 +1331,12 @@ FIELDS: dict[str, dict[str, str]] = {
         "`repealed_by`, `amends`, `amended_by`, `supersedes`, `superseded_by`, `commences`, `commenced_by`, "
         "`made_under`, `enables`, `transposes`, `transposed_by`, `domesticates`, `domesticated_by`, "
         "`implements`, `implemented_by`, `ratifies`, `ratified_by`, `cites`, `cited_by` or "
-        "`cross_reference`. A kind and its `_by` form are the same link seen from each end. `cites` says "
-        "only that one record refers to the other, never that it agrees with it or changes it.",
+        "`cross_reference`; for judgments, `follows`, `applies`, `distinguishes`, `doubts` or `overrules` "
+        "and `followed_by`, `applied_by`, `distinguished_by`, `doubted_by` or `overruled_by`. A kind and its "
+        "`_by` form are the same link seen from each end. `cites` says only that one record refers to the "
+        "other, never that it agrees with it or changes it. A treatment is a reviewer's reading of one "
+        "paragraph, in the opinion it is in; it is never inferred from a citation, and overruling is not "
+        "repeal.",
         "source_id": "The other record's ID.",
         "title": "The other record's title.",
         "citation": "How the other record is cited.",
@@ -1315,8 +1345,33 @@ FIELDS: dict[str, dict[str, str]] = {
         "effective_date": "When the link took effect, such as the date of a repeal or commencement, when "
         "known.",
         "evidence_url": "The official text that makes the link (the repealing, amending, commencing or "
-        "transposing law, for example).",
+        "transposing law, for example; for a judgment's citation or treatment, the citing judgment).",
         "verified": "Whether a reviewer checked the link against that text.",
+        "assertion_id": "For a judgment's citation or treatment: its ID. Absent on a link between whole records.",
+        "citing_locator": "The citing judgment's paragraph, by locator, such as `para_12` or `op_2__para_4`.",
+        "citing_pinpoint": "That paragraph as it is cited, such as `[12]` or `op. 2 [4]`.",
+        "cited_locator": "The part of the cited record the paragraph cites, by locator, such as "
+        "`sec_2__subsec_1`; absent when it cites the record as a whole, or its pinpoint names no part of a "
+        "public text.",
+        "cited_pinpoint": "That part as it is cited, such as `s. 2(1)` or `[4]`.",
+        "printed": "The citation as the paragraph writes it. Present only while the citing judgment's text is "
+        "public.",
+        "quote": "The paragraph's words (or, for a long paragraph, the sentences around the citation); for a "
+        "treatment, the passage that treats the other judgment. Present only while the citing judgment's text "
+        "is public.",
+        "opinion": "For a treatment: the opinion its paragraph is in, as the reviewer recorded it: `majority`, "
+        "`concurrence`, `dissent`, `plurality`, `order` or `unknown`. A dissent's words are not the court's "
+        "holding.",
+        "review": "Who checked it against the paragraph, at what level and when.",
+    },
+    "AssertionReview": {
+        "level": "`structural` for a citation (the paragraph cites that record or part), `doctrinal` for a "
+        "treatment (how the paragraph treats the other judgment).",
+        "reviewed_by": "The reviewer.",
+        "reviewer_role": "The reviewer's role, such as `owner` or `Nigerian advocate`.",
+        "reviewer_qualification": "For a treatment: the reviewer's legal qualification for the jurisdiction, "
+        "which a treatment is never recorded without.",
+        "reviewed_at": "When it was reviewed.",
     },
     "CurrentSource": {
         "source_id": "The record in force now.",
