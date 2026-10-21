@@ -1,0 +1,40 @@
+workbench/record_view.py
+  s_d665c62e07d76f::t_d4016a22fbfeff 810-822
+  s_d665c62e07d76f::t_20460ad52cb873 1186-1188
+  s_d665c62e07d76f::t_698362e97bd6cc 1185,1197-1199
+  s_d665c62e07d76f::t_07fde846ad3a2e 343-358
+  s_d665c62e07d76f::t_d34f6dc77e0538 806-809,823-824
+  s_d665c62e07d76f::t_74402d3a8f6252 935
+tests/test_record.py
+  s_d665c62e07d76f::t_7d27a8ed217d2e 288-290
+  s_d665c62e07d76f::t_178e69c0e48185 263-287,291-303
+schema/record.schema.json
+  s_d665c62e07d76f::t_7d493e229ff9d3 2144-2167
+schema/record.py
+  s_d665c62e07d76f::t_732f517789c114 714-717,722-726
+  s_8b630f173c157e::t_5817a41546fc20 727
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b943127e4bf6027224930f9e282e497b71a97af0",
+  "prompts": {},
+  "sessions": {
+    "s_8b630f173c157e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "dd01488b-9cc9-40d8-b248-a09cb23172a9",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    },
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
