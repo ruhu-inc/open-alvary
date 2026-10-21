@@ -1,0 +1,47 @@
+api/pinpoint.py
+  s_d665c62e07d76f::t_5ecae4bc0c605c 169-170
+ingestion/structure.py
+  s_d665c62e07d76f::t_576c7d24e30823 48-52
+tests/test_structure_rules.py
+  s_d665c62e07d76f::t_5fc8b3b69088c5 72-77
+tests/test_calibrate.py
+  s_d665c62e07d76f::t_30e8ad188148bc 49
+workbench/structure.py
+  s_d665c62e07d76f::t_f7357903d4fd45 351-352,1269-1277,1280-1335,1338-1418,1423-1436,1440-1528,1530-1531,1541-1591,1595-1710
+  s_d665c62e07d76f::t_5ecae4bc0c605c 1592-1594
+  s_d665c62e07d76f::t_a57a9d20e16e48 1224-1226
+  s_d665c62e07d76f::t_6fccec9110b83b 1532-1540
+  s_d665c62e07d76f::t_91159d1c7c9ef9 1279,1529
+  s_d665c62e07d76f::t_576c7d24e30823 1278,1336-1337
+  s_d665c62e07d76f::t_3c7701d24391f1 1419-1422,1437-1439
+  s_d665c62e07d76f::t_7827caaa7d11ff 26-40,49-51
+  s_d665c62e07d76f::t_2f0b5e9b4f1673 82-86,114-119
+  s_d665c62e07d76f::t_522bc8000c275c 1711-1712
+ingestion/calibrate.py
+  s_d665c62e07d76f::t_30e8ad188148bc 132-134
+  s_d665c62e07d76f::t_8bfd80f8abfa6c 82-99,107,161
+tests/test_batch_pipeline.py
+  s_d665c62e07d76f::t_dea21c9536bac9 498-520
+tests/test_structure_uniform_acts.py
+  s_d665c62e07d76f::t_a57a9d20e16e48 256
+tests/test_structure_articles.py
+  s_d665c62e07d76f::t_dab366ab62f551 24-26,33-35,37-41,43-51,65-67,80-85,88-90,92-101,113-117,130-132,183-185,220-226,229-231,234-236,262-264,268-270,279-284,292-294,300-305,345-347,350-352,359-363,383-387
+  s_d665c62e07d76f::t_a32af465138413 1-23,27-32,36,42,52-64,68-79,86-87,91,102-112,118-129,133-152,161-182,186-219,227-228,232-233,237-261,265-267,271-278,285-291,295-299,306-344,348-349,353-358,364-382,388-404
+  s_d665c62e07d76f::t_3c7701d24391f1 153-160
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0906f12b3dea6768f5d2518251be2705e8838c87",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
