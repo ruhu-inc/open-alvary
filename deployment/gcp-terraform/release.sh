@@ -43,6 +43,9 @@ REGION="${REGION:-europe-west1}"
 [[ "$PROJECT" != open-alvary-prod && "$PROJECT" != open-alvary-ingestion ]] \
   || { echo "$PROJECT was built by deployment/gcp/*.sh: never release into it from here (README)" >&2; exit 1; }
 GC=(gcloud --project "$PROJECT" --quiet)
+# An expired sign-in fails every call below; say so, rather than that the registry is missing.
+gcloud auth print-access-token >/dev/null 2>&1 \
+  || { echo "gcloud's sign-in has expired: run gcloud auth login, then release again" >&2; exit 1; }
 "${GC[@]}" artifacts repositories describe open-alvary --location="$REGION" >/dev/null 2>&1 \
   || { echo "No registry in $PROJECT: apply env/ first" >&2; exit 1; }
 COMMIT="$(git rev-parse --short "$REVISION")"
