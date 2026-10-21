@@ -315,7 +315,8 @@ OPERATIONS: dict[str, dict] = {
         "tag": "Retrieval",
         "summary": "Check cited parts",
         "description": "Before showing an answer that cites the corpus: for each cited part (up to 100), "
-        "whether it is still published with the same words, whether a newer text of the same edition "
+        "whether it is still published with the same words (`span_mismatch` when its words don't hash to the "
+        "`span_hash` sent), whether a newer text of the same edition "
         "exists (with the same part's anchor there and whether its words changed), and whether it was in "
         "force on a date. Given a `jurisdiction`, also whether the record binds there on that date "
         "(`applicability`): a regional instrument through the country's reviewed membership and the "
