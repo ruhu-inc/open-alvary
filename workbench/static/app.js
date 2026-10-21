@@ -1065,7 +1065,7 @@ function rowsEditor(columns, rows, onChange, { suggested = {}, pageLink = null, 
 // --- the work queue (CPR-06) ------------------------------------------------------------------------
 
 const TASK_PRIORITY = { high: ["high", "high flags"], full: ["medium", "review"], flags: ["warn", "flags"], proposal: ["role", "proposal"] };
-const TASK_KINDS = [["", "All work"], ["review", "Pages to review"], ["flags", "Flags to resolve"], ["events", "Legal events"], ["instructions", "Amendment instructions"]];
+const TASK_KINDS = [["", "All work"], ["review", "Pages to review"], ["flags", "Flags to resolve"], ["events", "Legal events"], ["instructions", "Amendment instructions"], ["citations", "Citations"]];
 
 // One task in words, with a link to where it is done. Pages to review are listed alike whatever the
 // reason (an audit page is one of them: CPR-01).
@@ -1078,6 +1078,7 @@ function taskLine(t) {
     return el("span", {}, el("a", { href: `#/doc/${id}/page/${t.pages[0]}`, text: what }), el("span", { class: "muted", text: ` · pages ${pageRuns(t.pages.slice(0, 60))}${t.pages.length > 60 ? "…" : ""}` }));
   }
   if (t.kind === "events") return el("a", { href: `#/doc/${id}/events`, text: `${t.count} legal event${s} to review` });
+  if (t.kind === "citations") return el("a", { href: `#/doc/${id}/citations`, text: `${t.count} citation${s} to confirm or reject` });
   return el("a", { href: `#/doc/${id}/instructions`, text: t.step === "second_review" ? `${t.count} instruction${s} awaiting a second editor` : `${t.count} instruction${s} to review` });
 }
 

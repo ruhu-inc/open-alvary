@@ -94,8 +94,10 @@ def test_proposals_are_imported_once_and_only_where_the_text_holds_their_paragra
         cited[ACT]["citation"]["cited_locator"] == "sec_2__subsec_1"
         and cited[ACT]["citation"]["review"] is None
     )
-    # Nothing proposed is exported.
+    # Nothing proposed is exported; the work queue lists the proposals waiting for an approver.
     assert reviewer.get(f"/api/documents/{CITING}/citations/export").json() == {"citations": []}
+    [waiting] = reviewer.get("/api/queue", params={"kind": "citations"}).json()["tasks"]
+    assert (waiting["id"], waiting["count"], waiting["step"]) == (CITING, 2, "review")
 
 
 def test_an_approver_confirms_with_a_role_and_a_treatment_needs_a_qualified_doctrinal_review(world, proposed):
