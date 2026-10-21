@@ -1,0 +1,530 @@
+{
+  "jurisdiction": "za",
+  "review_state": "unreviewed",
+  "reviewed_by": null,
+  "reviewed_on": null,
+  "reviewed_sha256": null,
+  "precedent": {
+    "binds": true,
+    "note": "The Constitutional Court treats stare decisis as part of the rule of law: precedent binds lower courts, and courts of final jurisdiction are bound by their own decisions unless clearly wrong. Only the ratio decidendi binds, not obiter dicta.",
+    "sources": [
+      "cc-campsbay-28",
+      "cc-turnbull-54",
+      "cc-turnbull-57-58"
+    ]
+  },
+  "courts": [
+    {
+      "id": "za-cc",
+      "name": "Constitutional Court",
+      "kind": "court",
+      "level": "apex",
+      "rank": 1,
+      "appeals_to": [],
+      "sources": [
+        "const-166",
+        "const-167-3",
+        "amend17-act",
+        "amend17-commencement"
+      ],
+      "note": "S. 167(3)(a): highest court of the Republic; may decide constitutional matters and, with leave, any other arguable point of law of general public importance. Before the Constitution Seventeenth Amendment Act of 2012 it was highest only in constitutional matters; that Act came into operation on 23 August 2013 (Proc. R. 35 of 2013)."
+    },
+    {
+      "id": "za-sca",
+      "name": "Supreme Court of Appeal",
+      "kind": "court",
+      "level": "appellate",
+      "appeals_to": [
+        "za-cc"
+      ],
+      "sources": [
+        "const-166",
+        "const-168-3",
+        "const-167-3",
+        "const-167-6"
+      ],
+      "note": "S. 168(3): decides appeals in any matter from the High Court or a court of similar status, except labour or competition matters to the extent an Act of Parliament provides. Further appeal to the Constitutional Court with its leave (s. 167(3)(b), 167(6)(b))."
+    },
+    {
+      "id": "za-hc",
+      "name": "High Court of South Africa",
+      "kind": "court",
+      "level": "superior",
+      "valid_from": "2013-08-23",
+      "appeals_to": [
+        "za-sca",
+        "za-cc"
+      ],
+      "sources": [
+        "const-166",
+        "const-169",
+        "const-168-3",
+        "const-167-6",
+        "amend17-act",
+        "amend17-commencement",
+        "sca-act-6",
+        "sca-act-16",
+        "sca-act-50",
+        "sca-act-commencement"
+      ],
+      "note": "A single High Court made up of Divisions (s. 169; Superior Courts Act s. 6(1)), created by the Seventeenth Amendment and the Superior Courts Act, both in force 23 August 2013; the former separate High Courts became seats of Divisions (SCA Act s. 50(1)). Appeals from a Division at first instance go, with leave, to the SCA or (single judge) to a full court of the same Division; appeals decided by a Division on appeal go to the SCA with special leave (SCA Act s. 16(1)(a)-(b)). Direct appeal to the Constitutional Court with its leave (s. 167(6)(b))."
+    },
+    {
+      "id": "za-mc",
+      "name": "Magistrates' Courts",
+      "kind": "court",
+      "level": "subordinate",
+      "appeals_to": [
+        "za-hc",
+        "za-land"
+      ],
+      "sources": [
+        "const-166",
+        "const-170",
+        "mca-2",
+        "mca-83",
+        "cpa-309",
+        "sca-act-53",
+        "lca-17",
+        "judiciary-hc",
+        "concourt-position"
+      ],
+      "note": "District courts and regional-division courts established under Magistrates' Courts Act s. 2(1)(f)-(g). Civil appeals lie to the High Court Division having jurisdiction (MCA s. 83, read with SCA Act s. 53(b)); criminal appeals from a lower court lie, with leave, to the High Court having jurisdiction (CPA s. 309(1)(a)). Appeals to the Land Court lie where land-related legislation confers that jurisdiction (Land Court Act s. 17(1)). S. 170: courts below the High Court may not rule on the constitutionality of legislation or presidential conduct. A High Court Division's decisions bind the magistrates' courts within that Division's area only. No relation records it: a relation of the High Court to the magistrates' courts would cover every Division and every area."
+    },
+    {
+      "id": "za-lc",
+      "name": "Labour Court",
+      "kind": "court",
+      "level": "specialised",
+      "appeals_to": [
+        "za-lac"
+      ],
+      "sources": [
+        "lra-151",
+        "lra-166",
+        "lra-173"
+      ],
+      "note": "Superior court with authority equal to a provincial division of the High Court in matters under its jurisdiction (LRA s. 151(2)). Appeals against its final judgments and orders go, with leave, to the Labour Appeal Court (ss. 166, 173(1)(a))."
+    },
+    {
+      "id": "za-lac",
+      "name": "Labour Appeal Court",
+      "kind": "court",
+      "level": "specialised",
+      "appeals_to": [
+        "za-cc"
+      ],
+      "sources": [
+        "lra-167",
+        "lra-183",
+        "const-168-3",
+        "const-167-6"
+      ],
+      "note": "Final court of appeal for Labour Court judgments in matters within that court's exclusive jurisdiction, with standing equal to the SCA in its own matters (LRA s. 167(2)-(3)). S. 183 bars appeals from it, subject to the Constitution; s. 168(3)(a) of the Constitution lets an Act exclude labour matters from the SCA, and s. 167(6)(b) allows a direct appeal to the Constitutional Court with leave."
+    },
+    {
+      "id": "za-lcc",
+      "name": "Land Claims Court",
+      "kind": "court",
+      "level": "specialised",
+      "valid_until": "2024-04-05",
+      "appeals_to": [
+        "za-sca",
+        "za-cc"
+      ],
+      "sources": [
+        "rlra-22",
+        "rlra-37-1996",
+        "rlra-37-1997",
+        "lca-sched-4",
+        "lca-commencement"
+      ],
+      "note": "Established by Restitution of Land Rights Act s. 22. Appeals, with leave, heard by the SCA (s. 37(1)-(2), as substituted in 1996 and amended in 1997); s. 37(9) preserves a direct appeal to the Constitutional Court. Chapter III (the court's provisions) was deleted by Land Court Act Schedule item 4, in force 5 April 2024; pending matters pass to the Land Court (Land Court Act s. 35(1)(b))."
+    },
+    {
+      "id": "za-land",
+      "name": "Land Court",
+      "kind": "court",
+      "level": "specialised",
+      "valid_from": "2024-04-05",
+      "appeals_to": [
+        "za-sca",
+        "za-cc"
+      ],
+      "sources": [
+        "lca-3",
+        "lca-31",
+        "lca-commencement",
+        "const-167-6"
+      ],
+      "note": "Superior court with standing equal to a Division of the High Court in its matters (Land Court Act s. 3(2)(a)). Appeals from a single judge go, with leave, to the SCA or a full court of the Land Court; from a full court on appeal, to the SCA with special leave (s. 31(1)), subject to the Constitution (direct appeal to the Constitutional Court, Constitution s. 167(6)(b)). Act in force 5 April 2024 except s. 37 and Schedule items 1, 2, 3, 6 and 7."
+    },
+    {
+      "id": "za-cac",
+      "name": "Competition Appeal Court",
+      "kind": "court",
+      "level": "specialised",
+      "appeals_to": [
+        "za-cc"
+      ],
+      "sources": [
+        "compact-36",
+        "compact-62-63-2000",
+        "compact-62-63-2018",
+        "compact-2018-commencement"
+      ],
+      "note": "Court under s. 166(e) of the Constitution with status similar to a High Court (Competition Act s. 36(1)(a)). Final in matters within its exclusive jurisdiction; on jurisdictional and constitutional questions (s. 62(2)) appeal lies to the Constitutional Court with its leave (ss. 62(4), 63(2) as amended by Act 18 of 2018, in force 12 July 2019). Before that date s. 62(4) also allowed appeals to the SCA."
+    },
+    {
+      "id": "za-ct",
+      "name": "Competition Tribunal",
+      "kind": "tribunal",
+      "level": "specialised",
+      "appeals_to": [
+        "za-cac"
+      ],
+      "sources": [
+        "compact-26",
+        "compact-37",
+        "compact-62-63-2000"
+      ],
+      "note": "Tribunal of record with national jurisdiction (Competition Act s. 26(1)). Its decisions may be appealed to, or reviewed by, the Competition Appeal Court (ss. 37(1), 61(1))."
+    },
+    {
+      "id": "za-ec",
+      "name": "Electoral Court",
+      "kind": "court",
+      "level": "specialised",
+      "appeals_to": [
+        "za-cc"
+      ],
+      "sources": [
+        "eca-18",
+        "sca-act-53",
+        "ea-96",
+        "cc-mk-2024",
+        "const-167-6"
+      ],
+      "note": "Established with the status of the Supreme Court (Electoral Commission Act s. 18), a reference now read as the High Court (SCA Act s. 53(b)). Electoral Act s. 96(1) says its decisions on electoral disputes and Code complaints are not subject to appeal or review; the Constitutional Court nonetheless granted leave for a direct appeal from it on a constitutional issue in [2024] ZACC 6, paras 28-30."
+    }
+  ],
+  "relations": [
+    {
+      "court": "za-cc",
+      "bound": null,
+      "relation": "binding",
+      "sources": [
+        "cc-turnbull-57-58"
+      ],
+      "note": "Para 57: a Constitutional Court ratio that is not clearly wrong binds that Court and all other courts. Para 58: now that it is highest court in all matters, this applies to all its decisions, not only constitutional ones."
+    },
+    {
+      "court": "za-cc",
+      "bound": "za-cc",
+      "relation": "binding",
+      "sources": [
+        "cc-campsbay-28",
+        "cc-turnbull-57-58"
+      ],
+      "note": "Courts of final jurisdiction are bound by their own decisions and may depart only when satisfied the earlier decision is clearly wrong; only the Constitutional Court may depart from its own clearly wrong ratio."
+    },
+    {
+      "court": "za-sca",
+      "bound": "za-hc",
+      "relation": "binding",
+      "sources": [
+        "cc-campsbay-29",
+        "cc-turnbull-57-58"
+      ],
+      "note": "Both judgments quote S v Walters paras 60-61: High Courts must follow the SCA's legal interpretations, constitutional or otherwise, until the SCA itself or the Constitutional Court decides otherwise."
+    },
+    {
+      "court": "za-sca",
+      "bound": "za-mc",
+      "relation": "binding",
+      "sources": [
+        "concourt-position"
+      ],
+      "note": "The Constitutional Court's website states that SCA decisions bind all lesser courts."
+    },
+    {
+      "court": "za-lac",
+      "bound": "za-lc",
+      "relation": "binding",
+      "sources": [
+        "lra-182"
+      ],
+      "note": "LRA s. 182: a judgment of the Labour Appeal Court binds the Labour Court."
+    }
+  ],
+  "sources": [
+    {
+      "id": "const-166",
+      "title": "Constitution of the Republic of South Africa, 1996, Chapter 8 (Department of Justice consolidated text, includes the Seventeenth Amendment)",
+      "url": "https://www.justice.gov.za/constitution/SAConstitution-web-eng-08.pdf",
+      "pinpoint": "s. 166"
+    },
+    {
+      "id": "const-167-3",
+      "title": "Constitution of the Republic of South Africa, 1996, Chapter 8 (Department of Justice consolidated text)",
+      "url": "https://www.justice.gov.za/constitution/SAConstitution-web-eng-08.pdf",
+      "pinpoint": "s. 167(3)"
+    },
+    {
+      "id": "const-167-6",
+      "title": "Constitution of the Republic of South Africa, 1996, Chapter 8 (Department of Justice consolidated text)",
+      "url": "https://www.justice.gov.za/constitution/SAConstitution-web-eng-08.pdf",
+      "pinpoint": "s. 167(6)(b)"
+    },
+    {
+      "id": "const-168-3",
+      "title": "Constitution of the Republic of South Africa, 1996, Chapter 8 (Department of Justice consolidated text)",
+      "url": "https://www.justice.gov.za/constitution/SAConstitution-web-eng-08.pdf",
+      "pinpoint": "s. 168(3)"
+    },
+    {
+      "id": "const-169",
+      "title": "Constitution of the Republic of South Africa, 1996, Chapter 8 (Department of Justice consolidated text)",
+      "url": "https://www.justice.gov.za/constitution/SAConstitution-web-eng-08.pdf",
+      "pinpoint": "s. 169(1)-(2)"
+    },
+    {
+      "id": "const-170",
+      "title": "Constitution of the Republic of South Africa, 1996, Chapter 8 (Department of Justice consolidated text)",
+      "url": "https://www.justice.gov.za/constitution/SAConstitution-web-eng-08.pdf",
+      "pinpoint": "s. 170"
+    },
+    {
+      "id": "amend17-act",
+      "title": "Constitution Seventeenth Amendment Act, 2012 (Government Gazette No. 36128, 1 February 2013)",
+      "url": "https://www.gov.za/sites/default/files/36128.pdf",
+      "pinpoint": "long title; ss. 2-6, 11"
+    },
+    {
+      "id": "amend17-commencement",
+      "title": "Proclamation No. R. 35 of 2013: Commencement of the Constitution Seventeenth Amendment Act of 2012 (Government Gazette No. 36774, 22 August 2013)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/36774proc35.pdf",
+      "pinpoint": "Proc. R. 35 of 2013 (fixes 23 August 2013)"
+    },
+    {
+      "id": "sca-act-6",
+      "title": "Superior Courts Act 10 of 2013 (Government Gazette No. 36743, 12 August 2013)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/36743act10of2013a.pdf",
+      "pinpoint": "s. 6(1)"
+    },
+    {
+      "id": "sca-act-16",
+      "title": "Superior Courts Act 10 of 2013 (Government Gazette No. 36743, 12 August 2013)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/36743act10of2013a.pdf",
+      "pinpoint": "s. 16(1)(a)-(c)"
+    },
+    {
+      "id": "sca-act-50",
+      "title": "Superior Courts Act 10 of 2013 (Government Gazette No. 36743, 12 August 2013)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/36743act10of2013a.pdf",
+      "pinpoint": "s. 50(1)"
+    },
+    {
+      "id": "sca-act-53",
+      "title": "Superior Courts Act 10 of 2013 (Government Gazette No. 36743, 12 August 2013)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/36743act10of2013a.pdf",
+      "pinpoint": "s. 53(b)-(c)"
+    },
+    {
+      "id": "sca-act-commencement",
+      "title": "Proclamation No. R. 36 of 2013: Commencement of the Superior Courts Act, 2013 (Government Gazette No. 36774, 22 August 2013)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/36774proc36.pdf",
+      "pinpoint": "Proc. R. 36 of 2013 (fixes 23 August 2013, except ss. 29, 37, 45 and listed Schedule items)"
+    },
+    {
+      "id": "mca-2",
+      "title": "Magistrates' Courts Act 32 of 1944 (Department of Justice consolidated text)",
+      "url": "https://www.justice.gov.za/legislation/acts/1944-032.pdf",
+      "pinpoint": "s. 2(1)(f)-(g)"
+    },
+    {
+      "id": "mca-83",
+      "title": "Magistrates' Courts Act 32 of 1944 (Department of Justice consolidated text)",
+      "url": "https://www.justice.gov.za/legislation/acts/1944-032.pdf",
+      "pinpoint": "s. 83"
+    },
+    {
+      "id": "cpa-309",
+      "title": "Criminal Procedure Act 51 of 1977 (Department of Justice consolidated text)",
+      "url": "https://www.justice.gov.za/legislation/acts/1977-051.pdf",
+      "pinpoint": "s. 309(1)(a)"
+    },
+    {
+      "id": "lra-151",
+      "title": "Labour Relations Act 66 of 1995 (gov.za text, incorporating amendments to 2002)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/act66-1995labourrelations.pdf",
+      "pinpoint": "s. 151"
+    },
+    {
+      "id": "lra-166",
+      "title": "Labour Relations Act 66 of 1995 (gov.za text, incorporating amendments to 2002)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/act66-1995labourrelations.pdf",
+      "pinpoint": "s. 166"
+    },
+    {
+      "id": "lra-167",
+      "title": "Labour Relations Act 66 of 1995 (gov.za text, incorporating amendments to 2002)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/act66-1995labourrelations.pdf",
+      "pinpoint": "s. 167(2)-(3)"
+    },
+    {
+      "id": "lra-173",
+      "title": "Labour Relations Act 66 of 1995 (gov.za text, incorporating amendments to 2002)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/act66-1995labourrelations.pdf",
+      "pinpoint": "s. 173(1)(a)"
+    },
+    {
+      "id": "lra-182",
+      "title": "Labour Relations Act 66 of 1995 (gov.za text, incorporating amendments to 2002)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/act66-1995labourrelations.pdf",
+      "pinpoint": "s. 182"
+    },
+    {
+      "id": "lra-183",
+      "title": "Labour Relations Act 66 of 1995 (gov.za text, incorporating amendments to 2002)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/act66-1995labourrelations.pdf",
+      "pinpoint": "s. 183"
+    },
+    {
+      "id": "rlra-22",
+      "title": "Restitution of Land Rights Act 22 of 1994 (Government Gazette No. 16106, 25 November 1994)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/act22of1994.pdf",
+      "pinpoint": "s. 22 (Chapter III)"
+    },
+    {
+      "id": "rlra-37-1996",
+      "title": "Land Restitution and Reform Laws Amendment Act 78 of 1996 (Government Gazette No. 17590, 20 November 1996)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/act78of1996.pdf",
+      "pinpoint": "s. 22 (substituting s. 37 of Act 22 of 1994: new s. 37(1), (2), (9))"
+    },
+    {
+      "id": "rlra-37-1997",
+      "title": "Land Restitution and Reform Laws Amendment Act 63 of 1997 (Government Gazette No. 18449, 21 November 1997)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/a63-97.pdf",
+      "pinpoint": "s. 27 (amending s. 37 of Act 22 of 1994: Appellate Division replaced by Supreme Court of Appeal)"
+    },
+    {
+      "id": "lca-3",
+      "title": "Land Court Act 6 of 2023 (Government Gazette No. 49372, 27 September 2023)",
+      "url": "https://www.justice.gov.za/legislation/acts/2023-006-Land-Court-Act-gg49372-GoN3744-27Sep2023.pdf",
+      "pinpoint": "s. 3"
+    },
+    {
+      "id": "lca-17",
+      "title": "Land Court Act 6 of 2023 (Government Gazette No. 49372, 27 September 2023)",
+      "url": "https://www.justice.gov.za/legislation/acts/2023-006-Land-Court-Act-gg49372-GoN3744-27Sep2023.pdf",
+      "pinpoint": "s. 17(1)"
+    },
+    {
+      "id": "lca-31",
+      "title": "Land Court Act 6 of 2023 (Government Gazette No. 49372, 27 September 2023)",
+      "url": "https://www.justice.gov.za/legislation/acts/2023-006-Land-Court-Act-gg49372-GoN3744-27Sep2023.pdf",
+      "pinpoint": "s. 31(1)"
+    },
+    {
+      "id": "lca-sched-4",
+      "title": "Land Court Act 6 of 2023 (Government Gazette No. 49372, 27 September 2023)",
+      "url": "https://www.justice.gov.za/legislation/acts/2023-006-Land-Court-Act-gg49372-GoN3744-27Sep2023.pdf",
+      "pinpoint": "Schedule, item 4, para. 6 (deletion of Chapter III of Act 22 of 1994); s. 35(1)(b)"
+    },
+    {
+      "id": "lca-commencement",
+      "title": "Proclamation Notice 162 of 2024: Commencement of the Land Court Act, 2023 (Government Gazette No. 50448, 5 April 2024)",
+      "url": "https://www.justice.gov.za/legislation/notices/2024/20240412-gg50448rg11688proc162-LandCourtAct-Commencement.pdf",
+      "pinpoint": "Proc. 162 of 2024 (5 April 2024, except s. 37 and Schedule items 1, 2, 3, 6 and 7)"
+    },
+    {
+      "id": "compact-26",
+      "title": "Competition Act 89 of 1998 (Government Gazette No. 19412, 30 October 1998)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/a89-98.pdf",
+      "pinpoint": "s. 26(1)"
+    },
+    {
+      "id": "compact-36",
+      "title": "Competition Act 89 of 1998 (Government Gazette No. 19412, 30 October 1998)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/a89-98.pdf",
+      "pinpoint": "s. 36(1)"
+    },
+    {
+      "id": "compact-37",
+      "title": "Competition Amendment Act 15 of 2000 (Government Gazette No. 21234, 26 May 2000)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/a15-000.pdf",
+      "pinpoint": "s. 2 (substituting s. 37 of Act 89 of 1998)"
+    },
+    {
+      "id": "compact-62-63-2000",
+      "title": "Competition Second Amendment Act 39 of 2000 (Government Gazette No. 21880, 13 December 2000)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/a39-000.pdf",
+      "pinpoint": "s. 15 (substituted Chapter 5: ss. 61(1), 62(1)-(4), 63(2))"
+    },
+    {
+      "id": "compact-62-63-2018",
+      "title": "Competition Amendment Act 18 of 2018 (Government Gazette No. 42231, 14 February 2019)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201902/competitionamendment-act18of2018.pdf",
+      "pinpoint": "ss. 35(b), 36(a) (amending ss. 62(4), 63(2) of Act 89 of 1998)"
+    },
+    {
+      "id": "compact-2018-commencement",
+      "title": "Proclamation No. 46 of 2019: Commencement of certain sections of the Competition Amendment Act, 2018 (Government Gazette No. 42578, 12 July 2019)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201907/42578pr46.pdf",
+      "pinpoint": "Proc. 46 of 2019 and Schedule (ss. 35(b), 36 in force on publication, 12 July 2019)"
+    },
+    {
+      "id": "eca-18",
+      "title": "Electoral Commission Act 51 of 1996 (Government Gazette No. 17478, 4 October 1996)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/act51of1996.pdf",
+      "pinpoint": "s. 18"
+    },
+    {
+      "id": "ea-96",
+      "title": "Electoral Act 73 of 1998 (Government Gazette No. 19351, 14 October 1998)",
+      "url": "https://www.gov.za/sites/default/files/gcis_document/201409/act73of1998.pdf",
+      "pinpoint": "s. 96(1)"
+    },
+    {
+      "id": "cc-mk-2024",
+      "title": "Electoral Commission of South Africa v Umkhonto Wesizwe Political Party and Others [2024] ZACC 6 (Constitutional Court, 20 May 2024)",
+      "url": "https://collections.concourt.org.za/server/api/core/bitstreams/ee82bc9f-53e4-4ec2-91f8-be306522a31a/content",
+      "pinpoint": "paras 28-30"
+    },
+    {
+      "id": "cc-campsbay-28",
+      "title": "Camps Bay Ratepayers' and Residents' Association and Another v Harrison and Another [2010] ZACC 19; 2011 (4) SA 42 (CC)",
+      "url": "https://collections.concourt.org.za/server/api/core/bitstreams/ccc069e2-4615-4162-821d-e2d9331a325b/content",
+      "pinpoint": "para 28"
+    },
+    {
+      "id": "cc-campsbay-29",
+      "title": "Camps Bay Ratepayers' and Residents' Association and Another v Harrison and Another [2010] ZACC 19; 2011 (4) SA 42 (CC)",
+      "url": "https://collections.concourt.org.za/server/api/core/bitstreams/ccc069e2-4615-4162-821d-e2d9331a325b/content",
+      "pinpoint": "para 29 (quoting Ex parte Minister of Safety and Security: In re S v Walters [2002] ZACC 6, paras 60-61)"
+    },
+    {
+      "id": "cc-turnbull-54",
+      "title": "Turnbull-Jackson v Hibiscus Coast Municipality and Others [2014] ZACC 24; 2014 (6) SA 592 (CC)",
+      "url": "https://collections.concourt.org.za/server/api/core/bitstreams/cd8c2846-0233-4ab7-a924-85019b55f6f6/content",
+      "pinpoint": "paras 54-56 (Madlanga J, majority)"
+    },
+    {
+      "id": "cc-turnbull-57-58",
+      "title": "Turnbull-Jackson v Hibiscus Coast Municipality and Others [2014] ZACC 24; 2014 (6) SA 592 (CC)",
+      "url": "https://collections.concourt.org.za/server/api/core/bitstreams/cd8c2846-0233-4ab7-a924-85019b55f6f6/content",
+      "pinpoint": "paras 57-58 and fn 104 (Madlanga J, majority)"
+    },
+    {
+      "id": "judiciary-hc",
+      "title": "South African Judiciary (Office of the Chief Justice): High Court",
+      "url": "https://www.judiciary.org.za/index.php/about-us/100-high-court"
+    },
+    {
+      "id": "concourt-position",
+      "title": "Constitutional Court of South Africa: The Court's position in the justice system",
+      "url": "https://www.concourt.org.za/index.php/26-role-of-the-constitutional-court/the-court-s-position-in-the-justice-system"
+    }
+  ]
+}
