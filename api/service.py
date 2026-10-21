@@ -106,12 +106,19 @@ def create_service(
                 )
             return await call_next(request)
 
+    # Every answer carries these, website pages included: Referrer-Policy keeps a page's address, such as
+    # a search's ?q=, from reaching the sites it links to (owner, 2026-10-21).
     @service.middleware("http")
     async def security_headers(request: Request, call_next):
         response = await call_next(request)
         for name, value in SECURITY_HEADERS.items():
             response.headers.setdefault(name, value)
         return response
+
+    @service.exception_handler(Exception)
+    async def failed(request: Request, exception: Exception):
+        # An unhandled error is answered outside every middleware, so this answer adds them itself.
+        return PlainTextResponse("Internal Server Error", status_code=500, headers=SECURITY_HEADERS)
 
     @service.get("/healthz", include_in_schema=False)
     def health():
