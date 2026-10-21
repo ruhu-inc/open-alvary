@@ -581,3 +581,17 @@ def test_every_register_written_and_the_readmes_example_are_valid_and_no_review_
     # Once reviewed, the same register answers what it records.
     reviewed_example = courts.CourtRegister.model_validate(reviewed(json.loads(raw)))
     assert courts.relation(reviewed_example, "xx-sc", "xx", before="xx-ca") == "binding"
+
+
+def test_the_east_african_court_prevails_on_the_treaty_and_binds_no_national_court():
+    """The EAC register as proposed (unreviewed): EAC Treaty art. 33(2) is a rule of precedence on the
+    Treaty's interpretation and application, quoted verbatim, never stare decisis."""
+    eac = courts.load("aa-eac")
+    assert {r.relation for r in eac.relations} == {"prevails_on_matter"}
+    assert {r.matter for r in eac.relations} == {"eac-treaty"}
+    for r in eac.relations:
+        assert r.rests_on[0].provision == "art. 33(2)" and r.rests_on[0].quote == (
+            "Decisions of the Court on the interpretation and application of this Treaty shall have precedence "
+            "over decisions of national courts on a similar matter."
+        )
+    assert all(courts.relation(eac, r.court, "ke", matter="eac-treaty") == "unknown" for r in eac.relations)
