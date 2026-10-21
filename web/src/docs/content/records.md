@@ -176,7 +176,9 @@ A regional body's instrument, such as an OHADA Uniform Act or an ECOWAS directiv
 | `member_states` | The member states it binds. Empty means every member. |
 | `transposition_deadline` | The date by which members must transpose it, when one is set. |
 
-A treaty has `treaty` instead: `adopted_by`, `depositary`, `entered_into_force` and `authentic_languages`, and on the record and its anchors, `parties`. Each party gives the dates it `signed`, `ratified`, `acceded` and `denounced` the treaty, when recorded, its `reservations`, and `domesticated_by`: the acts of that state that a checked link records as domesticating the treaty. Signature alone never binds a state. An empty `parties` list means none is recorded yet, never that the treaty has none. An evidence unit carries the treaty's status without its parties.
+A treaty has `treaty` instead: `adopted_by`, `depositary`, `entered_into_force` and `authentic_languages`, and on the record and its anchors, `parties`. Each party gives the dates it `signed`, `ratified`, `acceded` and `denounced` the treaty, when recorded, its `reservations`, and `domesticated_by`: the acts of that state that a checked link records as domesticating the treaty. Signature alone never binds a state. An empty `parties` list means none is recorded yet, never that the treaty has none.
+
+A party list may leave a state out. Once a reviewer has checked the list against the depositary's status list, the record and its anchors give `parties_complete_as_of`, the date the list is complete as of, and `parties_complete_evidence`, where that is shown. Until then, or after that date, a state missing from the list is not taken to be a non-party: whether the treaty binds it is `unknown`. An evidence unit carries the treaty's status without its parties or their completeness.
 
 A date gives its `precision` (`day`, `month` or `year`) and, when the record keeps it, the date as `printed`. Records of other kinds have neither `regional` nor `treaty`.
 

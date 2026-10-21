@@ -144,23 +144,25 @@ The search then also covers:
 - the instruments of the African Union and the regional bodies the country belonged to on `as_of` (today's date if you leave it out), from [reviewed memberships](/docs/records#find-which-bodies-a-country-belongs-to) only. A body whose membership is not reviewed yet is not added, which never means the country is not a member;
 - the treaties whose party list records the country's own ratification or accession. Membership of a body never applies its treaties to a member.
 
+A place within a country, such as Lagos State (`jurisdiction=ng-la`), has its country's law too: national and federal law applies throughout a country's states and places, so the search also covers Nigeria's own law (`ng`), labelled `national`. The regional bodies and treaties are those of the country, the member state and party; another place's law within the country is `comparative`. Each label that rests on the country says so in its `reasons` (`ng-la is within ng: …`).
+
 Of those, instruments that don't bind in the country are left out, and those whose relation to it is unknown are kept. Each unit's `applicability` says how it relates to the country on that date:
 
 | `relation` | Meaning | `binds` |
 |---|---|---|
-| `national` | The country's own law. | `bound` |
+| `national` | The country's own law. For a place within a country, its own law and the country's. | `bound` |
 | `regional_direct` | An instrument of a body the country belonged to, which applies directly in its members. | `bound` |
 | `regional_requires_transposition` | A directive or similar: it binds the country as to its result, through national law. `regional.transposition_deadline` is the deadline, and `transposed_by` the country's transposing acts that a checked link records. | `bound` |
 | `regional_binding_on_addressees` | It binds the member states it is addressed to, the country among them. | `bound` |
 | `treaty_in_force_for_state` | The country ratified or acceded to it on or before the date, had not denounced it, and the treaty was in force. `party` is the country's entry, with any act that domesticates it. | `bound` |
-| `treaty_not_in_force_for_state` | No ratification or accession by the country is recorded on the date: signature alone does not bind, and neither does a later ratification. | `not_bound` |
+| `treaty_not_in_force_for_state` | The country's entry in the party list gives no ratification or accession in force on the date: signature alone does not bind, nor does a ratification after the date or one denounced by then. A country missing from the list is `treaty_not_in_force_for_state` only when the list is recorded as complete on the date or later (`treaty.parties_complete_as_of` on the record); otherwise it is `unknown`, as the list may leave it out. | `not_bound` |
 | `non_binding` | The instrument is not binding. | `not_bound` |
-| `comparative` | Another country's law, an instrument addressed to other states, or one of a body the country had left or not yet joined. | `not_bound` |
-| `unknown` | The membership, the legal effect or the ratification is not reviewed, or a date can't be compared (a ratification known only to the year, say). | `unknown` |
+| `comparative` | Another country's law, another place's law within the same country, an instrument addressed to other states, or one of a body the country had left or not yet joined. | `not_bound` |
+| `unknown` | The membership, the legal effect or the ratification is not reviewed, the country is missing from a party list not known to be complete, or a date can't be compared (a ratification known only to the year, say). | `unknown` |
 
 Each label carries what it rests on: `memberships` (the reviewed memberships, each `held`, `not_held` or `unknown` on the date), `regional` (the instrument's legal effect) and `party` (the country's entry in the treaty's party list), with `reasons` in sentences. Whether a unit was in force on the date is still `currentness`, a separate question. These labels report what the reviewed records state; they never decide which law governs anyone's situation.
 
-The pack's `applicability` states the widening: `bodies` lists each body the country has a reviewed membership of, with whether it held on the date (only `held` bodies' law was added), `admitted` how many records of other jurisdictions were added, and `left_out` how many were left out because they don't bind there, by relation. `query.filters` shows `scope` as you asked for it. A record you name with `source_id` is answered whatever its relation, so you can ask whether a particular treaty binds a country. Without `scope`, nothing is added and no unit has `applicability`.
+The pack's `applicability` states the widening: for a place, `within` names the country whose law was added whole; `bodies` lists each body the country has a reviewed membership of, with whether it held on the date (only `held` bodies' law was added), `admitted` how many records of other jurisdictions were added besides, and `left_out` how many were left out because they don't bind there, by relation. `query.filters` shows `scope` as you asked for it. A record you name with `source_id` is answered whatever its relation, so you can ask whether a particular treaty binds a country. Without `scope`, nothing is added and no unit has `applicability`.
 
 [Search texts](/docs/api/search-text) takes `scope=applicable` too, with the same `applicability` on each passage and on the page.
 
