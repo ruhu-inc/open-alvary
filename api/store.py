@@ -1,5 +1,6 @@
 """Relational identities and foreign keys, with validated JSON entity payloads."""
 
+import logging
 import os
 from pathlib import Path
 
@@ -10,6 +11,12 @@ from schema.models import Corpus
 
 ROOT = Path(__file__).resolve().parents[1]
 metadata = MetaData()
+# Rows can carry what a caller sent (a search's words come back as its terms), so the engine never logs
+# one, whatever level logging is set to: SQLAlchemy writes rows at DEBUG to the engine's own logger.
+ENGINE_LOGGING_NAME = "open_alvary"
+logging.getLogger(f"sqlalchemy.engine.Engine.{ENGINE_LOGGING_NAME}").addFilter(
+    lambda record: record.levelno > logging.DEBUG
+)
 RELATIONS = {
     "languages": {},
     "jurisdictions": {},
@@ -68,8 +75,9 @@ def engine_for(url: str | None = None, pool_size: int | None = None) -> Engine:
     # request: each is checked before use and replaced after 30 minutes.
     live = {} if url.startswith("sqlite") else {"pool_pre_ping": True, "pool_recycle": 1800}
     # An error's text never carries its statement's values (a search's words, a citation), so nothing a
-    # caller sent reaches a log through an exception (OA-A2).
+    # caller sent reaches a log through an exception (OA-A2); nor does a row (ENGINE_LOGGING_NAME).
     live["hide_parameters"] = True
+    live["logging_name"] = ENGINE_LOGGING_NAME
     if pool_size is not None and not url.startswith("sqlite"):
         # A fixed, budgeted pool: no overflow beyond the share approved for this replica.
         engine = create_engine(url, pool_size=pool_size, max_overflow=0, pool_timeout=5, **live)

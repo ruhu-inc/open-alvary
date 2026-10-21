@@ -20,8 +20,11 @@ import uvicorn
 from click.core import ParameterSource
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from api.main import create_app
+from api.store import engine_for
 
 ROOT = Path(__file__).resolve().parents[1]
 # A query no text holds. Its first seven characters survive every analyser (case, stemming), so they are
@@ -159,6 +162,21 @@ def test_failed_request_logs_status_without_exception_text(store, caplog):
     events = [json.loads(r.message) for r in caplog.records if r.name == "open_alvary.requests"]
     assert len(events) == 1 and events[0]["status"] == 500
     assert "private-error-content" not in json.dumps(events)
+
+
+def test_the_services_engine_logs_no_statement_value_and_no_row_at_any_level(tmp_path, monkeypatch):
+    # A search's words come back as rows (its terms in each analyser), which SQLAlchemy logs at DEBUG.
+    monkeypatch.delenv("ALVARY_RUNTIME_MODE", raising=False)
+    engine = engine_for(f"sqlite:///{tmp_path / 'logs.db'}")
+    with every_log() as records, engine.connect() as connection:
+        assert connection.scalar(text("SELECT :q"), {"q": MARKER}) == MARKER
+        with pytest.raises(SQLAlchemyError) as failed:
+            connection.execute(text("SELECT :q FROM no_such_table"), {"q": MARKER})
+    engine.dispose()
+    assert TRACE not in str(failed.value).lower()
+    # Statements are still logged, with their values hidden.
+    assert any(r.name.startswith("sqlalchemy.engine") and "SELECT ?" in r.getMessage() for r in records)
+    assert [r.getMessage() for r in records if carried(r)] == []
 
 
 # An app uvicorn serves, wherever a command names one.
