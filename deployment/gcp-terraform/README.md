@@ -326,6 +326,28 @@ gcloud run jobs execute open-alvary-staging-operators --region europe-west1 --pr
 - The old system's `workbench-admin` and `workbench-enrol` jobs write to the old workbench database.
   Do not use them; they go with it.
 
+## Semantic index
+
+The dense arm searches the active generation of the vector profile the service is given
+(`vector_profile`). The job `open-alvary-<environment>-indexer` runs `python -m retrieval.indexer`
+with the arguments given at each run; the retrieval job embeds the texts waiting every minute:
+
+```
+gcloud run jobs execute open-alvary-staging-indexer --region europe-west1 --project open-alvary-staging --wait --args=prepare,retrieval/profiles/qwen3-embedding-0.6b-1.json
+gcloud run jobs execute open-alvary-staging-indexer --region europe-west1 --project open-alvary-staging --wait --args=status
+gcloud run jobs execute open-alvary-staging-indexer --region europe-west1 --project open-alvary-staging --wait --args=validate,<generation>
+gcloud run jobs execute open-alvary-staging-indexer --region europe-west1 --project open-alvary-staging --wait --args=activate,<generation>
+```
+
+- With the engine on, `prepare` adds the generation's vector field to the engine's units and queues
+  every published text; each text published afterwards is queued as it is published. The
+  generation's ID is in the job's log, and `status` lists every generation.
+- Only published texts are indexed: one under review in the workbench never is. A withdrawn text is
+  left out at query time and its vectors removed afterwards (`--args=purge`).
+- Answers use the dense arm only once `vector_profile` names the profile and an apply sets it on the
+  service, for every jurisdiction at once. Set it only when each scope served has passed its
+  evaluation, no worse with the profile than without it (RSV-12).
+
 ## Moving back from Azure
 
 The application already speaks both `gs://` and `az://`, and the restore job serves both clouds.
