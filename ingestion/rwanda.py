@@ -656,7 +656,7 @@ LISTED_STATUS = ("status.legal", "status.as_of", "status.note")
 # What the review list needs of a document stays in the manifest; what only its own page needs (the
 # details suggested from the text, the article check, the issue) goes in <id>.document.json, so the
 # manifest of tens of thousands of documents stays small enough to load at once.
-DETAILS = ("suggested", "suggested_absent", "suggested_legal", "alignment", "issue", "also_printed_as")
+DETAILS = ("suggested", "suggested_legal", "suggested_inferred", "alignment", "issue", "also_printed_as")
 
 
 def split_entry(document: dict) -> tuple[dict, dict]:
@@ -1144,7 +1144,7 @@ def prepare_selection(
                                 "others": {"Printed over the contents": entry["also_printed_as"]},
                             }
                         )
-            values, legal = rw_gazette.suggest(lines, entry, issue)
+            values, legal, inferred = rw_gazette.suggest(lines, entry, issue)
             # The earlier instruments it repeals or amends; linked across the collection when the
             # manifest is assembled (link_works).
             cites = rw_gazette.cited(lines, entry)
@@ -1158,14 +1158,6 @@ def prepare_selection(
                 for k in LISTED_STATUS
                 if listing.get(k)
             }
-            # A law the Senate did not sit on (its preamble names only the Chamber of Deputies).
-            absent = (
-                {"step:adopted:senate.date": "not_applicable"}
-                if entry["kind"] == "law"
-                and values.get("step:adopted:deputies.date")
-                and not values.get("step:adopted:senate.date")
-                else {}
-            )
             number = issue.get("date", "") if entry["number"] == "constitution" else entry["number"]
             work = work_id(entry["kind"], number, (entry.get("date") or issue.get("date") or "")[:4])
             for language, nodes in versions.items():
@@ -1209,9 +1201,10 @@ def prepare_selection(
                     **({"cites": cites} if cites else {}),
                     # Where RLRC's listing files it (in force, repealed), for its currency (link_works).
                     **({"listed": listing["status.legal"]} if listing.get("status.legal") else {}),
-                    "suggested_absent": absent,
-                    # Legal facts, each with the words (or the listing) that state it: never filled in.
+                    # Legal facts, each with the words (or the listing) that state it, and what is inferred
+                    # rather than printed for its step, with the words it rests on: never filled in.
                     **({"suggested_legal": legal} if legal else {}),
+                    **({"suggested_inferred": inferred} if inferred else {}),
                     "suggested": {
                         **values,
                         "publication.pages": "{}–{}".format(*entry["versions"][language]["pages"]),

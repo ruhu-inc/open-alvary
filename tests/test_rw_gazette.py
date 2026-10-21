@@ -254,10 +254,10 @@ def test_signatories_are_read_whether_the_office_is_printed_before_or_after_the_
     }
 
 
-def read_law() -> tuple[dict, dict]:
+def read_law() -> tuple[dict, dict, dict]:
     """What the reader suggests for the invented law printed in issue n° 11 Bis of 16/03/2026, whose
     English version states the language it was adopted in and when it comes into force: its details,
-    and apart from them its legal facts."""
+    and apart from them its legal facts and what is inferred rather than printed for its step."""
     en = [
         "",
         "Article One: Purpose of this Law",
@@ -292,12 +292,13 @@ def read_law() -> tuple[dict, dict]:
 
 
 def test_a_law_suggests_its_record_details_from_the_text_and_the_issue():
-    values, legal = read_law()
+    values, legal, inferred = read_law()
     assert values["identity.full_title"] == "Law n° 009/2026 of 12/03/2026 governing examples"
     assert values["identity.number.printed"] == "Law n° 009/2026" and values["identity.year"] == "2026"
     assert values["step:adopted:deputies.date"] == "2026-02-20"
-    assert values["step:promulgated.date"] == values["step:sealed.date"] == "2026-03-12"
+    assert values["step:promulgated.date"] == "2026-03-12"  # the President signs under "Kigali, 12/03/2026"
     assert values["step:promulgated.person"] == "EXAMPLE Name, President of the Republic"
+    assert "issued_by" not in values  # no enacting words printed here: never taken from the kind
     assert values["publication.date"] == "2026-03-16" and values["publication.number"] == "11 Bis"
     assert values["text.summary.text"] == "This Law governs examples."
     # Legal facts are suggested apart, each with the words that state it and their page; the record's
@@ -315,6 +316,40 @@ def test_a_law_suggests_its_record_details_from_the_text_and_the_issue():
     in_force = {"page": 2, "evidence": "This Law comes into force on the date of its publication."}
     assert legal["step:commenced.date"] == {"value": "2026-03-16", **in_force}
     assert legal["profile.commencement"] == {"value": "on_publication", **in_force}
+
+
+def test_what_is_inferred_rather_than_printed_for_its_step_is_only_suggested_with_its_words():
+    """The Gazette prints one date above the three signatures: the President's date of promulgation is
+    filled in, but the Prime Minister's countersignature and the Minister of Justice's seal carry no date
+    of their own. A preamble that names only the Chamber of Deputies' sitting does not say the Senate did
+    not sit. Each is suggested with the words it rests on and their page, never filled in."""
+    values, _, inferred = read_law()
+    kigali = {"value": "2026-03-12", "page": 2, "evidence": "Kigali, 12/03/2026"}
+    assert inferred["step:countersigned.date"] == inferred["step:sealed.date"] == kigali
+    assert "step:countersigned.date" not in values and "step:sealed.date" not in values
+    assert inferred["step:adopted:senate.date"] == {
+        "absent": "not_applicable",
+        "page": 2,
+        "evidence": "The Chamber of Deputies, in its sitting of 20 February 2026;",
+    }
+    assert "step:adopted:senate.date" not in values
+
+
+def test_who_adopted_a_law_is_read_from_its_enacting_words_never_from_its_kind():
+    def lines(*texts):
+        return [{"text": text, "page": 3, "x0": 0, "y0": 10 + 14 * i, "x1": 200, "y1": 20 + 14 * i}
+                for i, text in enumerate(texts)]  # fmt: skip
+
+    entry = {"kind": "law", "number": "03/99", "date": "1999-03-12", "versions": {"en": {"title": "LAW"}}}
+
+    def issued_by(*texts):
+        preamble = lines("We, EXAMPLE Name,", "President of the Republic;", *texts)
+        return RG.suggest({"en": preamble}, entry, {})[0]
+
+    assert issued_by("THE PARLIAMENT HAS ADOPTED AND WE SANCTION,")["issued_by"] == "Parliament"
+    older = issued_by("THE TRANSITIONAL NATIONAL ASSEMBLY HAD ADOPTED AND", "WE SANCTION, PROMULGATE")
+    assert older["issued_by"] == "Transitional National Assembly"
+    assert "issued_by" not in issued_by("This Law governs examples.")  # not printed: not filled in
 
 
 def test_a_legal_fact_is_suggested_only_with_the_words_that_state_it():
