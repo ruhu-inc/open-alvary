@@ -8,7 +8,8 @@ counties and municipalities.
 
 The record has three layers:
 
-* the core every document has: identity, place, who issued it, its language versions, the events
+* the core every document has: identity, place, who issued it, its language versions (what each is
+  worth as law, and the document's rule where they differ), the events
   of its life (passed, assented, published, commenced; filed, heard, decided; adopted, ratified,
   entered into force), where it was published, its legal status, its links to other documents,
   the form and version of the text, and its classification;
@@ -274,12 +275,15 @@ EXPRESSION_AUTHORITY = (
 
 
 class Expression(RecordModel):
-    """A language version of the document."""
+    """A language version of the document, and what its text is worth as law where that is recorded."""
 
     language: LanguageTag
     script: ScriptCode | None = None
     direction: Literal["ltr", "rtl"] = "ltr"
-    authority: Literal[*EXPRESSION_AUTHORITY]
+    # As the document or another official source states it, and where; None when not recorded, which the
+    # public catalogue answers as unknown. Never inferred from the language a text was read in.
+    authority: Literal[*EXPRESSION_AUTHORITY] | None = None
+    authority_evidence: Evidence | None = None
     this_text: bool = False  # the language version this record's text is
     translator: Short | None = None
     expression_uri: str | None = None
@@ -289,6 +293,24 @@ class Expression(RecordModel):
         if self.script in {"Arab", "Hebr", "Syrc", "Thaa", "Nkoo", "Adlm"} and self.direction != "rtl":
             raise ValueError(f"{self.script} is written right to left")
         return self
+
+    @model_validator(mode="after")
+    def evidence_of_an_authority(self):
+        if self.authority_evidence is not None and self.authority is None:
+            raise ValueError("evidence of a language version's authority needs the authority")
+        return self
+
+
+class LanguageRule(RecordModel):
+    """The instrument's own rule for divergence between its language versions, where it states one: the
+    OHADA Treaty (art. 42) has documents take effect in French before translation and the French version
+    prevail where versions differ. ``prevails`` is the language whose version prevails, when the rule
+    names one; a rule making every version equally authentic names none."""
+
+    rule: Text  # as the instrument states it
+    prevails: LanguageTag | None = None
+    provision: Short | None = None  # where it is stated: "Article 42"
+    evidence: Evidence
 
 
 EVENTS = (
@@ -737,6 +759,8 @@ class DocumentRecord(RecordModel):
     place: Place
     issued_by: tuple[Body, ...] = ()
     expressions: tuple[Expression, ...] = Field(min_length=1)
+    # Its rule for divergence between its language versions; absent["language_rule"] says why none is given.
+    language_rule: LanguageRule | None = None
     events: tuple[Event, ...] = ()
     publications: tuple[Publication, ...] = ()
     status: Status

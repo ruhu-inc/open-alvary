@@ -893,7 +893,7 @@ async function detailsView(actId) {
     const line = el("div", { class: "detail-row", "data-key": field.key },
       el("label", {}, field.label, field.required ? null : el("span", { class: "muted", text: " (optional)" })),
       el("div", { class: "detail-input" }, input, field.help ? el("div", { class: "muted small", text: field.help }) : null, note),
-      field.required && !field.essential ? why : el("span", { class: "muted small", text: field.essential ? "must be given" : "" }));
+      (field.required || field.accountable) && !field.essential ? why : el("span", { class: "muted small", text: field.essential ? "must be given" : "" }));
     rows.set(field.key, line);
     return line;
   };

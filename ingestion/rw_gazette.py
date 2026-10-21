@@ -1521,13 +1521,25 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> dict:
     authority = "rw" if adopted and adopted.group(1).lower() in ("ikinyarwanda", "kinyarwanda") else None
     if adopted and adopted.group(1).lower() == "english":
         authority = "en"
+    paragraphs = [n for n in versions_nodes(versions.get("en", [])) if n["kind"] == "paragraph"]
+    # The paragraph that says so, and its page, as the evidence the reviewer checks.
+    stated = next((n for n in paragraphs if ADOPTED_IN.search(" ".join(n["text"].split()))), None)
+    evidence = {}
+    if authority and stated:
+        evidence["authority_page"] = str(stated["page"])
+        words = " ".join(stated["text"].split())
+        if len(words) <= 400:
+            evidence["authority_words"] = words
     values["expressions"] = [
         {
             "language": language,
             "script": "Latn",
             "direction": "ltr",
             **(
-                {"authority": "authoritative" if language == authority else "official_translation"}
+                {
+                    "authority": "authoritative" if language == authority else "official_translation",
+                    **evidence,
+                }
                 if authority
                 else {}
             ),
@@ -1536,11 +1548,7 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> dict:
         if language in entry["versions"]
     ]
     purpose = next(
-        (
-            n
-            for n in versions_nodes(versions.get("en", []))
-            if n["kind"] == "paragraph" and n.get("after_article") == "1" and n.get("purpose")
-        ),
+        (n for n in paragraphs if n.get("after_article") == "1" and n.get("purpose")),
         None,
     )
     if purpose:
