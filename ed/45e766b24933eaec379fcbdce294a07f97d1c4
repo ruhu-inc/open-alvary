@@ -1,0 +1,46 @@
+changes/feed.py
+  s_d665c62e07d76f::t_4a8425dd17f373 442-448,450-453
+api/openapi_docs.py
+  s_d665c62e07d76f::t_360c5501a536f7 43,397-399,523-527,592-602
+web/src/docs/content/changes.md
+  s_d665c62e07d76f::t_29cd03aeb54eb2 33
+  s_d665c62e07d76f::t_913b21f381da2a 23
+changes/record.py
+  s_d665c62e07d76f::t_6cb46929fcb981 61
+  s_d665c62e07d76f::t_4ef58e4d3e44ae 480-481
+  s_d665c62e07d76f::t_0501e656e040b2 392-394
+  s_d665c62e07d76f::t_2ca1a0fa7c1ede 500-502
+  s_d665c62e07d76f::t_174b83c4bd8f6b 47-48,53-56,58-60
+  s_d665c62e07d76f::t_47769d13824fda 345-357,359-364,377-381,388-390,397-400,403-405,408-416,420-465,468
+  s_d665c62e07d76f::t_10905b208261f3 523-526,531,537,539-540,542-547,551-589,592
+web/src/docs/data/mcp-tools.json
+  s_d665c62e07d76f::t_333fb4e0a62d84 378,404
+tests/test_postgres_events.py
+  s_d665c62e07d76f::t_2e50f4fc8081ff 133-136
+  s_d665c62e07d76f::t_29dc5c67c9306f 117-132,137-147
+tests/test_postgres_changes.py
+  s_d665c62e07d76f::t_b7d048b2a3fa60 445-542,546-578,583-589,594-598,602-604
+  s_d665c62e07d76f::t_2e50f4fc8081ff 543-545,579-582,590-593,599-601
+api/mcp.py
+  s_d665c62e07d76f::t_360c5501a536f7 371-375,396
+web/src/docs/data/openapi.json
+  s_d665c62e07d76f::t_333fb4e0a62d84 100,137,350,523,696,7557,7688
+web/src/docs/content/changelog.md
+  s_d665c62e07d76f::t_c2d7bf63f9883f 8-9,16-18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ed45e766b24933eaec379fcbdce294a07f97d1c4",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
