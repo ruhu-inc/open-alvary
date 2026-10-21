@@ -5,11 +5,12 @@
 import React from "react";
 import { Link, PageTitle } from "./site";
 
-export const LEGAL_VERSION = "2026-10-18";
+export const LEGAL_VERSION = "2026-10-21";
 // Approved by the owner on 2026-10-16 (terms, acceptable use, privacy, and the security page's
 // disclosure terms); version 2026-10-18 (data a day in the terms, no request logs for the API and MCP
-// in the privacy notice) approved on 2026-10-18. A new version starts as a draft again: set this to
-// false until it is approved.
+// in the privacy notice) approved on 2026-10-18; version 2026-10-21 (no query strings in website request
+// logs and the Referrer-Policy in the privacy notice; keeping copies in the acceptable use policy)
+// approved on 2026-10-21. A new version starts as a draft again: set this to false until it is approved.
 const APPROVED = true;
 const TO_CONFIRM: string[] = [];
 const OPERATOR = "Ruhu, Inc.";
@@ -193,6 +194,15 @@ export function AcceptableUse() {
           <li>Don't use the services to identify, profile or target individuals named in legal texts.</li>
           <li>Don't send us confidential client or case information in requests, access requests or support messages.</li>
         </ul>
+      </section>
+      <section>
+        <h2>Keeping copies</h2>
+        <p>
+          You may keep copies of the records and texts your organisation is entitled to, and index them for
+          your own search, within each record's rights status and conditions. Keep your copies current: apply
+          the withdrawals and corrections the change feed announces within 7 days of their publication, and
+          stop showing a withdrawn text from then on.
+        </p>
       </section>
       <section>
         <h2>Lawful use</h2>
