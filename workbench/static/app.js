@@ -809,7 +809,7 @@ async function detailsView(actId) {
   setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: title }), "Details");
   const { standard, record, suggestions, related = {} } = data;
   const firstEvidence = Object.values(suggestions).map((h) => h.page).filter(Boolean).sort((a, b) => a - b)[0];
-  const original = sourcePanel(actId, doc.data.pages.length, doc.data.source || {}, firstEvidence);
+  const original = sourcePanel(actId, doc.data.pages.map((p) => p.page), doc.data.source || {}, firstEvidence);
   const canEdit = app.me.roles.includes("reviewer");
   const values = structuredClone(record.details);
   const absent = { ...record.absent };
@@ -937,15 +937,19 @@ async function detailsView(actId) {
 }
 
 // The original beside the details: its pages, turned by the evidence links, with the official source
-// and the original file one click away, so every detail is checked against where it is printed.
-function sourcePanel(actId, pageCount, source, first) {
+// and the original file one click away, so every detail is checked against where it is printed. Pages
+// go by their numbers in the reading: a law printed in a gazette issue keeps the issue's (45 to 52).
+function sourcePanel(actId, numbers, source, first) {
   const id = encodeURIComponent(actId);
-  let page = Math.min(Math.max(first || 1, 1), pageCount || 1);
+  const pages = numbers.length ? numbers : [1];
+  const closest = (n) => pages.reduce((best, p, i) => (Math.abs(p - n) < Math.abs(pages[best] - n) ? i : best), 0);
+  let at = closest(first || pages[0]);
+  let page = pages[at];
   let zoom = 1;
   const image = el("img", { alt: "", draggable: "false" });
   const frame = el("div", { class: "frame" }, image);
   const pick = el("select", { title: "Page", on: { change: () => show(Number(pick.value)) } },
-    Array.from({ length: pageCount }, (_, i) => el("option", { value: String(i + 1), text: `Page ${i + 1} of ${pageCount}` })));
+    pages.map((n) => el("option", { value: String(n), text: pages.at(-1) === pages.length ? `Page ${n} of ${pages.length}` : `Page ${n}` })));
   const editor = el("a", { title: "Open this page in the editor" });
   const label = el("span", { class: "muted zoom-label" });
   const setZoom = (value) => {
@@ -954,7 +958,8 @@ function sourcePanel(actId, pageCount, source, first) {
     label.textContent = `${Math.round(zoom * 100)}%`;
   };
   const show = (n) => {
-    page = Math.min(Math.max(n, 1), pageCount);
+    at = closest(n);
+    page = pages[at];
     pick.value = String(page);
     image.src = `/api/documents/${id}/pages/${page}/image`;
     image.alt = `Original page ${page}`;
@@ -969,9 +974,9 @@ function sourcePanel(actId, pageCount, source, first) {
     " · ", editor);
   const viewer = el("div", { class: "viewer" },
     el("div", { class: "viewer-tools" },
-      el("button", { class: "small", title: "Previous page", text: "←", on: { click: () => show(page - 1) } }),
+      el("button", { class: "small", title: "Previous page", text: "←", on: { click: () => show(pages[Math.max(at - 1, 0)]) } }),
       pick,
-      el("button", { class: "small", title: "Next page", text: "→", on: { click: () => show(page + 1) } }),
+      el("button", { class: "small", title: "Next page", text: "→", on: { click: () => show(pages[Math.min(at + 1, pages.length - 1)]) } }),
       el("button", { class: "small", title: "Zoom out", text: "−", on: { click: () => setZoom(zoom / 1.25) } }),
       label,
       el("button", { class: "small", title: "Zoom in", text: "+", on: { click: () => setZoom(zoom * 1.25) } }),
@@ -1172,7 +1177,7 @@ async function eventsView(actId) {
   const data = listing.data;
   app.names = { ...(app.names || {}), ...data.names };
   setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${id}`, text: doc.data.act.title }), "Legal events");
-  const original = sourcePanel(actId, doc.data.pages.length, doc.data.source || {}, 1);
+  const original = sourcePanel(actId, doc.data.pages.map((p) => p.page), doc.data.source || {}, 1);
   const canPropose = app.me.roles.includes("reviewer"), canReview = app.me.roles.includes("approver");
   const pageOf = Object.fromEntries(data.provisions.map((p) => [p.locator, p.page]));
   const cards = el("div");
@@ -1275,7 +1280,7 @@ async function instructionsView(actId) {
   const data = listing.data;
   app.names = { ...(app.names || {}), ...data.names };
   setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${id}`, text: doc.data.act.title }), "Amendment instructions");
-  const original = sourcePanel(actId, doc.data.pages.length, doc.data.source || {}, 1);
+  const original = sourcePanel(actId, doc.data.pages.map((p) => p.page), doc.data.source || {}, 1);
   const isReviewer = app.me.roles.includes("reviewer"), isApprover = app.me.roles.includes("approver");
   const pageOf = Object.fromEntries(data.provisions.map((p) => [p.locator, p.page]));
   const cards = el("div");
