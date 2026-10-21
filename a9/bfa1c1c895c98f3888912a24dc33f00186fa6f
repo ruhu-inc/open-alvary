@@ -1,0 +1,65 @@
+tests/test_v1_text.py
+  s_d665c62e07d76f::t_140d9a25dd73f3 92-94
+operations/publish.py
+  s_d665c62e07d76f::t_1180f74be85f2e 570-571
+  s_d665c62e07d76f::t_9c2ec999497cc0 572-576
+README.md
+  s_d665c62e07d76f::t_64b04880a2a59e 360-363
+tests/test_judgment_structure.py
+  s_d665c62e07d76f::t_30a1d93a4e4889 220,222-224
+  s_d665c62e07d76f::t_140d9a25dd73f3 225-228
+tests/test_consolidation.py
+  s_d665c62e07d76f::t_6b8ac2ce26ea7a 12
+workbench/consolidation.py
+  s_d665c62e07d76f::t_70b6da63a286e2 242
+tests/test_postgres_evaluation.py
+  s_d665c62e07d76f::t_6b8ac2ce26ea7a 70
+workbench/routing.py
+  s_d665c62e07d76f::t_464a4b2ea3130e 199-200,208
+workbench/structure.py
+  s_d665c62e07d76f::t_c08c6754fcdf7d 159-160,162-166,168-176,178-184,195,197-198
+  s_d665c62e07d76f::t_9cfc1ad18c79b0 4,9-11,13-18
+  s_d665c62e07d76f::t_9b46bd5df48796 38-61
+  s_d665c62e07d76f::t_41356e79a13513 123
+  s_d665c62e07d76f::t_22510d56077847 158,167,177
+tests/test_publish.py
+  s_d665c62e07d76f::t_6b8ac2ce26ea7a 262
+tests/test_editorial.py
+  s_d665c62e07d76f::t_6b8ac2ce26ea7a 64
+  s_d665c62e07d76f::t_9c0ac5584108d1 195-197
+tests/test_structure_rules.py
+  s_d665c62e07d76f::t_303dd655ba80e7 6-7,16,117,127,142,173
+  s_d665c62e07d76f::t_88e2c4c949ad56 1-5,8-15,17-94,100-116,118,122-126,128-141,143-158,162-167,174-175,179-184
+  s_d665c62e07d76f::t_140d9a25dd73f3 95-99,119-121,159-161,168-172,176-178
+workbench/static/app.js
+  s_d665c62e07d76f::t_7b1437969dc7c4 474-475
+  s_d665c62e07d76f::t_0ee9373f5b3a2c 489
+  s_d665c62e07d76f::t_9907c9d973a2a5 529
+tests/test_text_publication.py
+  s_d665c62e07d76f::t_f2d32420c3e5bc 386-389
+  s_d665c62e07d76f::t_1da90b390b5210 353-371,373
+workbench/publication.py
+  s_d665c62e07d76f::t_82933c10e6a017 47,54
+  s_d665c62e07d76f::t_d1c69fac088dfb 6
+tests/test_routing.py
+  s_d665c62e07d76f::t_9340088c605cbf 385-391
+  s_d665c62e07d76f::t_954bd01f9e928d 344-348
+  s_d665c62e07d76f::t_140d9a25dd73f3 380-383
+  s_d665c62e07d76f::t_650e7ee7930180 376-379,384,392-396
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "a9bfa1c1c895c98f3888912a24dc33f00186fa6f",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
