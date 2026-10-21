@@ -148,7 +148,22 @@ What the answer means:
 
 A membership is listed only after a reviewer has checked it against its evidence. One that has not been checked yet is left out, so a missing body is not proof that a country is not a member. Membership alone does not mean a body's treaties apply to a member: signature, ratification and entry into force are separate facts.
 
-[List jurisdictions](/docs/api/list-jurisdictions) gives every country's `member_of` in the same form. Changes to memberships are in the [change feed](/docs/changes) as `membership_recorded`.
+[List jurisdictions](/docs/api/list-jurisdictions) gives every country's `member_of` in the same form. Changes to memberships are in the [change feed](/docs/changes) as `membership_recorded`. To search a country's law together with the regional and treaty law that binds there, see [the law that applies in a country](/docs/retrieval#the-law-that-applies-in-a-country).
+
+## Regional instruments and treaties
+
+A regional body's instrument, such as an OHADA Uniform Act or an ECOWAS directive, has `regional` on its record ([Get a record](/docs/api/get-source)), on its [anchors](/docs/api/get-anchor) and on each evidence unit from it:
+
+| Field | Meaning |
+|---|---|
+| `organ` | The organ that adopted it, such as the Council of Ministers. |
+| `legal_effect` | `directly_applicable` (it applies in the members as it stands), `requires_transposition` (it binds the members as to its result, through national law), `binding_on_addressees` (it binds the member states it is addressed to) or `non_binding`. |
+| `member_states` | The member states it binds. Empty means every member. |
+| `transposition_deadline` | The date by which members must transpose it, when one is set. |
+
+A treaty has `treaty` instead: `adopted_by`, `depositary`, `entered_into_force` and `authentic_languages`, and on the record and its anchors, `parties`. Each party gives the dates it `signed`, `ratified`, `acceded` and `denounced` the treaty, when recorded, its `reservations`, and `domesticated_by`: the acts of that state that a checked link records as domesticating the treaty. Signature alone never binds a state. An empty `parties` list means none is recorded yet, never that the treaty has none. An evidence unit carries the treaty's status without its parties.
+
+A date gives its `precision` (`day`, `month` or `year`) and, when the record keeps it, the date as `printed`. Records of other kinds have neither `regional` nor `treaty`.
 
 ## Read the text
 
