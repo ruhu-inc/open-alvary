@@ -148,6 +148,7 @@ def test_reviewed_links_between_published_works_become_checked_catalogue_links(d
     assert [(a.source_id, a.kind, a.target_source_id, a.verified) for a in links] == [
         ("rw-law-055-2024", "repeals", "rw-law-31-2009", True),  # said by both: one link
         ("rw-law-5-2015", "amends", "rw-law-31-2009", True),
+        ("rw-law-5-2015", "cites", "rw-law-31-2009", True),
     ]
     assert all(str(a.evidence_url) == "https://www.minijust.gov.rw/official-gazette" for a in links)
 
@@ -205,6 +206,46 @@ def test_each_versions_recorded_authority_and_the_language_rule_reach_the_catalo
     assert silent.editions == [] and silent.language_rule is None
     # Not recorded, neither is in the row: rows stored before them read the same (DAT-08).
     assert not {"editions", "language_rule"} & set(silent.model_dump(mode="json"))
+
+
+def test_reviewed_vocabulary_links_are_published_from_either_end_and_judicial_ones_reported(decisions):
+    decision = publish.decide("ng", "Ijidai Lassa", 12, [], "", "")
+
+    def item(work, *relations):
+        return publish.Approved(
+            work, rwanda_law(relations=relations), ["en"], "Ijidai Lassa", datetime.now(UTC)
+        )
+
+    def link(kind, work):
+        return Relation(kind=kind, target=Reference(citation=f"Instrument {work}", work_uri=work))
+
+    approved = [
+        item("ng-act", link("transposes", "dir"), link("ratifies", "treaty"), link("cites", "order")),
+        item("dir", link("implemented_by", "order")),
+        item("treaty", link("domesticated_by", "ng-act")),
+        item("order", link("commences", "ng-act"), link("overrules", "dir"), link("related", "treaty")),
+        item("judgment", link("follows", "judgment-2"), link("appeal_from", "order")),
+    ]
+    sources = {a.work: publish.catalogue_entries(a, decision)["source"] for a in approved}
+    links = publish.catalogue_links(approved, sources)
+    assert [(a.source_id, a.kind, a.target_source_id) for a in links] == [
+        ("ng-act", "cites", "order"),
+        ("ng-act", "domesticates", "treaty"),  # stated by the treaty's record
+        ("ng-act", "ratifies", "treaty"),
+        ("ng-act", "transposes", "dir"),
+        ("order", "commences", "ng-act"),
+        ("order", "implements", "dir"),
+    ]
+    # Judicial treatment and appeal links wait for case law; nothing a record says is dropped unreported.
+    withheld = {(w["work"], w["kind"], w["other"]): w["reason"] for w in publish.withheld_relations(approved)}
+    assert set(withheld) == {
+        ("order", "overrules", "dir"),
+        ("order", "related", "treaty"),
+        ("judgment", "follows", "judgment-2"),
+        ("judgment", "appeal_from", "order"),
+    }
+    assert "case law" in withheld[("order", "overrules", "dir")]
+    assert withheld[("order", "related", "treaty")] == publish.NOT_PUBLISHED
 
 
 # --- texts (TXP-07) ----------------------------------------------------------------------------------
