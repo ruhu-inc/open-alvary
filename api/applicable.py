@@ -3,7 +3,11 @@ scope that widens a search to the regional and treaty law that binds there (``sc
 
 Nothing is decided that a reviewed record or a reviewed membership does not state:
 
-* a country's own law is ``national``; another country's is ``comparative``;
+* a country's own law is ``national``; another country's is ``comparative``. A place within a country (a
+  state, such as ``ng-la`` within ``ng``) has its own law and its country's as ``national``, as national
+  and federal law applies throughout the country; another place's law within it is ``comparative``, and
+  regional bodies and treaties are assessed for the country, the member state and party. A label that
+  rests on the country says the place is within it;
 * a treaty binds a state through that state's own ratification or accession on or before the date, not
   denounced by then, once the treaty itself is in force (``treaty_in_force_for_state``). A party list
   with the state's signature alone, a later ratification or a denunciation by then is
@@ -20,13 +24,14 @@ Nothing is decided that a reviewed record or a reviewed membership does not stat
   ``unknown``, and stays in answers: unknown applicability is reported, never dropped (evaluation-design).
 
 The scope is asked for, never assumed (RSV-03): the answer states the bodies it added, the membership
-each rests on and what it left out. A label is never a decision of anyone's governing law (JUR-03).
+each rests on, what it left out and, for a place, the country whose law it added whole. A label is never a
+decision of anyone's governing law (JUR-03).
 """
 
 import calendar
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 
 from api.reach import country
@@ -132,10 +137,10 @@ def treaty_view(source, acts: Acts, *, parties: bool = True) -> TreatyView | Non
 
 @dataclass
 class Labeller:
-    """Records' relation to one jurisdiction's law on one date, from whether it was a member of each body on
-    that date (``bodies``: api.catalogue.bodies_on, the one reader of membership dates, by body: the
+    """Records' relation to one jurisdiction's law on one date, from whether its country was a member of each
+    body on that date (``bodies``: api.catalogue.bodies_on, the one reader of membership dates, by body: the
     memberships relied on, each saying ``held``, ``not_held`` or ``unknown``) and the checked links ``acts``
-    reads."""
+    reads. For a place within a country, the memberships are the country's."""
 
     jurisdiction: str
     as_of: date
@@ -160,46 +165,66 @@ class Labeller:
         )
 
     def _label(self, source) -> Applicability:
-        here, day = self.jurisdiction, self.as_of
-        if source.treaty is not None:
-            return self._treaty(source)
-        if source.jurisdiction_id == here:
+        here, state = self.jurisdiction, country(self.jurisdiction)
+        if source.treaty is None and country(source.jurisdiction_id) is not None:
+            return self._national(source.jurisdiction_id)
+        found = self._treaty(source) if source.treaty is not None else self._regional(source)
+        if here == state:
+            return found
+        # A place within a country: regional bodies and treaties reach it through its country.
+        within = f"{here} is within {state}: regional bodies and treaties reach it through {state}."
+        return found.model_copy(update={"reasons": (within, *found.reasons)})
+
+    def _national(self, jurisdiction: str) -> Applicability:
+        """A country's or a place's law. National and federal law applies throughout a country's places."""
+        here, state = self.jurisdiction, country(self.jurisdiction)
+        if jurisdiction == here:
             return self._answer("national", [f"The law of {here}."])
-        place = country(source.jurisdiction_id)
-        if place is not None:
-            if place == country(here):
-                return self._answer(
-                    "unknown",
-                    [f"{source.jurisdiction_id} and {here} are places in one country: how their law relates is "
-                     "not assessed here."],
-                )  # fmt: skip
-            return self._answer("comparative", [f"The law of {source.jurisdiction_id}, not of {here}."])
+        if jurisdiction == state:
+            return self._answer(
+                "national", [f"{here} is within {state}: the law of {state} applies throughout it."]
+            )
+        if country(jurisdiction) != state:
+            return self._answer("comparative", [f"The law of {jurisdiction}, not of {here}."])
+        if here == state:
+            return self._answer(
+                "unknown",
+                [f"{jurisdiction} and {here} are places in one country: how their law relates is not assessed "
+                 "here."],
+            )  # fmt: skip
+        return self._answer(
+            "comparative", [f"The law of {jurisdiction}, another place within {state}, not of {here}."]
+        )
+
+    def _regional(self, source) -> Applicability:
+        """A body's instrument reaches a country through its reviewed membership held on the date (JUR-04)."""
+        state, day = country(self.jurisdiction), self.as_of
         body = source.jurisdiction_id
         basis = self.bodies.get(body, ())
         if not basis:
             return self._answer(
                 "unknown",
-                [f"No membership of {here} in {body} is reviewed yet: whether {body}'s instruments reach {here} "
+                [f"No membership of {state} in {body} is reviewed yet: whether {body}'s instruments reach {state} "
                  "is unknown, not none."],
             )  # fmt: skip
         if basis[0].held == "unknown":
             return self._answer(
-                "unknown", [f"Whether {here} was a member of {body} on {day} cannot be told from its reviewed "
+                "unknown", [f"Whether {state} was a member of {body} on {day} cannot be told from its reviewed "
                             "membership's dates."], memberships=basis,
             )  # fmt: skip
         if basis[0].held == "not_held":
             return self._answer(
-                "comparative", [f"{here} was not a member of {body} on {day}, by its reviewed membership."],
+                "comparative", [f"{state} was not a member of {body} on {day}, by its reviewed membership."],
                 memberships=basis,
             )  # fmt: skip
-        member = f"{here} was a member of {body} on {day}"
+        member = f"{state} was a member of {body} on {day}"
         regional = regional_view(source)
         if regional is None:
             return self._answer(
                 "unknown", [f"{member}, but the record states no legal effect."], memberships=basis
             )
         named = regional.member_states
-        if named and here not in named and country(here) not in named:
+        if named and state not in named and self.jurisdiction not in named:
             return self._answer(
                 "comparative", [f"{member}, but the instrument binds {', '.join(named)} only."],
                 memberships=basis, regional=regional,
@@ -209,18 +234,16 @@ class Labeller:
         if relation == "regional_direct":
             reasons.append(f"{member}; the instrument applies directly in its members.")
         elif relation == "regional_requires_transposition":
-            reasons.append(f"{member}; the instrument binds {here} as to its result, through national law.")
+            reasons.append(f"{member}; the instrument binds {state} as to its result, through national law.")
             if regional.transposition_deadline:
                 reasons.append(f"Transposition was due by {regional.transposition_deadline}.")
             transposed = tuple(
-                act
-                for act in self.acts(source.id, "transposed_by")
-                if country(act.jurisdiction_id) == country(here)
+                act for act in self.acts(source.id, "transposed_by") if country(act.jurisdiction_id) == state
             )
             if not transposed:
-                reasons.append(f"No act of {here} transposing it is recorded.")
+                reasons.append(f"No act of {state} transposing it is recorded.")
         elif relation == "regional_binding_on_addressees":
-            addressed = f"{here} among them" if named else "and it names none, so every member"
+            addressed = f"{state} among them" if named else "and it names none, so every member"
             reasons.append(
                 f"{member}; the instrument binds the member states it is addressed to, {addressed}."
             )
@@ -230,8 +253,8 @@ class Labeller:
 
     def _treaty(self, source) -> Applicability:
         """A treaty binds a state by that state's own consent, never by membership of a body (JUR-04)."""
-        here, day, treaty = self.jurisdiction, self.as_of, source.treaty
-        state, entered = country(here), _date(treaty.entered_into_force)
+        day, treaty = self.as_of, source.treaty
+        state, entered = country(self.jurisdiction), _date(treaty.entered_into_force)
         found = next((p for p in treaty.parties if p.place == state), None)
         if found is None:
             # A state missing from the list is not a party only where the list is complete on the date.
@@ -316,26 +339,41 @@ class Labeller:
 @dataclass(frozen=True)
 class Scope:
     """An applicable-law scope (``scope=applicable``): what it states, the records of other jurisdictions it
-    admits, their jurisdictions (for the plan's admission) and the labeller of every record it answers."""
+    admits, the country whose law it adds whole for a place within it (``within``), their jurisdictions (for
+    the plan's admission) and the labeller of every record it answers."""
 
     statement: ApplicableScope
     admitted: tuple[str, ...]
+    within: str | None
     jurisdictions: frozenset[str]
     labeller: Labeller
 
     def label(self, source) -> Applicability:
         return self.labeller.label(source)
 
+    def widen(self, filters):
+        """A search's filters (api.text_index.Filters) with this scope's widening: the country's law for a place
+        within it, and the records of other jurisdictions it admits."""
+        jurisdictions = filters.jurisdictions
+        if self.within is not None and jurisdictions is not None and self.within not in jurisdictions:
+            jurisdictions = (*jurisdictions, self.within)
+        return replace(filters, jurisdictions=jurisdictions, admitted=self.admitted)
+
 
 def scope(labeller: Labeller, candidates, *, date_basis: str, named=None) -> Scope:
     """Widen a search of the labeller's jurisdiction to the records of other jurisdictions that bind there or
-    whose relation is unknown. ``candidates``: the public records of the bodies it belonged to on the date
-    (reviewed memberships) and the public treaties whose party list names it. ``named``: the record the
-    request names (source_id), answered whatever its relation."""
+    whose relation is unknown. ``candidates``: the public records of the bodies its country belonged to on the
+    date (reviewed memberships) and the public treaties whose party list names its country. ``named``: the
+    record the request names (source_id), answered whatever its relation. For a place within a country, the
+    country's law is added whole: it applies throughout the place."""
     here, day = labeller.jurisdiction, labeller.as_of
-    admitted, places, left_out, unknown = set(), set(), Counter(), 0
+    state = country(here)
+    within = state if state != here else None
+    own = {here, state}
+    admitted, left_out, unknown = set(), Counter(), 0
+    places = {within} if within is not None else set()
     for source in [*candidates, *([named] if named is not None else [])]:
-        if source.jurisdiction_id == here or source.id in admitted:
+        if source.jurisdiction_id in own or source.id in admitted:
             continue
         label = labeller.label(source)
         if label.binds == "not_bound" and (named is None or source.id != named.id):
@@ -344,24 +382,30 @@ def scope(labeller: Labeller, candidates, *, date_basis: str, named=None) -> Sco
         admitted.add(source.id)
         places.add(source.jurisdiction_id)
         unknown += label.binds == "unknown"
+    notices = []
+    if within is not None:
+        notices.append(
+            f"{here} is within {state}: the law of {state} applies throughout it and was added whole, and regional "
+            f"bodies and treaties were assessed for {state}, the member state and party."
+        )
     if labeller.bodies:
-        notices = [
-            f"Regional law was added through reviewed memberships only: a body whose membership of {here} is "
-            f"not reviewed yet was not added, which never means {here} is not a member."
-        ]
+        notices.append(
+            f"Regional law was added through reviewed memberships only: a body whose membership of {state} is "
+            f"not reviewed yet was not added, which never means {state} is not a member."
+        )
         uncertain = [body for body, basis in labeller.bodies.items() if basis[0].held == "unknown"]
         if uncertain:
             notices.append(
-                f"Whether {here} was a member of {', '.join(uncertain)} on {day} cannot be told from the reviewed "
+                f"Whether {state} was a member of {', '.join(uncertain)} on {day} cannot be told from the reviewed "
                 "dates, so their law was not added."
             )
     else:
-        notices = [
-            f"No membership of {here} is reviewed yet, so no regional body's law was added; that never means "
-            f"{here} belongs to none."
-        ]
+        notices.append(
+            f"No membership of {state} is reviewed yet, so no regional body's law was added; that never means "
+            f"{state} belongs to none."
+        )
     notices.append(
-        f"Treaties were added where the treaty's reviewed party list records {country(here)}'s ratification or "
+        f"Treaties were added where the treaty's reviewed party list records {state}'s ratification or "
         "accession: membership of a body never applies its treaties."
     )
     if date_basis == "today":
@@ -376,11 +420,12 @@ def scope(labeller: Labeller, candidates, *, date_basis: str, named=None) -> Sco
         )
     if unknown:
         notices.append(f"{unknown} records whose relation to {here} is unknown were kept, labelled unknown.")
-    if named is not None and named.jurisdiction_id != here:
+    if named is not None and named.jurisdiction_id not in own:
         notices.append(f"{named.id}, named by source_id, is answered whatever its relation to {here}.")
     return Scope(
         statement=ApplicableScope(
             jurisdiction_id=here,
+            within=within,
             as_of=day,
             date_basis=date_basis,
             membership="reviewed" if labeller.bodies else "unknown",
@@ -390,6 +435,7 @@ def scope(labeller: Labeller, candidates, *, date_basis: str, named=None) -> Sco
             notices=tuple(notices),
         ),
         admitted=tuple(sorted(admitted)),
+        within=within,
         jurisdictions=frozenset(places),
         labeller=labeller,
     )

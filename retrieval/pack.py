@@ -62,8 +62,9 @@ class Request:
     max_units: int = 10
     max_evidence_bytes: int = 49_152
     include: frozenset[str] = INCLUDE
-    # An applicable-law scope (scope=applicable, api.applicable): the records it admits join the filters'
-    # jurisdiction, each unit says how it relates to that jurisdiction, and the pack states the widening.
+    # An applicable-law scope (scope=applicable, api.applicable): the records it admits, and for a place its
+    # country's law, join the filters' jurisdiction; each unit says how it relates to that jurisdiction, and
+    # the pack states the widening.
     scope: Scope | None = None
 
 
@@ -600,15 +601,18 @@ class Retriever:
             raise InvalidSearch("Invalid evidence bounds")
         filters = request.filters
         if request.scope is not None:
-            filters = replace(filters, admitted=request.scope.admitted)
+            filters = request.scope.widen(filters)
         citation = self.service.citations(
             query, as_of=filters.as_of, language=filters.language, within=filters.source_id
         )
         if citation.matches and any(not filters.admits(m.jurisdiction_id, m.id) for m in citation.matches):
             citation = None
         works = text_index.named_works(self.conn, query, filters)
+        # Planned and assessed for the jurisdictions asked: a place's country added by its scope makes the
+        # search no comparison.
+        asked = request.filters
         plan = router.plan(
-            query, citation=citation, works=works, as_of=filters.as_of, jurisdictions=filters.jurisdictions,
+            query, citation=citation, works=works, as_of=filters.as_of, jurisdictions=asked.jurisdictions,
             within=filters.source_id,
         )  # fmt: skip
         arms, degraded, _ = self._arms(query, plan, filters)
@@ -621,7 +625,7 @@ class Retriever:
             else []
         )
         fused += expanded
-        self._courts(fused, filters)
+        self._courts(fused, asked)
         self._rerank(query, fused, degraded, keep=expanded)
         candidates = apply_signals(self._supported(fused), set(works))
         scoped = "citation" in plan.routes or len(works) == 1 or bool(filters.source_id or filters.version_id)

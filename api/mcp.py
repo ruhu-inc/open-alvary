@@ -233,7 +233,8 @@ TOOLS = [
                     "(today without it): instruments of the African Union and regional bodies it belonged to "
                     "(reviewed memberships only) and treaties it ratified or acceded to. Each passage then "
                     "says how it relates to that jurisdiction (applicability), and the answer states what "
-                    "was added and left out.",
+                    "was added and left out. For a place within a country (ng-la), the country's own law "
+                    "too, and the country's memberships and treaties.",
                 },
             },
             "required": ["query"],
@@ -308,7 +309,8 @@ TOOLS = [
                     "belonged to (reviewed memberships only) and treaties it ratified or acceded to. Each unit "
                     "then says how it relates to that jurisdiction (applicability: national, regional_direct, "
                     "treaty_in_force_for_state, unknown and others, with what that rests on), and the answer "
-                    "states what was added and left out.",
+                    "states what was added and left out. For a place within a country (ng-la), the country's "
+                    "own law too, and the country's memberships and treaties.",
                 },
             },
             "required": ["query"],

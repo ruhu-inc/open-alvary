@@ -308,12 +308,25 @@
     },
     "ApplicableScope": {
       "additionalProperties": false,
-      "description": "The applicable-law scope a request asked for (``scope=applicable``) and the widening it applied, so\nthat nothing is widened silently (RSV-03): each body the jurisdiction has a reviewed membership of, with\nwhether it held on the date (only the law of bodies ``held`` was added), how many records of other\njurisdictions were admitted, and how many were left out, by relation.",
+      "description": "The applicable-law scope a request asked for (``scope=applicable``) and the widening it applied, so\nthat nothing is widened silently (RSV-03): for a place within a country, the country (``within``) whose\nlaw it added whole and whose memberships and treaty consents it assessed; each body the country has a\nreviewed membership of, with whether it held on the date (only the law of bodies ``held`` was added),\nhow many records of regional bodies and treaties were admitted, and how many were left out, by\nrelation.",
       "properties": {
         "jurisdiction_id": {
           "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
           "title": "Jurisdiction Id",
           "type": "string"
+        },
+        "within": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Within"
         },
         "as_of": {
           "format": "date",

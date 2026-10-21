@@ -306,11 +306,14 @@ class Applicability(WireModel):
 
 class ApplicableScope(WireModel):
     """The applicable-law scope a request asked for (``scope=applicable``) and the widening it applied, so
-    that nothing is widened silently (RSV-03): each body the jurisdiction has a reviewed membership of, with
-    whether it held on the date (only the law of bodies ``held`` was added), how many records of other
-    jurisdictions were admitted, and how many were left out, by relation."""
+    that nothing is widened silently (RSV-03): for a place within a country, the country (``within``) whose
+    law it added whole and whose memberships and treaty consents it assessed; each body the country has a
+    reviewed membership of, with whether it held on the date (only the law of bodies ``held`` was added),
+    how many records of regional bodies and treaties were admitted, and how many were left out, by
+    relation."""
 
     jurisdiction_id: ID
+    within: ID | None = Field(**OMIT)
     as_of: date
     date_basis: Literal["as_of", "today"]
     membership: Literal["reviewed", "unknown"]

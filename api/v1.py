@@ -73,7 +73,8 @@ DocumentType = Literal["constitution", "act", "regulation", "judgment", "gazette
 LANGUAGE = Query(None, min_length=2, max_length=35, pattern=r"^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$")
 PLACE = re.compile(r"[a-z]{2}(?:-[a-z0-9]{1,12})?")  # a court register's jurisdiction (schema.record)
 ONE_JURISDICTION = (
-    "scope=applicable needs exactly one jurisdiction: the country whose applicable law you ask for."
+    "scope=applicable needs exactly one jurisdiction: the country, or the place within one, whose applicable "
+    "law you ask for."
 )
 
 

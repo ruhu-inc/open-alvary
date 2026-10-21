@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 from api import applicable
 from api.catalogue import bodies_on
+from api.reach import country
 from api.text_index import Filters
 from retrieval.engine import Engine
 from schema.models import PartyStatus, RegionalEffect, Source, StatedDate, StatedEvidence, TreatyStatus
@@ -41,6 +42,7 @@ MEMBERSHIPS = [
     membership("sn", "aa-ohada", date(1995, 9, 18)),
     membership("sn", "aa-uemoa", date(1994, 1, 10), date(2000, 1, 1)),
     membership("ml", "aa-ecowas", date(1975, 5, 28), date(2025, 1, 28)),
+    membership("ng", "aa-ecowas", date(1975, 5, 28)),
 ]
 TRANSPOSING = LinkedAct(
     source_id="sn-transposing-act", jurisdiction_id="sn", title="Loi", citation="Loi n° 1"
@@ -61,7 +63,8 @@ def acts(source_id, kind):
 
 
 def labeller(member="sn", day=DAY, held=MEMBERSHIPS):
-    return applicable.Labeller(member, day, bodies_on(held, member, day), acts)
+    """As the catalogue makes it: from the memberships of the country (for a place, the one it is within)."""
+    return applicable.Labeller(member, day, bodies_on(held, country(member), day), acts)
 
 
 def regional(effect="directly_applicable", **fields):
@@ -246,7 +249,7 @@ def test_what_is_not_reviewed_is_unknown():
         acts,
     )  # fmt: skip
     assert uncertain.label(source("ecowas-act", "aa-ecowas", regional=regional())).relation == "unknown"
-    # Places in one country: not assessed here.
+    # A place's own law, asked of its country: not assessed here.
     assert label(source("ng-la-law", "ng-la"), member="ng").relation == "unknown"
 
 
@@ -268,6 +271,48 @@ def test_an_uncertain_membership_date_gives_the_unknown_label():
     assert [(b.body_id, b.held) for b in scope.statement.bodies] == [("aa-eac", "unknown")]
     assert any("cannot be told from the reviewed dates" in n for n in scope.statement.notices)
     assert labeller("ss", date(2016, 9, 6), joined).label(eac).relation == "regional_direct"
+
+
+def test_a_place_within_a_country_has_its_countrys_law_and_reaches_regional_and_treaty_law_through_it():
+    def lagos(record):
+        return label(record, member="ng-la")
+
+    # National and federal law applies throughout the country's states: national, and the basis says why.
+    federal = lagos(source("ng-federal-act", "ng"))
+    assert (federal.relation, federal.binds, federal.jurisdiction_id) == ("national", "bound", "ng-la")
+    assert federal.reasons == ("ng-la is within ng: the law of ng applies throughout it.",)
+    assert lagos(source("ng-la-law", "ng-la")).relation == "national"
+    other = lagos(source("ng-ab-law", "ng-ab"))
+    assert (other.relation, other.binds) == ("comparative", "not_bound")
+    assert "another place within ng" in other.reasons[0]
+    assert lagos(source("gh-act", "gh")).relation == "comparative"
+    # A regional body's instrument reaches Lagos State through Nigeria's reviewed membership.
+    directive = lagos(source("ecowas-directive", "aa-ecowas", regional=regional("requires_transposition")))
+    assert (directive.relation, directive.jurisdiction_id) == ("regional_requires_transposition", "ng-la")
+    assert [(m.id, m.held) for m in directive.memberships] == [("ng:aa-ecowas:1", "held")]
+    assert directive.reasons[:2] == (
+        "ng-la is within ng: regional bodies and treaties reach it through ng.",
+        "ng was a member of aa-ecowas on 2026-01-01; the instrument binds ng as to its result, through national "
+        "law.",
+    )
+    addressed = regional("binding_on_addressees", member_states=["ng"])
+    assert (
+        lagos(source("decision-ng", "aa-ecowas", regional=addressed)).relation
+        == "regional_binding_on_addressees"
+    )
+    others = regional("binding_on_addressees", member_states=["sn"])
+    assert lagos(source("decision-sn", "aa-ecowas", regional=others)).relation == "comparative"
+    unreviewed = lagos(source("ohada-act", "aa-ohada", regional=regional()))
+    assert unreviewed.relation == "unknown" and "No membership of ng in aa-ohada" in unreviewed.reasons[1]
+    # A treaty binds it by Nigeria's own ratification.
+    ratified = PartyStatus(party="Nigeria", place="ng", ratified=on(date(2005, 3, 1)))
+    treaty = lagos(source("au-charter", "aa-au", treaty=charter(ratified)))
+    assert (treaty.relation, treaty.party.place) == ("treaty_in_force_for_state", "ng")
+    assert treaty.reasons[0] == "ng-la is within ng: regional bodies and treaties reach it through ng."
+    # A country's own labels are as before: nothing says it is within anything.
+    assert not any(
+        "within" in r for r in label(source("ecowas-act", "aa-ecowas", regional=regional())).reasons
+    )
 
 
 def test_membership_on_a_date_is_read_by_one_function():
@@ -328,6 +373,21 @@ def test_the_scope_admits_what_binds_or_is_unknown_and_states_what_it_left_out()
     named = applicable.scope(labeller(), candidates, date_basis="today", named=candidates[4])
     assert "au-charter" in named.admitted and any("named by source_id" in n for n in named.statement.notices)
     assert named.statement.date_basis == "today" and any("today's date" in n for n in named.statement.notices)
+    # A place within a country: the country's law is added whole, and its bodies and treaties assessed.
+    lagos = applicable.scope(
+        labeller("ng-la"),
+        [source("ecowas-directive", "aa-ecowas", regional=regional("requires_transposition")),
+         source("ecowas-recommendation", "aa-ecowas", regional=regional("non_binding"))],
+        date_basis="as_of",
+    )  # fmt: skip
+    assert (lagos.within, lagos.statement.within, lagos.admitted) == ("ng", "ng", ("ecowas-directive",))
+    assert lagos.jurisdictions == {"ng", "aa-ecowas"} and lagos.statement.left_out == {"non_binding": 1}
+    assert [(b.body_id, b.held) for b in lagos.statement.bodies] == [("aa-ecowas", "held")]
+    assert lagos.statement.notices[0].startswith("ng-la is within ng: the law of ng applies throughout it")
+    widened = lagos.widen(Filters(jurisdictions=("ng-la",)))
+    assert widened.jurisdictions == ("ng-la", "ng") and widened.admitted == ("ecowas-directive",)
+    assert widened.admits("ng", "ng-federal-act") and not widened.admits("ng-ab", "ng-ab-law")
+    assert scope.widen(Filters(jurisdictions=("sn",))).jurisdictions == ("sn",) and statement.within is None
     # No reviewed membership: no body's law is added, and that is never "none".
     unreviewed = applicable.scope(labeller("cm"), [], date_basis="as_of").statement
     assert (

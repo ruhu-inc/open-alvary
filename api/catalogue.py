@@ -3,7 +3,6 @@
 import base64
 import hashlib
 from collections import Counter
-from dataclasses import replace
 from datetime import UTC, date, datetime
 from functools import cache
 from typing import Protocol
@@ -409,23 +408,26 @@ class LegacyCatalogue:
         return self._linked[(source_id, kind)]
 
     def labeller(self, jurisdiction: str, as_of: date) -> applicable.Labeller:
-        """Records' relation to a country's law on a date (api.applicable), from its reviewed memberships."""
-        if country(jurisdiction) is None:
+        """Records' relation to a country's or a place's law on a date (api.applicable), from the country's
+        reviewed memberships: a place within a country belongs to no body itself."""
+        state = country(jurisdiction)
+        if state is None:
             raise InvalidSearch(
                 f"Applicable law is the law of a country or a place within one; {jurisdiction} is the "
                 "continent or a regional body."
             )
         return applicable.Labeller(
-            jurisdiction, as_of, bodies_on(self.memberships(jurisdiction), jurisdiction, as_of), self._acts
+            jurisdiction, as_of, bodies_on(self.memberships(state), state, as_of), self._acts
         )
 
     def applicable_scope(
         self, jurisdiction: str, as_of: date | None, *, named: str | None = None
     ) -> applicable.Scope:
-        """A search's applicable-law scope (scope=applicable): the jurisdiction's own law, and the public
-        records of the bodies it belonged to on the date (reviewed memberships only) and the public treaties
-        whose party list names it, those that bind there or whose relation is unknown (api.applicable).
-        Without a date, today's; ``named`` is the record a request names, answered whatever its relation."""
+        """A search's applicable-law scope (scope=applicable): the jurisdiction's own law (for a place, its
+        country's too), and the public records of the bodies its country belonged to on the date (reviewed
+        memberships only) and the public treaties whose party list names its country, those that bind there
+        or whose relation is unknown (api.applicable). Without a date, today's; ``named`` is the record a
+        request names, answered whatever its relation."""
         labeller = self.labeller(jurisdiction, as_of or self.now.date())
         bodies = [body for body, basis in labeller.bodies.items() if basis[0].held == "held"]
         state, found = country(jurisdiction), {}
@@ -1137,10 +1139,10 @@ class LegacyCatalogue:
         searched: the part comes first (RET-02). Every hit's text is rechecked before its words are used;
         ``status`` says whether nothing matched, the scope has no published text, or the search could
         not run, and ``coverage`` what was searched. With an applicable-law ``scope`` (api.applicable),
-        the records it admits join the jurisdiction's, each hit says how it relates to that jurisdiction,
-        and the page states the widening."""
+        the records it admits, and for a place its country's law, join the jurisdiction's, each hit says how
+        it relates to that jurisdiction, and the page states the widening."""
         if scope is not None:
-            filters = replace(filters, admitted=scope.admitted)
+            filters = scope.widen(filters)
         query = " ".join(query.split())
         if not query:
             raise InvalidSearch("Search term must not be blank")
