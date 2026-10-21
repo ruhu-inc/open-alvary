@@ -1,0 +1,28 @@
+retrieval/vectors.py
+  s_d665c62e07d76f::t_1e89ddddaab37b 28,36-41,74-75,77,80-83,90-109,175-179
+tests/test_retrieval.py
+  s_d665c62e07d76f::t_15a23cc0610423 282-318
+  s_d665c62e07d76f::t_b0c8e581ced8b8 7-8
+retrieval/indexer.py
+  s_d665c62e07d76f::t_1e89ddddaab37b 29,271
+deployment/gcp-terraform/env/inference-cloud-init.yaml.tftpl
+  s_d665c62e07d76f::t_1e89ddddaab37b 2-5,17
+deployment/azure/env/inference-cloud-init.yaml.tftpl
+  s_d665c62e07d76f::t_1e89ddddaab37b 2-5,13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1b605311856a2351632cf000ca7ace42daf16ac5",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
