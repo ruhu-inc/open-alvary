@@ -1,6 +1,8 @@
 #cloud-config
-# The embedder takes a whole input of its model's length in one batch (Qwen3-Embedding: 32,768 tokens; the
-# server's default 16,384 refuses to start), so no text is ever cut short.
+# The embedder takes inputs of up to 8,192 tokens (retrieval.vectors.MAX_INPUT_TOKENS): the server would
+# otherwise warm up on one input of the model's full 32,768, which needs more memory than a T4 holds.
+# --auto-truncate is what lets the server take a limit below the model's own; nothing reaches it, as
+# Open Alvary never sends an input that could be longer (retrieval.vectors.fitted).
 # The inference machine: Docker with NVIDIA's container toolkit, and the two models as services. Each
 # waits for the GPU driver (in the boot image), then serves on the private address only. As
 # deployment/azure/env/inference-cloud-init.yaml.tftpl, but Docker and the toolkit are installed only
@@ -12,7 +14,7 @@ package_upgrade: false
 packages: [curl, gnupg]
 
 write_files:
-%{ for name, spec in { embedder = { model = embedder.model, revision = embedder.revision, port = 8080, args = "--max-batch-tokens 32768" }, reranker = { model = reranker.model, revision = reranker.revision, port = 8081, args = "" } } ~}
+%{ for name, spec in { embedder = { model = embedder.model, revision = embedder.revision, port = 8080, args = "--max-batch-tokens 8192 --auto-truncate" }, reranker = { model = reranker.model, revision = reranker.revision, port = 8081, args = "" } } ~}
   - path: /etc/systemd/system/${name}.service
     content: |
       [Unit]

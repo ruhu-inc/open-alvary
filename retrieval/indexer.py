@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select, text
 from sqlalchemy.engine import Connection, Engine
 
-from retrieval.vectors import Profile, Store, embedder_for, profile_hash, windows
+from retrieval.vectors import Profile, Store, embedder_for, fitted, profile_hash, windows
 
 MAX_ATTEMPTS = 3
 LEASE_SECONDS = 600
@@ -268,7 +268,7 @@ def _inputs(conn: Connection, version_id: str, profile: Profile) -> list[dict]:
                 {
                     "version_id": version_id, "unit_start": row.start_byte, "node_id": row.node_id,
                     "jurisdiction_id": row.jurisdiction_id, "start_byte": begin, "end_byte": finish,
-                    "input": f"{context}\n\n{words[start:end]}",
+                    "input": fitted(context, words[start:end], profile.document_prompt),
                 }
             )  # fmt: skip
     return found
