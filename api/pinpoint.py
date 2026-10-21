@@ -5,8 +5,10 @@ cited pinpoint read into the same key, so the citation an anchor gives resolves 
 A key compares numbers as printed, case aside ("23A" is "23a"); schedule and part numbers compare as
 numbers ("Second Schedule", "Schedule 2" and "Schedule II" are one schedule). Paragraph letters are
 never read as Roman numerals: "(i)" is "i" wherever it is printed. An article's alinéa, "article 10,
-alinéa 2" or "art. 10 al. 2", is keyed as "article 10(2)" is. A work may follow its pinpoint after
-"of" or the French "de", "du", "de la", "de l'" or "des": "article 10, alinéa 2, de l'Acte uniforme …".
+alinéa 2" or "art. 10 al. 2", is keyed as "article 10(2)" is, and an alinéa node (art_10__al_2, which has
+no printed number) is cited "art. 10, al. 2". An article inserted after another keeps its printed number
+("art. 853-1", "art. 626-1-1-1"). A work may follow its pinpoint after "of" or the French "de", "du",
+"de la", "de l'" or "des": "article 10, alinéa 2, de l'Acte uniforme …".
 
 A judgment's paragraph (judgment-paragraphs-1) is cited by its number in brackets after the neutral
 citation, "[2019] NGSC 4 [12]" or "[2019] NGSC 4 at [12]", or "[2019] NGSC 4, para. 12"; a paragraph
@@ -38,7 +40,8 @@ SECTION = re.compile(
     re.I,
 )
 ARTICLE = re.compile(
-    rf"^(?:{_ARTICLE_LEADS})\.?\s*(\d{{1,4}}|[ivxlc]{{1,8}}|mbere|premier|one|first)(?:er|ère)?\.?\s*{_SUBS}{_ALINEA}$",
+    rf"^(?:{_ARTICLE_LEADS})\.?\s*(\d{{1,4}}(?:-\d{{1,3}}){{0,4}}|[ivxlc]{{1,8}}|mbere|premier|one|first)(?:er|ère)?\.?\s*"
+    rf"{_SUBS}{_ALINEA}$",
     re.I,
 )
 SCHEDULE = re.compile(
@@ -101,10 +104,10 @@ def _ordinal(value: str | None) -> str:
 
 
 def _token_number(locator: str, token: str) -> str:
-    """The number in a node's own locator token ("art_12", "sch_ii"), without the suffix a repeated one
-    is published with ("art_12_2")."""
+    """The number in a node's own locator token ("art_12", "art_853-1", "sch_ii"), without the suffix a
+    repeated one is published with ("art_12_2")."""
     own = locator.rsplit("__", 1)[-1]
-    found = re.match(rf"{token}_([0-9]+|[ivxlc]+)", own)
+    found = re.match(rf"{token}_([0-9]+(?:-[0-9]+)*|[ivxlc]+)", own)
     return found.group(1) if found else ""
 
 
@@ -158,6 +161,15 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
         elif part.kind == "article" and part.label:
             number = _token_number(part.locator, "art")
             key, shown = [f"art:{number}"], f"art. {number}"
+        elif (
+            part.kind == "paragraph"
+            and key[:1]
+            and key[0].startswith("art:")
+            and _token_number(part.locator, "al")
+        ):
+            alinea = _token_number(part.locator, "al")  # counted, never printed: art_10__al_2
+            key.append(alinea)
+            shown += f", al. {alinea}"
         elif part.kind in ("subsection", "paragraph", "subparagraph") and part.label:
             if schedule and not any(k.startswith("para:") for k in key):
                 key.append(f"para:{_plain(part.label)}")

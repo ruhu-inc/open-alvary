@@ -36,6 +36,10 @@ def part(kind, label=None, locator="x"):
         ("Article 1er, alinéa premier", ("art:1", "1")),
         ("article 10 alinea 1er", ("art:10", "1")),
         ("article 10, alinéa 2".replace("é", "é"), ("art:10", "2")),  # the accent decomposed
+        # An article numbered after another keeps its printed number.
+        ("art. 853-1", ("art:853-1",)),
+        ("article 626-1-1-1, alinéa 2", ("art:626-1-1-1", "2")),
+        ("art. 2-1 al. 1", ("art:2-1", "1")),
         ("First Schedule, para. 3(a)", ("sch:1", "para:3", "a")),
         ("Schedule 2, Part II, paragraph 4", ("sch:2", "part:2", "para:4")),
         ("Sch. 1 para 3", ("sch:1", "para:3")),
@@ -193,6 +197,25 @@ def test_a_part_is_cited_from_its_printed_numbers_and_read_back_to_the_same_key(
     assert pinpoint.cite([part("chapter", "CHAPTER 3")])[1] == "Chapter 3"
     assert pinpoint.cite([part("part", "PART V"), part("paragraph", "(a)")]) is None
     assert pinpoint.cite([part("paragraph", "(a)")]) is None  # outside any section
+
+
+def test_an_alinea_and_an_inserted_article_are_cited_and_read_back():
+    # ohada-uniform-act-1: an alinéa has no printed number; its locator counts it. A list's item keeps its
+    # "1°)" as label, and is cited by its place among the alinéas, as French drafting counts them.
+    article = part("article", "Article 11", "art_11")
+    for alinea, label in (("art_11__al_2", ""), ("art_11__al_3", "1°)")):
+        key, shown = pinpoint.cite(
+            [part("document"), part("chapter", "CHAPITRE 1"), article, part("paragraph", label, alinea)]
+        )
+        assert (key, shown) == (("art:11", alinea[-1]), f"art. 11, al. {alinea[-1]}") and pinpoint.read(
+            shown
+        ) == key
+    inserted = part("article", "Article 626-1-1-1", "art_626-1-1-1")
+    assert pinpoint.cite([inserted]) == (("art:626-1-1-1",), "art. 626-1-1-1")
+    assert pinpoint.cite([part("article", "Article 853-1", "art_853-1_2")])[0] == ("art:853-1",)  # repeated
+    assert pinpoint.read("art. 853-1") == ("art:853-1",)
+    # A paragraph without a number inside a section is still not cited.
+    assert pinpoint.cite([part("section", "23.", "sec_23"), part("paragraph", "", "sec_23__para_x")]) is None
 
 
 def node(id_, kind, start, end, raw, parent=None, label=None, heading=None, locator=None):
