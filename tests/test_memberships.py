@@ -415,3 +415,15 @@ def test_au_proposals_start_at_entry_into_force_a_later_deposit_or_admission_and
     assert (au["ss"].basis.kind, au["ss"].valid_from.precision) == ("admission_decision", "range")
     assert str(au["dz"].valid_from) == "2001-05-31" and au["dz"].basis.kind == "deposit"
     assert sum(m.basis.kind == "entry_into_force" for m in au.values()) == 38
+
+
+def test_ecowas_founders_start_on_signature_under_article_62_and_mauritania_left_in_december_2000():
+    ecowas = researched("aa-ecowas")
+    founders = [m for m in ecowas.values() if m.basis.kind == "provisional_application_on_signature"]
+    assert len(founders) == 15 and all(str(m.valid_from) == "1975-05-28" for m in founders)
+    assert all(m.basis.pinpoint == "art. 62(1)" and "provisionally" in m.basis.quote for m in founders)
+    mauritania = ecowas["mr"]
+    assert mauritania.status == "proposal" and str(mauritania.valid_to) == "2000-12"
+    assert mauritania.holds_on(date(2000, 12, 15)) is None and mauritania.holds_on(date(2001, 1, 1)) is False
+    assert str(ecowas["cv"].valid_from) == "1976/1977" and ecowas["cv"].basis.pinpoint == "art. 62(2)"
+    assert all(m.status == "proposal" for m in ecowas.values())
