@@ -15,14 +15,15 @@ reviews.
 import re
 import statistics
 import unicodedata
+from bisect import bisect_right
 from collections import Counter
-from itertools import pairwise
+from itertools import accumulate, pairwise
 
 from ingestion import gazette_layout
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-21.2"  # what is inferred, not printed for its step, suggested apart with its words
+PIPELINE = "2026-10-21.3"  # a repealing law's own words carried to the law it repeals
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -1212,6 +1213,9 @@ ACTION = re.compile(
 )
 # Where a sentence or an article's heading ends ("No. 5" and "n°." do not end one).
 SUBJECT_START = re.compile(r"(?<![Nn][Oo°º])[.;:»”]\s+(?=[A-ZÀ-Ý«“\"])")
+# The article a repealing sentence is in, its heading just before it: "Article 64: ", "Ingingo ya 75: ".
+ARTICLE_HEADING = re.compile(r"\b(?:Article|Ingingo\s+ya)\s+\w+(?:\s+(?:bis|ter))?\s*:\s*$", re.I)
+SENTENCE_END = re.compile(r"(?<![Nn][Oo°º])[.;](?=\s|$)")
 _PART = (
     r"articles?|paragraphs?|sub-?paragraphs?|items?|points?|chapters?|sections?|annex(?:es)?|schedules?"
     r"|provisions?|alin[ée]as?|paragraphes?|chapitres?|annexes?|dispositions?"
@@ -1317,14 +1321,15 @@ def _relied_on(clause: str) -> list[str]:
 def cited(versions: dict[str, list[dict]], entry: dict) -> list[dict]:
     """The earlier instruments this one repeals or amends, and those it is made under, each by its
     citation as printed, with the kind, number and year it is found by and, where only some articles
-    change or are relied on, which."""
+    change or are relied on, which. An instrument it repeals comes with the provision that does, as
+    printed ("words", with its article heading, of at most 400 characters), and the page it begins on."""
     language = next((code for code in ("en", "fr", "rw") if versions.get(code)), None)
     if language is None:
         return []
     own = (entry["kind"], number_key(entry["number"]))
     found: dict[tuple, dict] = {}
 
-    def add(match, kind, target, refs=(), only_new=False, saved=False):
+    def add(match, kind, target, refs=(), only_new=False, saved=False, provision=None):
         instrument = CITED_KIND.get(_plain_words(match.group(1)))
         number, year = match.group(2).rstrip("./"), match.group(3)
         # What it does to another instrument, and what it is made under, are kept apart.
@@ -1345,13 +1350,31 @@ def cited(versions: dict[str, list[dict]], entry: dict) -> list[dict]:
         )
         if kind == "repeals":
             link["kind"] = "repeals"  # the whole instrument, though some sentence amends a part first
+            if provision and "words" not in link:
+                link |= provision
         link["saved" if saved else "refs"] += list(refs)
 
-    text = " ".join(line["text"] for line in versions[language])
+    lines = versions[language]
+    text = " ".join(line["text"] for line in lines)
+    begins = list(accumulate((len(line["text"]) + 1 for line in lines[:-1]), initial=0))
+
+    def printed(start: int, end: int) -> dict | None:
+        """The words of the text from ``start`` to ``end``, with the page they begin on."""
+        words = " ".join(text[start:end].split())
+        page = lines[bisect_right(begins, start) - 1].get("page")
+        return {"words": words, **({"page": page} if page else {})} if len(words) <= 400 else None
+
     for action in ACTION.finditer(text):
-        window = text[max(0, action.start() - 600) : action.start()]
+        base = max(0, action.start() - 600)
+        window = text[base : action.start()]
         starts = list(SUBJECT_START.finditer(window))
         subject = window[starts[-1].end() :] if starts else window
+        provision = None
+        if starts or not base:  # where its sentence begins, and the article heading before it
+            begin = base + (starts[-1].end() if starts else 0)
+            article = ARTICLE_HEADING.search(text, max(0, begin - 40), begin)
+            stop = SENTENCE_END.search(text, action.end())
+            provision = printed(article.start() if article else begin, stop.end() if stop else action.end())
         citations = list(CITED.finditer(subject))
         verb = next(v for v in action.groups() if v).lower()
         for i, match in enumerate(citations):
@@ -1372,7 +1395,7 @@ def cited(versions: dict[str, list[dict]], entry: dict) -> list[dict]:
                 kind = "amends"
             end = citations[i + 1].start() if i + 1 < len(citations) else len(subject)
             refs = [_article(m.group(1)) for m in ARTICLE_REF.finditer(before)] if part else []
-            add(match, kind, _printed(subject[match.start() : end]), refs, saved=saved)
+            add(match, kind, _printed(subject[match.start() : end]), refs, saved=saved, provision=provision)
     # The preamble: the law it is made under, named straight after "Pursuant to".
     for basis in MADE_UNDER.finditer(text):
         match = CITED.match(text, basis.end())
@@ -1380,14 +1403,18 @@ def cited(versions: dict[str, list[dict]], entry: dict) -> list[dict]:
             clause = text[match.start() : match.start() + 600].split(";")[0]
             add(match, "made_under", _printed(clause), _relied_on(clause))
     # The title: "Law n° 027/2023 of 18/05/2023 amending the Law n° 66/2018 of 30/08/2018 …".
-    title = sentence_case((entry["versions"].get(language) or {}).get("title") or "")
+    heading = entry["versions"].get(language) or {}
+    title = sentence_case(heading.get("title") or "")
+    as_printed = " ".join((heading.get("title") or "").split())
+    named = {"words": as_printed, **({"page": heading["pages"][0]} if heading.get("pages") else {})}
+    named = named if len(as_printed) <= 400 else None
     citations = list(CITED.finditer(title))
     for i, match in enumerate(citations):
         before = title[citations[i - 1].end() if i else 0 : match.start()]
         kind = "repeals" if REPEALING.search(before) else "amends" if AMENDING.search(before) else None
         if kind:  # what the text says comes first: its citation is printed in full
             end = citations[i + 1].start() if i + 1 < len(citations) else len(title)
-            add(match, kind, _printed(title[match.start() : end]), only_new=True)
+            add(match, kind, _printed(title[match.start() : end]), only_new=True, provision=named)
     out = []
     for link in found.values():
         refs, saved = link.pop("refs"), link.pop("saved")
