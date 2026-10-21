@@ -1,0 +1,21 @@
+web/src/docs/content/changelog.md
+  s_d665c62e07d76f::t_28e769acb3e010 11
+web/src/docs/content/records.md
+  s_d665c62e07d76f::t_28e769acb3e010 160-162
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8aa9e7afcf11d1c6f40e9f1b7c8de28a9ebe2129",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
