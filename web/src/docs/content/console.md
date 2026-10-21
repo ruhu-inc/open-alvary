@@ -140,18 +140,20 @@ Connected apps lists every app with who connected it, when, and when it was last
 
 ## Monitor changes {#monitor}
 
-A monitor watches for changes to the records you care about: laws added, catalogue records corrected, texts published, records withdrawn. Matches arrive in an inbox in the console, and by email if you choose. Open **Monitor** and choose **New monitor**.
+A monitor watches for changes to the records you care about: laws added, catalogue records corrected, texts published, records withdrawn, and reviewed memberships of regional bodies and suspensions from them. Matches arrive in an inbox in the console, and by email if you choose. Open **Monitor** and choose **New monitor**.
 
 ![The Monitor page before any monitor exists, with New monitor](/guide/monitor-empty.webp)
 
 - {1} A name, such as "Nigeria: new and corrected laws".
-- {2} Countries to follow. Choosing none means every country; a country includes its states and local law.
-- {3} Kinds of change: **Added**, **Corrected**, **Text published**, **Withdrawn** and **Coverage**. None means every kind.
+- {2} Countries to follow. A country includes its states and local law.
+- {3} Kinds of change: **Added**, **Corrected**, **Text published**, **Withdrawn**, **Coverage**, **Membership** and **Suspension**.
 - {4} Optionally, a keyword from the title or citation.
 - {5} Email: **No email, inbox only**, a **Weekly digest**, or a **Daily digest** on every plan except Starter. On Team and above you can also share a monitor with your organisation.
 - {6} **Create monitor**.
 
 ![The New monitor form: name, countries, kinds of change, keyword, email and Create monitor](/guide/monitor-new.webp)
+
+Leave countries empty to follow every country, or kinds empty to follow every kind, but choose at least one country, record, kind or keyword: a monitor with none is refused.
 
 A monitor tells you about changes after it starts. To check your choices first, **Preview recent changes** shows what it would have matched recently.
 
