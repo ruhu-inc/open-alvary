@@ -1,0 +1,467 @@
+{
+  "jurisdiction": "ng",
+  "review_state": "unreviewed",
+  "reviewed_by": null,
+  "reviewed_on": null,
+  "reviewed_sha256": null,
+  "precedent": {
+    "binds": true,
+    "note": "The Supreme Court states that, as the final court of appeal, its decisions bind every court and all courts must follow them under stare decisis (Obiuwevbi). In Dingyadi it described lower courts as bound by precedent, and in Onyemaizu it applied a Court of Appeal decision as binding on a State High Court. Section 287 is about something else: it requires decisions of the Supreme Court and the Court of Appeal to be enforced throughout the Federation by all authorities and persons and by courts with subordinate jurisdiction. It speaks of enforcing decisions, not of following precedent, so no relation in this register rests on s. 287 alone.",
+    "sources": [
+      "sc-obiuwevbi-2011",
+      "sc-dingyadi-2011",
+      "sc-onyemaizu-2010",
+      "con-s287-1",
+      "con-s287-2"
+    ]
+  },
+  "courts": [
+    {
+      "id": "ng-sc",
+      "name": "Supreme Court of Nigeria",
+      "kind": "court",
+      "level": "apex",
+      "rank": 1,
+      "appeals_to": [],
+      "sources": [
+        "con-s6-3",
+        "con-s6-5",
+        "con-s230",
+        "con-s235",
+        "con-s233-1",
+        "con-s287-1",
+        "sc-obiuwevbi-2011"
+      ],
+      "note": "Established by s. 230(1) and listed first among the superior courts of record (s. 6(3), 6(5)(a)). It alone hears appeals from the Court of Appeal (s. 233(1)), and no appeal lies from its determinations (s. 235). Obiuwevbi calls it the final court of appeal in Nigeria."
+    },
+    {
+      "id": "ng-ca",
+      "name": "Court of Appeal",
+      "kind": "court",
+      "level": "appellate",
+      "appeals_to": [
+        "ng-sc"
+      ],
+      "sources": [
+        "con-s6-3",
+        "con-s6-5",
+        "con-s237",
+        "con-s240",
+        "con-s233-1",
+        "con-s243",
+        "con-s246-3",
+        "con-s287-2"
+      ],
+      "note": "Established by s. 237(1); superior court of record (s. 6(5)(b)). It alone hears appeals from the Federal High Court, the National Industrial Court, the FCT and State High Courts, the Sharia and Customary Courts of Appeal, and courts-martial or tribunals prescribed by Act (s. 240). Appeals lie from it to the Supreme Court (s. 233(1)), but its decisions are final in civil appeals from the National Industrial Court (s. 243(4)) and in National and State Houses of Assembly election appeals (s. 246(3))."
+    },
+    {
+      "id": "ng-fhc",
+      "name": "Federal High Court",
+      "kind": "court",
+      "level": "superior",
+      "appeals_to": [
+        "ng-ca"
+      ],
+      "sources": [
+        "con-s6-3",
+        "con-s6-5",
+        "con-s249",
+        "con-s240",
+        "con-s241-242",
+        "con-s287-3"
+      ],
+      "note": "Established by s. 249(1); superior court of record (s. 6(5)(c)). Appeals lie to the Court of Appeal (s. 240), as of right in the cases in s. 241 and otherwise with leave (s. 242)."
+    },
+    {
+      "id": "ng-nic",
+      "name": "National Industrial Court of Nigeria",
+      "kind": "court",
+      "level": "specialised",
+      "valid_from": "2011-03-04",
+      "appeals_to": [
+        "ng-ca"
+      ],
+      "sources": [
+        "con-s6-3",
+        "con-s6-5",
+        "con-s254a",
+        "con-s254c",
+        "con-s240",
+        "con-s243",
+        "gazette-third-alteration",
+        "nic-act-2006"
+      ],
+      "note": "Constitutional court under ss. 6(5)(cc) and 254A-254F, inserted by the Constitution (Third Alteration) Act, which the Official Gazette shows commencing on 4 March 2011; valid_from is that date. The court existed earlier under statute (National Industrial Court Act 2006, s. 1), which this entry does not cover. It has exclusive civil jurisdiction over labour and employment matters (s. 254C(1)). Appeals to the Court of Appeal lie as of right on Chapter IV rights questions (s. 243(2)) and in criminal matters (s. 254C(6)); otherwise only as an Act prescribes, with the Court of Appeal's leave (s. 243(3)). The Court of Appeal's decision in civil appeals from it is final (s. 243(4))."
+    },
+    {
+      "id": "ng-fct-hc",
+      "name": "High Court of the Federal Capital Territory, Abuja",
+      "kind": "court",
+      "level": "superior",
+      "appeals_to": [
+        "ng-ca"
+      ],
+      "sources": [
+        "con-s6-3",
+        "con-s6-5",
+        "con-s255",
+        "con-s240"
+      ],
+      "note": "Established by s. 255(1); superior court of record (s. 6(5)(d)). Appeals lie to the Court of Appeal (s. 240)."
+    },
+    {
+      "id": "ng-fct-sca",
+      "name": "Sharia Court of Appeal of the Federal Capital Territory, Abuja",
+      "kind": "court",
+      "level": "specialised",
+      "appeals_to": [
+        "ng-ca"
+      ],
+      "sources": [
+        "con-s6-3",
+        "con-s6-5",
+        "con-s260",
+        "con-s262",
+        "con-s240",
+        "con-s244"
+      ],
+      "note": "Established by s. 260(1); superior court of record (s. 6(5)(f)). Exercises appellate and supervisory jurisdiction in civil proceedings on Islamic personal law (s. 262). Appeals lie to the Court of Appeal (s. 240), as of right on questions of Islamic personal law it is competent to decide (s. 244(1))."
+    },
+    {
+      "id": "ng-fct-cca",
+      "name": "Customary Court of Appeal of the Federal Capital Territory, Abuja",
+      "kind": "court",
+      "level": "customary",
+      "appeals_to": [
+        "ng-ca"
+      ],
+      "sources": [
+        "con-s6-3",
+        "con-s6-5",
+        "con-s265",
+        "con-s267",
+        "con-s240"
+      ],
+      "note": "Established by s. 265(1); superior court of record (s. 6(5)(h)). Exercises appellate and supervisory jurisdiction in civil proceedings on customary law (s. 267). Appeals lie to the Court of Appeal (s. 240)."
+    },
+    {
+      "id": "ng-state-hc",
+      "name": "High Court of a State",
+      "kind": "court",
+      "level": "superior",
+      "appeals_to": [
+        "ng-ca"
+      ],
+      "sources": [
+        "con-s6-3",
+        "con-s6-5",
+        "con-s270",
+        "con-s240",
+        "con-s241-242",
+        "con-s287-3"
+      ],
+      "note": "Generic entry: s. 270(1) requires a High Court for each State; each is a superior court of record (s. 6(5)(e)). Appeals lie to the Court of Appeal (s. 240), as of right in the cases in s. 241 and otherwise with leave (s. 242)."
+    },
+    {
+      "id": "ng-state-sca",
+      "name": "Sharia Court of Appeal of a State",
+      "kind": "court",
+      "level": "specialised",
+      "appeals_to": [
+        "ng-ca"
+      ],
+      "sources": [
+        "con-s6-3",
+        "con-s6-5",
+        "con-s275",
+        "con-s277",
+        "con-s240",
+        "con-s244"
+      ],
+      "note": "Generic entry: s. 275(1) provides one for any State that requires it; superior court of record (s. 6(5)(g)). Exercises appellate and supervisory jurisdiction in civil proceedings on Islamic personal law (s. 277). Appeals lie to the Court of Appeal (s. 240), as of right on questions of Islamic personal law (s. 244(1))."
+    },
+    {
+      "id": "ng-state-cca",
+      "name": "Customary Court of Appeal of a State",
+      "kind": "court",
+      "level": "customary",
+      "appeals_to": [
+        "ng-ca"
+      ],
+      "sources": [
+        "con-s6-3",
+        "con-s6-5",
+        "con-s280",
+        "con-s282",
+        "con-s240",
+        "con-s245"
+      ],
+      "note": "Generic entry: s. 280(1) provides one for any State that requires it; superior court of record (s. 6(5)(i)). Exercises appellate and supervisory jurisdiction in civil proceedings on customary law (s. 282). Appeals lie to the Court of Appeal (s. 240), as of right on questions of customary law (s. 245(1))."
+    },
+    {
+      "id": "ng-subordinate",
+      "name": "Courts with jurisdiction subordinate to that of a High Court (magistrates', district, area and customary courts)",
+      "kind": "court",
+      "level": "subordinate",
+      "appeals_to": [],
+      "sources": [
+        "con-s6-4a",
+        "con-s6-5jk",
+        "con-sch3-pt2-6c",
+        "con-sch3-pt3-2c"
+      ],
+      "note": "Generic entry. The Constitution does not establish these courts. It allows the National Assembly and State Houses of Assembly to create courts with jurisdiction subordinate to a High Court (s. 6(4)(a), 6(5)(j)-(k)). The Third Schedule refers to magistrates and to Area, Customary and District Courts under the State Judicial Service Commissions and the FCT Judicial Service Committee. Their appeal routes are set by Acts and State Laws, which were not fetched, so none is recorded."
+    }
+  ],
+  "relations": [
+    {
+      "court": "ng-sc",
+      "bound": null,
+      "relation": "binding",
+      "sources": [
+        "sc-obiuwevbi-2011",
+        "sc-dahiru-2016"
+      ],
+      "note": "Obiuwevbi: the Supreme Court's decisions bind every court in Nigeria, and stare decisis requires all courts to follow them. Dahiru v APC: the Federal High Court and the Court of Appeal were bound by its decisions under the doctrine of precedent."
+    },
+    {
+      "court": "ng-ca",
+      "bound": "ng-state-hc",
+      "relation": "binding",
+      "sources": [
+        "sc-onyemaizu-2010"
+      ],
+      "note": "The Supreme Court held that a Court of Appeal decision (Re Appolos Udo) bound the Anambra State High Court sitting as the trial court."
+    }
+  ],
+  "sources": [
+    {
+      "id": "con-s6-3",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 6(3)"
+    },
+    {
+      "id": "con-s6-4a",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 6(4)(a)"
+    },
+    {
+      "id": "con-s6-5",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 6(5)(a)-(i), including (cc)"
+    },
+    {
+      "id": "con-s6-5jk",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 6(5)(j)-(k)"
+    },
+    {
+      "id": "con-s230",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 230(1)"
+    },
+    {
+      "id": "con-s233-1",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 233(1)"
+    },
+    {
+      "id": "con-s235",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 235"
+    },
+    {
+      "id": "con-s237",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 237(1)"
+    },
+    {
+      "id": "con-s240",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 240 (as altered by the Third Alteration Act, s. 4)"
+    },
+    {
+      "id": "con-s241-242",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "ss. 241(1), 242(1)"
+    },
+    {
+      "id": "con-s243",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 243(2)-(4)"
+    },
+    {
+      "id": "con-s244",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 244(1)"
+    },
+    {
+      "id": "con-s245",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 245(1)"
+    },
+    {
+      "id": "con-s246-3",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 246(3)"
+    },
+    {
+      "id": "con-s249",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 249(1)"
+    },
+    {
+      "id": "con-s254a",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 254A(1)"
+    },
+    {
+      "id": "con-s254c",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 254C(1), (5)-(6)"
+    },
+    {
+      "id": "con-s255",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 255(1)"
+    },
+    {
+      "id": "con-s260",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 260(1)"
+    },
+    {
+      "id": "con-s262",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 262(1)"
+    },
+    {
+      "id": "con-s265",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 265(1)"
+    },
+    {
+      "id": "con-s267",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 267"
+    },
+    {
+      "id": "con-s270",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 270(1)"
+    },
+    {
+      "id": "con-s275",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 275(1)"
+    },
+    {
+      "id": "con-s277",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 277(1)"
+    },
+    {
+      "id": "con-s280",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 280(1)"
+    },
+    {
+      "id": "con-s282",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 282(1)"
+    },
+    {
+      "id": "con-s287-1",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 287(1)"
+    },
+    {
+      "id": "con-s287-2",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 287(2)"
+    },
+    {
+      "id": "con-s287-3",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "s. 287(3) (as altered by the Third Alteration Act, s. 7)"
+    },
+    {
+      "id": "con-sch3-pt2-6c",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "Third Schedule, Part II, para. 6(c) (State Judicial Service Commission)"
+    },
+    {
+      "id": "con-sch3-pt3-2c",
+      "title": "Constitution of the Federal Republic of Nigeria 1999, updated with the 1st, 2nd, 3rd (2010), 4th (2017) and 5th (2023) Alterations (PLAC consolidated edition, third revision reprint 2024)",
+      "url": "https://placng.org/i/wp-content/uploads/2023/11/Constitution-of-the-Federal-Republic-of-Nigeria-1999-Updated.pdf",
+      "pinpoint": "Third Schedule, Part III, para. 2(c) (Judicial Service Committee of the FCT)"
+    },
+    {
+      "id": "gazette-third-alteration",
+      "title": "Federal Republic of Nigeria Official Gazette No. 20, Vol. 98 (Lagos, 7 March 2011), Government Notice No. 103: Constitution of the Federal Republic of Nigeria (Third Alteration) Act, 2010 (Act No. 3)",
+      "url": "https://archive.gazettes.africa/archive/ng/2011/ng-government-gazette-dated-2011-03-07-no-20.pdf",
+      "pinpoint": "p. A25, commencement \"4th Day of March, 2011\"; s. 6 (insertion of ss. 254A-254F); assent dated 4 March 2011"
+    },
+    {
+      "id": "nic-act-2006",
+      "title": "National Industrial Court Act 2006 (PLAC Laws of Nigeria)",
+      "url": "https://placng.org/lawsofnigeria/view2.php?sn=411",
+      "pinpoint": "s. 1(1), (3)(a)"
+    },
+    {
+      "id": "sc-obiuwevbi-2011",
+      "title": "Obiuwevbi v Central Bank of Nigeria (SC. 266/2006) [2011] NGSC 7, Supreme Court of Nigeria",
+      "url": "https://nigerialii.org/akn/ng/judgment/ngsc/2011/7/eng@2011-03-10",
+      "pinpoint": "judgment of the Court per Rhodes-Vivour JSC, under \"Whether O.H.M.B. v Garba (supra) can be followed in this case\""
+    },
+    {
+      "id": "sc-dahiru-2016",
+      "title": "Senator Umaru Dahiru v All Progressive Congress (APC) and Others (SC/67/2016) [2016] NGSC 89, Supreme Court of Nigeria",
+      "url": "https://nigerialii.org/akn/ng/judgment/ngsc/2016/89/eng@2016-12-08",
+      "pinpoint": "lead judgment per Muhammad JSC (both courts below bound by the decisions of the Supreme Court)"
+    },
+    {
+      "id": "sc-onyemaizu-2010",
+      "title": "Onyemaizu v Ojiako (SC.339/2001) [2010] NGSC 1, (2010) 1-2 SC 41, Supreme Court of Nigeria",
+      "url": "https://nigerialii.org/akn/ng/judgment/ngsc/2010/1/eng@2010-01-28",
+      "pinpoint": "lead judgment per Chukwuma-Eneh JSC, on Re Appolos Udo and Order 37 r. 5(4)"
+    },
+    {
+      "id": "sc-dingyadi-2011",
+      "title": "Dingyadi v Independent National Electoral Commission (SC.32/2010) [2011] NGSC 15, Supreme Court of Nigeria",
+      "url": "https://nigerialii.org/akn/ng/judgment/ngsc/2011/15/eng@2011-04-08",
+      "pinpoint": "ratio 1, per Adekeye JSC (pp. 57-58); ratio 24 (p. 57)"
+    }
+  ]
+}
