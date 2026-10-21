@@ -1,0 +1,32 @@
+deployment/runbook.md
+  s_d665c62e07d76f::t_0fdc1227734eaf 573-591
+clients/conformance/bodies.json
+  s_d665c62e07d76f::t_a779b45351cab3 276,342,405,445,511,551,617,680
+retrieval/router.py
+  s_d665c62e07d76f::t_a779b45351cab3 20
+  s_d665c62e07d76f::t_31190422309b6d 1,7-12
+api/openapi_docs.py
+  s_d665c62e07d76f::t_a779b45351cab3 822
+tests/test_postgres_retrieval.py
+  s_d665c62e07d76f::t_a779b45351cab3 70
+web/src/docs/content/changelog.md
+  s_d665c62e07d76f::t_d480943de8bcae 14
+web/src/docs/data/openapi.json
+  s_d665c62e07d76f::t_9562a8057f0e86 5931
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "04079891864d37d13f3f3f1ff50168cbb0017529",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
