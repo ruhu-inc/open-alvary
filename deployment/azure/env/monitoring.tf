@@ -1,6 +1,8 @@
 # Logs, the operator's alerts and the budget. Request logs never carry a query or legal text: the
-# service writes none (RSV-01), and Container Apps' console logs hold only what it writes. Log
-# Analytics keeps them 30 days; the audit seals' long-kept copy is a container (storage.tf).
+# service writes none (RSV-01), and Container Apps' console logs hold only what it writes. Front
+# Door's access and WAF logs, which would, go nowhere (frontdoor.tf), and the service sends Application
+# Insights nothing: it holds the availability test. Log Analytics keeps logs 30 days; the audit seals'
+# long-kept copy is a container (storage.tf).
 
 resource "azurerm_log_analytics_workspace" "main" {
   name                = "${local.name_prefix}-logs"

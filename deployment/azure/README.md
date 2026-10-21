@@ -61,6 +61,16 @@ Unchanged: Auth0 (sign-in), Resend (email), DNS (records change at switchover), 
   Premium (about $330 a month) and stay a hardening step. The service refuses requests that lack this
   profile's ID (`ALVARY_FRONT_DOOR_ID`, 403 `wrong_address`), so its own address is no way around the
   edge.
+- **No request logs at the edge.** Front Door's access and WAF logs record each request's full
+  address, query string included, and queries show what people are researching (RSV-01; the privacy
+  notice promises the API and MCP keep no request logs). Azure collects a resource's logs only
+  through a diagnostic setting, and Front Door has none. No setting may send its access or WAF logs
+  (or a category group, which includes them) anywhere, unless a later one first excludes or redacts
+  query strings; health probe logs and metrics carry no query. Container Apps sends Log Analytics only
+  what the service writes, never a query or a text, and the service sends Application Insights
+  nothing. `tests/test_request_logging.py` fails on a Terraform setting that would send Front Door's
+  request logs; phase 3 checks that none was added outside Terraform. On Google Cloud the same
+  entries are excluded before they are stored (`google_logging_project_exclusion.api_request_urls`).
 - **The workbench has its own database server**, apart from the public service's, as on Google
   Cloud.
 - **No vector profile is active** until a generation passes its gates (RSV-12): `vector_profile`
@@ -180,6 +190,9 @@ Each phase ends with a check, and nothing serves the public until phase 6.
      appends Front Door's). Compare what the service records with `X-Azure-ClientIP` before the
      website's throttle and admission depend on it.
    - Check: a request to the Container App's own address is refused (403 `wrong_address`).
+   - Check: Front Door has no diagnostic setting, so no request log is kept.
+     `az monitor diagnostic-settings list --resource "$(az afd profile show -g open-alvary-<env>-sc-rg
+     --profile-name open-alvary-<env>-sc-fd --query id -o tsv)"` lists none.
    - Check, once `accounts_enabled` is on: a failed job run emails the operator. Start the worker
      once with its command replaced by one that fails (`az containerapp job start` with `--image`
      set to `public_image`, `--container-name worker` and `--command false`); the email should

@@ -4,6 +4,13 @@
 # policy throttles each address on the website's own paths (D23, as Cloud Armor did: 600 a minute on
 # /site/ and /downloads/), answering 429 above it. The service refuses requests without this
 # profile's ID (ALVARY_FRONT_DOOR_ID), so its own address is no way around the edge.
+#
+# The edge keeps no request log. Front Door's access and WAF logs record each request's full address,
+# query string included, so they would keep what people search for (RSV-01, OA-A2). Azure collects them
+# only through a diagnostic setting, and none exists: no azurerm_monitor_diagnostic_setting may send
+# FrontDoorAccessLog or FrontDoorWebApplicationFirewallLog (or a category group, which includes them)
+# anywhere, unless a future one first excludes or redacts query strings. Health probe logs and metrics
+# carry no query. tests/test_request_logging.py fails on a setting that would send them.
 
 resource "azurerm_cdn_frontdoor_profile" "edge" {
   name                     = "${local.name_prefix}-fd"
