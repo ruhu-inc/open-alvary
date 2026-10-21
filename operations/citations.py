@@ -137,9 +137,9 @@ def _passage(words: str, start: int, end: int) -> str:
         lo = max(lo, start - (MAX_QUOTE - (end - start)) // 2)
         hi = min(hi, lo + MAX_QUOTE)
         lo = max(sentences[first][0], hi - MAX_QUOTE)
-        if lo > 0 and words[lo - 1] != " ":
-            lo = words.find(" ", lo) + 1
-        if hi < len(words) and words[hi] != " ":
+        if lo > 0 and words[lo - 1] != " " and words.find(" ", lo, hi) != -1:
+            lo = words.find(" ", lo, hi) + 1
+        if hi < len(words) and words[hi] != " " and words.rfind(" ", lo, hi) != -1:
             hi = words.rfind(" ", lo, hi)
         return words[lo:hi].strip()
     while True:
@@ -153,7 +153,11 @@ def _passage(words: str, start: int, end: int) -> str:
 
 
 def _trimmed(value: str) -> str:
-    return value.strip().rstrip(" ,;:.)").strip()
+    """A reading without the punctuation that ends its clause; a bracket only when nothing opened it."""
+    value = value.strip().rstrip(" ,;:.")
+    while value.endswith(")") and value.count(")") > value.count("("):
+        value = value[:-1].rstrip(" ,;:.")
+    return value
 
 
 def _candidates(words: str) -> list[tuple[int, int, list[str]]]:
@@ -166,10 +170,11 @@ def _candidates(words: str) -> list[tuple[int, int, list[str]]]:
         found.append(
             (neutral.start(), end, list(dict.fromkeys([words[neutral.start() : end], neutral.group(0)])))
         )
+    neutral = [(a, b) for a, b, _ in found]
     for cited in pinpoint.IN_TEXT.finditer(words):
         pin = words[cited.start() : cited.end()].strip()
-        if any(a <= cited.start() < b for a, b, _ in found):
-            continue
+        if any(a <= cited.start() < b for a, b in neutral):
+            continue  # "[2019] NGSC 4, para. 12" is a judgment's paragraph, read above
         # Clause boundaries: the work is read up to the end of the sentence or clause it is in.
         before = re.split(r"[;:.!?]\s", words[: cited.start()])[-1].split()[-MAX_WORDS:]
         after = re.split(r"[;:!?]\s|\.\s(?=[A-Z])", words[cited.end() :])[0].split()[:MAX_WORDS]

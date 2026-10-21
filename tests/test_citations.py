@@ -149,6 +149,24 @@ def test_a_pinpoint_that_names_no_part_proposes_the_work_and_says_why(store):
     assert found["unresolved_pinpoint"] == "not_found"
 
 
+def test_each_provision_a_sentence_cites_is_proposed_with_its_own_part(store):
+    case_law(store)
+    words = (
+        b"[1] Section 1 of the Nigeria Data Protection Act 2023 states its objective and "
+        b"Nigeria Data Protection Act 2023, s. 2(2) excludes household processing."
+    )
+    nodes = [
+        {"kind": "paragraph", "locator": "para_1", "start_byte": 0, "end_byte": len(words), "pinpoint": "[1]"}
+    ]
+    with store.engine.begin() as conn:
+        service = LegacyCatalogue(LegacyRepository(conn))
+        found = citations.propose_from(words, nodes, CITING, f"{COURT}{CITING}.pdf", service.citations)
+    assert [(p["cited_locator"], p["printed"]) for p in found] == [
+        ("sec_1", "Section 1 of the Nigeria Data Protection Act 2023"),
+        ("sec_2__subsec_2", "Nigeria Data Protection Act 2023, s. 2(2)"),
+    ]
+
+
 def test_a_long_paragraphs_proposal_quotes_the_sentences_around_its_citation():
     words = " ".join(["The facts are long."] * 80) + " Section 2(1) of the Act applies. " + "So it is. " * 40
     start = words.index("Section 2(1)")
