@@ -254,7 +254,10 @@ def test_signatories_are_read_whether_the_office_is_printed_before_or_after_the_
     }
 
 
-def test_a_law_suggests_its_record_details_from_the_text_and_the_issue():
+def read_law() -> tuple[dict, dict]:
+    """What the reader suggests for the invented law printed in issue n° 11 Bis of 16/03/2026, whose
+    English version states the language it was adopted in and when it comes into force: its details,
+    and apart from them its legal facts."""
     en = [
         "",
         "Article One: Purpose of this Law",
@@ -285,7 +288,11 @@ def test_a_law_suggests_its_record_details_from_the_text_and_the_issue():
     lines = {
         language: issue_streams[language][v["start"] : v["end"]] for language, v in entry["versions"].items()
     }
-    values, legal = RG.suggest(lines, entry, {"date": "2026-03-16", "number": 11, "bis": True})
+    return RG.suggest(lines, entry, {"date": "2026-03-16", "number": 11, "bis": True})
+
+
+def test_a_law_suggests_its_record_details_from_the_text_and_the_issue():
+    values, legal = read_law()
     assert values["identity.full_title"] == "Law n° 009/2026 of 12/03/2026 governing examples"
     assert values["identity.number.printed"] == "Law n° 009/2026" and values["identity.year"] == "2026"
     assert values["step:adopted:deputies.date"] == "2026-02-20"

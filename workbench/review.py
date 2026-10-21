@@ -38,9 +38,11 @@ class Review:
             values, absent = record["details"], record["absent"]
             if not record_view.is_view(values):  # saved under the Nigerian DETAILS-1: read it in this view
                 values, absent = record_view.from_legacy(values, absent)
-        elif place.code == "ng":
-            values, absent = record_view.from_legacy(
-                *details.initial(details.suggest(reading, act, self.library.manifest_for(act["id"])))
+        elif place.code == "ng":  # a first draft from the suggestions, without the legal facts
+            values, absent = record_view.first_draft(
+                *record_view.from_legacy(
+                    *details.initial(details.suggest(reading, act, self.library.manifest_for(act["id"])))
+                )
             )
         else:
             values = record_view.base_values(act, self.library.manifest_for(act["id"]))
