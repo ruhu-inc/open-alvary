@@ -85,6 +85,8 @@ Every record added, corrected or withdrawn, and every text published, is recorde
 - [MCP tools](/docs/api/mcp) The tools AI tools use, and how to call them yourself.
 - [Find records](/docs/search) Search by words, list by country, and resolve citations.
 - [Rights and reuse](/docs/rights) What you may do with each record and text.
+- [Follow changes](/docs/changes) Keep a copy current, or be told when the catalogue changes.
+- [Download and mirror the data](/docs/mirror) Releases, their checksums, and catching up with the change feed.
 - [Webhooks](/docs/webhooks) Signed deliveries of your monitors' matches.
 :::
 
