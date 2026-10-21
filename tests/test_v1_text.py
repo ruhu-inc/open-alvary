@@ -443,6 +443,28 @@ def test_each_edition_is_served_with_the_authority_its_record_states(store, tmp_
     assert again["language_rule"] == {"status": "unknown"}
 
 
+def test_the_mcp_tool_lists_the_same_editions_authority_and_rule(store, tmp_path):
+    import json
+
+    from api.main import create_app
+
+    publish_editions(store)
+    rest = TestClient(create_v1_app(store, tmp_path, lambda: [])).get(f"/sources/{WORK}/expressions").json()
+    client = TestClient(create_app(store, tmp_path))
+
+    def call(arguments):
+        body = {"name": "list_expressions", "arguments": arguments}
+        return client.post(
+            "/mcp", json={"jsonrpc": "2.0", "method": "tools/call", "id": 1, "params": body}
+        ).json()
+
+    result = call({"source_id": WORK})["result"]
+    assert not result["isError"] and json.loads(result["content"][0]["text"]) == rest
+    assert rest["language_rule"] == RULE and rest["items"][0]["authority"] == "authoritative"
+    assert call({"source_id": "no-such-record"})["result"]["isError"]
+    assert "error" in call({"source_id": WORK, "limit": 5})  # only the source's ID
+
+
 def test_a_date_selects_the_text_in_force_and_never_one_without_a_date():
     from datetime import date
     from types import SimpleNamespace

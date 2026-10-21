@@ -222,6 +222,7 @@ def test_mcp_needs_a_credential_and_answers_tools_within_the_access(api):
         "search_catalogue",
         "get_source",
         "get_relationships",
+        "list_expressions",
         "get_anchor",
         "search_text",
         "resolve_citation",
