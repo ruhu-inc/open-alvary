@@ -100,23 +100,8 @@ class DocAIReader:
             workers=self.workers,
             pages_per_request=self.pages_per_request,
         )
-        nodes, count = result["nodes"], page_count(pdf)
-        pages = []
-        for number in range(1, count + 1):
-            mine = [node for node in nodes if node["page"] == number]
-            pages.append(
-                {
-                    "page": number,
-                    "text": layout_parser.page_text(mine, number),
-                    "tables": [
-                        [[cell["text"] for cell in row] for row in node["header_rows"] + node["body_rows"]]
-                        for node in mine
-                        if node["kind"] == "table"
-                    ],
-                    "furniture": [node["text"] for node in mine if node["kind"] == "furniture"],
-                    "nodes": mine,
-                }
-            )
+        count = page_count(pdf)
+        pages = layout_pages(result["nodes"], count)
         return Reading(
             self.name,
             self.version(),
@@ -124,6 +109,28 @@ class DocAIReader:
             count,
             {"layout": result["layout"], "retries": result["retries"]},
         )
+
+
+def layout_pages(nodes: list[dict], count: int) -> list[dict]:
+    """The Layout Parser's nodes as a reading's pages, 1 to ``count``: each page's text, tables,
+    furniture and nodes."""
+    pages = []
+    for number in range(1, count + 1):
+        mine = [node for node in nodes if node["page"] == number]
+        pages.append(
+            {
+                "page": number,
+                "text": layout_parser.page_text(mine, number),
+                "tables": [
+                    [[cell["text"] for cell in row] for row in node["header_rows"] + node["body_rows"]]
+                    for node in mine
+                    if node["kind"] == "table"
+                ],
+                "furniture": [node["text"] for node in mine if node["kind"] == "furniture"],
+                "nodes": mine,
+            }
+        )
+    return pages
 
 
 # --- Document AI Enterprise OCR (scanned pages: words with their places) ---------------------
