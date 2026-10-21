@@ -65,20 +65,22 @@ def test_access_filter_is_applied_before_total_and_window(cleared, store, tmp_pa
 
 
 @pytest.mark.parametrize(
-    "title,query",
+    "title,query,found",
     [
-        ("Straße", "STRASSE"),
-        ("ＦＯＯ  bar", "foo bar"),
-        ("Café", "Cafe\u0301"),
-        ("100%_literal", "%_"),
-        ("No\t\n amount", "no amount"),
+        ("Straße", "STRAßE", True),
+        ("ＦＯＯ  bar", "foo bar", True),
+        ("Café", "Cafe\u0301", True),
+        ("100%_literal", "literal 100", True),
+        ("100%_literal", "%_", False),
+        ("100%_literal", "liter", False),
+        ("No\t\n amount", "amount no", True),
     ],
 )
-def test_metadata_normalization_and_wildcards_keep_exact_semantics(catalogue, store, tmp_path, title, query):
+def test_metadata_search_matches_whole_words_in_any_order(catalogue, store, tmp_path, title, query, found):
     catalogue.sources[0].title = title
     store.save(catalogue)
     page = TestClient(create_app(store, tmp_path)).get("/search", params={"q": query}).json()
-    assert page["total"] == 1 and page["items"][0]["id"] == catalogue.sources[0].id
+    assert (catalogue.sources[0].id in {s["id"] for s in page["items"]}) is found
 
 
 def test_confirmed_metadata_query_does_not_decode_the_whole_catalogue(

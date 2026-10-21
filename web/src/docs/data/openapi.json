@@ -1953,7 +1953,7 @@
               "maxLength": 200,
               "title": "Q"
             },
-            "description": "Words to find, 1 to 200 characters. Case and spacing don't matter."
+            "description": "Words to find, 1 to 200 characters. Case, punctuation and spacing don't matter."
           },
           {
             "name": "jurisdiction",
@@ -2086,7 +2086,7 @@
             }
           }
         },
-        "description": "Records whose title or citation contains the words, or whose cleared full text does, a page at a time. Without `jurisdiction`, a search covers your plan's countries.",
+        "description": "Records with every one of the words in their title, citation or summary, or in one part of their cleared full text, a page at a time in record ID order. Whole words only, in any order: `invest` doesn't find the Investments and Securities Act. Without `jurisdiction`, a search covers your plan's countries.",
         "tags": [
           "Catalogue"
         ]
@@ -6156,6 +6156,15 @@
             "title": "Scope",
             "default": "Catalogue metadata and cleared full text only",
             "description": "What a search covers: catalogue metadata and cleared full text only."
+          },
+          "notices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notices",
+            "default": [],
+            "description": "Present when there is something to know about this search: published texts were not searched (the section index is being built, or that search took too long), or the query has no letters or digits to match."
           }
         },
         "additionalProperties": false,

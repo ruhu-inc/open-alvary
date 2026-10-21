@@ -17,7 +17,7 @@ description: Answers to common questions, and how to reach us.
 
 ## Answers
 
-**Why is a search empty?** Search finds your words as a phrase, in order. Try fewer words, or leave out `jurisdiction`. Records outside your plan's countries still answer, at the Starter rate. See [Find records](/docs/search).
+**Why is a search empty?** Search needs every word, and whole words: `invest` doesn't find `Investments`. Try fewer or complete words, or leave out `jurisdiction`. Records outside your plan's countries still answer, at the Starter rate. See [Find records](/docs/search).
 
 **Why is there no text for a record?** Texts are served only once their rights are cleared and a reviewer has checked them against the official file. The record links the official source in `canonical_url`. See [Rights and reuse](/docs/rights).
 

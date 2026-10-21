@@ -1221,6 +1221,14 @@
           "default": "Catalogue metadata and cleared full text only",
           "title": "Scope",
           "type": "string"
+        },
+        "notices": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Notices",
+          "type": "array"
         }
       },
       "required": [

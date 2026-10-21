@@ -2,7 +2,7 @@
   {
     "name": "search_catalogue",
     "title": "Search the catalogue",
-    "description": "Search catalogued legal sources by words in their title, citation or cleared full text. Returns metadata, rights status and official links.",
+    "description": "Search catalogued legal sources by words in their title, citation or summary, or in one part of their cleared full text. Every word must match a whole word, in any order. Returns metadata, rights status and official links.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -10,7 +10,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 200,
-          "description": "Words to find, such as a title, a citation or a phrase. Case doesn't matter."
+          "description": "Words to find, such as a title or a citation. Every word must appear; case and punctuation don't matter."
         },
         "limit": {
           "type": "integer",

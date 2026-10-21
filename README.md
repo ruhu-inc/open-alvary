@@ -225,9 +225,10 @@ repair. This synthetic local workflow does not activate production acquisition o
 
 Catalogue HTTP handlers delegate to `api.catalogue` services and transaction-scoped
 repositories in `api.repositories`. Source lists apply metadata permission before SQL
-pagination; single-source reads use bounded lookups. Search and coverage scan permitted
-metadata in 100-row windows, preserving the pilot substring-search contract without
-loading a private whole corpus. Policy headers are checked before approved canonical
+pagination; single-source reads use bounded lookups. Search matches whole words, never part of a
+word or a substring (G11): a record's title, citation and summary from a word index, and its published
+text from the section index. Coverage scans permitted metadata in 100-row windows without loading a
+private whole corpus. Policy headers are checked before approved canonical
 bytes are selected. The wire DTOs are deeply immutable and published in
 `schema/public.schema.json` (`pilot-public-1`, serialization schema); JSON fields and
 existing source URLs remain compatible. Target metadata paging uses only the eligible
@@ -708,12 +709,14 @@ empty/older schemas, and `--fresh-postgres` forces fresh migration for every cas
 mandatory PostgreSQL steps separately and verifies installed SQL definitions. Tests create/remove
 only their random `oa_*_test` databases; the configured test database and other projects are untouched.
 
-Migration `0012` adds an expression GIN/trigram index over normalized ASCII catalogue metadata.
-SQL counts/orders/pages confirmed matches; Unicode and eligible full-text candidates retain exact
-Python checks with a declared 10,000-candidate fallback bound. Rights are checked before text loads.
-There is no retained search copy of private canonical text. An older schema keeps the bounded
-legacy fallback while upgrading. `pg_trgm` is a standard PostgreSQL extension; downgrade removes
-only an extension introduced by this migration and refuses changed ownership/dependencies.
+Migration `0012` added an expression GIN/trigram index over normalized ASCII catalogue metadata; since
+migration `0038` no search uses it. `0038` indexes the words of each source's title, citation and
+summary (PostgreSQL `simple` analysis in NFKC, punctuation read as spaces), and catalogue search reads
+its matches from that index and from the section index of published texts (at most 10,000 records by
+text); SQL counts, orders and pages them. SQLite, the metadata-only pilot, compares the same words in
+Python. There is no retained search copy of private canonical text. `pg_trgm` is a standard PostgreSQL
+extension; downgrade removes only an extension introduced by `0012` and refuses changed
+ownership/dependencies.
 Same-day release IDs such as `2026-10-07.1` and `.2` are accepted, alongside unchanged date-only links.
 Each revision is immutable and current withdrawal checks still apply to listings and downloads.
 
