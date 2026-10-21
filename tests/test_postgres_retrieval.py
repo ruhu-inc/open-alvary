@@ -21,7 +21,7 @@ from changes.record import namespace
 from operations import courts as review_cli
 from operations import publish
 from schema.models import Authority, Corpus, Jurisdiction, Language, RightsRecord, Source
-from workbench import publication
+from workbench import publication, structure
 
 pytestmark = pytest.mark.postgres
 
@@ -342,8 +342,11 @@ OHADA_REGISTER = {
 }  # fmt: skip
 
 
-def publish_judgment(store, jurisdiction, court, court_name, work, citation, paragraphs):
-    """A judgment of ``court`` published through operations.publish, as tests/test_judgment_structure."""
+def publish_judgment(store, monkeypatch, jurisdiction, court, court_name, work, citation, paragraphs):
+    """A judgment of ``court`` published through operations.publish, as tests/test_judgment_structure.
+    Judgment structure rules are written for Nigeria only (TXP-03): the test lends them to this
+    jurisdiction."""
+    monkeypatch.setitem(structure.RULES, (jurisdiction, "judgment"), structure.JUDGMENT)
     store.save(
         Corpus(
             jurisdictions=[Jurisdiction(id=jurisdiction, name=jurisdiction, country_code=jurisdiction[:2].upper(),
@@ -389,7 +392,7 @@ def test_a_decisions_unit_says_how_its_court_bears_on_other_courts_once_its_regi
     folder = tmp_path / "courts"
     folder.mkdir()
     monkeypatch.setattr(courts, "COURTS", folder)
-    publish_judgment(store, "ke", "ke-hc", "High Court of Kenya", "ke-hc-2019-5", "[2019] KEHC 5",
+    publish_judgment(store, monkeypatch, "ke", "ke-hc", "High Court of Kenya", "ke-hc-2019-5", "[2019] KEHC 5",
                      ["[1] The appellant was convicted of handling stolen goods.", "[2] The appeal fails."])  # fmt: skip
     # No register: the court is not known, and nothing is answered.
     plain = authority(retrieve(client, "handling stolen goods", jurisdiction="ke"))
@@ -418,7 +421,7 @@ def test_a_ccja_decision_binds_member_states_courts_on_the_uniform_acts_only(
     monkeypatch.setattr(courts, "COURTS", folder)
     reviewed = review_cli.review(OHADA_REGISTER, "Test Reviewer", date(2026, 10, 1))
     (folder / "aa-ohada.json").write_text(json.dumps(reviewed))
-    publish_judgment(store, "aa-ohada", "aa-ohada-ccja", "Common Court of Justice and Arbitration",
+    publish_judgment(store, monkeypatch, "aa-ohada", "aa-ohada-ccja", "Common Court of Justice and Arbitration",
                      "aa-ohada-ccja-2020-1", "CCJA 2020-1",
                      ["[1] The Uniform Act on commercial companies applies to the share transfer."])  # fmt: skip
     found = authority(retrieve(client, "share transfer commercial companies", jurisdiction="aa-ohada"))
