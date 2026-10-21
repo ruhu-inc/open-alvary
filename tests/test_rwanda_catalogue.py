@@ -852,6 +852,7 @@ def test_a_manifest_entry_is_light_and_its_details_go_beside_it():
         "title": "Law n° 1/2001",
         "summary": {"pages": 6, "flags": {"high": 1, "medium": 2, "low": 0}},
         "suggested": {"identity.number": "1/2001"},
+        "suggested_legal": {"status.legal": {"value": "in_force", "page": None, "evidence": "Listed."}},
         "issue": {"name": "OG n° 1"},
         "alignment": {"aligned": True},
         "also_printed_as": None,
@@ -863,7 +864,7 @@ def test_a_manifest_entry_is_light_and_its_details_go_beside_it():
         "page_count": 6,
         "flag_counts": {"high": 1, "medium": 2, "low": 0},
     }
-    assert set(details) == {"suggested", "issue", "alignment"}
+    assert set(details) == {"suggested", "suggested_legal", "issue", "alignment"}
 
 
 def test_a_prepare_task_notes_a_file_it_cannot_prepare_and_goes_on(monkeypatch, capsys):
