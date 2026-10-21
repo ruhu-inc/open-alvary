@@ -11,9 +11,10 @@ Ranking (oa-rank-1) is PostgreSQL's cover density, ts_rank_cd with normalisation
 headings (weight 1.0), its words (0.4), its work's title (0.2) and identifiers (0.1): its citation and
 pinpoint. A text no longer in force (its record is repealed, superseded or historical, or a later
 published text of the same record replaces it) scores 0.8 of that. Ties go to the version, then the
-earlier unit. English texts are analysed in English and French texts in French (stemming and common
-words; tests/test_postgres_search.py); every other language word for word (simple) until it passes
-the language tests.
+earlier unit. English, French, Portuguese and Spanish texts are analysed in their language (stemming
+and common words), Arabic texts by their stems (PostgreSQL has no Arabic list of common words), each
+with its tests in tests/test_postgres_search.py; every other language word for word (simple), Kiswahili
+among them (PostgreSQL has no analysis for it), until an analysis for it passes the language tests.
 
 Beside the provisions, each published text has one document unit (RSV-02, migration 0034) for questions
 about a whole law: its work's title (weight 1.0), its long title or preamble (0.4, the unit's quotable
@@ -38,10 +39,11 @@ from api import pinpoint
 from api.store import tables
 from schema.public import NodeViewRecord, VersionViewRecord
 
-ANALYZER = "oa-search-4"  # a new value rebuilds every unit at the next publication
+ANALYZER = "oa-search-5"  # a new value rebuilds every unit at the next publication
 RANKING = "oa-rank-1"
-CONFIGS = {"en": "english", "fr": "french"}  # every other language: simple (MIN-02)
-ANALYSES = ("english", "french", "simple")  # the configs a unit may have (migration 0033)
+# PostgreSQL 16's own configurations; every other language: simple (MIN-02)
+CONFIGS = {"en": "english", "fr": "french", "pt": "portuguese", "es": "spanish", "ar": "arabic"}
+ANALYSES = (*CONFIGS.values(), "simple")  # the configs a unit may have (migration 0038)
 WEIGHTS = "{0.1, 0.2, 0.4, 1.0}"  # D identifiers, C the work's title, B words, A headings
 NOT_IN_FORCE = 0.8
 MAX_UNIT_BYTES = 64 * 1024
@@ -61,6 +63,17 @@ MIN_NAME = 4  # shorter names (and single letters) are never matched inside a qu
 
 def config_for(language: str) -> str:
     return CONFIGS.get(language.split("-")[0].casefold(), "simple")
+
+
+def word_for_word(languages) -> list[str]:
+    """A notice for each language whose texts are matched word for word (the simple fallback, MIN-02):
+    search results and evidence packs say so (RSV-03)."""
+    return [
+        f"Texts in {language} are matched word for word (no stemming or common words) until the language "
+        "passes the search tests."
+        for language in languages
+        if config_for(language) == "simple"
+    ]
 
 
 @dataclass(frozen=True)

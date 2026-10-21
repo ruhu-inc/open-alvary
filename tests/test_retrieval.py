@@ -357,3 +357,15 @@ def test_the_retrieval_job_runs_each_step_and_reports_one_that_fails(monkeypatch
     # The application changed, so it is deployed; the failing sync is reported; embedding still runs.
     assert calls == ["ensure", "deploy", "work"]
     assert report["engine"] == {"error": "ConnectionError"} and report["embeddings"] == {"done": 0}
+
+
+def test_each_language_matched_word_for_word_has_a_notice():
+    from api.text_index import word_for_word
+
+    assert word_for_word(["en", "fr", "pt", "es", "ar"]) == []
+    assert word_for_word(["ar", "sw", "rw-RW"]) == [
+        "Texts in sw are matched word for word (no stemming or common words) until the language passes the "
+        "search tests.",
+        "Texts in rw-RW are matched word for word (no stemming or common words) until the language passes "
+        "the search tests.",
+    ]

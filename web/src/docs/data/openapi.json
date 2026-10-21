@@ -4618,7 +4618,7 @@
           "analyzer": {
             "type": "string",
             "title": "Analyzer",
-            "description": "The text analysis, such as `oa-search-4`."
+            "description": "The text analysis, such as `oa-search-5`."
           },
           "engine": {
             "anyOf": [
@@ -7025,7 +7025,7 @@
             },
             "type": "object",
             "title": "Analysis",
-            "description": "How each language's texts are matched: `english` (stemming and common words) or `simple` (word for word)."
+            "description": "How each language's texts are matched: `english`, `french`, `portuguese` or `spanish` (by word stems, common words left out), `arabic` (by word stems, every word kept) or `simple` (word for word)."
           },
           "analyzer": {
             "type": "string",

@@ -161,6 +161,28 @@ def test_a_long_unit_is_an_excerpt_within_the_byte_budget(store, client):
     assert "context" not in unit and pack["bytes"]["unique"] <= 4096
 
 
+def test_a_pack_says_which_languages_it_matched_word_for_word(store, client):
+    # RSV-03 and MIN-02: a language without an analysis (Kiswahili) is matched word for word and the
+    # pack says so; an analysed one (Portuguese) is matched by its stems without the notice, and the
+    # analyzer that did it is in the pack's revisions.
+    kiswahili = [{"kind": "paragraph", "text": "1. Wafanyakazi wana haki ya mikataba ya maandishi."}]
+    _, _, nodes = publish_act(store, kiswahili, work="ng-sheria-mfano-2023", title="Sheria ya Mfano, 2023",
+                              language="sw")  # fmt: skip
+    pack = retrieve(client, "haki ya mikataba")
+    assert pack["evidence"][0]["anchor_id"] == nodes["sec_1"].id
+    assert pack["revisions"]["analyzer"] == "oa-search-5" and pack["coverage"]["notices"] == [
+        "Texts in sw are matched word for word (no stemming or common words) until the language passes "
+        "the search tests."
+    ]
+    assert not [u for u in retrieve(client, "mkataba")["evidence"] if u["unit"] == "provision"]
+    portuguese = [{"kind": "paragraph", "text": "1. Os trabalhadores têm direito a contratos escritos."}]
+    _, _, nodes = publish_act(store, portuguese, work="ng-lei-exemplo-2023", title="Lei exemplo, 2023",
+                              language="pt")  # fmt: skip
+    stemmed = retrieve(client, "trabalhador contrato", language="pt")
+    assert stemmed["evidence"][0]["anchor_id"] == nodes["sec_1"].id
+    assert not any("Texts in pt" in n for n in stemmed["coverage"]["notices"])
+
+
 def test_a_withdrawn_text_vanishes_from_retrieval_and_the_check(store, client):
     _, version, nodes = publish_act(store, UNITS)
     anchor = nodes["sec_1"]
