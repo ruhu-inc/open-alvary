@@ -3,6 +3,7 @@ three languages. The pages are built here, word by word, in the layout the Gazet
 and its numbers are invented."""
 
 from ingestion import rw_gazette as RG
+from schema.jurisdictions import registry
 
 WIDTH, HEIGHT = 842.0, 595.0
 COLUMNS = [(70.0, 290.0), (300.0, 520.0), (530.0, 770.0)]
@@ -300,6 +301,12 @@ def test_a_law_suggests_its_record_details_from_the_text_and_the_issue():
     assert values["step:promulgated.person"] == "EXAMPLE Name, President of the Republic"
     assert "issued_by" not in values  # no enacting words printed here: never taken from the kind
     assert values["publication.date"] == "2026-03-16" and values["publication.number"] == "11 Bis"
+    # The Gazette's publisher as Rwanda's reviewed profile names it, not typed in the reader.
+    [gazette] = registry()["rw"].gazettes
+    assert values["publication.publisher"] == gazette.publisher
+    assert (
+        gazette.publisher == "Ministry of Justice, Quality Assurance and Official Gazette Directorate General"
+    )
     assert values["text.summary.text"] == "This Law governs examples."
     # Legal facts are suggested apart, each with the words that state it and their page; the record's
     # own fields stay empty until a reviewer chooses (owner decision 2026-10-21).

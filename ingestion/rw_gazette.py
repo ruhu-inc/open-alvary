@@ -17,13 +17,15 @@ import statistics
 import unicodedata
 from bisect import bisect_right
 from collections import Counter
+from functools import cache
 from itertools import accumulate, pairwise
 
 from ingestion import gazette_layout
+from schema.jurisdictions import registry
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-21.3"  # a repealing law's own words carried to the law it repeals
+PIPELINE = "2026-10-21.4"  # the Gazette's publisher as Rwanda's profile names it
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -1501,6 +1503,17 @@ def stated(paragraphs: list[dict], pattern: re.Pattern, stops: tuple[str, ...] =
     return None
 
 
+GAZETTE = "Official Gazette of the Republic of Rwanda"
+
+
+@cache
+def gazette_publisher() -> str | None:
+    """The Gazette's publisher as Rwanda's reviewed jurisdiction profile names it (schema/jurisdictions.json),
+    never typed here a second time."""
+    profile = registry()["rw"]
+    return next((g.publisher for g in profile.gazettes if g.name == GAZETTE), None)
+
+
 def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[dict, dict, dict]:
     """Details of the record read from the instrument as printed: its title, number and dates, who
     adopted it and the sittings that did, who promulgated, countersigned and sealed it, the date it was
@@ -1577,12 +1590,12 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
             if values["identity.family"] in ("legislation", "constitution"):
                 legal["profile.commencement"] = {"value": "on_publication", **in_force}
     values["publication.kind"] = "gazette"
-    values["publication.name"] = "Official Gazette of the Republic of Rwanda"
+    values["publication.name"] = GAZETTE
     edition = "Special" if issue.get("special") else str(issue.get("number") or "")
     edition += " Bis" if issue.get("bis") else (" Ter" if issue.get("ter") else "")
     if edition.strip():
         values["publication.number"] = edition.strip()
-    values["publication.publisher"] = "Ministry of Justice"
+    values["publication.publisher"] = gazette_publisher()
     values["text.form"] = "gazette_publication"
     values["expressions"] = [
         {"language": language, "script": "Latn", "direction": "ltr"}
