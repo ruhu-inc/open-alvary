@@ -1,4 +1,6 @@
 #cloud-config
+# The embedder takes a whole input of its model's length in one batch (Qwen3-Embedding: 32,768 tokens; the
+# server's default 16,384 refuses to start), so no text is ever cut short.
 # The inference machine: Docker with NVIDIA's container toolkit, and the two models as services. Each
 # waits for the GPU driver (installed by Azure's extension), then serves on the private address only.
 package_update: true
@@ -6,7 +8,7 @@ package_upgrade: true
 packages: [docker.io, curl, gnupg, unattended-upgrades]
 
 write_files:
-%{ for name, spec in { embedder = { model = embedder.model, revision = embedder.revision, port = 8080 }, reranker = { model = reranker.model, revision = reranker.revision, port = 8081 } } ~}
+%{ for name, spec in { embedder = { model = embedder.model, revision = embedder.revision, port = 8080, args = "--max-batch-tokens 32768" }, reranker = { model = reranker.model, revision = reranker.revision, port = 8081, args = "" } } ~}
   - path: /etc/systemd/system/${name}.service
     content: |
       [Unit]
@@ -18,7 +20,7 @@ write_files:
       ExecStartPre=-/usr/bin/docker rm -f ${name}
       ExecStart=/usr/bin/docker run --rm --name ${name} --gpus all \
         -p ${ip}:${spec.port}:80 -v /var/models:/data ${image} \
-        --model-id ${spec.model} --revision ${spec.revision}
+        --model-id ${spec.model} --revision ${spec.revision} ${spec.args}
       ExecStop=/usr/bin/docker stop -t 30 ${name}
       Restart=always
       RestartSec=30
