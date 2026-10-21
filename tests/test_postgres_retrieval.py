@@ -4,6 +4,7 @@ and the explanation of their position, within the byte budget; /currentness conf
 
 import hashlib
 import json
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,10 +13,15 @@ from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
 from test_v1_text import RULE, STATED, UNITS, WORK, publish_act, publish_editions, withdraw
 
+from api import courts
 from api.main import create_app
 from api.store import Store
 from api.v1 import create_v1_app
 from changes.record import namespace
+from operations import courts as review_cli
+from operations import publish
+from schema.models import Authority, Corpus, Jurisdiction, Language, RightsRecord, Source
+from workbench import publication
 
 pytestmark = pytest.mark.postgres
 
@@ -301,3 +307,127 @@ def test_citations_as_people_write_them_pages_and_addresses_find_their_parts(sto
     official = retrieve(client, str(version.canonical_url))
     assert official["query"]["routes"] == ["link"] and official["evidence"][0]["unit"] == "document"
     assert retrieve(client, "https://example.org/not-a-law.pdf")["evidence"] == []
+
+
+# --- a decision's court (CPR-04) ----------------------------------------------------------------------
+
+COURT_SOURCE = {"id": "act", "title": "Synthetic Judicature Act", "url": "https://example.org/judicature.pdf"}
+# Test data only, reviewed as a reviewer would with operations.courts: a real register is entered from
+# its official sources (ingestion/courts).
+KE_REGISTER = {
+    "jurisdiction": "ke",
+    "review_state": "unreviewed",
+    "precedent": {"binds": True, "note": "Synthetic: higher courts bind lower ones.", "sources": ["act"]},
+    "courts": [
+        {"id": "ke-hc", "name": "High Court of Kenya", "level": "superior", "sources": ["act"]},
+        {"id": "ke-mc", "name": "Magistrates' Courts", "level": "subordinate", "appeals_to": ["ke-hc"],
+         "sources": ["act"]},
+    ],
+    "relations": [{"court": "ke-hc", "bound": "ke-mc", "relation": "binding", "sources": ["act"]}],
+    "sources": [COURT_SOURCE],
+}  # fmt: skip
+OHADA_REGISTER = {
+    "jurisdiction": "aa-ohada",
+    "review_state": "unreviewed",
+    "precedent": {"binds": True, "note": "Synthetic: the treaty gives rulings that force.", "sources": ["act"]},
+    "courts": [{"id": "aa-ohada-ccja", "name": "Common Court of Justice and Arbitration", "level": "regional",
+                "sources": ["act"]}],
+    "matters": [{"id": "uniform-acts", "name": "The Uniform Acts and regulations", "sources": ["act"]}],
+    "relations": [{"court": "aa-ohada-ccja", "members": True, "matter": "uniform-acts", "relation": "binding",
+                   "sources": ["act"]}],
+    "members": [{"state": "sn", "sources": ["act"]}],
+    "member_routes": [{"court": "aa-ohada-ccja", "kind": "cassation", "matter": "uniform-acts",
+                       "sources": ["act"]}],
+    "sources": [COURT_SOURCE],
+}  # fmt: skip
+
+
+def publish_judgment(store, jurisdiction, court, court_name, work, citation, paragraphs):
+    """A judgment of ``court`` published through operations.publish, as tests/test_judgment_structure."""
+    store.save(
+        Corpus(
+            jurisdictions=[Jurisdiction(id=jurisdiction, name=jurisdiction, country_code=jurisdiction[:2].upper(),
+                                        languages=["en"])],
+            authorities=[Authority(id=court, jurisdiction_id=jurisdiction, name=court_name, kind="court",
+                                   official_url="https://example.org/court/")],
+            languages=[Language(id="en", name="English", tag="en")],
+            sources=[Source(id=work, jurisdiction_id=jurisdiction, authority_id=court, title=citation,
+                            document_type="judgment", canonical_url=f"https://example.org/court/{work}.pdf",
+                            citation=citation, language="en")],
+            rights=[RightsRecord(id=f"rights-{work}", source_id=work, metadata_public=True,
+                                 metadata_basis="Independently authored catalogue entry")],
+        )
+    )  # fmt: skip
+    now = datetime.now(UTC).replace(microsecond=0)
+    decision = {
+        "document_types": ["judgment"], "rights_holder": "Synthetic test rights holder",
+        "licence": "Synthetic test decision", "licence_url": None, "attribution_required": False,
+        "attribution_text": None, "database_rights_notes": "None claimed.", "privacy_status": "cleared",
+        "basis": "Synthetic test judgment.", "evidence": ["https://example.org/decision"],
+        "decided_by": "Test Reviewer", "decided_at": (now - timedelta(minutes=1)).isoformat(),
+        "expires_at": (now + timedelta(days=365)).isoformat(),
+    }  # fmt: skip
+    units = [{"kind": "heading", "text": "JUDGMENT"}] + [{"kind": "paragraph", "text": p} for p in paragraphs]
+    text = publication.build({"id": work, "jurisdiction": jurisdiction, "type": "judgment"},
+                             [{"page": 1, "units": units}])  # fmt: skip
+    item = publish.ApprovedText(
+        document_id=work, work=work, language="en", document_type="judgment", text=text,
+        approver="Test Reviewer", approved_at=now - timedelta(minutes=5),
+        provenance={"url": f"https://example.org/court/{work}.pdf", "retrieved_at": "2026-10-09T06:41:17+00:00",
+                    "sha256": "7" * 64},
+    )  # fmt: skip
+    assert publish.publish_texts(store, jurisdiction, publish.Texts(approved=[item]), decision)["published"]
+
+
+def authority(pack):
+    return next(u for u in pack["evidence"] if u["unit"] == "provision")["authority"]
+
+
+def test_a_decisions_unit_says_how_its_court_bears_on_other_courts_once_its_register_is_reviewed(
+    store, client, tmp_path, monkeypatch
+):
+    folder = tmp_path / "courts"
+    folder.mkdir()
+    monkeypatch.setattr(courts, "COURTS", folder)
+    publish_judgment(store, "ke", "ke-hc", "High Court of Kenya", "ke-hc-2019-5", "[2019] KEHC 5",
+                     ["[1] The appellant was convicted of handling stolen goods.", "[2] The appeal fails."])  # fmt: skip
+    # No register: the court is not known, and nothing is answered.
+    plain = authority(retrieve(client, "handling stolen goods", jurisdiction="ke"))
+    assert plain == {"document_type": "judgment", "court_relation": "unknown"}
+    # A proposal awaiting review: the court is named, its bearing is not answered.
+    (folder / "ke.json").write_text(json.dumps(KE_REGISTER))
+    proposed = authority(retrieve(client, "handling stolen goods", jurisdiction="ke"))
+    assert proposed["court"] == {"id": "ke-hc", "name": "High Court of Kenya", "jurisdiction": "ke",
+                                 "review_state": "unreviewed", "bears_on": []}  # fmt: skip
+    # Reviewed: the High Court's decision binds a Kenyan magistrate's court, on the register's evidence.
+    reviewed = review_cli.review(KE_REGISTER, "Test Reviewer", date(2026, 10, 1))
+    (folder / "ke.json").write_text(json.dumps(reviewed))
+    found = authority(retrieve(client, "handling stolen goods", jurisdiction="ke"))
+    assert found["court_relation"] == "unknown"  # its bearing on Kenya's courts generally is not recorded
+    assert found["court"]["review_state"] == "reviewed" and found["court"]["reviewed_on"] == "2026-10-01"
+    assert found["court"]["bears_on"] == [
+        {"court": "ke-mc", "relation": "binding", "evidence": ["https://example.org/judicature.pdf"]}
+    ]
+
+
+def test_a_ccja_decision_binds_member_states_courts_on_the_uniform_acts_only(
+    store, client, tmp_path, monkeypatch
+):
+    folder = tmp_path / "courts"
+    folder.mkdir()
+    monkeypatch.setattr(courts, "COURTS", folder)
+    reviewed = review_cli.review(OHADA_REGISTER, "Test Reviewer", date(2026, 10, 1))
+    (folder / "aa-ohada.json").write_text(json.dumps(reviewed))
+    publish_judgment(store, "aa-ohada", "aa-ohada-ccja", "Common Court of Justice and Arbitration",
+                     "aa-ohada-ccja-2020-1", "CCJA 2020-1",
+                     ["[1] The Uniform Act on commercial companies applies to the share transfer."])  # fmt: skip
+    found = authority(retrieve(client, "share transfer commercial companies", jurisdiction="aa-ohada"))
+    assert found["court"]["jurisdiction"] == "aa-ohada"
+    assert found["court"]["bears_on"] == [{"court": None, "members": True, "matter": "uniform-acts",
+                                          "relation": "binding", "evidence": [COURT_SOURCE["url"]]}]  # fmt: skip
+    # Binding only on that matter: without the question's matter, the general answer stays unknown.
+    assert found["court_relation"] == "unknown"
+    register = courts.load("aa-ohada")
+    assert courts.relation(register, "aa-ohada-ccja", "sn", matter="uniform-acts") == "binding"
+    assert courts.relation(register, "aa-ohada-ccja", "sn") == "unknown"
+    assert courts.relation(register, "aa-ohada-ccja", "ke", matter="uniform-acts") == "unknown"

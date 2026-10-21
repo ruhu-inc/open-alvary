@@ -458,11 +458,23 @@ class Retriever:
             return None
         return [_hit(row) for row, _distance in found]
 
+    def _register(self, jurisdiction: str):
+        from api.courts import load
+
+        if jurisdiction not in self._registers:
+            try:
+                self._registers[jurisdiction] = load(jurisdiction)
+            except ValueError:
+                self._registers[jurisdiction] = None
+        return self._registers[jurisdiction]
+
     def _courts(self, candidates: list[Candidate], filters) -> None:
         """Each decision's court relation to the jurisdiction asked about (CPR-04): its own jurisdiction's
-        when the query names none or several. The court is the record's issuing authority."""
-        from api.courts import load, relation
+        when the query names none or several, on ``as_of`` or today. The court is the record's issuing
+        authority; a regional or continental court's register answers for a member state's courts."""
+        from api.courts import answering, evidence_court, relation
 
+        on = filters.as_of or self.today
         for candidate in candidates:
             if candidate.hit.document_type != "judgment":
                 continue
@@ -476,15 +488,13 @@ class Retriever:
                 else None
             )
             asked = asked or source.jurisdiction_id
-            if asked not in self._registers:
-                try:
-                    self._registers[asked] = load(asked)
-                except ValueError:
-                    self._registers[asked] = None
-            register = self._registers[asked]
-            candidate.court_relation = (
-                relation(register, source.authority_id, asked) if register else "unknown"
-            )
+            court = source.authority_id
+            register = answering(court, source.jurisdiction_id, asked, self._register, on)
+            if register is None:
+                candidate.court_relation = "unknown"
+                continue
+            candidate.court_relation = relation(register, court, asked, on=on)
+            candidate.court = evidence_court(register, court, on)
 
     def _expand(self, fused: list[Candidate], filters) -> list[Candidate]:
         """RSV-06 with a reranker: the provisions of the same text that the first seeds refer to by number
@@ -831,6 +841,7 @@ class Retriever:
                         court_relation=(candidate.court_relation or "unknown")
                         if source.document_type == "judgment"
                         else "not_applicable",
+                        court=candidate.court if source.document_type == "judgment" else None,
                     ),
                     ranking=self._explain(candidate, plan, len(evidence) + 1)
                     if "ranking" in request.include

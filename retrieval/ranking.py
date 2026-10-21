@@ -78,6 +78,7 @@ class Candidate:
     fused: float = 0.0
     rerank_score: float | None = None  # 0 to 1 when the reranker scored it
     court_relation: str | None = None  # for a decision: binding, persuasive, not_applicable or unknown
+    court: object | None = None  # for a decision: its court as its register gives it (EvidenceCourt)
     expanded_from: str | None = None  # the seed unit whose reference added it (RSV-06)
     features: dict[str, dict[str, float]] = field(default_factory=dict)  # arm → its features
     band: int = 0

@@ -53,9 +53,38 @@ Each unit in `evidence` is one part of a published text, best first:
 | `currentness` | Whether it was in force. Read `basis`: `record` means only the whole law's status is known, which says nothing about one section; `provision` means reviewed events for this part. |
 | `context.definitions` | The definitions the part relies on, with their own exact words. |
 | `licence`, `attribution_text` | What quoting it asks for. |
+| `authority` | Where the text stands: an instrument's place in its hierarchy, or for a decision its court and how the court's decisions bear on other courts (see [Court authority](#court-authority)). |
 | `ranking` | Why it ranks where it does: the route, each search's rank and every signal applied. |
 
 Quote only `text`. A unit whose `unit` is `document` tells you which law is relevant; never cite it for what a provision says.
+
+## Court authority
+
+A decision's unit names its court in `authority.court`, as the [court register](/docs/api/get-court-register) of the jurisdiction asked about lists it. Once a reviewer has checked that register against its sources, `court.bears_on` says how the court's decisions bear on other courts on the date assessed (`as_of`, or today):
+
+```json
+"authority": {
+  "document_type": "judgment",
+  "court_relation": "unknown",
+  "court": {
+    "id": "ke-hc",
+    "name": "High Court of Kenya",
+    "jurisdiction": "ke",
+    "review_state": "reviewed",
+    "reviewed_on": "2026-10-01",
+    "bears_on": [
+      {"court": "ke-mc", "relation": "binding", "evidence": ["https://…"]}
+    ]
+  }
+}
+```
+
+- `relation` is `binding`, `persuasive` or `not_applicable`, and `evidence` lists the official sources it rests on. `court` is the court bound, by its ID in the register; null means the jurisdiction's courts generally.
+- A regional court's bearing on member states' courts (`members`) is limited to the subject matter its treaty gives (`matter`), such as the Uniform Acts for the OHADA court: never a rank above national courts.
+- `court_relation` is the court's bearing on the jurisdiction's courts generally. Within a band, binding decisions rank first.
+- Nothing is guessed. Until a register is reviewed, `bears_on` is empty and `court_relation` is `unknown`. A relation the register does not record is `unknown` too: it is never inferred from a court's rank or appeal routes, and a bearing limited to a matter never becomes a general one.
+
+[List court registers](/docs/api/list-court-registers) says which jurisdictions have a register and whether it has been reviewed.
 
 ## Routes
 
