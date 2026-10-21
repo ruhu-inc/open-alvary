@@ -179,7 +179,7 @@
     },
     "Provision": {
       "additionalProperties": false,
-      "description": "An article of an instrument, as cited: the instrument, the article (``pinpoint``), where it was\nread and, optionally, its words.",
+      "description": "An article a suspension rests on, as cited: the instrument, the article (``pinpoint``), why it is\ncited (``role``: ``decision_basis`` or ``treaty_rule``), where it was read and, optionally, the words\nread there. A proposal may leave the role unstated, as registers written before roles do; a reviewed\nsuspension states each.",
       "properties": {
         "instrument": {
           "maxLength": 300,
@@ -192,6 +192,22 @@
           "minLength": 1,
           "title": "Pinpoint",
           "type": "string"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "enum": [
+                "decision_basis",
+                "treaty_rule"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
         },
         "evidence_url": {
           "maxLength": 2000,
@@ -224,7 +240,7 @@
     },
     "Suspension": {
       "additionalProperties": false,
-      "description": "A member suspended from participating in a body's activities, overlaid on one membership: its first\nand last day (``valid_to`` null: not lifted), its legal basis, the decision that suspended it and the\none that lifted it. It never ends the membership.",
+      "description": "A member suspended from participating in a body's activities, overlaid on one membership: its first\nand last day (``valid_to`` null: not lifted), its legal basis (the article the decision cites and,\nwhere there is one, the treaty's rule it applies), the decision that suspended it and the one that\nlifted it. It never ends the membership.",
       "properties": {
         "id": {
           "pattern": "^[a-z]{2}(?:-[a-z0-9]{1,12})?:aa-[a-z0-9]{1,12}:[1-9][0-9]{0,2}:s[1-9][0-9]{0,2}$",

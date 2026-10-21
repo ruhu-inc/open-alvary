@@ -27,7 +27,12 @@ BASIS = {
     "evidence_url": "https://evidence.example.org/treaty",
 }
 LEGAL_BASIS = (
-    {"instrument": "Synthetic Act", "pinpoint": "art. 2", "evidence_url": "https://evidence.example.org/act"},
+    {
+        "instrument": "Synthetic Protocol",
+        "pinpoint": "art. 2",
+        "role": "decision_basis",
+        "evidence_url": "https://evidence.example.org/decision",
+    },
 )
 
 
@@ -302,6 +307,25 @@ def test_a_suspension_is_dated_evidenced_and_overlaid_on_a_membership_of_the_reg
     assert proposal.valid_from is None and proposal.member_id == "ga" and proposal.body_id == "aa-au"
     with pytest.raises(ValidationError, match="dated and states its legal basis"):
         suspension("ga:aa-au:1", "2023-08-31", legal_basis=())
+    # Each article's role: a proposal may leave it out, as registers written before roles do; a reviewed
+    # suspension states each, and cites the article its decision rests on.
+    treaty = {
+        "instrument": "Synthetic Act",
+        "pinpoint": "art. 30",
+        "evidence_url": "https://evidence.example.org/act",
+    }
+    unstated = suspension("ga:aa-au:1", "2023-08-31", status="proposal", legal_basis=(treaty,))
+    assert unstated.legal_basis[0].role is None
+    with pytest.raises(ValidationError, match="why it cites each article"):
+        suspension("ga:aa-au:1", "2023-08-31", legal_basis=(*LEGAL_BASIS, treaty))
+    with pytest.raises(ValidationError, match="article its decision rests on"):
+        suspension("ga:aa-au:1", "2023-08-31", legal_basis=(treaty | {"role": "treaty_rule"},))
+    with pytest.raises(ValidationError):
+        suspension("ga:aa-au:1", "2023-08-31", legal_basis=(LEGAL_BASIS[0] | {"role": "cited"},))
+    both = suspension(
+        "ga:aa-au:1", "2023-08-31", legal_basis=(*LEGAL_BASIS, treaty | {"role": "treaty_rule"})
+    )
+    assert [p.role for p in both.legal_basis] == ["decision_basis", "treaty_rule"]
     with pytest.raises(ValidationError, match="decision that lifted it"):
         suspension("ga:aa-au:1", "2023-08-31", "2025-04-29", lifted_evidence_url=None)
     with pytest.raises(ValidationError, match="starts with its membership"):
@@ -392,7 +416,12 @@ def test_the_reviewer_approves_a_suspension_of_a_reviewed_membership(proposals):
     data["suspensions"][0] |= {
         "evidence_url": "https://www.peaceau.org/decision.pdf",
         "legal_basis": [
-            {"instrument": "Act", "pinpoint": "art. 30", "evidence_url": "https://au.int/act.pdf"}
+            {
+                "instrument": "Protocol",
+                "pinpoint": "art. 7(g)",
+                "role": "decision_basis",
+                "evidence_url": "https://www.peaceau.org/decision.pdf",
+            }
         ],
     }
     proposals.write_text(json.dumps(data))

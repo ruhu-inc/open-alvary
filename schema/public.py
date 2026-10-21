@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, field_serializer, model_validator
 
 from schema.dates import DateBounds, UncertainDate
-from schema.memberships import BASES
+from schema.memberships import BASES, ROLES
 from schema.models import (
     ID,
     Edition,
@@ -160,18 +160,24 @@ def _with_bounds(data, names=("valid_from", "valid_to")):
 
 
 class ProvisionView(WireModel):
-    """An article of an instrument, as cited: the instrument, the article, where it was read and its words
-    when recorded."""
+    """An article a suspension rests on, as cited: the instrument, the article, why it is cited (the basis
+    the decision itself cites, or the treaty's rule it applies), where it was read and the words read
+    there when recorded."""
+
+    instrument: Nonempty
+    pinpoint: Nonempty
+    role: Literal[*ROLES]
+    evidence_url: Nonempty
+    quote: str | None = Field(**OMIT)
+
+
+class BasisView(WireModel):
+    """Why a membership starts when it does, and the article that makes that its start."""
 
     instrument: Nonempty
     pinpoint: Nonempty
     evidence_url: Nonempty
     quote: str | None = Field(**OMIT)
-
-
-class BasisView(ProvisionView):
-    """Why a membership starts when it does, and the article that makes that its start."""
-
     kind: Literal[*BASES]
 
 
@@ -179,8 +185,8 @@ class SuspensionView(WireModel):
     """A reviewed suspension of a member from participation in a body's activities: context for its
     membership, which it never ends. Its first and last day (inclusive; none: not lifted), each an EDTF
     date with its bounds, whether it was in effect on the date asked (``null``: the date falls inside an
-    uncertain start or end), its legal basis, the decision that suspended it, the one that lifted it, and
-    who reviewed it when."""
+    uncertain start or end), its legal basis (the article its decision cites and any treaty rule it
+    applies), the decision that suspended it, the one that lifted it, and who reviewed it when."""
 
     id: ID
     kind: Literal["suspended_from_participation"] = "suspended_from_participation"

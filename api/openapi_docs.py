@@ -701,7 +701,10 @@ SCHEMAS: dict[str, dict] = {
                 "type": ["object", "null"],
                 "description": "For a suspension from participation: {id, kind, membership_id, member, body, "
                 "valid_from, valid_from_bounds, valid_to, valid_to_bounds, legal_basis, evidence_url, "
-                "lifted_evidence_url, retracted}. It never ends the membership, which no event changes. A change "
+                "lifted_evidence_url, retracted}. `legal_basis` lists each article {instrument, pinpoint, role, "
+                "evidence_url}: `role` `decision_basis` for the one the decision cites, `treaty_rule` for the "
+                "treaty's rule it applies; a change of their words alone is not announced. It never ends the "
+                "membership, which no event changes. A change "
                 "with `change_reason` `lifted` records its lifting; a later correction has the same `event_id`, "
                 "and `retracted` true when it is no longer a reviewed fact.",
             },
@@ -1626,8 +1629,12 @@ FIELDS: dict[str, dict[str, str]] = {
     "ProvisionView": {
         "instrument": "The instrument, such as `Constitutive Act of the African Union`.",
         "pinpoint": "Its article, such as `art. 30`.",
-        "evidence_url": "Where the article was read.",
-        "quote": "The article's words, when recorded.",
+        "role": "Why it is cited: `decision_basis`, the article the decision itself cites as its basis (read "
+        "in the decision), or `treaty_rule`, the treaty's rule the suspension applies (read in the treaty), "
+        "whether or not the decision names it.",
+        "evidence_url": "Where it was read: the decision, for `decision_basis`; the treaty, for `treaty_rule`.",
+        "quote": "The words read there, when recorded: the decision's citing the article, or the article's "
+        "own.",
     },
     "BasisView": {
         "kind": "`entry_into_force` (the instrument entered into force for the member), `deposit` (the "
@@ -1651,7 +1658,8 @@ FIELDS: dict[str, dict[str, str]] = {
         "lasts.",
         "in_effect": "Whether it was in effect on `as_of`; null when that date falls inside an uncertain first "
         "or last day.",
-        "legal_basis": "The articles it rests on.",
+        "legal_basis": "The articles it rests on: the one its decision cites (`decision_basis`), always, "
+        "and the treaty's rule it applies (`treaty_rule`), where there is one.",
         "evidence_url": "The decision that suspended the member.",
         "lifted_evidence_url": "The decision that lifted it, once lifted.",
         "note": "What the evidence says, and anything a reader should know.",

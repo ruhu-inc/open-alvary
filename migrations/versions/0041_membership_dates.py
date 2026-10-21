@@ -3,12 +3,13 @@
 corpus.membership's valid_from and valid_to become dates of the schema.dates subset (a day, a month, a
 year, or a window [FIRST..LAST] holding the day), each stored as its EDTF string with its inclusive
 earliest and latest bounds, which only schema.dates computes; ``basis`` records why the membership starts
-when it does (its kind, the instrument's article and the evidence). corpus.membership_suspension holds the reviewed suspensions from participation, each
-overlaid on one published membership, which it never ends. changes.suspension_state is the last announced
-form of each, so changes.record.publish announces a newly published suspension as suspension_recorded,
-its lifting (valid_to set) as another with the reason ``lifted``, and any other change, or its
-retraction, as a correction of the latest. The change log's checks gain that type and that reason, added
-to whatever they list.
+when it does (its kind, the instrument's article and the evidence). corpus.membership_suspension holds
+the reviewed suspensions from participation, each overlaid on one published membership, which it never
+ends, with its legal basis: each article with its role, the one its decision cites (decision_basis) among
+them. changes.suspension_state is the last announced form of each, so changes.record.publish announces a
+newly published suspension as suspension_recorded, its lifting (valid_to set) as another with the reason
+``lifted``, and any other change, or its retraction, as a correction of the latest. The change log's
+checks gain that type and that reason, added to whatever they list.
 
 Only reviewed memberships are stored, and a reviewed membership now states its basis, which none
 published before this revision does: the upgrade refuses a catalogue that holds any (none has been
@@ -39,6 +40,8 @@ BASES = (
     "provisional_application_on_signature",
     "signature",
 )
+# schema.memberships.ROLES, as of this revision: why a suspension's legal basis cites an article.
+ROLES = ("decision_basis", "treaty_rule")
 TABLES = """
 ALTER TABLE {corpus}.membership
     ALTER COLUMN valid_from TYPE text USING valid_from::text,
@@ -67,7 +70,10 @@ CREATE TABLE {corpus}.membership_suspension (
     valid_to_earliest date,
     valid_to_latest date,
     legal_basis jsonb NOT NULL
-        CHECK (jsonb_typeof(legal_basis) = 'array' AND jsonb_array_length(legal_basis) BETWEEN 1 AND 5),
+        CHECK (jsonb_typeof(legal_basis) = 'array' AND jsonb_array_length(legal_basis) BETWEEN 1 AND 5
+               AND jsonb_array_length(jsonb_path_query_array(legal_basis, '$[*] ? ({roles})'))
+                   = jsonb_array_length(legal_basis)
+               AND jsonb_path_exists(legal_basis, '$[*] ? (@.role == "decision_basis")')),
     evidence_url text NOT NULL CHECK (evidence_url ~ '^https://' AND char_length(evidence_url) <= 2000),
     lifted_evidence_url text
         CHECK (lifted_evidence_url ~ '^https://' AND char_length(lifted_evidence_url) <= 2000),
@@ -158,7 +164,8 @@ def upgrade():
     # The check that compared the two dates as dates; the new ones compare their bounds.
     for name, _ in _constraints(conn, membership, "valid_from"):
         op.execute(f"ALTER TABLE {schemas['corpus']}.membership DROP CONSTRAINT {quote(name)}")
-    op.execute(TABLES.format(edtf=EDTF, bases=_listed(BASES), **schemas))
+    roles = " || ".join(f'@.role == "{role}"' for role in ROLES)
+    op.execute(TABLES.format(edtf=EDTF, bases=_listed(BASES), roles=roles, **schemas))
     _recheck(conn, ns, schemas["changes"], add=True)
     for capability, privileges, schema, table in GRANTS:
         role = ns.role(capability)

@@ -51,6 +51,14 @@ def row(member, body, start, end=None, *, status="reviewed", evidence=None):
     }
 
 
+LEGAL_BASIS = {
+    "instrument": "Synthetic Protocol",
+    "pinpoint": "art. 7",
+    "role": "decision_basis",
+    "evidence_url": "https://decision.example.org/suspended",
+}
+
+
 def suspended(membership_id, start, end=None, *, n=1, status="reviewed"):
     return {
         "id": f"{membership_id}:s{n}",
@@ -59,9 +67,7 @@ def suspended(membership_id, start, end=None, *, n=1, status="reviewed"):
         "status": status,
         "valid_from": start,
         "valid_to": end,
-        "legal_basis": [
-            {"instrument": "Synthetic Act", "pinpoint": "art. 30", "evidence_url": "https://act.example.org/"}
-        ],
+        "legal_basis": [LEGAL_BASIS],
         "evidence_url": "https://decision.example.org/suspended",
         "lifted_evidence_url": "https://decision.example.org/lifted" if end else None,
         "note": NOTE,
@@ -289,9 +295,7 @@ def test_a_suspension_is_served_as_context_and_never_changes_whether_a_membershi
     assert (
         context["in_effect"] is True and context["valid_from"] == "2023-08-31" and context["valid_to"] is None
     )
-    assert context["legal_basis"] == [
-        {"instrument": "Synthetic Act", "pinpoint": "art. 30", "evidence_url": "https://act.example.org/"}
-    ]
+    assert context["legal_basis"] == [LEGAL_BASIS]
     before = client.get("/jurisdictions/ga", params={"as_of": "2020-01-01"}).json()["member_of"]
     assert bodies(before) == ["aa-au"] and before["items"][0]["suspensions"][0]["in_effect"] is False
     # Under the body too, and never in the body's list of those who left.

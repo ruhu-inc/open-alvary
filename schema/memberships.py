@@ -51,6 +51,10 @@ BASES = (
     "provisional_application_on_signature",
     "signature",
 )
+# Why a suspension's legal basis cites an article: the decision cites it as the basis it acts on (its
+# evidence is the decision, its quote the decision's words), or it is the treaty's rule the suspension
+# applies (its evidence is the treaty, its quote the article's words), whether or not the decision names it.
+ROLES = ("decision_basis", "treaty_rule")
 
 
 class Basis(RecordModel):
@@ -66,11 +70,14 @@ class Basis(RecordModel):
 
 
 class Provision(RecordModel):
-    """An article of an instrument, as cited: the instrument, the article (``pinpoint``), where it was
-    read and, optionally, its words."""
+    """An article a suspension rests on, as cited: the instrument, the article (``pinpoint``), why it is
+    cited (``role``: ``decision_basis`` or ``treaty_rule``), where it was read and, optionally, the words
+    read there. A proposal may leave the role unstated, as registers written before roles do; a reviewed
+    suspension states each."""
 
     instrument: Short
     pinpoint: Short
+    role: Literal[*ROLES] | None = None
     evidence_url: Evidence
     quote: Quote | None = None
 
@@ -114,8 +121,9 @@ class Membership(RecordModel):
 
 class Suspension(RecordModel):
     """A member suspended from participating in a body's activities, overlaid on one membership: its first
-    and last day (``valid_to`` null: not lifted), its legal basis, the decision that suspended it and the
-    one that lifted it. It never ends the membership."""
+    and last day (``valid_to`` null: not lifted), its legal basis (the article the decision cites and,
+    where there is one, the treaty's rule it applies), the decision that suspended it and the one that
+    lifted it. It never ends the membership."""
 
     id: SuspensionID
     membership_id: MembershipID
@@ -141,6 +149,10 @@ class Suspension(RecordModel):
                 raise ValueError(f"{self.id}: a reviewed suspension names who reviewed it and when")
             if self.valid_from is None or not self.legal_basis:
                 raise ValueError(f"{self.id}: a reviewed suspension is dated and states its legal basis")
+            if any(p.role is None for p in self.legal_basis):
+                raise ValueError(f"{self.id}: a reviewed suspension states why it cites each article (role)")
+            if not any(p.role == "decision_basis" for p in self.legal_basis):
+                raise ValueError(f"{self.id}: a reviewed suspension cites the article its decision rests on")
             if self.valid_to is not None and self.lifted_evidence_url is None:
                 raise ValueError(f"{self.id}: a lifted suspension cites the decision that lifted it")
         elif self.reviewed_by or self.reviewed_at:
