@@ -46,7 +46,11 @@ export const CODES: [number, string, string][] = [
     "entitlement_lapsed",
     "The organisation's access ended or was revoked. Its keys are kept and work again when access is renewed.",
   ],
-  [403, "jurisdiction_not_included", "The record or country is outside the organisation's plan."],
+  [
+    403,
+    "jurisdiction_not_included",
+    "A bulk release file's country is outside the organisation's plan. Only bulk files are refused for this: any other request outside your plan's countries is answered at the Starter rate.",
+  ],
   [403, "account_inactive", "The person's account is suspended or closed."],
   [403, "organisation_suspended", "The organisation is suspended."],
   [403, "wrong_address", "The request did not come through open.alvary.ai or api.open.alvary.ai. Use those addresses."],
@@ -76,6 +80,27 @@ export const CODES: [number, string, string][] = [
     "Access cannot be checked right now, so the request is refused rather than let through. Try again after Retry-After.",
   ],
   [503, "capacity_exhausted", "The service is at capacity for now. Try again after Retry-After."],
+];
+
+// The console's own refusals that these pages mention. They answer the console, not the API, and carry
+// no problem type; they are listed so a code you meet there has a meaning here.
+export const CONSOLE_CODES: [number, string, string][] = [
+  [401, "reauthentication_required", "The action needs a sign-in within the last 10 minutes. Sign in again, then repeat it."],
+  [
+    403,
+    "second_factor_required",
+    "The action needs your second factor: owners and admins of an organisation on a paid or approved plan confirm one. Confirm it, then repeat the action.",
+  ],
+  [
+    409,
+    "already_rotated",
+    "This key has already been replaced, so it can't be rotated again. Rotate or revoke its replacement.",
+  ],
+  [
+    409,
+    "limit_reached",
+    "Something your plan or account allows is used up: keys of this kind, monitors, members and invitations, or organisations. Revoke or delete one, or change your plan.",
+  ],
 ];
 
 const STATUS_NAMES: Record<number, string> = {
@@ -115,5 +140,8 @@ export function errorsMarkdown(): string {
       `## ${status} ${STATUS_NAMES[status] ?? ""}`.trimEnd(),
       ...CODES.filter(([s]) => s === status).flatMap(([, code, meaning]) => [`### \`${code}\` {#${code}}`, meaning]),
     ]),
+    "## In the console",
+    "The console answers its own refusals with a code too. These are the ones these pages mention:",
+    ...CONSOLE_CODES.flatMap(([status, code, meaning]) => [`### \`${code}\` {#${code}}`, `\`${status}\`. ${meaning}`]),
   ].join("\n\n");
 }
