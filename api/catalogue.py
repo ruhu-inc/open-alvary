@@ -1312,7 +1312,7 @@ class LegacyCatalogue:
     def memberships(self, jurisdiction_id: str | None = None) -> list[MembershipView]:
         """The reviewed memberships published to the catalogue (corpus.membership, operations.memberships),
         all or those of one member or body, each with its reviewed suspensions; none in SQLite or before
-        migration 0042."""
+        migration 0041."""
         conn = self.repository.connection
         if conn.dialect.name != "postgresql":
             return []

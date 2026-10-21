@@ -227,7 +227,7 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
         return 0  # a database before migration 0023 has no change log
     keeps_links = conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["link_state"]}) is not None
     keeps_events = conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["event_state"]}) is not None
-    # Memberships as migration 0042 stores them (dates with their bounds, a basis), and their suspensions.
+    # Memberships as migration 0041 stores them (dates with their bounds, a basis), and their suspensions.
     keeps_memberships = (
         conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["suspension_state"]}) is not None
     )
