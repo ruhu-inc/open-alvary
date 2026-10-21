@@ -1,0 +1,354 @@
+{
+  "jurisdiction": "aa-eac",
+  "review_state": "unreviewed",
+  "reviewed_by": null,
+  "reviewed_on": null,
+  "reviewed_sha256": null,
+  "precedent": null,
+  "courts": [
+    {
+      "id": "aa-eac-eacj-fid",
+      "name": "East African Court of Justice, First Instance Division",
+      "kind": "court",
+      "level": "regional",
+      "valid_from": "2001-11-30",
+      "appeals_to": [
+        "aa-eac-eacj-ad"
+      ],
+      "sources": [
+        "eac-treaty-art-23",
+        "eac-treaty-art-35a",
+        "eac-treaty-art-140a",
+        "eac-treaty-art-27",
+        "eac-treaty-art-30",
+        "eac-history",
+        "eacj-about"
+      ],
+      "note": "Art. 23(2)-(3): the Court has a First Instance Division that hears any matter before the Court at first instance, subject to appeal to the Appellate Division under art. 35A. The Court's jurisdiction is the interpretation and application of the Treaty (art. 27(1)), including references by any resident of a Partner State challenging the legality of an act of a Partner State or Community institution (art. 30(1)). Art. 140A deems every judgment or order of the Court since the Treaty's entry into force to be a First Instance Division decision and keeps the Court's existing judges as judges of that Division. valid_from is the date the EAC timeline gives for the Heads of State's inauguration of the Court (30 November 2001; the EACJ site says established November 2001); the Division's own creation date under the 2006-2007 amendments is not evidenced."
+    },
+    {
+      "id": "aa-eac-eacj-ad",
+      "name": "East African Court of Justice, Appellate Division",
+      "kind": "court",
+      "level": "regional",
+      "appeals_to": [],
+      "sources": [
+        "eac-treaty-art-23",
+        "eac-treaty-art-35a"
+      ],
+      "note": "Art. 23(2): the Court consists of a First Instance Division and an Appellate Division. Art. 35A(1): an appeal from any judgment or order of the First Instance Division lies to the Appellate Division on points of law, lack of jurisdiction or procedural irregularity. No official source found that dates the Division's creation or first sitting, so valid_from is left out."
+    }
+  ],
+  "relations": [
+    {
+      "court": "aa-eac-eacj-fid",
+      "bound": null,
+      "members": true,
+      "matter": "eac-treaty",
+      "relation": "binding",
+      "sources": [
+        "eac-treaty-art-33",
+        "eac-treaty-art-23",
+        "eac-treaty-art-140a"
+      ],
+      "note": "PROPOSAL for the reviewer. Art. 33(2) speaks of precedence, not of binding force: the Court's decisions on the Treaty's interpretation and application \"shall have precedence over decisions of national courts on a similar matter\". The Treaty does not otherwise say national courts must follow them. Applied to this Division because art. 23(2) makes it part of the Court and art. 140A deems the Court's earlier judgments to be its decisions."
+    },
+    {
+      "court": "aa-eac-eacj-ad",
+      "bound": null,
+      "members": true,
+      "matter": "eac-treaty",
+      "relation": "binding",
+      "sources": [
+        "eac-treaty-art-33",
+        "eac-treaty-art-23"
+      ],
+      "note": "PROPOSAL for the reviewer. Art. 33(2) speaks of precedence, not of binding force: the Court's decisions on the Treaty's interpretation and application \"shall have precedence over decisions of national courts on a similar matter\". The Treaty does not otherwise say national courts must follow them. Applied to this Division because art. 23(2) makes it part of the Court."
+    }
+  ],
+  "matters": [
+    {
+      "id": "eac-treaty",
+      "name": "Interpretation and application of the Treaty for the Establishment of the East African Community",
+      "sources": [
+        "eac-treaty-art-27"
+      ]
+    },
+    {
+      "id": "eac-community-acts",
+      "name": "Validity of the regulations, directives, decisions or actions of the Community",
+      "sources": [
+        "eac-treaty-art-34",
+        "eacj-preliminary-ruling-guidelines"
+      ]
+    }
+  ],
+  "members": [
+    {
+      "state": "ke",
+      "court": null,
+      "valid_from": "2000-07-07",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "eac-treaty-art-3",
+        "eac-overview",
+        "eac-history",
+        "eac-partner-ke"
+      ],
+      "note": "Art. 3(1) names Kenya as an original Partner State. The EAC overview says the Treaty entered into force on 7 July 2000 after ratification by Kenya, Uganda and Tanzania; the timeline gives the same date. The Kenya page says joined July 2000 (founding member)."
+    },
+    {
+      "state": "tz",
+      "court": null,
+      "valid_from": "2000-07-07",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "eac-treaty-art-3",
+        "eac-overview",
+        "eac-history",
+        "eac-partner-tz"
+      ],
+      "note": "Art. 3(1) names the United Republic of Tanzania as an original Partner State. The EAC overview says the Treaty entered into force on 7 July 2000 after ratification by Kenya, Uganda and Tanzania; the timeline gives the same date. The Tanzania page says joined July 2000 (founding member)."
+    },
+    {
+      "state": "ug",
+      "court": null,
+      "valid_from": "2000-07-07",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "eac-treaty-art-3",
+        "eac-overview",
+        "eac-history",
+        "eac-partner-ug"
+      ],
+      "note": "Art. 3(1) names Uganda as an original Partner State. The EAC overview says the Treaty entered into force on 7 July 2000 after ratification by Kenya, Uganda and Tanzania; the timeline gives the same date. The Uganda page says joined July 2000 (founding member)."
+    },
+    {
+      "state": "rw",
+      "court": null,
+      "valid_from": "2007-07-01",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "eac-overview",
+        "eac-history",
+        "eac-partner-rw"
+      ],
+      "note": "The EAC overview says Rwanda acceded to the Treaty on 18 June 2007 and became a full Member with effect from 1 July 2007; the timeline gives the same dates. The Rwanda page says joined July 2007."
+    },
+    {
+      "state": "bi",
+      "court": null,
+      "valid_from": "2007-07-01",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "eac-overview",
+        "eac-history",
+        "eac-partner-bi"
+      ],
+      "note": "The EAC overview says Burundi acceded to the Treaty on 18 June 2007 and became a full Member with effect from 1 July 2007; the timeline gives the same dates. The Burundi page says joined July 2007."
+    },
+    {
+      "state": "ss",
+      "court": null,
+      "valid_from": "2016-09-05",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "eac-press-ss-2016",
+        "eac-history",
+        "eac-partner-ss",
+        "eac-overview"
+      ],
+      "note": "CONFLICT. The EAC press release of 5 September 2016 says South Sudan deposited its instrument of ratification of the accession that day and is now a member with full and equal rights; the timeline and the South Sudan page also give 5 September 2016 for full membership. The EAC overview instead says full Member on 15 August 2016 (accession 15 April 2016; the timeline says joined 16 April 2016). 5 September 2016 proposed; reviewer to confirm."
+    },
+    {
+      "state": "cd",
+      "court": null,
+      "valid_from": "2022-07-11",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "eac-overview",
+        "eac-history",
+        "eac-partner-cd"
+      ],
+      "note": "The EAC overview and the DR Congo page say the DR Congo acceded to the Treaty on 8 April 2022 and became a full member on 11 July 2022; the timeline gives the same dates."
+    },
+    {
+      "state": "so",
+      "court": null,
+      "valid_from": "2024-03-04",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "eac-overview",
+        "eac-press-so-2024",
+        "eac-history"
+      ],
+      "note": "The EAC overview says Somalia acceded to the Treaty on 15 December 2023 and became a full member on 4 March 2024. The EAC press release of 4 March 2024 says Somalia would deposit its instrument of ratification of the Treaty of Accession that morning, making it the 8th Partner State. The timeline records only the Summit's admission of Somalia on 24 November 2023."
+    }
+  ],
+  "member_routes": [
+    {
+      "court": "aa-eac-eacj-fid",
+      "kind": "reference",
+      "matter": "eac-treaty",
+      "sources": [
+        "eac-treaty-art-34",
+        "eac-treaty-art-23",
+        "eacj-preliminary-ruling-guidelines",
+        "eacj-rules-2019-r126"
+      ],
+      "note": "Art. 34: a court or tribunal of a Partner State faced with a question on the interpretation or application of the Treaty shall, if it considers a ruling necessary to give judgment, request a preliminary ruling from the Court. Rule 126 requires the request to be lodged as a case stated. Placed on the First Instance Division because art. 23(3) gives it every matter before the Court at first instance; no source names the Division for references expressly."
+    },
+    {
+      "court": "aa-eac-eacj-fid",
+      "kind": "reference",
+      "matter": "eac-community-acts",
+      "sources": [
+        "eac-treaty-art-34",
+        "eac-treaty-art-23",
+        "eacj-preliminary-ruling-guidelines",
+        "eacj-rules-2019-r126"
+      ],
+      "note": "Art. 34 also covers questions on the validity of the Community's regulations, directives, decisions or actions. The Court's preliminary-ruling guidelines say the Court alone may declare such acts invalid and national courts must refer when they doubt validity. Placed on the First Instance Division under art. 23(3), as for the Treaty route."
+    }
+  ],
+  "sources": [
+    {
+      "id": "eac-treaty-art-3",
+      "title": "Treaty for the Establishment of the East African Community, 1999 (as amended), text on the East African Court of Justice website",
+      "url": "https://www.eacj.org/?page_id=33",
+      "pinpoint": "art. 3(1)"
+    },
+    {
+      "id": "eac-treaty-art-23",
+      "title": "Treaty for the Establishment of the East African Community, 1999 (as amended), text on the East African Court of Justice website",
+      "url": "https://www.eacj.org/?page_id=33",
+      "pinpoint": "art. 23(2)-(3)"
+    },
+    {
+      "id": "eac-treaty-art-27",
+      "title": "Treaty for the Establishment of the East African Community, 1999 (as amended), text on the East African Court of Justice website",
+      "url": "https://www.eacj.org/?page_id=33",
+      "pinpoint": "art. 27(1)"
+    },
+    {
+      "id": "eac-treaty-art-30",
+      "title": "Treaty for the Establishment of the East African Community, 1999 (as amended), text on the East African Court of Justice website",
+      "url": "https://www.eacj.org/?page_id=33",
+      "pinpoint": "art. 30(1)"
+    },
+    {
+      "id": "eac-treaty-art-33",
+      "title": "Treaty for the Establishment of the East African Community, 1999 (as amended), text on the East African Court of Justice website",
+      "url": "https://www.eacj.org/?page_id=33",
+      "pinpoint": "art. 33(2)"
+    },
+    {
+      "id": "eac-treaty-art-34",
+      "title": "Treaty for the Establishment of the East African Community, 1999 (as amended), text on the East African Court of Justice website",
+      "url": "https://www.eacj.org/?page_id=33",
+      "pinpoint": "art. 34"
+    },
+    {
+      "id": "eac-treaty-art-35a",
+      "title": "Treaty for the Establishment of the East African Community, 1999 (as amended), text on the East African Court of Justice website",
+      "url": "https://www.eacj.org/?page_id=33",
+      "pinpoint": "art. 35A(1)"
+    },
+    {
+      "id": "eac-treaty-art-140a",
+      "title": "Treaty for the Establishment of the East African Community, 1999 (as amended), text on the East African Court of Justice website",
+      "url": "https://www.eacj.org/?page_id=33",
+      "pinpoint": "art. 140A(1)-(2)"
+    },
+    {
+      "id": "eacj-about",
+      "title": "East African Court of Justice, Court / About Us",
+      "url": "https://www.eacj.org/?page_id=19",
+      "pinpoint": "Establishment of the East African Court of Justice"
+    },
+    {
+      "id": "eacj-preliminary-ruling-guidelines",
+      "title": "East African Court of Justice, Guidelines: Reference for Preliminary Ruling",
+      "url": "https://www.eacj.org/?page_id=67",
+      "pinpoint": "General, para. 2; Reference on determination of validity, paras. 1-2"
+    },
+    {
+      "id": "eacj-rules-2019-r126",
+      "title": "East African Court of Justice Rules of Procedure, 2019 (EAC Gazette No. 2 of 15 February 2019, Statutory Instruments Supplement No. 1)",
+      "url": "https://www.eacj.org/wp-content/uploads/2023/02/EACJ-Rules-of-Procedure-2019.pdf",
+      "pinpoint": "r. 126; Sixth Schedule"
+    },
+    {
+      "id": "eac-history",
+      "title": "East African Community, EAC History (timeline)",
+      "url": "https://www.eac.int/eac-history",
+      "pinpoint": "entries for 7 July 2000, 30 November 2001, 18 June and 1 July 2007, 16 April and 5 September 2016, 8 April and 11 July 2022, 24 November 2023"
+    },
+    {
+      "id": "eac-overview",
+      "title": "East African Community, Overview of EAC",
+      "url": "https://www.eac.int/overview-of-eac",
+      "pinpoint": "paragraphs on the Treaty's entry into force and on accessions"
+    },
+    {
+      "id": "eac-partner-ke",
+      "title": "East African Community, Partner States: Kenya",
+      "url": "https://www.eac.int/eac-partner-states/kenya",
+      "pinpoint": "Key facts: Joined EAC"
+    },
+    {
+      "id": "eac-partner-tz",
+      "title": "East African Community, Partner States: United Republic of Tanzania",
+      "url": "https://www.eac.int/eac-partner-states/tanzania",
+      "pinpoint": "Key facts: Joined EAC"
+    },
+    {
+      "id": "eac-partner-ug",
+      "title": "East African Community, Partner States: Republic of Uganda",
+      "url": "https://www.eac.int/eac-partner-states/uganda",
+      "pinpoint": "Key facts: Joined EAC"
+    },
+    {
+      "id": "eac-partner-rw",
+      "title": "East African Community, Partner States: Republic of Rwanda",
+      "url": "https://www.eac.int/eac-partner-states/rwanda",
+      "pinpoint": "introduction; Key facts: Joined EAC"
+    },
+    {
+      "id": "eac-partner-bi",
+      "title": "East African Community, Partner States: Republic of Burundi",
+      "url": "https://www.eac.int/eac-partner-states/burundi",
+      "pinpoint": "introduction; Key facts: Joined EAC"
+    },
+    {
+      "id": "eac-partner-ss",
+      "title": "East African Community, Partner States: Republic of South Sudan",
+      "url": "https://www.eac.int/eac-partner-states/south-sudan",
+      "pinpoint": "introduction; Key facts: Joined EAC"
+    },
+    {
+      "id": "eac-partner-cd",
+      "title": "East African Community, Partner States: Democratic Republic of the Congo",
+      "url": "https://www.eac.int/eac-partner-states/drcongo",
+      "pinpoint": "introduction; Key facts: Joined EAC"
+    },
+    {
+      "id": "eac-press-ss-2016",
+      "title": "East African Community press release, 5 September 2016: Republic of South Sudan deposits Instruments of Ratification on the accession of the Treaty for the establishment of the East African Community to the Secretary General",
+      "url": "https://www.eac.int/press-releases/550-951-449-republic-of-south-sudan-deposits-instruments-of-ratification-on-the-accession-of-the-treaty-for-the-establishment-of-the-east-african-community-to-the-secretary-general"
+    },
+    {
+      "id": "eac-press-so-2024",
+      "title": "East African Community press release, 4 March 2024: Somalia to Deposit Her Instrument of Ratification on the Treaty of Accession to the EAC today",
+      "url": "https://www.eac.int/press-releases/3046-somalia-to-deposit-her-instrument-of-ratification-on-the-treaty-of-accession-to-the-eac-today"
+    }
+  ]
+}
