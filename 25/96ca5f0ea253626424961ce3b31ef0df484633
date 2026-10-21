@@ -1,0 +1,52 @@
+tests/test_postgres_applicable.py
+  s_d665c62e07d76f::t_231bc64dc2743e 33,58,131-140,169,381-428
+  s_d665c62e07d76f::t_fe476cd390b79c 429-430
+api/catalogue.py
+  s_d665c62e07d76f::t_9c8e1be9b8b50f 411-414,420,426-430,1145
+  s_d665c62e07d76f::t_15c77c2179554b 1142-1143
+schema/public.schema.json
+  s_d665c62e07d76f::t_ccc72defb769f8 311,318-329
+  s_d665c62e07d76f::t_d3599062ffc68e 330
+api/mcp.py
+  s_d665c62e07d76f::t_d8235913634d1f 236-237
+  s_d665c62e07d76f::t_b6596827302396 312-313
+api/openapi_docs.py
+  s_d665c62e07d76f::t_d8235913634d1f 258-260,301-303
+  s_d665c62e07d76f::t_26c3892c51ae16 1713-1714,1732-1734,1741
+tests/test_applicable.py
+  s_d665c62e07d76f::t_5b25ec46ce37b7 11,45,66-67,252,276-317,376-390
+web/src/docs/data/mcp-tools.json
+  s_d665c62e07d76f::t_14f8ceffde4e14 218,288
+schema/public.py
+  s_d665c62e07d76f::t_553d028c78136c 309-313,316
+web/src/docs/data/openapi.json
+  s_d665c62e07d76f::t_14f8ceffde4e14 2457,2764
+  s_d665c62e07d76f::t_ccc72defb769f8 3896,3988-4000,4038,4068
+api/v1.py
+  s_d665c62e07d76f::t_644385a31b1caa 76-77
+retrieval/pack.py
+  s_d665c62e07d76f::t_9c8e1be9b8b50f 604
+  s_d665c62e07d76f::t_03338b14ad5caf 611-613,615,628
+  s_d665c62e07d76f::t_4a35990ee3f8d4 65-67
+api/applicable.py
+  s_d665c62e07d76f::t_21807fa3368ef5 6-8,140-141,143,168-181,183-201,207,212,217,220,227,237,241,244,246,256-257
+  s_d665c62e07d76f::t_553d028c78136c 27-28,34,342-343,347,354-361,365-368,370-372,376,385-390,392-395,399,403-406,408,423,428,438
+  s_d665c62e07d76f::t_1f575d3189dce4 373-374
+  s_d665c62e07d76f::t_26c3892c51ae16 9-10
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "2596ca5f0ea253626424961ce3b31ef0df484633",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
