@@ -231,10 +231,12 @@ export function Privacy() {
         <h2>Reading the website</h2>
         <p>
           Your browser requests pages, fonts and data from this site; search terms go to our server to find
-          matching records. We set no cookies on the website and use no advertising or analytics. Our hosting
-          processes connection information such as IP addresses to deliver pages, limit abuse and keep
-          operational logs, kept for up to 30 days. Please don't put personal or confidential information in
-          searches.
+          matching records, only to answer that search. We set no cookies on the website and use no advertising
+          or analytics. Our hosting processes connection information such as IP addresses to deliver pages,
+          limit abuse and keep operational logs for up to 30 days. Those logs never hold what you search for:
+          a request whose address carries a search, or anything else after a question mark, is left out of
+          them. Our pages also ask your browser to tell other sites at most that you came from Open Alvary,
+          never which page or search. Please don't put personal or confidential information in searches.
         </p>
       </section>
       <section>
