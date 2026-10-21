@@ -153,6 +153,19 @@ curl "https://api.open.alvary.ai/api/v1/citations/FOI%20Act%202011,%20s.%201(1)"
   -H "Authorization: Bearer $OPEN_ALVARY_KEY"
 ```
 
+A part is read as people write it:
+
+| Kind | Written as |
+|---|---|
+| Sections, regulations and rules | `s. 23(1)(a)`, `section 23`, `ss. 23`, `reg. 4`, `r. 12`; the law after the part with `of`: `section 1 of the FOI Act 2011` |
+| Articles | `art. 12`, `article 12(2)`, an inserted article by its printed number (`art. 853-1`, `article 626-1-1-1`), and in Kinyarwanda `ingingo ya 12` (`ingingo ya mbere` for the first) |
+| A French article's alinéa | `article 10, alinéa 2`, `art. 10 al. 2` or `alinéa 1er`, read as `article 10(2)`; where the text holds each alinéa as a part of its own, the answer cites it `art. 11, al. 2`. The law may follow `de`, `du`, `de la`, `de l'` or `des`: `article 10, alinéa 2, de l'Acte uniforme …` |
+| Schedules | `First Schedule, para. 3`, `Schedule 2`, `Sch. II, Part 1, para. 4`: `Second Schedule`, `Schedule 2` and `Schedule II` are one schedule |
+| Parts and chapters | `Part V`, `Pt. 5`, `Chapter 3` |
+| A judgment's paragraph | After its neutral citation: `[2019] NGSC 4 [12]`, `[2019] NGSC 4 at [12]` or `[2019] NGSC 4, para. 12`; a paragraph of a later opinion that numbers its own, `op. 2 [4]` |
+
+Numbers compare as printed, case aside (`23A` is `23a`). Paragraph letters are never read as Roman numerals: `(i)` is the letter i. `para. 12` alone is read as a judgment's paragraph only after a neutral citation; in an Act it is a schedule's paragraph.
+
 Nothing is chosen for you. When the part is in several texts, such as two languages, `provision.status` is `ambiguous`, every candidate is listed and `reason` says why; add `language` or `as_of` to choose. When it can't be found, `reason` says whether the record has no published text, none matches your `language` or `as_of`, or the text has no such part; `nearest` then gives the closest part that does exist, such as the section of a paragraph the text doesn't divide.
 
 The citation each [anchor](/docs/api/get-anchor) gives resolves back to that anchor.
