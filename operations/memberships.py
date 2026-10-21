@@ -14,7 +14,8 @@ A DATE is a day (2001-05-26), a month (2000-12), a year (1976) or a window holdi
 who reviewed it and when, with the start date (a reviewed row is dated) and any end, evidence or note the
 reviewer sets. A reviewed membership states its basis, why it starts when it does, with the article that
 says so: from the proposal, or given here. A reviewed suspension states its legal basis (from the
-proposal) and, once lifted, the decision that lifted it. Run it again on a reviewed row to record its end
+proposal), each article with its role, the one its decision cites (decision_basis) among them, and, once
+lifted, the decision that lifted it. Run it again on a reviewed row to record its end
 or a correction; it is then reviewed again. One person may review (single-reviewer rule). Commit the
 register: it is the public record of what was reviewed, by whom.
 

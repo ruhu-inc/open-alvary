@@ -1473,7 +1473,7 @@
     },
     "ProvisionView": {
       "additionalProperties": false,
-      "description": "An article of an instrument, as cited: the instrument, the article, where it was read and its words\nwhen recorded.",
+      "description": "An article a suspension rests on, as cited: the instrument, the article, why it is cited (the basis\nthe decision itself cites, or the treaty's rule it applies), where it was read and the words read\nthere when recorded.",
       "properties": {
         "instrument": {
           "minLength": 1,
@@ -1483,6 +1483,14 @@
         "pinpoint": {
           "minLength": 1,
           "title": "Pinpoint",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "decision_basis",
+            "treaty_rule"
+          ],
+          "title": "Role",
           "type": "string"
         },
         "evidence_url": {
@@ -1506,6 +1514,7 @@
       "required": [
         "instrument",
         "pinpoint",
+        "role",
         "evidence_url"
       ],
       "title": "ProvisionView",
@@ -2418,7 +2427,7 @@
     },
     "SuspensionView": {
       "additionalProperties": false,
-      "description": "A reviewed suspension of a member from participation in a body's activities: context for its\nmembership, which it never ends. Its first and last day (inclusive; none: not lifted), each an EDTF\ndate with its bounds, whether it was in effect on the date asked (``null``: the date falls inside an\nuncertain start or end), its legal basis, the decision that suspended it, the one that lifted it, and\nwho reviewed it when.",
+      "description": "A reviewed suspension of a member from participation in a body's activities: context for its\nmembership, which it never ends. Its first and last day (inclusive; none: not lifted), each an EDTF\ndate with its bounds, whether it was in effect on the date asked (``null``: the date falls inside an\nuncertain start or end), its legal basis (the article its decision cites and any treaty rule it\napplies), the decision that suspended it, the one that lifted it, and who reviewed it when.",
       "properties": {
         "id": {
           "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
