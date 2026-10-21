@@ -301,6 +301,11 @@ def _absent(reason: str, page: int | None, evidence: str) -> dict:
     return {"absent": reason, "page": page, "evidence": evidence[:240]}
 
 
+def _inferred(value, page: int | None, evidence: str) -> dict:
+    """A value inferred rather than printed: suggested beside its field, never in the first draft."""
+    return _suggest(value, page, evidence) | {"inferred": True}
+
+
 def suggest(reading: dict, document: dict, manifest: dict) -> dict:
     """Each detail as read from the document, with the page and words it came from."""
     pages = reading["pages"]
@@ -381,8 +386,10 @@ def _gazette(page: dict, out: dict) -> bool:
         if when:
             out["gazette_date"] = _suggest(when, number, evidence)
         out["gazette_volume"] = _suggest(issue.group(6), number, evidence)
-    out["gazette_issue"] = _suggest(
-        "extraordinary" if "Extraordinary" in text else "ordinary", number, "Gazette front page"
+    out["gazette_issue"] = (  # an ordinary issue does not say so: inferred from the word's absence
+        _suggest("extraordinary", number, "Gazette front page")
+        if "Extraordinary" in text
+        else _inferred("ordinary", number, "The gazette front page does not print the word Extraordinary")
     )
     notice = re.search(r"Government Notice No\.\s*(\d+)", text)
     if notice:
@@ -545,8 +552,9 @@ def _relations(out):
 
 
 def initial(suggestions: dict) -> tuple[dict, dict]:
-    """A first draft from the suggestions, for the reviewer to work through."""
-    details = {key: s["value"] for key, s in suggestions.items() if "value" in s}
+    """A first draft from the suggestions, for the reviewer to work through; an inferred one stays a
+    suggestion."""
+    details = {key: s["value"] for key, s in suggestions.items() if "value" in s and not s.get("inferred")}
     absent = {key: s["absent"] for key, s in suggestions.items() if "absent" in s}
     return details, absent
 

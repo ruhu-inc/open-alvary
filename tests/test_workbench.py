@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import update
 
-from workbench import auth, content, details
+from workbench import auth, content, details, record_view
 from workbench.app import create_app
 from workbench.store import Store, connect, session
 
@@ -465,6 +465,29 @@ def test_details_are_suggested_from_the_gazette_the_certificate_and_the_assent()
         {"kind": "repeals", "target": "Copyright Act, Cap C28, Laws of the Federation of Nigeria, 2004"}
     ]
     assert found["gazette_number"]["page"] == 1 and found["assent_date"]["page"] == 3
+    assert details.initial(found)[0]["gazette_issue"] == "extraordinary"  # printed: in the first draft
+
+
+def test_an_issue_inferred_to_be_ordinary_is_suggested_not_filled_in():
+    """An ordinary gazette does not print "Ordinary": inferred from the absence of "Extraordinary", it is
+    suggested beside its field and left out of the first draft, which keeps what the front page prints."""
+    front = {
+        "page": 1,
+        "text": "Federal Republic of Nigeria Official Gazette No. 12 Lagos - 4th May, 2023 Vol. 110",
+        "tables": [],
+        "furniture": [],
+        "nodes": [],
+    }
+    found = details.suggest({"pages": [front]}, {"id": "x", "type": "act"}, {"jurisdiction": "ng"})
+    assert found["gazette_issue"] == {
+        "value": "ordinary",
+        "page": 1,
+        "evidence": "The gazette front page does not print the word Extraordinary",
+        "inferred": True,
+    }
+    values, _ = record_view.first_draft(*record_view.from_legacy(*details.initial(found)))
+    assert "publication.issue" not in values and values["publication.number"] == "12"
+    assert record_view.suggestions_view(found)["publication.issue"]["value"] == "ordinary"
 
 
 def test_a_certified_bill_marks_the_gazette_details_as_not_in_this_copy():
