@@ -376,6 +376,117 @@
       "title": "DecisionView",
       "type": "object"
     },
+    "JurisdictionDetail": {
+      "additionalProperties": false,
+      "description": "One jurisdiction on a date (API /jurisdictions/{id}): a country's bodies, or a body's members.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "country_code": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Z]{2}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Country Code"
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parent Id"
+        },
+        "legal_systems": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Legal Systems",
+          "type": "array"
+        },
+        "languages": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Languages",
+          "type": "array"
+        },
+        "member_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MembershipList"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "level": {
+          "anyOf": [
+            {
+              "enum": [
+                "continental",
+                "regional",
+                "national",
+                "subnational",
+                "local"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Level"
+        },
+        "as_of": {
+          "format": "date",
+          "title": "As Of",
+          "type": "string"
+        },
+        "members": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MembershipList"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "as_of"
+      ],
+      "title": "JurisdictionDetail",
+      "type": "object"
+    },
     "JurisdictionView": {
       "additionalProperties": false,
       "properties": {
@@ -430,6 +541,17 @@
           },
           "title": "Languages",
           "type": "array"
+        },
+        "member_of": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MembershipList"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -437,6 +559,129 @@
         "name"
       ],
       "title": "JurisdictionView",
+      "type": "object"
+    },
+    "MembershipList": {
+      "additionalProperties": false,
+      "description": "Memberships in one direction on one date: the bodies a jurisdiction belongs to, or a body's members.\n``items`` held on the date; ``ended`` had ended by then. ``unknown`` when no membership in this\ndirection is reviewed: never an empty list read as \"none\".",
+      "properties": {
+        "status": {
+          "enum": [
+            "reviewed",
+            "unknown"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "items": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MembershipView"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "ended": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MembershipView"
+          },
+          "title": "Ended",
+          "type": "array"
+        },
+        "notice": {
+          "title": "Notice",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "notice"
+      ],
+      "title": "MembershipList",
+      "type": "object"
+    },
+    "MembershipView": {
+      "additionalProperties": false,
+      "description": "One reviewed membership of the African Union or a regional body (JUR-04): the member, the body, the\nfirst and last day it held (inclusive; no last day means it has not ended), the evidence and who\nreviewed it when. Membership alone never applies the body's treaties to the member.",
+      "properties": {
+        "id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "member_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Member Id",
+          "type": "string"
+        },
+        "member_name": {
+          "minLength": 1,
+          "title": "Member Name",
+          "type": "string"
+        },
+        "body_id": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Body Id",
+          "type": "string"
+        },
+        "body_name": {
+          "minLength": 1,
+          "title": "Body Name",
+          "type": "string"
+        },
+        "valid_from": {
+          "format": "date",
+          "title": "Valid From",
+          "type": "string"
+        },
+        "valid_to": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Valid To"
+        },
+        "evidence_url": {
+          "minLength": 1,
+          "title": "Evidence Url",
+          "type": "string"
+        },
+        "note": {
+          "minLength": 1,
+          "title": "Note",
+          "type": "string"
+        },
+        "reviewed_by": {
+          "minLength": 1,
+          "title": "Reviewed By",
+          "type": "string"
+        },
+        "reviewed_at": {
+          "format": "date-time",
+          "title": "Reviewed At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "member_id",
+        "member_name",
+        "body_id",
+        "body_name",
+        "valid_from",
+        "evidence_url",
+        "note",
+        "reviewed_by",
+        "reviewed_at"
+      ],
+      "title": "MembershipView",
       "type": "object"
     },
     "NodeViewRecord": {
@@ -2371,6 +2616,14 @@
         "$ref": "#/$defs/JurisdictionView"
       },
       "title": "Jurisdictions",
+      "type": "array"
+    },
+    "jurisdiction_details": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/JurisdictionDetail"
+      },
+      "title": "Jurisdiction Details",
       "type": "array"
     },
     "coverage": {

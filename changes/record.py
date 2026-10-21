@@ -62,6 +62,8 @@ OF = ":of"  # after a link's ID, the state (and event) key of its event on the a
 # A version diff names provisions, not the containers around a text (TXP-04); each list is capped.
 DIFF_SKIPPED = frozenset({"document", "contents", "contents_entry", "notice"})
 DIFF_CAP = 200
+# What a reviewed membership asserts (JUR-04): a change to any of these is announced; its note is not.
+MEMBERSHIP_FIELDS = ("member_id", "body_id", "valid_from", "valid_to", "evidence_url")
 
 
 def digest(value) -> str:
@@ -133,9 +135,11 @@ class _Recorder:
                 "rights_revision",
                 "link_state",
                 "event_state",
+                "membership_state",
             )
         }
         self.t["legal_event"] = ns.qualified(conn, "corpus", "legal_event")
+        self.t["membership"] = ns.qualified(conn, "corpus", "membership")
         self.allocate = ns.qualified(conn, "policy", "allocate_publication_revision") + "()"
         self.events: list[dict] = []
         self.rights_revision: dict[str, int] = {}  # work -> the rights revision in force after this write
@@ -216,6 +220,9 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
         return 0  # a database before migration 0023 has no change log
     keeps_links = conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["link_state"]}) is not None
     keeps_events = conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["event_state"]}) is not None
+    keeps_memberships = (
+        conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["membership_state"]}) is not None
+    )
     state = (
         conn.execute(
             text(
@@ -262,10 +269,13 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
         if keeps_events
         else []
     )
+    # Memberships are few and change only by publishing the register: always compared whole.
+    memberships = _memberships(rec, announce=bool(state["baselined"])) if keeps_memberships else []
     if not state["baselined"]:
         _record_rights(rec, revisions, 0)
         _record_links(rec, links, baseline=True)
         _record_provision_events(rec, provision_events)
+        _record_memberships(rec, memberships)
         conn.execute(
             text(f"UPDATE {rec.t['feed_state']} SET baselined = true, baseline_at = statement_timestamp()")
         )
@@ -273,6 +283,7 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
     if keeps_links:
         _record_links(rec, links, baseline=not state["links_baselined"])
     _record_provision_events(rec, provision_events)
+    _record_memberships(rec, memberships)
     if rec.events or revisions:
         revision = conn.scalar(text(f"SELECT {rec.allocate}"))
         _record_rights(rec, revisions, revision)
@@ -607,6 +618,127 @@ def _record_provision_events(rec: _Recorder, states: list[tuple]) -> None:
                 "h": event_hash,
                 "c": planned and planned["event_id"],
                 "r": planned and planned["event_revision"],
+            },
+        )
+
+
+def _memberships(rec: _Recorder, *, announce: bool) -> list[tuple]:
+    """The reviewed memberships published to the catalogue (corpus.membership), compared with their last
+    announced form: a new one is a membership_recorded event; its end (valid_to set) is another, with the
+    reason ``ended``; any other change, or its retraction, corrects the latest of them (SUB C1, JUR-04).
+    Returns the state to record. Without ``announce`` (before the feed's baseline) nothing is announced."""
+    rows = rec.conn.execute(
+        text(f"SELECT {', '.join(('membership_id', *MEMBERSHIP_FIELDS))} FROM {rec.t['membership']}")
+    ).mappings()
+    public = {
+        r["membership_id"]: {
+            k: (r[k].isoformat() if hasattr(r[k], "isoformat") else r[k]) for k in MEMBERSHIP_FIELDS
+        }
+        for r in rows
+    }
+    held = {
+        row.membership_id: row
+        for row in rec.conn.execute(
+            text(
+                "SELECT membership_id, projection, projection_hash, event_id, event_revision, event_key"
+                f" FROM {rec.t['membership_state']}"
+            )
+        )
+    }
+    places = {m[k] for m in public.values() for k in ("member_id", "body_id")}
+    places |= {row.projection[k] for row in held.values() for k in ("member_id", "body_id")}
+    names = _names(rec.conn, sorted(places)) if announce else {}
+
+    def announce_one(membership_id, now, was, *, retracted=False):
+        member, body = (names.get(now[k], now[k]) for k in ("member_id", "body_id"))
+        before = was.projection if was is not None and was.event_id else None
+        if before is None:
+            key, reason, corrects = membership_id, None, None
+            summary = f"{member} is a member of {body}, from {now['valid_from']}."
+            if now["valid_to"]:
+                summary = f"{member} was a member of {body} from {now['valid_from']} until {now['valid_to']}."
+        elif not retracted and before["valid_to"] is None and now["valid_to"] is not None:
+            key, reason, corrects = f"{membership_id}:ended", "ended", None
+            summary = f"{member}'s membership of {body} ended; its last day was {now['valid_to']}."
+        else:
+            key, reason, corrects = was.event_key, None, (was.event_id, was.event_revision)
+            summary = f"The record of {member}'s membership of {body} was corrected."
+            if retracted:
+                summary = (
+                    f"The record of {member}'s membership of {body} was withdrawn; it is not a fact now."
+                )
+        changed = [] if before is None else [k for k in MEMBERSHIP_FIELDS if now[k] != before.get(k)]
+        return rec.add(
+            "membership_recorded",
+            key,
+            membership_id,
+            {
+                "projection": {
+                    "title": f"{member}: membership of {body}",
+                    "canonical_url": now["evidence_url"],
+                    "jurisdiction_id": now["member_id"],
+                }
+            },
+            summary=summary,
+            reason=reason,
+            changed=changed,
+            extra={
+                "membership": {
+                    "id": membership_id,
+                    "member": {"id": now["member_id"], "name": member},
+                    "body": {"id": now["body_id"], "name": body},
+                    "valid_from": now["valid_from"],
+                    "valid_to": now["valid_to"],
+                    "evidence_url": now["evidence_url"],
+                    "retracted": retracted,
+                }
+            },
+            corrects=corrects,
+            legal_effective={"from": now["valid_from"], "until": now["valid_to"], "precision": "day"},
+        )
+
+    states = []
+    for membership_id, now in sorted(public.items()):
+        now_hash, was = digest(now), held.get(membership_id)
+        if was is not None and was.projection_hash == now_hash:
+            continue
+        planned = announce_one(membership_id, now, was) if announce else None
+        states.append(("put", membership_id, now, now_hash, planned))
+    for membership_id in sorted(held.keys() - public.keys()):
+        was = held[membership_id]
+        if announce and was.event_id:
+            announce_one(membership_id, was.projection, was, retracted=True)
+        states.append(("drop", membership_id, None, None, None))
+    return states
+
+
+def _record_memberships(rec: _Recorder, states: list[tuple]) -> None:
+    table = rec.t["membership_state"]
+    for action, membership_id, membership, membership_hash, planned in states:
+        if action == "drop":
+            rec.conn.execute(text(f"DELETE FROM {table} WHERE membership_id = :m"), {"m": membership_id})
+            continue
+        rec.conn.execute(
+            text(
+                f"INSERT INTO {table} (membership_id, member_id, body_id, projection, projection_hash, event_id,"
+                " event_revision, event_key) VALUES (:m, :member, :body, CAST(:p AS jsonb), :h, :e, :r, :k)"
+                " ON CONFLICT (membership_id) DO UPDATE SET member_id = EXCLUDED.member_id,"
+                " body_id = EXCLUDED.body_id, projection = EXCLUDED.projection,"
+                " projection_hash = EXCLUDED.projection_hash,"
+                f" event_id = coalesce(EXCLUDED.event_id, {table}.event_id),"
+                f" event_revision = coalesce(EXCLUDED.event_revision, {table}.event_revision),"
+                f" event_key = coalesce(EXCLUDED.event_key, {table}.event_key),"
+                " updated_at = statement_timestamp()"
+            ),
+            {
+                "m": membership_id,
+                "member": membership["member_id"],
+                "body": membership["body_id"],
+                "p": json.dumps(membership, ensure_ascii=False),
+                "h": membership_hash,
+                "e": planned and planned["event_id"],
+                "r": planned and planned["event_revision"],
+                "k": planned and planned["logical_event_key"],
             },
         )
 

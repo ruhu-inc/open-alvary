@@ -702,7 +702,13 @@ LATER_TABLES = {
     "index_generation": {"release": {"SELECT", "INSERT", "UPDATE"}, "serving": {"SELECT"}},
     "index_job": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
     "engine_state": {"release": {"SELECT", "INSERT", "UPDATE"}, "serving": {"SELECT"}},
+    "membership_state": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
     # The guard reads every table of the corpus schema (bundle v0003).
+    "corpus.membership": {
+        "release": {"SELECT", "INSERT", "UPDATE", "DELETE"},
+        "serving": {"SELECT"},
+        "guard": {"SELECT"},
+    },
     "corpus.legal_event": {
         "release": {"SELECT", "INSERT", "UPDATE"},
         "serving": {"SELECT"},

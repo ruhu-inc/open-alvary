@@ -283,5 +283,14 @@
     "requires": [
       "changes.engine_state"
     ]
+  },
+  {
+    "revision": "g1_memberships",
+    "anchor": "corpus.membership",
+    "file": "vg1_memberships.sql",
+    "requires": [
+      "changes.membership_state",
+      "corpus.membership"
+    ]
   }
 ]

@@ -86,10 +86,50 @@ class NodeViewRecord(StructureNode):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class MembershipView(WireModel):
+    """One reviewed membership of the African Union or a regional body (JUR-04): the member, the body, the
+    first and last day it held (inclusive; no last day means it has not ended), the evidence and who
+    reviewed it when. Membership alone never applies the body's treaties to the member."""
+
+    id: ID
+    member_id: ID
+    member_name: Nonempty
+    body_id: ID
+    body_name: Nonempty
+    valid_from: date
+    valid_to: date | None = None
+    evidence_url: Nonempty
+    note: Nonempty
+    reviewed_by: Nonempty
+    reviewed_at: AwareDatetime
+
+
+class MembershipList(WireModel):
+    """Memberships in one direction on one date: the bodies a jurisdiction belongs to, or a body's members.
+    ``items`` held on the date; ``ended`` had ended by then. ``unknown`` when no membership in this
+    direction is reviewed: never an empty list read as "none"."""
+
+    status: Literal["reviewed", "unknown"]
+    items: tuple[MembershipView, ...] = ()
+    ended: tuple[MembershipView, ...] = ()
+    notice: str
+
+
 class JurisdictionView(Jurisdiction):
     model_config = ConfigDict(extra="forbid", frozen=True)
     legal_systems: tuple[str, ...] = ()
     languages: tuple[str, ...] = ()
+    # The bodies it belongs to, where the keyed API answers them; absent elsewhere, so the pilot's answer
+    # is unchanged.
+    member_of: MembershipList | None = Field(default=None, exclude_if=lambda value: value is None)
+
+
+class JurisdictionDetail(JurisdictionView):
+    """One jurisdiction on a date (API /jurisdictions/{id}): a country's bodies, or a body's members."""
+
+    level: Literal["continental", "regional", "national", "subnational", "local"] | None = None
+    as_of: date
+    members: MembershipList | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class DecisionView(WireModel):
@@ -714,6 +754,7 @@ class PublicContracts(WireModel):
     rights: tuple[RightsView, ...] = ()
     citations: tuple[CitationView, ...] = ()
     jurisdictions: tuple[JurisdictionView, ...] = ()
+    jurisdiction_details: tuple[JurisdictionDetail, ...] = ()
     coverage: tuple[CoverageView, ...] = ()
     relationships: tuple[SourceRelationships, ...] = ()
     structures: tuple[StructurePage, ...] = ()

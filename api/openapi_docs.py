@@ -34,13 +34,14 @@ FEED = {
 FILTERS = [
     (
         "jurisdiction",
-        "Jurisdiction IDs, such as `ng`; a country includes its states and local law. Up to 50.",
+        "Jurisdiction IDs, such as `ng`; a country includes its states and local law, and a body such as "
+        "`aa-ecowas` includes changes to its membership. Up to 50.",
     ),
     ("work", "Record IDs, such as `ng-foi-act-2011`. Up to 50."),
     (
         "type",
         "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, "
-        "`legal_effect_recorded`, `withdrawal`, `coverage_changed`.",
+        "`legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`.",
     ),
     ("class", "Document types, such as `act` or `regulation`. Up to 50."),
     ("language", "Languages of the affected text, such as `en`. Up to 50."),
@@ -325,9 +326,28 @@ OPERATIONS: dict[str, dict] = {
         "operationId": "list_jurisdictions",
         "tag": "Catalogue",
         "summary": "List jurisdictions",
-        "description": "The jurisdictions the catalogue holds: countries and their states or regions, "
-        "with their legal systems and languages.",
-        "errors": {},
+        "description": "The jurisdictions the catalogue holds: countries and their states or regions, the "
+        "African Union and the regional bodies, with their legal systems and languages, and for each country "
+        "`member_of`, the bodies it belongs to on `as_of` (today by default). Only reviewed memberships are "
+        "listed; `status` is `unknown` when none is reviewed.",
+        "parameters": {"as_of": "A date, such as `2026-01-01`: the memberships held on it. Default today."},
+        "errors": BAD,
+    },
+    "/jurisdictions/{jurisdiction_id}": {
+        "operationId": "get_jurisdiction",
+        "tag": "Catalogue",
+        "summary": "Get a jurisdiction and its memberships",
+        "description": "One jurisdiction on a date. For a country, `member_of`: the African Union and the "
+        "regional bodies it belonged to on `as_of`, and in `ended` the memberships that had ended by then, "
+        "each with its first and last day, evidence and review. For the African Union or a regional body, "
+        "`members`: its member states on that date, and those that had left. Only reviewed memberships are "
+        "listed; `status` is `unknown`, never an empty list, when none is reviewed. Membership alone never "
+        "means a body's treaties apply to a member.",
+        "parameters": {
+            "jurisdiction_id": "The jurisdiction's ID, such as `sn` (Senegal) or `aa-ecowas` (ECOWAS).",
+            "as_of": "A date, such as `2026-01-01`: the memberships held on it. Default today.",
+        },
+        "errors": BAD | {"404": "There is no such jurisdiction (`unavailable`)."},
     },
     "/coverage": {
         "operationId": "get_coverage",
@@ -523,7 +543,9 @@ SCHEMAS: dict[str, dict] = {
                 "`text_version_published`, `legal_effect_recorded` (a checked link with another public "
                 "record that changes what law applies: a repeal, amendment, supersession, commencement, "
                 "transposition, domestication or ratification; or a reviewed event on its provisions), "
-                "`withdrawal` (a record or text) or `coverage_changed` (a jurisdiction's coverage). More types "
+                "`withdrawal` (a record or text), `coverage_changed` (a jurisdiction's coverage) or "
+                "`membership_recorded` (a reviewed membership of the African Union or a regional body "
+                "recorded, ended or corrected). More types "
                 "may be added: ignore those you do not know; `/change-coverage` lists the ones recorded.",
             },
             "feed_epoch": {
@@ -566,7 +588,7 @@ SCHEMAS: dict[str, dict] = {
             "change_reason": NULL_S
             | {
                 "description": "Why, when known: `restored`, `first_text`, `source_revision`, "
-                "`extraction_correction`, `redaction`, `corrected` or `unknown`."
+                "`extraction_correction`, `redaction`, `corrected`, `ended` (a membership ended) or `unknown`."
             },
             "supersedes": {
                 "type": ["object", "null"],
@@ -600,6 +622,14 @@ SCHEMAS: dict[str, dict] = {
                 "`repealed`, `suspended`, `revived`, …), with `scope` (`whole` or `explicit_nodes`), "
                 "`provisions` (their locators), `precision` of the date and `review_state` (`withdrawn` when "
                 "the event was withdrawn, or is no longer public); `by` is present when another law asserted it.",
+            },
+            "membership": {
+                "type": ["object", "null"],
+                "description": "For a membership: {id, member, body, valid_from, valid_to, evidence_url, "
+                "retracted}. `member` and `body` are {id, name}; the dates are its first and last day "
+                "(`valid_to` null: not ended), as a reviewer checked them against the evidence. A change with "
+                "`change_reason` `ended` records its end; a later correction has the same `event_id`, and "
+                "`retracted` true when the membership is no longer a reviewed fact.",
             },
             "previous": {
                 "type": "object",
@@ -726,6 +756,14 @@ SCHEMAS: dict[str, dict] = {
 }
 
 # Field descriptions of the response models, by schema.
+JURISDICTION = {
+    "id": "The jurisdiction's ID, such as `ng`, or `aa-ecowas` for a regional body.",
+    "name": "Its name.",
+    "country_code": "Its ISO country code, such as `NG`; null for the African Union and the regional bodies.",
+    "parent_id": "The country a state or region belongs to.",
+    "legal_systems": "Its legal systems.",
+    "languages": "Its official languages.",
+}
 FIELDS: dict[str, dict[str, str]] = {
     "EvidencePack": {
         "schema_version": "`oa-evidence-1`.",
@@ -1286,13 +1324,36 @@ FIELDS: dict[str, dict[str, str]] = {
         "jurisdictions": "Records per jurisdiction, as {ID: count}.",
         "notice": "What the counts cover.",
     },
-    "JurisdictionView": {
-        "id": "The jurisdiction's ID, such as `ng`.",
-        "name": "Its name.",
-        "country_code": "Its ISO country code, such as `NG`.",
-        "parent_id": "The country a state or region belongs to.",
-        "legal_systems": "Its legal systems.",
-        "languages": "Its official languages.",
+    "JurisdictionView": JURISDICTION
+    | {"member_of": "For a country: the bodies it belongs to on `as_of`, reviewed memberships only."},
+    "JurisdictionDetail": JURISDICTION
+    | {
+        "member_of": "For a country: the African Union and regional bodies it belongs to on `as_of`.",
+        "level": "`continental`, `regional`, `national`, `subnational` or `local`, when known.",
+        "as_of": "The date the memberships are given for.",
+        "members": "For the African Union or a regional body: its members on `as_of`.",
+    },
+    "MembershipList": {
+        "status": "`reviewed`: the memberships listed are reviewed facts. `unknown`: none is reviewed yet, "
+        "which never means none exists.",
+        "items": "The memberships held on the date.",
+        "ended": "The reviewed memberships that had ended before the date, with their last day.",
+        "notice": "What the list covers, in a sentence.",
+    },
+    "MembershipView": {
+        "id": "The membership's ID: member, body and period, such as `ml:aa-ecowas:1`.",
+        "member_id": "The member's jurisdiction ID, such as `ml`.",
+        "member_name": "The member's name.",
+        "body_id": "The body's jurisdiction ID, such as `aa-ecowas`.",
+        "body_name": "The body's name.",
+        "valid_from": "The membership's first day.",
+        "valid_to": "Its last day, when it has ended (a withdrawal effective on 29 January ends it on the 28th); "
+        "null when it has not.",
+        "evidence_url": "The official source the dates were checked against: the body's own site or the "
+        "treaty's depositary.",
+        "note": "What the evidence says, and anything a reader should know about the dates.",
+        "reviewed_by": "Who reviewed it.",
+        "reviewed_at": "When it was reviewed.",
     },
 }
 

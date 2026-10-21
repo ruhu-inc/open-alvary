@@ -38,6 +38,7 @@ TYPES = (
     "treatment_recorded",
     "withdrawal",
     "coverage_changed",
+    "membership_recorded",
 )
 SUPPORTED = (
     "catalogue_added",
@@ -46,7 +47,10 @@ SUPPORTED = (
     "legal_effect_recorded",
     "withdrawal",
     "coverage_changed",
+    "membership_recorded",
 )
+# Events about a jurisdiction rather than a record: never subject to a record's visibility.
+PLACE_EVENTS = ("coverage_changed", "membership_recorded")
 DIMENSIONS = {
     "jurisdiction": "jurisdiction_id",
     "work": "work_id",
@@ -129,6 +133,10 @@ class Filters:
             for i, value in enumerate(self.jurisdiction):
                 params[f"j{i}"] = value
                 alternatives.append(f"e.jurisdiction_id = :j{i}")
+                # A membership concerns its body as much as its member.
+                alternatives.append(
+                    f"(e.event_type = 'membership_recorded' AND e.payload #>> '{{membership,body,id}}' = :j{i})"
+                )
                 if "-" not in value:  # a country includes its sub-national units
                     params[f"jp{i}"] = value + "-"
                     alternatives.append(f"left(e.jurisdiction_id, length(:jp{i})) = :jp{i}")
@@ -166,7 +174,10 @@ class Filters:
         matched = []
         if self.jurisdiction:
             place = event["jurisdiction_id"]
-            if not any(place == j or ("-" not in j and place.startswith(j + "-")) for j in self.jurisdiction):
+            body = (event["payload"].get("membership") or {}).get("body", {}).get("id")
+            if body not in self.jurisdiction and not any(
+                place == j or ("-" not in j and place.startswith(j + "-")) for j in self.jurisdiction
+            ):
                 return None
             matched.append("jurisdiction")
         for name, column in (("work", "work_id"), ("cls", "document_class"), ("language", "language")):
@@ -431,8 +442,15 @@ class Feed:
         """The public form of one event, or None while what it names is not public."""
         payload = row["payload"]
         kind = row["event_type"]
-        work = visible.work(row["work_id"]) if kind != "coverage_changed" else None
+        work = visible.work(row["work_id"]) if kind not in PLACE_EVENTS else None
         named = work is not None
+        membership = None
+        if kind == "membership_recorded":
+            # A reviewed membership is a public fact about two jurisdictions; their names are current ones.
+            membership = dict(payload.get("membership") or {})
+            for side in ("member", "body"):
+                place = (membership.get(side) or {}).get("id")
+                membership[side] = {"id": place, "name": visible.jurisdiction(place)}
         if kind in ("catalogue_added", "metadata_corrected", "legal_effect_recorded") and not named:
             return None
         legal_effect = None
@@ -468,7 +486,7 @@ class Feed:
             if not named:
                 summary = "A previously public record was withdrawn. Revalidate any copies you keep."
         jurisdiction = None
-        if named or kind == "coverage_changed":
+        if named or kind in PLACE_EVENTS:
             jurisdiction = {
                 "id": row["jurisdiction_id"],
                 "name": visible.jurisdiction(row["jurisdiction_id"]),
@@ -498,7 +516,7 @@ class Feed:
             "version": version,
             # The rights record revision in force for a text published or withdrawn (OA-R1).
             "rights_revision": payload.get("rights_revision") if version is not None else None,
-            "changed_fields": payload.get("changed_fields", []) if named else [],
+            "changed_fields": payload.get("changed_fields", []) if named or membership else [],
             "change_reason": row["change_reason"],
             "supersedes": {
                 "event_id": str(row["supersedes_event_id"]),
@@ -507,9 +525,10 @@ class Feed:
             if row["supersedes_event_id"]
             else None,
             "summary": summary,
-            "sources": payload.get("sources", []) if named else [],
+            "sources": payload.get("sources", []) if named or membership else [],
             "withdrawal": withdrawal,
             "legal_effect": legal_effect,
+            "membership": membership,
             # A correction's previous values, only for fields that can never have been withheld.
             "previous": payload.get("previous", {}) if named and kind == "metadata_corrected" else {},
             "version_diff": payload.get("version_diff") if kind == "text_version_published" else None,
@@ -661,6 +680,7 @@ LABELS = {
     "text_version_published": "Text published",
     "withdrawal": "Withdrawn",
     "coverage_changed": "Coverage",
+    "membership_recorded": "Membership",
 }
 
 

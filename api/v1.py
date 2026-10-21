@@ -15,7 +15,7 @@ must include bulk and the release's country must be within its plan (MAC-06; own
 import hashlib
 from collections.abc import Callable
 from contextlib import contextmanager
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -48,6 +48,7 @@ from schema.public import (
     CoverageView,
     EvidencePack,
     ExpressionPage,
+    JurisdictionDetail,
     JurisdictionView,
     RelationKind,
     RightsHistory,
@@ -191,11 +192,21 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
     def tier_catalogue():
         return {"tiers": tiers()}
 
+    # Jurisdictions and their memberships are reference data: plan countries do not narrow them.
     @app.get("/jurisdictions")
     def jurisdictions(
-        request: Request, service: LegacyCatalogue = Depends(catalogue)
+        request: Request, as_of: date | None = None, service: LegacyCatalogue = Depends(catalogue)
     ) -> tuple[JurisdictionView, ...]:
-        return service.jurisdictions()
+        return service.jurisdictions(as_of=as_of or datetime.now(UTC).date())
+
+    @app.get("/jurisdictions/{jurisdiction_id}")
+    def jurisdiction(
+        request: Request,
+        jurisdiction_id: str,
+        as_of: date | None = None,
+        service: LegacyCatalogue = Depends(catalogue),
+    ) -> JurisdictionDetail:
+        return service.jurisdiction(jurisdiction_id, as_of or datetime.now(UTC).date())
 
     @app.get("/sources")
     def sources(

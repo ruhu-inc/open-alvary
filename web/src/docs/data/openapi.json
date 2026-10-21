@@ -106,7 +106,7 @@
             "name": "jurisdiction",
             "in": "query",
             "required": false,
-            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law. Up to 50.",
+            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law, and a body such as `aa-ecowas` includes changes to its membership. Up to 50.",
             "schema": {
               "type": "array",
               "items": {
@@ -134,7 +134,7 @@
             "name": "type",
             "in": "query",
             "required": false,
-            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`.",
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`.",
             "schema": {
               "type": "array",
               "items": {
@@ -319,7 +319,7 @@
             "name": "jurisdiction",
             "in": "query",
             "required": false,
-            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law. Up to 50.",
+            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law, and a body such as `aa-ecowas` includes changes to its membership. Up to 50.",
             "schema": {
               "type": "array",
               "items": {
@@ -347,7 +347,7 @@
             "name": "type",
             "in": "query",
             "required": false,
-            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`.",
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`.",
             "schema": {
               "type": "array",
               "items": {
@@ -492,7 +492,7 @@
             "name": "jurisdiction",
             "in": "query",
             "required": false,
-            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law. Up to 50.",
+            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law, and a body such as `aa-ecowas` includes changes to its membership. Up to 50.",
             "schema": {
               "type": "array",
               "items": {
@@ -520,7 +520,7 @@
             "name": "type",
             "in": "query",
             "required": false,
-            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`.",
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`.",
             "schema": {
               "type": "array",
               "items": {
@@ -665,7 +665,7 @@
             "name": "jurisdiction",
             "in": "query",
             "required": false,
-            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law. Up to 50.",
+            "description": "Jurisdiction IDs, such as `ng`; a country includes its states and local law, and a body such as `aa-ecowas` includes changes to its membership. Up to 50.",
             "schema": {
               "type": "array",
               "items": {
@@ -693,7 +693,7 @@
             "name": "type",
             "in": "query",
             "required": false,
-            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`.",
+            "description": "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, `legal_effect_recorded`, `withdrawal`, `coverage_changed`, `membership_recorded`.",
             "schema": {
               "type": "array",
               "items": {
@@ -939,17 +939,47 @@
       "get": {
         "summary": "List jurisdictions",
         "operationId": "list_jurisdictions",
+        "parameters": [
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            },
+            "description": "A date, such as `2026-01-01`: the memberships held on it. Default today."
+          }
+        ],
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
+                  "type": "array",
                   "items": {
                     "$ref": "#/components/schemas/JurisdictionView"
                   },
-                  "type": "array",
                   "title": "Response Jurisdictions Jurisdictions Get"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -995,7 +1025,119 @@
             }
           }
         },
-        "description": "The jurisdictions the catalogue holds: countries and their states or regions, with their legal systems and languages.",
+        "description": "The jurisdictions the catalogue holds: countries and their states or regions, the African Union and the regional bodies, with their legal systems and languages, and for each country `member_of`, the bodies it belongs to on `as_of` (today by default). Only reviewed memberships are listed; `status` is `unknown` when none is reviewed.",
+        "tags": [
+          "Catalogue"
+        ]
+      }
+    },
+    "/jurisdictions/{jurisdiction_id}": {
+      "get": {
+        "summary": "Get a jurisdiction and its memberships",
+        "operationId": "get_jurisdiction",
+        "parameters": [
+          {
+            "name": "jurisdiction_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Jurisdiction Id"
+            },
+            "description": "The jurisdiction's ID, such as `sn` (Senegal) or `aa-ecowas` (ECOWAS)."
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            },
+            "description": "A date, such as `2026-01-01`: the memberships held on it. Default today."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JurisdictionDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or the record is outside it (`entitlement_required`, `entitlement_lapsed`, `jurisdiction_not_included`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "There is no such jurisdiction (`unavailable`).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "One jurisdiction on a date. For a country, `member_of`: the African Union and the regional bodies it belonged to on `as_of`, and in `ended` the memberships that had ended by then, each with its first and last day, evidence and review. For the African Union or a regional body, `members`: its member states on that date, and those that had left. Only reviewed memberships are listed; `status` is `unknown`, never an empty list, when none is reviewed. Membership alone never means a body's treaties apply to a member.",
         "tags": [
           "Catalogue"
         ]
@@ -5131,13 +5273,13 @@
         "title": "ExpressionView",
         "description": "One language edition of a record (API-02 expressions): its public texts, the one to read when no\ndate is given, and what the edition is worth as law as its record states it, with where; ``unknown``\nwhen the record states nothing. A preferred text is a reading default, never a claim of authority."
       },
-      "JurisdictionView": {
+      "JurisdictionDetail": {
         "properties": {
           "id": {
             "type": "string",
             "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
             "title": "Id",
-            "description": "The jurisdiction's ID, such as `ng`."
+            "description": "The jurisdiction's ID, such as `ng`, or `aa-ecowas` for a regional body."
           },
           "name": {
             "type": "string",
@@ -5156,7 +5298,7 @@
               }
             ],
             "title": "Country Code",
-            "description": "Its ISO country code, such as `NG`."
+            "description": "Its ISO country code, such as `NG`; null for the African Union and the regional bodies."
           },
           "parent_id": {
             "anyOf": [
@@ -5188,6 +5330,133 @@
             "title": "Languages",
             "default": [],
             "description": "Its official languages."
+          },
+          "member_of": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MembershipList"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a country: the African Union and regional bodies it belongs to on `as_of`."
+          },
+          "level": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "continental",
+                  "regional",
+                  "national",
+                  "subnational",
+                  "local"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Level",
+            "description": "`continental`, `regional`, `national`, `subnational` or `local`, when known."
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date",
+            "title": "As Of",
+            "description": "The date the memberships are given for."
+          },
+          "members": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MembershipList"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For the African Union or a regional body: its members on `as_of`."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "as_of"
+        ],
+        "title": "JurisdictionDetail",
+        "description": "One jurisdiction on a date (API /jurisdictions/{id}): a country's bodies, or a body's members."
+      },
+      "JurisdictionView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Id",
+            "description": "The jurisdiction's ID, such as `ng`, or `aa-ecowas` for a regional body."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name",
+            "description": "Its name."
+          },
+          "country_code": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Z]{2}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country Code",
+            "description": "Its ISO country code, such as `NG`; null for the African Union and the regional bodies."
+          },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id",
+            "description": "The country a state or region belongs to."
+          },
+          "legal_systems": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Legal Systems",
+            "default": [],
+            "description": "Its legal systems."
+          },
+          "languages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Languages",
+            "default": [],
+            "description": "Its official languages."
+          },
+          "member_of": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MembershipList"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For a country: the bodies it belongs to on `as_of`, reviewed memberships only."
           }
         },
         "additionalProperties": false,
@@ -5267,6 +5536,143 @@
         ],
         "title": "LanguageRuleView",
         "description": "The instrument's own rule for divergence between its language versions (LNG-03, DAT-07), as its\nrecord states it: ``stated``, with the rule, the language whose version prevails when it names one,\nwhere it is stated and the evidence; ``not_stated``, the reviewed copy states none;\n``not_applicable``; or ``unknown``, nothing is recorded."
+      },
+      "MembershipList": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "reviewed",
+              "unknown"
+            ],
+            "title": "Status",
+            "description": "`reviewed`: the memberships listed are reviewed facts. `unknown`: none is reviewed yet, which never means none exists."
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MembershipView"
+            },
+            "type": "array",
+            "title": "Items",
+            "default": [],
+            "description": "The memberships held on the date."
+          },
+          "ended": {
+            "items": {
+              "$ref": "#/components/schemas/MembershipView"
+            },
+            "type": "array",
+            "title": "Ended",
+            "default": [],
+            "description": "The reviewed memberships that had ended before the date, with their last day."
+          },
+          "notice": {
+            "type": "string",
+            "title": "Notice",
+            "description": "What the list covers, in a sentence."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status",
+          "notice"
+        ],
+        "title": "MembershipList",
+        "description": "Memberships in one direction on one date: the bodies a jurisdiction belongs to, or a body's members.\n``items`` held on the date; ``ended`` had ended by then. ``unknown`` when no membership in this\ndirection is reviewed: never an empty list read as \"none\"."
+      },
+      "MembershipView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Id",
+            "description": "The membership's ID: member, body and period, such as `ml:aa-ecowas:1`."
+          },
+          "member_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Member Id",
+            "description": "The member's jurisdiction ID, such as `ml`."
+          },
+          "member_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Member Name",
+            "description": "The member's name."
+          },
+          "body_id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+            "title": "Body Id",
+            "description": "The body's jurisdiction ID, such as `aa-ecowas`."
+          },
+          "body_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Body Name",
+            "description": "The body's name."
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date",
+            "title": "Valid From",
+            "description": "The membership's first day."
+          },
+          "valid_to": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To",
+            "description": "Its last day, when it has ended (a withdrawal effective on 29 January ends it on the 28th); null when it has not."
+          },
+          "evidence_url": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Evidence Url",
+            "description": "The official source the dates were checked against: the body's own site or the treaty's depositary."
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Note",
+            "description": "What the evidence says, and anything a reader should know about the dates."
+          },
+          "reviewed_by": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Reviewed By",
+            "description": "Who reviewed it."
+          },
+          "reviewed_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Reviewed At",
+            "description": "When it was reviewed."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "member_id",
+          "member_name",
+          "body_id",
+          "body_name",
+          "valid_from",
+          "evidence_url",
+          "note",
+          "reviewed_by",
+          "reviewed_at"
+        ],
+        "title": "MembershipView",
+        "description": "One reviewed membership of the African Union or a regional body (JUR-04): the member, the body, the\nfirst and last day it held (inclusive; no last day means it has not ended), the evidence and who\nreviewed it when. Membership alone never applies the body's treaties to the member."
       },
       "NextStep": {
         "properties": {
@@ -7560,7 +7966,7 @@
           },
           "event_type": {
             "type": "string",
-            "description": "What changed: `catalogue_added` (a record added: an old law newly catalogued, not a new law), `metadata_corrected` (its catalogue details corrected), `text_version_published`, `legal_effect_recorded` (a checked link with another public record that changes what law applies: a repeal, amendment, supersession, commencement, transposition, domestication or ratification; or a reviewed event on its provisions), `withdrawal` (a record or text) or `coverage_changed` (a jurisdiction's coverage). More types may be added: ignore those you do not know; `/change-coverage` lists the ones recorded."
+            "description": "What changed: `catalogue_added` (a record added: an old law newly catalogued, not a new law), `metadata_corrected` (its catalogue details corrected), `text_version_published`, `legal_effect_recorded` (a checked link with another public record that changes what law applies: a repeal, amendment, supersession, commencement, transposition, domestication or ratification; or a reviewed event on its provisions), `withdrawal` (a record or text), `coverage_changed` (a jurisdiction's coverage) or `membership_recorded` (a reviewed membership of the African Union or a regional body recorded, ended or corrected). More types may be added: ignore those you do not know; `/change-coverage` lists the ones recorded."
           },
           "feed_epoch": {
             "type": "string",
@@ -7659,7 +8065,7 @@
               "string",
               "null"
             ],
-            "description": "Why, when known: `restored`, `first_text`, `source_revision`, `extraction_correction`, `redaction`, `corrected` or `unknown`."
+            "description": "Why, when known: `restored`, `first_text`, `source_revision`, `extraction_correction`, `redaction`, `corrected`, `ended` (a membership ended) or `unknown`."
           },
           "supersedes": {
             "type": [
@@ -7692,6 +8098,13 @@
               "null"
             ],
             "description": "For a legal effect: {kind, by, effective_date, evidence_url}. `kind` is `repeal`, `amendment`, `supersession`, `commencement`, `transposition`, `domestication` or `ratification` of the record in `work`; `by` is the record that had the effect {id, title, citation}; the date is when it took effect, when known. A reviewer checked it against the official text. A transposition, domestication or ratification changes the law on both sides, so the law that gives effect to the instrument has its own change, naming the instrument in `of` {id, title, citation} instead of `by`. A later correction of it has the same `event_id`; when the link was withdrawn, the correction says `review_state` `withdrawn` and names the link it withdraws. For a reviewed event on provisions, `kind` is the event (`commenced`, `repealed`, `suspended`, `revived`, …), with `scope` (`whole` or `explicit_nodes`), `provisions` (their locators), `precision` of the date and `review_state` (`withdrawn` when the event was withdrawn, or is no longer public); `by` is present when another law asserted it."
+          },
+          "membership": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "For a membership: {id, member, body, valid_from, valid_to, evidence_url, retracted}. `member` and `body` are {id, name}; the dates are its first and last day (`valid_to` null: not ended), as a reviewer checked them against the evidence. A change with `change_reason` `ended` records its end; a later correction has the same `event_id`, and `retracted` true when the membership is no longer a reviewed fact."
           },
           "previous": {
             "type": "object",
