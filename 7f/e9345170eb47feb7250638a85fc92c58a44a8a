@@ -1,0 +1,49 @@
+tests/test_rw_gazette.py
+  s_d665c62e07d76f::t_fd3b997c0e38d9 810,815-816
+  s_d665c62e07d76f::t_8d38f9cbd1c294 833
+  s_d665c62e07d76f::t_3ba3af8bcb415f 814,825-832,834-846
+  s_d665c62e07d76f::t_9d05468e4ca261 805,809,811-813
+workbench/static/app.js
+  s_d665c62e07d76f::t_974c0d090e12bf 877,880,882-884,886-888,894-895
+tests/test_record.py
+  s_d665c62e07d76f::t_770910f86f2c1b 464-504
+  s_d665c62e07d76f::t_71b770ec828d63 400,402-408
+ingestion/rwanda.py
+  s_d665c62e07d76f::t_345c4c2cb49ba2 725
+  s_d665c62e07d76f::t_767398131a973f 754-755
+  s_d665c62e07d76f::t_c54ea0e0a7f613 705-708
+  s_d665c62e07d76f::t_5b50b28e8a2f1e 771-772
+ingestion/rw_gazette.py
+  s_d665c62e07d76f::t_1ede80f16bbd86 1375,1377
+  s_d665c62e07d76f::t_241e897103c3f8 1406-1407,1417
+  s_d665c62e07d76f::t_19c8032d0cddde 1353-1354,1357-1366,1368-1369,1372-1374,1376
+  s_d665c62e07d76f::t_67bff5c81ed49a 1216-1218
+  s_d665c62e07d76f::t_6c232b0c9ba9df 1324-1325,1332
+  s_d665c62e07d76f::t_f38199d60454f2 26
+  s_d665c62e07d76f::t_c16efaeb4ef630 1408-1410
+  s_d665c62e07d76f::t_ce92f3445e7e9d 1398
+  s_d665c62e07d76f::t_7a259642e001d0 18,20
+tests/test_rwanda_catalogue.py
+  s_d665c62e07d76f::t_8c2e6347d346bc 1065,1068
+  s_d665c62e07d76f::t_6c470b907a2d0e 1078-1082
+workbench/record_view.py
+  s_d665c62e07d76f::t_556513bc77c3f0 1217-1218
+  s_d665c62e07d76f::t_1677c89feabace 1231-1234
+  s_d665c62e07d76f::t_0b4d2e5143401c 1187-1192,1194-1195,1202,1205-1216
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "7fe9345170eb47feb7250638a85fc92c58a44a8a",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
