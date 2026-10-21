@@ -7,6 +7,7 @@
   flags         pages whose flags are to be resolved
   events        legal events proposed and waiting for an approver's review (CPR-02)
   instructions  amendment instructions waiting for an editor's review, or a second editor's (CPR-03)
+  citations     a judgment's citations proposed and waiting for an approver to confirm or reject them
 
 A task is one document's work of one kind and priority: pages with an open high flag first, then
 pages to review whole, then flags to resolve, then proposals. Work in documents already started comes
@@ -23,6 +24,7 @@ PRIORITIES = ("high", "full", "flags", "proposal")
 WAITING = {  # the statuses a proposal waits in, and for what
     "events": ("event_id", {"proposed": "review"}),
     "instructions": ("instruction_id", {"proposed": "review", "reviewed": "second_review"}),
+    "citations": ("citation_id", {"proposed": "review"}),
 }
 
 
@@ -68,11 +70,11 @@ def not_started(document: dict) -> dict:
     return task(document, "review", priority, document["page_count"], None, started=False)
 
 
-def proposal_tasks(events: list[dict], instructions: list[dict], document_of) -> list[dict]:
+def proposal_tasks(events: list[dict], instructions: list[dict], document_of, citations=()) -> list[dict]:
     """Proposals waiting for review: a task per work, kind and step, shown on the document they were last
     saved on (``document_of`` gives its id and title)."""
     groups: dict[tuple[str, str, str], list[dict]] = {}
-    for kind, rows in (("events", events), ("instructions", instructions)):
+    for kind, rows in (("events", events), ("instructions", instructions), ("citations", list(citations))):
         key, steps = WAITING[kind]
         for revisions in histories(rows, key).values():
             head = revisions[0]

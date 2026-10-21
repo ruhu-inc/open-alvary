@@ -422,11 +422,14 @@ def create_app(
             return listed(library.listed(act_id)) if library.has(act_id) else {"id": act_id, "title": act_id}
 
         tasks += queue.proposal_tasks(
-            store.legal_event_revisions(), store.instruction_revisions(), document_of
+            store.legal_event_revisions(),
+            store.instruction_revisions(),
+            document_of,
+            store.citation_revisions(),
         )
         counts = {
             name: sum(t["kind"] == name for t in tasks)
-            for name in ("review", "flags", "events", "instructions")
+            for name in ("review", "flags", "events", "instructions", "citations")
         }
         chosen = queue.ordered([t for t in tasks if not kind or t["kind"] == kind])
         limit, offset, moment = max(1, min(limit, 500)), max(0, offset), datetime.now(UTC)
