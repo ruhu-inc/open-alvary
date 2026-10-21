@@ -1,0 +1,33 @@
+web/src/docs/data/mcp-tools.json
+  s_d665c62e07d76f::t_6c5052f0d720b2 113-135
+  s_d665c62e07d76f::t_65529c8e5c4dcb 112
+tests/test_mcp.py
+  s_d665c62e07d76f::t_79b3ed10895508 34
+tests/test_postgres_retrieval.py
+  s_d665c62e07d76f::t_9ece4bd8795606 100,115-119
+tests/test_v1_text.py
+  s_d665c62e07d76f::t_9ece4bd8795606 446-456,460-467
+  s_d665c62e07d76f::t_0fb521f05b1464 457-459
+api/mcp.py
+  s_d665c62e07d76f::t_bcc49f4a390fe7 584-589
+  s_d665c62e07d76f::t_4b926e64485e40 134-156
+  s_d665c62e07d76f::t_16bc508e5c87f0 133
+tests/test_postgres_api_v1.py
+  s_d665c62e07d76f::t_79b3ed10895508 225
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "388bd31a00dc37e79553f896b7d668adfd6aab9f",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
