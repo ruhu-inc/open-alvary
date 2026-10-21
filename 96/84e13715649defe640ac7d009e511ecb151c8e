@@ -1,0 +1,25 @@
+rights/sql/provision/manifest.json
+  s_d665c62e07d76f::t_b9b3213f041860 288,290
+migrations/versions/0040_memberships.py
+  s_d665c62e07d76f::t_b9b3213f041860 1-118
+api/catalogue.py
+  s_d665c62e07d76f::t_a792196e7594a4 1195
+rights/capabilities.py
+  s_d665c62e07d76f::t_eee3642cb9d41c 11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "9684e13715649defe640ac7d009e511ecb151c8e",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
