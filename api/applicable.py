@@ -6,16 +6,18 @@ Nothing is decided that a reviewed record or a reviewed membership does not stat
 * a country's own law is ``national``; another country's is ``comparative``;
 * a treaty binds a state through that state's own ratification or accession on or before the date, not
   denounced by then, once the treaty itself is in force (``treaty_in_force_for_state``). A party list
-  without the state, or with its signature alone, is ``treaty_not_in_force_for_state``. Membership of a
-  body never applies a treaty to its members (JUR-04);
+  with the state's signature alone, a later ratification or a denunciation by then is
+  ``treaty_not_in_force_for_state``; so is a list without the state, but only when the record says the
+  list is complete as of the date or later (``parties_complete_as_of``, from the depositary's status
+  list). Membership of a body never applies a treaty to its members (JUR-04);
 * a body's instrument reaches a country only through a reviewed membership held on the date, and then by
   the instrument's own legal effect and the member states it names: ``regional_direct``,
   ``regional_requires_transposition`` (with the country's transposing acts that checked links record),
   ``regional_binding_on_addressees`` or ``non_binding``. One addressed to other states, or of a body the
   country had left or not yet joined, is ``comparative``;
-* whatever is not reviewed (no reviewed membership of the body, a record that states no legal effect or no
-  party, a date that cannot be compared) is ``unknown``, and stays in answers: unknown applicability is
-  reported, never dropped (evaluation-design).
+* whatever is not reviewed (no reviewed membership of the body, a record that states no legal effect, a
+  party list without the state that is not known to be complete, a date that cannot be compared) is
+  ``unknown``, and stays in answers: unknown applicability is reported, never dropped (evaluation-design).
 
 The scope is asked for, never assumed (RSV-03): the answer states the bodies it added, the membership
 each rests on and what it left out. A label is never a decision of anyone's governing law (JUR-03).
@@ -31,6 +33,7 @@ from api.reach import country
 from schema.public import (
     Applicability,
     ApplicableScope,
+    AuthorityEvidence,
     LinkedAct,
     RegionalView,
     StatedDateView,
@@ -86,6 +89,14 @@ def _date(stated) -> StatedDateView | None:
     return StatedDateView.model_validate(stated.model_dump(mode="json")) if stated else None
 
 
+def _evidence(stated) -> AuthorityEvidence | None:
+    return (
+        AuthorityEvidence.model_validate(stated.model_dump(mode="json", exclude_none=True))
+        if stated
+        else None
+    )
+
+
 def regional_view(source) -> RegionalView | None:
     """A regional instrument's legal effect as its record states it; None for any other record."""
     return RegionalView.model_validate(source.regional.model_dump(mode="json")) if source.regional else None
@@ -102,7 +113,8 @@ def _party(party, domesticating: tuple[LinkedAct, ...]) -> TreatyPartyView:
 
 def treaty_view(source, acts: Acts, *, parties: bool = True) -> TreatyView | None:
     """A treaty's status as its record states it, each party with the acts of that state that checked links
-    record as domesticating it; without ``parties`` (an evidence unit), its parties are left out."""
+    record as domesticating it, and the date the party list is complete as of, with its evidence, when
+    recorded; without ``parties`` (an evidence unit), its parties and their completeness are left out."""
     treaty = source.treaty
     if treaty is None:
         return None
@@ -113,6 +125,8 @@ def treaty_view(source, acts: Acts, *, parties: bool = True) -> TreatyView | Non
         entered_into_force=_date(treaty.entered_into_force),
         authentic_languages=tuple(treaty.authentic_languages),
         parties=tuple(_party(p, domesticating) for p in treaty.parties) if parties else None,
+        parties_complete_as_of=treaty.parties_complete_as_of if parties else None,
+        parties_complete_evidence=_evidence(treaty.parties_complete_evidence) if parties else None,
     )
 
 
@@ -218,18 +232,28 @@ class Labeller:
         """A treaty binds a state by that state's own consent, never by membership of a body (JUR-04)."""
         here, day, treaty = self.jurisdiction, self.as_of, source.treaty
         state, entered = country(here), _date(treaty.entered_into_force)
-        if not treaty.parties:
-            return self._answer(
-                "unknown", [f"The treaty's record lists no parties: whether it binds {state} is unknown."],
-                entered_into_force=entered,
-            )  # fmt: skip
         found = next((p for p in treaty.parties if p.place == state), None)
         if found is None:
-            return self._answer(
-                "treaty_not_in_force_for_state",
-                [f"The treaty's reviewed party list records no ratification or accession by {state}."],
-                entered_into_force=entered,
+            # A state missing from the list is not a party only where the list is complete on the date.
+            listed = (
+                f"The treaty's reviewed party list records no ratification or accession by {state}"
+                if treaty.parties
+                else "The treaty's record lists no parties"
             )
+            complete = treaty.parties_complete_as_of
+            if complete is not None and complete >= day:
+                return self._answer(
+                    "treaty_not_in_force_for_state",
+                    [f"{listed}, and the list is complete as of {complete} by the depositary's status list."],
+                    entered_into_force=entered,
+                )  # fmt: skip
+            only = f" (it is complete as of {complete} only)" if complete else ""
+            return self._answer(
+                "unknown",
+                [f"{listed}, and the party list is not known to be complete on {day}{only}: whether it binds "
+                 f"{state} is unknown."],
+                entered_into_force=entered,
+            )  # fmt: skip
         party = _party(found, self.acts(source.id, "domesticated_by"))
 
         def answer(relation, *reasons):

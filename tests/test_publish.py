@@ -313,6 +313,8 @@ def test_a_regional_instruments_effect_and_a_treatys_parties_reach_the_catalogue
                 TreatyParty(party="Mali", place="ml", ratified=Dated(value=date(2004, 1, 1)),
                             denounced=Dated(value=date(2024, 1, 1), printed="1er janvier 2024")),
             ),
+            parties_complete_as_of=date(2026, 6, 1),
+            parties_complete_evidence=Evidence(source="external", url="https://www.example.org/status-list.pdf"),
         ),
         events=(Event(kind="entered_into_force", when=Dated(value=date(2005, 1, 1))),),
     )  # fmt: skip
@@ -323,6 +325,8 @@ def test_a_regional_instruments_effect_and_a_treatys_parties_reach_the_catalogue
         ("ke", date(2005, 3, 1), "Article 4"), ("ml", date(2004, 1, 1), None),
     ]  # fmt: skip
     assert status.parties[1].denounced == StatedDate(value=date(2024, 1, 1), printed="1er janvier 2024")
+    assert status.parties_complete_as_of == date(2026, 6, 1)
+    assert str(status.parties_complete_evidence.url) == "https://www.example.org/status-list.pdf"
     assert Source.model_validate(source("au-charter", treaty).model_dump(mode="json")).treaty == status
     # Two different entry-into-force dates for the whole treaty: none is chosen.
     later = Event(kind="entered_into_force", when=Dated(value=date(2006, 1, 1)))
@@ -332,6 +336,13 @@ def test_a_regional_instruments_effect_and_a_treatys_parties_reach_the_catalogue
         ).treaty.entered_into_force
         is None
     )
+    # A party list not recorded as complete: neither field is in the row (DAT-08).
+    open_list = treaty.model_copy(
+        update={"profile": treaty.profile.model_copy(update={"parties_complete_as_of": None,
+                                                             "parties_complete_evidence": None})}
+    )  # fmt: skip
+    written = source("au-charter", open_list).model_dump(mode="json")["treaty"]
+    assert not {"parties_complete_as_of", "parties_complete_evidence"} & set(written)
     # Any other record's row is unchanged: neither field is written (DAT-08).
     law = source("rw-example-law", example_law())
     assert law.regional is None and law.treaty is None

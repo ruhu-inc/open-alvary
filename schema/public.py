@@ -35,8 +35,9 @@ ExpressionAuthority = Literal[*EXPRESSION_AUTHORITY, "unknown"]
 
 
 class AuthorityEvidence(WireModel):
-    """Where an edition's authority or a language rule is stated: a page and the words of the document
-    (``document``), the address of another instrument (``external``), or the reviewer who recorded it."""
+    """Where an edition's authority or a language rule is stated, or a treaty's party list is shown
+    complete: a page and the words of the document (``document``), the address of another instrument
+    (``external``), or the reviewer who recorded it."""
 
     source: Literal["document", "reviewer", "registry", "manifest", "external"]
     page: int | None = Field(ge=1, **OMIT)
@@ -102,13 +103,17 @@ class TreatyPartyView(WireModel):
 
 class TreatyView(WireModel):
     """A treaty's status, as its reviewed record states it (JUR-04, DAT-03). ``parties`` is on the record
-    and its anchors, never on an evidence unit; an empty list means none is recorded, never none exists."""
+    and its anchors, never on an evidence unit; an empty list means none is recorded, never none exists.
+    Beside it, the date the list is complete as of and where that is shown, when recorded: without it, a
+    state missing from the list is unknown, never not a party."""
 
     adopted_by: str | None = Field(**OMIT)
     depositary: str | None = Field(**OMIT)
     entered_into_force: StatedDateView | None = Field(**OMIT)
     authentic_languages: tuple[ID, ...] = ()
     parties: tuple[TreatyPartyView, ...] | None = Field(**OMIT)
+    parties_complete_as_of: date | None = Field(**OMIT)
+    parties_complete_evidence: AuthorityEvidence | None = Field(**OMIT)
 
 
 class SourceView(Source):

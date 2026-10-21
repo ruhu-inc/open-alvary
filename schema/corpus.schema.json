@@ -1427,7 +1427,7 @@
     },
     "TreatyStatus": {
       "additionalProperties": false,
-      "description": "A treaty's status, from its reviewed record (JUR-04, DAT-03): who adopted it, its depositary, when it\nentered into force (null when the record states no single date), its authentic languages and its\nparties. No party listed means none is recorded, never that it has none.",
+      "description": "A treaty's status, from its reviewed record (JUR-04, DAT-03): who adopted it, its depositary, when it\nentered into force (null when the record states no single date), its authentic languages and its\nparties. No party listed means none is recorded, never that it has none. ``parties_complete_as_of`` is\nthe date the party list is complete as of, with where that is shown (the depositary's status list);\nwithout it, a state missing from the list is unknown, never not a party.",
       "properties": {
         "adopted_by": {
           "anyOf": [
@@ -1480,6 +1480,30 @@
           },
           "title": "Parties",
           "type": "array"
+        },
+        "parties_complete_as_of": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Parties Complete As Of"
+        },
+        "parties_complete_evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatedEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "title": "TreatyStatus",

@@ -10,7 +10,7 @@ from api import applicable
 from api.catalogue import bodies_on
 from api.text_index import Filters
 from retrieval.engine import Engine
-from schema.models import PartyStatus, RegionalEffect, Source, StatedDate, TreatyStatus
+from schema.models import PartyStatus, RegionalEffect, Source, StatedDate, StatedEvidence, TreatyStatus
 from schema.public import LinkedAct, MembershipBasis, MembershipView
 
 DAY = date(2026, 1, 1)
@@ -75,8 +75,15 @@ def on(value, precision="day"):
 IN_FORCE = StatedDate(value=date(2005, 1, 1))
 
 
-def charter(*parties, entered=IN_FORCE):
-    return TreatyStatus(adopted_by="Assembly of the Union", entered_into_force=entered, parties=list(parties))
+STATUS_LIST = StatedEvidence(source="external", url="https://www.example.org/status-list.pdf")
+
+
+def charter(*parties, entered=IN_FORCE, complete=None):
+    """A treaty's status; ``complete``: the date its party list is complete as of, by a status list."""
+    return TreatyStatus(
+        adopted_by="Assembly of the Union", entered_into_force=entered, parties=list(parties),
+        parties_complete_as_of=complete, parties_complete_evidence=STATUS_LIST if complete else None,
+    )  # fmt: skip
 
 
 def label(record, **kwargs):
@@ -171,14 +178,28 @@ def test_a_treaty_is_in_force_for_a_state_that_ratified_it_with_its_domesticatin
 
 
 def test_a_treaty_is_not_in_force_for_a_state_without_its_own_ratification_on_the_date():
-    def relation(*parties, entered=IN_FORCE, member="sn"):
-        return label(source("au-charter", "aa-au", treaty=charter(*parties, entered=entered)), member=member)
+    def relation(*parties, entered=IN_FORCE, member="sn", complete=None):
+        treaty = charter(*parties, entered=entered, complete=complete)
+        return label(source("au-charter", "aa-au", treaty=treaty), member=member)
 
     kenya = PartyStatus(party="Kenya", place="ke", ratified=on(date(2005, 3, 1)))
-    # No ratification recorded for Senegal: membership of the AU never applies the treaty (JUR-04).
-    found = relation(kenya)
+    # Senegal missing from a party list complete on the date: not a party. Membership of the AU never
+    # applies the treaty (JUR-04).
+    found = relation(kenya, complete=date(2026, 6, 1))
     assert (found.relation, found.binds) == ("treaty_not_in_force_for_state", "not_bound")
-    assert "no ratification or accession by sn" in found.reasons[0]
+    assert (
+        "no ratification or accession by sn" in found.reasons[0]
+        and "complete as of 2026-06-01" in found.reasons[0]
+    )
+    assert relation(kenya, complete=DAY).relation == "treaty_not_in_force_for_state"
+    # Missing from a list not known to be complete, or complete only before the date: unknown, never "not a
+    # party", as the list may leave the state out.
+    for complete in (None, date(2025, 12, 31)):
+        absent = relation(kenya, complete=complete)
+        assert (absent.relation, absent.binds, absent.party) == ("unknown", "unknown", None)
+        assert "the party list is not known to be complete on 2026-01-01" in absent.reasons[0]
+    assert "complete as of 2025-12-31 only" in relation(kenya, complete=date(2025, 12, 31)).reasons[0]
+    # Listed, the state's own entry decides, complete or not.
     signed = relation(PartyStatus(party="Senegal", place="sn", signed=on(date(2004, 1, 1))))
     assert signed.relation == "treaty_not_in_force_for_state" and "signature alone" in signed.reasons[0]
     later = relation(PartyStatus(party="Senegal", place="sn", ratified=on(date(2026, 6, 1))))
@@ -210,6 +231,9 @@ def test_what_is_not_reviewed_is_unknown():
     assert label(source("ecowas-court-judgment", "aa-ecowas")).relation == "unknown"
     # A treaty whose record lists no parties, or no entry into force, or a date that cannot be compared.
     assert label(source("treaty", "aa-au", treaty=charter())).relation == "unknown"
+    # A list complete on the date with no parties at all: none is a party.
+    none = label(source("treaty", "aa-au", treaty=charter(complete=date(2026, 6, 1))))
+    assert none.relation == "treaty_not_in_force_for_state" and "lists no parties" in none.reasons[0]
     ratified = PartyStatus(party="Senegal", place="sn", ratified=on(date(2006, 1, 1)))
     assert label(source("treaty", "aa-au", treaty=charter(ratified, entered=None))).relation == "unknown"
     vague = PartyStatus(party="Senegal", place="sn", ratified=on(date(2026, 1, 1), "year"))

@@ -171,13 +171,26 @@ class PartyStatus(Model):
 class TreatyStatus(Model):
     """A treaty's status, from its reviewed record (JUR-04, DAT-03): who adopted it, its depositary, when it
     entered into force (null when the record states no single date), its authentic languages and its
-    parties. No party listed means none is recorded, never that it has none."""
+    parties. No party listed means none is recorded, never that it has none. ``parties_complete_as_of`` is
+    the date the party list is complete as of, with where that is shown (the depositary's status list);
+    without it, a state missing from the list is unknown, never not a party."""
 
     adopted_by: Nonempty | None = None
     depositary: Nonempty | None = None
     entered_into_force: StatedDate | None = None
     authentic_languages: list[ID] = Field(default_factory=list)
     parties: list[PartyStatus] = Field(default_factory=list)
+    # Left out of the row when not recorded, so rows stored before them are unchanged (DAT-08).
+    parties_complete_as_of: date | None = Field(default=None, exclude_if=lambda value: value is None)
+    parties_complete_evidence: StatedEvidence | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+
+    @model_validator(mode="after")
+    def complete_with_evidence(self):
+        if (self.parties_complete_as_of is None) != (self.parties_complete_evidence is None):
+            raise ValueError("a party list complete as of a date says where that is shown, and only then")
+        return self
 
 
 class Source(Model):
