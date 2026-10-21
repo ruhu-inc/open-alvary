@@ -39,6 +39,8 @@ REQUESTS: dict[str, tuple[dict[str, str], list[tuple[str, str]]]] = {
     "list_jurisdictions": ({}, []),
     "get_jurisdiction": ({"jurisdiction_id": "sn"}, [("as_of", "2026-01-01")]),
     "get_coverage": ({}, []),
+    "list_court_registers": ({}, []),
+    "get_court_register": ({"jurisdiction": "ke"}, []),
     "list_releases": ({}, []),
     "get_bulk_file": (
         {"release_id": "2026-10-05", "jurisdiction": "ng", "mode": "corpus", "filename": "manifest.json"},
@@ -53,7 +55,7 @@ REQUESTS: dict[str, tuple[dict[str, str], list[tuple[str, str]]]] = {
 }
 RECORDED = {"search", "list_sources", "get_source", "get_versions", "get_rights", "get_relationships",
             "resolve_citation", "list_jurisdictions", "get_jurisdiction", "get_coverage", "list_releases",
-            "list_plans", "get_quota_policy"}  # fmt: skip
+            "list_plans", "get_quota_policy", "list_court_registers", "get_court_register"}  # fmt: skip
 MEMBERSHIP_NOTE = (
     "No membership has been reviewed yet, so the answer is `unknown`. Once one is, `items` lists it with its "
     "first and last day, its evidence and who reviewed it."
@@ -63,6 +65,8 @@ MEMBERSHIP_NOTE = (
 def shorten(operation: str, answer):
     if operation == "list_plans":
         return {"tiers": answer["tiers"][:2]}
+    if operation == "get_court_register":
+        return answer | {key: answer[key][:2] for key in ("courts", "relations")}
     if operation == "list_releases":
         return [
             {**r, "files": dict(list(r["files"].items())[:2])} if isinstance(r.get("files"), dict) else r
@@ -114,6 +118,10 @@ def change_examples(url: str) -> dict[str, dict]:
     }
 
 
+COURTS_NOTE = (
+    "Shortened to its first courts and relations. The register is a proposal awaiting review, so every "
+    "`relation` is `unknown`; `recorded` is what the reviewer will check against the sources."
+)
 RELATIONS_NOTE = (
     "An example, with the repeal marked as checked by a reviewer: a link is listed once a reviewer has "
     "checked it against the official text."
@@ -147,6 +155,8 @@ def main() -> None:
                 example["note"] = RELATIONS_NOTE
             if operation == "get_jurisdiction" and example["answer"]["member_of"]["status"] == "unknown":
                 example["note"] = MEMBERSHIP_NOTE
+            if operation == "get_court_register" and example["answer"]["review_state"] == "unreviewed":
+                example["note"] = COURTS_NOTE
         examples[operation] = example
     if "--changes" in sys.argv:
         for operation, recorded in change_examples(sys.argv[sys.argv.index("--changes") + 1]).items():
