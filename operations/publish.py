@@ -378,16 +378,40 @@ def aliases(work: str, citation: str, identity) -> list[Citation]:
     return found
 
 
-# A reviewed link, as the catalogue keeps it: from the newer instrument to the older.
-FORWARD = {"repeals": "repeals", "amends": "amends", "supersedes": "supersedes", "made_under": "made_under"}
-BACKWARD = {"repealed_by": "repeals", "amended_by": "amends", "superseded_by": "supersedes"}
+# A reviewed link, as the catalogue keeps it: from the asserting (newer) instrument to the one it
+# concerns (EDT-01), whichever of the two records states it.
+FORWARD = {
+    kind: kind
+    for kind in ("repeals", "amends", "supersedes", "made_under", "commences", "transposes", "domesticates",
+                 "implements", "ratifies", "cites")
+}  # fmt: skip
+BACKWARD = {
+    "repealed_by": "repeals",
+    "amended_by": "amends",
+    "superseded_by": "supersedes",
+    "enables": "made_under",
+    "commenced_by": "commences",
+    "transposed_by": "transposes",
+    "domesticated_by": "domesticates",
+    "implemented_by": "implements",
+}
+# Relations a record may state that the catalogue does not publish, and why: each is reported, never
+# dropped silently.
+JUDICIAL = ("appeal_from", "appealed_to", "affirms", "reverses", "overrules", "overruled_by", "follows",
+            "distinguishes")  # fmt: skip
+WITHHELD = {
+    kind: "judicial treatment and appeal links wait for case law and its own review (EDT-01)"
+    for kind in JUDICIAL
+}
+NOT_PUBLISHED = "not a relationship kind the catalogue publishes yet"
 
 
 def catalogue_links(approved: list[Approved], sources: dict[str, Source]) -> list[Amendment]:
     """The links between catalogued works from their reviewed details: what each repeals, amends,
-    supersedes or is made under, and what repealed or amended it. Each is checked (a reviewer
-    confirmed the details) and cites the newer instrument's official link; a link to a work the
-    catalogue does not hold is left out."""
+    supersedes, commences, transposes, domesticates, implements, ratifies, cites or is made under, and
+    the same links stated from the other end. Each is checked (a reviewer confirmed the details) and
+    cites the asserting instrument's official link; a link to a work the catalogue does not hold is left
+    out, and so are the kinds withheld_relations reports."""
     links: dict[str, Amendment] = {}
     for item in approved:
         for relation in item.record.relations:
@@ -410,6 +434,22 @@ def catalogue_links(approved: list[Approved], sources: dict[str, Source]) -> lis
                 verified=True,
             )
     return sorted(links.values(), key=lambda link: link.id)
+
+
+def withheld_relations(approved: list[Approved]) -> list[dict]:
+    """The relations in approved works' reviewed details that the catalogue does not publish, each with
+    the work, the other work (or its citation) and why."""
+    return [
+        {
+            "work": item.work,
+            "kind": relation.kind,
+            "other": relation.target.work_uri or relation.target.citation,
+            "reason": WITHHELD.get(relation.kind, NOT_PUBLISHED),
+        }
+        for item in approved
+        for relation in item.record.relations
+        if relation.kind not in FORWARD and relation.kind not in BACKWARD
+    ]
 
 
 def publish_records(
@@ -461,15 +501,28 @@ def publish_records(
                 entry["source"] = entry["source"].model_copy(update={"catalogue_note": held.catalogue_note})
         _put(corpus, "rights", entry["rights"])
         report["updated" if item.work in by_id["sources"] else "published"].append(item.work)
-    # The reviewed links of the works published now replace the links they had.
+    # The reviewed links of the works published now replace the links they had. A link between two of
+    # them that neither states any more is withdrawn: kept unchecked, so it leaves public view and the
+    # change log says so (a save never deletes a row). A link to a work outside this run is left as it is.
     works = {item.work for item in approved}
     links = catalogue_links(approved, {s.id: s for s in corpus.sources})
-    corpus.amendments = [
-        a
-        for a in corpus.amendments
-        if not (a.id.startswith("link-") and (a.source_id in works or a.target_source_id in works))
-    ] + links
+    stated, kept, withdrawn = {link.id for link in links}, [], []
+    for link in corpus.amendments:
+        if link.id in stated:
+            continue
+        if (
+            link.id.startswith("link-")
+            and link.verified
+            and link.source_id in works
+            and link.target_source_id in works
+        ):
+            link = link.model_copy(update={"verified": False})
+            withdrawn.append(link.id)
+        kept.append(link)
+    corpus.amendments = kept + links
     report["links"] = len(links)
+    report["links_withdrawn"] = withdrawn
+    report["withheld"] = withheld_relations(approved)
     for work in sorted(waiting):
         rights = by_id["rights"].get(f"rights-{work}")
         if work in by_id["sources"] and rights is not None and rights.metadata_public:

@@ -80,3 +80,47 @@ def test_the_workbench_approval_is_what_publishes(store, decisions, tmp_path, mo
     assert approve(approver).status_code == 200
     approved, waiting = publish.from_workbench(review, library, review_store, "ng")
     assert [a.work for a in approved] == [ACT] and approved[0].approver == "App" and ACT not in waiting
+
+
+def test_a_link_its_records_no_longer_state_is_withdrawn_and_judicial_links_are_reported(store, decisions):
+    from schema.record import Reference, Relation
+
+    def item(work, *relations):
+        return publish.Approved(
+            work, rwanda_law(relations=relations), ["en"], "Ijidai Lassa", datetime.now(UTC)
+        )
+
+    def link(kind, work):
+        return Relation(kind=kind, target=Reference(citation=f"Instrument {work}", work_uri=work))
+
+    def effects():
+        with store.engine.connect() as conn:
+            table = namespace(conn).qualified(conn, "changes", "change_event")
+            return [
+                (r.work_id, r.event_revision, r.payload["legal_effect"].get("review_state"))
+                for r in conn.execute(
+                    text(
+                        f"SELECT * FROM {table} WHERE event_type = 'legal_effect_recorded' ORDER BY work_id, event_revision"
+                    )
+                )
+            ]
+
+    decision = publish.decide("rw", "Ijidai Lassa", 12, [], "", "")
+    law, treaty = "rw-law-domesticating", "rw-treaty-synthetic"
+    approved = [item(law, link("domesticates", treaty), link("follows", "rw-judgment")), item(treaty)]
+    report = publish.publish_records(store, "rw", approved, set(), decision)
+    assert report["links"] == 1 and report["links_withdrawn"] == []
+    [withheld] = report["withheld"]
+    assert (withheld["work"], withheld["kind"], withheld["other"]) == (law, "follows", "rw-judgment")
+    assert "case law" in withheld["reason"]
+    assert effects() == [(law, 1, None), (treaty, 1, None)]  # one on each work
+    # Approved again without the link: it is withdrawn, and each work's event says so once.
+    report = publish.publish_records(store, "rw", [item(law), item(treaty)], set(), decision)
+    assert report["links_withdrawn"] == [f"link-{law}-domesticates-{treaty}"] and report["withheld"] == []
+    assert not next(a for a in store.load().amendments if a.id == report["links_withdrawn"][0]).verified
+    assert effects() == [(law, 1, None), (law, 2, "withdrawn"), (treaty, 1, None), (treaty, 2, "withdrawn")]
+    assert (
+        publish.publish_records(store, "rw", [item(law), item(treaty)], set(), decision)["links_withdrawn"]
+        == []
+    )
+    assert len(effects()) == 4
