@@ -285,9 +285,9 @@
     ]
   },
   {
-    "revision": "g1_memberships",
+    "revision": "0040",
     "anchor": "corpus.membership",
-    "file": "vg1_memberships.sql",
+    "file": "v0040.sql",
     "requires": [
       "changes.membership_state",
       "corpus.membership"
