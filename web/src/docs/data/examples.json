@@ -893,12 +893,13 @@
     "answer": {
       "events": [
         {
-          "event_id": "d4d1a6ac-13cf-4704-9073-485f3aa42773",
+          "schema_version": "change-event-1",
+          "event_id": "ce22283d-5d15-4ae2-8cdb-4ddcb67793de",
           "event_revision": 1,
           "event_type": "metadata_corrected",
-          "feed_epoch": "71a6d585-8ff5-4618-a791-83c821f1fc23",
-          "publication_revision": 2,
-          "committed_at": "2026-10-17T04:52:06.729358Z",
+          "feed_epoch": "a13ecf36-b00b-4b85-bad1-10958d2881bd",
+          "publication_revision": 1,
+          "committed_at": "2026-10-21T07:05:17.227327Z",
           "observed_at": null,
           "publisher_published_at": null,
           "legal_effective": null,
@@ -910,6 +911,7 @@
             "id": "ng-foi-act-2011",
             "title": "Freedom of Information Act 2011",
             "citation": "FOI Act 2011",
+            "legal_status": "unknown",
             "jurisdiction_id": "ng",
             "document_class": "act",
             "language": "en",
@@ -917,6 +919,7 @@
             "api_url": "https://api.open.alvary.ai/api/v1/sources/ng-foi-act-2011"
           },
           "version": null,
+          "rights_revision": null,
           "changed_fields": [
             "summary"
           ],
@@ -926,12 +929,17 @@
           "sources": [
             "https://www.justice.gov.ng/freedom-of-information-portal/"
           ],
-          "withdrawal": null
+          "withdrawal": null,
+          "legal_effect": null,
+          "membership": null,
+          "suspension": null,
+          "previous": {},
+          "version_diff": null
         }
       ],
       "has_more": false,
-      "feed_epoch": "71a6d585-8ff5-4618-a791-83c821f1fc23",
-      "resume_token": "r1.CWVwaGVtZXJhbIKXr…"
+      "feed_epoch": "a13ecf36-b00b-4b85-bad1-10958d2881bd",
+      "resume_token": "r1.CWVwaGVtZXJhbO_Lk…"
     },
     "note": "An example: one catalogue correction, recorded in a scratch copy of the catalogue. Your answers carry the changes recorded since you started following."
   },
@@ -946,12 +954,13 @@
     "answer": {
       "events": [
         {
-          "event_id": "d4d1a6ac-13cf-4704-9073-485f3aa42773",
+          "schema_version": "change-event-1",
+          "event_id": "ce22283d-5d15-4ae2-8cdb-4ddcb67793de",
           "event_revision": 1,
           "event_type": "metadata_corrected",
-          "feed_epoch": "71a6d585-8ff5-4618-a791-83c821f1fc23",
-          "publication_revision": 2,
-          "committed_at": "2026-10-17T04:52:06.729358Z",
+          "feed_epoch": "a13ecf36-b00b-4b85-bad1-10958d2881bd",
+          "publication_revision": 1,
+          "committed_at": "2026-10-21T07:05:17.227327Z",
           "observed_at": null,
           "publisher_published_at": null,
           "legal_effective": null,
@@ -963,6 +972,7 @@
             "id": "ng-foi-act-2011",
             "title": "Freedom of Information Act 2011",
             "citation": "FOI Act 2011",
+            "legal_status": "unknown",
             "jurisdiction_id": "ng",
             "document_class": "act",
             "language": "en",
@@ -970,6 +980,7 @@
             "api_url": "https://api.open.alvary.ai/api/v1/sources/ng-foi-act-2011"
           },
           "version": null,
+          "rights_revision": null,
           "changed_fields": [
             "summary"
           ],
@@ -979,7 +990,12 @@
           "sources": [
             "https://www.justice.gov.ng/freedom-of-information-portal/"
           ],
-          "withdrawal": null
+          "withdrawal": null,
+          "legal_effect": null,
+          "membership": null,
+          "suspension": null,
+          "previous": {},
+          "version_diff": null
         }
       ]
     },
@@ -1007,12 +1023,13 @@
     "path": {},
     "query": [],
     "answer": {
-      "event_id": "d4d1a6ac-13cf-4704-9073-485f3aa42773",
+      "schema_version": "change-event-1",
+      "event_id": "ce22283d-5d15-4ae2-8cdb-4ddcb67793de",
       "event_revision": 1,
       "event_type": "metadata_corrected",
-      "feed_epoch": "71a6d585-8ff5-4618-a791-83c821f1fc23",
-      "publication_revision": 2,
-      "committed_at": "2026-10-17T04:52:06.729358Z",
+      "feed_epoch": "a13ecf36-b00b-4b85-bad1-10958d2881bd",
+      "publication_revision": 1,
+      "committed_at": "2026-10-21T07:05:17.227327Z",
       "observed_at": null,
       "publisher_published_at": null,
       "legal_effective": null,
@@ -1024,6 +1041,7 @@
         "id": "ng-foi-act-2011",
         "title": "Freedom of Information Act 2011",
         "citation": "FOI Act 2011",
+        "legal_status": "unknown",
         "jurisdiction_id": "ng",
         "document_class": "act",
         "language": "en",
@@ -1031,6 +1049,7 @@
         "api_url": "https://api.open.alvary.ai/api/v1/sources/ng-foi-act-2011"
       },
       "version": null,
+      "rights_revision": null,
       "changed_fields": [
         "summary"
       ],
@@ -1040,7 +1059,12 @@
       "sources": [
         "https://www.justice.gov.ng/freedom-of-information-portal/"
       ],
-      "withdrawal": null
+      "withdrawal": null,
+      "legal_effect": null,
+      "membership": null,
+      "suspension": null,
+      "previous": {},
+      "version_diff": null
     },
     "note": "An example: one catalogue correction, recorded in a scratch copy of the catalogue. Your answers carry the changes recorded since you started following."
   },
@@ -1048,15 +1072,18 @@
     "path": {},
     "query": [],
     "answer": {
-      "feed_started_at": "2026-10-17T04:51:46.197471Z",
-      "feed_epoch": "71a6d585-8ff5-4618-a791-83c821f1fc23",
-      "earliest_replayable_at": "2026-10-17T04:51:46.696206Z",
+      "feed_started_at": "2026-10-21T07:03:44.576431Z",
+      "feed_epoch": "a13ecf36-b00b-4b85-bad1-10958d2881bd",
+      "earliest_replayable_at": "2026-10-21T07:05:17.227327Z",
       "supported_event_types": [
         "catalogue_added",
         "metadata_corrected",
         "text_version_published",
+        "legal_effect_recorded",
         "withdrawal",
-        "coverage_changed"
+        "coverage_changed",
+        "membership_recorded",
+        "suspension_recorded"
       ],
       "supported_filters": [
         "jurisdiction",
@@ -1070,9 +1097,9 @@
         {
           "id": "ng",
           "name": "Nigeria",
-          "works": 4,
+          "works": 5,
           "readable_works": 0,
-          "last_change_at": "2026-10-17T04:52:06.729358Z",
+          "last_change_at": "2026-10-21T07:05:17.227327Z",
           "last_checked_at": null,
           "expected_cadence": null,
           "known_gaps": null
