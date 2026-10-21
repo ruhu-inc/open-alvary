@@ -157,7 +157,9 @@ Dates are written as [EDTF](https://www.loc.gov/standards/datetime/) dates, so a
 | `2001-05-26` | That day. |
 | `2000-12` | A day in December 2000. |
 | `1976` | A day in 1976. |
-| `2016-08-15/2016-09-05` | One day between 15 August and 5 September 2016, inclusive: the sources disagree. It is not a period lasting from one to the other. |
+| `[2016-08-15..2016-09-05]` | One day between 15 August and 5 September 2016, inclusive, unknown which: the sources disagree. It is not a period lasting from one to the other. A window of years, such as `[1976..1977]`, is one day in one of those years. |
+
+A window is EDTF's "one of a set", in square brackets. We never write it with a slash: in EDTF, `2016-08-15/2016-09-05` is an interval, every day from the first to the last.
 
 A date that falls within such a window is listed in `uncertain`, not in `items` or `ended`: for a country that left a body in December 2000, `as_of` 2000-12-15 gives `uncertain`, 2000-11-30 gives `items` and 2001-01-01 gives `ended`.
 
