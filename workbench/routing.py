@@ -7,14 +7,16 @@ Routes (route profile ROUTES), one per page:
             layer agreeing with the reading the units came from and with an independent reading,
             numbers and negations exactly) and reads as the units do at every flag of the page;
             nothing forces ``full``
-  agreed    every reader agrees on every word, no flag of any severity, no table, and the structure
-            deriver reports nothing on the page
+  agreed    an independent reading was compared on the page (routing.compared), every reader agrees
+            on every word, no flag of any severity, no table, and the structure deriver reports
+            nothing on the page
   flagged   disagreements or flags, none of a risky kind and no table: the reviewer resolves each
             flag against the image; the rest of the page is not proofread
   full      a table; a flag whose words carry a number, an amount, a date, a cross-reference or a
             negation or exception; a high flag; the first page, a contents page or a page where a
             schedule starts; a structure error or warning on the page; a clean text layer that
-            differs from the units where no flag says so: reviewed whole, as before
+            differs from the units where no flag says so; a page read only once (nothing
+            compared) and not native: reviewed whole, as before
 
 Routed readiness applies only under an owner's verification-routing policy (D28,
 ingestion/decisions/verification-routing.json): without it, every page must be checked, as REV-02 and
@@ -66,7 +68,17 @@ def _flag_words(flag: dict) -> str:
     return " ".join([str(flag.get("primary") or ""), *(str(v) for v in (flag.get("checks") or {}).values())])
 
 
-def route(page: dict, *, first: bool, structure_issues: int) -> tuple[str, list[str]]:
+def compared(reading: dict) -> set[int]:
+    """The pages an independent reading was compared on: a check reader's words for the page (the
+    batch readers), or a scanned page both Google's OCR and the Layout Parser read (the Rwandan
+    Gazette). A page read once, such as a Gazette page read from its own text layer only, has no flag
+    because nothing was compared, not because readers agreed."""
+    top = reading.get("checks") or {}
+    both = set(top.get("scans_read_by_ocr") or []) & set(top.get("scans_read_by_docai") or [])
+    return {p["page"] for p in reading["pages"] if any((p.get("checks") or {}).values()) or p["page"] in both}
+
+
+def route(page: dict, *, first: bool, structure_issues: int, compared: bool = True) -> tuple[str, list[str]]:
     """One page's route and why."""
     reasons = []
     if first:
@@ -98,6 +110,8 @@ def route(page: dict, *, first: bool, structure_issues: int) -> tuple[str, list[
         return "native", [
             f"the text layer passed the DIG-01 checks (agreement {evidence['agreement']:.1%}){held}"
         ]
+    if not compared:
+        return "full", ["one reading only: nothing was compared"]
     if flags:
         return "flagged", [f"{len(flags)} flag(s) to resolve"]
     return "agreed", ["every reader agrees and nothing is flagged"]
@@ -106,8 +120,11 @@ def route(page: dict, *, first: bool, structure_issues: int) -> tuple[str, list[
 def routes(reading: dict, issues_by_page: dict[int, int] | None = None) -> dict[int, tuple[str, list[str]]]:
     issues_by_page = issues_by_page or {}
     pages = sorted(reading["pages"], key=lambda p: p["page"])
+    checked = compared(reading)
     return {
-        p["page"]: route(p, first=n == 0, structure_issues=issues_by_page.get(p["page"], 0))
+        p["page"]: route(
+            p, first=n == 0, structure_issues=issues_by_page.get(p["page"], 0), compared=p["page"] in checked
+        )
         for n, p in enumerate(pages)
     }
 
