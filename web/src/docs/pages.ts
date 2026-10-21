@@ -98,7 +98,7 @@ export function buildPages(
     { title: "Start here", items: ["", "quickstart", "authentication", "plans", "console"] },
     {
       title: "Guides",
-      items: ["search", "retrieval", "records", "rights", "pagination", "changes", "webhooks", "ai-tools"],
+      items: ["search", "retrieval", "records", "rights", "pagination", "changes", "mirror", "webhooks", "ai-tools"],
     },
     {
       title: "API reference",
