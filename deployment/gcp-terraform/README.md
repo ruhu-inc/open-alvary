@@ -306,6 +306,25 @@ newer commit is refused by older code, so copy the databases again before releas
    - Keep the old environment read-only as the fallback. Moving the A records back and resuming its
      schedules is the rollback.
 
+## Workbench operators
+
+The workbench has no web route that adds people, by design. The job `open-alvary-<environment>-operators`
+runs `python -m workbench.admin` against this environment's workbench database, with the arguments
+given at each run:
+
+```
+gcloud run jobs execute open-alvary-staging-operators --region europe-west1 --project open-alvary-staging --wait --args=list
+gcloud run jobs execute open-alvary-staging-operators --region europe-west1 --project open-alvary-staging --wait --args=add,someone@example.org,--name,Their Name,--roles,reviewer
+gcloud run jobs execute open-alvary-staging-operators --region europe-west1 --project open-alvary-staging --wait --args=enrol,someone@example.org,--replace
+```
+
+- An enrolment code (24 hours, one use) is printed to the job's log, which only the project's owners
+  can read. The operator registers a passkey with it at the workbench's address.
+- Passkeys belong to the address they were registered at. A workbench at a new address (a new
+  project or environment) needs every administrator to enrol again, with `--replace`.
+- The old system's `workbench-admin` and `workbench-enrol` jobs write to the old workbench database.
+  Do not use them; they go with it.
+
 ## Moving back from Azure
 
 The application already speaks both `gs://` and `az://`, and the restore job serves both clouds.

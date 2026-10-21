@@ -247,3 +247,66 @@ resource "google_iap_web_cloud_run_service_iam_member" "operators" {
   role                   = "roles/iap.httpsResourceAccessor"
   member                 = each.value
 }
+
+# Operators (workbench/admin.py): the workbench has no web route that adds people, by design. This job
+# runs the same command against this environment's workbench database, with the arguments given at
+# each run (README, "Workbench operators"):
+#   gcloud run jobs execute <name> --region <region> --args=enrol,someone@example.org,--replace
+# Its default, list, changes nothing. An enrolment code it prints (24 hours, one use) is in the job's
+# log, readable by the project's owners only.
+resource "google_cloud_run_v2_job" "operators" {
+  count               = local.workbench_enabled ? 1 : 0
+  name                = "${local.name_prefix}-operators"
+  location            = var.region
+  deletion_protection = false
+
+  template {
+    task_count = 1
+    template {
+      service_account = google_service_account.workbench.email
+      timeout         = "120s"
+      max_retries     = 0
+
+      vpc_access {
+        egress = "PRIVATE_RANGES_ONLY"
+        network_interfaces {
+          network    = google_compute_network.main.id
+          subnetwork = google_compute_subnetwork.run.id
+        }
+      }
+
+      containers {
+        name    = "operators"
+        image   = var.workbench_image
+        command = ["python", "-m", "workbench.admin"]
+        args    = ["list"]
+
+        resources {
+          limits = {
+            cpu    = "1"
+            memory = "512Mi"
+          }
+        }
+
+        env {
+          name = "ALVARY_REVIEW_DATABASE_URL"
+          value_source {
+            secret_key_ref {
+              secret  = google_secret_manager_secret.review_database_url[0].secret_id
+              version = "latest"
+            }
+          }
+        }
+      }
+    }
+  }
+
+  lifecycle {
+    ignore_changes = [client, client_version]
+  }
+
+  depends_on = [
+    google_secret_manager_secret_iam_member.review_database_url,
+    google_secret_manager_secret_version.review_database_url,
+  ]
+}
