@@ -110,6 +110,30 @@
     }
   },
   {
+    "name": "list_expressions",
+    "title": "List a source's language editions",
+    "description": "A source's language editions with a published text: for each, its texts, the one to read when no date is given, and what the edition is worth as law as its record states it (authoritative, equally_authentic, official_translation, unofficial_translation or machine_translation, with where that is stated; unknown when nothing is recorded); and the instrument's own rule for which version prevails where its language versions differ (language_rule), or unknown. A preferred text is a reading default, never a claim that its edition is authoritative.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "The source's ID, such as ng-foi-act-2011, from a search."
+        }
+      },
+      "required": [
+        "source_id"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "openWorldHint": false
+    }
+  },
+  {
     "name": "get_anchor",
     "title": "Get one part of a text exactly",
     "description": "One part of a published text, such as a section or article, exactly: its words, its span as UTF-8 byte offsets, the hash of its bytes for checking a quotation, a citation such as s. 23(1)(a), the official file and the attribution its rights record asks for. Never shortened: a part too large for one answer is refused; read it from the REST text route with its offsets.",

@@ -97,7 +97,7 @@ def test_a_topic_query_answers_an_evidence_pack(store, client):
     assert retrieve(client, "repaid from salary") == pack
 
 
-def test_each_unit_carries_its_editions_authority_as_the_record_states_it(store, client):
+def test_each_unit_carries_its_editions_authority_as_the_record_states_it(store, client, tmp_path):
     english, french = publish_editions(store)
     [unit] = retrieve(client, "repaid from salary", language="en", max_units=1)["evidence"]
     assert unit["version_id"] == english.id and unit["expression_id"] == f"{WORK}:en"
@@ -112,6 +112,11 @@ def test_each_unit_carries_its_editions_authority_as_the_record_states_it(store,
         ("fr", "unknown"),
     ]
     assert page["language_rule"] == RULE
+    body = {"name": "list_expressions", "arguments": {"source_id": WORK}}
+    answer = TestClient(create_app(store, tmp_path)).post(
+        "/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": body}
+    )
+    assert json.loads(answer.json()["result"]["content"][0]["text"]) == page
 
 
 def test_routes_for_an_instrument_a_definition_and_a_citation(store, client):

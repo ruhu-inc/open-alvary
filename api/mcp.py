@@ -131,6 +131,30 @@ TOOLS = [
         "annotations": {"readOnlyHint": True, "openWorldHint": False},
     },
     {
+        "name": "list_expressions",
+        "title": "List a source's language editions",
+        "description": "A source's language editions with a published text: for each, its texts, the one to read "
+        "when no date is given, and what the edition is worth as law as its record states it (authoritative, "
+        "equally_authentic, official_translation, unofficial_translation or machine_translation, with where "
+        "that is stated; unknown when nothing is recorded); and the instrument's own rule for which version "
+        "prevails where its language versions differ (language_rule), or unknown. A preferred text is a "
+        "reading default, never a claim that its edition is authoritative.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "source_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 160,
+                    "description": "The source's ID, such as ng-foi-act-2011, from a search.",
+                }
+            },
+            "required": ["source_id"],
+            "additionalProperties": False,
+        },
+        "annotations": {"readOnlyHint": True, "openWorldHint": False},
+    },
+    {
         "name": "get_anchor",
         "title": "Get one part of a text exactly",
         "description": "One part of a published text, such as a section or article, exactly: its words, its "
@@ -557,6 +581,12 @@ def create_router(
                 return service.relationships(
                     source_id, kinds=[kind] if kind else None, limit=limit, cursor=cursor
                 ).model_dump(mode="json")
+            if name == "list_expressions" and set(arguments) == {"source_id"}:
+                source_id = arguments["source_id"]
+                if not isinstance(source_id, str) or not 1 <= len(source_id) <= 160:
+                    return None
+                plan.admit(service.source(source_id).jurisdiction_id)
+                return _bounded(service.expressions(source_id).model_dump(mode="json"))
             if name == "get_anchor" and set(arguments) == {"anchor_id"}:
                 anchor_id = arguments["anchor_id"]
                 if not isinstance(anchor_id, str) or not 1 <= len(anchor_id) <= 160:
