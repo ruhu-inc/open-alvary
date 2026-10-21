@@ -4,6 +4,8 @@ signals, bands, diversification, derived links and record-level currentness."""
 from datetime import date
 from types import SimpleNamespace
 
+import pytest
+
 from api.text_index import fold, name_forms
 from retrieval import links, router
 from retrieval.legal_time import (
@@ -275,6 +277,43 @@ def test_the_http_embedder_sends_a_key_only_when_it_has_one(monkeypatch):
         ["x"], query=False
     )
     assert __import__("json").loads(seen[-1].content)["dimensions"] == 8
+
+
+def test_every_input_is_embedded_whole_within_the_servers_limit():
+    import re
+    from pathlib import Path
+
+    import httpx
+
+    from retrieval import vectors
+    from retrieval.vectors import HttpEmbedder, Profile, fitted, input_bytes
+
+    # Both clouds' GPU machines take the inputs the code allows: MAX_INPUT_TOKENS.
+    root = Path(__file__).resolve().parents[1]
+    for cloud in ("gcp-terraform", "azure"):
+        template = (root / "deployment" / cloud / "env" / "inference-cloud-init.yaml.tftpl").read_text()
+        args = re.search(r'embedder = \{[^}]*args = "([^"]*)"', template).group(1)
+        assert args == f"--max-batch-tokens {vectors.MAX_INPUT_TOKENS} --auto-truncate"
+    # The longest window, even in four-byte characters, fits an input whole; a longer one is refused.
+    base = {"id": "p", "model": "m", "revision": "1", "dims": 8, "embedder": "http"}
+    longest = (vectors.INPUT_BYTES - 2) // 4
+    assert Profile.from_dict(base | {"window_chars": longest}).window_chars == longest >= vectors.WINDOW_CHARS
+    with pytest.raises(ValueError, match="embedded whole"):
+        Profile.from_dict(base | {"window_chars": longest + 1})
+    # A window's context gives way to its words, never the words to the context.
+    words = "\U0001d504" * longest  # four bytes each
+    assert fitted("Act — s. 1", words) == words and input_bytes(words) <= vectors.INPUT_BYTES
+    tight = fitted("Data Protection Act — s. 1", "\U0001d504" * (longest - 4))
+    assert tight.startswith("Data Pr") and "…\n\n" in tight and input_bytes(tight) <= vectors.INPUT_BYTES
+    assert fitted("Act — s. 1", "A person.") == "Act — s. 1\n\nA person."
+    # An input the server would cut short is refused, and none of its batch is sent.
+    seen = []
+    embedder = HttpEmbedder(
+        Profile.from_dict(base), url="http://embedder.test", transport=httpx.MockTransport(seen.append)
+    )
+    with pytest.raises(ValueError, match="longer than the embedder takes whole"):
+        embedder.embed(["x", "y" * (vectors.INPUT_BYTES + 1)], query=False)
+    assert not seen
 
 
 def test_a_long_unit_is_reranked_by_its_opening_and_the_windows_with_the_query_words():

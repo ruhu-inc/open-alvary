@@ -25,6 +25,7 @@ import json
 import math
 import os
 import re
+import unicodedata
 from dataclasses import dataclass, field
 
 from sqlalchemy import text
@@ -32,6 +33,12 @@ from sqlalchemy.engine import Connection
 
 EXACT_LIMIT = 50_000  # windows an exact search may read
 WINDOW_CHARS, WINDOW_OVERLAP = 2_000, 200  # about 400-500 tokens of English, overlapping by a sentence
+# The embedding server takes inputs of up to this many tokens (--max-batch-tokens in
+# deployment/*/env/inference-cloud-init.yaml.tftpl) and would cut a longer one short. The model's tokenizer
+# is byte-level (a token is at least one byte of the NFC text), so an input of at most INPUT_BYTES, with
+# room for the tokens the server adds, is always embedded whole.
+MAX_INPUT_TOKENS = 8_192
+INPUT_BYTES = MAX_INPUT_TOKENS - 8
 TIMEOUT_SECONDS = 10
 
 
@@ -64,15 +71,40 @@ class Profile:
             raise ValueError("pin the exact model revision before building with this profile (EMB-05)")
         if profile.metric != "cosine":
             raise ValueError("only cosine distance is supported")
+        # A window of four-byte characters, with its document prompt, still fits an input whole.
+        longest = (INPUT_BYTES - len(b"\n\n") - input_bytes(profile.document_prompt)) // 4
         if (
-            not 200 <= profile.window_chars <= 20_000
+            not 200 <= profile.window_chars <= longest
             or not 0 <= profile.window_overlap < profile.window_chars // 2
         ):
-            raise ValueError("windows must be 200 to 20,000 characters, overlapping less than half")
+            raise ValueError(
+                f"windows must be 200 to {longest:,} characters, overlapping less than half, so that each is "
+                "embedded whole"
+            )
         return profile
 
     def as_dict(self) -> dict:
         return self.__dict__.copy()
+
+
+def input_bytes(text: str) -> int:
+    """An input's length in UTF-8 bytes as the model's tokenizer reads it (NFC): never fewer than its
+    tokens."""
+    return len(unicodedata.normalize("NFC", text).encode())
+
+
+def fitted(context: str, words: str, prompt: str = "") -> str:
+    """A window's input, its context (title, pinpoint, heading) then its words: whole when it fits
+    INPUT_BYTES with the prompt, otherwise with the context shortened, marked by an ellipsis. The window's
+    own words always fit (Profile: window_chars)."""
+    whole = f"{context}\n\n{words}"
+    if input_bytes(prompt + whole) <= INPUT_BYTES:
+        return whole
+    room = INPUT_BYTES - input_bytes(f"{prompt}…\n\n{words}")
+    cut = context.encode()[: max(room, 0)].decode("utf-8", "ignore")
+    while cut and input_bytes(f"{prompt}{cut}…\n\n{words}") > INPUT_BYTES:
+        cut = cut[:-1]
+    return f"{cut}…\n\n{words}" if cut else words
 
 
 def windows(words: str, size: int, overlap: int) -> list[tuple[int, int]]:
@@ -140,7 +172,11 @@ class HttpEmbedder:
 
     def embed(self, texts: list[str], *, query: bool) -> list[list[float]]:
         prompt = self.profile.query_prompt if query else self.profile.document_prompt
-        body = {"model": self.profile.model, "input": [prompt + t for t in texts]}
+        inputs = [prompt + t for t in texts]
+        if any(input_bytes(t) > INPUT_BYTES for t in inputs):
+            # The server would embed only its opening: refuse rather than store a vector of part of it.
+            raise ValueError(f"An input is longer than the embedder takes whole ({INPUT_BYTES:,} bytes)")
+        body = {"model": self.profile.model, "input": inputs}
         if self.profile.request_dims:
             body["dimensions"] = self.profile.dims
         answer = self.client.post("/embeddings", json=body)
