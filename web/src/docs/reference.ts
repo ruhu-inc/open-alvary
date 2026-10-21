@@ -175,6 +175,21 @@ function postExamples(url: string, body: unknown): string[] {
   return [fence("curl", curl.join(" \\\n  ")), fence("python", python.join("\n")), fence("javascript", javascript.join("\n"))];
 }
 
+// Where to find the value for each path placeholder an example leaves in its address.
+const PLACEHOLDERS: Record<string, string> = {
+  source_id: "a record ID from [Search](/docs/api/search), such as `ng-foi-act-2011`",
+  version_id: "a version `id` from [Get a record's texts](/docs/api/get-versions)",
+  anchor_id:
+    "an `anchor_id` from [Search published texts](/docs/api/search-text) or a text's [structure](/docs/api/get-version-structure)",
+  event_id: "an `event_id` from [List changes](/docs/api/list-changes)",
+  jurisdiction_id: "a jurisdiction ID from [List jurisdictions](/docs/api/list-jurisdictions), such as `sn`",
+  jurisdiction: "a jurisdiction ID, such as `ke`, from [List court registers](/docs/api/list-court-registers)",
+  citation: "a citation, encoded for the address, such as `FOI%20Act%202011`",
+  release_id: "a release's `release_id` from [List data releases](/docs/api/list-releases)",
+  mode: "`corpus` or `metadata`, as the release's `download_base` gives it",
+  filename: "a file the release's manifest lists, such as `manifest.json`",
+};
+
 function requestExamples(
   path: string,
   operation: Operation,
@@ -184,8 +199,8 @@ function requestExamples(
 ): string[] {
   if (method === "POST")
     return [
-      ...postExamples(BASE + path, request.body ?? { items: [{ anchor_id: "nod_…", span_hash: "…" }] }),
-      ...(request.body ? [] : ["Use the `anchor_id` and `span_hash` of each evidence unit you cite."]),
+      ...postExamples(BASE + path, request.body ?? {}),
+      "The IDs and hash here are examples: send the `anchor_id` and `span_hash` of each evidence unit you cite.",
     ];
   const filled = path.replace(/\{(\w+)\}/g, (_, name) =>
     request.path?.[name] ? encodeURIComponent(request.path[name]) : `{${name}}`,
@@ -223,9 +238,9 @@ function requestExamples(
       ? "if (!response.ok) throw new Error((await response.json()).detail);\nconst answer = await response.json();"
       : "if (!response.ok) throw new Error(`HTTP ${response.status}`);\nconst feed = await response.text();",
   ];
-  const placeholder = /\{\w+\}/.test(filled)
-    ? [`Replace \`${filled.match(/\{\w+\}/)![0]}\` with an \`event_id\` from [List changes](/docs/api/list-changes).`]
-    : [];
+  const placeholder = [...new Set([...filled.matchAll(/\{(\w+)\}/g)].map((m) => m[1]))].map(
+    (name) => `Replace \`{${name}}\` with ${PLACEHOLDERS[name] ?? "its value, as the parameters above describe"}.`,
+  );
   return [
     fence("curl", curl.join(" \\\n  ")),
     fence("python", python.join("\n")),

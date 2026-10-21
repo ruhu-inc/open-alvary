@@ -645,6 +645,90 @@
     },
     "note": "Shortened to its first courts and relations. The register is a proposal: no entry has been reviewed yet, so every `relation` is `unknown`; `recorded` is what a legally qualified reviewer will check against the words in `rests_on`."
   },
+  "search_text": {
+    "path": {},
+    "query": [
+      [
+        "q",
+        "personal data consent"
+      ],
+      [
+        "jurisdiction",
+        "ng"
+      ]
+    ]
+  },
+  "retrieve_evidence": {
+    "path": {},
+    "query": [
+      [
+        "q",
+        "when must a data controller report a breach"
+      ],
+      [
+        "jurisdiction",
+        "ng"
+      ]
+    ]
+  },
+  "check_currentness": {
+    "path": {},
+    "query": [],
+    "body": {
+      "items": [
+        {
+          "anchor_id": "nod_5b1d2c3e-8f4a-4d6b-9c7e-1a2b3c4d5e6f",
+          "span_hash": "50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c"
+        },
+        {
+          "version_id": "ver_0c9e8d7f-6a5b-4c3d-8e2f-1a0b9c8d7e6f",
+          "locator": "sec_40__subsec_2",
+          "as_of": "2026-01-01",
+          "jurisdiction": "ng"
+        }
+      ]
+    }
+  },
+  "get_expressions": {
+    "path": {
+      "source_id": "ng-foi-act-2011"
+    },
+    "query": [],
+    "answer": {
+      "source_id": "ng-foi-act-2011",
+      "language_rule": {
+        "status": "unknown"
+      },
+      "items": []
+    }
+  },
+  "get_version_text": {
+    "path": {},
+    "query": []
+  },
+  "get_version_structure": {
+    "path": {},
+    "query": [
+      [
+        "limit",
+        "100"
+      ]
+    ]
+  },
+  "get_anchor": {
+    "path": {},
+    "query": []
+  },
+  "get_rights_history": {
+    "path": {
+      "source_id": "ng-foi-act-2011"
+    },
+    "query": [],
+    "answer": {
+      "source_id": "ng-foi-act-2011",
+      "revisions": []
+    }
+  },
   "list_releases": {
     "path": {},
     "query": [],

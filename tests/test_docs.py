@@ -14,6 +14,7 @@ from pydantic import TypeAdapter
 
 from api.service import create_service, docs_pages
 from api.v1 import create_v1_app
+from schema import public
 
 WEB = Path(__file__).resolve().parents[1] / "web"
 DOCS = WEB / "src" / "docs"
@@ -111,6 +112,23 @@ def test_recorded_answers_are_what_the_api_answers(v1):
             TypeAdapter(model).validate_python(EXAMPLES[operation]["answer"])
             checked += 1
     assert models and checked >= 7
+
+
+def test_example_requests_send_what_each_route_requires():
+    # The reference's example for each route works as written: every required query parameter is in it,
+    # and a request body is valid for the route's own model.
+    for methods in SPEC["paths"].values():
+        [(method, operation)] = methods.items()
+        example = EXAMPLES.get(operation["operationId"], {})
+        sent = {name for name, _ in example.get("query", [])}
+        required = {
+            p["name"] for p in operation.get("parameters", []) if p["in"] == "query" and p.get("required")
+        }
+        assert required <= sent, (operation["operationId"], required - sent)
+        if method == "post":
+            assert "body" in example, operation["operationId"]
+            ref = operation["requestBody"]["content"]["application/json"]["schema"]["$ref"].split("/")[-1]
+            TypeAdapter(getattr(public, ref)).validate_python(example["body"])
 
 
 def test_the_sitemap_lists_the_documentation(catalogue, store, tmp_path):
