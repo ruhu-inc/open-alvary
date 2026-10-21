@@ -1,0 +1,863 @@
+{
+  "jurisdiction": "aa-au",
+  "review_state": "unreviewed",
+  "reviewed_by": null,
+  "reviewed_on": null,
+  "reviewed_sha256": null,
+  "precedent": null,
+  "courts": [
+    {
+      "id": "aa-au-afchpr",
+      "name": "African Court on Human and Peoples' Rights",
+      "kind": "court",
+      "level": "continental",
+      "valid_from": "2004-01-25",
+      "appeals_to": [],
+      "sources": [
+        "protocol-1",
+        "protocol-2",
+        "protocol-3",
+        "protocol-5",
+        "protocol-6",
+        "protocol-28-2",
+        "protocol-30",
+        "protocol-34-6",
+        "au-protocol-page",
+        "au-status-protocol"
+      ],
+      "note": "Established by the Protocol (art. 1), in force 25 January 2004 (au.int). It complements the Commission's protective mandate (art. 2). Jurisdiction: cases on the interpretation and application of the Charter, the Protocol and other human rights instruments ratified by the States concerned; it decides disputes over its own jurisdiction (art. 3). Cases may be brought by the Commission, States parties in the roles listed and African intergovernmental organisations (art. 5(1)); individuals and NGOs with observer status before the Commission only against a State that has made an art. 34(6) declaration (arts. 5(3), 34(6)). On admissibility it applies Charter art. 56, may ask the Commission's opinion, and may consider cases or transfer them to the Commission (art. 6). Its judgment is final and not subject to appeal (art. 28(2)). Art. 30: States parties undertake to comply with judgments in cases to which they are parties and to guarantee execution. That is a duty of the parties to a case, not a rule that decisions bind national courts or later cases; the Protocol states no such rule, so no relation or precedent entry is recorded. valid_from is the Protocol's entry into force."
+    },
+    {
+      "id": "aa-au-achpr",
+      "name": "African Commission on Human and Peoples' Rights",
+      "kind": "quasi_judicial",
+      "level": "continental",
+      "valid_from": "1986-10-21",
+      "appeals_to": [],
+      "sources": [
+        "charter-30",
+        "charter-45",
+        "charter-47-49",
+        "charter-52-53",
+        "charter-55-56",
+        "charter-58-59",
+        "charter-64",
+        "au-charter-page",
+        "protocol-5",
+        "protocol-6"
+      ],
+      "note": "Established within the OAU by Charter art. 30 to promote and protect human and peoples' rights in Africa; art. 45 sets its functions (promotion, protection, interpreting the Charter on request, tasks from the Assembly). It hears communications from States (arts. 47-49) and other communications (arts. 55-56). Its findings are made as recommendations: it reports the facts and its findings to the States concerned and the Assembly (art. 52) and may make to the Assembly 'such recommendations as it deems useful' (art. 53); where communications reveal serious or massive violations, the Assembly may request a factual report with findings and recommendations (art. 58); measures stay confidential, and reports are published, only as the Assembly decides (art. 59). It may submit cases to the Court (Protocol art. 5(1)(a)) and the Court may transfer cases to it (Protocol art. 6(3)). valid_from is the Charter's entry into force (au.int); members are elected after that date (art. 64(1))."
+    }
+  ],
+  "relations": [],
+  "members": [
+    {
+      "state": "dz",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-01-25",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Algeria. AU status list (as at 14/02/2023): signed 1999-07-13, ratified 2003-04-22, deposited 2003-06-03; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
+    },
+    {
+      "state": "bj",
+      "court": "aa-au-afchpr",
+      "valid_from": "2014-08-22",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025",
+        "noudehouenou-order"
+      ],
+      "note": "Benin. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2014-06-10, deposited 2014-08-22; in force for it on the deposit date (art. 34(4)). Court Table 1 (2025 report) gives ratification 2014-08-22; the Court's order of 5 May 2020 (§ 2) also dates Benin's party status from 2014-08-22."
+    },
+    {
+      "state": "bf",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-01-25",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Burkina Faso. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 1998-12-31, deposited 1999-02-23; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
+    },
+    {
+      "state": "bi",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-01-25",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Burundi. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2003-04-02, deposited 2003-05-12; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
+    },
+    {
+      "state": "cm",
+      "court": "aa-au-afchpr",
+      "valid_from": "2015-08-17",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Cameroon. AU status list (as at 14/02/2023): signed 2006-07-25, ratified 2014-12-09, deposited 2015-08-17; in force for it on the deposit date (art. 34(4)). Court Table 1 (2025 report) gives ratification 2015-08-17."
+    },
+    {
+      "state": "td",
+      "court": "aa-au-afchpr",
+      "valid_from": "2016-02-08",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Chad. AU status list (as at 14/02/2023): signed 2004-12-06, ratified 2016-01-27, deposited 2016-02-08; in force for it on the deposit date (art. 34(4))."
+    },
+    {
+      "state": "ci",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-01-25",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025",
+        "fory-judgment"
+      ],
+      "note": "Côte d'Ivoire. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2003-01-07, deposited 2003-03-21; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3)). Fory judgment § 2 dates its party status from 2004-01-25, consistent with art. 34(3)."
+    },
+    {
+      "state": "km",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-01-25",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Comoros. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2003-12-23, deposited 2003-12-26; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
+    },
+    {
+      "state": "cg",
+      "court": "aa-au-afchpr",
+      "valid_from": "2010-10-06",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Congo. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2010-08-10, deposited 2010-10-06; in force for it on the deposit date (art. 34(4))."
+    },
+    {
+      "state": "cd",
+      "court": "aa-au-afchpr",
+      "valid_from": "2020-12-08",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Democratic Republic of Congo. AU status list (as at 14/02/2023): signed 1999-09-09, ratified 2017-01-31, deposited 2020-12-08; in force for it on the deposit date (art. 34(4)). Court Table 1 (2025 report) gives ratification 2020-12-08."
+    },
+    {
+      "state": "ga",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-06-29",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Gabon. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2000-08-14, deposited 2004-06-29; in force for it on the deposit date (art. 34(4))."
+    },
+    {
+      "state": "gm",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-01-25",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Gambia. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 1999-06-30, deposited 1999-10-15; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
+    },
+    {
+      "state": "gh",
+      "court": "aa-au-afchpr",
+      "valid_from": "2005-08-16",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Ghana. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2004-08-25, deposited 2005-08-16; in force for it on the deposit date (art. 34(4))."
+    },
+    {
+      "state": "gw",
+      "court": "aa-au-afchpr",
+      "valid_from": "2021-11-02",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Guinea-Bissau. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2021-10-14, deposited 2021-11-02; in force for it on the deposit date (art. 34(4)). Conflict: Court Table 1 (2025 report) gives ratification and deposit 2021-11-03."
+    },
+    {
+      "state": "ke",
+      "court": "aa-au-afchpr",
+      "valid_from": "2005-02-18",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Kenya. AU status list (as at 14/02/2023): signed 2003-07-07, ratified 2004-02-04, deposited 2005-02-18; in force for it on the deposit date (art. 34(4))."
+    },
+    {
+      "state": "ly",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-01-25",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Libya. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2003-11-19, deposited 2003-12-08; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
+    },
+    {
+      "state": "ls",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-01-25",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Lesotho. AU status list (as at 14/02/2023): signed 1999-10-29, ratified 2003-10-28, deposited 2003-12-23; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
+    },
+    {
+      "state": "mg",
+      "court": "aa-au-afchpr",
+      "valid_from": "2022-01-12",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Madagascar. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2021-10-12, deposited 2022-01-12; in force for it on the deposit date (art. 34(4)). Conflict: Court Table 1 (2025 report) gives deposit 2021-10-12."
+    },
+    {
+      "state": "ml",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-01-25",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Mali. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2000-05-10, deposited 2000-06-20; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
+    },
+    {
+      "state": "mw",
+      "court": "aa-au-afchpr",
+      "valid_from": "2008-10-09",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Malawi. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2008-09-09, deposited 2008-10-09; in force for it on the deposit date (art. 34(4))."
+    },
+    {
+      "state": "mz",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-07-20",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Mozambique. AU status list (as at 14/02/2023): signed 2003-05-23, ratified 2004-07-17, deposited 2004-07-20; in force for it on the deposit date (art. 34(4))."
+    },
+    {
+      "state": "mr",
+      "court": "aa-au-afchpr",
+      "valid_from": "2005-12-14",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Mauritania. AU status list (as at 14/02/2023): signed 1999-03-22, ratified 2005-05-19, deposited 2005-12-14; in force for it on the deposit date (art. 34(4))."
+    },
+    {
+      "state": "mu",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-01-25",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Mauritius. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2003-03-03, deposited 2003-03-24; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
+    },
+    {
+      "state": "ng",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-06-09",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Nigeria. AU status list (as at 14/02/2023): signed 2004-06-09, ratified 2004-05-20, deposited 2004-06-09; in force for it on the deposit date (art. 34(4)). The AU list prints the signature date after the ratification date; recorded as printed."
+    },
+    {
+      "state": "ne",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-06-26",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Niger. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2004-05-17, deposited 2004-06-26; in force for it on the deposit date (art. 34(4))."
+    },
+    {
+      "state": "rw",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-01-25",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025",
+        "ingabire-ruling"
+      ],
+      "note": "Rwanda. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2003-05-05, deposited 2003-05-06; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3)). Ingabire ruling § 51 says the ratification was deposited on 2003-06-06 (AU list: 2003-05-06); either way before entry into force."
+    },
+    {
+      "state": "za",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-01-25",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "South Africa. AU status list (as at 14/02/2023): signed 1999-06-09, ratified 2002-07-03, deposited 2002-07-03; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
+    },
+    {
+      "state": "eh",
+      "court": "aa-au-afchpr",
+      "valid_from": "2014-01-27",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Sahrawi Arab Democratic Republic. AU status list (as at 14/02/2023): signed 2010-07-25, ratified 2013-11-27, deposited 2014-01-27; in force for it on the deposit date (art. 34(4)). Code 'eh' (ISO 3166-1 Western Sahara) used for the Sahrawi Arab Democratic Republic; reviewer to confirm."
+    },
+    {
+      "state": "sn",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-01-25",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Senegal. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 1998-09-29, deposited 1998-10-30; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
+    },
+    {
+      "state": "tz",
+      "court": "aa-au-afchpr",
+      "valid_from": "2006-02-10",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025",
+        "cheusi-judgment"
+      ],
+      "note": "Tanzania. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2006-02-07, deposited 2006-02-10; in force for it on the deposit date (art. 34(4)). Cheusi judgment § 2 dates its party status from 2006-02-10, consistent."
+    },
+    {
+      "state": "tg",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-01-25",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Togo. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2003-06-23, deposited 2003-07-06; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
+    },
+    {
+      "state": "tn",
+      "court": "aa-au-afchpr",
+      "valid_from": "2007-10-05",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025",
+        "belgeith-ruling"
+      ],
+      "note": "Tunisia. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2007-08-21, deposited 2007-10-05; in force for it on the deposit date (art. 34(4)). Conflict: Belgeith ruling § 2 dates its party status from 2007-08-21 (the ratification date), not the deposit date."
+    },
+    {
+      "state": "ug",
+      "court": "aa-au-afchpr",
+      "valid_from": "2004-01-25",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Uganda. AU status list (as at 14/02/2023): signed 2001-02-01, ratified 2001-02-16, deposited 2001-06-06; in force for it from the Protocol's entry into force on 2004-01-25 (art. 34(3))."
+    },
+    {
+      "state": "zm",
+      "court": "aa-au-afchpr",
+      "valid_from": "2023-01-10",
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "au-status-protocol",
+        "protocol-34-3-4",
+        "court-activity-report-2025"
+      ],
+      "note": "Zambia. AU status list (as at 14/02/2023): signed 1998-06-09, ratified 2022-12-28, deposited 2023-01-10; in force for it on the deposit date (art. 34(4))."
+    }
+  ],
+  "declarations": [
+    {
+      "state": "bf",
+      "court": "aa-au-afchpr",
+      "valid_from": "1998-07-28",
+      "valid_until": null,
+      "withdrawal_deposited": null,
+      "sources": [
+        "court-declarations",
+        "au-status-protocol",
+        "court-activity-report-2025",
+        "court-basic-information"
+      ],
+      "note": "Signed 1998-07-14, deposited 1998-07-28 (Court page and AU list agree), before the Protocol entered into force on 2004-01-25. Listed as in effect in the Court's 2025 report and on its Basic Information page."
+    },
+    {
+      "state": "mw",
+      "court": "aa-au-afchpr",
+      "valid_from": "2008-10-09",
+      "valid_until": null,
+      "withdrawal_deposited": null,
+      "sources": [
+        "court-declarations",
+        "au-status-protocol",
+        "court-activity-report-2025",
+        "court-basic-information"
+      ],
+      "note": "Signed 2008-09-09, deposited 2008-10-09 (Court page and AU list agree). Listed as in effect in the Court's 2025 report and on its Basic Information page."
+    },
+    {
+      "state": "ml",
+      "court": "aa-au-afchpr",
+      "valid_from": "2010-02-19",
+      "valid_until": null,
+      "withdrawal_deposited": null,
+      "sources": [
+        "court-declarations",
+        "au-status-protocol",
+        "court-activity-report-2025",
+        "court-basic-information"
+      ],
+      "note": "Signed 2010-02-05, deposited 2010-02-19 (Court page and AU list agree). Listed as in effect in the Court's 2025 report and on its Basic Information page."
+    },
+    {
+      "state": "tz",
+      "court": "aa-au-afchpr",
+      "valid_from": "2010-03-29",
+      "valid_until": "2020-11-22",
+      "withdrawal_deposited": "2019-11-21",
+      "sources": [
+        "court-declarations",
+        "cheusi-judgment",
+        "ingabire-ruling",
+        "au-status-protocol"
+      ],
+      "note": "Signed 2010-03-09, deposited 2010-03-29 (Court page; Cheusi § 2). Withdrawal deposited with the AU Commission Chairperson on 2019-11-21; applying Ingabire's 12-month rule, the Court held it takes effect on 2020-11-22 (Cheusi §§ 36-39). The Court page gives 14 Nov 2019 against the withdrawal without saying what that date is."
+    },
+    {
+      "state": "gh",
+      "court": "aa-au-afchpr",
+      "valid_from": "2011-03-10",
+      "valid_until": null,
+      "withdrawal_deposited": null,
+      "sources": [
+        "court-declarations",
+        "au-status-protocol",
+        "court-activity-report-2025",
+        "court-basic-information"
+      ],
+      "note": "Signed 2011-02-09, deposited 2011-03-10 (Court page and AU list agree). Listed as in effect in the Court's 2025 report and on its Basic Information page."
+    },
+    {
+      "state": "rw",
+      "court": "aa-au-afchpr",
+      "valid_from": "2013-02-06",
+      "valid_until": "2017-03-01",
+      "withdrawal_deposited": "2016-02-29",
+      "sources": [
+        "court-declarations",
+        "ingabire-ruling",
+        "ingabire-corrigendum",
+        "au-status-protocol"
+      ],
+      "note": "Court page: signed 2013-01-22, deposited 2013-02-06; conflict: Ingabire ruling § 51 says deposited 2013-06-22. Withdrawal received at the AU Commission on 2016-02-29 (Ingabire § 21). Ruling of 3 June 2016 (retitled by corrigendum as the ruling on the effects of the withdrawal): one-year notice applies, effect from 2017-03-01, no effect on pending cases (§§ 66-68, operative iii). Court page gives 24 Feb 2016 for the withdrawal."
+    },
+    {
+      "state": "ci",
+      "court": "aa-au-afchpr",
+      "valid_from": "2013-07-23",
+      "valid_until": "2021-04-30",
+      "withdrawal_deposited": "2020-04-29",
+      "sources": [
+        "court-declarations",
+        "fory-judgment",
+        "ingabire-ruling",
+        "au-status-protocol"
+      ],
+      "note": "Signed 2013-06-19, deposited 2013-07-23 (Court page; Fory § 2). Withdrawal deposited with the AU Commission Chairperson on 2020-04-29; the Court held it took effect one year later, on 2021-04-30 (Fory §§ 2, 27-28). The Court page gives 28 Apr 2020 against the withdrawal."
+    },
+    {
+      "state": "bj",
+      "court": "aa-au-afchpr",
+      "valid_from": "2016-02-08",
+      "valid_until": "2021-03-26",
+      "withdrawal_deposited": "2020-03-25",
+      "sources": [
+        "court-declarations",
+        "noudehouenou-order",
+        "noudehouenou-erratum",
+        "ingabire-ruling",
+        "au-status-protocol"
+      ],
+      "note": "Signed 2014-05-22, deposited 2016-02-08 (Court page; order of 5 May 2020 § 2). Withdrawal deposited with the AU Commission on 2020-03-25 (§ 3). The order (§ 5) first gave 25 March 2021 as the effective date; the erratum of 29 July 2020 corrected it to 2021-03-26. The Court page gives 24 Mar 2020 against the withdrawal."
+    },
+    {
+      "state": "tn",
+      "court": "aa-au-afchpr",
+      "valid_from": "2017-06-02",
+      "valid_until": "2026-03-08",
+      "withdrawal_deposited": "2025-03-07",
+      "sources": [
+        "court-declarations",
+        "au-status-protocol",
+        "ghannouchi-ruling",
+        "belgeith-ruling",
+        "court-activity-report-2025",
+        "ingabire-ruling"
+      ],
+      "note": "Signed 2017-04-13, deposited 2017-06-02 (Court page and AU list); conflict: 2025 report Table 2 gives 2017-05-29, Belgeith § 2 gives 2017-04-16. Withdrawal deposited with the AU Commission on 2025-03-07 (Ghannouchi §§ 7, 11; Belgeith §§ 2, 14; 2025 report § 8). The Court held it takes effect on 2026-03-08, 12 months after filing (Ghannouchi § 13). The Court page does not yet show it."
+    },
+    {
+      "state": "gm",
+      "court": "aa-au-afchpr",
+      "valid_from": "2020-02-03",
+      "valid_until": null,
+      "withdrawal_deposited": null,
+      "sources": [
+        "court-declarations",
+        "court-declaration-gm",
+        "court-activity-report-2025",
+        "court-basic-information"
+      ],
+      "note": "Declaration dated 2018-10-23 at Banjul (Court copy); deposited 2020-02-03 (Court page; 2025 report Table 2). Conflict: the Court's May 2020 table gives 2020-02-02, and the AU list gives a 2011-02-09 signature date and no deposit date. Listed as in effect in the 2025 report and on the Basic Information page."
+    },
+    {
+      "state": "ne",
+      "court": "aa-au-afchpr",
+      "valid_from": "2022-04-07",
+      "valid_until": null,
+      "withdrawal_deposited": null,
+      "sources": [
+        "court-declarations",
+        "au-status-protocol",
+        "court-activity-report-2025",
+        "court-basic-information"
+      ],
+      "note": "Signed 2021-10-28, deposited 2022-04-07 (Court page and AU list agree). Conflict: the Court's 2025 report Table 2 gives 2021-10-28 as the deposit date. Listed as in effect in the 2025 report and on the Basic Information page."
+    },
+    {
+      "state": "gw",
+      "court": "aa-au-afchpr",
+      "valid_from": "2021-11-02",
+      "valid_until": null,
+      "withdrawal_deposited": null,
+      "sources": [
+        "court-declarations",
+        "au-status-protocol",
+        "court-activity-report-2025",
+        "court-basic-information"
+      ],
+      "note": "Signed 2021-10-14, deposited 2021-11-02 (Court page and AU list agree). Conflict: the Court's 2025 report Table 2 gives 2021-11-03 for both signature and deposit. Listed as in effect in the 2025 report and on the Basic Information page."
+    }
+  ],
+  "sources": [
+    {
+      "id": "protocol-1",
+      "title": "Protocol to the African Charter on Human and Peoples' Rights on the Establishment of an African Court on Human and Peoples' Rights (1998)",
+      "url": "https://au.int/sites/default/files/treaties/36393-treaty-0019_-_protocol_to_the_african_charter_on_human_and_peoplesrights_on_the_establishment_of_an_african_court_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "art. 1"
+    },
+    {
+      "id": "protocol-2",
+      "title": "Protocol to the African Charter on Human and Peoples' Rights on the Establishment of an African Court on Human and Peoples' Rights (1998)",
+      "url": "https://au.int/sites/default/files/treaties/36393-treaty-0019_-_protocol_to_the_african_charter_on_human_and_peoplesrights_on_the_establishment_of_an_african_court_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "art. 2"
+    },
+    {
+      "id": "protocol-3",
+      "title": "Protocol to the African Charter on Human and Peoples' Rights on the Establishment of an African Court on Human and Peoples' Rights (1998)",
+      "url": "https://au.int/sites/default/files/treaties/36393-treaty-0019_-_protocol_to_the_african_charter_on_human_and_peoplesrights_on_the_establishment_of_an_african_court_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "art. 3"
+    },
+    {
+      "id": "protocol-5",
+      "title": "Protocol to the African Charter on Human and Peoples' Rights on the Establishment of an African Court on Human and Peoples' Rights (1998)",
+      "url": "https://au.int/sites/default/files/treaties/36393-treaty-0019_-_protocol_to_the_african_charter_on_human_and_peoplesrights_on_the_establishment_of_an_african_court_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "art. 5(1), 5(3)"
+    },
+    {
+      "id": "protocol-6",
+      "title": "Protocol to the African Charter on Human and Peoples' Rights on the Establishment of an African Court on Human and Peoples' Rights (1998)",
+      "url": "https://au.int/sites/default/files/treaties/36393-treaty-0019_-_protocol_to_the_african_charter_on_human_and_peoplesrights_on_the_establishment_of_an_african_court_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "art. 6"
+    },
+    {
+      "id": "protocol-28-2",
+      "title": "Protocol to the African Charter on Human and Peoples' Rights on the Establishment of an African Court on Human and Peoples' Rights (1998)",
+      "url": "https://au.int/sites/default/files/treaties/36393-treaty-0019_-_protocol_to_the_african_charter_on_human_and_peoplesrights_on_the_establishment_of_an_african_court_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "art. 28(2)"
+    },
+    {
+      "id": "protocol-30",
+      "title": "Protocol to the African Charter on Human and Peoples' Rights on the Establishment of an African Court on Human and Peoples' Rights (1998)",
+      "url": "https://au.int/sites/default/files/treaties/36393-treaty-0019_-_protocol_to_the_african_charter_on_human_and_peoplesrights_on_the_establishment_of_an_african_court_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "art. 30"
+    },
+    {
+      "id": "protocol-34-3-4",
+      "title": "Protocol to the African Charter on Human and Peoples' Rights on the Establishment of an African Court on Human and Peoples' Rights (1998)",
+      "url": "https://au.int/sites/default/files/treaties/36393-treaty-0019_-_protocol_to_the_african_charter_on_human_and_peoplesrights_on_the_establishment_of_an_african_court_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "art. 34(3)-(4)"
+    },
+    {
+      "id": "protocol-34-6",
+      "title": "Protocol to the African Charter on Human and Peoples' Rights on the Establishment of an African Court on Human and Peoples' Rights (1998)",
+      "url": "https://au.int/sites/default/files/treaties/36393-treaty-0019_-_protocol_to_the_african_charter_on_human_and_peoplesrights_on_the_establishment_of_an_african_court_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "art. 34(6)-(7)"
+    },
+    {
+      "id": "au-protocol-page",
+      "title": "African Union treaty page: Protocol on the Establishment of an African Court on Human and Peoples' Rights",
+      "url": "https://au.int/en/treaties/protocol-african-charter-human-and-peoples-rights-establishment-african-court-human-and",
+      "pinpoint": "Date of adoption; date of entry into force (25 Jan 2004)"
+    },
+    {
+      "id": "au-status-protocol",
+      "title": "African Union: List of countries which have signed, ratified/acceded to the Protocol on the Establishment of an African Court on Human and Peoples' Rights (as at 14/02/2023)",
+      "url": "https://au.int/sites/default/files/treaties/36393-sl-PROTOCOL_TO_THE_AFRICAN_CHARTER_ON_HUMAN_AND_PEOPLESRIGHTS_ON_THE_ESTABLISHMENT_OF_AN_AFRICAN_COURT_ON_HUMAN_AND_PEOPLES_RIGHTS_0.pdf",
+      "pinpoint": "status table; note on entry into force; 'Declarations entered by Member States'"
+    },
+    {
+      "id": "charter-30",
+      "title": "African Charter on Human and Peoples' Rights (1981)",
+      "url": "https://au.int/sites/default/files/treaties/36390-treaty-0011_-_african_charter_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "art. 30"
+    },
+    {
+      "id": "charter-45",
+      "title": "African Charter on Human and Peoples' Rights (1981)",
+      "url": "https://au.int/sites/default/files/treaties/36390-treaty-0011_-_african_charter_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "art. 45"
+    },
+    {
+      "id": "charter-47-49",
+      "title": "African Charter on Human and Peoples' Rights (1981)",
+      "url": "https://au.int/sites/default/files/treaties/36390-treaty-0011_-_african_charter_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "arts. 47-49"
+    },
+    {
+      "id": "charter-52-53",
+      "title": "African Charter on Human and Peoples' Rights (1981)",
+      "url": "https://au.int/sites/default/files/treaties/36390-treaty-0011_-_african_charter_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "arts. 52-53"
+    },
+    {
+      "id": "charter-55-56",
+      "title": "African Charter on Human and Peoples' Rights (1981)",
+      "url": "https://au.int/sites/default/files/treaties/36390-treaty-0011_-_african_charter_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "arts. 55-56"
+    },
+    {
+      "id": "charter-58-59",
+      "title": "African Charter on Human and Peoples' Rights (1981)",
+      "url": "https://au.int/sites/default/files/treaties/36390-treaty-0011_-_african_charter_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "arts. 58-59"
+    },
+    {
+      "id": "charter-64",
+      "title": "African Charter on Human and Peoples' Rights (1981)",
+      "url": "https://au.int/sites/default/files/treaties/36390-treaty-0011_-_african_charter_on_human_and_peoples_rights_e.pdf",
+      "pinpoint": "art. 64(1)"
+    },
+    {
+      "id": "au-charter-page",
+      "title": "African Union treaty page: African Charter on Human and Peoples' Rights",
+      "url": "https://au.int/en/treaties/african-charter-human-and-peoples-rights",
+      "pinpoint": "Date of entry into force (21 Oct 1986)"
+    },
+    {
+      "id": "court-declarations",
+      "title": "African Court on Human and Peoples' Rights: Declarations",
+      "url": "https://www.african-court.org/afchpr/declarations-2/",
+      "pinpoint": "table (columns: Ratification [date the declaration was signed], Deposition, Withdrawals)"
+    },
+    {
+      "id": "court-basic-information",
+      "title": "African Court on Human and Peoples' Rights: Basic Information",
+      "url": "https://www.african-court.org/afchpr/basic-information-2/",
+      "pinpoint": "'Ratification & Declaration' (34 States parties; 7 declarations)"
+    },
+    {
+      "id": "court-activity-report-2025",
+      "title": "Activity Report of the African Court on Human and Peoples' Rights, 1 January-31 December 2025, EX.CL/1660(XLVIII)",
+      "url": "https://www.african-court.org/afchpr/wp-content/uploads/2026/02/EX-CL-1660-XLVIII_En-AFCHPR-Activity-Report-2025_compressed.pdf",
+      "pinpoint": "paras. 5-8, Tables 1-2"
+    },
+    {
+      "id": "court-declaration-gm",
+      "title": "The Gambia: Declaration of recognition in conformity with Article 34(6) of the Protocol (Court copy)",
+      "url": "https://www.african-court.org/afchpr/wp-content/uploads/2020/10/Gambia-Declaration.pdf",
+      "pinpoint": "dated 23 October 2018"
+    },
+    {
+      "id": "ingabire-ruling",
+      "title": "Ingabire Victoire Umuhoza v. Republic of Rwanda, App. No. 003/2014, Ruling of 3 June 2016 (effects of the withdrawal of the art. 34(6) declaration)",
+      "url": "https://www.african-court.org/cpmt/storage/app/uploads/public/62b/472/674/62b472674ae7a087934189.pdf",
+      "pinpoint": "paras. 21, 51, 66-68, 69(iii)"
+    },
+    {
+      "id": "ingabire-corrigendum",
+      "title": "Ingabire Victoire Umuhoza v. Republic of Rwanda, App. No. 003/2014, Corrigendum to Ruling (5 September 2016)",
+      "url": "https://www.african-court.org/cpmt/storage/app/uploads/public/62b/473/002/62b473002f5ec295040578.pdf",
+      "pinpoint": "item i (title of the ruling)"
+    },
+    {
+      "id": "cheusi-judgment",
+      "title": "Andrew Ambrose Cheusi v. United Republic of Tanzania, App. No. 004/2015, Judgment of 26 June 2020",
+      "url": "https://www.african-court.org/cpmt/storage/app/uploads/public/633/412/677/6334126779fd3091950154.pdf",
+      "pinpoint": "paras. 2, 35-39"
+    },
+    {
+      "id": "noudehouenou-order",
+      "title": "Houngue Eric Noudehouenou v. Republic of Benin, App. No. 003/2020, Order for Provisional Measures of 5 May 2020",
+      "url": "https://www.african-court.org/cpmt/storage/app/uploads/public/631/1ce/fc4/6311cefc4a2c9267178507.pdf",
+      "pinpoint": "paras. 2-5"
+    },
+    {
+      "id": "noudehouenou-erratum",
+      "title": "Houngue Eric Noudehouenou v. Republic of Benin, App. No. 003/2020, Erratum of 29 July 2020 to the Order of 5 May 2020",
+      "url": "https://www.african-court.org/cpmt/storage/app/uploads/public/630/5cc/5b4/6305cc5b46da7198376787.pdf",
+      "pinpoint": "para. 5, line 3"
+    },
+    {
+      "id": "fory-judgment",
+      "title": "Kouadio Kobena Fory v. Republic of Côte d'Ivoire, App. No. 034/2017, Judgment of 2 December 2021",
+      "url": "https://www.african-court.org/cpmt/storage/app/uploads/public/61b/9a8/564/61b9a85644459394514610.pdf",
+      "pinpoint": "paras. 2, 27-28"
+    },
+    {
+      "id": "ghannouchi-ruling",
+      "title": "Moadh Kheriji Ghannouchi and Others v. Republic of Tunisia, App. No. 004/2023, Ruling of 17 March 2025 on the request for revocation of the order for provisional measures",
+      "url": "https://www.african-court.org/ajudata/download-file/decision/735/EN/343",
+      "pinpoint": "paras. 7, 11-13"
+    },
+    {
+      "id": "belgeith-ruling",
+      "title": "Brahim Ben Mohamed Ben Brahim Belgeith v. Republic of Tunisia, App. No. 004/2025, Ruling (Provisional Measures) of 6 July 2026",
+      "url": "https://www.african-court.org/ajudata/download-file/decision/764/EN/369",
+      "pinpoint": "paras. 2, 14"
+    }
+  ]
+}
