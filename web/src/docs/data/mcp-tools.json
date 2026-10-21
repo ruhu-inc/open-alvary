@@ -62,7 +62,7 @@
   {
     "name": "get_relationships",
     "title": "Get a source's history",
-    "description": "Whether a source is current and how it relates to other public sources, one step away: what it repeals, amends or commences and the law it is made under, what repealed, amended or commenced it, the treaty or directive it transposes, domesticates, implements or ratifies and the laws that do so for it, what it cites and is cited by, the instruments made under it, and the source in force in its place now when it has been repealed. Only links a reviewer has checked against the official text; judicial treatment is not included yet. A page at a time.",
+    "description": "Whether a source is current and how it relates to other public sources, one step away: what it repeals, amends or commences and the law it is made under, what repealed, amended or commenced it, the treaty or directive it transposes, domesticates, implements or ratifies and the laws that do so for it, what it cites and is cited by, the instruments made under it, and the source in force in its place now when it has been repealed. For case law: each judgment paragraph that cites a provision or another judgment, with the paragraph's words, and how a judgment follows, applies, distinguishes, doubts or overrules another, or was so treated, where a legally qualified reviewer recorded it (no treatment recorded means none is known, not that there is none). Only links a reviewer has checked against the official text. A page at a time.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -75,6 +75,11 @@
         "relation_type": {
           "type": "string",
           "enum": [
+            "overruled_by",
+            "doubted_by",
+            "distinguished_by",
+            "applied_by",
+            "followed_by",
             "repealed_by",
             "superseded_by",
             "amended_by",
@@ -92,12 +97,23 @@
             "domesticated_by",
             "implemented_by",
             "ratified_by",
+            "overrules",
+            "doubts",
+            "distinguishes",
+            "applies",
+            "follows",
             "cross_reference",
             "cites",
             "cited_by",
             "enables"
           ],
-          "description": "Only links of this kind, such as repealed_by or enables."
+          "description": "Only links of this kind, such as repealed_by, enables, cited_by or overruled_by."
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Only the citations and treatments of this part of the source, or of a part within it: a provision's locator, such as sec_2__subsec_1, for the judgment paragraphs citing it (relation_type cited_by), or a judgment paragraph's, such as para_12."
         },
         "limit": {
           "type": "integer",
@@ -419,7 +435,7 @@
             "type": "string"
           },
           "maxItems": 10,
-          "description": "Kinds of change: catalogue_added, metadata_corrected, text_version_published, legal_effect_recorded, withdrawal, coverage_changed, membership_recorded, suspension_recorded."
+          "description": "Kinds of change: catalogue_added, metadata_corrected, text_version_published, legal_effect_recorded, treatment_recorded, withdrawal, coverage_changed, membership_recorded, suspension_recorded."
         },
         "class": {
           "type": "array",

@@ -7,12 +7,14 @@ canonical bodies; the shared policy runs on gate fields before an individual bod
 from collections.abc import Iterator
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     LargeBinary,
     Text,
     and_,
     case,
     cast,
+    column,
     func,
     literal,
     literal_column,
@@ -22,10 +24,12 @@ from sqlalchemy import (
     true,
     union_all,
 )
+from sqlalchemy import table as sql_table
 from sqlalchemy.engine import Connection
 
 from api.search import FIELDS, fields_vector
 from api.store import RELATIONS, tables
+from rights.database import PolicyNamespace
 from schema.models import Amendment, Source
 from schema.public import RightsViewRecord, VersionGate, VersionViewRecord
 
@@ -57,9 +61,24 @@ EDGE_KINDS = {
     ("in", "cites"): "cited_by",
     ("in", "made_under"): "enables",
 }
-# What changed this law, what it rests on or gives effect to, what it changed, what gives effect to it,
-# what it refers to and is referred to by, and last the instruments made under it, which may be many.
+# How a judgment's paragraph treats the judgment it cites (corpus.judicial_treatment, EDT-01), and the
+# same treatment as the treated judgment sees it.
+TREATED_BY = {
+    "follows": "followed_by",
+    "applies": "applied_by",
+    "distinguishes": "distinguished_by",
+    "doubts": "doubted_by",
+    "overrules": "overruled_by",
+}
+# How later judgments treated this one; what changed this law, what it rests on or gives effect to, what
+# it changed, what gives effect to it; how this judgment treats others; what it refers to and is referred
+# to by, and last the instruments made under it, which may be many.
 EDGE_ORDER = [
+    "overruled_by",
+    "doubted_by",
+    "distinguished_by",
+    "applied_by",
+    "followed_by",
     "repealed_by",
     "superseded_by",
     "amended_by",
@@ -77,11 +96,26 @@ EDGE_ORDER = [
     "domesticated_by",
     "implemented_by",
     "ratified_by",
+    "overrules",
+    "doubts",
+    "distinguishes",
+    "applies",
+    "follows",
     "cross_reference",
     "cites",
     "cited_by",
     "enables",
 ]
+# The columns of the case-law tables (migration 0042) that the relationship pages read.
+CITATION_COLUMNS = (
+    "citation_id", "citing_work", "citing_locator", "citing_pinpoint", "citing_order", "cited_work",
+    "cited_locator", "cited_pinpoint", "cited_order", "printed", "quote", "evidence_url", "review_state",
+    "reviewed_by", "reviewer_role", "reviewed_at",
+)  # fmt: skip
+TREATMENT_COLUMNS = (
+    "treatment_id", "citation_id", "treatment", "opinion", "quote", "review_state", "reviewed_by",
+    "reviewer_role", "reviewer_qualification", "reviewed_at",
+)  # fmt: skip
 MAX_UNPAGED_ROWS = 1000
 MAX_BUFFER_BYTES = 10 * 1024 * 1024
 # A version's structure: an Act of a few hundred pages has a few thousand nodes (the Electricity Act
@@ -103,6 +137,7 @@ class LegacyRepository:
         self._sources = tables["sources"]
         self._rights = tables["rights"]
         self._indexed_metadata = None
+        self._case_law_tables = None
 
     @staticmethod
     def _identity_matches(table):
@@ -369,10 +404,13 @@ class LegacyRepository:
             select(table.c.payload).where(table.c.id == node_id, self._identity_matches(table))
         )
 
-    def edges(self, source_id: str, kinds, *, limit: int, offset: int):
+    def edges(self, source_id: str, kinds, *, limit: int, offset: int, locator: str | None = None):
         """One page of a source's checked links to public sources, each as seen from its side
-        (EDGE_KINDS), in EDGE_ORDER then by the other source; and how many there are. The database
-        filters, counts and pages, so a law with hundreds of orders made under it costs one page."""
+        (EDGE_KINDS), and of a judgment's reviewed citations and treatments (_assertions), in EDGE_ORDER
+        then by the other source; and how many there are. The database filters, counts and pages, so a
+        law with hundreds of orders made under it costs one page. With ``locator``, only citations and
+        treatments whose part on this side is that one or within it. A link is an Amendment; a citation
+        or treatment is its row's fields (a dict)."""
         table, sources, rights = tables["amendments"], self._sources, self._rights
         stored = table.c.payload["kind"].as_string()
         parts = []
@@ -381,14 +419,17 @@ class LegacyRepository:
             ("in", table.c.target_source_id, table.c.source_id),
         ):
             wanted = [(k, seen) for (d, k), seen in EDGE_KINDS.items() if d == direction and seen in kinds]
-            if not wanted:
+            if not wanted or locator is not None:
                 continue
             parts.append(
                 select(
                     table.c.payload.label("payload"),
                     case(*[(stored == k, EDGE_ORDER.index(seen)) for k, seen in wanted]).label("rank"),
                     other.label("other"),
+                    literal(0).label("first"),
+                    literal(0).label("second"),
                     table.c.id.label("edge"),
+                    literal(False).label("assertion"),
                 )
                 .select_from(
                     table.join(sources, sources.c.id == other).join(rights, rights.c.source_id == other)
@@ -402,16 +443,114 @@ class LegacyRepository:
                     self._visible(),
                 )
             )
+        parts += self._assertions(source_id, kinds, locator)
         if not parts:
             return 0, []
         edges = union_all(*parts).subquery()
         total = self.connection.scalar(select(func.count()).select_from(edges))
         rows = self.connection.execute(
-            select(edges).order_by(edges.c.rank, edges.c.other, edges.c.edge).limit(limit).offset(offset)
+            select(edges)
+            .order_by(edges.c.rank, edges.c.other, edges.c.first, edges.c.second, edges.c.edge)
+            .limit(limit)
+            .offset(offset)
         ).all()
         return total, [
-            (EDGE_ORDER[row.rank], row.other, Amendment.model_validate(row.payload)) for row in rows
+            (
+                EDGE_ORDER[row.rank],
+                row.other,
+                row.payload if row.assertion else Amendment.model_validate(row.payload),
+            )
+            for row in rows
         ]
+
+    def _case_law(self):
+        """corpus.citation and corpus.judicial_treatment (migration 0042), or None: SQLite, or before it."""
+        if self._case_law_tables is None:
+            found = ()
+            if self.connection.dialect.name == "postgresql":
+                ns = PolicyNamespace(self.connection.scalar(text("SELECT current_schema()")))
+                treatments = ns.qualified(self.connection, "corpus", "judicial_treatment")
+                if self.connection.scalar(text("SELECT to_regclass(:t)"), {"t": treatments}) is not None:
+                    found = (
+                        sql_table("citation", *map(column, CITATION_COLUMNS), schema=ns.schema("corpus")),
+                        sql_table(
+                            "judicial_treatment", *map(column, TREATMENT_COLUMNS), schema=ns.schema("corpus")
+                        ),
+                    )
+            self._case_law_tables = found
+        return self._case_law_tables or None
+
+    def _assertions(self, source_id: str, kinds, locator: str | None) -> list:
+        """The union parts of a judgment's reviewed citations (`cites`, `cited_by`) and treatments (each
+        kind and its TREATED_BY form) with public records, from this source's side: the citing paragraph
+        and the part cited, the paragraph's words, and the review. Within one other record, in the order of
+        the citing paragraphs."""
+        found = self._case_law()
+        if found is None:
+            return []
+        c, t = found
+        sources, rights, parts = self._sources, self._rights, []
+
+        def within(mine):
+            return (
+                true()
+                if locator is None
+                else or_(mine == locator, func.left(mine, len(locator) + 2) == locator + "__")
+            )
+
+        def citation_fields():
+            return [
+                "citing_work", c.c.citing_work, "citing_locator", c.c.citing_locator,
+                "citing_pinpoint", c.c.citing_pinpoint, "cited_locator", c.c.cited_locator,
+                "cited_pinpoint", c.c.cited_pinpoint, "printed", c.c.printed, "evidence_url", c.c.evidence_url,
+            ]  # fmt: skip
+
+        for direction, mine, other, here in (
+            ("out", c.c.citing_work, c.c.cited_work, c.c.citing_locator),
+            ("in", c.c.cited_work, c.c.citing_work, c.c.cited_locator),
+        ):
+            seen = "cites" if direction == "out" else "cited_by"
+            joined = c.join(sources, sources.c.id == other).join(rights, rights.c.source_id == other)
+            if seen in kinds:
+                payload = func.json_build_object(
+                    "assertion_id", c.c.citation_id, *citation_fields(), "quote", c.c.quote,
+                    "level", "structural", "reviewed_by", c.c.reviewed_by, "reviewer_role", c.c.reviewer_role,
+                    "reviewed_at", c.c.reviewed_at, type_=JSON,
+                )  # fmt: skip
+                parts.append(
+                    select(
+                        payload.label("payload"), literal(EDGE_ORDER.index(seen)).label("rank"),
+                        other.label("other"), c.c.citing_order.label("first"),
+                        func.coalesce(c.c.cited_order, -1).label("second"), c.c.citation_id.label("edge"),
+                        literal(True).label("assertion"),
+                    )
+                    .select_from(joined)
+                    .where(mine == source_id, c.c.review_state == "reviewed", within(here), self._visible())
+                )  # fmt: skip
+            wanted = [(k, k if direction == "out" else TREATED_BY[k]) for k in TREATED_BY]
+            wanted = [(k, shown) for k, shown in wanted if shown in kinds]
+            if not wanted:
+                continue
+            payload = func.json_build_object(
+                "assertion_id", t.c.treatment_id, *citation_fields(), "quote", t.c.quote, "opinion", t.c.opinion,
+                "level", "doctrinal", "reviewed_by", t.c.reviewed_by, "reviewer_role", t.c.reviewer_role,
+                "reviewer_qualification", t.c.reviewer_qualification, "reviewed_at", t.c.reviewed_at, type_=JSON,
+            )  # fmt: skip
+            parts.append(
+                select(
+                    payload.label("payload"),
+                    case(*[(t.c.treatment == k, EDGE_ORDER.index(shown)) for k, shown in wanted]).label("rank"),
+                    other.label("other"), c.c.citing_order.label("first"),
+                    func.coalesce(c.c.cited_order, -1).label("second"), t.c.treatment_id.label("edge"),
+                    literal(True).label("assertion"),
+                )
+                .select_from(joined.join(t, t.c.citation_id == c.c.citation_id))
+                .where(
+                    mine == source_id, c.c.review_state == "reviewed", t.c.review_state == "reviewed",
+                    t.c.treatment.in_([k for k, _ in wanted]), within(here), self._visible(),
+                )
+            )  # fmt: skip
+        return parts
 
     def replaced(self, source_id: str):
         """What repealed or replaced a source (checked links only; at most a page of them)."""
