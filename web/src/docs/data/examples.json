@@ -280,9 +280,43 @@
         ],
         "languages": [
           "en"
-        ]
+        ],
+        "member_of": {
+          "status": "unknown",
+          "items": [],
+          "ended": [],
+          "notice": "No membership here has been reviewed yet: unknown, not none."
+        }
       }
     ]
+  },
+  "get_jurisdiction": {
+    "path": {
+      "jurisdiction_id": "sn"
+    },
+    "query": [
+      [
+        "as_of",
+        "2026-01-01"
+      ]
+    ],
+    "answer": {
+      "id": "sn",
+      "name": "Senegal",
+      "country_code": "SN",
+      "parent_id": null,
+      "legal_systems": [],
+      "languages": [],
+      "member_of": {
+        "status": "unknown",
+        "items": [],
+        "ended": [],
+        "notice": "No membership here has been reviewed yet: unknown, not none."
+      },
+      "level": "national",
+      "as_of": "2026-01-01"
+    },
+    "note": "No membership has been reviewed yet, so the answer is `unknown`. Once one is, `items` lists it with its first and last day, its evidence and who reviewed it."
   },
   "get_coverage": {
     "path": {},

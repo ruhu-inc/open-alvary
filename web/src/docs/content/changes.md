@@ -23,6 +23,7 @@ Changes cover what Open Alvary holds, not every change in a country's law. [Chan
 | `legal_effect_recorded` | A reviewer checked, against the official text, that another public record repeals, amends, supersedes or brings into force this one, or that a law transposes, domesticates or ratifies a treaty or directive. `legal_effect` names the record that had the effect (`by`) and the date it took effect, when known. A transposition, domestication or ratification changes the law on both sides, so each record has its own change; the law's names the instrument it gives effect to (`of`). It may describe a past effect recorded late. If the link is withdrawn, the same change is corrected with `review_state` `withdrawn`, still naming the link. |
 | `withdrawal` | A record or a text stopped being public. |
 | `coverage_changed` | A country's coverage changed, for example its first record. |
+| `membership_recorded` | A reviewer checked a country's membership of the African Union or a regional body against its evidence. `membership` gives the member, the body, the first and last day and the evidence. `change_reason` is `ended` when the membership ended, and `corrected` when we corrected it; `retracted` is true when it is no longer a checked fact. |
 
 Each change has a plain `summary` sentence, the `work` it concerns (ID, title, citation, and its links on the website and in the API) and, for a text, the `version`. A correction of a record's legal status, rights status, type or year gives the old value in `previous`. Every field is listed in the [reference](/docs/api/list-changes).
 
@@ -122,7 +123,7 @@ Narrow the feed with any of these; repeat a parameter for several values. Values
 
 | Parameter | Matches |
 |---|---|
-| `jurisdiction` | Countries or other jurisdictions, such as `ng`. A country includes its states and local law. |
+| `jurisdiction` | Countries or other jurisdictions, such as `ng`. A country includes its states and local law. A body, such as `aa-ecowas`, includes changes to who its members are. |
 | `work` | Particular records, by ID. |
 | `type` | Kinds of change, such as `withdrawal`. |
 | `class` | Document types, such as `act`. |

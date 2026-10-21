@@ -97,6 +97,59 @@ Each link is seen from this record's side and cites the official text that makes
 
 Links come 25 to a page (`limit` up to 100); pass `next_cursor` as `cursor` for the next, or ask for one `kind` only, such as `enables` for the instruments made under a law or `transposed_by` for the national laws that transpose a directive. Only links one step away are listed (depth 1), and only between public records that a reviewer has checked against that text, so a record may be repealed before its history shows by what. Judicial treatment, such as a judgment that follows or overrules another, is not listed yet.
 
+## Find which bodies a country belongs to
+
+[Get a jurisdiction](/docs/api/get-jurisdiction) tells you which regional bodies a country belonged to on a date: the African Union, ECOWAS, the EAC, OHADA and the others. For a body such as `aa-ecowas`, it lists the members instead.
+
+```curl
+curl "https://api.open.alvary.ai/api/v1/jurisdictions/sn?as_of=2026-01-01" \
+  -H "Authorization: Bearer $OPEN_ALVARY_KEY"
+```
+
+```python
+import os
+
+import requests
+
+senegal = requests.get(
+    "https://api.open.alvary.ai/api/v1/jurisdictions/sn",
+    params={"as_of": "2026-01-01"},
+    headers={"Authorization": f"Bearer {os.environ['OPEN_ALVARY_KEY']}"},
+    timeout=30,
+).json()
+if senegal["member_of"]["status"] == "unknown":
+    print("No membership reviewed yet")
+for body in senegal["member_of"]["items"]:
+    print(body["body_name"], body["valid_from"], body["evidence_url"])
+```
+
+```javascript
+const url = new URL("https://api.open.alvary.ai/api/v1/jurisdictions/sn");
+url.searchParams.append("as_of", "2026-01-01");
+const senegal = await (
+  await fetch(url, { headers: { Authorization: `Bearer ${process.env.OPEN_ALVARY_KEY}` } })
+).json();
+for (const body of senegal.member_of.items) console.log(body.body_name, body.valid_from, body.evidence_url);
+```
+
+{{example:get_jurisdiction}}
+
+What the answer means:
+
+| Field | Meaning |
+|---|---|
+| `member_of` | For a country: the bodies it belonged to on `as_of` (today if you leave it out). |
+| `members` | For the African Union or a regional body: its members on `as_of`. |
+| `items` | The memberships held on that date. |
+| `ended` | Memberships that had ended by then, with their last day in `valid_to`. A country that left ECOWAS on 29 January 2025 has `valid_to` 28 January 2025. |
+| `valid_from`, `valid_to` | The first and last day of the membership. `valid_to` is null if it has not ended. |
+| `evidence_url`, `note` | The body's own source, or the treaty depositary's, that the dates were checked against, and what it says. |
+| `status` | `reviewed`, or `unknown` when no membership has been reviewed. `unknown` never means "none". |
+
+A membership is listed only after a reviewer has checked it against its evidence. One that has not been checked yet is left out, so a missing body is not proof that a country is not a member. Membership alone does not mean a body's treaties apply to a member: signature, ratification and entry into force are separate facts.
+
+[List jurisdictions](/docs/api/list-jurisdictions) gives every country's `member_of` in the same form. Changes to memberships are in the [change feed](/docs/changes) as `membership_recorded`.
+
 ## Read the text
 
 [Get a record's texts](/docs/api/get-versions) returns the record's cleared text versions, in full:

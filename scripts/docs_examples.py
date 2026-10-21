@@ -37,6 +37,7 @@ REQUESTS: dict[str, tuple[dict[str, str], list[tuple[str, str]]]] = {
     "get_relationships": ({"source_id": "ng-isa-2007"}, []),
     "resolve_citation": ({"citation": "FOI Act 2011"}, []),
     "list_jurisdictions": ({}, []),
+    "get_jurisdiction": ({"jurisdiction_id": "sn"}, [("as_of", "2026-01-01")]),
     "get_coverage": ({}, []),
     "list_releases": ({}, []),
     "get_bulk_file": (
@@ -51,8 +52,12 @@ REQUESTS: dict[str, tuple[dict[str, str], list[tuple[str, str]]]] = {
     "get_rss_feed": ({}, [("jurisdiction", "ng")]),
 }
 RECORDED = {"search", "list_sources", "get_source", "get_versions", "get_rights", "get_relationships",
-            "resolve_citation", "list_jurisdictions", "get_coverage", "list_releases", "list_plans",
-            "get_quota_policy"}  # fmt: skip
+            "resolve_citation", "list_jurisdictions", "get_jurisdiction", "get_coverage", "list_releases",
+            "list_plans", "get_quota_policy"}  # fmt: skip
+MEMBERSHIP_NOTE = (
+    "No membership has been reviewed yet, so the answer is `unknown`. Once one is, `items` lists it with its "
+    "first and last day, its evidence and who reviewed it."
+)
 
 
 def shorten(operation: str, answer):
@@ -140,6 +145,8 @@ def main() -> None:
             example["answer"] = shorten(operation, response.json())
             if operation == "get_relationships" and unchecked:
                 example["note"] = RELATIONS_NOTE
+            if operation == "get_jurisdiction" and example["answer"]["member_of"]["status"] == "unknown":
+                example["note"] = MEMBERSHIP_NOTE
         examples[operation] = example
     if "--changes" in sys.argv:
         for operation, recorded in change_examples(sys.argv[sys.argv.index("--changes") + 1]).items():
