@@ -466,7 +466,8 @@ OPERATIONS: dict[str, dict] = {
         "tag": "Changes",
         "summary": "List changes",
         "description": "Changes in the order they were made, oldest first: records added, corrected or "
-        "withdrawn, texts published, legal effects recorded and coverage changes. Keep the `resume_token` "
+        "withdrawn, texts published, legal effects recorded, coverage changes, and reviewed memberships and "
+        "suspensions recorded. Keep the `resume_token` "
         "and send it next time for only newer changes. Send at most one of `cursor`, `resume_token` and "
         "`start`. The same route answers without a key at https://open.alvary.ai/api/changes.",
         "extra": FILTER_PARAMETERS + PAGING,

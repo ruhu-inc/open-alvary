@@ -26,6 +26,8 @@ Changes cover what Open Alvary holds, not every change in a country's law. [Chan
 | `membership_recorded` | A reviewer checked a country's membership of the African Union or a regional body against its evidence. `membership` gives the member, the body, the first and last day (each with its bounds when known only to a month, a year or a window), its `basis` and the evidence. `change_reason` is `ended` when the membership ended, and `corrected` when we corrected it; `retracted` is true when it is no longer a checked fact. |
 | `suspension_recorded` | A reviewer checked that a member was suspended from taking part in a body's activities. `suspension` gives the member, the body, the first day, the legal basis (each article with its `role`, `decision_basis` or `treaty_rule`) and the decision. The country is still a member: no `membership_recorded` change follows. `change_reason` is `lifted` when the suspension was lifted, with its last day, and `corrected` when we corrected it; `retracted` is true when it is no longer a checked fact. |
 
+Only links that change what law applies record a `legal_effect_recorded` change. A record's other checked links, which cite or refer to another record (`cites`, `cross_reference`), implement an instrument (`implements`) or name the law it was made under (`made_under`), are in its [history](/docs/api/get-relationships) but record no change.
+
 Each change has a plain `summary` sentence, the `work` it concerns (ID, title, citation, and its links on the website and in the API) and, for a text, the `version`. A correction of a record's legal status, rights status, type or year gives the old value in `previous`. Every field is listed in the [reference](/docs/api/list-changes).
 
 Each change carries `schema_version` (`change-event-1`). New kinds of change and new fields can appear within a version, so ignore the ones you don't know. [Change coverage](/docs/api/get-change-coverage) lists the kinds recorded.
@@ -131,16 +133,20 @@ Narrow the feed with any of these; repeat a parameter for several values. Values
 | `language` | The language of the affected text. |
 | `q` | Whole words in the title, citation or summary. |
 
+A withdrawal that names no record (`scope_disclosure` `revalidate_releases`) matches every filter except `type`, so a filtered feed never misses one.
+
 A resume token belongs to its filters: keep one token per set of filters.
 
 ### When the feed answers an error
 
 | Answer | What to do |
 |---|---|
+| `400` [`invalid_cursor`](/docs/errors#invalid_cursor) | The cursor or resume token isn't valid, or was issued for other filters or another page size. Send it with the filters and `limit` it was issued for, or continue from your last resume token. |
+| `400` [`invalid_filter`](/docs/errors#invalid_filter) | A filter isn't valid: an unknown change type, too many values, or a keyword over 200 characters. Correct it. |
 | `409` [`stale_cursor`](/docs/errors#stale_cursor) | The cursor is older than 15 minutes. Continue from your last resume token. |
 | `409` [`feed_reset`](/docs/errors#feed_reset) | The feed was reset. Take a new `start=now` token, reload from a current release, then continue from the new token. |
 | `410` [`replay_window_expired`](/docs/errors#replay_window_expired) | Your token is older than the changes still kept. Reload from a current release with a new token. |
-| `503` with `Retry-After` | Try again after that many seconds. |
+| `429` [`rate_limited`](/docs/errors#rate_limited) or `503` with `Retry-After` | Try again after that many seconds. |
 
 ## Feeds
 
