@@ -1,6 +1,7 @@
 """Request logs never carry what a caller sent: queries reveal what someone is researching (RSV-01,
-ACS-06, OA-A2). The legacy API's own request log holds no input, and every image runs uvicorn without
-its access log."""
+ACS-06, OA-A2). The legacy API's own request log holds no input; every image runs uvicorn without its
+access log; Front Door's request logs go nowhere on Azure, and Google Cloud drops REST v1's and MCP's
+before they are stored. tests/test_postgres_request_logging.py runs the public service itself."""
 
 import http.client
 import json
@@ -202,3 +203,97 @@ def test_uvicorn_as_the_images_run_it_logs_no_request_where_its_access_log_would
             assert ask(port, "GET", f"/search?q=data+protection+{MARKER}")[0] == 200
         assert any(carried(r) for r in records) is logged, options
         assert any(r.name == "uvicorn.access" for r in records) is logged, options
+
+
+def resources(kind: str, source: str) -> dict[str, str]:
+    """Each `resource "<kind>" "<name>" { ... }` in Terraform source: its name and its body."""
+    found = {}
+    for match in re.finditer(rf'resource\s+"{kind}"\s+"([\w-]+)"\s*\{{', source):
+        depth, end = 1, match.end()
+        while depth:
+            depth += {"{": 1, "}": -1}.get(source[end], 0)
+            end += 1
+        found[match.group(1)] = source[match.end() : end - 1]
+    return found
+
+
+# Front Door records each request's full address, query string included, in its access and WAF logs; a
+# category group (allLogs) includes both.
+FRONT_DOOR_REQUEST_LOGS = ("FrontDoorAccessLog", "FrontDoorWebApplicationFirewallLog")
+WITHOUT_ADDRESSES = ('"FrontDoorHealthProbeLog"', '"AllMetrics"')
+
+
+def front_door_request_logs(source: str) -> list[str]:
+    """The diagnostic settings that could send Front Door's request logs anywhere: on its profile or WAF
+    policy (or a target that cannot be read), any category group, and any category but health probes
+    and metrics, including one Terraform only knows when it runs."""
+    flagged = []
+    for name, body in resources("azurerm_monitor_diagnostic_setting", source).items():
+        target = re.search(r"\btarget_resource_id\s*=\s*(.+)", body)
+        if target and not re.search(r"frontdoor|front_door|Microsoft\.Cdn/profiles", target.group(1), re.I):
+            continue
+        categories = [c.strip() for c in re.findall(r"\bcategory\s*=\s*(.+)", body)]
+        if re.search(r"\bcategory_group\s*=", body) or set(categories) - set(WITHOUT_ADDRESSES):
+            flagged.append(name)
+    return flagged
+
+
+def test_no_diagnostic_setting_sends_front_doors_access_or_waf_logs_anywhere():
+    source = "\n".join(p.read_text() for p in sorted((ROOT / "deployment" / "azure").rglob("*.tf")))
+    assert 'resource "azurerm_cdn_frontdoor_profile"' in source
+    assert front_door_request_logs(source) == []
+    # The check sees a setting that would send them, and passes one with health probes and metrics only.
+    setting = """
+resource "azurerm_monitor_diagnostic_setting" "edge" {
+  name                       = "edge"
+  target_resource_id         = azurerm_cdn_frontdoor_profile.edge.id
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.main.id
+
+  enabled_log {
+    category = "CATEGORY"
+  }
+  enabled_metric {
+    category = "AllMetrics"
+  }
+}
+"""
+    for category in FRONT_DOOR_REQUEST_LOGS:
+        assert front_door_request_logs(setting.replace("CATEGORY", category)) == ["edge"]
+    grouped = setting.replace('category = "CATEGORY"', 'category_group = "allLogs"')
+    assert front_door_request_logs(grouped) == ["edge"]
+    assert front_door_request_logs(setting.replace('"CATEGORY"', "each.value")) == ["edge"]
+    assert front_door_request_logs(setting.replace("CATEGORY", "FrontDoorHealthProbeLog")) == []
+    elsewhere = setting.replace("azurerm_cdn_frontdoor_profile.edge.id", "azurerm_key_vault.main.id")
+    assert front_door_request_logs(elsewhere.replace("CATEGORY", "AuditEvent")) == []
+
+
+# A double-quoted string, its escapes kept (\" in both HCL and the shell).
+STRING = r'"((?:[^"\\]|\\.)*)"'
+
+
+def exclusion_groups(text: str) -> list[set[str]]:
+    """A logging filter of the form (A OR B) AND (C OR D OR E), as its two groups of clauses."""
+    matched = re.fullmatch(r"\((.+)\) AND \((.+)\)", " ".join(text.split()))
+    assert matched, text
+    return [set(group.split(" OR ")) for group in matched.groups()]
+
+
+def test_google_clouds_exclusion_still_drops_the_request_logs_of_rest_v1_mcp_and_the_api_host():
+    # Cloud Run and the load balancer log each request's full address: these entries are never stored.
+    monitoring = (ROOT / "deployment" / "gcp-terraform" / "env" / "monitoring.tf").read_text()
+    body = resources("google_logging_project_exclusion", monitoring)["api_request_urls"]
+    assert not re.search(r"\bdisabled\s*=\s*true", body)
+    [listed] = re.findall(r'\bfilter\s*=\s*join\(" ",\s*\[(.*?)\]\s*\)', body, re.S)
+    terraform = " ".join(json.loads(f'"{part}"') for part in re.findall(STRING, listed))
+    logs, addresses = exclusion_groups(terraform)
+    assert logs >= {'log_id("run.googleapis.com/requests")', 'resource.type="http_load_balancer"'}
+    assert addresses >= {
+        'httpRequest.requestUrl:"/api/v1"',
+        'httpRequest.requestUrl:"/mcp"',
+        'httpRequest.requestUrl:"//${var.api_domain}/"',
+    }
+    # The script that set it on the live project (public_service.sh request_logs) drops the same.
+    script = (ROOT / "deployment" / "gcp" / "public_service.sh").read_text()
+    function = script.split("\nrequest_logs() {", 1)[1].split("\n}\n", 1)[0]
+    live = "".join(json.loads(f'"{part}"') for part in re.findall(r"\bfilter\+?=" + STRING, function))
+    assert exclusion_groups(live.replace("$API_DOMAIN", "${var.api_domain}")) == [logs, addresses]

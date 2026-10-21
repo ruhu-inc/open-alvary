@@ -15,6 +15,8 @@ resource "google_monitoring_notification_channel" "operator" {
 
 # No request logs for the API and MCP, so their queries are never kept: the app writes no access log,
 # but Cloud Run and the load balancer each log every request with its full address, query included.
+# tests/test_request_logging.py fails if the filter stops covering them or differs from the live
+# project's (public_service.sh request_logs).
 resource "google_logging_project_exclusion" "api_request_urls" {
   name        = "open-alvary-api-request-urls"
   description = "REST v1 and MCP request logs carry queries (OA-A2): never stored"
