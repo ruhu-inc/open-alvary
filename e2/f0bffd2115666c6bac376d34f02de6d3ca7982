@@ -1,0 +1,21 @@
+tests/test_routing.py
+  s_d665c62e07d76f::t_29c254128b0c79 71-90
+workbench/routing.py
+  s_d665c62e07d76f::t_29c254128b0c79 10-12,18-19,71-81,113-114,123,125-127
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e2f0bffd2115666c6bac376d34f02de6d3ca7982",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
