@@ -6,8 +6,9 @@ engine hold the same units, never others:
 
 - ``sync`` reads the change log after the engine's checkpoint (changes.engine_state), and for each
   work an event names, reconciles that work: units of texts no longer indexed are deleted, units of new
-  texts are fed. It then records the position reached. A feed reset (a new epoch), a new application
-  or ``rebuild`` reconciles every work.
+  texts are fed, and units fed under another analyzer are analysed again (their vectors kept). It then
+  records the position reached. A feed reset (a new epoch), a new application (a new analyzer is
+  one) or ``rebuild`` reconciles every work.
 - Units are recomputed from the published text with the section index's own function
   (api.text_index.units), so the engine's units are the section index's units, field for field.
 
@@ -50,7 +51,13 @@ def application(conn: Connection) -> Application:
 
 
 def application_hash(app: Application) -> str:
-    return hashlib.sha256(app.schema().encode() + app.services().encode()).hexdigest()
+    """The application and the section index's analyzer: the engine analyses units as it does
+    (retrieval.engine.LOCALES), so a new analyzer is a new application."""
+    from api import text_index
+
+    return hashlib.sha256(
+        app.schema().encode() + app.services().encode() + text_index.ANALYZER.encode()
+    ).hexdigest()
 
 
 def state(conn: Connection) -> dict:
@@ -113,8 +120,9 @@ def _documents(conn: Connection, work_id: str) -> dict[str, list[dict]]:
         config = text_index.config_for(version.language)
         base = {
             "version_id": version.id, "work_id": work_id, "language": version.language, "config": config,
-            "jurisdiction_id": facts["jurisdiction_id"], "document_type": facts["document_type"],
-            "legal_status": facts["legal_status"], "year": facts["year"], "effective_from": version.effective_from,
+            "analyzer": text_index.ANALYZER, "jurisdiction_id": facts["jurisdiction_id"],
+            "document_type": facts["document_type"], "legal_status": facts["legal_status"],
+            "year": facts["year"], "effective_from": version.effective_from,
             "effective_until": version.effective_until, "content_hash": version.content_hash,
             "replaced": facts["replaced"],
         }  # fmt: skip
@@ -148,21 +156,28 @@ def _documents(conn: Connection, work_id: str) -> dict[str, list[dict]]:
 
 
 def reconcile(db: Engine, engine: SearchEngine, work_ids: list[str]) -> dict:
-    """Make the engine hold exactly each work's public units."""
-    fed = removed = 0
+    """Make the engine hold exactly each work's public units, analysed as the section index is now."""
+    from api import text_index
+
+    fed = removed = reanalysed = 0
     for work_id in work_ids:
         with db.begin() as conn:
             wanted = _documents(conn, work_id)
-        held = {d["version_id"] for d in engine.visit(f'unit.work_id=="{work_id}"', fields="version_id")}
-        for version_id in sorted(held - set(wanted)):
+        held: dict[str, set] = {}
+        for d in engine.visit(f'unit.work_id=="{work_id}"', fields="version_id,analyzer"):
+            held.setdefault(d["version_id"], set()).add(d.get("analyzer"))
+        for version_id in sorted(set(held) - set(wanted)):
             removed += engine.delete_version(version_id)
         for version_id, docs in sorted(wanted.items()):
-            if version_id in held:
-                continue
-            for doc in docs:
-                engine.put(doc)
-                fed += 1
-    return {"works": len(work_ids), "fed": fed, "removed": removed}
+            if version_id not in held:
+                for doc in docs:
+                    engine.put(doc)
+                    fed += 1
+            elif held[version_id] != {text_index.ANALYZER}:
+                for doc in docs:
+                    engine.reanalyse(doc)
+                    reanalysed += 1
+    return {"works": len(work_ids), "fed": fed, "removed": removed, "reanalysed": reanalysed}
 
 
 def _all_works(db: Engine) -> list[str]:

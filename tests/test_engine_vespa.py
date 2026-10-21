@@ -116,6 +116,52 @@ def test_a_generation_in_the_engine_is_built_validated_and_searched(store, engin
     assert not any("dense" in u.ranking.arms for u in cited.evidence)
 
 
+def test_each_language_is_analysed_as_in_the_section_index_and_again_on_a_new_analyzer(
+    store, engine, monkeypatch
+):
+    # Same words, same matching (RSV-04, MIN-02): Portuguese and Arabic are stemmed in the engine as in
+    # the section index, and Kiswahili, matched word for word there, is never stemmed here. A new
+    # analyzer is a new application: every unit held is analysed again, its vectors kept.
+    from api import text_index
+
+    texts = {
+        "pt": ("ng-lei-exemplo-2023", "Lei exemplo, 2023", "1. Os trabalhadores têm direito a contratos escritos."),
+        "ar": ("ng-qanun-mithal-2023", "قانون مثال، 2023", "1. يحق للموظفين الحصول على البيانات الشخصية لدى الحكومة."),
+        "sw": ("ng-sheria-mfano-2023", "Sheria ya Mfano, 2023", "1. Wafanyakazi wana haki ya mikataba ya maandishi."),
+    }  # fmt: skip
+    anchors, versions = {}, {}
+    for language, (work, title, words) in texts.items():
+        _, versions[language], nodes = publish_act(store, [{"kind": "paragraph", "text": words}], work=work,
+                                                   title=title, language=language)  # fmt: skip
+        anchors[language] = nodes["sec_1"]
+    projector.sync(store.engine, engine)
+
+    def first(query):
+        found = pack(store, engine, query)
+        assert found.revisions.engine == "vespa" and "engine:unavailable" not in found.coverage.degraded
+        return next((u.anchor_id for u in found.evidence if u.unit == "provision"), None)
+
+    assert first("trabalhador contrato escrito") == anchors["pt"].id
+    assert first("موظف شخصي حكومة") == anchors["ar"].id
+    assert first("haki ya mikataba") == anchors["sw"].id and first("mkataba") is None
+    generation = indexer.prepare(store.engine, PROFILE, backend="vespa", engine=engine)
+    embedders = {PROFILE.id: HashingEmbedder(PROFILE)}
+    assert indexer.work(store.engine, batches=3, embedders=embedders, searcher=engine)["failed"] == 0
+    with store.engine.begin() as conn:
+        vectors = indexer.generation(conn, generation)["vectors_table"]
+    unit = Engine.doc_id(versions["sw"].id, anchors["sw"].start_byte)
+    held = engine.get(unit, vectors)[vectors]
+    monkeypatch.setattr(text_index, "ANALYZER", "oa-search-test")
+    with store.engine.begin() as conn:
+        text_index.ensure(conn)
+    projector.deploy(store.engine, engine)
+    again = projector.sync(store.engine, engine)
+    assert again["rebuilt"] and again["fed"] == 0 and again["reanalysed"] > 0
+    assert {d.get("analyzer") for d in engine.visit(fields="analyzer")} == {"oa-search-test"}
+    assert engine.get(unit, vectors)[vectors] == held
+    assert first("trabalhador contrato escrito") == anchors["pt"].id
+
+
 def test_the_pack_falls_back_to_the_system_of_record_when_the_engine_is_down(store):
     publish_act(store, UNITS)
     down = Engine("http://127.0.0.1:9", None)

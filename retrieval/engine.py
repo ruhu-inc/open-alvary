@@ -3,8 +3,9 @@ filtered search in one place; PostgreSQL stays the system of record and the engi
 (retrieval.projector follows the change log).
 
 One document per section-index unit (``unit``): its identity and filters as attributes, its words,
-headings, work title and identifiers (citation, pinpoint and names) as BM25 fields,
-analysed in the unit's language, and one multi-vector field per embedding profile, ``emb_<profile>``,
+headings, work title and identifiers (citation, pinpoint and names) as BM25 fields, analysed as the
+section index analyses them (``locale``: stemmed in the same languages, word for word in the others),
+and one multi-vector field per embedding profile, ``emb_<profile>``,
 holding a vector for each window of the unit (tensor<bfloat16>(w{}, x[dims]) with an HNSW index:
 compressed, and searched by its best window). A new embedding generation is a new field, filled by
 partial updates and validated before queries use it: blue/green inside the engine.
@@ -38,10 +39,21 @@ FIELDS = ("headings", "words", "title", "identifiers")
 # is its heading alone, and at 0.75 it outranks the sections under it. Measured on the NDPA development
 # set through the whole pack (nDCG@10 0.746 to 0.783; experiments/embeddings/screen-2026-10-19.md).
 LENGTH_NORMALISATION = {"words": 0.3, "headings": 0.3}
-LOCALES = {"english": "en", "french": "fr"}  # the language each analysis stems in; simple has none
+# The language the engine's linguistics (OpenNLP) split and stem each analysis in: French, Portuguese,
+# Spanish and Arabic with Snowball's stemmers, as PostgreSQL's configurations of these names; English
+# with KStem, PostgreSQL's with Snowball's (checked on Vespa 8.763.13).
+LOCALES = {"english": "en", "french": "fr", "portuguese": "pt", "spanish": "es", "arabic": "ar"}
+# simple: a language the engine knows and has no stemmer for (Kiswahili's), so that a unit in any
+# language and the query are split alike and never stemmed. An unknown tag would be guessed at.
+WORD_FOR_WORD = "sw"
 TIMEOUT_SECONDS = 10
 EPOCH = date(1970, 1, 1)
 UNKNOWN_DAY = -1
+
+
+def locale(config: str) -> str:
+    """The language the engine analyses a config's units and query words in."""
+    return LOCALES.get(config, WORD_FOR_WORD)
 
 
 def schema_field(name: str, kind: str, indexing: str, *settings: str | None) -> str:
@@ -68,14 +80,15 @@ class Application:
         attributes = [
             ("unit_id", "string"), ("version_id", "string"), ("work_id", "string"), ("node_id", "string"),
             ("unit_kind", "string"), ("kind", "string"), ("locator", "string"), ("pinpoint", "string"),
-            ("heading", "string"), ("jurisdiction_id", "string"), ("document_type", "string"),
-            ("legal_status", "string"), ("content_hash", "string"), ("config", "string"),
-            ("start_byte", "int"), ("end_byte", "int"), ("year", "int"), ("effective_from", "long"),
-            ("effective_until", "long"), ("replaced", "bool"),
+            ("heading", "string"), ("language", "string"), ("jurisdiction_id", "string"),
+            ("document_type", "string"), ("legal_status", "string"), ("content_hash", "string"),
+            ("config", "string"), ("analyzer", "string"), ("start_byte", "int"), ("end_byte", "int"),
+            ("year", "int"), ("effective_from", "long"), ("effective_until", "long"), ("replaced", "bool"),
         ]  # fmt: skip
         fast = {
             "version_id",
             "work_id",
+            "language",
             "jurisdiction_id",
             "document_type",
             "legal_status",
@@ -83,10 +96,9 @@ class Application:
             "kind",
         }
         lines = ["schema unit {", "    document unit {"]
-        # First, so the text fields after it are analysed in the unit's language.
-        lines.append(
-            schema_field("language", "string", "set_language | summary | attribute", "attribute: fast-search")
-        )
+        # First, so the text fields after it are analysed in their analysis's language (not the text's
+        # own: a language the section index matches word for word is never stemmed here either).
+        lines.append(schema_field("locale", "string", "set_language | summary | attribute"))
         for name, kind in attributes:
             lines.append(
                 schema_field(
@@ -216,6 +228,17 @@ class Engine:
     def put(self, unit: dict) -> None:
         identifier = unit["unit_id"]  # version:start for a unit, version:document for a document unit
         answer = self.query.post(f"/document/v1/oa/unit/docid/{identifier}", json={"fields": unit})
+        answer.raise_for_status()
+
+    def reanalyse(self, unit: dict) -> None:
+        """Assign every field of a unit again (a new analyzer), so its words are analysed anew while its
+        vectors are kept; a unit the engine lacks is created."""
+        identifier = unit["unit_id"]
+        answer = self.query.put(
+            f"/document/v1/oa/unit/docid/{identifier}",
+            json={"fields": {name: {"assign": value} for name, value in unit.items()}},
+            params={"create": "true"},
+        )
         answer.raise_for_status()
 
     def update_embedding(
@@ -352,16 +375,16 @@ class Engine:
     ) -> "Hits":
         """Units (or document units) matching the query, by the lexical profile. ``terms`` holds, for each
         analysis (the section index's configs), the query's words that analysis indexes (its stopwords
-        removed: api.text_index.query_terms); a unit matches through its own analysis, as in PostgreSQL.
-        With ``every``, a unit must hold all of them; otherwise any (weakAnd, rarer words weighing more by
-        BM25), for a question written as a sentence."""
+        removed: api.text_index.query_terms); a unit matches through its own analysis, as in PostgreSQL,
+        its words analysed in that analysis's language (never guessed from the query). With ``every``, a
+        unit must hold all of them; otherwise any (weakAnd, rarer words weighing more by BM25), for a
+        question written as a sentence."""
         branches, params = [], {}
         for n, (config, words) in enumerate(sorted(terms.items())):
             if not words.strip():
                 continue
             annotations = ['grammar: "all"'] if every else ['grammar: "weakAnd"', "targetHits: 1000"]
-            if config in LOCALES:
-                annotations.append(f'language: "{LOCALES[config]}"')
+            annotations.append(f'language: "{locale(config)}"')
             branches.append(
                 f'(config contains "{config}" and ({{{", ".join(annotations)}}}userInput(@q{n})))'
             )
@@ -388,15 +411,17 @@ class Hits(list):
 
 
 def document(row: dict, words: str, headings: str, title: str, identifiers: str) -> dict:
-    """A section-index unit as an engine document."""
+    """A section-index unit as an engine document; ``analyzer`` is the section index's analysis it was
+    fed under."""
     return {
         "unit_id": f"{row['version_id']}:{row['start_byte']}",
         "version_id": row["version_id"], "work_id": row["work_id"], "node_id": row.get("node_id") or "",
         "unit_kind": row.get("unit_kind", "unit"), "kind": row.get("kind") or "document",
         "locator": row.get("locator") or "document", "pinpoint": row.get("pinpoint") or "",
         "heading": row.get("heading") or "", "language": (row.get("language") or "und").split("-")[0].casefold(),
-        "jurisdiction_id": row["jurisdiction_id"], "document_type": row["document_type"],
-        "legal_status": row["legal_status"], "content_hash": row["content_hash"], "config": row["config"],
+        "locale": locale(row["config"]), "jurisdiction_id": row["jurisdiction_id"],
+        "document_type": row["document_type"], "legal_status": row["legal_status"],
+        "content_hash": row["content_hash"], "config": row["config"], "analyzer": row.get("analyzer") or "",
         "start_byte": row["start_byte"], "end_byte": row["end_byte"], "year": row.get("year") or 0,
         "effective_from": days(row.get("effective_from")), "effective_until": days(row.get("effective_until")),
         "replaced": bool(row.get("replaced")), "words": words, "headings": headings, "title": title,
