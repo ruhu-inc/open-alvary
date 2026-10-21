@@ -702,9 +702,10 @@ def link_works(documents: list[dict]) -> list[dict]:
     """Each document with its links ("relations") to the earlier instruments it repeals, amends or is
     made under, found in the collection by their citations, and to the later ones that repeal or
     amend it; the instruments made under it ("enables"); and whether it is current ("currency"):
-    repealed by a later text in the collection, else as RLRC's listing files it, else unknown, with
-    the latest law in its line, what has amended it, and any law it was made under that is since
-    repealed. A citation of an instrument the collection lacks stays as printed, without a target."""
+    repealed by a later text in the collection (with the words of its provision that does, and their
+    page), else as RLRC's listing files it, else unknown, with the latest law in its line, what has
+    amended it, and any law it was made under that is since repealed. A citation of an instrument the
+    collection lacks stays as printed, without a target."""
     whole = [{**d, "work": d.get("work") or d["id"]} for d in documents if not d.get("part")]
     by_key: dict[str, str] = {}
     titles: dict[str, str] = {}
@@ -721,6 +722,7 @@ def link_works(documents: list[dict]) -> list[dict]:
     forward: dict[str, list[dict]] = {}
     backward: dict[str, list[dict]] = {}
     enables: dict[str, set[str]] = {}
+    provisions: dict[tuple[str, str], dict] = {}  # (repealed, repealing): the provision that repeals it
     for d in whole:
         if d["work"] in forward or not d.get("cites"):
             continue
@@ -749,6 +751,8 @@ def link_works(documents: list[dict]) -> list[dict]:
                         **note,
                     }
                 )
+                if cite["kind"] == "repeals" and cite.get("words"):
+                    provisions[target, d["work"]] = {k: cite[k] for k in ("words", "page") if cite.get(k)}
         forward[d["work"]] = links
     repealed_by = {
         work: [link["target_id"] for link in links if link["kind"] == "repealed_by"]
@@ -764,8 +768,8 @@ def link_works(documents: list[dict]) -> list[dict]:
             "status": "repealed" if by else listed.get(work, "unknown"),
             "basis": "text" if by else "listing" if work in listed else None,
         }
-        if by:
-            out["repealed_by"] = [named(w) for w in by]
+        if by:  # each with the words of its provision that repeals this, and their page, where read
+            out["repealed_by"] = [named(w) | provisions.get((work, w), {}) for w in by]
             latest = _latest(work, repealed_by, years)
             if latest not in by:  # repealed in turn: the law in force now is further down the line
                 out["latest"] = named(latest)

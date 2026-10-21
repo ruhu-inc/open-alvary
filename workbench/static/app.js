@@ -874,19 +874,25 @@ async function detailsView(actId) {
     const hint = field.kind === "rows" ? null : suggestions[field.key];
     let note = null;
     if (hint) {
+      const label = (value) => field.kind === "choice" ? (field.choices.find((c) => c.value === value) || { label: String(value) }).label : String(value);
       const shown = hint.absent ? standard.absent[hint.absent]
         : Array.isArray(hint.value) ? hint.value.map((l) => (typeof l === "object" ? Object.values(l).join(" ") : l)).join("; ")
-        : field.kind === "choice" ? (field.choices.find((c) => c.value === hint.value) || { label: String(hint.value) }).label
-        : String(hint.value);
+        : label(hint.value);
       const differs = hint.absent ? absent[field.key] !== hint.absent : JSON.stringify(hint.value) !== JSON.stringify(values[field.key]);
+      // Words printed in another law (the provision that repeals this one): that law and its page.
+      const other = hint.source && related[hint.source.work];
+      const where = hint.source ? `${hint.source.title}${hint.source.page ? `, p. ${hint.source.page}` : ""}` : "";
       note = el("div", { class: "hint" },
-        hint.page ? pageLink(hint.page) : el("span", { text: "From the collection" }), " · ",
+        hint.page ? pageLink(hint.page)
+          : other && hint.source.page ? el("a", { href: `#/doc/${encodeURIComponent(other)}/page/${hint.source.page}`, text: where, title: "Open that page of the other law" })
+          : el("span", { text: where || "From the collection" }), " · ",
         el("span", { class: "evidence", text: `“${hint.evidence}”` }),
         differs && canEdit ? el("button", { class: "small", text: `Use: ${shown.length > 60 ? shown.slice(0, 60) + "…" : shown}`, on: { click: () => {
           if (hint.absent) { absent[field.key] = hint.absent; delete values[field.key]; why.value = hint.absent; }
           else { values[field.key] = structuredClone(hint.value); delete absent[field.key]; why.value = ""; }
           rows.get(field.key).replaceWith(row(field)); touched();
-        } } }) : null);
+        } } }) : null,
+        hint.secondary ? el("div", { class: "muted small", text: `Secondary source: ${label(hint.secondary.value)} — “${hint.secondary.evidence}”` }) : null);
     }
     return { input, why, note };
   };

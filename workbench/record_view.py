@@ -1224,25 +1224,38 @@ def suggestions(document: dict) -> dict:
     """The legal facts suggested for a document, keyed as its fields are, each with the words that state
     it and their page, or where else it was read: when it commences and what each language version is
     worth (under "expressions", the authority by language), read from its text; whether it is current,
-    as a later text of its collection or its listing says. With them, what its reader inferred rather than
-    read where it is printed for its field (a date printed once for several steps, a step that did not
-    happen), with the words it rests on. Shown beside the empty fields for the reviewer to choose; never
-    filled in."""
+    as a later text of its collection or its listing says: where both speak, the later text, a primary
+    source, leads with the words of its provision that repeals it ("source": which law, and the page), and
+    the listing, a secondary source, is noted beside it ("secondary"). With them, what its reader inferred
+    rather than read where it is printed for its field (a date printed once for several steps, a step that
+    did not happen), with the words it rests on. Shown beside the empty fields for the reviewer to choose;
+    never filled in."""
     out = {**(document.get("suggested_inferred") or {}), **(document.get("suggested_legal") or {})}
-    listed = (out.get("status.legal") or {}).get("value")
+    listing = out.get("status.legal") or {}
+    listed = listing.get("value")
     said = [(out.get("status.note") or {}).get("value")]
     links = document.get("relations") or []
     current = document.get("currency") or {}
     repealers = current.get("repealed_by") or [
         {"title": link["target"]} for link in links if link["kind"] == "repealed_by"
     ]
+    lead = None
     if repealers:
         names = "; ".join(r["title"] for r in repealers)
-        if listed in (None, "unknown"):
-            said = [f"Repealed by {names}, as its text says."]
-            out["status.legal"] = {"value": "repealed", "page": None}
-        elif listed != "repealed":
-            said.append(f"But {names} says it repeals this: check which is right.")
+        quoted = next((r for r in repealers if r.get("words")), None)
+        page = f" (p. {quoted['page']})" if quoted and quoted.get("page") else ""
+        said = [f"Repealed by {names}, as its text says{page}."]
+        lead = {"value": "repealed", "page": None}  # the page is the other law's, under "source"
+        if quoted:
+            source = {key: quoted[key] for key in ("work", "title", "page") if quoted.get(key)}
+            lead |= {"evidence": quoted["words"], "source": source}
+        if listed not in (None, "unknown"):
+            lead["secondary"] = {"value": listed, "evidence": listing.get("evidence")}
+            if listed == "repealed":
+                said.append(f"A secondary source agrees: {listing.get('evidence')}")
+            else:
+                said.append(f"A secondary source says otherwise: {listing.get('evidence')}")
+                said.append("Check which is right.")
         if current.get("latest"):
             said.append(
                 f"That law was repealed in turn; the law in force now is {current['latest']['title']}."
@@ -1255,8 +1268,10 @@ def suggestions(document: dict) -> dict:
     note = " ".join(filter(None, said))
     if note:
         out["status.note"] = {"value": note, "page": None, "evidence": note}
-        if "status.legal" in out:
-            out["status.legal"] = {**out["status.legal"], "evidence": note}
+    if lead:
+        out["status.legal"] = {**lead, "evidence": lead.get("evidence") or note}
+    elif note and "status.legal" in out:
+        out["status.legal"] = {**out["status.legal"], "evidence": note}
     return out
 
 

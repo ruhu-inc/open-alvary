@@ -802,16 +802,46 @@ def test_a_repealed_article_amends_its_law_and_a_repealed_law_is_repealed():
     }  # not the law it was made under, nor the one that only amended the law it repeals
     labour = found["amends", "law", "066/2018", "2018"]
     assert labour["target"] == "Law n° 066/2018 of 30/08/2018 regulating labour in Rwanda"
-    assert labour["note"] == "Articles 43 and 44"
+    assert labour["note"] == "Articles 43 and 44" and "words" not in labour  # repealing words only
     assert found["repeals", "law", "028/2023", "2023"]["target"] == (
         "Law nº 028/2023 of 19/05/2023 on the prevention of money laundering"
     )
+    # Each law it repeals keeps the provision that does, with its heading, as printed.
+    provision = (
+        "Article 3: Repealing provision Law nº 028/2023 of 19/05/2023 on the prevention of money laundering, "
+        "as amended by Law n° 9/2024 of 02/03/2024, and Presidential Order n° 046/01 of 29/05/2019 determining "
+        "examples are hereby repealed."
+    )
+    assert found["repeals", "law", "028/2023", "2023"]["words"] == provision
+    assert found["repeals", "presidential_order", "046/01", "2019"]["words"] == provision
     assert "note" not in found["repeals", "presidential_order", "046/01", "2019"]
     saved = found["repeals", "law", "13/2009", "2009"]  # all but one article
     assert (saved["target"], saved["note"]) == (
         "Law n° 13/2009 of 27/05/2009 regulating labour in Rwanda",
         "Except Article 163",
     )
+
+
+def test_a_repealing_provision_is_kept_as_printed_with_the_page_it_begins_on():
+    printed = [
+        (106, "Article 104: Language provision"),
+        (106, "This Law was drafted, considered and adopted in Ikinyarwanda."),
+        (107, "Article 105: Repealing provision"),
+        (107, "Law n° 026/2019 of 8/09/2019 on tax procedures and all"),
+        (107, "prior legal provisions contrary to this Law are repealed."),
+    ]
+    entry = {"kind": "law", "number": "020/2023", "versions": {"en": {"title": "LAW N° 020/2023"}}}
+    [link] = RG.cited({"en": [{"text": text, "page": page} for page, text in printed]}, entry)
+    assert (link["kind"], link["page"]) == ("repeals", 107)
+    assert link["words"] == (
+        "Article 105: Repealing provision Law n° 026/2019 of 8/09/2019 on tax procedures and all prior legal "
+        "provisions contrary to this Law are repealed."
+    )
+    # Named only in its title: the title as printed, on the instrument's first page.
+    title = "LAW N° 1/2030 OF 01/01/2030 REPEALING LAW N° 5/2001 OF 01/02/2001"
+    titled = {"kind": "law", "number": "1/2030", "versions": {"en": {"title": title, "pages": [4, 5]}}}
+    [link] = RG.cited({"en": [{"text": "", "page": 4}]}, titled)
+    assert (link["kind"], link["number"], link["words"], link["page"]) == ("repeals", "5/2001", title, 4)
 
 
 def test_a_title_names_the_law_it_amends_and_a_french_text_is_read_where_there_is_no_english():

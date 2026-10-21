@@ -1062,9 +1062,10 @@ def test_a_works_currency_follows_its_line_of_repeals_and_the_listing_and_its_pa
             "year": year,
         }
 
+    repealing = {"words": "Article 9: Law n° 1/2001 is repealed.", "page": 12}
     documents = [
         doc("rw-law-1-2001", 2001, listed="in_force"),
-        doc("rw-law-2-2010", 2010, cites=[cite("repeals", "1/2001", "2001")]),
+        doc("rw-law-2-2010", 2010, cites=[cite("repeals", "1/2001", "2001") | repealing]),
         doc("rw-law-3-2020", 2020, cites=[cite("repeals", "2/2010", "2010")]),
         doc("rw-law-4-2021", 2021, cites=[cite("amends", "3/2020", "2020")]),
         doc("rw-presidential-order-5-01-2012", 2012, cites=[cite("made_under", "2/2010", "2010")]),
@@ -1074,7 +1075,11 @@ def test_a_works_currency_follows_its_line_of_repeals_and_the_listing_and_its_pa
     out = {d["work"]: d for d in rwanda.link_works(documents)}
     first = out["rw-law-1-2001"]["currency"]
     assert first["status"] == "repealed" and first["basis"] == "text"
-    assert first["repealed_by"] == [{"work": "rw-law-2-2010", "title": "Title of rw-law-2-2010"}]
+    # With the words of the provision that repeals it, and their page in the repealing law.
+    assert first["repealed_by"] == [{"work": "rw-law-2-2010", "title": "Title of rw-law-2-2010", **repealing}]
+    assert out["rw-law-2-2010"]["currency"]["repealed_by"] == [
+        {"work": "rw-law-3-2020", "title": "Title of rw-law-3-2020"}
+    ]  # no words read: none carried
     assert first["latest"] == {"work": "rw-law-3-2020", "title": "Title of rw-law-3-2020"}
     assert first["disagrees"] == "RLRC's listing files it among the laws in force"
     assert "latest" not in out["rw-law-2-2010"]["currency"]  # what repealed it is in force

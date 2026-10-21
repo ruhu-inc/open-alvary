@@ -438,9 +438,15 @@ def test_a_rwandan_organic_law_follows_rwandas_procedure_into_a_complete_record(
         "force now is Law n° 3/2030 of 01/01/2030. Made under Law n° 5/2020, which Law n° 9/2025 has since "
         "repealed: check it is still in force."
     )
+    # Where the listing disagrees, the repealing law, a primary source, leads; the listing is noted beside it.
     disagree = V.suggestions({**document, "suggested_legal": listed, "relations": [repealer]})
-    noted = "Listed in force. But Law n° 1/2027 of 01/01/2027 says it repeals this: check which is right."
-    assert disagree["status.legal"] == {"value": "in_force", "page": None, "evidence": noted}
+    noted = f"{repealed} A secondary source says otherwise: Listed in force. Check which is right."
+    assert disagree["status.legal"] == {
+        "value": "repealed",
+        "page": None,
+        "evidence": noted,
+        "secondary": {"value": "in_force", "evidence": "Listed in force."},
+    }
     assert disagree["status.note"]["value"] == noted
     # A document prepared before legal facts were kept apart: its reader's authorities, commencement and
     # status are not filled in either.
@@ -496,3 +502,44 @@ def test_a_rwandan_organic_law_follows_rwandas_procedure_into_a_complete_record(
     sealed = next(e for e in record.events if e.step == "sealed")
     assert sealed.kind == "certified" and sealed.person.name.startswith("OTHER Name")
     assert [e.language for e in record.expressions] == ["rw", "en", "fr"]
+
+
+def test_a_repealing_laws_own_words_lead_the_status_suggestion_over_a_listing():
+    """Where a later law of the collection repeals a law that RLRC's listing files among the laws in force,
+    the suggestion is the repealing law's: the words of its provision that repeals it, from which law and
+    on which page. The listing, a secondary source, is noted beside it. Both stay suggestions."""
+    from workbench import record_view as V
+
+    listing = "RLRC's Laws of Rwanda files it among the laws in force (listing read 2026-10-11)."
+    words = "Article 105: Repealing provision Law n° 026/2019 of 8/09/2019 on tax procedures are repealed."
+    repealer = {"work": "rw-law-020-2023", "title": "Law n° 020/2023", "words": words, "page": 107}
+    document = {
+        "type": "law",
+        "title": "Law n° 026/2019 of 8/09/2019 on tax procedures",
+        "suggested_legal": {
+            "status.legal": {"value": "in_force", "page": None, "evidence": listing},
+            "status.note": {"value": listing, "page": None, "evidence": listing},
+        },
+        "currency": {"status": "repealed", "basis": "text", "repealed_by": [repealer]},
+    }
+    suggested = V.suggestions(document)
+    assert suggested["status.legal"] == {
+        "value": "repealed",
+        "page": None,  # not a page of this law: the repealing law's, under "source"
+        "evidence": words,
+        "source": {"work": "rw-law-020-2023", "title": "Law n° 020/2023", "page": 107},
+        "secondary": {"value": "in_force", "evidence": listing},
+    }
+    assert suggested["status.note"]["value"] == (
+        f"Repealed by Law n° 020/2023, as its text says (p. 107). A secondary source says otherwise: {listing} "
+        "Check which is right."
+    )
+    # A listing that agrees is still the secondary source.
+    agreeing = listing.replace("laws in force", "repealed laws")
+    document["suggested_legal"]["status.legal"] |= {"value": "repealed", "evidence": agreeing}
+    suggested = V.suggestions(document)
+    assert suggested["status.legal"]["evidence"] == words
+    assert suggested["status.legal"]["secondary"] == {"value": "repealed", "evidence": agreeing}
+    assert suggested["status.note"]["value"].endswith(f"A secondary source agrees: {agreeing}")
+    # Never filled in: the first draft leaves the status not yet checked.
+    assert V.base_values(document, {})["status.legal"] == "unknown"
