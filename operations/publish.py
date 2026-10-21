@@ -255,19 +255,20 @@ def from_workbench(review, library, store, jurisdiction: str) -> tuple[list[Appr
 
 
 # ---------- into the public catalogue ----------
+# The catalogue's document type of each record family (schema.record.FAMILIES); every other family is
+# "other".
+DOCUMENT_TYPES = {
+    "constitution": "constitution",
+    "legislation": "act",
+    "subsidiary_legislation": "regulation",
+    "executive_instrument": "regulation",
+    "judgment": "judgment",
+    "gazette": "gazette",
+}
+
+
 def _document_type(record) -> str:
-    family = record.identity.family
-    if family == "constitution":
-        return "constitution"
-    if family == "legislation":
-        return "act"
-    if family in ("subsidiary_legislation", "executive"):
-        return "regulation"
-    if family == "judgment":
-        return "judgment"
-    if family == "gazette":
-        return "gazette"
-    return "other"
+    return DOCUMENT_TYPES.get(record.identity.family, "other")
 
 
 def _slug(text: str) -> str:

@@ -8,6 +8,7 @@ import pytest
 from operations import publish
 from schema.models import RegionalEffect, Source, StatedDate
 from schema.record import (
+    FAMILIES,
     Absent,
     Body,
     Classification,
@@ -15,6 +16,7 @@ from schema.record import (
     DocumentRecord,
     Event,
     Evidence,
+    ExecutiveProfile,
     Expression,
     Identity,
     LanguageRule,
@@ -107,6 +109,21 @@ def test_a_validated_record_maps_to_a_catalogue_entry_and_never_to_text(decision
     without_link = publish.Approved("rw-x", rwanda_law(publications=()), ["rw"], "A", datetime.now(UTC))
     with pytest.raises(publish.Refused, match="no official publication link"):
         publish.catalogue_entries(without_link, decision)
+
+
+def test_each_family_has_its_catalogue_document_type(decisions):
+    # Every family named is one a record has: a misspelt one would catalogue its records as "other".
+    assert set(publish.DOCUMENT_TYPES) <= set(FAMILIES)
+    decision = publish.decide("rw", "Ijidai Lassa", 12, [], "", "")
+    order = rwanda_law(
+        identity=Identity(
+            family="executive_instrument", type="presidential_order", work_uri="/akn/rw/act/2026/9",
+            title="Example Presidential Order n° 009/01",
+        ),
+        profile=ExecutiveProfile(family="executive_instrument", authority=Body(name="President", kind="head_of_state")),
+    )  # fmt: skip
+    item = publish.Approved("rw-example-order", order, ["rw"], "Ijidai Lassa", datetime.now(UTC))
+    assert publish.catalogue_entries(item, decision)["source"].document_type == "regulation"
 
 
 def test_every_form_a_work_is_cited_by_becomes_an_alias(decisions):
