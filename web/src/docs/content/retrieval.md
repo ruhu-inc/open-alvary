@@ -126,7 +126,7 @@ This example is an illustration of a reviewed register. No register has been rev
 
 ## Routes
 
-A question that cites a part, names a law or asks what a term means (`meaning of "personal data"`) is answered by that first; anything else is a search of the words and, where a semantic index is active, of their meaning (`revisions.vector` names it). `query.routes` says which routes ran.
+A question that cites a part, names a law or asks what a term means (`meaning of "personal data"`) is answered by that first; anything else is a search of the words and, where a semantic index is active, of their meaning (`revisions.vector` names it). `query.routes` says which routes ran, and `revisions.router` names the routing rules (`oa-route-3`) and `revisions.ranking` the ranking (`oa-rank-3`). When either changes, the same question may be answered differently, so an answer cached under older rules may differ from today's.
 
 - **Citations as people write them:** `NDPA s. 23(1)(a)`, `section 23 of the Nigeria Data Protection Act`, `s. 23 Nigeria Data Protection Act 2023`, `Part V of the NDPA` (its heading, then its sections in order), `First Schedule, para. 16`. In French, an article's alinéa is read as its `(2)`, an article numbered after another by its printed number (`art. 2-1`), and the law may follow `de`, `du`, `de la`, `de l'` or `des`: `article 10, alinéa 2, de l'Acte uniforme …`, `art. 10 al. 2`. A law can be named by its title with or without the year, its citation, or its initials (`NDPA`; three letters only with the year, `ISA 2025`).
 - **A pinpoint alone**, such as `s. 23`, is read within the record you limit the request to with `source_id`.
@@ -247,7 +247,7 @@ Add `jurisdiction` to an item, such as `{"anchor_id": "…", "as_of": "2026-01-0
 
 ## Caching and the change feed
 
-If you cache evidence for your users, key each part by `anchor_id` and `content_hash`, and whole answers by the request and `revisions.dataset`. Keep the cache current with the [change feed](/docs/changes), and apply withdrawals and corrections promptly:
+If you cache evidence for your users, key each part by `anchor_id` and `content_hash`, and whole answers by the request and `revisions` (`dataset`, `router`, `ranking` and the rest). Keep the cache current with the [change feed](/docs/changes), and apply withdrawals and corrections promptly:
 
 | Change | What to do |
 |---|---|
