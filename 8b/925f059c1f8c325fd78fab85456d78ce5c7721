@@ -1,0 +1,32 @@
+tests/test_retrieval.py
+  s_d665c62e07d76f::t_b7498364c556ae 336
+  s_d665c62e07d76f::t_910d55d5dc1abd 323-335,337-358
+retrieval/profiles/README.md
+  s_d665c62e07d76f::t_3d1ff4567289f0 7,13
+  s_d665c62e07d76f::t_bf8de82d2256d3 8-11,14
+  s_d665c62e07d76f::t_c4d758835511db 15
+retrieval/profiles/qwen3-embedding-0.6b-1.json
+  s_d665c62e07d76f::t_23efce0838c113 1-14
+deployment/azure/env/jobs.tf
+  s_d665c62e07d76f::t_c425ea3285ef6b 31-39
+deployment/gcp-terraform/README.md
+  s_d665c62e07d76f::t_6fb9075fcb037e 329-350
+deployment/gcp-terraform/env/jobs.tf
+  s_d665c62e07d76f::t_f4ff7f968a6427 6,16,27,32-40,45,52,89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8b925f059c1f8c325fd78fab85456d78ce5c7721",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
