@@ -1,0 +1,38 @@
+deployment/gcp-terraform/README.md
+  s_d665c62e07d76f::t_f6e3b7ee648121 118-119
+deployment/gcp/public_service.sh
+  s_d665c62e07d76f::t_ab52bfb12c7e32 438-439,443-459
+deployment/azure/README.md
+  s_d665c62e07d76f::t_9583b26ae15bda 73-74
+tests/test_request_logging.py
+  s_d665c62e07d76f::t_d763996c73cb80 3-5
+  s_d665c62e07d76f::t_fcc099e5e39030 300-343,345-380,383-398
+deployment/gcp-terraform/env/monitoring.tf
+  s_d665c62e07d76f::t_a1052b3e780881 33-48
+  s_d665c62e07d76f::t_49e42e8d8375bb 2-5
+deployment/gcp-terraform/env/edge.tf
+  s_d665c62e07d76f::t_8d2792b3c19621 124-126
+deployment/gcp/slo.sh
+  s_d665c62e07d76f::t_f690c220a24b83 79-80
+  s_d665c62e07d76f::t_d67b3fb1bbd27e 23
+  s_d665c62e07d76f::t_d3c2cf46f47c86 26-30
+  s_d665c62e07d76f::t_90e6d4ba87d080 24-25
+deployment/runbook.md
+  s_d665c62e07d76f::t_86e44fffadfa0a 151-156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d68c7cd1f602e8c53a785e963070f81838068248",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
