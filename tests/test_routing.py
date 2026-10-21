@@ -341,8 +341,11 @@ def test_without_the_decision_every_page_waits(routed_world, monkeypatch, tmp_pa
 
 
 class FakeLibrary:
-    def __init__(self, found):
-        self.found = found
+    def __init__(self, found, type_="act"):
+        self.found, self.type = found, type_
+
+    def act(self, document_id):
+        return {"id": document_id, "jurisdiction": "ng", "type": self.type}
 
     def reading(self, document_id):
         return self.found
@@ -368,6 +371,27 @@ def test_calibration_reports_what_reviews_changed_on_each_route():
     agreed = report["routes"]["agreed"]
     assert agreed["pages"] == 2 and agreed["material"] == 1 and agreed["material_rate"] == 0.5
     assert 0.5 < agreed["material_upper_95"] <= 1.0
+
+
+def test_calibration_derives_a_judgments_structure_by_the_judgment_rules(monkeypatch):
+    from workbench import publication
+
+    found = reading(page(1, "JUDGMENT"), page(2, "[1] The appeal fails."), page(3, "[2] It is dismissed."))
+    latest = {
+        p["page"]: {"status": "checked", "units": content.units_from(p), "revision": 1}
+        for p in found["pages"]
+    }
+    rules, build = [], publication.build
+
+    def spy(*args):
+        built = build(*args)
+        rules.append(built.rules_id)
+        return built
+
+    monkeypatch.setattr(publication, "build", spy)
+    routing.calibrate(FakeLibrary(found, "judgment"), FakeStore(latest), ["ng-sc-2019-4"])
+    routing.calibrate(FakeLibrary(found), FakeStore(latest), [ACT])
+    assert rules == ["judgment-paragraphs-1", "ng-federal-act-1"]
 
 
 def test_review_time_is_reported_per_route():

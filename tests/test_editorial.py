@@ -61,7 +61,7 @@ def save_event(browser, event, status="proposed", expected=0, event_id=None):
 
 def test_proposals_are_read_from_a_text_and_its_nodes_without_a_database():
     pages = [{"page": 1, "units": content.units_from(reading()["pages"][0])}]
-    text = publication.build({"id": ACT, "jurisdiction": "ng"}, pages)
+    text = publication.build({"id": ACT, "jurisdiction": "ng", "type": "act"}, pages)
     found = events.propose_from(text.serialized.text.encode(), text.structure.canonical(), ACT, SOURCE)
     commenced = next(p for p in found if p["type"] == "commenced")
     assert commenced["date_from"] == "2024-06-12" and commenced["evidence"]["locator"] == "sec_2"
@@ -192,7 +192,9 @@ def test_an_instruction_exports_only_after_a_second_review_by_another_editor(wor
     assert instruction.effective_date == date(2024, 6, 12)
     base = [{"page": 1, "units": [{"kind": "paragraph", "text": "1. Short title."},
                                   {"kind": "paragraph", "text": "3. The levy is one percent.", "notes": ["Levy"]}]}]  # fmt: skip
-    result = consolidation.apply({"id": TARGET, "jurisdiction": "ng"}, base, [instruction], date(2025, 1, 1))
+    result = consolidation.apply(
+        {"id": TARGET, "jurisdiction": "ng", "type": "act"}, base, [instruction], date(2025, 1, 1)
+    )
     assert result.pages[0]["units"][1]["text"] == "3. The levy is two percent." and result.applied == [key]
     assert exported(reviewer, "ng-another-act") == {"instructions": []}
 

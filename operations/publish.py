@@ -567,6 +567,13 @@ def texts_from_workbench(review, library, store, jurisdiction: str) -> Texts:
             found.revoked.add((work, language))
         if not now["approved"]:
             continue
+        # Errors before the bound hashes, as approving again cannot cure them: a document approved
+        # before its kind had to have structure rules says so, not "approve it again".
+        if built.errors:
+            found.skipped[act["id"]] = (
+                f"{len(built.errors)} problem(s) in its text's structure, first: {built.errors[0].message}"
+            )
+            continue
         bound = (head.get("text_sha256"), head.get("structure_sha256"))
         made = (head.get("serialization_profile"), head.get("structure_rules"))
         if bound != (built.text_sha256, built.structure_sha256) or made != (built.profile_id, built.rules_id):
@@ -574,9 +581,6 @@ def texts_from_workbench(review, library, store, jurisdiction: str) -> Texts:
                 "its approval does not cover this text and structure (approved before they were bound, "
                 "or the rules changed): approve it again"
             )
-            continue
-        if built.errors:
-            found.skipped[act["id"]] = f"{len(built.errors)} problem(s) in its text's structure"
             continue
         record = review.built(act, now["view"])
         provenance = library.provenance(act["id"])

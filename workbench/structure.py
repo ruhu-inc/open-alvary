@@ -1,16 +1,21 @@
 """Legal structure of reviewed text: parts, sections, articles and their spans (TXP-03).
 
 Built from the canonical text's leaves (workbench.serialize) and the units they came from, by the
-structure rules of the document's kind:
+structure rules for the document's jurisdiction and type (RULES):
 
   ng-federal-act-1   Nigerian federal Acts and constitutional alterations: contents, preamble,
                      parts and chapters, sections, subsections, paragraphs, sub-paragraphs,
                      definitions, schedules and the Clerk's certificates after them
-  rw-law-1           Rwandan laws, one language at a time: titles, chapters, divisions (a civil-law
-                     "section" groups articles) and articles
+  rw-law-1           Rwandan laws, orders and the other instruments of the Official Gazette, one
+                     language at a time: titles, chapters, divisions (a civil-law "section" groups
+                     articles) and articles
   judgment-paragraphs-1
-                     judgments and rulings: the header, each opinion with its numbered paragraphs
-                     (each one a retrieval unit, cited "[2019] NGSC 4 [12]"), and the orders
+                     Nigerian judgments and rulings: the header, each opinion with its numbered
+                     paragraphs (each one a retrieval unit, cited "[2019] NGSC 4 [12]"), and the orders
+
+There is no default. A document of any other jurisdiction or type has no structure but one node
+holding its whole text, and an error that blocks its approval and publication: its layout is
+unsupported until rules are written for it from real texts (DAT-05), never read by another's.
 
 Where the reviewer set an indent level it decides a unit's depth; numbering patterns decide only
 where no level was set. Locators follow the Akoma Ntoso eId convention of the workbench export
@@ -30,6 +35,30 @@ NG_FEDERAL_ACT = "ng-federal-act-1"
 RW_LAW = "rw-law-1"
 JUDGMENT = "judgment-paragraphs-1"
 JUDGMENT_TYPES = {"judgment", "ruling"}
+# The kinds of instrument the Rwandan Gazette reader names from the heading that opens each one
+# (ingestion.rw_gazette.KIND, CONSTITUTION), whose article and division headings rw-law-1 reads. An
+# agreement, and a text whose kind was not recognised ("other"), are not among them.
+RW_INSTRUMENTS = (
+    "constitution",
+    "organic_law",
+    "law",
+    "decree_law",
+    "presidential_order",
+    "prime_ministers_order",
+    "ministerial_order",
+    "regulations",
+    "instructions",
+    "decree",
+    "ordinance",
+    "royal_decree",
+)
+# The rules for each (jurisdiction, document type) written so far (TXP-03), and nothing else.
+RULES = {
+    ("ng", "act"): NG_FEDERAL_ACT,
+    **{("ng", kind): JUDGMENT for kind in JUDGMENT_TYPES},
+    **{("rw", kind): RW_LAW for kind in RW_INSTRUMENTS},
+}
+NO_RULES = "no_structure_rules"
 
 # --- Nigerian federal Acts ---------------------------------------------------------------------------
 
@@ -91,7 +120,7 @@ class Node:
 class Structure:
     root: Node
     issues: list[Issue]
-    rules_id: str
+    rules_id: str | None  # None: no rules for the document's jurisdiction and type
 
     @property
     def nodes(self) -> list[Node]:
@@ -126,13 +155,33 @@ class Structure:
         return hashlib.sha256(canonical_json(self.canonical()).encode()).hexdigest()
 
 
-def rules_for(document: dict) -> str:
-    """A judgment or ruling by its type (its details' document type, else its collection type), in any
-    jurisdiction; otherwise a law by its jurisdiction."""
+def rules_key(document: dict) -> tuple[str, str]:
+    """A document's jurisdiction (else its id's) and type (its details' document type, else its
+    collection type)."""
     kind = document.get("document_type") or document.get("type") or document.get("kind") or ""
-    if str(kind).casefold() in JUDGMENT_TYPES:
-        return JUDGMENT
-    return RW_LAW if (document.get("jurisdiction") or document.get("id", "")[:2]) == "rw" else NG_FEDERAL_ACT
+    return str(document.get("jurisdiction") or document.get("id", "")[:2]), str(kind).casefold()
+
+
+def rules_for(document: dict) -> str | None:
+    """The rules for a document's jurisdiction and type, or None where none are written."""
+    return RULES.get(rules_key(document))
+
+
+def for_document(document: dict, serialized: Serialized, pages: list[dict]) -> Structure:
+    """A document's structure by the rules for its jurisdiction and type. Without rules, one node
+    holds the whole text and an error says why, so the document can be neither approved nor
+    published (TXP-01, DAT-05)."""
+    rules_id = rules_for(document)
+    if rules_id is not None:
+        return derive(serialized, pages, rules_id, document.get("language"))
+    jurisdiction, kind = rules_key(document)
+    root = Node("document", "document", leaves=list(range(len(serialized.leaves))))
+    finish(root, serialized.leaves)
+    message = (
+        f"No structure rules for {jurisdiction or '(no jurisdiction)'}/{kind or '(no type)'}: "
+        "this layout is not supported yet"
+    )
+    return Structure(root, [Issue("error", NO_RULES, None, None, message)], None)
 
 
 def derive(
@@ -143,8 +192,10 @@ def derive(
         builder: Builder = RwandaBuilder(language or "en", serialized, units)
     elif rules_id == JUDGMENT:
         builder = JudgmentBuilder(serialized, units)
-    else:
+    elif rules_id == NG_FEDERAL_ACT:
         builder = ActBuilder(serialized, units)
+    else:
+        raise ValueError(f"No structure rules {rules_id!r}")
     builder.build()
     finish(builder.root, serialized.leaves)
     return Structure(builder.root, builder.issues, rules_id)

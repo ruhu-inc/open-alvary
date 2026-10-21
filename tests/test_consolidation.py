@@ -9,7 +9,7 @@ import pytest
 from workbench import publication
 from workbench.consolidation import Instruction, Refused, apply
 
-DOCUMENT = {"id": "ng-example-act-2023", "jurisdiction": "ng"}
+DOCUMENT = {"id": "ng-example-act-2023", "jurisdiction": "ng", "type": "act"}
 FINAL = [
     {
         "page": 1,

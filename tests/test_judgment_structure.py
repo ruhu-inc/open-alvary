@@ -217,11 +217,15 @@ def test_an_order_printed_before_a_ruling_is_the_courts():
     assert span(text, nodes["para_1"]) == "[1] The applicant sought a stay."
 
 
-def test_judgments_and_rulings_follow_the_judgment_rules_in_any_jurisdiction():
+def test_nigerian_judgments_and_rulings_follow_the_judgment_rules_and_no_others_do():
     assert structure.rules_for({"id": "ng-sc-2019-4", "type": "judgment"}) == structure.JUDGMENT
-    assert structure.rules_for({"id": "rw-sc-2020-1", "document_type": "ruling"}) == structure.JUDGMENT
-    assert structure.rules_for({"id": "rw-law-2024-1", "type": "act"}) == structure.RW_LAW
-    assert structure.rules_for({"id": "ng-act-2023", "type": "order"}) == structure.NG_FEDERAL_ACT
+    assert structure.rules_for({"id": "ng-sc-2020-1", "document_type": "ruling"}) == structure.JUDGMENT
+    # Written from Nigerian judgments: another court's layout is not assumed to be theirs.
+    assert structure.rules_for({"id": "rw-sc-2020-1", "document_type": "ruling"}) is None
+    assert (
+        structure.rules_for({"id": "aa-au-afchpr-2026-9", "jurisdiction": "aa-au", "type": "judgment"})
+        is None
+    )
     pages = [{"page": n, "units": units} for n, units in enumerate(JUDGMENT, start=1)]
     built = publication.build({"id": "ng-sc-2019-4", "jurisdiction": "ng", "type": "judgment"}, pages)
     summary = publication.summary(built)

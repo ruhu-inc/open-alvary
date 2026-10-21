@@ -350,28 +350,27 @@ def test_warnings_for_the_reviewer():
 # --- Rwandan laws ------------------------------------------------------------------------------------
 
 
+RWANDA = [
+    [
+        head("TABLE OF CONTENTS"),
+        para("Article One: Purpose of this Law"),
+        head("TITLE ONE: GENERAL PROVISIONS"),
+        head("CHAPTER ONE: PURPOSE AND DEFINITIONS"),
+        head("Article One: Purpose of this Law"),
+        para("This Law determines the organisation of the Fund."),
+        head("Article 2: Definitions"),
+        para("In this Law, the following terms mean:"),
+        head("TITLE II: THE FUND"),
+        head("CHAPTER ONE: ESTABLISHMENT"),
+        head("Section One: Organs"),
+        head("Article 3: Organs of the Fund"),
+        para("The organs of the Fund are the Board and the Management."),
+    ]
+]
+
+
 def test_rwandan_titles_chapters_divisions_and_articles():
-    text, result = build(
-        [
-            [
-                head("TABLE OF CONTENTS"),
-                para("Article One: Purpose of this Law"),
-                head("TITLE ONE: GENERAL PROVISIONS"),
-                head("CHAPTER ONE: PURPOSE AND DEFINITIONS"),
-                head("Article One: Purpose of this Law"),
-                para("This Law determines the organisation of the Fund."),
-                head("Article 2: Definitions"),
-                para("In this Law, the following terms mean:"),
-                head("TITLE II: THE FUND"),
-                head("CHAPTER ONE: ESTABLISHMENT"),
-                head("Section One: Organs"),
-                head("Article 3: Organs of the Fund"),
-                para("The organs of the Fund are the Board and the Management."),
-            ]
-        ],
-        rules=structure.RW_LAW,
-        language="en",
-    )
+    text, result = build(RWANDA, rules=structure.RW_LAW, language="en")
     nodes = by_locator(result)
     assert nodes["contents"].children == []
     assert span(text, nodes["contents"]) == "TABLE OF CONTENTS\n\nArticle One: Purpose of this Law"
@@ -384,6 +383,7 @@ def test_rwandan_titles_chapters_divisions_and_articles():
     assert not result.issues
 
 
-def test_rules_follow_the_jurisdiction():
-    assert structure.rules_for({"id": "rw-law-2024-1"}) == structure.RW_LAW
-    assert structure.rules_for({"id": "ng-electricity-act-2023"}) == structure.NG_FEDERAL_ACT
+def test_rules_follow_the_jurisdiction_and_type():
+    assert structure.rules_for({"id": "rw-law-2024-1", "type": "law"}) == structure.RW_LAW
+    assert structure.rules_for({"id": "rw-po-2024-1", "type": "presidential_order"}) == structure.RW_LAW
+    assert structure.rules_for({"id": "ng-electricity-act-2023", "type": "act"}) == structure.NG_FEDERAL_ACT

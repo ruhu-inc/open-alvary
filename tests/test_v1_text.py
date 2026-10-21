@@ -89,7 +89,9 @@ def publish_act(
         "decided_at": (now - timedelta(minutes=1)).isoformat(),
         "expires_at": (now + timedelta(days=365)).isoformat(),
     }
-    text = publication.build({"id": work, "jurisdiction": "ng"}, pages or [{"page": 1, "units": units}])
+    text = publication.build(
+        {"id": work, "jurisdiction": "ng", "type": "act"}, pages or [{"page": 1, "units": units}]
+    )
     item = publish.ApprovedText(
         document_id=work, work=work, language=language, document_type="act", text=text,
         approver="Ijidai Lassa", approved_at=now - timedelta(minutes=5), effective_from=effective_from,
