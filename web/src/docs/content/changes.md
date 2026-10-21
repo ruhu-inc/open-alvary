@@ -9,7 +9,7 @@ Every change to the catalogue is recorded, in the order it was made. There are t
 |---|---|---|
 | The [change feed API](#keep-a-copy-current) | Keeping your own copy of the catalogue current | Nothing (or a key, to use your plan's limits) |
 | [Atom and RSS feeds](#feeds) | Feed readers and simple alerts | Nothing |
-| [Monitors and webhooks](/docs/webhooks) | Being told about particular laws or countries, by email or at your own endpoint | An account; webhooks need a paid plan |
+| [Monitors and webhooks](/docs/webhooks) | Being told about particular laws or countries, by email or at your own endpoint | An account; webhooks need a plan other than Starter |
 
 Changes cover what Open Alvary holds, not every change in a country's law. [Change coverage](/docs/api/get-change-coverage) says when recording began and what is held for each country.
 

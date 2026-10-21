@@ -148,7 +148,7 @@ A monitor watches for changes to the records you care about: laws added, catalog
 - {2} Countries to follow. Choosing none means every country; a country includes its states and local law.
 - {3} Kinds of change: **Added**, **Corrected**, **Text published**, **Withdrawn** and **Coverage**. None means every kind.
 - {4} Optionally, a keyword from the title or citation.
-- {5} Email: **No email, inbox only**, a **Weekly digest**, or a **Daily digest** on paid plans. On Team and above you can also share a monitor with your organisation.
+- {5} Email: **No email, inbox only**, a **Weekly digest**, or a **Daily digest** on every plan except Starter. On Team and above you can also share a monitor with your organisation.
 - {6} **Create monitor**.
 
 ![The New monitor form: name, countries, kinds of change, keyword, email and Create monitor](/guide/monitor-new.webp)
@@ -177,7 +177,7 @@ Every digest email has a link to stop it, without signing in.
 
 ## Webhooks {#webhooks}
 
-On paid plans, webhooks send your monitors' matches to your own HTTPS endpoint as they happen, signed so you can check each one came from Open Alvary. Create a monitor first, then open **Webhooks** and choose **Add endpoint**. The [webhooks guide](/docs/webhooks) has the code to receive them.
+On every plan except Starter, webhooks send your monitors' matches to your own HTTPS endpoint as they happen, signed so you can check each one came from Open Alvary. Create a monitor first, then open **Webhooks** and choose **Add endpoint**. The [webhooks guide](/docs/webhooks) has the code to receive them.
 
 ![The Webhooks page with no endpoints and Add endpoint](/guide/webhooks-empty.webp)
 
