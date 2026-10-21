@@ -6,12 +6,30 @@ structure rules for the document's jurisdiction and type (RULES):
   ng-federal-act-1   Nigerian federal Acts and constitutional alterations: contents, preamble,
                      parts and chapters, sections, subsections, paragraphs, sub-paragraphs,
                      definitions, schedules and the Clerk's certificates after them
+  eac-act-1          Acts of the East African Community: Nigeria's rules, with the Community's
+                     long title ("An Act of the Community to …"), the Act's title on its cover,
+                     lettered parts in schedules ("PART A—PROHIBITED GOODS") and a schedule's line
+                     of the sections it serves ("(ss. 18, 19, and 20.)")
+  ke-act-1           Kenyan Acts as the Kenya Gazette Supplement prints them: Nigeria's rules, with
+                     Kenya's long title ("AN ACT of Parliament to …") and the Act's title after the
+                     gazette's cover
+  za-act-1           South African Acts as the Government Gazette prints them: the gazette's notices,
+                     the long title and enacting words, then the contents; chapters with parts A, B …
+                     inside them; a section's heading printed above it; definitions in ‘‘ ’’
+  gh-act-1           Ghanaian Acts: unnumbered group headings, a section's heading printed above it,
+                     and the first group heading after "PASSED by Parliament …" opening the body
   rw-law-1           Rwandan laws, orders and the other instruments of the Official Gazette, one
                      language at a time: titles, chapters, divisions (a civil-law "section" groups
                      articles) and articles
   judgment-paragraphs-1
                      Nigerian judgments and rulings: the header, each opinion with its numbered
                      paragraphs (each one a retrieval unit, cited "[2019] NGSC 4 [12]"), and the orders
+
+The Commonwealth families are one builder (ActBuilder) with each family's Drafting: what it prints
+otherwise than Nigeria's federal Acts. Each was written from, and calibrated on, whole official texts
+of its family; a family whose Acts read exactly as Nigeria's would be mapped to ng-federal-act-1. All
+four read a definition however long the scope before its meaning ("‘‘de-identify’’, in relation to …,
+means").
 
 There is no default. A document of any other jurisdiction or type has no structure but one node
 holding its whole text, and an error that blocks its approval and publication: its layout is
@@ -32,6 +50,10 @@ from workbench.serialize import Issue, Leaf, Serialized, clean
 from workbench.store import canonical_json
 
 NG_FEDERAL_ACT = "ng-federal-act-1"
+EAC_ACT = "eac-act-1"
+KE_ACT = "ke-act-1"
+ZA_ACT = "za-act-1"
+GH_ACT = "gh-act-1"
 RW_LAW = "rw-law-1"
 JUDGMENT = "judgment-paragraphs-1"
 JUDGMENT_TYPES = {"judgment", "ruling"}
@@ -55,6 +77,10 @@ RW_INSTRUMENTS = (
 # The rules for each (jurisdiction, document type) written so far (TXP-03), and nothing else.
 RULES = {
     ("ng", "act"): NG_FEDERAL_ACT,
+    ("aa-eac", "act"): EAC_ACT,
+    ("ke", "act"): KE_ACT,
+    ("za", "act"): ZA_ACT,
+    ("gh", "act"): GH_ACT,
     **{("ng", kind): JUDGMENT for kind in JUDGMENT_TYPES},
     **{("rw", kind): RW_LAW for kind in RW_INSTRUMENTS},
 }
@@ -88,6 +114,96 @@ NUMBERED = re.compile(r"^(?:\d{1,3}[A-Z]{0,2}\.|\(\w{1,5}\))(?=\s|$)")
 SECTION_DEPTH, SUBSECTION_DEPTH, DEFINITION_DEPTH, PARAGRAPH_DEPTH, SUBPARAGRAPH_DEPTH = 0, 1, 1.5, 2, 3
 BODY_KINDS = {0: "section", 1: "subsection", 2: "paragraph", 3: "subparagraph"}
 BODY_TOKENS = {"section": "sec", "subsection": "subsec", "paragraph": "para", "subparagraph": "subpara"}
+
+
+@dataclass(frozen=True)
+class Drafting:
+    """What a family of Commonwealth Acts prints otherwise than Nigeria's federal Acts; the defaults
+    are ng-federal-act-1's own."""
+
+    preamble: re.Pattern = PREAMBLE  # the long title or enacting words, which open the preamble
+    contents: re.Pattern = CONTENTS
+    part: re.Pattern = PART
+    definition: re.Pattern = DEFINITION
+    notices: tuple[re.Pattern, ...] = (MEMORANDUM,)  # front matter that opens a notice
+    certificate: re.Pattern | None = CERTIFICATE  # after the body, opens a notice
+    # The Act's title, wherever it is printed before the body ("THE DATA PROTECTION ACT", on a
+    # gazette's cover or again before the long title); without it, the first heading is the title.
+    title: re.Pattern | None = None
+    # A heading just before a section is that section's heading, as a margin note is (South Africa,
+    # Ghana); otherwise it is a cross-heading.
+    headings_above: bool = False
+    # Parts restart in each chapter, so the chapter qualifies them: chap_3__part_A (South Africa).
+    parts_in_chapters: bool = False
+    # The contents follow the enacting words, and end where a chapter or part they list is printed
+    # again (South Africa).
+    contents_after_preamble: bool = False
+    # Enacting words after which the next heading opens the body, though it is no part or section
+    # (Ghana: "PASSED by Parliament …", then the first group heading).
+    enacting: re.Pattern | None = None
+    # A schedule's line of the sections it serves, printed under its name ("SECOND SCHEDULE" then
+    # "(ss. 18, 19, and 20.)"): held by the schedule, whose heading is the line after it.
+    reference: re.Pattern | None = None
+
+
+# An Act's title as printed above its long title or on the gazette's cover: "THE DATA PROTECTION ACT",
+# "THE EAST AFRICAN COMMUNITY ONE STOP BORDER POSTS ACT, 2016"; never "The Data Protection Act, 2019 901"
+# (a cover's list of contents).
+ACT_TITLE = re.compile(r"^the\s+.+\bact(?:,?\s+\d{4})?$", re.I | re.S)
+# A definition as the East African, Kenyan, South African and Ghanaian Acts print them: Nigeria's, with
+# the term in ‘‘ ’’ too, "mean" after two terms ("“approved place of loading” and “approved place of
+# unloading” mean"), and a term's scope before its meaning however long ("‘‘de-identify’’, in relation to
+# personal information of a data subject, means", "“owner” in respect of—" before its paragraphs).
+DEFINITIONS = re.compile(
+    r"^(?:‘‘|''|[“\"‘'])([^”\"’']{1,120})(?:’’|''|[”\"’'])"
+    r"(?:\s+(?:[^\s.;:]+\s+){0,5}?(?:means?|includes?|has|shall\s+have|refers)\b"
+    r"|[^;]{0,120}?\bin\s+(?:relation\s+to|respect\s+of)\b[^;]{0,200}?(?:\b(?:means?|includes?)\b|[—–]$))"
+)
+NG = Drafting()
+EAC = Drafting(
+    preamble=re.compile(
+        r"^(?:a\s+bill\b|an?\s+act\s+(?:of\s+the\s+community\s+)?(?:to|for)\b|(?:be\s+it\s+)?enacted\b)", re.I
+    ),
+    # "PART A—PROHIBITED GOODS" in a schedule
+    part=re.compile(r"^PART\s+([IVXLC]+|\d+|[A-Z])\b\s*[—–:.-]?\s*(.*)$", re.S),
+    definition=DEFINITIONS,
+    title=ACT_TITLE,
+    reference=re.compile(r"^\(ss?\.\s.*\)$"),
+)
+KE = Drafting(
+    preamble=re.compile(
+        r"^(?:a\s+bill\b|an?\s+act\s+(?:of\s+parliament\s+)?(?:to|for)\b|(?:be\s+it\s+)?enacted\b)", re.I
+    ),
+    definition=DEFINITIONS,
+    title=ACT_TITLE,
+)
+ZA = Drafting(
+    # "ACT" above the long title ("To promote …"), or older Acts' "BE IT ENACTED by the Parliament …".
+    preamble=re.compile(r"^(?:ACT$|(?i:be\s+it\s+enacted)\b)"),
+    contents=re.compile(
+        r"^(?:contents\s+of\s+act|arrangement\s+of\s+sections|table\s+of\s+contents)\b", re.I
+    ),
+    part=re.compile(r"^(?:PART|Part)\s+([IVXLC]+|\d+|[A-Z])\b\s*[—–:.-]?\s*(.*)$", re.S),
+    definition=DEFINITIONS,
+    # gov.za's note on the languages it publishes; the Government Gazette's front page, with the
+    # Presidency's notice of assent; the gazette's explanatory note on brackets and underlining.
+    notices=(
+        re.compile(r"^please\s+note\s+that\s+most\s+acts\b", re.I),
+        re.compile(r"^government\s+gazette$", re.I),
+        re.compile(r"^general\s+explanatory\s+note\b", re.I),
+    ),
+    certificate=None,
+    headings_above=True,
+    parts_in_chapters=True,
+    contents_after_preamble=True,
+)
+GH = Drafting(
+    definition=DEFINITIONS,
+    certificate=re.compile(r"^date\s+of\s+gazette\s+notification\b", re.I),
+    headings_above=True,
+    enacting=re.compile(r"^passed\s+by\s+parliament\b", re.I),
+)
+DRAFTING = {NG_FEDERAL_ACT: NG, EAC_ACT: EAC, KE_ACT: KE, ZA_ACT: ZA, GH_ACT: GH}
 
 
 @dataclass
@@ -192,8 +308,8 @@ def derive(
         builder: Builder = RwandaBuilder(language or "en", serialized, units)
     elif rules_id == JUDGMENT:
         builder = JudgmentBuilder(serialized, units)
-    elif rules_id == NG_FEDERAL_ACT:
-        builder = ActBuilder(serialized, units)
+    elif rules_id in DRAFTING:
+        builder = ActBuilder(serialized, units, DRAFTING[rules_id])
     else:
         raise ValueError(f"No structure rules {rules_id!r}")
     builder.build()
@@ -254,12 +370,15 @@ class Builder:
             self.notes_to(self.root, heading=False)
         self.check_running_heads()
 
-    def check_running_heads(self) -> None:
-        # A contents list repeats the headings it lists: its lines are neither running heads nor the
-        # first occurrence a later heading repeats (a Part's own heading is not a running head).
-        listed = {
+    def repeatable(self) -> set[int]:
+        """Leaves that are neither running heads nor the first occurrence a later heading repeats: a
+        contents list repeats the headings it lists (a Part's own heading is not a running head)."""
+        return {
             i for node in self.root.walk() if node.kind in ("contents", "contents_entry") for i in node.leaves
         }
+
+    def check_running_heads(self) -> None:
+        listed = self.repeatable()
         seen: dict[str, Leaf] = {}
         for index, leaf in enumerate(self.leaves):
             if leaf.role != "text" or self.unit(leaf).get("kind") != "heading" or index in listed:
@@ -302,12 +421,13 @@ def number_of(label: str) -> str:
     return label.strip(".()").strip()
 
 
-# --- ng-federal-act-1 --------------------------------------------------------------------------------
+# --- ng-federal-act-1 and the other Commonwealth families ---------------------------------------------
 
 
 class ActBuilder(Builder):
-    def __init__(self, serialized: Serialized, units: dict):
+    def __init__(self, serialized: Serialized, units: dict, drafting: Drafting = NG):
         super().__init__(serialized, units)
+        self.drafting = drafting
         self.region = "front"  # front, contents, preamble, body, schedules, endmatter
         self.container: Node = self.root  # where provisions and cross-headings go
         self.chapter: Node | None = None
@@ -317,19 +437,29 @@ class ActBuilder(Builder):
         self.awaiting_heading: Node | None = None  # a part or schedule whose heading may follow
         self.last_section: tuple[int, str] | None = None
         self.counts: dict[str, int] = {}
+        self.enacted = False  # the preamble holds the enacting words (Drafting.enacting)
+        self.listed_chapter: str | None = None  # the chapter the contents list parts under
+        self.titles: set[int] = set()  # leaves that print the Act's title (Drafting.title)
 
     def next_number(self, key: str) -> int:
         self.counts[key] = self.counts.get(key, 0) + 1
         return self.counts[key]
 
+    def repeatable(self) -> set[int]:
+        listed = super().repeatable() | self.titles  # the title, on the cover and again before the long title
+        if self.drafting.parts_in_chapters:  # each chapter has its own "Part A"
+            listed |= {node.leaves[0] for node in self.root.walk() if node.kind == "part" and node.leaves}
+        return listed
+
     def place(self, index: int, leaf: Leaf) -> None:
-        unit, text = self.unit(leaf), leaf.text
+        unit, text, drafting = self.unit(leaf), leaf.text, self.drafting
         heading_unit = unit.get("kind") == "heading"
         awaiting, self.awaiting_heading = self.awaiting_heading, None
         if leaf.role in ("caption", "table"):
             self.table(index, leaf)
             return
-        if CERTIFICATE.match(text) and self.region in ("body", "schedules", "endmatter"):
+        certificate = drafting.certificate.match(text) if drafting.certificate else None
+        if certificate and self.region in ("body", "schedules", "endmatter"):
             self.notes_to(
                 self.open_region("endmatter", "notice", f"notice_{self.next_number('notice')}", leaf), False
             )
@@ -339,26 +469,34 @@ class ActBuilder(Builder):
             self.notes_to(self.region_node, False)
             self.hold(self.region_node, index)
             return
+        if drafting.title and self.region in ("front", "contents") and drafting.title.match(text):
+            self.root.heading = self.root.heading or text  # the document's title, which ends the contents
+            self.titles.add(index)
+            self.region, self.region_node = "front", None
+            self.notes_to(self.root, False)
+            self.hold(self.root, index)
+            return
         if self.region == "front":
-            opens = MEMORANDUM, CONTENTS, PREAMBLE, SECTION, PART, CHAPTER
-            first = not self.root.leaves and not self.root.children
+            opens = *drafting.notices, drafting.contents, drafting.preamble, SECTION, drafting.part, CHAPTER
+            first = not self.root.leaves and not self.root.children and not drafting.title
             if first and heading_unit and not any(pattern.match(text) for pattern in opens):
                 self.root.heading = text  # the document's title
                 self.notes_to(self.root, False)
                 self.hold(self.root, index)
                 return
-            if MEMORANDUM.match(text):
+            if any(pattern.match(text) for pattern in drafting.notices):
                 node = self.open_region("front", "notice", f"notice_{self.next_number('notice')}", leaf)
                 node.heading = text
                 self.notes_to(node, False)
                 self.hold(node, index)
                 return
-        if self.region in ("front", "contents") and PREAMBLE.match(text):
+        if self.region in ("front", "contents") and drafting.preamble.match(text):
             node = self.open_region("preamble", "preamble", "preamble", leaf)
             self.notes_to(node, False)
             self.hold(node, index)
             return
-        if self.region == "front" and CONTENTS.match(text):
+        opening = ("front", "preamble") if drafting.contents_after_preamble else ("front",)
+        if self.region in opening and drafting.contents.match(text):
             node = self.open_region("contents", "contents", "contents", leaf)
             node.heading = text
             self.notes_to(node, False)
@@ -367,12 +505,14 @@ class ActBuilder(Builder):
         if self.region == "contents" and not self.contents_ends(leaf, unit):
             self.contents_entry(index, leaf, unit)
             return
-        if self.region in ("front", "contents", "preamble") and not self.body_starts(text):
+        if self.region in ("front", "contents", "preamble") and not self.body_starts(text, heading_unit):
             self.notes_to(self.region_node or self.root, False)
             self.hold(self.region_node or self.root, index)
+            if self.region == "preamble" and drafting.enacting and drafting.enacting.match(text):
+                self.enacted = True
             return
         if self.region in ("front", "contents", "preamble"):
-            if self.region == "contents":
+            if self.region == "contents" and not drafting.contents_after_preamble:
                 self.issue(
                     "warning", "contents_unclosed", leaf, "The contents end without the enacting words"
                 )
@@ -386,25 +526,45 @@ class ActBuilder(Builder):
         return self.region_node
 
     def contents_ends(self, leaf: Leaf, unit: dict) -> bool:
-        """A long numbered paragraph with a margin note is the body, not a contents entry."""
-        return bool(SECTION.match(leaf.text) and (unit.get("notes") or len(leaf.text) > 150))
+        """A long numbered paragraph with a margin note is the body, not a contents entry; so is a
+        chapter or part the contents already list, where they follow the enacting words."""
+        if SECTION.match(leaf.text) and (unit.get("notes") or len(leaf.text) > 150):
+            return True
+        if not self.drafting.contents_after_preamble:
+            return False
+        chapter, part = CHAPTER.match(leaf.text), self.drafting.part.match(leaf.text)
+        if chapter:
+            target = f"chap_{chapter.group(1)}"
+        elif part:
+            target = self.part_locator(part.group(1), self.listed_chapter)
+        else:
+            return False
+        return any(entry.target == target for entry in self.region_node.children)
 
-    def body_starts(self, text: str) -> bool:
-        return bool(SECTION.match(text) or PART.match(text) or CHAPTER.match(text))
+    def body_starts(self, text: str, heading_unit: bool) -> bool:
+        if heading_unit and self.enacted:  # the first group heading after "PASSED by Parliament …"
+            return True
+        return bool(SECTION.match(text) or self.drafting.part.match(text) or CHAPTER.match(text))
+
+    def part_locator(self, number: str, chapter: str | None) -> str:
+        """part_II; within a chapter where parts restart in each, chap_3__part_A."""
+        qualified = self.drafting.parts_in_chapters and chapter
+        return f"{chapter}__part_{number}" if qualified else f"part_{number}"
 
     def contents_entry(self, index: int, leaf: Leaf, unit: dict) -> None:
-        text, contents = leaf.text, self.region_node
-        found = SECTION.match(text) or PART.match(text) or CHAPTER.match(text) or SCHEDULE.match(text)
+        text, contents, part = leaf.text, self.region_node, self.drafting.part
+        found = SECTION.match(text) or part.match(text) or CHAPTER.match(text) or SCHEDULE.match(text)
         self.notes_to(contents, False)
         if not found:
             self.hold(contents, index)
             return
         if found.re is SECTION:
             label, target = f"{found.group(1)}.", f"sec_{found.group(1)}"
-        elif found.re is PART:
-            label, target = f"PART {found.group(1)}", f"part_{found.group(1)}"
+        elif found.re is part:
+            label, target = f"PART {found.group(1)}", self.part_locator(found.group(1), self.listed_chapter)
         elif found.re is CHAPTER:
             label, target = f"CHAPTER {found.group(1)}", f"chap_{found.group(1)}"
+            self.listed_chapter = target
         else:
             label, target = found.group(0), f"sch_{self.schedule_number(found)}"
         entry = self.add(contents, "contents_entry", f"contents__entry_{len(contents.children) + 1}", leaf)
@@ -474,7 +634,7 @@ class ActBuilder(Builder):
             self.notes_to(self.root, False)
             self.hold(self.root, index)
             return
-        part, chapter = PART.match(text), CHAPTER.match(text)
+        part, chapter = self.drafting.part.match(text), CHAPTER.match(text)
         if chapter and self.region == "body":
             self.stack = []
             self.chapter = self.container = self.add(self.root, "chapter", f"chap_{chapter.group(1)}", leaf)
@@ -486,8 +646,11 @@ class ActBuilder(Builder):
         if part:
             self.stack = []
             owner = self.schedule if self.region == "schedules" else self.chapter or self.root
-            prefix = f"{self.schedule.locator}__" if self.region == "schedules" else ""
-            self.container = self.add(owner, "part", f"{prefix}part_{part.group(1)}", leaf)
+            if self.region == "schedules":
+                locator = f"{self.schedule.locator}__part_{part.group(1)}"
+            else:
+                locator = self.part_locator(part.group(1), self.chapter.locator if self.chapter else None)
+            self.container = self.add(owner, "part", locator, leaf)
             self.container.label, self.container.heading = f"PART {part.group(1)}", part.group(2).strip()
             self.notes_to(self.container, False)
             self.hold(self.container, index)
@@ -496,12 +659,19 @@ class ActBuilder(Builder):
         numbered = SECTION.match(text) or SUBSECTION.match(text) or LETTER.match(text)
         if awaiting is not None and not awaiting.heading and not numbered:
             if heading_unit or unit.get("align") == "center":
-                awaiting.heading = text  # "PART III" then "LICENSED INDEPENDENT POWER PRODUCERS"
+                reference = self.drafting.reference
+                if reference and awaiting.kind == "schedule" and reference.match(text):
+                    self.awaiting_heading = awaiting  # its title is the next line
+                else:
+                    awaiting.heading = text  # "PART III" then "LICENSED INDEPENDENT POWER PRODUCERS"
                 self.notes_to(awaiting, False)
                 self.hold(awaiting, index)
                 return
         if heading_unit:
             following = self.depth_of(self.next_text(index))
+            if self.drafting.headings_above and self.region == "body" and following == SECTION_DEPTH:
+                self.pending_notes.append(index)  # the section's heading, held by it as a margin note is
+                return
             if self.stack and following is not None and following > SECTION_DEPTH:
                 # A heading inside a provision ("Committees" before "(7)"): the provision goes on.
                 while self.stack and self.stack[-1].depth >= following:
@@ -558,7 +728,7 @@ class ActBuilder(Builder):
                 f"“{text[:24]}…” has two numbers in a row: the restored number may be in the wrong place",
             )
         section = SECTION.match(text)
-        definition = DEFINITION.match(text) if not in_schedule else None
+        definition = self.drafting.definition.match(text) if not in_schedule else None
         if section:
             depth, label = SECTION_DEPTH, f"{section.group(1)}."
         elif SUBSECTION.match(text):

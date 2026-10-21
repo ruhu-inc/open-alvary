@@ -64,6 +64,10 @@ def test_documents_with_rules_keep_exactly_the_structure_they_had(document, page
         ({"id": "ng-sc-2019-4", "jurisdiction": "ng", "type": "Judgment"}, "judgment-paragraphs-1"),
         ({"id": "ng-sc-2019-5", "jurisdiction": "ng", "type": "act", "document_type": "ruling"}, "judgment-paragraphs-1"),
         *[({"id": f"rw-{kind}-1-en", "jurisdiction": "rw", "type": kind}, "rw-law-1") for kind in structure.RW_INSTRUMENTS],
+        ({"id": "aa-eac-act-2005-1", "jurisdiction": "aa-eac", "type": "act"}, "eac-act-1"),
+        ({"id": "ke-act-2019-24", "type": "act"}, "ke-act-1"),
+        ({"id": "za-act-2013-4", "jurisdiction": "za", "type": "act"}, "za-act-1"),
+        ({"id": "gh-act-2012-843", "jurisdiction": "gh", "type": "act"}, "gh-act-1"),
     ],
 )  # fmt: skip
 def test_rules_are_chosen_by_jurisdiction_and_type(document, rules):
@@ -80,7 +84,12 @@ def test_rules_are_chosen_by_jurisdiction_and_type(document, rules):
         ({"id": "rw-other-00f8ef71645e-fr", "jurisdiction": "rw", "type": "other"}, "rw/other"),
         ({"id": "rw-sc-2020-1", "jurisdiction": "rw", "type": "judgment"}, "rw/judgment"),
         ({"id": "aa-au-afchpr-2026-9", "jurisdiction": "aa-au", "type": "judgment"}, "aa-au/judgment"),
-        ({"id": "ke-example-act-2024", "type": "act"}, "ke/act"),
+        ({"id": "ug-example-act-2024", "type": "act"}, "ug/act"),
+        ({"id": "ke-example-order-2024", "jurisdiction": "ke", "type": "order"}, "ke/order"),
+        (
+            {"id": "aa-eac-regulations-2010-1", "jurisdiction": "aa-eac", "type": "regulations"},
+            "aa-eac/regulations",
+        ),
     ],
 )
 def test_a_document_with_no_rules_has_one_node_and_an_error_that_blocks_it(document, named):
