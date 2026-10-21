@@ -1779,7 +1779,8 @@ def describe(generated: dict) -> dict:
     """The generated document, with every route, parameter and field described."""
     spec = deepcopy(generated)
     spec["tags"] = TAGS
-    spec["servers"] = [{"url": "/api/v1", "description": "https://api.open.alvary.ai/api/v1"}]
+    # Absolute, so a client generated from a downloaded copy calls the API, not the place it was saved.
+    spec["servers"] = [{"url": "https://api.open.alvary.ai/api/v1", "description": "The REST API"}]
     spec["info"]["contact"] = {
         "name": "Open Alvary",
         "email": "hello@ruhu.ai",

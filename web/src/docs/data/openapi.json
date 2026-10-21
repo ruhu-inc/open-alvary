@@ -11036,8 +11036,8 @@
   ],
   "servers": [
     {
-      "url": "/api/v1",
-      "description": "https://api.open.alvary.ai/api/v1"
+      "url": "https://api.open.alvary.ai/api/v1",
+      "description": "The REST API"
     }
   ],
   "externalDocs": {
