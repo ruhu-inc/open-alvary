@@ -1,0 +1,574 @@
+{
+  "jurisdiction": "gh",
+  "review_state": "unreviewed",
+  "reviewed_by": null,
+  "reviewed_on": null,
+  "reviewed_sha256": null,
+  "precedent": {
+    "binds": true,
+    "note": "The Constitution states the rule: art. 129(3) binds all other courts to follow Supreme Court decisions on questions of law, and art. 136(5) binds the Court of Appeal to its own decisions and courts below it to its decisions on questions of law. Courts Act ss. 2(3) and 10(5) restate both. No provision was found on how High Court decisions bear on lower courts. The Supreme Court treats its own previous decisions as normally binding but may depart from one when it appears right to do so (art. 129(3)); neither binding nor persuasive states that, so no relation of the Court to itself is recorded.",
+    "sources": [
+      "const-129-3",
+      "const-136-5",
+      "osp-const-129-136",
+      "courts-act-2",
+      "courts-act-10-5"
+    ]
+  },
+  "courts": [
+    {
+      "id": "gh-sc",
+      "name": "Supreme Court of Ghana",
+      "kind": "court",
+      "level": "apex",
+      "rank": 1,
+      "valid_from": "1993-01-07",
+      "appeals_to": [],
+      "sources": [
+        "const-126",
+        "const-129-1",
+        "const-132",
+        "const-sch1-3",
+        "pndcl-282-s1",
+        "js-supreme-court"
+      ],
+      "note": "Final court of appeal (art. 129(1)) with supervisory jurisdiction over all courts (art. 132); not bound by any other court's decisions (art. 129(2)). valid_from is the Constitution's entry into force (PNDCL 282, s. 1); the court existing before then is deemed established under the Constitution (First Schedule, s. 3(1)). The Judicial Service site calls it the highest court."
+    },
+    {
+      "id": "gh-ca",
+      "name": "Court of Appeal of Ghana",
+      "kind": "court",
+      "level": "appellate",
+      "rank": 2,
+      "valid_from": "1993-01-07",
+      "appeals_to": [
+        "gh-sc"
+      ],
+      "sources": [
+        "const-126",
+        "const-131-1",
+        "const-137",
+        "const-sch1-3",
+        "pndcl-282-s1",
+        "js-court-of-appeal"
+      ],
+      "note": "Hears appeals from the High Court and Regional Tribunals (art. 137). Appeal to the Supreme Court lies as of right where the case began in the High Court or a Regional Tribunal, otherwise with leave, and the Supreme Court may grant special leave (art. 131(1)-(2)). The Judicial Service site calls it the second highest of the superior courts."
+    },
+    {
+      "id": "gh-hc",
+      "name": "High Court of Ghana",
+      "kind": "court",
+      "level": "superior",
+      "rank": 3,
+      "valid_from": "1993-01-07",
+      "appeals_to": [
+        "gh-ca",
+        "gh-sc"
+      ],
+      "sources": [
+        "const-126",
+        "const-137",
+        "const-131-3",
+        "const-139-140",
+        "const-141",
+        "courts-act-16",
+        "const-sch1-3",
+        "pndcl-282-s1",
+        "js-high-court"
+      ],
+      "note": "Appeals lie as of right to the Court of Appeal (art. 137(2)); appeals on treason or high treason convictions go to the Supreme Court instead (art. 131(3)), hence both ids in appeals_to. Supervisory jurisdiction over all lower courts (art. 141; Courts Act s. 16). The Judicial Service site calls it the third highest of the superior courts."
+    },
+    {
+      "id": "gh-rt",
+      "name": "Regional Tribunals",
+      "kind": "tribunal",
+      "level": "superior",
+      "rank": 3,
+      "appeals_to": [
+        "gh-ca"
+      ],
+      "sources": [
+        "const-126",
+        "const-142-143",
+        "const-137",
+        "courts-act-26",
+        "js-high-court"
+      ],
+      "note": "Superior courts listed with the High Court (art. 126(1)(a)(iii)), set up in each region as the Chief Justice determines (art. 142(1)), trying offences Parliament prescribes (art. 143). Appeals go to the Court of Appeal (art. 137; Courts Act s. 26(3)). The Judicial Service site gives them the same status as the High Court and says none presently exists. valid_from left out: when tribunals were set up is not evidenced."
+    },
+    {
+      "id": "gh-cc",
+      "name": "Circuit Courts",
+      "kind": "court",
+      "level": "subordinate",
+      "appeals_to": [
+        "gh-ca",
+        "gh-hc"
+      ],
+      "sources": [
+        "const-126",
+        "courts-act-39",
+        "courts-act-40",
+        "courts-act-11",
+        "courts-act-21",
+        "courts-act-44",
+        "courts-act-115"
+      ],
+      "note": "Lower court established by the Courts Act (s. 39(a)), in each region as the Chief Justice determines (s. 40(1)). Civil judgments appeal to the Court of Appeal (ss. 11(3)-(4), 44(1)); criminal judgments to the High Court (ss. 21(1), 44(2)). Successor to the earlier Circuit Court; Circuit Tribunals abolished (s. 115(4)-(5)). Part Two was substituted by Act 620 (2002)."
+    },
+    {
+      "id": "gh-dc",
+      "name": "District Courts",
+      "kind": "court",
+      "level": "subordinate",
+      "appeals_to": [
+        "gh-hc"
+      ],
+      "sources": [
+        "const-126",
+        "courts-act-39",
+        "courts-act-45",
+        "courts-act-15",
+        "courts-act-21",
+        "courts-act-115",
+        "js-district-court"
+      ],
+      "note": "Lower court (s. 39(b)), in each district as the Chief Justice determines (s. 45(1)). Civil and criminal judgments appeal to the High Court (ss. 15(1)(c), 21(1)-(3)). Community Tribunals were abolished and their pending cases sent to District Courts (s. 115(7)-(8)). The Judicial Service site calls it the lowest court in the hierarchy; rank left out because the order of the other lower courts is not stated."
+    },
+    {
+      "id": "gh-jc",
+      "name": "Juvenile Courts",
+      "kind": "court",
+      "level": "subordinate",
+      "appeals_to": [
+        "gh-hc"
+      ],
+      "sources": [
+        "courts-act-39",
+        "courts-act-49",
+        "courts-act-15",
+        "courts-act-21",
+        "js-district-court"
+      ],
+      "note": "Lower court (s. 39(c)): a District Court the Chief Justice designates, sitting with two lay members, for civil or criminal matters involving persons under eighteen (s. 49). Judgments appeal to the High Court (ss. 15(1)(c), 21(1)). The Judicial Service site says Juvenile Courts are District Courts."
+    },
+    {
+      "id": "gh-nhc",
+      "name": "National House of Chiefs (Judicial Committee)",
+      "kind": "court",
+      "level": "customary",
+      "appeals_to": [
+        "gh-sc"
+      ],
+      "sources": [
+        "courts-act-39",
+        "const-273",
+        "const-131-4"
+      ],
+      "note": "A lower court only for its jurisdiction over causes affecting chieftaincy (Courts Act s. 39(d)), exercised by its Judicial Committee (art. 273(2)). Hears appeals from Regional Houses of Chiefs and has some original jurisdiction (art. 273(1), (5)). Appeal lies to the Supreme Court, with leave from appellate decisions and as of right from original ones (arts. 131(4), 273(1), (6)). Reviewer to settle kind: s. 39 calls it a lower court."
+    },
+    {
+      "id": "gh-rhc",
+      "name": "Regional Houses of Chiefs (Judicial Committees)",
+      "kind": "court",
+      "level": "customary",
+      "appeals_to": [
+        "gh-nhc"
+      ],
+      "sources": [
+        "courts-act-39",
+        "const-274",
+        "const-273"
+      ],
+      "note": "A lower court for causes affecting chieftaincy (Courts Act s. 39(d)); one in each region, acting through a Judicial Committee of three chiefs (art. 274(1), (4)). Hears appeals from traditional councils on the nomination, installation or deposition of chiefs and has original jurisdiction over paramount stools (art. 274(3)(c)-(d)). Appeal lies to the National House of Chiefs (art. 273(1))."
+    },
+    {
+      "id": "gh-tc",
+      "name": "Traditional Councils",
+      "kind": "court",
+      "level": "customary",
+      "appeals_to": [
+        "gh-rhc"
+      ],
+      "sources": [
+        "courts-act-39",
+        "const-274"
+      ],
+      "note": "A lower court for causes affecting chieftaincy (Courts Act s. 39(d)). Appeals on the nomination, election, selection, installation or deposition of a chief lie to the Regional House of Chiefs (art. 274(3)(c)); no other route is evidenced here."
+    }
+  ],
+  "relations": [
+    {
+      "court": "gh-sc",
+      "bound": null,
+      "relation": "binding",
+      "sources": [
+        "const-129-3",
+        "courts-act-2"
+      ],
+      "note": "Art. 129(3): all other courts are bound to follow its decisions on questions of law (restated in Courts Act s. 2(3))."
+    },
+    {
+      "court": "gh-sc",
+      "bound": "gh-ca",
+      "relation": "binding",
+      "sources": [
+        "const-129-3",
+        "courts-act-2"
+      ],
+      "note": "Art. 129(3): all other courts follow its decisions on questions of law."
+    },
+    {
+      "court": "gh-sc",
+      "bound": "gh-hc",
+      "relation": "binding",
+      "sources": [
+        "const-129-3",
+        "courts-act-2"
+      ],
+      "note": "Art. 129(3): all other courts follow its decisions on questions of law."
+    },
+    {
+      "court": "gh-sc",
+      "bound": "gh-rt",
+      "relation": "binding",
+      "sources": [
+        "const-129-3",
+        "courts-act-2"
+      ],
+      "note": "Art. 129(3): all other courts follow its decisions on questions of law."
+    },
+    {
+      "court": "gh-sc",
+      "bound": "gh-cc",
+      "relation": "binding",
+      "sources": [
+        "const-129-3",
+        "courts-act-2"
+      ],
+      "note": "Art. 129(3): all other courts follow its decisions on questions of law."
+    },
+    {
+      "court": "gh-sc",
+      "bound": "gh-dc",
+      "relation": "binding",
+      "sources": [
+        "const-129-3",
+        "courts-act-2"
+      ],
+      "note": "Art. 129(3): all other courts follow its decisions on questions of law."
+    },
+    {
+      "court": "gh-sc",
+      "bound": "gh-jc",
+      "relation": "binding",
+      "sources": [
+        "const-129-3",
+        "courts-act-2"
+      ],
+      "note": "Art. 129(3): all other courts follow its decisions on questions of law."
+    },
+    {
+      "court": "gh-sc",
+      "bound": "gh-nhc",
+      "relation": "binding",
+      "sources": [
+        "const-129-3",
+        "courts-act-39"
+      ],
+      "note": "Art. 129(3) binds all other courts; Courts Act s. 39(d) makes the House a lower court for chieftaincy causes. Reviewer to confirm art. 129(3) reaches it."
+    },
+    {
+      "court": "gh-sc",
+      "bound": "gh-rhc",
+      "relation": "binding",
+      "sources": [
+        "const-129-3",
+        "courts-act-39"
+      ],
+      "note": "Art. 129(3) binds all other courts; Courts Act s. 39(d) makes Regional Houses lower courts for chieftaincy causes. Reviewer to confirm art. 129(3) reaches them."
+    },
+    {
+      "court": "gh-sc",
+      "bound": "gh-tc",
+      "relation": "binding",
+      "sources": [
+        "const-129-3",
+        "courts-act-39"
+      ],
+      "note": "Art. 129(3) binds all other courts; Courts Act s. 39(d) makes Traditional Councils lower courts for chieftaincy causes. Reviewer to confirm art. 129(3) reaches them."
+    },
+    {
+      "court": "gh-ca",
+      "bound": "gh-ca",
+      "relation": "binding",
+      "sources": [
+        "const-136-5",
+        "courts-act-10-5"
+      ],
+      "note": "Art. 136(5): bound by its own previous decisions, subject to the Supreme Court's power under art. 129(3) (restated in Courts Act s. 10(5))."
+    },
+    {
+      "court": "gh-ca",
+      "bound": "gh-hc",
+      "relation": "binding",
+      "sources": [
+        "const-136-5",
+        "courts-act-10-5",
+        "js-court-of-appeal",
+        "js-high-court"
+      ],
+      "note": "Art. 136(5): courts lower than the Court of Appeal follow its decisions on questions of law; the Judicial Service site places the High Court below it."
+    },
+    {
+      "court": "gh-ca",
+      "bound": "gh-rt",
+      "relation": "binding",
+      "sources": [
+        "const-136-5",
+        "courts-act-10-5",
+        "js-court-of-appeal",
+        "js-high-court"
+      ],
+      "note": "Art. 136(5): courts lower than the Court of Appeal follow its decisions on questions of law; the Judicial Service site gives Regional Tribunals the High Court's status."
+    },
+    {
+      "court": "gh-ca",
+      "bound": "gh-cc",
+      "relation": "binding",
+      "sources": [
+        "const-136-5",
+        "courts-act-10-5",
+        "const-126",
+        "courts-act-39"
+      ],
+      "note": "Art. 136(5): courts lower than the Court of Appeal follow its decisions on questions of law; Circuit Courts are lower courts (art. 126(1)(b); Courts Act s. 39(a))."
+    },
+    {
+      "court": "gh-ca",
+      "bound": "gh-dc",
+      "relation": "binding",
+      "sources": [
+        "const-136-5",
+        "courts-act-10-5",
+        "const-126",
+        "courts-act-39"
+      ],
+      "note": "Art. 136(5): courts lower than the Court of Appeal follow its decisions on questions of law; District Courts are lower courts (art. 126(1)(b); Courts Act s. 39(b))."
+    },
+    {
+      "court": "gh-ca",
+      "bound": "gh-jc",
+      "relation": "binding",
+      "sources": [
+        "const-136-5",
+        "courts-act-10-5",
+        "const-126",
+        "courts-act-39"
+      ],
+      "note": "Art. 136(5): courts lower than the Court of Appeal follow its decisions on questions of law; Juvenile Courts are lower courts (art. 126(1)(b); Courts Act s. 39(c))."
+    }
+  ],
+  "sources": [
+    {
+      "id": "const-126",
+      "title": "Constitution of the Republic of Ghana, 1992, Chapter 11 (The Judiciary), Judicial Service of Ghana website",
+      "url": "https://www.judicial.gov.gh/index.php/the-judiciary",
+      "pinpoint": "art. 126(1)"
+    },
+    {
+      "id": "const-129-1",
+      "title": "Constitution of the Republic of Ghana, 1992, Chapter 11 (The Judiciary), Judicial Service of Ghana website",
+      "url": "https://www.judicial.gov.gh/index.php/the-judiciary",
+      "pinpoint": "art. 129(1)"
+    },
+    {
+      "id": "const-129-3",
+      "title": "Constitution of the Republic of Ghana, 1992, Chapter 11 (The Judiciary), Judicial Service of Ghana website",
+      "url": "https://www.judicial.gov.gh/index.php/the-judiciary",
+      "pinpoint": "art. 129(2)-(3)"
+    },
+    {
+      "id": "const-131-1",
+      "title": "Constitution of the Republic of Ghana, 1992, Chapter 11 (The Judiciary), Judicial Service of Ghana website",
+      "url": "https://www.judicial.gov.gh/index.php/the-judiciary",
+      "pinpoint": "art. 131(1)-(2)"
+    },
+    {
+      "id": "const-131-3",
+      "title": "Constitution of the Republic of Ghana, 1992, Chapter 11 (The Judiciary), Judicial Service of Ghana website",
+      "url": "https://www.judicial.gov.gh/index.php/the-judiciary",
+      "pinpoint": "art. 131(3)"
+    },
+    {
+      "id": "const-131-4",
+      "title": "Constitution of the Republic of Ghana, 1992, Chapter 11 (The Judiciary), Judicial Service of Ghana website",
+      "url": "https://www.judicial.gov.gh/index.php/the-judiciary",
+      "pinpoint": "art. 131(4)"
+    },
+    {
+      "id": "const-132",
+      "title": "Constitution of the Republic of Ghana, 1992, Chapter 11 (The Judiciary), Judicial Service of Ghana website",
+      "url": "https://www.judicial.gov.gh/index.php/the-judiciary",
+      "pinpoint": "art. 132"
+    },
+    {
+      "id": "const-136-5",
+      "title": "Constitution of the Republic of Ghana, 1992, Chapter 11 (The Judiciary), Judicial Service of Ghana website",
+      "url": "https://www.judicial.gov.gh/index.php/the-judiciary",
+      "pinpoint": "art. 136(5)"
+    },
+    {
+      "id": "const-137",
+      "title": "Constitution of the Republic of Ghana, 1992, Chapter 11 (The Judiciary), Judicial Service of Ghana website",
+      "url": "https://www.judicial.gov.gh/index.php/the-judiciary",
+      "pinpoint": "art. 137(1)-(2)"
+    },
+    {
+      "id": "const-139-140",
+      "title": "Constitution of the Republic of Ghana, 1992, Chapter 11 (The Judiciary), Judicial Service of Ghana website",
+      "url": "https://www.judicial.gov.gh/index.php/the-judiciary",
+      "pinpoint": "arts. 139(1), 140(1)"
+    },
+    {
+      "id": "const-141",
+      "title": "Constitution of the Republic of Ghana, 1992, Chapter 11 (The Judiciary), Judicial Service of Ghana website",
+      "url": "https://www.judicial.gov.gh/index.php/the-judiciary",
+      "pinpoint": "art. 141"
+    },
+    {
+      "id": "const-142-143",
+      "title": "Constitution of the Republic of Ghana, 1992, Chapter 11 (The Judiciary), Judicial Service of Ghana website",
+      "url": "https://www.judicial.gov.gh/index.php/the-judiciary",
+      "pinpoint": "arts. 142(1), 143(1)-(2)"
+    },
+    {
+      "id": "const-sch1-3",
+      "title": "Constitution of the Republic of Ghana, 1992, First Schedule (Transitional Provisions), Judicial Service of Ghana website",
+      "url": "https://www.judicial.gov.gh/index.php/first-schedule",
+      "pinpoint": "s. 3(1)"
+    },
+    {
+      "id": "pndcl-282-s1",
+      "title": "Constitution of the Fourth Republic of Ghana (Promulgation) Law, 1992 (PNDCL 282), with the Constitution as amended to 1996, copy on the Office of the Special Prosecutor website",
+      "url": "https://osp.gov.gh/media/Resources/Ghana_Constitution.pdf",
+      "pinpoint": "s. 1"
+    },
+    {
+      "id": "osp-const-129-136",
+      "title": "Constitution of the Republic of Ghana, 1992 (as amended to 1996), copy on the Office of the Special Prosecutor website",
+      "url": "https://osp.gov.gh/media/Resources/Ghana_Constitution.pdf",
+      "pinpoint": "arts. 129(3), 136(5)"
+    },
+    {
+      "id": "const-273",
+      "title": "Constitution of the Republic of Ghana, 1992 (as amended to 1996), Chapter 22 (Chieftaincy), copy on the Office of the Special Prosecutor website",
+      "url": "https://osp.gov.gh/media/Resources/Ghana_Constitution.pdf",
+      "pinpoint": "art. 273(1), (2), (5), (6)"
+    },
+    {
+      "id": "const-274",
+      "title": "Constitution of the Republic of Ghana, 1992 (as amended to 1996), Chapter 22 (Chieftaincy), copy on the Office of the Special Prosecutor website",
+      "url": "https://osp.gov.gh/media/Resources/Ghana_Constitution.pdf",
+      "pinpoint": "art. 274(1), (3)(c)-(d), (4)"
+    },
+    {
+      "id": "courts-act-2",
+      "title": "Courts Act, 1993 (Act 459), revised edition incorporating the Courts (Amendment) Act, 2002 (Act 620), Parliament of Ghana repository (scanned)",
+      "url": "https://repository.parliament.gh/bitstreams/7f4fac0e-2156-436c-9cb4-dbf0779af5dc/download",
+      "pinpoint": "s. 2(1)-(3)"
+    },
+    {
+      "id": "courts-act-10-5",
+      "title": "Courts Act, 1993 (Act 459), revised edition incorporating the Courts (Amendment) Act, 2002 (Act 620), Parliament of Ghana repository (scanned)",
+      "url": "https://repository.parliament.gh/bitstreams/7f4fac0e-2156-436c-9cb4-dbf0779af5dc/download",
+      "pinpoint": "s. 10(5)"
+    },
+    {
+      "id": "courts-act-11",
+      "title": "Courts Act, 1993 (Act 459), revised edition incorporating the Courts (Amendment) Act, 2002 (Act 620), Parliament of Ghana repository (scanned)",
+      "url": "https://repository.parliament.gh/bitstreams/7f4fac0e-2156-436c-9cb4-dbf0779af5dc/download",
+      "pinpoint": "s. 11(1)-(4)"
+    },
+    {
+      "id": "courts-act-15",
+      "title": "Courts Act, 1993 (Act 459), revised edition incorporating the Courts (Amendment) Act, 2002 (Act 620), Parliament of Ghana repository (scanned)",
+      "url": "https://repository.parliament.gh/bitstreams/7f4fac0e-2156-436c-9cb4-dbf0779af5dc/download",
+      "pinpoint": "s. 15(1)"
+    },
+    {
+      "id": "courts-act-16",
+      "title": "Courts Act, 1993 (Act 459), revised edition incorporating the Courts (Amendment) Act, 2002 (Act 620), Parliament of Ghana repository (scanned)",
+      "url": "https://repository.parliament.gh/bitstreams/7f4fac0e-2156-436c-9cb4-dbf0779af5dc/download",
+      "pinpoint": "s. 16"
+    },
+    {
+      "id": "courts-act-21",
+      "title": "Courts Act, 1993 (Act 459), revised edition incorporating the Courts (Amendment) Act, 2002 (Act 620), Parliament of Ghana repository (scanned)",
+      "url": "https://repository.parliament.gh/bitstreams/7f4fac0e-2156-436c-9cb4-dbf0779af5dc/download",
+      "pinpoint": "s. 21(1)-(4)"
+    },
+    {
+      "id": "courts-act-26",
+      "title": "Courts Act, 1993 (Act 459), revised edition incorporating the Courts (Amendment) Act, 2002 (Act 620), Parliament of Ghana repository (scanned)",
+      "url": "https://repository.parliament.gh/bitstreams/7f4fac0e-2156-436c-9cb4-dbf0779af5dc/download",
+      "pinpoint": "s. 26(3)"
+    },
+    {
+      "id": "courts-act-39",
+      "title": "Courts Act, 1993 (Act 459), revised edition incorporating the Courts (Amendment) Act, 2002 (Act 620), Parliament of Ghana repository (scanned)",
+      "url": "https://repository.parliament.gh/bitstreams/7f4fac0e-2156-436c-9cb4-dbf0779af5dc/download",
+      "pinpoint": "s. 39"
+    },
+    {
+      "id": "courts-act-40",
+      "title": "Courts Act, 1993 (Act 459), revised edition incorporating the Courts (Amendment) Act, 2002 (Act 620), Parliament of Ghana repository (scanned)",
+      "url": "https://repository.parliament.gh/bitstreams/7f4fac0e-2156-436c-9cb4-dbf0779af5dc/download",
+      "pinpoint": "s. 40(1)-(2)"
+    },
+    {
+      "id": "courts-act-44",
+      "title": "Courts Act, 1993 (Act 459), revised edition incorporating the Courts (Amendment) Act, 2002 (Act 620), Parliament of Ghana repository (scanned)",
+      "url": "https://repository.parliament.gh/bitstreams/7f4fac0e-2156-436c-9cb4-dbf0779af5dc/download",
+      "pinpoint": "s. 44"
+    },
+    {
+      "id": "courts-act-45",
+      "title": "Courts Act, 1993 (Act 459), revised edition incorporating the Courts (Amendment) Act, 2002 (Act 620), Parliament of Ghana repository (scanned)",
+      "url": "https://repository.parliament.gh/bitstreams/7f4fac0e-2156-436c-9cb4-dbf0779af5dc/download",
+      "pinpoint": "s. 45(1)"
+    },
+    {
+      "id": "courts-act-49",
+      "title": "Courts Act, 1993 (Act 459), revised edition incorporating the Courts (Amendment) Act, 2002 (Act 620), Parliament of Ghana repository (scanned)",
+      "url": "https://repository.parliament.gh/bitstreams/7f4fac0e-2156-436c-9cb4-dbf0779af5dc/download",
+      "pinpoint": "s. 49"
+    },
+    {
+      "id": "courts-act-115",
+      "title": "Courts Act, 1993 (Act 459), revised edition incorporating the Courts (Amendment) Act, 2002 (Act 620), Parliament of Ghana repository (scanned)",
+      "url": "https://repository.parliament.gh/bitstreams/7f4fac0e-2156-436c-9cb4-dbf0779af5dc/download",
+      "pinpoint": "s. 115(4)-(8)"
+    },
+    {
+      "id": "js-supreme-court",
+      "title": "Judicial Service of Ghana: The Supreme Court",
+      "url": "https://www.judicial.gov.gh/index.php/the-supreme-court"
+    },
+    {
+      "id": "js-court-of-appeal",
+      "title": "Judicial Service of Ghana: The Court of Appeal",
+      "url": "https://www.judicial.gov.gh/index.php/the-court-of-appeal"
+    },
+    {
+      "id": "js-high-court",
+      "title": "Judicial Service of Ghana: The High Court",
+      "url": "https://www.judicial.gov.gh/index.php/the-high-court"
+    },
+    {
+      "id": "js-district-court",
+      "title": "Judicial Service of Ghana: The District Court",
+      "url": "https://www.judicial.gov.gh/index.php/the-district-court"
+    }
+  ]
+}
