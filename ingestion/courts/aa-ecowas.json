@@ -1,0 +1,326 @@
+{
+  "jurisdiction": "aa-ecowas",
+  "review_state": "unreviewed",
+  "reviewed_by": null,
+  "reviewed_on": null,
+  "reviewed_sha256": null,
+  "precedent": {
+    "binds": false,
+    "note": "Protocol art. 25(5), now art. 27(5): a decision of the Court binds only the parties, and only in that case. In the English text it sits in the article on applications for revision.",
+    "sources": [
+      "ecowas-protocol-1991-art25",
+      "ecowas-supp-2005-renumbering"
+    ]
+  },
+  "courts": [
+    {
+      "id": "aa-ecowas-ccj",
+      "name": "ECOWAS Community Court of Justice",
+      "kind": "court",
+      "level": "regional",
+      "appeals_to": [],
+      "sources": [
+        "ecowas-treaty-art15",
+        "ecowas-treaty-art76",
+        "ecowas-protocol-1991-art19",
+        "ecowas-supp-2005-art3",
+        "ecowas-supp-2005-art4",
+        "ecowas-supp-2005-renumbering",
+        "ecowas-history"
+      ],
+      "note": "Established by Revised Treaty art. 15; its powers are set by Protocol A/P.1/7/91 as amended. Art. 15(4): its judgments bind Member States, Community institutions, individuals and corporate bodies. Protocol art. 19(2), now art. 20: decisions are final and immediately enforceable, subject to the Protocol's review provisions. Treaty art. 76(2): decisions on Treaty disputes are final, with no appeal. Art. 10(d) as inserted in 2005 lets individuals apply for human-rights relief. Mauritania is not listed as a member: ECOWAS says it withdrew in December 2000 but gives no day, and an entry without its end date would read as a current member."
+    }
+  ],
+  "relations": [],
+  "matters": [
+    {
+      "id": "community-law",
+      "name": "ECOWAS Community law: the Treaty, Conventions and Protocols, and regulations, directives, decisions and other subsidiary legal instruments",
+      "sources": [
+        "ecowas-supp-2005-art3"
+      ]
+    },
+    {
+      "id": "human-rights",
+      "name": "Violations of human rights occurring in any Member State",
+      "sources": [
+        "ecowas-supp-2005-art3",
+        "ecowas-supp-2005-art4"
+      ]
+    }
+  ],
+  "members": [
+    {
+      "state": "bj",
+      "court": null,
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ecowas-member-states",
+        "ecowas-history",
+        "ccj-ratification-status"
+      ],
+      "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 14/03/2000 (status at 31/10/2022)."
+    },
+    {
+      "state": "cv",
+      "court": null,
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ecowas-member-states",
+        "ecowas-history",
+        "ccj-ratification-status"
+      ],
+      "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. ECOWAS says Cabo Verde joined in 1977 (no day given). The Court lists it as yet to ratify the Court Protocol (status at 31/10/2022)."
+    },
+    {
+      "state": "ci",
+      "court": null,
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ecowas-member-states",
+        "ecowas-history",
+        "ccj-ratification-status"
+      ],
+      "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 05/11/1996 (status at 31/10/2022)."
+    },
+    {
+      "state": "gm",
+      "court": null,
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ecowas-member-states",
+        "ecowas-history",
+        "ccj-ratification-status"
+      ],
+      "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 26/08/1997 (status at 31/10/2022)."
+    },
+    {
+      "state": "gh",
+      "court": null,
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ecowas-member-states",
+        "ecowas-history",
+        "ccj-ratification-status"
+      ],
+      "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 07/12/1992 (status at 31/10/2022)."
+    },
+    {
+      "state": "gn",
+      "court": null,
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ecowas-member-states",
+        "ecowas-history",
+        "ccj-ratification-status"
+      ],
+      "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 18/07/1992 (status at 31/10/2022)."
+    },
+    {
+      "state": "gw",
+      "court": null,
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ecowas-member-states",
+        "ecowas-history",
+        "ccj-ratification-status"
+      ],
+      "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists it as yet to ratify the Court Protocol (status at 31/10/2022)."
+    },
+    {
+      "state": "lr",
+      "court": null,
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ecowas-member-states",
+        "ecowas-history",
+        "ccj-ratification-status"
+      ],
+      "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 25/10/2016 (status at 31/10/2022)."
+    },
+    {
+      "state": "ng",
+      "court": null,
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ecowas-member-states",
+        "ecowas-history",
+        "ccj-ratification-status"
+      ],
+      "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 01/07/1994 (status at 31/10/2022)."
+    },
+    {
+      "state": "sn",
+      "court": null,
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ecowas-member-states",
+        "ecowas-history",
+        "ccj-ratification-status"
+      ],
+      "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 30/06/1994 (status at 31/10/2022)."
+    },
+    {
+      "state": "sl",
+      "court": null,
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ecowas-member-states",
+        "ecowas-history",
+        "ccj-ratification-status"
+      ],
+      "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 07/11/2000 (status at 31/10/2022)."
+    },
+    {
+      "state": "tg",
+      "court": null,
+      "valid_until": null,
+      "withdrawal_notified": null,
+      "sources": [
+        "ecowas-member-states",
+        "ecowas-history",
+        "ccj-ratification-status"
+      ],
+      "note": "Listed by ECOWAS as a current Member State; no official date of entry into force of the Revised Treaty for it was found. The Court lists its ratification of the Court Protocol as 01/12/1999 (status at 31/10/2022)."
+    },
+    {
+      "state": "bf",
+      "court": null,
+      "valid_until": "2025-01-29",
+      "withdrawal_notified": null,
+      "sources": [
+        "ecowas-withdrawal-statement-2025",
+        "ecowas-withdrawal-news-2025",
+        "ecowas-history",
+        "ecowas-treaty-art91",
+        "ccj-ratification-status"
+      ],
+      "note": "ECOWAS states the withdrawal took effect on 29 January 2025. No official ECOWAS text found gives the date notice was given, so withdrawal_notified is empty. The Court lists its ratification of the Court Protocol as 16/01/1996 (status at 31/10/2022)."
+    },
+    {
+      "state": "ml",
+      "court": null,
+      "valid_until": "2025-01-29",
+      "withdrawal_notified": null,
+      "sources": [
+        "ecowas-withdrawal-statement-2025",
+        "ecowas-withdrawal-news-2025",
+        "ecowas-history",
+        "ecowas-treaty-art91",
+        "ccj-ratification-status"
+      ],
+      "note": "ECOWAS states the withdrawal took effect on 29 January 2025. No official ECOWAS text found gives the date notice was given, so withdrawal_notified is empty. The Court lists its ratification of the Court Protocol as 23/05/1992 (status at 31/10/2022)."
+    },
+    {
+      "state": "ne",
+      "court": null,
+      "valid_until": "2025-01-29",
+      "withdrawal_notified": null,
+      "sources": [
+        "ecowas-withdrawal-statement-2025",
+        "ecowas-withdrawal-news-2025",
+        "ecowas-history",
+        "ecowas-treaty-art91",
+        "ccj-ratification-status"
+      ],
+      "note": "ECOWAS states the withdrawal took effect on 29 January 2025. No official ECOWAS text found gives the date notice was given, so withdrawal_notified is empty. The Court lists its ratification of the Court Protocol as 12/04/2004 (status at 31/10/2022)."
+    }
+  ],
+  "member_routes": [
+    {
+      "court": "aa-ecowas-ccj",
+      "kind": "reference",
+      "matter": "community-law",
+      "sources": [
+        "ecowas-supp-2005-art4"
+      ],
+      "note": "Protocol art. 10(f), inserted in 2005: when a question on interpreting the Treaty, other Protocols or Regulations arises before a national court, that court may refer it, on its own motion or at a party's request. Referral is optional; the text says nothing on the answer's effect on the referring court."
+    }
+  ],
+  "sources": [
+    {
+      "id": "ecowas-treaty-art15",
+      "title": "Revised Treaty of the Economic Community of West African States (Cotonou, 24 July 1993), ECOWAS Commission reprint 2010",
+      "url": "https://www.ecowas.int/wp-content/uploads/2022/08/Revised-treaty-1.pdf",
+      "pinpoint": "art. 15"
+    },
+    {
+      "id": "ecowas-treaty-art76",
+      "title": "Revised Treaty of the Economic Community of West African States (Cotonou, 24 July 1993), ECOWAS Commission reprint 2010",
+      "url": "https://www.ecowas.int/wp-content/uploads/2022/08/Revised-treaty-1.pdf",
+      "pinpoint": "art. 76(2)"
+    },
+    {
+      "id": "ecowas-treaty-art91",
+      "title": "Revised Treaty of the Economic Community of West African States (Cotonou, 24 July 1993), ECOWAS Commission reprint 2010",
+      "url": "https://www.ecowas.int/wp-content/uploads/2022/08/Revised-treaty-1.pdf",
+      "pinpoint": "art. 91(1)"
+    },
+    {
+      "id": "ecowas-protocol-1991-art19",
+      "title": "Protocol A/P.1/7/91 on the Community Court of Justice (Abuja, 6 July 1991)",
+      "url": "https://courtecowas.org/wp-content/uploads/2025/06/Protocol_AP1791_ENG.pdf",
+      "pinpoint": "art. 19(2) (art. 20 after renumbering by Supplementary Protocol A/SP.1/01/05, art. 5)"
+    },
+    {
+      "id": "ecowas-protocol-1991-art25",
+      "title": "Protocol A/P.1/7/91 on the Community Court of Justice (Abuja, 6 July 1991)",
+      "url": "https://courtecowas.org/wp-content/uploads/2025/06/Protocol_AP1791_ENG.pdf",
+      "pinpoint": "art. 25(5) (art. 27(5) after renumbering by Supplementary Protocol A/SP.1/01/05, art. 7)"
+    },
+    {
+      "id": "ecowas-supp-2005-art3",
+      "title": "Supplementary Protocol A/SP.1/01/05 amending the Preamble and Articles 1, 2, 9 and 30 of Protocol A/P.1/7/91 relating to the Community Court of Justice (Accra, 19 January 2005)",
+      "url": "https://courtecowas.org/wp-content/uploads/2025/06/Supplementary_Protocol_ASP.10105_ENG.pdf",
+      "pinpoint": "art. 3 (new Protocol art. 9(1) and 9(4))"
+    },
+    {
+      "id": "ecowas-supp-2005-art4",
+      "title": "Supplementary Protocol A/SP.1/01/05 amending the Preamble and Articles 1, 2, 9 and 30 of Protocol A/P.1/7/91 relating to the Community Court of Justice (Accra, 19 January 2005)",
+      "url": "https://courtecowas.org/wp-content/uploads/2025/06/Supplementary_Protocol_ASP.10105_ENG.pdf",
+      "pinpoint": "art. 4 (new Protocol art. 10(d) and 10(f))"
+    },
+    {
+      "id": "ecowas-supp-2005-renumbering",
+      "title": "Supplementary Protocol A/SP.1/01/05 amending the Preamble and Articles 1, 2, 9 and 30 of Protocol A/P.1/7/91 relating to the Community Court of Justice (Accra, 19 January 2005)",
+      "url": "https://courtecowas.org/wp-content/uploads/2025/06/Supplementary_Protocol_ASP.10105_ENG.pdf",
+      "pinpoint": "arts. 5 and 7 (renumbering of former arts. 10-22 and 23-33)"
+    },
+    {
+      "id": "ecowas-member-states",
+      "title": "ECOWAS, Member States",
+      "url": "https://www.ecowas.int/member-states/"
+    },
+    {
+      "id": "ecowas-history",
+      "title": "ECOWAS, Creation (History)",
+      "url": "https://www.ecowas.int/creation-history/?lang=en"
+    },
+    {
+      "id": "ecowas-withdrawal-statement-2025",
+      "title": "ECOWAS Commission, Press Statement on the withdrawal of Burkina Faso, Mali and Niger (29 January 2025)",
+      "url": "https://www.ecowas.int/wp-content/uploads/2025/01/FINAL_Press-Statement-_-ECOWAS-_-Withdrawal-BURKINA_MALI_NIGER.pdf"
+    },
+    {
+      "id": "ecowas-withdrawal-news-2025",
+      "title": "ECOWAS, Burkina Faso, Mali and Niger's Withdrawal from ECOWAS is now a reality (30 January 2025)",
+      "url": "https://www.ecowas.int/burkina-faso-mali-and-nigers-withdrawal-from-ecowas-is-now-a-reality/"
+    },
+    {
+      "id": "ccj-ratification-status",
+      "title": "ECOWAS Court of Justice, Ratification status of Protocol A/P.1/7/91 (status as at 31/10/2022)",
+      "url": "https://courtecowas.org/legal-resources/ratification-status/"
+    }
+  ]
+}
