@@ -33,9 +33,15 @@ Every key expires: after 90 days unless you choose otherwise, and after at most 
 ### Keeping keys safe
 
 - Keep keys in environment variables or a secret store, never in source code.
-- Send keys only in the `Authorization` header. A key in the address is refused with [`credential_not_accepted`](/docs/errors#credential_not_accepted), because addresses end up in logs.
+- Send keys only in the `Authorization` header. A key in the address is refused with [`credential_not_accepted`](/docs/errors#credential_not_accepted), because addresses are kept in browser history, proxies and your own logs.
 - Never use a key in a web page. The API's data routes don't allow calls from other websites (no CORS), so a key in browser code wouldn't work anyway; call the API from your server.
 - Revoke a key you think was exposed, and create a new one.
+
+## Privacy of your requests
+
+What you send the API and MCP, such as search words, questions, citations and the records you ask for, is used only to answer that request. The API and MCP keep no request logs, and an error never records what was sent. Your organisation's usage counts requests and bytes per key or app, never what they asked. On the website, request logs never keep an address's query string, such as the words of a search.
+
+Even so, remove confidential client or case details before you send a request: ask about the law, not the case. The [acceptable use policy](/acceptable-use) asks this too. The [privacy notice](/privacy) says what else is kept, and for how long.
 
 ## Connected apps
 
