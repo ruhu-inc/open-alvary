@@ -15,8 +15,8 @@ from sqlalchemy import text
 
 from rights.database import PolicyNamespace
 
-revision = "0038"
-down_revision = "0037"
+revision = "0039"
+down_revision = "0038"
 branch_labels = None
 depends_on = None
 
