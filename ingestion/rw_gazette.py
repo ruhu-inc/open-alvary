@@ -22,7 +22,7 @@ from ingestion import gazette_layout
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-18.5"  # a page whose own columns leave one empty takes the page before's
+PIPELINE = "2026-10-21.1"  # legal facts suggested apart from the details, with the words that state them
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -1455,11 +1455,30 @@ def signatories(lines: list[str]) -> dict[str, str]:
     return found
 
 
-def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> dict:
+def stated(paragraphs: list[dict], pattern: re.Pattern) -> dict | None:
+    """Where the text states something: the page of the paragraph that says it and the sentence that
+    does, as printed (a paragraph may run on into the signatures). None when no paragraph says it in a
+    sentence of at most 400 characters."""
+    for node in paragraphs:
+        words = " ".join(node["text"].split())
+        found = pattern.search(words)
+        if not found:
+            continue
+        end = words.find(". ", found.end())
+        sentence = words[words.rfind(". ", 0, found.start()) + 1 : end + 1 if end >= 0 else None].strip()
+        return {"page": node["page"], "evidence": sentence} if len(sentence) <= 400 else None
+    return None
+
+
+def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[dict, dict]:
     """Details of the record read from the instrument as printed: its title, number and dates, the
-    sittings that adopted it, who promulgated, countersigned and sealed it and when, where it was
-    published, when it came into force and the language it was adopted in. Values only; the
-    reviewer confirms each against the page."""
+    sittings that adopted it, who promulgated, countersigned and sealed it and when, and where it was
+    published; the reviewer confirms each against the page.
+
+    And apart from them, the legal facts the text suggests: when it came into force, and what each
+    language version is worth as law from the language it was adopted in. Each comes with the words
+    that state it and their page, and stays a suggestion until a reviewer chooses it (owner decision
+    2026-10-21); the record's own fields are left empty for them."""
     english = [line["text"] for line in versions.get("en", [])]
     text = " ".join(english)
     every = [line["text"] for lines in versions.values() for line in lines]
@@ -1502,13 +1521,16 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> dict:
         people = signatories([line["text"] for line in versions.get(language, [])])
         for step, person in people.items():
             values.setdefault(f"step:{step}.person", person)
+    paragraphs = [n for n in versions_nodes(versions.get("en", [])) if n["kind"] == "paragraph"]
+    legal: dict = {}
     if issue.get("date"):
         values["step:published.date"] = issue["date"]
         values["publication.date"] = issue["date"]
-        if IN_FORCE_ON_PUBLICATION.search(text):
-            values["step:commenced.date"] = issue["date"]
+        in_force = stated(paragraphs, IN_FORCE_ON_PUBLICATION)
+        if in_force:
+            legal["step:commenced.date"] = {"value": issue["date"], **in_force}
             if values["identity.family"] in ("legislation", "constitution"):
-                values["profile.commencement"] = "on_publication"
+                legal["profile.commencement"] = {"value": "on_publication", **in_force}
     values["publication.kind"] = "gazette"
     values["publication.name"] = "Official Gazette of the Republic of Rwanda"
     edition = "Special" if issue.get("special") else str(issue.get("number") or "")
@@ -1517,43 +1539,35 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> dict:
         values["publication.number"] = edition.strip()
     values["publication.publisher"] = "Ministry of Justice"
     values["text.form"] = "gazette_publication"
+    values["expressions"] = [
+        {"language": language, "script": "Latn", "direction": "ltr"}
+        for language in LANGUAGES
+        if language in entry["versions"]
+    ]
+    # Adopted in Kinyarwanda (or English): that version authoritative, the others official translations,
+    # each with the paragraph that says so and its page.
     adopted = ADOPTED_IN.search(text)
     authority = "rw" if adopted and adopted.group(1).lower() in ("ikinyarwanda", "kinyarwanda") else None
     if adopted and adopted.group(1).lower() == "english":
         authority = "en"
-    paragraphs = [n for n in versions_nodes(versions.get("en", [])) if n["kind"] == "paragraph"]
-    # The paragraph that says so, and its page, as the evidence the reviewer checks.
-    stated = next((n for n in paragraphs if ADOPTED_IN.search(" ".join(n["text"].split()))), None)
-    evidence = {}
-    if authority and stated:
-        evidence["authority_page"] = str(stated["page"])
-        words = " ".join(stated["text"].split())
-        if len(words) <= 400:
-            evidence["authority_words"] = words
-    values["expressions"] = [
-        {
-            "language": language,
-            "script": "Latn",
-            "direction": "ltr",
-            **(
-                {
-                    "authority": "authoritative" if language == authority else "official_translation",
-                    **evidence,
+    said = stated(paragraphs, ADOPTED_IN) if authority else None
+    if said:
+        legal["expressions"] = {
+            "authority": {
+                row["language"]: {
+                    "value": "authoritative" if row["language"] == authority else "official_translation",
+                    **said,
                 }
-                if authority
-                else {}
-            ),
+                for row in values["expressions"]
+            }
         }
-        for language in LANGUAGES
-        if language in entry["versions"]
-    ]
     purpose = next(
         (n for n in paragraphs if n.get("after_article") == "1" and n.get("purpose")),
         None,
     )
     if purpose:
         values["text.summary.text"] = purpose["text"]
-    return values
+    return values, legal
 
 
 def versions_nodes(lines: list[dict]) -> list[dict]:

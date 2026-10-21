@@ -285,24 +285,46 @@ def test_a_law_suggests_its_record_details_from_the_text_and_the_issue():
     lines = {
         language: issue_streams[language][v["start"] : v["end"]] for language, v in entry["versions"].items()
     }
-    values = RG.suggest(lines, entry, {"date": "2026-03-16", "number": 11, "bis": True})
+    values, legal = RG.suggest(lines, entry, {"date": "2026-03-16", "number": 11, "bis": True})
     assert values["identity.full_title"] == "Law n° 009/2026 of 12/03/2026 governing examples"
     assert values["identity.number.printed"] == "Law n° 009/2026" and values["identity.year"] == "2026"
     assert values["step:adopted:deputies.date"] == "2026-02-20"
     assert values["step:promulgated.date"] == values["step:sealed.date"] == "2026-03-12"
     assert values["step:promulgated.person"] == "EXAMPLE Name, President of the Republic"
-    assert values["step:commenced.date"] == values["publication.date"] == "2026-03-16"
-    assert values["publication.number"] == "11 Bis"
+    assert values["publication.date"] == "2026-03-16" and values["publication.number"] == "11 Bis"
     assert values["text.summary.text"] == "This Law governs examples."
-    assert [(e["language"], e["authority"]) for e in values["expressions"]] == [
-        ("rw", "authoritative"),
-        ("en", "official_translation"),
-        ("fr", "official_translation"),
-    ]
-    # With the paragraph that says so and its page, for the reviewer to check.
-    assert {(e["authority_page"], e["authority_words"]) for e in values["expressions"]} == {
-        ("2", "This Law was drafted in English, considered and adopted in Ikinyarwanda.")
+    # Legal facts are suggested apart, each with the words that state it and their page; the record's
+    # own fields stay empty until a reviewer chooses (owner decision 2026-10-21).
+    assert [e["language"] for e in values["expressions"]] == ["rw", "en", "fr"]
+    assert not any("authority" in e for e in values["expressions"])
+    assert "step:commenced.date" not in values and "profile.commencement" not in values
+    adopted = "This Law was drafted in English, considered and adopted in Ikinyarwanda."
+    assert legal["expressions"]["authority"] == {
+        "rw": {"value": "authoritative", "page": 2, "evidence": adopted},
+        "en": {"value": "official_translation", "page": 2, "evidence": adopted},
+        "fr": {"value": "official_translation", "page": 2, "evidence": adopted},
     }
+    # The sentence that says it, not the signatures its paragraph runs on into.
+    in_force = {"page": 2, "evidence": "This Law comes into force on the date of its publication."}
+    assert legal["step:commenced.date"] == {"value": "2026-03-16", **in_force}
+    assert legal["profile.commencement"] == {"value": "on_publication", **in_force}
+
+
+def test_a_legal_fact_is_suggested_only_with_the_words_that_state_it():
+    paragraphs = [
+        {"page": 4, "text": "Nothing here."},
+        {
+            "page": 5,
+            "text": "Law n° 1/2001 is repealed. This Law comes into force on\nthe date of its publication.",
+        },
+    ]
+    assert RG.stated(paragraphs, RG.IN_FORCE_ON_PUBLICATION) == {
+        "page": 5,
+        "evidence": "This Law comes into force on the date of its publication.",
+    }
+    assert RG.stated(paragraphs[:1], RG.IN_FORCE_ON_PUBLICATION) is None  # nothing to quote: no suggestion
+    run_on = [{"page": 6, "text": "This Law comes into force on the date of its publication " + "and " * 120}]
+    assert RG.stated(run_on, RG.IN_FORCE_ON_PUBLICATION) is None  # no sentence short enough to quote
 
 
 def test_numbered_items_within_an_article_keep_their_numbers():
