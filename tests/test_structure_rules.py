@@ -69,6 +69,12 @@ def test_documents_with_rules_keep_exactly_the_structure_they_had(document, page
         ({"id": "za-act-2013-4", "jurisdiction": "za", "type": "act"}, "za-act-1"),
         ({"id": "gh-act-2012-843", "jurisdiction": "gh", "type": "act"}, "gh-act-1"),
         ({"id": "aa-ohada-auscgie-2014-fr", "jurisdiction": "aa-ohada", "type": "uniform_act"}, "ohada-uniform-act-1"),
+        ({"id": "aa-au-charter-1981-en", "jurisdiction": "aa-au", "type": "charter"}, "au-treaty-1"),
+        ({"id": "aa-au-protocol-1998-pt", "jurisdiction": "aa-au", "type": "protocol"}, "au-treaty-1"),
+        ({"id": "aa-ecowas-sa-2010-1-en", "jurisdiction": "aa-ecowas", "type": "supplementary_act"}, "ecowas-act-1"),
+        ({"id": "ci-loi-2013-450", "jurisdiction": "ci", "type": "law"}, "ci-loi-1"),
+        ({"id": "cm-law-2024-017-en", "jurisdiction": "cm", "type": "law"}, "cm-law-1"),
+        ({"id": "ao-lei-22-11", "jurisdiction": "ao", "type": "law"}, "ao-lei-1"),
     ],
 )  # fmt: skip
 def test_rules_are_chosen_by_jurisdiction_and_type(document, rules):

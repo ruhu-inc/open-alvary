@@ -45,6 +45,11 @@ SPLIT = re.compile(
     r"|(?:SECTION|ARTICLE|Article|ARTIGO|Artigo)\s+(?:\d{1,4}(?:-\d{1,3})*|premier|1er)"
     r"(?:\s*[:]|\.\s*[-–—]|\s+[-–—]\s|\.?\s*º)"
     r"|Art\.\s*\d{1,4}(?:-\d{1,3})*\.\s*[—–]"
+    # The closing words after a law's last article, and the next act a gazette prints after it: "…
+    # comme loi de l'Etat. Fait à Abidjan, le 19 juin 2013. Alassane OUATTARA. DECRET n° 2012-525 …",
+    # "… à data da sua publicação. Vista e aprovada pela Assembleia Nacional …".
+    r"|Fait\s+à\s+[A-Z]|Vista\s+e\s+aprovada\b"
+    r"|(?:LOI|D[ÉE]CRET|ARR[ÊE]T[ÉE]|ORDONNANCE)\s+n\s*°"
     r")"
 )
 LEVEL = [

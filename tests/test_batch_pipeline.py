@@ -495,6 +495,29 @@ def test_merged_articles_of_civil_law_and_treaty_drafting_are_split_but_citation
     assert " ".join(n["text"] for n in out) == text
 
 
+def test_a_laws_closing_words_and_the_next_act_in_its_gazette_are_split_from_its_last_article():
+    out = structure.split_units(
+        [
+            node(
+                "Art. 54. — La présente loi sera publiée au Journal officiel. Fait à Abidjan, le 19 juin 2013. "
+                "Alassane OUATTARA. DECRET n° 2012-525 du 20 juin 2012 portant composition",
+                "paragraph",
+            ),
+            node(
+                "A presente lei entra em vigor à data da sua publicação. Vista e aprovada em Luanda.",
+                "paragraph",
+            ),
+        ]
+    )
+    assert [n["text"][:12] for n in out] == [
+        "Art. 54. — L",
+        "Fait à Abidj",
+        "DECRET n° 20",
+        "A presente l",
+        "Vista e apro",
+    ]
+
+
 def test_a_section_after_a_closing_quotation_mark_is_split():
     out = structure.split_units(
         [

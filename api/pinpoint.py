@@ -166,6 +166,8 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
             # "Part V", "Chapter 3": a section or article inside it is cited by its own number.
             word = "Part" if part.kind == "part" else "Chapter"
             number = re.sub(rf"^{word}\s+", "", _printed(part.label), flags=re.I)
+            if not re.match(rf"^{word}\b", _printed(part.label), re.I):  # "CHAPITRE 1", "PREMIERE PARTIE"
+                number = _token_number(part.locator, "part" if part.kind == "part" else "chap") or number
             key = [f"{'part' if part.kind == 'part' else 'chap'}:{_ordinal(number)}"]
             shown = f"{word} {number.upper() if _ROMAN.fullmatch(number.casefold()) else number}"
         elif part.kind == "section" and part.label and not schedule:

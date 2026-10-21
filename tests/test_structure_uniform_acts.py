@@ -253,6 +253,7 @@ def test_warnings_for_the_reviewer():
                 head("Article 12"),
                 para("Les statuts constituent soit le contrat de société, en cas de pluralité d’associés,"),
                 para("soit l’acte de volonté d’une seule personne, en cas d’associé unique."),  # a break not joined
+                para("les relations entre associés ;", "list_item"),  # an item: lower case is its own
                 head("Article 11"),
                 para("Words."),
                 head("Nature"),

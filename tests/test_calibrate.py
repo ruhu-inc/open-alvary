@@ -46,7 +46,7 @@ def test_language_versions_are_compared_provision_by_provision(tmp_path):
     short = calibrate.calibrate(act(tmp_path / "sw", ["1", "3"]), structure.KE_ACT, "sw")
     assert calibrate.compare([whole, short]) == {
         "en": {"count": 3, "missing": []},
-        "sw": {"count": 2, "missing": ["sec_2"]},
+        "sw": {"count": 2, "missing": ["2"]},
     }
 
 

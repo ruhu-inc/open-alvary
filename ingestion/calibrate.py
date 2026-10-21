@@ -79,6 +79,24 @@ def calibrate(sample: Path, rules_id: str, language: str | None) -> dict:
     found = structure.derive(text, pages, rules_id, language)
     nodes = [n for n in found.nodes if n.kind != "document"]
     provisions = [n.locator for n in nodes if n.kind in ("article", "section")]
+    raw, nested = text.text.encode(), True
+    for node in found.nodes:
+        try:
+            raw[node.start : node.end].decode()
+        except UnicodeDecodeError:
+            nested = False
+        if node.parent and not node.parent.start <= node.start <= node.end <= node.parent.end:
+            nested = False
+    numbers = [int(p.split("_")[1]) for p in provisions if p.split("_")[1].isdigit()]
+    codes = {i.code for i in found.issues}
+    checks = {
+        # TXP-03's calibration: every provision found in order, locators unique, every leaf held once.
+        "leaves_held_once": sorted(i for n in found.nodes for i in n.leaves) == list(range(len(text.leaves))),
+        "spans_nest": nested,
+        "locators_unique": "repeated_locator" not in codes,
+        "in_order": "article_order" not in codes and numbers == sorted(numbers),
+        "missing_numbers": sorted(set(range(1, max(numbers, default=0) + 1)) - set(numbers)),
+    }
     return {
         "sample": str(sample),
         "rules": rules_id,
@@ -86,6 +104,7 @@ def calibrate(sample: Path, rules_id: str, language: str | None) -> dict:
         "pages": len(pages),
         "units": sum(len(p["units"]) for p in pages),
         "reconciled": summary,
+        "checks": checks,
         "kinds": dict(collections.Counter(n.kind for n in nodes).most_common()),
         "issues": dict(collections.Counter(f"{i.level}:{i.code}" for i in found.issues).most_common()),
         "issue_samples": [
@@ -110,8 +129,9 @@ def calibrate(sample: Path, rules_id: str, language: str | None) -> dict:
 
 
 def compare(reports: list[dict]) -> dict:
-    """The provisions each language version finds that another does not."""
-    found = {r["language"] or r["sample"]: set(r["provisions"]) for r in reports}
+    """The provisions each language version finds that another does not, by number: one edition's
+    "SECTION 7" is another's "ARTICLE 7" (Cameroon)."""
+    found = {r["language"] or r["sample"]: {p.split("_", 1)[1] for p in r["provisions"]} for r in reports}
     every = set().union(*found.values())
     return {
         version: {"count": len(have), "missing": sorted(every - have)[:40]} for version, have in found.items()
@@ -138,6 +158,7 @@ def main(argv=None) -> int:
         print(f"== {report['sample']} ({report['rules']}, {report['language']})")
         print(f"   {report['pages']} pages, {report['units']} units; flags {report['reconciled']['flags']}")
         print(f"   nodes: {report['kinds']}")
+        print(f"   checks: {report['checks']}")
         print(f"   issues: {report['issues'] or 'none'}")
         for line in report["outline"][: args.show]:
             print(f"     {line['kind']:12} {line['locator']:40} {line['heading']}")
