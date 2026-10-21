@@ -565,13 +565,45 @@ class EvidenceContext(WireModel):
     expanded_from: ID | None = Field(**OMIT)
 
 
+COURT_ANSWER = Literal["binding", "persuasive", "not_applicable", "unknown"]
+
+
+class EvidenceBearing(WireModel):
+    """How the decision's court bears on another court, as a reviewed court register records it: on
+    ``court``, on the jurisdiction's courts generally (null), or with ``members`` on the courts of each
+    member state of a regional body; only on ``matter`` where one is given."""
+
+    court: str | None
+    members: bool | None = Field(**OMIT)
+    matter: str | None = Field(**OMIT)
+    relation: Literal["binding", "persuasive", "not_applicable"]
+    valid_from: date | None = Field(**OMIT)
+    valid_until: date | None = Field(**OMIT)
+    evidence: tuple[str, ...]
+
+
+class EvidenceCourt(WireModel):
+    """For a decision: its court in the court register that answers for the jurisdiction asked about
+    (CPR-04), and how its decisions bear on other courts on the date assessed. ``bears_on`` is empty
+    until the register is reviewed: nothing is guessed."""
+
+    id: str
+    name: str
+    jurisdiction: str  # the register's
+    review_state: Literal["unreviewed", "reviewed"]
+    reviewed_on: date | None = Field(**OMIT)
+    bears_on: tuple[EvidenceBearing, ...] = ()
+
+
 class EvidenceAuthority(WireModel):
     """The inputs to the authority signals (RSV-05): the instrument's place in its jurisdiction's
-    hierarchy (0 is highest), and for decisions the court's relation to the queried jurisdiction."""
+    hierarchy (0 is highest), and for decisions the court's relation to the queried jurisdiction's
+    courts generally, with the court and its bearing on other courts as its register records them."""
 
     document_type: str
     instrument_rank: int | None = Field(**OMIT)
-    court_relation: Literal["binding", "persuasive", "not_applicable", "unknown"] = "not_applicable"
+    court_relation: COURT_ANSWER = "not_applicable"
+    court: EvidenceCourt | None = Field(**OMIT)
 
 
 class EvidenceLinks(WireModel):
@@ -744,6 +776,113 @@ class CheckPage(WireModel):
     schema_version: Literal["oa-check-1"] = "oa-check-1"
     dataset: str
     results: tuple[CheckResult, ...]
+
+
+REVIEW_STATE = Literal["unreviewed", "reviewed"]
+
+
+class CourtEvidence(WireModel):
+    """A source a court register entry cites: a constitution, an Act, a treaty, a court's own record."""
+
+    title: str
+    url: str
+    pinpoint: str | None = Field(**OMIT)
+
+
+class CourtEntry(WireModel):
+    """What every entry of a court register carries: whether it has been reviewed (with its register),
+    the sources it rests on, and a note on what they say."""
+
+    review_state: REVIEW_STATE
+    evidence: tuple[CourtEvidence, ...]
+    note: str | None = Field(**OMIT)
+
+
+class CourtPrecedentView(CourtEntry):
+    binds: bool
+
+
+class CourtLevelView(CourtEntry):
+    id: str
+    name: str
+    kind: Literal["court", "tribunal", "quasi_judicial"]
+    level: str
+    rank: int | None = Field(**OMIT)
+    jurisdiction: str | None = Field(**OMIT)
+    valid_from: date | None = Field(**OMIT)
+    valid_until: date | None = Field(**OMIT)
+    appeals_to: tuple[str, ...] = ()
+
+
+class CourtRelationView(CourtEntry):
+    court: str
+    bound: str | None
+    members: bool
+    matter: str | None = Field(**OMIT)
+    relation: COURT_ANSWER
+    recorded: Literal["binding", "persuasive", "not_applicable"]
+    valid_from: date | None = Field(**OMIT)
+    valid_until: date | None = Field(**OMIT)
+
+
+class CourtMatterView(CourtEntry):
+    id: str
+    name: str
+
+
+class CourtMemberView(CourtEntry):
+    state: str
+    court: str | None = Field(**OMIT)
+    valid_from: date | None = Field(**OMIT)
+    valid_until: date | None = Field(**OMIT)
+    withdrawal_notified: date | None = Field(**OMIT)
+
+
+class CourtRouteView(CourtEntry):
+    court: str
+    kind: Literal["cassation", "appeal", "reference"]
+    matter: str | None = Field(**OMIT)
+    valid_from: date | None = Field(**OMIT)
+    valid_until: date | None = Field(**OMIT)
+
+
+class CourtDeclarationView(CourtEntry):
+    state: str
+    court: str
+    valid_from: date | None = Field(**OMIT)
+    valid_until: date | None = Field(**OMIT)
+    withdrawal_deposited: date | None = Field(**OMIT)
+
+
+class CourtRegisterView(WireModel):
+    """A jurisdiction's court register (CPR-04, JUR-03, JUR-04): its courts with their levels and appeal
+    routes, how each court's decisions bear on the others, whether precedent binds there at all, and for
+    a regional or continental body the states its courts reach. Every entry with its sources. Until the
+    register is reviewed every ``relation`` answers ``unknown``; ``recorded`` is what awaits review."""
+
+    jurisdiction: str
+    review_state: REVIEW_STATE
+    reviewed_by: str | None = Field(**OMIT)
+    reviewed_on: date | None = Field(**OMIT)
+    precedent: CourtPrecedentView | None
+    courts: tuple[CourtLevelView, ...] = ()
+    relations: tuple[CourtRelationView, ...] = ()
+    matters: tuple[CourtMatterView, ...] = ()
+    members: tuple[CourtMemberView, ...] = ()
+    member_routes: tuple[CourtRouteView, ...] = ()
+    declarations: tuple[CourtDeclarationView, ...] = ()
+
+
+class CourtRegisterSummary(WireModel):
+    jurisdiction: str
+    review_state: REVIEW_STATE
+    reviewed_on: date | None = Field(**OMIT)
+    courts: int = Field(ge=0)
+    relations: int = Field(ge=0)
+
+
+class CourtRegisters(WireModel):
+    registers: tuple[CourtRegisterSummary, ...]
 
 
 class PublicContracts(WireModel):
