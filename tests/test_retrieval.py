@@ -359,6 +359,139 @@ def test_the_retrieval_job_runs_each_step_and_reports_one_that_fails(monkeypatch
     assert report["engine"] == {"error": "ConnectionError"} and report["embeddings"] == {"done": 0}
 
 
+def test_the_engine_analyses_each_config_as_the_section_index_does():
+    # RSV-04 "same words, same matching": every language the section index stems, the engine stems in
+    # the same language; a language matched word for word there is never stemmed or guessed at here,
+    # whatever the text's own language.
+    from api import text_index
+    from retrieval.engine import LOCALES, WORD_FOR_WORD, document, locale
+
+    assert {config: language for language, config in text_index.CONFIGS.items()} == LOCALES
+    assert text_index.ANALYSES == (*LOCALES, "simple")
+    assert [text_index.config_for(t) for t in ("pt-BR", "es", "AR", "sw", "rw", "de")] == [
+        "portuguese", "spanish", "arabic", "simple", "simple", "simple",
+    ]  # fmt: skip
+    assert locale("arabic") == "ar" and locale("simple") == WORD_FOR_WORD
+    assert WORD_FOR_WORD not in text_index.CONFIGS  # Kiswahili: no analysis in either
+    row = {"version_id": "ver_de", "work_id": "w", "start_byte": 0, "end_byte": 9, "language": "de-CH",
+           "config": "simple", "analyzer": text_index.ANALYZER, "jurisdiction_id": "ng",
+           "document_type": "act", "legal_status": "current", "content_hash": "0" * 64}  # fmt: skip
+    unit = document(row, "Gesetze", "", "", "")
+    assert unit["language"] == "de" and unit["locale"] == WORD_FOR_WORD  # filtered as German, never stemmed
+    assert unit["analyzer"] == text_index.ANALYZER
+    assert document(row | {"language": "pt", "config": "portuguese"}, "", "", "", "")["locale"] == "pt"
+
+
+def test_the_engine_schema_and_queries_carry_each_analysis_language():
+    import json
+
+    import httpx
+
+    from api.text_index import Filters
+    from retrieval.engine import WORD_FOR_WORD, Application, Engine
+
+    schema = Application().schema()
+    fields = [line.split()[1] for line in schema.splitlines() if line.strip().startswith("field ")]
+    assert fields[0] == "locale" and "set_language" in schema.split("field language")[0]
+    assert "set_language" not in schema.split("field language")[1].split("}")[0]
+    asked = []
+
+    def answer(request):
+        asked.append(json.loads(request.content))
+        return httpx.Response(200, json={"root": {"fields": {"totalCount": 0}}})
+
+    engine = Engine("http://engine.test", transport=httpx.MockTransport(answer))
+    terms = {"arabic": "موظف", "portuguese": "trabalhador", "simple": "mikataba", "spanish": ""}
+    engine.lexical(terms, Filters(), 10)
+    yql = asked[-1]["yql"]
+    assert 'config contains "arabic" and ({grammar: "all", language: "ar"}userInput(@q0))' in yql
+    assert 'config contains "portuguese" and ({grammar: "all", language: "pt"}userInput(@q1))' in yql
+    simple = f'config contains "simple" and ({{grammar: "all", language: "{WORD_FOR_WORD}"}}userInput(@q2))'
+    assert simple in yql and "spanish" not in yql  # no word the Spanish analysis indexes
+    engine.lexical({"simple": "haki"}, Filters(), 10, every=False)
+    assert f'language: "{WORD_FOR_WORD}"' in asked[-1]["yql"] and "weakAnd" in asked[-1]["yql"]
+
+
+def test_a_new_analyzer_is_a_new_application_and_reanalyses_held_units(monkeypatch):
+    # Bumping the analyzer redeploys and reconciles every work (retrieval.worker); units fed under the
+    # old one are analysed again by partial update, keeping their vectors; new texts are fed whole.
+    from contextlib import contextmanager
+
+    from api import text_index
+    from retrieval import projector
+    from retrieval.engine import Application
+
+    before = projector.application_hash(Application())
+    monkeypatch.setattr(text_index, "ANALYZER", "oa-search-test")
+    assert projector.application_hash(Application()) != before
+
+    class Database:
+        @contextmanager
+        def begin(self):
+            yield None
+
+    class Engine:
+        def __init__(self):
+            self.calls = []
+
+        def visit(self, selection, fields):
+            assert fields == "version_id,analyzer"
+            return [
+                {"version_id": "ver_old", "analyzer": "oa-search-4"},
+                {"version_id": "ver_same", "analyzer": "oa-search-test"},
+                {"version_id": "ver_mixed", "analyzer": "oa-search-test"},
+                {"version_id": "ver_mixed"},  # fed before units carried their analyzer
+                {"version_id": "ver_gone", "analyzer": "oa-search-test"},
+            ]
+
+        def put(self, doc):
+            self.calls.append(("put", doc["unit_id"]))
+
+        def reanalyse(self, doc):
+            self.calls.append(("reanalyse", doc["unit_id"]))
+
+        def delete_version(self, version_id):
+            self.calls.append(("delete", version_id))
+            return 1
+
+    wanted = {v: [{"unit_id": f"{v}:0"}] for v in ("ver_old", "ver_same", "ver_mixed", "ver_new")}
+    monkeypatch.setattr(projector, "_documents", lambda conn, work_id: wanted)
+    engine = Engine()
+    report = projector.reconcile(Database(), engine, ["w"])
+    assert engine.calls == [
+        ("delete", "ver_gone"), ("reanalyse", "ver_mixed:0"), ("put", "ver_new:0"), ("reanalyse", "ver_old:0"),
+    ]  # fmt: skip
+    assert report == {"works": 1, "fed": 1, "removed": 1, "reanalysed": 2}
+
+
+def test_reanalysing_a_unit_assigns_every_field_and_creates_a_missing_one():
+    import json
+
+    import httpx
+
+    from retrieval.engine import Engine
+
+    seen = []
+
+    def answer(request):
+        seen.append(request)
+        return httpx.Response(200, json={})
+
+    Engine("http://engine.test", transport=httpx.MockTransport(answer)).reanalyse(
+        {"unit_id": "ver_a:0", "locale": "pt", "words": "Os trabalhadores"}
+    )
+    [request] = seen
+    assert request.method == "PUT" and request.url.path == "/document/v1/oa/unit/docid/ver_a:0"
+    assert request.url.params["create"] == "true"
+    assert json.loads(request.content) == {
+        "fields": {
+            "unit_id": {"assign": "ver_a:0"},
+            "locale": {"assign": "pt"},
+            "words": {"assign": "Os trabalhadores"},
+        }
+    }
+
+
 def test_each_language_matched_word_for_word_has_a_notice():
     from api.text_index import word_for_word
 

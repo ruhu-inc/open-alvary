@@ -637,6 +637,8 @@ class Retriever:
                     candidates=tuple(c.anchor_id for c in citation.provision.candidates),
                 )
             )
+        # The engine analyses each config as the section index does (retrieval.engine.LOCALES), so the
+        # notice holds whichever of them answered.
         notices += text_index.word_for_word(searched.languages)
         return EvidencePack(
             status=status,
