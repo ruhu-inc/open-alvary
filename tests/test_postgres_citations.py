@@ -13,6 +13,9 @@ from sqlalchemy.exc import IntegrityError
 from test_citations import ACT, CITED, CITING, COURT, REVIEWED, case_law
 from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
+from test_workbench_citations import proposed as proposed
+from test_workbench_citations import signed_in
+from test_workbench_citations import world as world
 
 from api.main import create_app
 from api.store import Store
@@ -126,10 +129,8 @@ def test_a_proposal_is_not_served_until_confirmed_then_both_ends_serve_the_citin
     assert v1.get(f"/sources/{ACT}/relationships", params={"locator": "sec 2"}).status_code == 400
     [cites] = related(v1, CITING, kind="cites")["items"]
     assert (cites["source_id"], cites["citing_pinpoint"], cites["cited_pinpoint"]) == (ACT, "[2]", "s. 2(1)")
-    assert (
-        related(v1, CITING, locator="para_2")["total"] == 1
-        and related(v1, CITING, locator="para_3")["total"] == 0
-    )
+    assert related(v1, CITING, locator="para_2")["total"] == 1
+    assert related(v1, CITING, locator="para_3")["total"] == 0
 
     # MCP answers the same page.
     client = TestClient(create_app(store=store))
@@ -218,19 +219,14 @@ def test_an_overruled_judgment_carries_the_overruling_one_and_withdrawing_it_cor
     by_work = {e["work_id"]: e for e in first}
     assert set(by_work) == {CITING, CITED}
     treating, treated = by_work[CITING], by_work[CITED]
-    assert (
-        treating["logical_event_key"] == OVERRULES and treated["logical_event_key"] == OVERRULES + ":treated"
-    )
+    assert treating["logical_event_key"] == OVERRULES
+    assert treated["logical_event_key"] == OVERRULES + ":treated"
     assert treating["payload"]["summary"] == "Adeyemi v. Example Bank overrules Bello v. The State, at [3]."
-    assert (
-        treated["payload"]["summary"]
-        == "Bello v. The State was overruled by Adeyemi v. Example Bank, at [3]."
-    )
-    assert (
-        treating["payload"]["treatment"]["of"]["id"] == CITED
-        and treated["payload"]["treatment"]["by"]["id"] == CITING
-    )
+    said = "Bello v. The State was overruled by Adeyemi v. Example Bank, at [3]."
+    assert treated["payload"]["summary"] == said
+    assert treating["payload"]["treatment"]["of"]["id"] == CITED
     told = treated["payload"]["treatment"]
+    assert told["by"]["id"] == CITING
     assert told["assertion"] == "direct_treatment" and told["review_level"] == "doctrinal"
     assert (told["citing_locator"], told["cited_locator"], told["opinion"]) == (
         "para_3",
@@ -253,11 +249,8 @@ def test_an_overruled_judgment_carries_the_overruling_one_and_withdrawing_it_cor
     corrected = treatment_events(store)[2:]
     assert {(e["event_id"], e["event_revision"]) for e in corrected} == {(e["event_id"], 2) for e in first}
     for event in corrected:
-        assert (
-            event["change_reason"] == "corrected"
-            and event["payload"]["treatment"]["review_state"] == "withdrawn"
-        )
-        assert "was withdrawn" in event["payload"]["summary"]
+        assert event["change_reason"] == "corrected" and "was withdrawn" in event["payload"]["summary"]
+        assert event["payload"]["treatment"]["review_state"] == "withdrawn"
     assert related(v1, CITED, kind="overruled_by")["items"] == []
     assert [i["kind"] for i in related(v1, CITED)["items"]] == ["cited_by"]  # the citation itself stands
     assert publish(store, to_judgment(overruling(review_state="withdrawn")))["announced"] == 0
@@ -309,3 +302,30 @@ def test_migration_0042_steps_back_only_without_treatment_events(pg_engine):
         )
     with pytest.raises(RuntimeError, match="Treatment events exist"):
         run(command.downgrade, "0041")
+
+
+def test_what_the_workbench_confirms_is_what_is_published(store, v1, world, proposed):
+    approver = signed_in(world, "approver@example.org")
+    advocate = signed_in(world, "advocate@example.org")
+    approver.post(f"/api/documents/{CITING}/citations/proposals", json=proposed)
+    listing = approver.get(f"/api/documents/{CITING}/citations").json()["citations"]
+    items = {c["citation"]["cited_work"]: c for c in listing}
+    for item in items.values():
+        body = {"citation_id": item["citation_id"], "expected_revision": 1, "status": "confirmed",
+                "reviewer_role": "owner"}  # fmt: skip
+        assert approver.post(f"/api/documents/{CITING}/citations", json=body).status_code == 200
+    treatment = {"expected_revision": 2, "action": "record", "review_level": "doctrinal", "kind": "overrules",
+                 "opinion": "majority", "quote": "That decision is overruled.", "reviewer_role": "Nigerian advocate",
+                 "reviewer_qualification": ADVOCATE}  # fmt: skip
+    path = f"/api/documents/{CITING}/citations/{items[CITED]['citation_id']}/treatment"
+    assert advocate.post(path, json=treatment).status_code == 200
+    exported = approver.get(f"/api/documents/{CITING}/citations/export").json()
+    report = citations.publish(store.engine, citations.CitationFile.model_validate(exported))
+    assert report["citations_added"] == 2 and report["treatments_added"] == 1 and report["announced"] == 2
+    [cited_by] = related(v1, ACT, kind="cited_by", locator="sec_2")["items"]
+    assert cited_by["review"]["reviewed_by"] == "App" and cited_by["cited_pinpoint"] == "s. 2(1)"
+    [overruled_by] = related(v1, CITED, kind="overruled_by")["items"]
+    assert overruled_by["review"]["reviewer_qualification"] == ADVOCATE
+    assert (
+        overruled_by["review"]["reviewed_by"] == "Test Advocate" and overruled_by["citing_pinpoint"] == "[3]"
+    )
