@@ -460,13 +460,21 @@ BACKWARD = {
     "domesticated_by": "domesticates",
     "implemented_by": "implements",
 }
-# Relations a record may state that the catalogue does not publish, and why: each is reported, never
-# dropped silently.
-JUDICIAL = ("appeal_from", "appealed_to", "affirms", "reverses", "overrules", "overruled_by", "follows",
-            "distinguishes")  # fmt: skip
+# Relations a record may state that the catalogue does not publish from it, and why: each is reported,
+# never dropped silently. Judicial treatment is published from a judgment's reviewed citations instead,
+# each with its paragraph and a legally qualified reviewer; appeal history is not published yet.
+TREATMENT = ("overrules", "overruled_by", "follows", "distinguishes")
+APPEAL = ("appeal_from", "appealed_to", "affirms", "reverses")
 WITHHELD = {
-    kind: "judicial treatment and appeal links wait for case law and its own review (EDT-01)"
-    for kind in JUDICIAL
+    **{
+        kind: "judicial treatment is published from the judgment's reviewed citations, with the paragraph "
+        "and a doctrinal review (operations.citations), not from its details (EDT-01)"
+        for kind in TREATMENT
+    },
+    **{
+        kind: "appeal history waits for its own review of the case's identity and chain (EDT-01)"
+        for kind in APPEAL
+    },
 }
 NOT_PUBLISHED = "not a relationship kind the catalogue publishes yet"
 
