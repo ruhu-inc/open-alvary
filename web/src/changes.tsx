@@ -32,6 +32,7 @@ const TYPES: [string, string][] = [
   ["coverage_changed", "Coverage"],
   ["membership_recorded", "Membership"],
   ["suspension_recorded", "Suspension"],
+  ["treatment_recorded", "Treatment"],
 ];
 const LABEL = Object.fromEntries(TYPES.filter(([t]) => t));
 

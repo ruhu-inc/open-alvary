@@ -1,8 +1,9 @@
 // A record's place in the law, beside the record: whether it is current and, when it has been
 // repealed or replaced, the law in force in its place now; the records it repeals, amends, commences,
 // gives effect to or is made under; those that repealed, amended, commenced or gave effect to it; what
-// it cites and is cited by; and the instruments made under it. Only links between public records that
-// a reviewer has checked against the official text (GET /site/v1/sources/{id}/relationships).
+// it cites and is cited by, a judgment's by paragraph; how judgments treated it or it treats them, where
+// a qualified reviewer recorded it; and the instruments made under it. Only links between public
+// records that a reviewer has checked against the official text (GET /site/v1/sources/{id}/relationships).
 import { ArrowRight, ExternalLink } from "lucide-react";
 import { LEGAL_STATUS, Link } from "./site";
 
@@ -16,6 +17,11 @@ export type Related = {
   effective_date?: string | null;
   evidence_url: string;
   verified: boolean;
+  // A judgment's reviewed citation or treatment: the citing paragraph and the part it cites.
+  assertion_id?: string;
+  citing_pinpoint?: string;
+  cited_pinpoint?: string;
+  opinion?: string;
 };
 export type History = {
   source_id: string;
@@ -29,6 +35,11 @@ export type History = {
 
 // How the other record relates to this one, in the order a reader asks: what replaced it first.
 const KINDS: [string, string][] = [
+  ["overruled_by", "Overruled by"],
+  ["doubted_by", "Doubted by"],
+  ["distinguished_by", "Distinguished by"],
+  ["applied_by", "Applied by"],
+  ["followed_by", "Followed by"],
   ["repealed_by", "Repealed by"],
   ["superseded_by", "Replaced by"],
   ["amended_by", "Amended by"],
@@ -46,6 +57,11 @@ const KINDS: [string, string][] = [
   ["domesticated_by", "Domesticated by"],
   ["implemented_by", "Implemented by"],
   ["ratified_by", "Ratified by"],
+  ["overrules", "Overrules"],
+  ["doubts", "Doubts"],
+  ["distinguishes", "Distinguishes"],
+  ["applies", "Applies"],
+  ["follows", "Follows"],
   ["cross_reference", "See also"],
   ["cites", "Cites"],
   ["cited_by", "Cited by"],
@@ -62,11 +78,23 @@ function day(value: string) {
   });
 }
 
+// Where a judgment's citation or treatment is: its paragraph, the part it cites, and a minority opinion.
+function paragraph(item: Related) {
+  if (!item.citing_pinpoint) return "";
+  const on = item.cited_pinpoint ? `, on ${item.cited_pinpoint}` : "";
+  const opinion =
+    item.opinion && !["majority", "unknown"].includes(item.opinion)
+      ? ` (${item.opinion} opinion)`
+      : "";
+  return ` · paragraph ${item.citing_pinpoint}${on}${opinion}`;
+}
+
 function Item({ item }: { item: Related }) {
   return (
     <li>
       <Link to={record(item.source_id)}>{item.title}</Link>
       <span className="history-meta">
+        {paragraph(item)}
         {item.effective_date ? ` · from ${day(item.effective_date)}` : ""}
         {item.kind !== "repealed_by" && item.kind !== "superseded_by"
           ? ` · ${LEGAL_STATUS[item.legal_status] ?? item.legal_status}`
@@ -125,7 +153,10 @@ export function RecordHistory({ history }: { history?: History }) {
           <h4>{label}</h4>
           <ul>
             {items.map((item) => (
-              <Item key={item.kind + item.source_id} item={item} />
+              <Item
+                key={item.assertion_id ?? item.kind + item.source_id}
+                item={item}
+              />
             ))}
           </ul>
         </div>
