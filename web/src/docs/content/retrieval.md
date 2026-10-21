@@ -95,6 +95,59 @@ A question that cites a part, names a law or asks what a term means (`meaning of
 - **A page:** `page 18 of the NDPA` gives the provisions on that page of the official file.
 - **An address:** paste an Open Alvary page or API address of a record or part, or a law's official address, and the pack holds what it addresses. Add `as_of` for the law on a date: only texts in force then, and currentness assessed at it. Without `as_of`, nothing is assumed about the date.
 
+## The law that applies in a country
+
+A request covers exactly the jurisdictions you name: `jurisdiction=sn` searches Senegal's own law. To also search the regional and treaty law that binds in Senegal, add `scope=applicable`, with one `jurisdiction`:
+
+```curl
+curl -G https://api.open.alvary.ai/api/v1/retrieve \
+  --data-urlencode "q=who may manage a commercial company" \
+  -d jurisdiction=sn -d scope=applicable -d as_of=2026-01-01 \
+  -H "Authorization: Bearer $OPEN_ALVARY_KEY"
+```
+
+```python
+import os
+
+import requests
+
+pack = requests.get(
+    "https://api.open.alvary.ai/api/v1/retrieve",
+    params={"q": "who may manage a commercial company", "jurisdiction": "sn", "scope": "applicable",
+            "as_of": "2026-01-01"},
+    headers={"Authorization": f"Bearer {os.environ['OPEN_ALVARY_KEY']}"},
+    timeout=30,
+).json()
+for unit in pack["evidence"]:
+    print(unit["citation"], unit["applicability"]["relation"], unit["applicability"]["binds"])
+print(pack["applicability"]["left_out"])
+```
+
+The search then also covers:
+
+- the instruments of the African Union and the regional bodies the country belonged to on `as_of` (today's date if you leave it out), from [reviewed memberships](/docs/records#find-which-bodies-a-country-belongs-to) only. A body whose membership is not reviewed yet is not added, which never means the country is not a member;
+- the treaties whose party list records the country's own ratification or accession. Membership of a body never applies its treaties to a member.
+
+Of those, instruments that don't bind in the country are left out, and those whose relation to it is unknown are kept. Each unit's `applicability` says how it relates to the country on that date:
+
+| `relation` | Meaning | `binds` |
+|---|---|---|
+| `national` | The country's own law. | `bound` |
+| `regional_direct` | An instrument of a body the country belonged to, which applies directly in its members. | `bound` |
+| `regional_requires_transposition` | A directive or similar: it binds the country as to its result, through national law. `regional.transposition_deadline` is the deadline, and `transposed_by` the country's transposing acts that a checked link records. | `bound` |
+| `regional_binding_on_addressees` | It binds the member states it is addressed to, the country among them. | `bound` |
+| `treaty_in_force_for_state` | The country ratified or acceded to it on or before the date, had not denounced it, and the treaty was in force. `party` is the country's entry, with any act that domesticates it. | `bound` |
+| `treaty_not_in_force_for_state` | No ratification or accession by the country is recorded on the date: signature alone does not bind, and neither does a later ratification. | `not_bound` |
+| `non_binding` | The instrument is not binding. | `not_bound` |
+| `comparative` | Another country's law, an instrument addressed to other states, or one of a body the country had left or not yet joined. | `not_bound` |
+| `unknown` | The membership, the legal effect or the ratification is not reviewed, or a date can't be compared (a ratification known only to the year, say). | `unknown` |
+
+Each label carries what it rests on: `memberships` (the reviewed memberships, each `held`, `not_held` or `unknown` on the date), `regional` (the instrument's legal effect) and `party` (the country's entry in the treaty's party list), with `reasons` in sentences. Whether a unit was in force on the date is still `currentness`, a separate question. These labels report what the reviewed records state; they never decide which law governs anyone's situation.
+
+The pack's `applicability` states the widening: `bodies` lists each body the country has a reviewed membership of, with whether it held on the date (only `held` bodies' law was added), `admitted` how many records of other jurisdictions were added, and `left_out` how many were left out because they don't bind there, by relation. `query.filters` shows `scope` as you asked for it. A record you name with `source_id` is answered whatever its relation, so you can ask whether a particular treaty binds a country. Without `scope`, nothing is added and no unit has `applicability`.
+
+[Search texts](/docs/api/search-text) takes `scope=applicable` too, with the same `applicability` on each passage and on the page.
+
 ## Languages
 
 A question's words are matched against each text in the text's own language:
@@ -132,6 +185,8 @@ for result in check["results"]:
 
 `unchanged` means the part is still published with the same words. `newer_version` means a later text of the same edition exists: `newer_anchor_id` is the same part there and `same_words` says whether it changed. `unavailable` means the part is not public now: remove it from the answer.
 
+Add `jurisdiction` to an item, such as `{"anchor_id": "…", "as_of": "2026-01-01", "jurisdiction": "ke"}`, and its result also says whether the record binds in that country on that date: `applicability`, with the same labels and basis as [above](#the-law-that-applies-in-a-country). For a treaty, that is `treaty_in_force_for_state` only where the country's own ratification or accession is recorded.
+
 ## Caching and the change feed
 
 You may cache evidence for your own users, keyed by `anchor_id` and `content_hash`, and whole answers keyed by the request and `revisions.dataset`. Keep the cache honest with the [change feed](/docs/changes):
@@ -147,4 +202,4 @@ If Open Alvary cannot be reached, you may answer from your cache, but say that c
 
 ## From an AI tool
 
-The MCP tools [`retrieve_evidence`](/docs/api/mcp#retrieve_evidence) and [`check_currentness`](/docs/api/mcp#check_currentness) answer exactly what these routes answer, within the MCP answer size (at most 15 units and 40,960 bytes of words).
+The MCP tools [`retrieve_evidence`](/docs/api/mcp#retrieve_evidence) and [`check_currentness`](/docs/api/mcp#check_currentness) answer exactly what these routes answer, within the MCP answer size (at most 15 units and 40,960 bytes of words). `retrieve_evidence` and `search_text` take `scope`, and `check_currentness` items take `jurisdiction`.
