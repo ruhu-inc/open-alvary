@@ -26,7 +26,7 @@ Create keys in the console under **API keys** ([pictures](/docs/console#keys)). 
 
 Every key expires: after 90 days unless you choose otherwise, and after at most 365. The console shows when each key was last used.
 
-- **Rotate** a key to replace it: you get a new key, and the old one keeps working for 24 hours so you can switch over.
+- **Rotate** a key to replace it: you get a new key in its place, and the old one keeps working for 24 hours so you can switch over. You can rotate even when you have as many keys as allowed, because the old key isn't counted during those 24 hours. If you rotate the new key before they are up, the old one stops at once.
 - **Revoke** a key to stop it at once.
 - If your organisation's access ends, its keys are kept and refused with [`entitlement_lapsed`](/docs/errors#entitlement_lapsed) until access is renewed.
 

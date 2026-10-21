@@ -11,7 +11,7 @@ from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
 
 from accounts import keys, policies
-from accounts.store import AccountError, Accounts
+from accounts.store import PERSONAL_KEYS_PER_MEMBER, SERVICE_KEYS_PER_ORGANISATION, AccountError, Accounts
 from rights.database import PolicyNamespace
 
 pytestmark = pytest.mark.postgres
@@ -338,6 +338,87 @@ def test_a_rotation_overlap_is_at_most_24_hours_and_never_lengthens_a_key(accoun
         k=short["id"].removeprefix("key_"),
     ).scalar()
     assert left <= timedelta(hours=2)
+
+
+def refused(call, *args, **kwargs) -> str:
+    with pytest.raises(AccountError) as error:
+        call(*args, **kwargs)
+    return error.value.code
+
+
+def test_rotation_at_the_key_cap_succeeds_and_the_old_key_works_outside_it_until_its_overlap_ends(accounts):
+    """MAC-05 (owner, 2026-10-21): no cap refuses a rotation. The new key takes the old one's place; the
+    old key works beside it, uncounted, until its overlap ends, and only an overlap of 0 stops it at once.
+    A new key at the cap is still refused."""
+    owner, organisation = person(accounts)
+    grant(accounts, organisation)
+
+    def one_more(kind):
+        return refused(accounts.create_key, owner, organisation, kind=kind, name="one more")
+
+    full = [
+        accounts.create_key(owner, organisation, kind="service", name=f"server {n}")
+        for n in range(SERVICE_KEYS_PER_ORGANISATION)
+    ]
+    assert one_more("service") == "limit_reached"
+    old = full[0]
+    new = accounts.rotate_key(owner, organisation, old["id"], overlap_hours=6)
+    assert check_key(accounts, old["secret"])["credential"] == old["id"]
+    assert check_key(accounts, new["secret"])["credential"] == new["id"]
+    assert one_more("service") == "limit_reached"
+    listed = {k["id"]: k for k in accounts.list_keys(owner, organisation)}
+    assert listed[old["id"]]["replaced"] and listed[old["id"]]["state"] == "active"
+    assert not listed[new["id"]]["replaced"]
+    # Six hours and a second later the old key is refused, and the cap is as full as before.
+    sql(
+        accounts,
+        "UPDATE {api_key} SET created_at = created_at - interval '6 hours 1 second',"
+        " expires_at = expires_at - interval '6 hours 1 second' WHERE key_id = :k",
+        k=old["id"].removeprefix("key_"),
+    )
+    assert check_key(accounts, old["secret"])["code"] == "invalid_credentials"
+    assert check_key(accounts, new["secret"])["credential"] == new["id"]
+    assert one_more("service") == "limit_reached"
+    # After a leak: no overlap, so the old key stops at once, still at the cap.
+    leaked = full[1]
+    replacement = accounts.rotate_key(owner, organisation, leaked["id"], overlap_hours=0)
+    assert check_key(accounts, leaked["secret"])["code"] == "invalid_credentials"
+    assert check_key(accounts, replacement["secret"])["credential"] == replacement["id"]
+    assert one_more("service") == "limit_reached"
+    # A member's personal keys have their own cap and rotate past it the same way.
+    personal = [
+        accounts.create_key(owner, organisation, kind="personal", name=f"laptop {n}")
+        for n in range(PERSONAL_KEYS_PER_MEMBER)
+    ]
+    rotated = accounts.rotate_key(owner, organisation, personal[0]["id"], overlap_hours=1)
+    assert check_key(accounts, personal[0]["secret"])["ok"] and check_key(accounts, rotated["secret"])["ok"]
+    assert one_more("personal") == "limit_reached"
+
+
+def test_a_key_has_at_most_one_predecessor_working_and_a_replaced_key_is_not_rotated_again(accounts):
+    """Rotating a key again during its predecessor's overlap stops the predecessor now, so one key's place
+    never holds more than one key outside the cap; the key already replaced is refused a second rotation."""
+    owner, organisation = person(accounts)
+    grant(accounts, organisation)
+    first = accounts.create_key(owner, organisation, kind="service", name="server")
+    second = accounts.rotate_key(owner, organisation, first["id"], overlap_hours=6)
+    assert (
+        refused(accounts.rotate_key, owner, organisation, first["id"], overlap_hours=6) == "already_rotated"
+    )
+    assert check_key(accounts, first["secret"])["ok"]  # a refused rotation changes nothing
+    third = accounts.rotate_key(owner, organisation, second["id"], overlap_hours=6)
+    assert check_key(accounts, first["secret"])["code"] == "invalid_credentials"
+    assert check_key(accounts, second["secret"])["credential"] == second["id"]
+    assert check_key(accounts, third["secret"])["credential"] == third["id"]
+    reasons = dict(sql(accounts, "SELECT 'key_' || key_id, revoked_reason FROM {api_key}").all())
+    assert reasons == {first["id"]: "rotated", second["id"]: None, third["id"]: None}
+    summaries = sql(
+        accounts, "SELECT summary FROM {audit_event} WHERE action = 'key.rotated' ORDER BY seq"
+    ).scalars()
+    assert list(summaries) == [
+        {"replacement": second["id"], "overlap_hours": 6},
+        {"replacement": third["id"], "overlap_hours": 6, "ended_predecessor": first["id"]},
+    ]
 
 
 def test_roles_limit_keys_and_leaving_revokes_personal_keys_and_apps(accounts):

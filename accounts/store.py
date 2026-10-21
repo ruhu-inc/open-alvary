@@ -1318,7 +1318,11 @@ class Accounts:
             membership = self._membership(conn, person_id, organisation_id, lock=True)
             return self._create_key(conn, person_id, organisation_id, membership, kind, name, days, context)
 
-    def _create_key(self, conn, person_id, organisation_id, membership, kind, name, days, context) -> dict:
+    def _create_key(
+        self, conn, person_id, organisation_id, membership, kind, name, days, context, *, replacing=False
+    ) -> dict:
+        """``replacing``: a rotation's new key, which takes the old key's place and so is never refused
+        by the cap (owner, 2026-10-21)."""
         name = " ".join((name or "").split())
         if kind not in ("personal", "service") or not 1 <= len(name) <= 80:
             raise AccountError("invalid_input", 400, "Give the key a name of 1 to 80 characters.")
@@ -1329,16 +1333,19 @@ class Accounts:
             raise AccountError(
                 "entitlement_inactive", 409, "Keys can be created only while the organisation has access."
             )
-        count = conn.scalar(
+        limit = PERSONAL_KEYS_PER_MEMBER if kind == "personal" else SERVICE_KEYS_PER_ORGANISATION
+        # A key that has been rotated and still works its overlap is outside the cap: its replacement
+        # holds the place.
+        if not replacing and limit <= conn.scalar(
             text(
-                f"SELECT count(*) FROM {self._t(conn, 'api_key')} WHERE organisation_id = :o AND kind = :k"
-                " AND revoked_at IS NULL AND expires_at > statement_timestamp()"
-                + (" AND holder_membership = :m" if kind == "personal" else "")
+                f"SELECT count(*) FROM {self._t(conn, 'api_key')} k WHERE k.organisation_id = :o AND k.kind = :k"
+                " AND k.revoked_at IS NULL AND k.expires_at > statement_timestamp()"
+                + (" AND k.holder_membership = :m" if kind == "personal" else "")
+                + f" AND NOT EXISTS (SELECT 1 FROM {self._t(conn, 'api_key')} n"
+                " WHERE n.organisation_id = k.organisation_id AND n.rotated_from = k.key_id)"
             ),
             {"o": organisation_id, "k": kind, "m": membership["id"]},
-        )
-        limit = PERSONAL_KEYS_PER_MEMBER if kind == "personal" else SERVICE_KEYS_PER_ORGANISATION
-        if count >= limit:
+        ):
             raise AccountError("limit_reached", 409, f"You can have up to {limit} active keys of this kind.")
         new = keys.generate()
         actor = self._actor(conn, person_id)
@@ -1388,6 +1395,8 @@ class Accounts:
                     f"SELECT 'key_' || k.key_id AS id, k.kind, k.name, k.last_four, k.created_at, k.expires_at,"
                     " k.last_used_at, k.revoked_at, k.revoked_reason, a.display_name AS created_by,"
                     " k.holder_membership = :m AS mine,"
+                    f" EXISTS (SELECT 1 FROM {self._t(conn, 'api_key')} n WHERE n.organisation_id = k.organisation_id"
+                    " AND n.rotated_from = k.key_id) AS replaced,"
                     " CASE WHEN k.revoked_at IS NOT NULL THEN 'revoked' WHEN k.expires_at <= statement_timestamp()"
                     f" THEN 'expired' ELSE 'active' END AS state FROM {self._t(conn, 'api_key')} k"
                     f" LEFT JOIN {self._t(conn, 'actor')} a ON a.id = k.created_by WHERE k.organisation_id = :o"
@@ -1427,17 +1436,24 @@ class Accounts:
     def rotate_key(
         self, person_id: str, organisation_id: str, public_id: str, overlap_hours: int = 24, context=None
     ) -> dict:
-        """A new key with the same name and kind; the old one keeps working for at most 24 hours."""
-        if not 0 <= overlap_hours <= 24:
+        """A new key with the same name and kind, in the old one's place, so no cap ever refuses it (owner,
+        2026-10-21). The old key keeps working for at most 24 hours outside the cap, or stops at once with
+        no overlap (after a leak). A key has at most one predecessor still working: rotating it again
+        during that overlap ends the predecessor now, and a key already replaced is not rotated again."""
+        if not isinstance(overlap_hours, int) or not 0 <= overlap_hours <= 24:
             raise AccountError("invalid_input", 400, "The old key may keep working for 0 to 24 hours.")
         key_id = public_id.removeprefix("key_")
         with self.engine.begin() as conn:
+            # The organisation's row is locked, so rotations and new keys in it take turns and each sees
+            # the replacements made before it.
             membership = self._membership(conn, person_id, organisation_id, lock=True)
             old = (
                 conn.execute(
                     text(
-                        f"SELECT kind, name, holder_membership, expires_at - created_at AS life FROM"
-                        f" {self._t(conn, 'api_key')} WHERE key_id = :k AND organisation_id = :o AND revoked_at IS NULL"
+                        f"SELECT kind, name, holder_membership, rotated_from, expires_at - created_at AS life,"
+                        f" EXISTS (SELECT 1 FROM {self._t(conn, 'api_key')} n WHERE n.organisation_id = :o"
+                        f" AND n.rotated_from = :k) AS replaced FROM {self._t(conn, 'api_key')}"
+                        " WHERE key_id = :k AND organisation_id = :o AND revoked_at IS NULL"
                         " AND expires_at > statement_timestamp() FOR UPDATE"
                     ),
                     {"k": key_id, "o": organisation_id},
@@ -1450,6 +1466,12 @@ class Accounts:
                 raise AccountError("not_found", 404, "No such active key that you may rotate.")
             if old["kind"] == "personal" and not mine:
                 raise AccountError("role_forbidden", 403, "Only its holder can rotate a personal key.")
+            if old["replaced"]:
+                raise AccountError(
+                    "already_rotated",
+                    409,
+                    "This key has already been replaced: rotate or revoke its replacement.",
+                )
             new = self._create_key(
                 conn,
                 person_id,
@@ -1459,6 +1481,7 @@ class Accounts:
                 old["name"],
                 max(1, min(keys.MAX_DAYS, old["life"].days)),
                 context,
+                replacing=True,
             )
             conn.execute(
                 text(
@@ -1474,13 +1497,24 @@ class Accounts:
                 text(f"UPDATE {self._t(conn, 'api_key')} SET rotated_from = :old WHERE key_id = :new"),
                 {"old": key_id, "new": new["id"].removeprefix("key_")},
             )
+            # The key this one replaced, if still in its overlap, stops now: a key's place never holds
+            # more than one key outside the cap.
+            ended = old["rotated_from"] and conn.scalar(
+                text(
+                    f"UPDATE {self._t(conn, 'api_key')} SET revoked_at = statement_timestamp(),"
+                    " revoked_reason = 'rotated' WHERE key_id = :p AND organisation_id = :o"
+                    " AND revoked_at IS NULL AND expires_at > statement_timestamp() RETURNING 'key_' || key_id"
+                ),
+                {"p": old["rotated_from"], "o": organisation_id},
+            )
             self._audit(
                 conn,
                 self._actor(conn, person_id),
                 "key.rotated",
                 organisation=organisation_id,
                 target=("key", public_id),
-                summary={"replacement": new["id"], "overlap_hours": overlap_hours},
+                summary={"replacement": new["id"], "overlap_hours": overlap_hours}
+                | ({"ended_predecessor": ended} if ended else {}),
                 context=context,
             )
             return new
