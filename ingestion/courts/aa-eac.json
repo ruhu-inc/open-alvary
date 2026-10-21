@@ -42,7 +42,7 @@
       "bound": null,
       "members": true,
       "matter": "eac-treaty",
-      "relation": "binding",
+      "relation": "prevails_on_matter",
       "rests_on": [
         {
           "source": "eac-treaty-art-33",
@@ -63,9 +63,10 @@
       "sources": [
         "eac-treaty-art-33",
         "eac-treaty-art-23",
-        "eac-treaty-art-140a"
+        "eac-treaty-art-140a",
+        "eac-treaty-art-35a"
       ],
-      "note": "PROPOSAL for the reviewer. Art. 33(2) speaks of precedence, not of binding force: the Court's decisions on the Treaty's interpretation and application \"shall have precedence over decisions of national courts on a similar matter\". The Treaty does not otherwise say national courts must follow them. Applied to this Division because art. 23(2) makes it part of the Court and art. 140A deems the Court's earlier judgments to be its decisions."
+      "note": "Art. 33(2) gives the Court's decisions on the interpretation and application of the Treaty precedence over decisions of national courts on a similar matter: a rule of precedence on that matter, not stare decisis. The Treaty does not otherwise say national courts must follow the Court's decisions, and art. 35A provides appeals only from the First Instance Division to the Appellate Division: the register's sources give the Court no appellate jurisdiction over national courts. Applied to this Division because art. 23(2) makes it part of the Court and art. 140A deems the Court's earlier judgments to be its decisions."
     },
     {
       "id": "aa-eac-eacj-ad-on-members-eac-treaty",
@@ -73,7 +74,7 @@
       "bound": null,
       "members": true,
       "matter": "eac-treaty",
-      "relation": "binding",
+      "relation": "prevails_on_matter",
       "rests_on": [
         {
           "source": "eac-treaty-art-33",
@@ -90,7 +91,7 @@
         "eac-treaty-art-33",
         "eac-treaty-art-23"
       ],
-      "note": "PROPOSAL for the reviewer. Art. 33(2) speaks of precedence, not of binding force: the Court's decisions on the Treaty's interpretation and application \"shall have precedence over decisions of national courts on a similar matter\". The Treaty does not otherwise say national courts must follow them. Applied to this Division because art. 23(2) makes it part of the Court."
+      "note": "Art. 33(2) gives the Court's decisions on the interpretation and application of the Treaty precedence over decisions of national courts on a similar matter: a rule of precedence on that matter, not stare decisis. The Treaty does not otherwise say national courts must follow the Court's decisions, and the register's sources give the Court no appellate jurisdiction over national courts. Applied to this Division because art. 23(2) makes it part of the Court."
     }
   ],
   "matters": [
@@ -240,7 +241,7 @@
         "eacj-preliminary-ruling-guidelines",
         "eacj-rules-2019-r126"
       ],
-      "note": "Art. 34: a court or tribunal of a Partner State faced with a question on the interpretation or application of the Treaty shall, if it considers a ruling necessary to give judgment, request a preliminary ruling from the Court. Rule 126 requires the request to be lodged as a case stated. Placed on the First Instance Division because art. 23(3) gives it every matter before the Court at first instance; no source names the Division for references expressly."
+      "note": "Art. 34: a court or tribunal of a Partner State faced with a question on the interpretation or application of the Treaty shall, if it considers a ruling necessary to give judgment, request a preliminary ruling from the Court. Rule 126 requires the request to be lodged as a case stated. Placed on the First Instance Division because art. 23(3) gives it every matter before the Court at first instance; no source names the Division for references expressly. No source in the register states what the ruling binds: art. 34 and r. 126(3) say only that the Court gives the ruling and communicates it to the referring court, and the guidelines say \"it is for the referring court to draw the appropriate conclusions from that reply\". So no binding_in_referred_case relation is recorded."
     },
     {
       "id": "route-reference-aa-eac-eacj-fid-eac-community-acts",
@@ -253,7 +254,7 @@
         "eacj-preliminary-ruling-guidelines",
         "eacj-rules-2019-r126"
       ],
-      "note": "Art. 34 also covers questions on the validity of the Community's regulations, directives, decisions or actions. The Court's preliminary-ruling guidelines say the Court alone may declare such acts invalid and national courts must refer when they doubt validity. Placed on the First Instance Division under art. 23(3), as for the Treaty route."
+      "note": "Art. 34 also covers questions on the validity of the Community's regulations, directives, decisions or actions. The Court's preliminary-ruling guidelines say the Court alone may declare such acts invalid and national courts must refer when they doubt validity. Placed on the First Instance Division under art. 23(3), as for the Treaty route. No source in the register states what the ruling binds: art. 34 and r. 126(3) say only that the Court gives the ruling and communicates it to the referring court, and the guidelines say \"it is for the referring court to draw the appropriate conclusions from that reply\". So no binding_in_referred_case relation is recorded."
     }
   ],
   "sources": [
@@ -315,13 +316,13 @@
       "id": "eacj-preliminary-ruling-guidelines",
       "title": "East African Court of Justice, Guidelines: Reference for Preliminary Ruling",
       "url": "https://www.eacj.org/?page_id=67",
-      "pinpoint": "General, para. 2; Reference on determination of validity, paras. 1-2"
+      "pinpoint": "General, para. 2; Reference on determination of validity, paras. 1-2; The role of the East African Court of Justice in the preliminary ruling procedure, para. 2"
     },
     {
       "id": "eacj-rules-2019-r126",
       "title": "East African Court of Justice Rules of Procedure, 2019 (EAC Gazette No. 2 of 15 February 2019, Statutory Instruments Supplement No. 1)",
       "url": "https://www.eacj.org/wp-content/uploads/2023/02/EACJ-Rules-of-Procedure-2019.pdf",
-      "pinpoint": "r. 126; Sixth Schedule"
+      "pinpoint": "r. 126(1), (3); Sixth Schedule"
     },
     {
       "id": "eac-history",
