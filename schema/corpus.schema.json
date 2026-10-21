@@ -165,6 +165,45 @@
       "title": "Citation",
       "type": "object"
     },
+    "Edition": {
+      "additionalProperties": false,
+      "description": "What one language edition of a work is worth as law, as its reviewed record states it (API-02,\nDAT-07), with where that is stated when recorded.",
+      "properties": {
+        "language": {
+          "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+          "title": "Language",
+          "type": "string"
+        },
+        "authority": {
+          "enum": [
+            "authoritative",
+            "equally_authentic",
+            "official_translation",
+            "unofficial_translation",
+            "machine_translation"
+          ],
+          "title": "Authority",
+          "type": "string"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatedEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "language",
+        "authority"
+      ],
+      "title": "Edition",
+      "type": "object"
+    },
     "Jurisdiction": {
       "additionalProperties": false,
       "properties": {
@@ -244,6 +283,76 @@
         "tag"
       ],
       "title": "Language",
+      "type": "object"
+    },
+    "LanguageRule": {
+      "additionalProperties": false,
+      "description": "The work's own rule for divergence between its language versions (LNG-03), from its reviewed\nrecord: ``stated``, with the rule as stated, the language whose version prevails when it names one,\nwhere it is stated and the evidence; ``not_stated``, the reviewed copy states none;\n``not_applicable``, as the reviewer recorded.",
+      "properties": {
+        "status": {
+          "enum": [
+            "stated",
+            "not_stated",
+            "not_applicable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "rule": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rule"
+        },
+        "prevails": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prevails"
+        },
+        "provision": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provision"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StatedEvidence"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "LanguageRule",
       "type": "object"
     },
     "Permission": {
@@ -619,6 +728,24 @@
           ],
           "default": null,
           "title": "Year"
+        },
+        "editions": {
+          "items": {
+            "$ref": "#/$defs/Edition"
+          },
+          "title": "Editions",
+          "type": "array"
+        },
+        "language_rule": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LanguageRule"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -783,6 +910,70 @@
         "parser"
       ],
       "title": "SourceVersion",
+      "type": "object"
+    },
+    "StatedEvidence": {
+      "additionalProperties": false,
+      "description": "Where a reviewed detail is stated (schema.record.Evidence): a page and the words of the document,\nthe address of another instrument that states it, or the reviewer who recorded it.",
+      "properties": {
+        "source": {
+          "enum": [
+            "document",
+            "reviewer",
+            "registry",
+            "manifest",
+            "external"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "quote": {
+          "anyOf": [
+            {
+              "maxLength": 400,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Quote"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "format": "uri",
+              "maxLength": 2083,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "StatedEvidence",
       "type": "object"
     },
     "StructureNode": {

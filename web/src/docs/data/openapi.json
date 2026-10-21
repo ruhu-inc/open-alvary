@@ -1458,7 +1458,7 @@
             }
           }
         },
-        "description": "The record's language editions with a public text: for each, its texts and the one to read when no date is given (`preferred_version_id`), with the reason. A preferred text is a reading default, not a claim that the edition is authoritative. An edition's ID is `{source_id}:{language}`; pass it as `expression_id` to Get a record's texts.",
+        "description": "The record's language editions with a public text: for each, its texts, the one to read when no date is given (`preferred_version_id`) with the reason, and what the edition is worth as law as the record states it (`authority`, with `authority_evidence`; `unknown` when nothing is recorded); and the instrument's own rule for which version prevails where its language versions differ (`language_rule`). A preferred text is a reading default, never a claim that the edition is authoritative. An edition's ID is `{source_id}:{language}`; pass it as `expression_id` to Get a record's texts.",
         "tags": [
           "Catalogue"
         ]
@@ -3507,6 +3507,66 @@
         "title": "AnchorView",
         "description": "One part of a text exactly (API-02 /anchors/{id}, DAT-06): its span, locator, hashes, offset unit,\ncitation and attribution, and the words of the span themselves."
       },
+      "AuthorityEvidence": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "document",
+              "reviewer",
+              "registry",
+              "manifest",
+              "external"
+            ],
+            "title": "Source",
+            "description": "Where it is stated: `document` (this document: its page and words), `external` (another instrument, at `url`), `reviewer`, `registry` or `manifest`."
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Page",
+            "description": "The page it is stated on, of the official file (1 is the file's first page) or of the instrument at `url`."
+          },
+          "quote": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quote",
+            "description": "The words that state it, as printed."
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url",
+            "description": "The address of the instrument that states it, when it is another."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "title": "AuthorityEvidence",
+        "description": "Where an edition's authority or a language rule is stated: a page and the words of the document\n(``document``), the address of another instrument (``external``), or the reviewer who recorded it."
+      },
       "CatalogueMatch": {
         "properties": {
           "source_id": {
@@ -4633,6 +4693,31 @@
             "title": "Expression Id",
             "description": "The edition (`{source_id}:{language}`)."
           },
+          "expression_authority": {
+            "type": "string",
+            "enum": [
+              "authoritative",
+              "equally_authentic",
+              "official_translation",
+              "unofficial_translation",
+              "machine_translation",
+              "unknown"
+            ],
+            "title": "Expression Authority",
+            "default": "unknown",
+            "description": "What the edition is worth as law, as its record states it: `authoritative`, `equally_authentic`, `official_translation`, `unofficial_translation`, `machine_translation`, or `unknown` when nothing is recorded. Get a record's editions gives the instrument's rule where versions differ."
+          },
+          "expression_authority_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorityEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where that authority is stated, when recorded."
+          },
           "unit": {
             "type": "string",
             "enum": [
@@ -4919,6 +5004,13 @@
             "title": "Source Id",
             "description": "The record."
           },
+          "language_rule": {
+            "$ref": "#/components/schemas/LanguageRuleView",
+            "default": {
+              "status": "unknown"
+            },
+            "description": "The instrument's own rule for which version prevails where its language versions differ, as the record states it."
+          },
           "items": {
             "items": {
               "$ref": "#/components/schemas/ExpressionView"
@@ -4958,10 +5050,28 @@
           },
           "authority": {
             "type": "string",
-            "const": "unknown",
+            "enum": [
+              "authoritative",
+              "equally_authentic",
+              "official_translation",
+              "unofficial_translation",
+              "machine_translation",
+              "unknown"
+            ],
             "title": "Authority",
             "default": "unknown",
-            "description": "Whether the edition is authentic or authoritative: `unknown` until the catalogue records it."
+            "description": "What the edition is worth as law, as the record states it: `authoritative` (the only authoritative text), `equally_authentic` (one of several equally authentic texts), `official_translation`, `unofficial_translation`, `machine_translation`, or `unknown` when nothing is recorded."
+          },
+          "authority_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorityEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where that authority is stated, when recorded."
           },
           "version_ids": {
             "items": {
@@ -5007,7 +5117,7 @@
           "preferred_reason"
         ],
         "title": "ExpressionView",
-        "description": "One language edition of a record (API-02 expressions): its public texts and the one to read when\nno date is given. A preferred text is a reading default, not a claim that the edition is\nauthoritative; the catalogue does not yet record which editions are."
+        "description": "One language edition of a record (API-02 expressions): its public texts, the one to read when no\ndate is given, and what the edition is worth as law as its record states it, with where; ``unknown``\nwhen the record states nothing. A preferred text is a reading default, never a claim of authority."
       },
       "JurisdictionView": {
         "properties": {
@@ -5069,6 +5179,76 @@
           "country_code"
         ],
         "title": "JurisdictionView"
+      },
+      "LanguageRuleView": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "stated",
+              "not_stated",
+              "not_applicable",
+              "unknown"
+            ],
+            "title": "Status",
+            "description": "`stated` (the instrument states a rule), `not_stated` (the reviewed copy states none), `not_applicable`, or `unknown` (nothing is recorded)."
+          },
+          "rule": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule",
+            "description": "The rule, as the instrument states it."
+          },
+          "prevails": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prevails",
+            "description": "The language whose version prevails where versions differ, when the rule names one; absent when it names none, as when every version is equally authentic."
+          },
+          "provision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provision",
+            "description": "Where the instrument states it, such as `Article 42`."
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorityEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where the rule is stated: its page and words, or the instrument's address."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "LanguageRuleView",
+        "description": "The instrument's own rule for divergence between its language versions (LNG-03, DAT-07), as its\nrecord states it: ``stated``, with the rule, the language whose version prevails when it names one,\nwhere it is stated and the evidence; ``not_stated``, the reviewed copy states none;\n``not_applicable``; or ``unknown``, nothing is recorded."
       },
       "NextStep": {
         "properties": {
@@ -7198,6 +7378,37 @@
             ],
             "title": "Expression Id",
             "description": "The language edition the text belongs to: `{source_id}:{language}`."
+          },
+          "expression_authority": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "authoritative",
+                  "equally_authentic",
+                  "official_translation",
+                  "unofficial_translation",
+                  "machine_translation",
+                  "unknown"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expression Authority",
+            "description": "What that edition is worth as law, as the record states it: `authoritative`, `equally_authentic`, `official_translation`, `unofficial_translation`, `machine_translation`, or `unknown` when nothing is recorded. Never implied by which text is preferred or selected."
+          },
+          "expression_authority_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AuthorityEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Where that authority is stated, when recorded."
           }
         },
         "additionalProperties": false,

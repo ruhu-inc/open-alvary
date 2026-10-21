@@ -126,6 +126,73 @@ def withdraw(store):
     store.save(corpus)
 
 
+STATED = {"source": "document", "page": 1, "quote": "This Act is made in English."}
+RULE = {
+    "status": "stated",
+    "rule": "Where a translation differs from the English text, the English text prevails.",
+    "prevails": "en",
+    "provision": "section 3",
+    "evidence": STATED,
+}
+
+
+def edition_record(**changes):
+    """The example Act's reviewed record: its English version authoritative, with where that is stated,
+    its French version's authority not stated, and its rule where the versions differ."""
+    from schema import record as R
+
+    stated = R.Evidence(**STATED)
+    fields = dict(
+        identity=R.Identity(
+            family="legislation", type="act", work_uri="/akn/ng/act/2023/1", title="Example Act, 2023",
+            citations=(R.Citation(kind="official", text="Example Act, 2023"),),
+        ),
+        place=R.Place(code="ng", name="Nigeria", level="national"),
+        issued_by=(R.Body(name="National Assembly", kind="legislature", id="nass"),),
+        expressions=(
+            R.Expression(language="en", authority="authoritative", authority_evidence=stated, this_text=True),
+            R.Expression(language="fr"),
+        ),
+        language_rule=R.LanguageRule(
+            rule=RULE["rule"], prevails="en", provision="section 3", evidence=stated
+        ),
+        publications=(
+            R.Publication(kind="gazette", name="Official Gazette", url="https://www.nass.gov.ng/example-act.pdf"),
+        ),
+        status=R.Status(legal="unknown"),
+        text=R.TextInfo(form="gazette_publication", version=R.Version(label="As enacted")),
+        classification=R.Classification(hierarchy="primary"),
+        profile=R.LegislationProfile(family="legislation"),
+    )  # fmt: skip
+    return R.DocumentRecord(**(fields | changes))
+
+
+def publish_record(store, record, work=WORK):
+    """A reviewed record published as the work's catalogue entry through operations.publish (no text)."""
+    now = datetime.now(UTC).replace(microsecond=0)
+    decision = {
+        "basis": "Independently authored catalogue entry",
+        "legal_note": "Text published after review.",
+        "evidence": [],
+        "expires_at": (now + timedelta(days=365)).isoformat(),
+    }
+    languages = [e.language for e in record.expressions]
+    item = publish.Approved(work, record, languages, "Ijidai Lassa", now - timedelta(minutes=10))
+    report = publish.publish_records(store, "ng", [item], set(), decision)
+    assert not report["skipped"], report
+
+
+FRENCH_UNITS = [{**u, "text": u["text"].replace("The Fund shall lend", "Le Fonds prête")} for u in UNITS]
+
+
+def publish_editions(store):
+    """The example Act's record with its editions' authority, and its English and French texts."""
+    publish_record(store, edition_record())
+    _, english, _ = publish_act(store, UNITS, record=False)
+    _, french, _ = publish_act(store, FRENCH_UNITS, language="fr", record=False)
+    return english, french
+
+
 def test_a_text_is_its_exact_bytes_with_its_hash_as_etag(published, tmp_path):
     store, version, _ = published
     client = TestClient(create_v1_app(store, tmp_path, lambda: []))
@@ -324,7 +391,9 @@ def test_a_part_in_two_languages_is_two_alternatives_until_a_language_is_given(s
         (f"{WORK}:en", [english.id], english.id, "only_text"),
         (f"{WORK}:fr", [french.id], french.id, "only_text"),
     ]  # fmt: skip
-    assert all(e["authority"] == "unknown" for e in editions["items"])
+    # A record that states nothing of its editions: unknown, whichever text is preferred.
+    assert all(e["authority"] == "unknown" and "authority_evidence" not in e for e in editions["items"])
+    assert editions["language_rule"] == {"status": "unknown"}
     edition = client.get(f"/sources/{WORK}/versions", params={"expression_id": f"{WORK}:fr"}).json()
     assert [v["id"] for v in edition["items"]] == [french.id] and edition["items"][0][
         "expression_id"
@@ -336,6 +405,42 @@ def test_a_part_in_two_languages_is_two_alternatives_until_a_language_is_given(s
         f"{WORK}:en",
         f"{WORK}:fr",
     }
+    texts = client.get(f"/sources/{WORK}/versions").json()["items"]
+    assert all(
+        v["expression_authority"] == "unknown" and "expression_authority_evidence" not in v for v in texts
+    )
+
+
+def test_each_edition_is_served_with_the_authority_its_record_states(store, tmp_path):
+    from api.main import create_app
+    from schema import record as R
+
+    english, french = publish_editions(store)
+    client = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    page = client.get(f"/sources/{WORK}/expressions").json()
+    en, fr = page["items"]
+    assert (en["language"], en["authority"], en["authority_evidence"]) == ("en", "authoritative", STATED)
+    assert (fr["language"], fr["authority"]) == ("fr", "unknown") and "authority_evidence" not in fr
+    assert fr["preferred_version_id"] == french.id  # the text to read, never a claim of authority
+    assert page["language_rule"] == RULE
+    # Each text carries its edition's authority, whatever selects it.
+    texts = {v["id"]: v for v in client.get(f"/sources/{WORK}/versions").json()["items"]}
+    assert texts[english.id]["expression_authority"] == "authoritative"
+    assert texts[english.id]["expression_authority_evidence"] == STATED
+    assert texts[french.id]["expression_authority"] == "unknown"
+    assert "expression_authority_evidence" not in texts[french.id]
+    selected = client.get(f"/sources/{WORK}/versions", params={"language": "fr"}).json()
+    assert [(v["id"], v["expression_authority"]) for v in selected["items"]] == [(french.id, "unknown")]
+    # The record's answer and the pilot's answers are unchanged.
+    assert not {"editions", "language_rule"} & set(client.get(f"/sources/{WORK}").json())
+    pilot = TestClient(create_app(store, tmp_path)).get(f"/sources/{WORK}/versions").json()["items"]
+    assert len(pilot) == 2 and not any({"expression_id", "expression_authority"} & set(v) for v in pilot)
+    # A record republished without them: unknown again, never what it said before.
+    silent = R.Expression(language="en", this_text=True)
+    publish_record(store, edition_record(expressions=(silent,), language_rule=None))
+    again = client.get(f"/sources/{WORK}/expressions").json()
+    assert [e["authority"] for e in again["items"]] == ["unknown", "unknown"]
+    assert again["language_rule"] == {"status": "unknown"}
 
 
 def test_a_date_selects_the_text_in_force_and_never_one_without_a_date():

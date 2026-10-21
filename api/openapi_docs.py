@@ -135,10 +135,13 @@ OPERATIONS: dict[str, dict] = {
         "operationId": "get_expressions",
         "tag": "Catalogue",
         "summary": "Get a record's editions",
-        "description": "The record's language editions with a public text: for each, its texts and the one to "
-        "read when no date is given (`preferred_version_id`), with the reason. A preferred text is a reading "
-        "default, not a claim that the edition is authoritative. An edition's ID is `{source_id}:{language}`; "
-        "pass it as `expression_id` to Get a record's texts.",
+        "description": "The record's language editions with a public text: for each, its texts, the one to "
+        "read when no date is given (`preferred_version_id`) with the reason, and what the edition is worth "
+        "as law as the record states it (`authority`, with `authority_evidence`; `unknown` when nothing is "
+        "recorded); and the instrument's own rule for which version prevails where its language versions "
+        "differ (`language_rule`). A preferred text is a reading default, never a claim that the edition is "
+        "authoritative. An edition's ID is `{source_id}:{language}`; pass it as `expression_id` to Get a "
+        "record's texts.",
         "parameters": {"source_id": "The record's ID."},
         "errors": MISSING,
     },
@@ -763,6 +766,11 @@ FIELDS: dict[str, dict[str, str]] = {
         "source_id": "The record.",
         "version_id": "The text version.",
         "expression_id": "The edition (`{source_id}:{language}`).",
+        "expression_authority": "What the edition is worth as law, as its record states it: `authoritative`, "
+        "`equally_authentic`, `official_translation`, `unofficial_translation`, `machine_translation`, or "
+        "`unknown` when nothing is recorded. Get a record's editions gives the instrument's rule where "
+        "versions differ.",
+        "expression_authority_evidence": "Where that authority is stated, when recorded.",
         "unit": "`provision`; `container_run` (words a part holds between its provisions); or `document` "
         "(a law's title and preamble: evidence of which law is relevant, never of a provision).",
         "kind": "What the part is, such as `section`, `definition` or `article`.",
@@ -1051,17 +1059,47 @@ FIELDS: dict[str, dict[str, str]] = {
         "`oa-text-1/workbench-units-1`, when recorded.",
         "prior_version_id": "The earlier version of the same record this one corrects or replaces, if any.",
         "expression_id": "The language edition the text belongs to: `{source_id}:{language}`.",
+        "expression_authority": "What that edition is worth as law, as the record states it: `authoritative`, "
+        "`equally_authentic`, `official_translation`, `unofficial_translation`, `machine_translation`, or "
+        "`unknown` when nothing is recorded. Never implied by which text is preferred or selected.",
+        "expression_authority_evidence": "Where that authority is stated, when recorded.",
     },
-    "ExpressionPage": {"source_id": "The record.", "items": "Its language editions with a public text."},
+    "ExpressionPage": {
+        "source_id": "The record.",
+        "language_rule": "The instrument's own rule for which version prevails where its language versions "
+        "differ, as the record states it.",
+        "items": "Its language editions with a public text.",
+    },
     "ExpressionView": {
         "expression_id": "The edition's ID: `{source_id}:{language}`.",
         "source_id": "The record.",
         "language": "The edition's language.",
-        "authority": "Whether the edition is authentic or authoritative: `unknown` until the catalogue records it.",
+        "authority": "What the edition is worth as law, as the record states it: `authoritative` (the only "
+        "authoritative text), `equally_authentic` (one of several equally authentic texts), "
+        "`official_translation`, `unofficial_translation`, `machine_translation`, or `unknown` when nothing "
+        "is recorded.",
+        "authority_evidence": "Where that authority is stated, when recorded.",
         "version_ids": "The edition's public texts.",
         "preferred_version_id": "The text to read when no date is given, when one can be named; else absent.",
         "preferred_reason": "Why: `only_text`, `in_force_today` (the one text in force today, every text "
         "dated), or, when none is preferred, `several_texts` or `dates_unknown`.",
+    },
+    "AuthorityEvidence": {
+        "source": "Where it is stated: `document` (this document: its page and words), `external` (another "
+        "instrument, at `url`), `reviewer`, `registry` or `manifest`.",
+        "page": "The page it is stated on, of the official file (1 is the file's first page) or of the "
+        "instrument at `url`.",
+        "quote": "The words that state it, as printed.",
+        "url": "The address of the instrument that states it, when it is another.",
+    },
+    "LanguageRuleView": {
+        "status": "`stated` (the instrument states a rule), `not_stated` (the reviewed copy states none), "
+        "`not_applicable`, or `unknown` (nothing is recorded).",
+        "rule": "The rule, as the instrument states it.",
+        "prevails": "The language whose version prevails where versions differ, when the rule names one; "
+        "absent when it names none, as when every version is equally authentic.",
+        "provision": "Where the instrument states it, such as `Article 42`.",
+        "evidence": "Where the rule is stated: its page and words, or the instrument's address.",
     },
     "NodeViewRecord": {
         "id": "The part's ID.",

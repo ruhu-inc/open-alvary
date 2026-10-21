@@ -14,7 +14,14 @@ from urllib.parse import unquote, urlsplit
 from sqlalchemy import text as sql
 
 from api import text_index
-from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable, expression_id, select_versions
+from api.catalogue import (
+    InvalidSearch,
+    LegacyCatalogue,
+    SourceUnavailable,
+    edition_authority,
+    expression_id,
+    select_versions,
+)
 from retrieval import indexer, links, rerank, router
 from retrieval.legal_time import Events
 from retrieval.ranking import INSTRUMENT_RANK, PROFILE, Candidate, Hit, apply_signals, diversify, fuse
@@ -782,12 +789,15 @@ class Retriever:
                 )
                 used += extra_unique
                 sent += extra_sent
+            authority, stated = edition_authority(source, version.language)
             evidence.append(
                 EvidenceUnit(
                     anchor_id=hit.node_id or version.id,
                     source_id=source.id,
                     version_id=version.id,
                     expression_id=expression_id(version),
+                    expression_authority=authority,
+                    expression_authority_evidence=stated,
                     unit=hit.unit,
                     kind=hit.kind,
                     locator=hit.locator,

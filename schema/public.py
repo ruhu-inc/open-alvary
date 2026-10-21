@@ -7,8 +7,10 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, field
 
 from schema.models import (
     ID,
+    Edition,
     Hash,
     Jurisdiction,
+    LanguageRule,
     Nonempty,
     RightsRecord,
     RightsStatus,
@@ -16,10 +18,41 @@ from schema.models import (
     SourceVersion,
     StructureNode,
 )
+from schema.record import EXPRESSION_AUTHORITY
+
+OMIT = {"default": None, "exclude_if": lambda value: value is None}
 
 
 class WireModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+# What a language edition is worth as law, as its record states it (API-02, DAT-07); ``unknown`` when
+# the record states nothing. Never inferred from a preferred or selected text.
+ExpressionAuthority = Literal[*EXPRESSION_AUTHORITY, "unknown"]
+
+
+class AuthorityEvidence(WireModel):
+    """Where an edition's authority or a language rule is stated: a page and the words of the document
+    (``document``), the address of another instrument (``external``), or the reviewer who recorded it."""
+
+    source: Literal["document", "reviewer", "registry", "manifest", "external"]
+    page: int | None = Field(ge=1, **OMIT)
+    quote: str | None = Field(**OMIT)
+    url: str | None = Field(**OMIT)
+
+
+class LanguageRuleView(WireModel):
+    """The instrument's own rule for divergence between its language versions (LNG-03, DAT-07), as its
+    record states it: ``stated``, with the rule, the language whose version prevails when it names one,
+    where it is stated and the evidence; ``not_stated``, the reviewed copy states none;
+    ``not_applicable``; or ``unknown``, nothing is recorded."""
+
+    status: Literal["stated", "not_stated", "not_applicable", "unknown"]
+    rule: str | None = Field(**OMIT)
+    prevails: ID | None = Field(**OMIT)
+    provision: str | None = Field(**OMIT)
+    evidence: AuthorityEvidence | None = Field(**OMIT)
 
 
 class SourceView(Source):
@@ -27,6 +60,9 @@ class SourceView(Source):
     access_mode: Literal["open_full_text", "metadata_link_only"]
     rights_status: RightsStatus
     has_full_text: bool
+    # Answered on the record's editions and texts instead (API-02), so the record's answer is unchanged.
+    editions: list[Edition] = Field(default_factory=list, exclude=True)
+    language_rule: LanguageRule | None = Field(default=None, exclude=True)
 
 
 class RightsViewRecord(RightsRecord):
@@ -38,9 +74,12 @@ class RightsViewRecord(RightsRecord):
 
 class VersionViewRecord(SourceVersion):
     model_config = ConfigDict(extra="forbid", frozen=True)
-    # The language edition the text belongs to (API-02), `{source_id}:{language}`; the keyed API
-    # answers it, and it is absent elsewhere, so the pilot's answer is unchanged.
+    # The language edition the text belongs to (API-02), `{source_id}:{language}`, what the edition is
+    # worth as law as its record states it and where; the keyed API answers them, and they are absent
+    # elsewhere, so the pilot's answer is unchanged.
     expression_id: ID | None = Field(default=None, exclude_if=lambda value: value is None)
+    expression_authority: ExpressionAuthority | None = Field(**OMIT)
+    expression_authority_evidence: AuthorityEvidence | None = Field(**OMIT)
 
 
 class NodeViewRecord(StructureNode):
@@ -74,14 +113,15 @@ class SearchPage(SourcePage):
 
 
 class ExpressionView(WireModel):
-    """One language edition of a record (API-02 expressions): its public texts and the one to read when
-    no date is given. A preferred text is a reading default, not a claim that the edition is
-    authoritative; the catalogue does not yet record which editions are."""
+    """One language edition of a record (API-02 expressions): its public texts, the one to read when no
+    date is given, and what the edition is worth as law as its record states it, with where; ``unknown``
+    when the record states nothing. A preferred text is a reading default, never a claim of authority."""
 
     expression_id: ID
     source_id: ID
     language: ID
-    authority: Literal["unknown"] = "unknown"
+    authority: ExpressionAuthority = "unknown"
+    authority_evidence: AuthorityEvidence | None = Field(**OMIT)
     version_ids: tuple[ID, ...]
     preferred_version_id: ID | None = None
     preferred_reason: Literal["only_text", "in_force_today", "several_texts", "dates_unknown"]
@@ -89,6 +129,7 @@ class ExpressionView(WireModel):
 
 class ExpressionPage(WireModel):
     source_id: ID
+    language_rule: LanguageRuleView = LanguageRuleView(status="unknown")
     items: tuple[ExpressionView, ...]
 
 
@@ -381,7 +422,6 @@ class TextSearchPage(WireModel):
 
 
 CURRENTNESS = Literal["in_force", "not_in_force", "partly_in_force", "unknown", "contested"]
-OMIT = {"default": None, "exclude_if": lambda value: value is None}
 
 
 class Currentness(WireModel):
@@ -499,6 +539,9 @@ class EvidenceUnit(WireModel):
     source_id: ID
     version_id: ID
     expression_id: str
+    # What the edition is worth as law, as its record states it (API-02, DAT-07), and where.
+    expression_authority: ExpressionAuthority = "unknown"
+    expression_authority_evidence: AuthorityEvidence | None = Field(**OMIT)
     unit: Literal["provision", "container_run", "document"]
     kind: str
     locator: str

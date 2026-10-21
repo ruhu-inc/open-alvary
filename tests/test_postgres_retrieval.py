@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
-from test_v1_text import UNITS, WORK, publish_act, withdraw
+from test_v1_text import RULE, STATED, UNITS, WORK, publish_act, publish_editions, withdraw
 
 from api.main import create_app
 from api.store import Store
@@ -68,6 +68,8 @@ def test_a_topic_query_answers_an_evidence_pack(store, client):
     span = raw[first["start_byte"] : first["end_byte"]]
     assert first["text"] == span.decode() and first["span_hash"] == hashlib.sha256(span).hexdigest()
     assert first["expression_id"] == f"{WORK}:en" and first["content_hash"] == version.content_hash
+    # The record states nothing of its editions: unknown, never taken from the text's being found.
+    assert first["expression_authority"] == "unknown" and "expression_authority_evidence" not in first
     # Where to check it and read it: the original file's fingerprint, this part by the API, and the
     # record on the website at this part (the website shows the record's one text).
     assert first["original_sha256"] == version.raw_hash and first["retrieved_at"]
@@ -93,6 +95,23 @@ def test_a_topic_query_answers_an_evidence_pack(store, client):
     assert "dense:not_configured" in pack["coverage"]["degraded"]
     # Deterministic: the same request over the same revisions gives the same pack.
     assert retrieve(client, "repaid from salary") == pack
+
+
+def test_each_unit_carries_its_editions_authority_as_the_record_states_it(store, client):
+    english, french = publish_editions(store)
+    [unit] = retrieve(client, "repaid from salary", language="en", max_units=1)["evidence"]
+    assert unit["version_id"] == english.id and unit["expression_id"] == f"{WORK}:en"
+    assert unit["expression_authority"] == "authoritative" and unit["expression_authority_evidence"] == STATED
+    [unit] = retrieve(client, "Le Fonds prête", language="fr", max_units=1)["evidence"]
+    assert unit["version_id"] == french.id and unit["expression_authority"] == "unknown"
+    assert "expression_authority_evidence" not in unit
+    # Stored and served as recorded on PostgreSQL too.
+    page = client.get(f"/sources/{WORK}/expressions").json()
+    assert [(e["language"], e["authority"]) for e in page["items"]] == [
+        ("en", "authoritative"),
+        ("fr", "unknown"),
+    ]
+    assert page["language_rule"] == RULE
 
 
 def test_routes_for_an_instrument_a_definition_and_a_citation(store, client):

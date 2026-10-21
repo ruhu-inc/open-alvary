@@ -1,8 +1,9 @@
 """Publish approved works from the review workbench to the public catalogue (LIF-01 approved →
 published), catalogue records first (owner decision, 2026-10-16).
 
-Only the record is published: title, number, year, citation, legal status, issuer and the official
-publication link, from the work's confirmed details. No text: republishing official texts waits for
+Only the record is published: title, number, year, citation, legal status, issuer, the official
+publication link, what each language version is worth as law and the work's rule where they differ,
+from the work's confirmed details. No text: republishing official texts waits for
 the copyright check (Rwanda: Law N° 055/2024) and the public reader (MAC-01). A work is published
 when the latest approval of at least one of its language versions still covers its current pages and
 its confirmed details (the workbench's own test, workbench.review). A work whose approval lapses is
@@ -50,13 +51,16 @@ from schema.models import (
     Authority,
     Citation,
     Corpus,
+    Edition,
     Jurisdiction,
     Language,
+    LanguageRule,
     Permission,
     RightsRecord,
     RightsStatus,
     Source,
     SourceVersion,
+    StatedEvidence,
     StructureNode,
 )
 from workbench.content import Library
@@ -300,6 +304,8 @@ def catalogue_entries(item: Approved, decision: dict) -> dict:
         catalogue_note=f"Official texts: {names}. " + decision["legal_note"],
         summary=record.text.summary.text if record.text.summary else None,
         year=record.identity.year,
+        editions=editions(record),
+        language_rule=language_rule(record),
     )
     rights = RightsRecord(
         id=f"rights-{item.work}",
@@ -319,6 +325,41 @@ def catalogue_entries(item: Approved, decision: dict) -> dict:
         "authority": authority,
         "languages": languages,
     }
+
+
+def editions(record) -> list[Edition]:
+    """What each language version is worth as law, as the reviewed record states it, with where (API-02,
+    DAT-07). A version the record states nothing of is left out: the catalogue answers it as unknown."""
+    return [
+        Edition(language=e.language, authority=e.authority, evidence=_stated(e.authority_evidence))
+        for e in record.expressions
+        if e.authority is not None
+    ]
+
+
+# Why a reviewer gave no language rule, as the catalogue says it; "not yet known" and the rest are unknown.
+RULE_ABSENT = {"not_in_source": "not_stated", "not_applicable": "not_applicable"}
+
+
+def language_rule(record) -> LanguageRule | None:
+    """The work's own rule where its language versions differ (LNG-03), with where it is stated; or that
+    the reviewed copy states none, or that none applies, as the reviewer said; None when not recorded."""
+    rule = record.language_rule
+    if rule is not None:
+        return LanguageRule(
+            status="stated",
+            rule=rule.rule,
+            prevails=rule.prevails,
+            provision=rule.provision,
+            evidence=_stated(rule.evidence),
+        )
+    absent = record.absent.get("language_rule")
+    status = RULE_ABSENT.get(absent.reason) if absent else None
+    return LanguageRule(status=status) if status else None
+
+
+def _stated(evidence) -> StatedEvidence | None:
+    return StatedEvidence.model_validate(evidence.model_dump(mode="json")) if evidence else None
 
 
 def aliases(work: str, citation: str, identity) -> list[Citation]:

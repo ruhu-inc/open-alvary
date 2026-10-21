@@ -6,12 +6,16 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from operations import publish
+from schema.models import Source
 from schema.record import (
+    Absent,
     Body,
     Classification,
     DocumentRecord,
+    Evidence,
     Expression,
     Identity,
+    LanguageRule,
     LegislationProfile,
     Number,
     Place,
@@ -146,6 +150,61 @@ def test_reviewed_links_between_published_works_become_checked_catalogue_links(d
         ("rw-law-5-2015", "amends", "rw-law-31-2009", True),
     ]
     assert all(str(a.evidence_url) == "https://www.minijust.gov.rw/official-gazette" for a in links)
+
+
+def example_law(**changes) -> DocumentRecord:
+    """A fictional law, to carry details no real one is said to have."""
+    identity = Identity(
+        family="legislation", type="law", work_uri="/akn/rw/act/2026/9", title="Example Law n° 009/2026"
+    )
+    return rwanda_law(identity=identity, **changes)
+
+
+def test_each_versions_recorded_authority_and_the_language_rule_reach_the_catalogue(decisions):
+    decision = publish.decide("rw", "Ijidai Lassa", 12, [], "", "")
+    stated = Evidence(
+        source="document", page=2, quote="This Law was drafted in English and adopted in Ikinyarwanda."
+    )
+    record = example_law(
+        expressions=(
+            Expression(language="rw", authority="authoritative", authority_evidence=stated, this_text=True),
+            Expression(language="en", authority="official_translation"),
+            Expression(language="fr"),  # nothing states it: unknown
+        ),
+        language_rule=LanguageRule(
+            rule="Where the versions differ, the Kinyarwanda version prevails.",
+            prevails="rw",
+            provision="Article 9",
+            evidence=stated,
+        ),
+    )
+
+    def source(record):
+        item = publish.Approved("rw-example-law", record, ["rw"], "Ijidai Lassa", datetime.now(UTC))
+        return publish.catalogue_entries(item, decision)["source"]
+
+    entry = source(record)
+    assert [(e.language, e.authority) for e in entry.editions] == [
+        ("rw", "authoritative"),
+        ("en", "official_translation"),
+    ]  # French is left out: the catalogue answers it as unknown
+    assert entry.editions[0].evidence.page == 2 and entry.editions[1].evidence is None
+    rule = entry.language_rule
+    assert (rule.status, rule.prevails, rule.provision, rule.evidence.quote) == (
+        "stated",
+        "rw",
+        "Article 9",
+        stated.quote,
+    )
+    assert Source.model_validate(entry.model_dump(mode="json")) == entry
+    # A copy that states no rule, a rule not yet known, and a record that states nothing.
+    no_rule = source(example_law(absent={"language_rule": Absent(reason="not_in_source")}))
+    assert no_rule.language_rule.status == "not_stated" and no_rule.language_rule.rule is None
+    assert source(example_law(absent={"language_rule": Absent(reason="unknown")})).language_rule is None
+    silent = source(example_law(expressions=(Expression(language="rw", this_text=True),)))
+    assert silent.editions == [] and silent.language_rule is None
+    # Not recorded, neither is in the row: rows stored before them read the same (DAT-08).
+    assert not {"editions", "language_rule"} & set(silent.model_dump(mode="json"))
 
 
 # --- texts (TXP-07) ----------------------------------------------------------------------------------
