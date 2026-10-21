@@ -6,12 +6,20 @@ The change feed needs PostgreSQL. Given a migrated, seeded scratch database, the
 illustrative correction there and records the feed's answers, labelled as examples; never give it a
 real database. Without one, the feed's answers recorded before are kept.
 
+No text is public yet, so the text routes (a text search, an evidence pack, a check, an anchor, a
+text's structure and a record's editions) are recorded over one invented Act, published in another
+migrated, empty scratch database and labelled as an illustration. Without one, the answers recorded
+before are kept.
+
     python -m scripts.docs_examples [--changes postgresql+psycopg://.../scratch]
+                                    [--texts postgresql+psycopg://.../scratch_texts]
 """
 
+import hashlib
 import json
 import os
 import sys
+from datetime import UTC, datetime, timedelta
 from urllib.parse import quote, urlencode
 
 from fastapi.testclient import TestClient
@@ -22,8 +30,10 @@ from accounts.store import listed_plans
 from api.mcp import TOOLS
 from api.store import ROOT, Store, metadata
 from api.v1 import create_v1_app
-from schema.models import Corpus
+from operations import publish
+from schema.models import Authority, Corpus, Jurisdiction, Language, RightsRecord, Source
 from scripts.docs_reference import DATA
+from workbench import publication
 
 CATALOGUE = ROOT / "ingestion" / "catalogue" / "ng.json"
 
@@ -44,7 +54,7 @@ REQUESTS: dict[str, tuple[dict[str, str], list[tuple[str, str]]]] = {
     "search_text": ({}, [("q", "personal data consent"), ("jurisdiction", "ng")]),
     "retrieve_evidence": ({}, [("q", "when must a data controller report a breach"), ("jurisdiction", "ng")]),
     "check_currentness": ({}, []),
-    "get_expressions": ({"source_id": "ng-foi-act-2011"}, []),
+    "get_expressions": ({}, []),
     # No public text exists yet to name, so these leave {version_id} and {anchor_id} in the address, and
     # the reference says where to find one.
     "get_version_text": ({}, []),
@@ -81,9 +91,12 @@ BODIES: dict[str, dict] = {
         ]
     }
 }
+# Recorded over the invented Act with --texts; kept from before without it.
+TEXTS = {"search_text", "retrieve_evidence", "check_currentness", "get_anchor", "get_version_structure",
+         "get_expressions"}  # fmt: skip
 RECORDED = {"search", "list_sources", "get_source", "get_versions", "get_rights", "get_relationships",
             "resolve_citation", "list_jurisdictions", "get_jurisdiction", "get_coverage", "list_releases",
-            "list_plans", "get_quota_policy", "list_court_registers", "get_court_register", "get_expressions",
+            "list_plans", "get_quota_policy", "list_court_registers", "get_court_register",
             "get_rights_history"}  # fmt: skip
 MEMBERSHIP_NOTE = (
     "No membership has been reviewed yet, so the answer is `unknown`. Once one is, `items` lists it with its "
@@ -148,6 +161,131 @@ def change_examples(url: str) -> dict[str, dict]:
     }
 
 
+TEXT_NOTE = (
+    "An illustration: an invented Act, published in a scratch copy of the catalogue, not a law Open Alvary "
+    "holds. Your answers hold the texts published for your request."
+)
+EXAMPLE_WORK = "ng-example-data-act-2023"
+EXAMPLE_TITLE = "Example Data Protection Act, 2023"
+# The invented Act's words, as the reader gives them: headings, paragraphs and their marginal notes.
+EXAMPLE_UNITS = [
+    {"kind": "heading", "text": "EXAMPLE DATA PROTECTION ACT, 2023"},
+    {"kind": "paragraph", "text": "ENACTED by the National Assembly —"},
+    {"kind": "paragraph", "text": "1. In this Act —", "notes": ["Interpretation"]},
+    {"kind": "paragraph", "text": "“data controller” means a person who decides why and how personal data is processed;"},
+    {"kind": "paragraph", "text": "“personal data breach” means a breach of security that leads to the loss or disclosure of personal data."},
+    {"kind": "paragraph", "text": "2. (1) A data controller shall process personal data only with the consent of the data subject or on another lawful basis.", "notes": ["Lawful processing"]},
+    {"kind": "paragraph", "text": "(2) Consent is given freely, for a specific purpose, and may be withdrawn at any time."},
+    {"kind": "paragraph", "text": "3. (1) A data controller shall report a personal data breach to the Commission within 72 hours of becoming aware of it.", "notes": ["Reporting a breach"]},
+    {"kind": "paragraph", "text": "(2) Where the breach is likely to harm data subjects, the data controller shall also inform them without delay."},
+]  # fmt: skip
+
+
+def publish_example(store: Store) -> None:
+    """The invented Act, catalogued and published through operations.publish as a reviewed text is."""
+    store.save(
+        Corpus(
+            jurisdictions=[Jurisdiction(id="ng", name="Nigeria", country_code="NG", languages=["en"])],
+            authorities=[
+                Authority(
+                    id="ng-nass", jurisdiction_id="ng", name="National Assembly", kind="legislature",
+                    official_url="https://nass.gov.ng/",
+                )
+            ],
+            languages=[Language(id="en", name="English", tag="en")],
+            sources=[
+                Source(
+                    id=EXAMPLE_WORK, jurisdiction_id="ng", authority_id="ng-nass", title=EXAMPLE_TITLE,
+                    document_type="act", canonical_url="https://www.nass.gov.ng/example-data-act.pdf",
+                    citation=EXAMPLE_TITLE, language="en", year=2023,
+                )
+            ],
+            rights=[
+                RightsRecord(
+                    id=f"rights-{EXAMPLE_WORK}", source_id=EXAMPLE_WORK, metadata_public=True,
+                    metadata_basis="Independently authored catalogue entry",
+                )
+            ],
+        )
+    )  # fmt: skip
+    now = datetime.now(UTC).replace(microsecond=0)
+    decision = {
+        "document_types": ["act"],
+        "rights_holder": "Federal Republic of Nigeria",
+        "licence": "Not eligible for copyright (Copyright Act 2022, s. 3(b))",
+        "licence_url": None,
+        "attribution_required": False,
+        "attribution_text": None,
+        "database_rights_notes": "No database right is claimed in the texts.",
+        "privacy_status": "cleared",
+        "basis": "Official legislative texts are not eligible for copyright in Nigeria.",
+        "evidence": ["https://www.copyright.gov.ng/copyright-act-2022"],
+        "decided_by": "Example Reviewer",
+        "decided_at": (now - timedelta(minutes=1)).isoformat(),
+        "expires_at": (now + timedelta(days=365)).isoformat(),
+    }
+    text = publication.build(
+        {"id": EXAMPLE_WORK, "jurisdiction": "ng", "type": "act"}, [{"page": 1, "units": EXAMPLE_UNITS}]
+    )
+    item = publish.ApprovedText(
+        document_id=EXAMPLE_WORK, work=EXAMPLE_WORK, language="en", document_type="act", text=text,
+        approver="Example Reviewer", approved_at=now - timedelta(minutes=5),
+        provenance={
+            "url": "https://www.nass.gov.ng/example-data-act.pdf",
+            "retrieved_at": "2026-10-09T06:41:17+00:00",
+            "sha256": hashlib.sha256(b"an invented Act").hexdigest(),
+        },
+    )  # fmt: skip
+    publish.publish_texts(store, "ng", publish.Texts(approved=[item]), decision)
+
+
+def text_examples(url: str) -> dict[str, dict]:
+    """The text routes' answers over the invented Act, in an empty scratch PostgreSQL copy (the name must
+    say so): the same requests as REQUESTS, and a check of the parts the evidence pack cites."""
+    assert "scratch" in url or "example" in url, "a scratch database only"
+    engine = create_engine(url)
+    store = Store(engine)
+    publish_example(store)
+    client = TestClient(create_v1_app(store, ROOT / "releases", lambda: []))
+
+    def get(path: str, query: list[tuple[str, str]]):
+        response = client.get(path + ("?" + urlencode(query) if query else ""))
+        response.raise_for_status()
+        return response.json()
+
+    examples: dict[str, dict] = {}
+    for operation, path in (("search_text", "/search/text"), ("retrieve_evidence", "/retrieve")):
+        examples[operation] = {"answer": get(path, REQUESTS[operation][1])}
+    first = examples["retrieve_evidence"]["answer"]["evidence"][0]
+    version_id = first["version_id"]
+    body = {
+        "items": [
+            {"anchor_id": first["anchor_id"], "span_hash": first["span_hash"]},
+            {
+                "version_id": version_id,
+                "locator": first["locator"],
+                "as_of": "2026-01-01",
+                "jurisdiction": "ng",
+            },
+        ]
+    }
+    check = client.post("/currentness", json=body)
+    check.raise_for_status()
+    examples["check_currentness"] = {"body": body, "answer": check.json()}
+    examples["get_anchor"] = {"answer": get(f"/anchors/{quote(first['anchor_id'], safe='')}", [])}
+    structure = get(f"/versions/{quote(version_id, safe='')}/structure", REQUESTS["get_version_structure"][1])
+    examples["get_version_structure"] = {"answer": structure | {"items": structure["items"][:3]}}
+    examples["get_expressions"] = {"answer": get(f"/sources/{EXAMPLE_WORK}/expressions", [])}
+    engine.dispose()
+    pack = examples["retrieve_evidence"]["answer"]
+    examples["retrieve_evidence"]["answer"] = pack | {"evidence": pack["evidence"][:2]}
+    shortened = {"get_version_structure": " Shortened to its first parts.", "retrieve_evidence": " Shortened to "
+                 "its first two units."}  # fmt: skip
+    for operation, example in examples.items():
+        example["note"] = TEXT_NOTE + shortened.get(operation, "")
+    return examples
+
+
 COURTS_NOTE = (
     "Shortened to its first courts and relations. The register is a proposal: no entry has been reviewed "
     "yet, so every `relation` is `unknown`; `recorded` is what a legally qualified reviewer will check "
@@ -191,6 +329,9 @@ def main() -> None:
             if operation == "get_court_register" and example["answer"]["review_state"] == "unreviewed":
                 example["note"] = COURTS_NOTE
         examples[operation] = example
+    if "--texts" in sys.argv:
+        for operation, recorded in text_examples(sys.argv[sys.argv.index("--texts") + 1]).items():
+            examples[operation] = examples[operation] | recorded
     if "--changes" in sys.argv:
         for operation, recorded in change_examples(sys.argv[sys.argv.index("--changes") + 1]).items():
             examples[operation] = examples.get(operation, {"path": {}, "query": []}) | recorded
@@ -198,7 +339,11 @@ def main() -> None:
         before = json.loads((DATA / "examples.json").read_text())
         for operation, recorded in before.items():
             if operation in paths and operation not in RECORDED and "answer" in recorded:
-                examples[operation] = recorded
+                if operation in TEXTS and "--texts" in sys.argv:
+                    continue
+                examples[operation] = examples.get(operation, {"path": {}, "query": []}) | {
+                    k: v for k, v in recorded.items() if k in ("answer", "note", "body")
+                }
     examples["mcp:search_catalogue"] = {"arguments": {"query": "freedom of information", "limit": 3}}
     assert {t["name"] for t in TOOLS} >= {"search_catalogue"}
     (DATA / "examples.json").write_text(json.dumps(examples, indent=2, ensure_ascii=False) + "\n")

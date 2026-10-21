@@ -656,7 +656,88 @@
         "jurisdiction",
         "ng"
       ]
-    ]
+    ],
+    "answer": {
+      "status": "results",
+      "query": "personal data consent",
+      "total": 1,
+      "total_exact": true,
+      "items": [
+        {
+          "anchor_id": "nod_685b4844-1301-4e60-8f55-f93f2926c5ce",
+          "source_id": "ng-example-data-act-2023",
+          "version_id": "ver_dfb2b787-af0c-44e3-9a23-9d1197412250",
+          "title": "Example Data Protection Act, 2023",
+          "citation": "Example Data Protection Act, 2023, s. 2",
+          "pinpoint": "s. 2",
+          "kind": "section",
+          "locator": "sec_2",
+          "heading": "Lawful processing",
+          "language": "en",
+          "jurisdiction_id": "ng",
+          "document_type": "act",
+          "legal_status": "unknown",
+          "year": 2023,
+          "effective_from": null,
+          "effective_until": null,
+          "start_byte": 309,
+          "end_byte": 538,
+          "snippet": "Lawful processing\n\n2. (1) A data controller shall process personal data only with the consent of the data subject or on another lawful basis.\n\n(2) Consent is given freely, for a specific purpose, and may be withdrawn at any time",
+          "snippet_start_byte": 309,
+          "snippet_end_byte": 537,
+          "highlights": [
+            [
+              337,
+              341
+            ],
+            [
+              367,
+              375
+            ],
+            [
+              376,
+              380
+            ],
+            [
+              395,
+              402
+            ],
+            [
+              410,
+              414
+            ],
+            [
+              456,
+              463
+            ]
+          ],
+          "offset_unit": "utf-8-bytes",
+          "content_hash": "e18d854beedfb2c8896770d2c3b781ba81e0a44287274407f04610664d1fd4e5",
+          "matched_by": "text",
+          "score": 0.090909,
+          "official_url": "https://www.nass.gov.ng/example-data-act.pdf",
+          "licence": "Not eligible for copyright (Copyright Act 2022, s. 3(b))",
+          "attribution_required": false,
+          "attribution_text": null
+        }
+      ],
+      "next_cursor": null,
+      "citation": null,
+      "coverage": {
+        "records_in_scope": 1,
+        "records_with_text": 1,
+        "texts_searched": 1,
+        "notice": "Only published texts are searched: 1 of the 1 records in this scope have one. Find records without a published text with /search."
+      },
+      "analysis": {
+        "en": "english"
+      },
+      "analyzer": "oa-search-5",
+      "ranking": "oa-rank-1",
+      "index_built_at": "2026-10-21T08:08:24.752142+01:00",
+      "notices": []
+    },
+    "note": "An illustration: an invented Act, published in a scratch copy of the catalogue, not a law Open Alvary holds. Your answers hold the texts published for your request."
   },
   "retrieve_evidence": {
     "path": {},
@@ -669,7 +750,247 @@
         "jurisdiction",
         "ng"
       ]
-    ]
+    ],
+    "answer": {
+      "schema_version": "oa-evidence-1",
+      "status": "results",
+      "query": {
+        "text": "when must a data controller report a breach",
+        "routes": [
+          "topic"
+        ],
+        "filters": {
+          "jurisdictions": [
+            "ng"
+          ]
+        }
+      },
+      "revisions": {
+        "dataset": "a0e2d05b-a4d8-40b0-9777-cb08c240be3f:1",
+        "router": "oa-route-3",
+        "ranking": "oa-rank-3",
+        "analyzer": "oa-search-5"
+      },
+      "coverage": {
+        "records_in_scope": 1,
+        "records_with_text": 1,
+        "texts_searched": 1,
+        "degraded": [
+          "dense:not_configured",
+          "reranker:not_configured"
+        ],
+        "unsupported": [],
+        "incomplete_evidence": false,
+        "omitted_units": 0,
+        "notices": []
+      },
+      "evidence": [
+        {
+          "anchor_id": "nod_790754db-d1cf-4dbc-8103-09ee32f73df6",
+          "source_id": "ng-example-data-act-2023",
+          "version_id": "ver_dfb2b787-af0c-44e3-9a23-9d1197412250",
+          "expression_id": "ng-example-data-act-2023:en",
+          "expression_authority": "unknown",
+          "unit": "provision",
+          "kind": "section",
+          "locator": "sec_3",
+          "pinpoint": "s. 3",
+          "heading": "Reporting a breach",
+          "citation": "Example Data Protection Act, 2023, s. 3",
+          "title": "Example Data Protection Act, 2023",
+          "language": "en",
+          "jurisdiction_id": "ng",
+          "document_type": "act",
+          "official_url": "https://www.nass.gov.ng/example-data-act.pdf",
+          "retrieved_at": "2026-10-09T06:41:17Z",
+          "original_sha256": "74882d4ad83c209bb60886362c7088da1838dc53e1ac4c20bc8cdd79831ae8a2",
+          "page_start": 1,
+          "page_end": 1,
+          "links": {
+            "web": "https://open.alvary.ai/sources/ng-example-data-act-2023#nod_790754db-d1cf-4dbc-8103-09ee32f73df6",
+            "api": "https://api.open.alvary.ai/api/v1/anchors/nod_790754db-d1cf-4dbc-8103-09ee32f73df6",
+            "text": "https://api.open.alvary.ai/api/v1/versions/ver_dfb2b787-af0c-44e3-9a23-9d1197412250/text"
+          },
+          "text": "Reporting a breach\n\n3. (1) A data controller shall report a personal data breach to the Commission within 72 hours of becoming aware of it.\n\n(2) Where the breach is likely to harm data subjects, the data controller shall also inform them without delay.",
+          "text_start_byte": 540,
+          "text_end_byte": 792,
+          "complete": true,
+          "start_byte": 540,
+          "end_byte": 792,
+          "offset_unit": "utf-8-bytes",
+          "span_hash": "7d7726940f03cd9a89fe5d749a6b93e0141051274ea9bc308642d49b517af069",
+          "content_hash": "e18d854beedfb2c8896770d2c3b781ba81e0a44287274407f04610664d1fd4e5",
+          "licence": "Not eligible for copyright (Copyright Act 2022, s. 3(b))",
+          "attribution_required": false,
+          "currentness": {
+            "state": "unknown",
+            "basis": "record",
+            "assessed_at": "2026-10-21",
+            "algorithm": "record-status-1",
+            "evidence": [],
+            "reasons": [
+              "The record's legal status is unknown.",
+              "Assessed for the whole text from the record; no provision-level events are recorded."
+            ]
+          },
+          "authority": {
+            "document_type": "act",
+            "instrument_rank": 1,
+            "court_relation": "not_applicable"
+          },
+          "ranking": {
+            "position": 1,
+            "router": "oa-route-3",
+            "routes": [
+              "topic"
+            ],
+            "profile": "oa-rank-3",
+            "arms": {
+              "lexical_any": 1
+            },
+            "fused_score": 0.01639344,
+            "band": 0,
+            "signals": [],
+            "diversification": []
+          },
+          "context": {
+            "heading_path": [
+              "3. Reporting a breach"
+            ],
+            "definitions": [
+              {
+                "term": "data controller",
+                "anchor_id": "nod_3e579491-9eb0-4afc-a613-115d4164341a",
+                "locator": "sec_1__def_data_controller",
+                "text": "“data controller” means a person who decides why and how personal data is processed;",
+                "start_byte": 109,
+                "end_byte": 197,
+                "span_hash": "b3f6dd9fb4fc801670f9cca7867729fd50b25163eb6b6746d1c864bd79ba9cb6"
+              },
+              {
+                "term": "personal data breach",
+                "anchor_id": "nod_8ded5879-6b11-4c04-b4f1-fc620c2293c2",
+                "locator": "sec_1__def_personal_data_breach",
+                "text": "“personal data breach” means a breach of security that leads to the loss or disclosure of personal data.",
+                "start_byte": 199,
+                "end_byte": 307,
+                "span_hash": "b05dcc9abb6e772f77658a25becf02556abf49726fe3bb47288fdbd37fda9ed6"
+              }
+            ],
+            "references": [],
+            "qualifications": [],
+            "also_in": []
+          },
+          "warnings": []
+        },
+        {
+          "anchor_id": "nod_64b4b4ff-f955-4256-beb5-e4adc6922c52",
+          "source_id": "ng-example-data-act-2023",
+          "version_id": "ver_dfb2b787-af0c-44e3-9a23-9d1197412250",
+          "expression_id": "ng-example-data-act-2023:en",
+          "expression_authority": "unknown",
+          "unit": "provision",
+          "kind": "section",
+          "locator": "sec_1",
+          "pinpoint": "s. 1",
+          "heading": "Interpretation",
+          "citation": "Example Data Protection Act, 2023, s. 1",
+          "title": "Example Data Protection Act, 2023",
+          "language": "en",
+          "jurisdiction_id": "ng",
+          "document_type": "act",
+          "official_url": "https://www.nass.gov.ng/example-data-act.pdf",
+          "retrieved_at": "2026-10-09T06:41:17Z",
+          "original_sha256": "74882d4ad83c209bb60886362c7088da1838dc53e1ac4c20bc8cdd79831ae8a2",
+          "page_start": 1,
+          "page_end": 1,
+          "links": {
+            "web": "https://open.alvary.ai/sources/ng-example-data-act-2023#nod_64b4b4ff-f955-4256-beb5-e4adc6922c52",
+            "api": "https://api.open.alvary.ai/api/v1/anchors/nod_64b4b4ff-f955-4256-beb5-e4adc6922c52",
+            "text": "https://api.open.alvary.ai/api/v1/versions/ver_dfb2b787-af0c-44e3-9a23-9d1197412250/text"
+          },
+          "text": "Interpretation\n\n1. In this Act —\n\n“data controller” means a person who decides why and how personal data is processed;\n\n“personal data breach” means a breach of security that leads to the loss or disclosure of personal data.",
+          "text_start_byte": 73,
+          "text_end_byte": 307,
+          "complete": true,
+          "start_byte": 73,
+          "end_byte": 307,
+          "offset_unit": "utf-8-bytes",
+          "span_hash": "2c251292547ce74f71af664b1ee52ec54024510a1fb9f29e22fb09e7a775bca8",
+          "content_hash": "e18d854beedfb2c8896770d2c3b781ba81e0a44287274407f04610664d1fd4e5",
+          "licence": "Not eligible for copyright (Copyright Act 2022, s. 3(b))",
+          "attribution_required": false,
+          "currentness": {
+            "state": "unknown",
+            "basis": "record",
+            "assessed_at": "2026-10-21",
+            "algorithm": "record-status-1",
+            "evidence": [],
+            "reasons": [
+              "The record's legal status is unknown.",
+              "Assessed for the whole text from the record; no provision-level events are recorded."
+            ]
+          },
+          "authority": {
+            "document_type": "act",
+            "instrument_rank": 1,
+            "court_relation": "not_applicable"
+          },
+          "ranking": {
+            "position": 2,
+            "router": "oa-route-3",
+            "routes": [
+              "topic"
+            ],
+            "profile": "oa-rank-3",
+            "arms": {
+              "lexical_any": 2
+            },
+            "fused_score": 0.01612903,
+            "band": 0,
+            "signals": [],
+            "diversification": []
+          },
+          "context": {
+            "heading_path": [
+              "1. Interpretation"
+            ],
+            "definitions": [
+              {
+                "term": "data controller",
+                "anchor_id": "nod_3e579491-9eb0-4afc-a613-115d4164341a",
+                "locator": "sec_1__def_data_controller",
+                "text": "“data controller” means a person who decides why and how personal data is processed;",
+                "start_byte": 109,
+                "end_byte": 197,
+                "span_hash": "b3f6dd9fb4fc801670f9cca7867729fd50b25163eb6b6746d1c864bd79ba9cb6"
+              },
+              {
+                "term": "personal data breach",
+                "anchor_id": "nod_8ded5879-6b11-4c04-b4f1-fc620c2293c2",
+                "locator": "sec_1__def_personal_data_breach",
+                "text": "“personal data breach” means a breach of security that leads to the loss or disclosure of personal data.",
+                "start_byte": 199,
+                "end_byte": 307,
+                "span_hash": "b05dcc9abb6e772f77658a25becf02556abf49726fe3bb47288fdbd37fda9ed6"
+              }
+            ],
+            "references": [],
+            "qualifications": [],
+            "also_in": []
+          },
+          "warnings": []
+        }
+      ],
+      "catalogue": [],
+      "next_steps": [],
+      "bytes": {
+        "unique": 980,
+        "transmitted": 1264,
+        "budget": 49152
+      }
+    },
+    "note": "An illustration: an invented Act, published in a scratch copy of the catalogue, not a law Open Alvary holds. Your answers hold the texts published for your request. Shortened to its first two units."
   },
   "check_currentness": {
     "path": {},
@@ -677,30 +998,95 @@
     "body": {
       "items": [
         {
-          "anchor_id": "nod_5b1d2c3e-8f4a-4d6b-9c7e-1a2b3c4d5e6f",
-          "span_hash": "50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c"
+          "anchor_id": "nod_790754db-d1cf-4dbc-8103-09ee32f73df6",
+          "span_hash": "7d7726940f03cd9a89fe5d749a6b93e0141051274ea9bc308642d49b517af069"
         },
         {
-          "version_id": "ver_0c9e8d7f-6a5b-4c3d-8e2f-1a0b9c8d7e6f",
-          "locator": "sec_40__subsec_2",
+          "version_id": "ver_dfb2b787-af0c-44e3-9a23-9d1197412250",
+          "locator": "sec_3",
           "as_of": "2026-01-01",
           "jurisdiction": "ng"
         }
       ]
-    }
+    },
+    "answer": {
+      "schema_version": "oa-check-1",
+      "dataset": "a0e2d05b-a4d8-40b0-9777-cb08c240be3f:1",
+      "results": [
+        {
+          "index": 0,
+          "result": "unchanged",
+          "anchor_id": "nod_790754db-d1cf-4dbc-8103-09ee32f73df6",
+          "version_id": "ver_dfb2b787-af0c-44e3-9a23-9d1197412250",
+          "locator": "sec_3",
+          "currentness": {
+            "state": "unknown",
+            "basis": "record",
+            "assessed_at": "2026-10-21",
+            "algorithm": "record-status-1",
+            "evidence": [],
+            "reasons": [
+              "The record's legal status is unknown.",
+              "Assessed for the whole text from the record; no provision-level events are recorded."
+            ]
+          }
+        },
+        {
+          "index": 1,
+          "result": "unchanged",
+          "anchor_id": "nod_790754db-d1cf-4dbc-8103-09ee32f73df6",
+          "version_id": "ver_dfb2b787-af0c-44e3-9a23-9d1197412250",
+          "locator": "sec_3",
+          "currentness": {
+            "state": "unknown",
+            "basis": "record",
+            "assessed_at": "2026-01-01",
+            "algorithm": "record-status-1",
+            "evidence": [],
+            "reasons": [
+              "The text has no effective date to compare with the date asked.",
+              "Assessed for the whole text from the record; no provision-level events are recorded."
+            ]
+          },
+          "applicability": {
+            "jurisdiction_id": "ng",
+            "as_of": "2026-01-01",
+            "relation": "national",
+            "binds": "bound",
+            "memberships": [],
+            "transposed_by": [],
+            "reasons": [
+              "The law of ng."
+            ]
+          }
+        }
+      ]
+    },
+    "note": "An illustration: an invented Act, published in a scratch copy of the catalogue, not a law Open Alvary holds. Your answers hold the texts published for your request."
   },
   "get_expressions": {
-    "path": {
-      "source_id": "ng-foi-act-2011"
-    },
+    "path": {},
     "query": [],
     "answer": {
-      "source_id": "ng-foi-act-2011",
+      "source_id": "ng-example-data-act-2023",
       "language_rule": {
         "status": "unknown"
       },
-      "items": []
-    }
+      "items": [
+        {
+          "expression_id": "ng-example-data-act-2023:en",
+          "source_id": "ng-example-data-act-2023",
+          "language": "en",
+          "authority": "unknown",
+          "version_ids": [
+            "ver_dfb2b787-af0c-44e3-9a23-9d1197412250"
+          ],
+          "preferred_version_id": "ver_dfb2b787-af0c-44e3-9a23-9d1197412250",
+          "preferred_reason": "only_text"
+        }
+      ]
+    },
+    "note": "An illustration: an invented Act, published in a scratch copy of the catalogue, not a law Open Alvary holds. Your answers hold the texts published for your request."
   },
   "get_version_text": {
     "path": {},
@@ -713,11 +1099,98 @@
         "limit",
         "100"
       ]
-    ]
+    ],
+    "answer": {
+      "version_id": "ver_dfb2b787-af0c-44e3-9a23-9d1197412250",
+      "content_hash": "e18d854beedfb2c8896770d2c3b781ba81e0a44287274407f04610664d1fd4e5",
+      "total": 11,
+      "items": [
+        {
+          "id": "nod_01dbf565-7c11-4b25-901f-996ee084c5c4",
+          "source_id": "ng-example-data-act-2023",
+          "version_id": "ver_dfb2b787-af0c-44e3-9a23-9d1197412250",
+          "parent_id": null,
+          "kind": "document",
+          "locator": "document",
+          "order": 0,
+          "start_byte": 0,
+          "end_byte": 792,
+          "page": 1,
+          "source_hash": "e18d854beedfb2c8896770d2c3b781ba81e0a44287274407f04610664d1fd4e5",
+          "label": null,
+          "heading": "EXAMPLE DATA PROTECTION ACT, 2023",
+          "page_end": 1,
+          "span_hash": "c9fda87487be04b00477469e30546e283c169583adb1f44f94f5c5143598ee92",
+          "target_node_id": null
+        },
+        {
+          "id": "nod_cd99eae9-c8f8-4b1e-9378-0a846e71383f",
+          "source_id": "ng-example-data-act-2023",
+          "version_id": "ver_dfb2b787-af0c-44e3-9a23-9d1197412250",
+          "parent_id": "nod_01dbf565-7c11-4b25-901f-996ee084c5c4",
+          "kind": "preamble",
+          "locator": "preamble",
+          "order": 0,
+          "start_byte": 35,
+          "end_byte": 71,
+          "page": 1,
+          "source_hash": "e18d854beedfb2c8896770d2c3b781ba81e0a44287274407f04610664d1fd4e5",
+          "label": null,
+          "heading": null,
+          "page_end": 1,
+          "span_hash": "27cfa68c70d004c7f48aaef70aefe8ce6959f7503e08470a2e680cc1088e7d52",
+          "target_node_id": null
+        },
+        {
+          "id": "nod_64b4b4ff-f955-4256-beb5-e4adc6922c52",
+          "source_id": "ng-example-data-act-2023",
+          "version_id": "ver_dfb2b787-af0c-44e3-9a23-9d1197412250",
+          "parent_id": "nod_01dbf565-7c11-4b25-901f-996ee084c5c4",
+          "kind": "section",
+          "locator": "sec_1",
+          "order": 1,
+          "start_byte": 73,
+          "end_byte": 307,
+          "page": 1,
+          "source_hash": "e18d854beedfb2c8896770d2c3b781ba81e0a44287274407f04610664d1fd4e5",
+          "label": "1.",
+          "heading": "Interpretation",
+          "page_end": 1,
+          "span_hash": "2c251292547ce74f71af664b1ee52ec54024510a1fb9f29e22fb09e7a775bca8",
+          "target_node_id": null
+        }
+      ],
+      "next_cursor": null
+    },
+    "note": "An illustration: an invented Act, published in a scratch copy of the catalogue, not a law Open Alvary holds. Your answers hold the texts published for your request. Shortened to its first parts."
   },
   "get_anchor": {
     "path": {},
-    "query": []
+    "query": [],
+    "answer": {
+      "anchor_id": "nod_790754db-d1cf-4dbc-8103-09ee32f73df6",
+      "source_id": "ng-example-data-act-2023",
+      "version_id": "ver_dfb2b787-af0c-44e3-9a23-9d1197412250",
+      "kind": "section",
+      "locator": "sec_3",
+      "label": "3.",
+      "heading": "Reporting a breach",
+      "start_byte": 540,
+      "end_byte": 792,
+      "offset_unit": "utf-8-bytes",
+      "span_hash": "7d7726940f03cd9a89fe5d749a6b93e0141051274ea9bc308642d49b517af069",
+      "content_hash": "e18d854beedfb2c8896770d2c3b781ba81e0a44287274407f04610664d1fd4e5",
+      "serialization_profile": "oa-text-1/workbench-units-1",
+      "page": 1,
+      "page_end": 1,
+      "citation": "Example Data Protection Act, 2023, s. 3",
+      "official_url": "https://www.nass.gov.ng/example-data-act.pdf",
+      "licence": "Not eligible for copyright (Copyright Act 2022, s. 3(b))",
+      "attribution_required": false,
+      "attribution_text": null,
+      "text": "Reporting a breach\n\n3. (1) A data controller shall report a personal data breach to the Commission within 72 hours of becoming aware of it.\n\n(2) Where the breach is likely to harm data subjects, the data controller shall also inform them without delay."
+    },
+    "note": "An illustration: an invented Act, published in a scratch copy of the catalogue, not a law Open Alvary holds. Your answers hold the texts published for your request."
   },
   "get_rights_history": {
     "path": {
