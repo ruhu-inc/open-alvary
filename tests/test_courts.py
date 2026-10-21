@@ -595,3 +595,28 @@ def test_the_east_african_court_prevails_on_the_treaty_and_binds_no_national_cou
             "over decisions of national courts on a similar matter."
         )
     assert all(courts.relation(eac, r.court, "ke", matter="eac-treaty") == "unknown" for r in eac.relations)
+
+
+def test_ghanas_houses_of_chiefs_are_bound_only_on_a_chieftaincy_question():
+    """Courts Act s. 39(d) makes the Houses of Chiefs and Traditional Councils lower courts only for a cause
+    or matter affecting chieftaincy: the Supreme Court's decisions bind them on that matter alone. The
+    proposal stays unreviewed; a copy reviewed here as its reviewers would answers."""
+    houses = ("gh-nhc", "gh-rhc", "gh-tc")
+    proposal = courts.load("gh")
+    scoped = [r for r in proposal.relations if r.bound in houses]
+    assert {(r.court, r.bound, r.matter, r.relation) for r in scoped} == {
+        ("gh-sc", house, "chieftaincy", "binding") for house in houses
+    }
+    assert {e.id for e in proposal.matters} == {"chieftaincy"}
+    for r in scoped:
+        assert ("s. 39(d)", "courts-act-39") in {(q.provision, q.source) for q in r.rests_on}
+        assert not proposal.reviewed(r)
+        assert courts.relation(proposal, "gh-sc", "gh", before=r.bound, matter="chieftaincy") == "unknown"
+    gh = courts.CourtRegister.model_validate(reviewed(json.loads((courts.COURTS / "gh.json").read_text())))
+    for house in houses:
+        assert courts.relation(gh, "gh-sc", "gh", before=house, matter="chieftaincy") == "binding"
+        assert courts.relation(gh, "gh-sc", "gh", before=house) == "unknown"  # no matter: no answer
+        assert courts.relation(gh, "gh-sc", "gh", before=house, matter="land") == "unknown"
+    bearings = {b.court: b.matter for b in courts.evidence_court(gh, "gh-sc", date(2026, 10, 21)).bears_on}
+    assert {house: bearings[house] for house in houses} == dict.fromkeys(houses, "chieftaincy")
+    assert bearings["gh-ca"] is None  # the Court of Appeal is bound on any matter
