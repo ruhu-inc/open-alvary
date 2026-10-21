@@ -1,0 +1,20 @@
+web/src/legal.tsx
+  s_d665c62e07d76f::t_03f734b2ca393d 238-239
+  s_d665c62e07d76f::t_7296bd393a7589 234-237
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f98bc1a5d9d148f7ae0e9000871966845e93d22e",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
