@@ -58,7 +58,8 @@ RECORDED = {"search", "list_sources", "get_source", "get_versions", "get_rights"
             "list_plans", "get_quota_policy", "list_court_registers", "get_court_register"}  # fmt: skip
 MEMBERSHIP_NOTE = (
     "No membership has been reviewed yet, so the answer is `unknown`. Once one is, `items` lists it with its "
-    "first and last day, its evidence and who reviewed it."
+    "first and last day and their bounds, its basis, its evidence, who reviewed it and any suspensions; "
+    "`uncertain` lists one whose uncertain first or last day may fall on `as_of`."
 )
 
 

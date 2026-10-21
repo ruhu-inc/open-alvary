@@ -141,14 +141,29 @@ What the answer means:
 | `member_of` | For a country: the bodies it belonged to on `as_of` (today if you leave it out). |
 | `members` | For the African Union or a regional body: its members on `as_of`. |
 | `items` | The memberships held on that date. |
-| `ended` | Memberships that had ended by then, with their last day in `valid_to`. A country that left ECOWAS on 29 January 2025 has `valid_to` 28 January 2025. |
-| `valid_from`, `valid_to` | The first and last day of the membership. `valid_to` is null if it has not ended. |
+| `uncertain` | Memberships that may or may not have held on that date, because it falls within an uncertain first or last day (see below). We never guess which. |
+| `ended` | Memberships that had certainly ended by then, with their last day in `valid_to`. A country that left ECOWAS on 29 January 2025 has `valid_to` 28 January 2025. |
+| `valid_from`, `valid_to` | The first and last day of the membership, as precisely as the evidence gives them (see below). `valid_to` is null if it has not ended. |
+| `valid_from_bounds`, `valid_to_bounds` | The earliest and latest day each date can be, and its `precision`: `day`, `month`, `year` or `range`. |
+| `basis` | Why the membership starts when it does: `entry_into_force`, `deposit` (of the country's instrument), `admission_decision`, `provisional_application_on_signature` or `signature`, with the article that says so (`instrument`, `pinpoint`), where it was read and, when recorded, its words. |
+| `suspensions` | The country's suspensions from taking part in the body's activities, with their dates, legal basis and decisions, and `in_effect` on `as_of`. A suspended country is still a member: it stays in `items`. |
 | `evidence_url`, `note` | The body's own source, or the treaty depositary's, that the dates were checked against, and what it says. |
 | `status` | `reviewed`, or `unknown` when no membership has been reviewed. `unknown` never means "none". |
 
+Dates are written as [EDTF](https://www.loc.gov/standards/datetime/) dates, so a date known only to the month or the year is never filled in:
+
+| `valid_from` or `valid_to` | Means |
+|---|---|
+| `2001-05-26` | That day. |
+| `2000-12` | A day in December 2000. |
+| `1976` | A day in 1976. |
+| `2016-08-15/2016-09-05` | One day between 15 August and 5 September 2016, inclusive: the sources disagree. It is not a period lasting from one to the other. |
+
+A date that falls within such a window is listed in `uncertain`, not in `items` or `ended`: for a country that left a body in December 2000, `as_of` 2000-12-15 gives `uncertain`, 2000-11-30 gives `items` and 2001-01-01 gives `ended`.
+
 A membership is listed only after a reviewer has checked it against its evidence. One that has not been checked yet is left out, so a missing body is not proof that a country is not a member. Membership alone does not mean a body's treaties apply to a member: signature, ratification and entry into force are separate facts.
 
-[List jurisdictions](/docs/api/list-jurisdictions) gives every country's `member_of` in the same form. Changes to memberships are in the [change feed](/docs/changes) as `membership_recorded`. To search a country's law together with the regional and treaty law that binds there, see [the law that applies in a country](/docs/retrieval#the-law-that-applies-in-a-country).
+[List jurisdictions](/docs/api/list-jurisdictions) gives every country's `member_of` in the same form. Changes to memberships are in the [change feed](/docs/changes) as `membership_recorded`, and suspensions as `suspension_recorded`. To search a country's law together with the regional and treaty law that binds there, see [the law that applies in a country](/docs/retrieval#the-law-that-applies-in-a-country).
 
 ## Regional instruments and treaties
 
