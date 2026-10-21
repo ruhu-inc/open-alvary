@@ -704,7 +704,18 @@ LATER_TABLES = {
     "engine_state": {"release": {"SELECT", "INSERT", "UPDATE"}, "serving": {"SELECT"}},
     "membership_state": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
     "suspension_state": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
+    "treatment_state": {"release": {"SELECT", "INSERT", "UPDATE", "DELETE"}, "serving": {"SELECT"}},
     # The guard reads every table of the corpus schema (bundle v0003).
+    "corpus.citation": {
+        "release": {"SELECT", "INSERT", "UPDATE"},
+        "serving": {"SELECT"},
+        "guard": {"SELECT"},
+    },
+    "corpus.judicial_treatment": {
+        "release": {"SELECT", "INSERT", "UPDATE"},
+        "serving": {"SELECT"},
+        "guard": {"SELECT"},
+    },
     "corpus.membership": {
         "release": {"SELECT", "INSERT", "UPDATE", "DELETE"},
         "serving": {"SELECT"},

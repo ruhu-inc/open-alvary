@@ -301,5 +301,15 @@
       "changes.suspension_state",
       "corpus.membership_suspension"
     ]
+  },
+  {
+    "revision": "0042",
+    "anchor": "corpus.judicial_treatment",
+    "file": "v0042.sql",
+    "requires": [
+      "changes.treatment_state",
+      "corpus.citation",
+      "corpus.judicial_treatment"
+    ]
   }
 ]
