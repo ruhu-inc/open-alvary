@@ -70,6 +70,18 @@ MEMBERSHIP_FIELDS = ("member_id", "body_id", "valid_from", "valid_to", "basis", 
 # its note, and the words its legal basis quotes, are not announced. It never ends its membership.
 SUSPENSION_FIELDS = ("membership_id", "member_id", "body_id", "valid_from", "valid_to", "legal_basis",
                      "evidence_url", "lifted_evidence_url")  # fmt: skip
+# Reviewed judicial treatment (EDT-01, migration 0042): announced on the treating judgment, and an
+# overruling, which changes the treated judgment's authority, on that judgment too. Its passage is not
+# announced; the treating paragraph and the part it treats are.
+TREATED = ":treated"  # after a treatment's ID, the state (and event) key of its event on the treated judgment
+ON_TREATED = frozenset({"overrules"})
+TREATED_AS = {
+    "follows": "followed",
+    "applies": "applied",
+    "distinguishes": "distinguished",
+    "doubts": "doubted",
+    "overrules": "overruled",
+}
 
 
 def digest(value) -> str:
@@ -143,11 +155,11 @@ class _Recorder:
                 "event_state",
                 "membership_state",
                 "suspension_state",
+                "treatment_state",
             )
         }
-        self.t["legal_event"] = ns.qualified(conn, "corpus", "legal_event")
-        self.t["membership"] = ns.qualified(conn, "corpus", "membership")
-        self.t["membership_suspension"] = ns.qualified(conn, "corpus", "membership_suspension")
+        for name in ("legal_event", "membership", "membership_suspension", "citation", "judicial_treatment"):
+            self.t[name] = ns.qualified(conn, "corpus", name)
         self.allocate = ns.qualified(conn, "policy", "allocate_publication_revision") + "()"
         self.events: list[dict] = []
         self.rights_revision: dict[str, int] = {}  # work -> the rights revision in force after this write
@@ -232,6 +244,9 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
     keeps_memberships = (
         conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["suspension_state"]}) is not None
     )
+    keeps_treatments = (
+        conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["treatment_state"]}) is not None
+    )
     state = (
         conn.execute(
             text(
@@ -281,12 +296,18 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
     # Memberships and suspensions are few and change only by publishing the register: compared whole.
     memberships = _memberships(rec, announce=bool(state["baselined"])) if keeps_memberships else []
     suspensions = _suspensions(rec, announce=bool(state["baselined"])) if keeps_memberships else []
+    treatments = (
+        _treatments(rec, scope if state["baselined"] else None, announce=bool(state["baselined"]))
+        if keeps_treatments
+        else []
+    )
     if not state["baselined"]:
         _record_rights(rec, revisions, 0)
         _record_links(rec, links, baseline=True)
         _record_provision_events(rec, provision_events)
         _record_memberships(rec, memberships)
         _record_suspensions(rec, suspensions)
+        _record_treatments(rec, treatments)
         conn.execute(
             text(f"UPDATE {rec.t['feed_state']} SET baselined = true, baseline_at = statement_timestamp()")
         )
@@ -296,6 +317,7 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
     _record_provision_events(rec, provision_events)
     _record_memberships(rec, memberships)
     _record_suspensions(rec, suspensions)
+    _record_treatments(rec, treatments)
     if rec.events or revisions:
         revision = conn.scalar(text(f"SELECT {rec.allocate}"))
         _record_rights(rec, revisions, revision)
@@ -630,6 +652,146 @@ def _record_provision_events(rec: _Recorder, states: list[tuple]) -> None:
                 "h": event_hash,
                 "c": planned and planned["event_id"],
                 "r": planned and planned["event_revision"],
+            },
+        )
+
+
+def _treatments(rec: _Recorder, scope, *, announce: bool) -> list[tuple]:
+    """Reviewed treatments of reviewed citations between two public judgments that concern these works
+    (all when None), compared with the last recorded state of each event: a new one is a
+    treatment_recorded event on the treating judgment (and, for ON_TREATED kinds, on the treated one), a
+    changed one a correction of its event, and one no longer public (withdrawn, its citation withdrawn,
+    or a judgment no longer public) a correction marked withdrawn that names it (SUB C1, as _links).
+    Returns the state to record. Without ``announce`` (before the feed's baseline) nothing is announced."""
+    query = (
+        "SELECT t.treatment_id, t.treatment, t.opinion, c.citing_work, c.citing_locator, c.citing_pinpoint,"
+        " c.cited_work, c.cited_locator, c.cited_pinpoint, c.evidence_url"
+        f" FROM {rec.t['judicial_treatment']} t JOIN {rec.t['citation']} c ON c.citation_id = t.citation_id"
+        " WHERE t.review_state = 'reviewed' AND c.review_state = 'reviewed'"
+    )
+    params = {}
+    if scope is not None:
+        query += " AND (c.citing_work = ANY(:ids) OR c.cited_work = ANY(:ids))"
+        params = {"ids": sorted(scope)}
+    rows = rec.conn.execute(text(query + " ORDER BY t.treatment_id"), params).mappings().all()
+    works = sorted({w for r in rows for w in (r["citing_work"], r["cited_work"])})
+    visible = current(rec.conn, works) if works else {}
+    public = {}  # state key -> (the judgment the event is on, the treatment)
+    for r in rows:
+        if r["citing_work"] not in visible or r["cited_work"] not in visible:
+            continue
+        treatment = {
+            "id": r["treatment_id"],
+            "kind": r["treatment"],
+            "treating": r["citing_work"],
+            "treated": r["cited_work"],
+            "citing_locator": r["citing_locator"],
+            "citing_pinpoint": r["citing_pinpoint"],
+            "cited_locator": r["cited_locator"],
+            "cited_pinpoint": r["cited_pinpoint"],
+            "opinion": r["opinion"],
+            "evidence_url": r["evidence_url"],
+        }
+        public[r["treatment_id"]] = (r["citing_work"], treatment)
+        if r["treatment"] in ON_TREATED:
+            public[r["treatment_id"] + TREATED] = (r["cited_work"], treatment)
+    table = rec.t["treatment_state"]
+    held_query = (
+        f"SELECT state_key, work_id, projection, projection_hash, event_id, event_revision FROM {table}"
+    )
+    if scope is not None:
+        held_query += (
+            " WHERE state_key = ANY(:keys) OR work_id = ANY(:ids) OR projection->>'treating' = ANY(:ids)"
+            " OR projection->>'treated' = ANY(:ids)"
+        )
+        params = {"keys": sorted(public), "ids": sorted(scope)}
+    held = {row.state_key: row for row in rec.conn.execute(text(held_query), params)}
+    states, known = [], dict(visible)
+    for key, (work, treatment) in sorted(public.items()):
+        treatment_hash, was = digest(treatment), held.get(key)
+        if was is not None and was.projection_hash == treatment_hash:
+            continue
+        event = _treatment_event(rec, known, key, work, treatment, was) if announce else None
+        states.append((key, work, treatment, treatment_hash, event))
+    for key in sorted(held.keys() - public.keys()):
+        was = held[key]
+        if was.projection.get("review_state") == "withdrawn":
+            continue  # announced as withdrawn already
+        treatment = was.projection | {"review_state": "withdrawn"}
+        event = _treatment_event(rec, known, key, was.work_id, treatment, was) if announce else None
+        states.append((key, was.work_id, treatment, digest(treatment), event))
+    return states
+
+
+def _treatment_event(rec: _Recorder, known: dict, key: str, work: str, treatment: dict, was) -> dict:
+    """Plan the event on ``work`` (the treating judgment, or the treated one for ON_TREATED kinds) for a
+    treatment that is new, changed or withdrawn: the next revision of the one announced before, if any."""
+    treating = _as_public(rec, known, treatment["treating"])["projection"]
+    treated = _as_public(rec, known, treatment["treated"])["projection"]
+    corrects = (was.event_id, was.event_revision) if was is not None and was.event_id else None
+    withdrawn = treatment.get("review_state") == "withdrawn"
+    on_treated = key.endswith(TREATED)
+    kind, at = treatment["kind"], treatment["citing_pinpoint"]
+    if withdrawn:
+        summary = f"The recorded treatment of {treated.get('title')} by {treating.get('title')} ({kind}) was withdrawn."
+    elif corrects:
+        summary = f"The record of how {treating.get('title')} treats {treated.get('title')} was corrected."
+    elif on_treated:
+        summary = f"{treated.get('title')} was {TREATED_AS[kind]} by {treating.get('title')}, at {at}."
+    else:
+        summary = f"{treating.get('title')} {kind} {treated.get('title')}, at {at}."
+    other, named = (treatment["treating"], treating) if on_treated else (treatment["treated"], treated)
+    return rec.add(
+        "treatment_recorded",
+        key,
+        work,
+        _as_public(rec, known, work),
+        summary=summary,
+        extra={
+            "treatment": {
+                "id": treatment["id"],
+                "kind": kind,
+                # A direct treatment a reviewer recorded, never an inferred risk (EDT-02).
+                "assertion": "direct_treatment",
+                ("by" if on_treated else "of"): {
+                    "id": other,
+                    "title": named.get("title"),
+                    "citation": named.get("citation"),
+                },
+                "citing_locator": treatment["citing_locator"],
+                "citing_pinpoint": at,
+                "cited_locator": treatment["cited_locator"],
+                "cited_pinpoint": treatment["cited_pinpoint"],
+                "opinion": treatment["opinion"],
+                "review_level": "doctrinal",
+                "evidence_url": treatment["evidence_url"],
+                **({"review_state": "withdrawn"} if withdrawn else {}),
+            }
+        },
+        corrects=corrects,
+    )
+
+
+def _record_treatments(rec: _Recorder, states: list[tuple]) -> None:
+    table = rec.t["treatment_state"]
+    for key, work, treatment, treatment_hash, event in states:
+        rec.conn.execute(
+            text(
+                f"INSERT INTO {table} (state_key, work_id, projection, projection_hash, event_id, event_revision)"
+                " VALUES (:k, :w, CAST(:p AS jsonb), :h, :e, :r) ON CONFLICT (state_key) DO UPDATE SET"
+                " work_id = EXCLUDED.work_id, projection = EXCLUDED.projection,"
+                " projection_hash = EXCLUDED.projection_hash,"
+                f" event_id = coalesce(EXCLUDED.event_id, {table}.event_id),"
+                f" event_revision = coalesce(EXCLUDED.event_revision, {table}.event_revision),"
+                " updated_at = statement_timestamp()"
+            ),
+            {
+                "k": key,
+                "w": work,
+                "p": json.dumps(treatment, ensure_ascii=False),
+                "h": treatment_hash,
+                "e": event and event["event_id"],
+                "r": event and event["event_revision"],
             },
         )
 
