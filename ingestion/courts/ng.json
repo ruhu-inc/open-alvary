@@ -1,9 +1,5 @@
 {
   "jurisdiction": "ng",
-  "review_state": "unreviewed",
-  "reviewed_by": null,
-  "reviewed_on": null,
-  "reviewed_sha256": null,
   "precedent": {
     "binds": true,
     "note": "The Supreme Court states that, as the final court of appeal, its decisions bind every court and all courts must follow them under stare decisis (Obiuwevbi). In Dingyadi it described lower courts as bound by precedent, and in Onyemaizu it applied a Court of Appeal decision as binding on a State High Court. Section 287 is about something else: it requires decisions of the Supreme Court and the Court of Appeal to be enforced throughout the Federation by all authorities and persons and by courts with subordinate jurisdiction. It speaks of enforcing decisions, not of following precedent, so no relation in this register rests on s. 287 alone.",
@@ -215,9 +211,22 @@
   ],
   "relations": [
     {
+      "id": "ng-sc-on-courts",
       "court": "ng-sc",
       "bound": null,
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "sc-obiuwevbi-2011",
+          "provision": "per Rhodes-Vivour JSC, under “Whether O.H.M.B. v Garba (supra) can be followed in this case”",
+          "quote": "The Supreme Court is the final Court of Appeal in Nigeria. Its decisions are binding on every court in this country. By the doctrine of Stare Decisis all courts are bound to follow the decisions of this Court."
+        },
+        {
+          "source": "sc-dahiru-2016",
+          "provision": "lead judgment per Muhammad JSC",
+          "quote": "I agree with the learned counsel for the appellants that this Court has since resolved the issue and that by the doctrine of precedent the two courts are bound by the decisions of this Court on same."
+        }
+      ],
       "sources": [
         "sc-obiuwevbi-2011",
         "sc-dahiru-2016"
@@ -225,9 +234,17 @@
       "note": "Obiuwevbi: the Supreme Court's decisions bind every court in Nigeria, and stare decisis requires all courts to follow them. Dahiru v APC: the Federal High Court and the Court of Appeal were bound by its decisions under the doctrine of precedent."
     },
     {
+      "id": "ng-ca-on-ng-state-hc",
       "court": "ng-ca",
       "bound": "ng-state-hc",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "sc-onyemaizu-2010",
+          "provision": "lead judgment per Chukwuma-Eneh JSC, on Re Appolos Udo",
+          "quote": "It is otherwise rightly decided and binding on the trial court that has rightly relied on it in deciding the instant case."
+        }
+      ],
       "sources": [
         "sc-onyemaizu-2010"
       ],

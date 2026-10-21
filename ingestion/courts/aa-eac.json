@@ -1,9 +1,5 @@
 {
   "jurisdiction": "aa-eac",
-  "review_state": "unreviewed",
-  "reviewed_by": null,
-  "reviewed_on": null,
-  "reviewed_sha256": null,
   "precedent": null,
   "courts": [
     {
@@ -41,11 +37,29 @@
   ],
   "relations": [
     {
+      "id": "aa-eac-eacj-fid-on-members-eac-treaty",
       "court": "aa-eac-eacj-fid",
       "bound": null,
       "members": true,
       "matter": "eac-treaty",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "eac-treaty-art-33",
+          "provision": "art. 33(2)",
+          "quote": "Decisions of the Court on the interpretation and application of this Treaty shall have precedence over decisions of national courts on a similar matter."
+        },
+        {
+          "source": "eac-treaty-art-23",
+          "provision": "art. 23(2)",
+          "quote": "The Court shall consist of a First Instance Division and an Appellate Division."
+        },
+        {
+          "source": "eac-treaty-art-140a",
+          "provision": "art. 140A(1)",
+          "quote": "Any judgment or order made by the Court since the entry into force of the Treaty shall be deemed to have been made by the First Instance Division of the Court."
+        }
+      ],
       "sources": [
         "eac-treaty-art-33",
         "eac-treaty-art-23",
@@ -54,11 +68,24 @@
       "note": "PROPOSAL for the reviewer. Art. 33(2) speaks of precedence, not of binding force: the Court's decisions on the Treaty's interpretation and application \"shall have precedence over decisions of national courts on a similar matter\". The Treaty does not otherwise say national courts must follow them. Applied to this Division because art. 23(2) makes it part of the Court and art. 140A deems the Court's earlier judgments to be its decisions."
     },
     {
+      "id": "aa-eac-eacj-ad-on-members-eac-treaty",
       "court": "aa-eac-eacj-ad",
       "bound": null,
       "members": true,
       "matter": "eac-treaty",
       "relation": "binding",
+      "rests_on": [
+        {
+          "source": "eac-treaty-art-33",
+          "provision": "art. 33(2)",
+          "quote": "Decisions of the Court on the interpretation and application of this Treaty shall have precedence over decisions of national courts on a similar matter."
+        },
+        {
+          "source": "eac-treaty-art-23",
+          "provision": "art. 23(2)",
+          "quote": "The Court shall consist of a First Instance Division and an Appellate Division."
+        }
+      ],
       "sources": [
         "eac-treaty-art-33",
         "eac-treaty-art-23"
@@ -85,6 +112,7 @@
   ],
   "members": [
     {
+      "id": "member-ke",
       "state": "ke",
       "court": null,
       "valid_from": "2000-07-07",
@@ -99,6 +127,7 @@
       "note": "Art. 3(1) names Kenya as an original Partner State. The EAC overview says the Treaty entered into force on 7 July 2000 after ratification by Kenya, Uganda and Tanzania; the timeline gives the same date. The Kenya page says joined July 2000 (founding member)."
     },
     {
+      "id": "member-tz",
       "state": "tz",
       "court": null,
       "valid_from": "2000-07-07",
@@ -113,6 +142,7 @@
       "note": "Art. 3(1) names the United Republic of Tanzania as an original Partner State. The EAC overview says the Treaty entered into force on 7 July 2000 after ratification by Kenya, Uganda and Tanzania; the timeline gives the same date. The Tanzania page says joined July 2000 (founding member)."
     },
     {
+      "id": "member-ug",
       "state": "ug",
       "court": null,
       "valid_from": "2000-07-07",
@@ -127,6 +157,7 @@
       "note": "Art. 3(1) names Uganda as an original Partner State. The EAC overview says the Treaty entered into force on 7 July 2000 after ratification by Kenya, Uganda and Tanzania; the timeline gives the same date. The Uganda page says joined July 2000 (founding member)."
     },
     {
+      "id": "member-rw",
       "state": "rw",
       "court": null,
       "valid_from": "2007-07-01",
@@ -140,6 +171,7 @@
       "note": "The EAC overview says Rwanda acceded to the Treaty on 18 June 2007 and became a full Member with effect from 1 July 2007; the timeline gives the same dates. The Rwanda page says joined July 2007."
     },
     {
+      "id": "member-bi",
       "state": "bi",
       "court": null,
       "valid_from": "2007-07-01",
@@ -153,6 +185,7 @@
       "note": "The EAC overview says Burundi acceded to the Treaty on 18 June 2007 and became a full Member with effect from 1 July 2007; the timeline gives the same dates. The Burundi page says joined July 2007."
     },
     {
+      "id": "member-ss",
       "state": "ss",
       "court": null,
       "valid_from": "2016-09-05",
@@ -167,6 +200,7 @@
       "note": "CONFLICT. The EAC press release of 5 September 2016 says South Sudan deposited its instrument of ratification of the accession that day and is now a member with full and equal rights; the timeline and the South Sudan page also give 5 September 2016 for full membership. The EAC overview instead says full Member on 15 August 2016 (accession 15 April 2016; the timeline says joined 16 April 2016). 5 September 2016 proposed; reviewer to confirm."
     },
     {
+      "id": "member-cd",
       "state": "cd",
       "court": null,
       "valid_from": "2022-07-11",
@@ -180,6 +214,7 @@
       "note": "The EAC overview and the DR Congo page say the DR Congo acceded to the Treaty on 8 April 2022 and became a full member on 11 July 2022; the timeline gives the same dates."
     },
     {
+      "id": "member-so",
       "state": "so",
       "court": null,
       "valid_from": "2024-03-04",
@@ -195,6 +230,7 @@
   ],
   "member_routes": [
     {
+      "id": "route-reference-aa-eac-eacj-fid-eac-treaty",
       "court": "aa-eac-eacj-fid",
       "kind": "reference",
       "matter": "eac-treaty",
@@ -207,6 +243,7 @@
       "note": "Art. 34: a court or tribunal of a Partner State faced with a question on the interpretation or application of the Treaty shall, if it considers a ruling necessary to give judgment, request a preliminary ruling from the Court. Rule 126 requires the request to be lodged as a case stated. Placed on the First Instance Division because art. 23(3) gives it every matter before the Court at first instance; no source names the Division for references expressly."
     },
     {
+      "id": "route-reference-aa-eac-eacj-fid-eac-community-acts",
       "court": "aa-eac-eacj-fid",
       "kind": "reference",
       "matter": "eac-community-acts",

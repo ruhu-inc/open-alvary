@@ -369,9 +369,9 @@ OPERATIONS: dict[str, dict] = {
         "operationId": "list_court_registers",
         "tag": "Courts",
         "summary": "List court registers",
-        "description": "The jurisdictions with a court register, each with whether it has been reviewed and "
-        "how many courts and relations it records. A jurisdiction not listed has no register: every court "
-        "relation there is `unknown`.",
+        "description": "The jurisdictions with a court register, each with how many courts, relations and "
+        "entries it records and how many entries have been reviewed. A jurisdiction not listed has no "
+        "register: every court relation there is `unknown`.",
         "errors": {},
     },
     "/courts/{jurisdiction}": {
@@ -379,13 +379,15 @@ OPERATIONS: dict[str, dict] = {
         "tag": "Courts",
         "summary": "Get a court register",
         "description": "A jurisdiction's courts and tribunals with their levels, appeal routes and the dates "
-        "their roles apply; how each court's decisions bear on the others (`binding`, `persuasive` or "
-        "`not_applicable`); and whether precedent binds there at all. A regional or continental body's "
-        "register also gives the states its courts reach, the routes from their courts to its own and "
-        "declarations admitting cases from individuals; its bearing on a member state's courts is limited "
-        "to the subject matter its sources give. Every entry has its sources. Until a reviewer has checked "
-        "the register against them, every `relation` is `unknown`, and `recorded` shows what awaits "
-        "review. A jurisdiction with no register answers an empty one.",
+        "their roles apply; how each court's decisions bear on the others (`binding`, `prevails_on_matter`, "
+        "`binding_in_referred_case`, `persuasive` or `not_applicable`), each in the words of its source; and "
+        "whether precedent binds there at all. A regional or continental body's register also gives the "
+        "states its courts reach, the routes from their courts to its own and declarations admitting cases "
+        "from individuals; its bearing on a member state's courts is limited to the subject matter its "
+        "sources give. Every entry has its sources and its own review: `structural` for courts, matters, "
+        "members, routes and declarations, `doctrinal` (by a legally qualified reviewer) for relations and "
+        "the precedent rule. Until a relation has its own doctrinal review its `relation` is `unknown`, and "
+        "`recorded` shows what awaits review. A jurisdiction with no register answers an empty one.",
         "path": {
             "jurisdiction": "The jurisdiction ID: a country such as `ke`, a state such as `ng-la`, or a "
             "regional or continental body such as `aa-ohada`, `aa-eac`, `aa-ecowas` or `aa-au`.",
@@ -812,6 +814,21 @@ JURISDICTION = {
     "legal_systems": "Its legal systems.",
     "languages": "Its official languages.",
 }
+# What every court register entry carries (CourtEntry).
+COURT_ENTRY = {
+    "review_state": "`reviewed` once a reviewer has checked this entry against its sources, and it is "
+    "unchanged since; else `unreviewed`.",
+    "review_level": "The review the entry needs: `structural` (which courts there are, from when, where "
+    "an appeal or reference lies) or `doctrinal` (how decisions bind, prevail or persuade, reviewed by "
+    "someone legally qualified for the jurisdiction).",
+    "reviewed_by": "Who reviewed it.",
+    "reviewer_role": "Their role, such as `owner` or `Kenyan advocate`.",
+    "reviewer_qualification": "Their legal qualification for the jurisdiction, which a doctrinal review "
+    "states.",
+    "reviewed_on": "The day they reviewed it.",
+    "evidence": "The official sources the entry rests on.",
+    "note": "What the sources say, in brief.",
+}
 FIELDS: dict[str, dict[str, str]] = {
     "EvidencePack": {
         "schema_version": "`oa-evidence-1`.",
@@ -931,10 +948,14 @@ FIELDS: dict[str, dict[str, str]] = {
         "document_type": "The record's document type.",
         "instrument_rank": "The instrument's place in the hierarchy, 0 highest (constitution 0, Act 1, "
         "subsidiary legislation 2, guidance 3).",
-        "court_relation": "For a decision, how its court's decisions bear on the courts of the jurisdiction "
-        "asked about generally, from a reviewed court register: `binding`, `persuasive`, `not_applicable` "
-        "or `unknown` (no reviewed register says, or only on a subject matter: see `court.bears_on`); "
-        "`not_applicable` for anything but a decision.",
+        "court_relation": "For a decision, the ranking signal: how its court's decisions bear on the courts "
+        "of the jurisdiction asked about generally, from a reviewed relation of its court register. "
+        "`binding` (precedent binds) ranks first within a band; `prevails_on_matter` (precedence on a "
+        "subject matter, not stare decisis) is given only on a question of that matter, and then ranks with "
+        "`binding`: a request states no matter, so it is never given here; `persuasive` ranks next; "
+        "`binding_in_referred_case` (the ruling binds only the court that referred the question, in that "
+        "case), `not_applicable` and `unknown` (no reviewed relation says, or only on a subject matter: see "
+        "`court.bears_on`) rank alike. `not_applicable` for anything but a decision.",
         "court": "For a decision whose court a court register lists: that court, and how its decisions bear "
         "on other courts.",
     },
@@ -942,40 +963,52 @@ FIELDS: dict[str, dict[str, str]] = {
         "id": "The court's ID in its register, as `/courts/{jurisdiction}` lists it.",
         "name": "The court's name.",
         "jurisdiction": "The jurisdiction whose court register answers: the one asked about or, for a "
-        "regional or continental court when one of its member states is asked about, that body's "
-        "(`aa-ohada`, `aa-eac`, …).",
-        "review_state": "`reviewed`, or `unreviewed`: then `bears_on` is empty and nothing is answered.",
-        "reviewed_on": "The day a reviewer checked the register against its sources.",
+        "regional or continental court when one of its member states is asked about (by a reviewed "
+        "membership), that body's (`aa-ohada`, `aa-eac`, …).",
+        "review_state": "`reviewed` once a reviewer has checked the court's entry against its sources, else "
+        "`unreviewed`.",
+        "reviewed_on": "The day they did.",
         "bears_on": "Each relation of the court's decisions to other courts on the date assessed (`as_of`, "
-        "or today), as the reviewed register records it.",
+        "or today) that has its own doctrinal review; none until then.",
     },
     "EvidenceBearing": {
+        "id": "The relation's ID in the register.",
         "court": "The court bound or persuaded, by its ID in the register; null for the jurisdiction's courts "
         "generally.",
         "members": "True when the relation covers the courts of each member state of a regional body.",
         "matter": "The subject matter the relation is limited to, by its ID in the register, such as "
         "`uniform-acts`. Absent: any matter.",
-        "relation": "`binding`, `persuasive` or `not_applicable`.",
+        "relation": "`binding` (precedent binds), `prevails_on_matter` (the court's decisions on `matter` "
+        "take precedence over national courts' decisions: not stare decisis), `binding_in_referred_case` "
+        "(the ruling binds the court that referred the question, in that case only), `persuasive` or "
+        "`not_applicable`.",
         "valid_from": "The first day the relation applies, when it has a start.",
         "valid_until": "The first day it no longer applies, when it has ended.",
         "evidence": "The official sources the relation rests on.",
+        "rests_on": "The words of those sources it rests on, verbatim.",
+    },
+    "CourtQuote": {
+        "quote": "The source's words, verbatim.",
+        "provision": "Where they are, such as `art. 33(2)` or `para 39`.",
+        "title": "The source, such as `Constitution of Kenya, 2010`.",
+        "url": "Its official text.",
     },
     "CourtRegisters": {"registers": "Each jurisdiction with a court register, in order of its ID."},
     "CourtRegisterSummary": {
         "jurisdiction": "The jurisdiction ID, such as `ke` or `aa-ohada`.",
-        "review_state": "`reviewed`, or `unreviewed`: every relation is then `unknown`.",
-        "reviewed_on": "The day a reviewer checked it against its sources.",
+        "review_state": "`reviewed` when every entry has its review, `partly_reviewed` when some have, "
+        "`unreviewed` when none has.",
         "courts": "How many courts and tribunals it lists.",
         "relations": "How many relations between courts it records.",
+        "entries": "How many entries it holds, each reviewed on its own.",
+        "reviewed_entries": "How many of them have a review that covers them as they are.",
     },
     "CourtRegisterView": {
         "jurisdiction": "The jurisdiction ID, such as `ke` or `aa-ohada`.",
-        "review_state": "`reviewed`, or `unreviewed`: a proposal awaiting review, whose relations are all "
-        "`unknown`.",
-        "reviewed_by": "Who checked every entry against its sources.",
-        "reviewed_on": "The day they did.",
+        "review_state": "`reviewed` when every entry has its review, `partly_reviewed` when some have, "
+        "`unreviewed` when none has: a proposal awaiting review.",
         "precedent": "Whether decisions bind later courts there at all, as its law says; null when not "
-        "recorded, and then every relation is `unknown`.",
+        "recorded, and then every `binding`, `persuasive` or `not_applicable` relation is `unknown`.",
         "courts": "Each court and tribunal.",
         "relations": "How each court's decisions bear on other courts. A relation not listed is `unknown`: "
         "none is inferred from rank or appeal routes.",
@@ -985,13 +1018,13 @@ FIELDS: dict[str, dict[str, str]] = {
         "declarations": "Declarations accepting a court's jurisdiction over cases brought by individuals and "
         "NGOs, such as those under art. 34(6) of the African Court Protocol, with their withdrawals.",
     },
-    "CourtPrecedentView": {
+    "CourtPrecedentView": COURT_ENTRY
+    | {
+        "id": "`precedent`, the entry's ID for review.",
         "binds": "Whether decisions bind later courts there at all (stare decisis).",
-        "review_state": "`reviewed` once a reviewer has checked the register against its sources.",
-        "evidence": "The official sources the entry rests on.",
-        "note": "What the sources say, in brief.",
     },
-    "CourtLevelView": {
+    "CourtLevelView": COURT_ENTRY
+    | {
         "id": "The court's ID, as evidence units give it in `authority.court.id`.",
         "name": "Its name.",
         "kind": "`court`, `tribunal` or `quasi_judicial` (a body such as a human-rights commission whose "
@@ -1004,62 +1037,58 @@ FIELDS: dict[str, dict[str, str]] = {
         "valid_from": "The first day its role applies, when it has a start.",
         "valid_until": "The first day its role no longer applies, when it has ended.",
         "appeals_to": "The courts of this register an appeal lies to.",
-        "review_state": "`reviewed` once a reviewer has checked the register against its sources.",
-        "evidence": "The official sources the entry rests on.",
-        "note": "What the sources say, in brief.",
     },
-    "CourtRelationView": {
+    "CourtRelationView": COURT_ENTRY
+    | {
+        "id": "The relation's ID in the register.",
         "court": "The court whose decisions bear.",
         "bound": "The court they bear on; null for the jurisdiction's courts generally, or with `members` "
         "the courts of each member state.",
         "members": "True when the relation covers the courts of each member state while it is a member.",
         "matter": "The subject matter it is limited to, by its ID in `matters`. Absent: any matter.",
-        "relation": "What Open Alvary answers: the recorded relation once the register is reviewed (and "
-        "records whether precedent binds), `unknown` until then.",
-        "recorded": "The relation the register records: `binding`, `persuasive` or `not_applicable`.",
+        "relation": "What Open Alvary answers: the recorded relation once it has its own doctrinal review "
+        "(and, for `binding`, `persuasive` and `not_applicable`, once the precedent rule has its own), "
+        "`unknown` until then.",
+        "recorded": "The relation the register records, in its source's terms: `binding` (precedent binds), "
+        "`prevails_on_matter` (precedence on `matter` over national courts' decisions: not stare "
+        "decisis), `binding_in_referred_case` (the ruling binds the court that referred the question, in "
+        "that case only), `persuasive` or `not_applicable`.",
+        "rests_on": "The words of its sources it rests on, verbatim.",
         "valid_from": "The first day it applies, when it has a start.",
         "valid_until": "The first day it no longer applies, when it has ended.",
-        "review_state": "`reviewed` once a reviewer has checked the register against its sources.",
-        "evidence": "The official sources the entry rests on.",
-        "note": "What the sources say, in brief.",
     },
-    "CourtMatterView": {
+    "CourtMatterView": COURT_ENTRY
+    | {
         "id": "The matter's ID, as relations and routes name it.",
         "name": "The matter, as its source defines it.",
-        "review_state": "`reviewed` once a reviewer has checked the register against its sources.",
-        "evidence": "The official sources the entry rests on.",
-        "note": "What the sources say, in brief.",
     },
-    "CourtMemberView": {
+    "CourtMemberView": COURT_ENTRY
+    | {
+        "id": "The membership's ID in the register.",
         "state": "The member state, such as `sn`.",
         "court": "Set when the state is party only to this court's own instrument, not the body's treaty.",
         "valid_from": "The day the instrument entered into force for the state, when known.",
         "valid_until": "The first day it no longer bound the state, after a withdrawal.",
         "withdrawal_notified": "The day the state notified its withdrawal.",
-        "review_state": "`reviewed` once a reviewer has checked the register against its sources.",
-        "evidence": "The official sources the entry rests on.",
-        "note": "What the sources say, in brief.",
     },
-    "CourtRouteView": {
+    "CourtRouteView": COURT_ENTRY
+    | {
+        "id": "The route's ID in the register.",
         "court": "The register's court the route leads to.",
         "kind": "`cassation` (in place of the national court of last resort), `appeal`, or `reference` (a "
         "national court refers a question of interpretation).",
         "matter": "The subject matter it is limited to, by its ID in `matters`. Absent: any matter.",
         "valid_from": "The first day it applies, when it has a start.",
         "valid_until": "The first day it no longer applies, when it has ended.",
-        "review_state": "`reviewed` once a reviewer has checked the register against its sources.",
-        "evidence": "The official sources the entry rests on.",
-        "note": "What the sources say, in brief.",
     },
-    "CourtDeclarationView": {
+    "CourtDeclarationView": COURT_ENTRY
+    | {
+        "id": "The declaration's ID in the register.",
         "state": "The declaring state, such as `gh`.",
         "court": "The court whose jurisdiction it accepts.",
         "valid_from": "The day the declaration was deposited.",
         "valid_until": "The first day it no longer applied, after a withdrawal.",
         "withdrawal_deposited": "The day the withdrawal was deposited.",
-        "review_state": "`reviewed` once a reviewer has checked the register against its sources.",
-        "evidence": "The official sources the entry rests on.",
-        "note": "What the sources say, in brief.",
     },
     "CourtEvidence": {
         "title": "The source, such as `Constitution of Kenya, 2010`.",
