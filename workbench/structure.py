@@ -23,6 +23,21 @@ structure rules for the document's jurisdiction and type (RULES):
                      SOMMAIRE, the Council of Ministers' preamble, PARTIE, LIVRE, TITRE, SOUS-TITRE,
                      CHAPITRE and Section, articles numbered through the Act ("Article 2-1"
                      inserted) and their alinéas, and the signatures
+  au-treaty-1        The AU's charters and protocols, in English, French and Portuguese: the
+                     preamble to the enacting words, parts ("PREMIERE PARTIE") and chapters, articles
+                     with their heading after the number, numbered paragraphs and lettered items
+  ecowas-act-1       ECOWAS's Supplementary Acts in English: as au-treaty-1, with a heading inside an
+                     article (a defined term) kept in it, the logo text on every page reported, and
+                     the signatures ("H. E. …") a notice
+  ci-loi-1           Ivorian laws as the Journal officiel prints them: the issue's front matter, the
+                     title with its enacting words, TITRE, CHAPITRE and Section, articles opening with
+                     their first alinéa ("Art. 2. — …"), alinéas as OHADA's, and "Fait à …" a notice
+                     holding the rest of the issue
+  cm-law-1           Cameroonian laws in English ("SECTION 7:", subsections "(1)") and French
+                     ("ARTICLE 7.-", numbered paragraphs), the stamp printed on every page reported
+  ao-lei-1           Angolan laws as the Diário da República prints them: CAPÍTULO, SECÇÃO, articles
+                     ("ARTIGO 3.º") with their heading in brackets, números and alíneas, and "Vista e
+                     aprovada …" a notice
   rw-law-1           Rwandan laws, orders and the other instruments of the Official Gazette, one
                      language at a time: titles, chapters, divisions (a civil-law "section" groups
                      articles) and articles
@@ -31,7 +46,9 @@ structure rules for the document's jurisdiction and type (RULES):
                      paragraphs (each one a retrieval unit, cited "[2019] NGSC 4 [12]"), and the orders
 
 The Commonwealth families are one builder (ActBuilder) with each family's Drafting: what it prints
-otherwise than Nigeria's federal Acts. Each was written from, and calibrated on, whole official texts
+otherwise than Nigeria's federal Acts. The article families after OHADA's are one builder
+(ArticleBuilder) with each family's ArticleStyle, calibrated on the cloud readings of official texts
+(ingestion.calibrate) as reviewers receive them. Each was written from, and calibrated on, whole official texts
 of its family; a family whose Acts read exactly as Nigeria's would be mapped to ng-federal-act-1. All
 four read a definition however long the scope before its meaning ("‘‘de-identify’’, in relation to …,
 means").
@@ -62,6 +79,11 @@ ZA_ACT = "za-act-1"
 GH_ACT = "gh-act-1"
 OHADA_UNIFORM_ACT = "ohada-uniform-act-1"
 RW_LAW = "rw-law-1"
+AU_TREATY = "au-treaty-1"
+ECOWAS_ACT = "ecowas-act-1"
+CI_LAW = "ci-loi-1"
+CM_LAW = "cm-law-1"
+AO_LAW = "ao-lei-1"
 JUDGMENT = "judgment-paragraphs-1"
 JUDGMENT_TYPES = {"judgment", "ruling"}
 # The kinds of instrument the Rwandan Gazette reader names from the heading that opens each one
@@ -89,6 +111,12 @@ RULES = {
     ("za", "act"): ZA_ACT,
     ("gh", "act"): GH_ACT,
     ("aa-ohada", "uniform_act"): OHADA_UNIFORM_ACT,
+    ("aa-au", "charter"): AU_TREATY,
+    ("aa-au", "protocol"): AU_TREATY,
+    ("aa-ecowas", "supplementary_act"): ECOWAS_ACT,
+    ("ci", "law"): CI_LAW,
+    ("cm", "law"): CM_LAW,
+    ("ao", "law"): AO_LAW,
     **{("ng", kind): JUDGMENT for kind in JUDGMENT_TYPES},
     **{("rw", kind): RW_LAW for kind in RW_INSTRUMENTS},
 }
@@ -320,6 +348,8 @@ def derive(
         builder = ActBuilder(serialized, units, DRAFTING[rules_id])
     elif rules_id == OHADA_UNIFORM_ACT:
         builder = UniformActBuilder(language, serialized, units)
+    elif rules_id in ARTICLE_STYLES:
+        builder = ArticleBuilder(ARTICLE_STYLES[rules_id], language, serialized, units)
     else:
         raise ValueError(f"No structure rules {rules_id!r}")
     builder.build()
@@ -1191,7 +1221,9 @@ class UniformActBuilder(Builder):
             article, "paragraph", f"{article.locator}__al_{number}", leaf, label=item.group(1) if item else ""
         )
         self.put(node, index)
-        if text[:1].islower() and not item:  # "a) dont …" is an item
+        # A paragraph beginning in lower case may go on from the one before it across a page break; a
+        # list's item ("les relations entre associés ;") and a numbered one ("a) dont …") always may.
+        if text[:1].islower() and not item and self.unit(leaf).get("kind") != "list_item":
             self.issue(
                 "warning",
                 "lower_case_alinea",
@@ -1232,6 +1264,450 @@ class UniformActBuilder(Builder):
                     self.leaves[node.leaves[0]],
                     f"The contents list {node.label}, but the text has no {node.target}",
                 )
+
+
+# --- au-treaty-1, ecowas-act-1, ci-loi-1, cm-law-1, ao-lei-1: articles and their paragraphs ----------
+
+# Ordinal parts of the French editions: "PREMIERE PARTIE : DES DROITS ET DES DEVOIRS".
+FRENCH_ORDINALS = {
+    "premiere": "1", "deuxieme": "2", "troisieme": "3", "quatrieme": "4", "cinquieme": "5", "sixieme": "6",
+}  # fmt: skip
+ONE = ("premier", "1er", "primeiro", "unico", "único")  # "Article premier", "Artigo único": article 1
+ROMAN_LEVEL = re.compile(r"^\(?((?:x{0,3})(?:ix|iv|v?i{1,3}|v))\)(?=\s)")
+LETTER_LEVEL = re.compile(r"^\(?([a-z])\)(?=\s)")
+# Angola's heading on the line after "ARTIGO 1.º", alone or before the article's first words.
+BRACKETED_HEADING = re.compile(r"^\(([^()]{1,200})\)(?=\s|$)", re.S)
+
+
+@dataclass(frozen=True)
+class Edition:
+    """One language edition of an article family: its divisions, by rank, and how a provision opens."""
+
+    divisions: tuple[tuple[str, int, str, str], ...]  # (printed word, rank, kind, token)
+    words: tuple[str, ...] = ("ARTICLE", "Article", "Art.")
+    provision: str = "article"  # or "section": Cameroon's English text prints "SECTION 7:"
+
+
+@dataclass(frozen=True)
+class ArticleStyle:
+    """What an article family prints (ArticleBuilder): the editions calibrated, each a language with its
+    words; whether every unit of an article is an alinéa (French drafting) or its paragraphs are
+    numbered; how the title, the closing words and any stamp on every page are printed."""
+
+    rules_id: str
+    family: str  # as an error names it: "aa-au/charter"
+    editions: dict[str, Edition]
+    title: re.Pattern
+    signature: re.Pattern
+    alineas: bool = False
+    paragraph: re.Pattern = re.compile(r"^(\d{1,2})\.(?=\s)")  # "1." (or Cameroon's "(1)")
+    title_units: tuple[str, ...] = ("heading",)
+    running_head: re.Pattern | None = None
+
+
+ARTICLE_STYLES = {
+    AU_TREATY: ArticleStyle(
+        AU_TREATY,
+        "aa-au/charter or protocol",
+        {
+            "en": Edition((("PART", 0, "part", "part"), ("CHAPTER", 1, "chapter", "chap"))),
+            "fr": Edition((("PARTIE", 0, "part", "part"), ("CHAPITRE", 1, "chapter", "chap"))),
+            "pt": Edition(
+                (("PARTE", 0, "part", "part"), ("CAPÍTULO", 1, "chapter", "chap")),
+                ("ARTIGO", "Artigo", "Art."),
+            ),
+        },
+        title=re.compile(
+            r"^(?:african\s+charter\b|protocol\s+(?:to|on|relating)\b|charte\s+africaine\b|protocole\s+relatif\b"
+            r"|carta\s+africana\b|protocolo\s+relativo\b)",
+            re.I,
+        ),
+        signature=re.compile(
+            r"^(?:adopted\s+by\b|done\s+at\b|in\s+(?:witness|faith)\s+whereof\b|adopt[ée]e?\s+par\b|fait\s+[àa]\b"
+            r"|feito\s+em\b|adoptad[oa]\s+(?:pel|em)\b)",
+            re.I,
+        ),
+    ),
+    ECOWAS_ACT: ArticleStyle(
+        ECOWAS_ACT,
+        "aa-ecowas/supplementary_act",
+        {"en": Edition((("PART", 0, "part", "part"), ("CHAPTER", 1, "chapter", "chap")))},
+        title=re.compile(r"^supplementary\s+act\b", re.I),
+        # The signatures open with the closing formula, or, where it is not printed, the first "H. E."
+        signature=re.compile(r"^(?:in\s+(?:faith|witness)\s+whereof\b|done\s+at\b|H\.\s?E\.\s)", re.I),
+        running_head=re.compile(r"^CEDEAO\s+ECOWAS\b\s*"),
+    ),
+    CI_LAW: ArticleStyle(
+        CI_LAW,
+        "ci/law",
+        {
+            "fr": Edition(
+                (
+                    ("TITRE", 0, "title", "title"),
+                    ("CHAPITRE", 1, "chapter", "chap"),
+                    ("SECTION", 2, "division", "dvs"),
+                )
+            )
+        },
+        title=re.compile(r"^loi\s+n\s*[°o]", re.I),
+        signature=re.compile(r"^fait\s+[àa]\b", re.I),
+        alineas=True,
+        title_units=("heading", "paragraph"),
+    ),
+    CM_LAW: ArticleStyle(
+        CM_LAW,
+        "cm/law",
+        {
+            "en": Edition(
+                (("PART", 0, "part", "part"), ("CHAPTER", 1, "chapter", "chap")), ("SECTION",), "section"
+            ),
+            "fr": Edition(
+                (
+                    ("TITRE", 0, "title", "title"),
+                    ("CHAPITRE", 1, "chapter", "chap"),
+                    ("SECTION", 2, "division", "dvs"),
+                ),
+                ("ARTICLE", "Article"),
+            ),
+        },
+        title=re.compile(r"^(?:law\s+n|loi\s+n\s*[°o]|relating\s+to\b|relative\s+[àa]\b)", re.I),
+        signature=re.compile(r"^yaound[ée]\s*,?\s+(?:le|the)\b", re.I),
+        paragraph=re.compile(r"^\((\d{1,2})\)(?=\s)"),
+        running_head=re.compile(
+            r"^PR[ÉE]SIDENCE\s+DE\s+LA\s+R[ÉE]PUBLIQUE\s+PRESIDENCY\s+OF\s+THE\s+REPUBLIC\b.*$", re.S
+        ),
+    ),
+    AO_LAW: ArticleStyle(
+        AO_LAW,
+        "ao/law",
+        {
+            "pt": Edition(
+                (
+                    ("TÍTULO", 0, "title", "title"),
+                    ("CAPÍTULO", 1, "chapter", "chap"),
+                    ("SECÇÃO", 2, "division", "dvs"),
+                    ("SUBSECÇÃO", 3, "division", "subdvs"),
+                ),
+                ("ARTIGO", "Artigo", "Art."),
+            )
+        },
+        title=re.compile(r"^lei\s+n\.?\s*[º°o]", re.I),
+        signature=re.compile(r"^vista\s+e\s+aprovada\b", re.I),
+    ),
+}
+
+
+class ArticleBuilder(Builder):
+    """A text of articles, in a family's style (ARTICLE_STYLES): the issue's or cover's front matter;
+    the title; everything after it to the first division or article, the preamble ("HAVE AGREED AS
+    FOLLOWS", "dont la teneur suit", "a seguinte"); divisions nesting by rank, each qualified by the
+    division it is in because numbering restarts in each (part_ii__chap_1), titled on the same line or
+    the next heading; articles numbered through the text (art_12, art_2-1 inserted after it, "premier"
+    and "único" art_1), their heading the words after the number in a heading ("ARTICLE 3 : COMPETENCE
+    DE LA COUR") or the bracketed line after it ("(Objecto)"), their first words in a paragraph unit
+    ("Art. 2. — La présente loi …") the article's own. In French drafting every later unit is an
+    alinéa (art_10__al_2), as OHADA's; otherwise numbered paragraphs ("1.", Cameroon's "(1)"), lettered
+    items ("(a)", "a)") and roman ones ("(i)") nest (art_7__para_1__subpara_a, cited art. 7(1)(a)), and
+    an unnumbered unit stays in the innermost open one. A unit opening with the family's closing words
+    ("Fait à …", "Vista e aprovada …") opens the closing notice, which holds the rest of the issue. A
+    stamp printed on every page (Cameroon's, ECOWAS's logo text) is reported, for the reviewer to remove.
+    Another language's edition is refused, never read by these patterns."""
+
+    def __init__(self, style: ArticleStyle, language: str | None, *args):
+        super().__init__(*args)
+        self.style = style
+        only = next(iter(style.editions.values())) if len(style.editions) == 1 else None
+        # A document without its language is read by a family's one edition, as OHADA's French one; a
+        # family of several cannot tell which, and asks for it.
+        self.edition = style.editions.get(language) if language else only
+        self.region = "front"  # front, preamble, body, endmatter
+        self.region_node: Node | None = None
+        self.open: list[tuple[int, Node]] = []
+        self.provision: Node | None = None
+        self.levels: list[tuple[int, Node]] = []  # the open numbered paragraphs, by level
+        self.awaiting: Node | None = None  # a division whose title may be on the next heading
+        self.heading_due: Node | None = None  # an article whose heading may be on the next line
+        self.caption: Node | None = None
+        self.named: set[int] = set()
+        self.unlettered: dict[str, list[Leaf]] = {}
+        self.last: tuple[tuple[int, ...], str] | None = None
+        self.counts: dict[str, int] = {}
+        if self.edition is None:
+            message = (
+                f"No structure rules for {style.family} in {language}: this layout is not supported yet"
+                if language
+                else f"{style.family} is read in {', '.join(style.editions)}: set the document's language"
+            )
+            self.issues.append(Issue("error", NO_RULES, None, None, message))
+            self.edition = next(iter(style.editions.values()))  # the text is held, never published
+        words = "|".join(re.escape(w) for w, *_ in self.edition.divisions)
+        ordinals = "|".join(FRENCH_ORDINALS)
+        self.division_pattern = re.compile(
+            rf"^(?:({ordinals})\s+({words})|({words})(?:\s+|(?=\d))(\d{{1,3}}(?:-\d{{1,2}})?|[IVXLC]{{1,6}}|"
+            rf"PR[ÉE]LIMINAIRE|UNIQUE|[ÚU]NIC[OA]))(?!\w)\s*[-–—:.]?\s*(.*)$",
+            re.S | re.I,
+        )
+        self.ranks = {
+            unicodedata.normalize("NFC", w).upper(): (r, k, t) for w, r, k, t in self.edition.divisions
+        }
+        provisions = "|".join(re.escape(w) for w in self.edition.words)
+        self.provision_pattern = re.compile(
+            rf"^(?:{provisions})\s*(\d{{1,4}}(?:-\d{{1,3}}){{0,3}}|premier|1er|primeiro|[úu]nico)(?:\s*\.?\s*[º°]|er)?"
+            rf"(?![\w-])(\s*(?:[.:\-–—]+\s*)*)(.*)$",
+            re.S | re.I if self.edition.provision == "article" else re.S,
+        )
+
+    def next_number(self, key: str) -> int:
+        self.counts[key] = self.counts.get(key, 0) + 1
+        return self.counts[key]
+
+    def put(self, node: Node, index: int) -> None:
+        self.notes_to(node, False)
+        self.hold(node, index)
+
+    def owner(self) -> Node:
+        if self.levels:
+            return self.levels[-1][1]
+        return self.provision or (self.open[-1][1] if self.open else self.region_node or self.root)
+
+    def place(self, index: int, leaf: Leaf) -> None:
+        unit, text = self.unit(leaf), clean(leaf.text)
+        heading_unit = unit.get("kind") == "heading"
+        awaiting, self.awaiting = self.awaiting, None
+        heading_due, self.heading_due = self.heading_due, None
+        if leaf.role in ("caption", "table"):
+            self.table(index, leaf)
+            return
+        if self.style.running_head and (stamp := self.style.running_head.match(text)):
+            self.issue(
+                "warning",
+                "running_head",
+                leaf,
+                f"“{text[: stamp.end()][:60]}” is the stamp printed on every page: remove it, or it is part of "
+                f"{self.owner().label or self.owner().locator}",
+            )
+            text = text[stamp.end() :].strip()
+            if not text:
+                self.put(self.owner(), index)
+                return
+        if self.region == "endmatter":
+            self.put(self.region_node, index)
+            return
+        if self.region == "body" and self.style.signature.match(text):
+            self.region, self.provision, self.levels, self.open = "endmatter", None, [], []
+            self.region_node = self.add(self.root, "notice", f"notice_{self.next_number('notice')}", leaf)
+            self.put(self.region_node, index)
+            return
+        if (
+            self.region == "front"
+            and not self.root.heading
+            and unit.get("kind") in self.style.title_units
+            and self.style.title.match(text)
+        ):
+            self.root.heading = text
+            self.named.add(index)
+            self.put(self.root, index)
+            self.region = "preamble"
+            return
+        division = self.division_of(text)
+        provision = self.provision_of(text, heading_unit)
+        if self.region in ("front", "preamble") and not (division or provision):
+            if self.region == "preamble" and self.region_node is None:
+                self.region_node = self.add(self.root, "preamble", "preamble", leaf)
+            self.put(self.region_node or self.root, index)
+            return
+        if self.region != "body":
+            self.region, self.region_node = "body", None
+        if division:
+            self.division(index, leaf, division)
+        elif provision:
+            self.open_provision(index, leaf, provision, heading_unit)
+        elif awaiting is not None and (heading_unit or unit.get("align") == "center"):
+            awaiting.heading = text  # "CHAPTER I" then "HUMAN AND PEOPLES' RIGHTS"
+            self.named.add(index)
+            self.put(awaiting, index)
+        elif heading_due is not None and (found := BRACKETED_HEADING.match(text)):
+            heading_due.heading = found.group(1).strip()  # "ARTIGO 1.º" then "(Objecto)"
+            self.named.add(index)
+            rest = text[found.end() :].strip()  # "(Entrada em vigor) A presente lei …"
+            level, number, label = self.numbered(rest) if rest and not self.style.alineas else (0, "", "")
+            if level == 1:
+                sub = self.open_level(1, number, label, leaf)
+                sub.trim[index] = len(leaf.text[: leaf.text.index(rest)].encode())
+                heading_due.opens_at = leaf.start
+                self.put(sub, index)
+            else:
+                self.put(heading_due, index)
+        elif self.provision is not None:
+            self.inside(index, leaf, text, unit)
+        else:
+            self.issue("warning", "outside_article", leaf, f"“{text[:40]}…” is outside any article")
+            self.put(self.owner(), index)
+
+    def division_of(self, text: str) -> tuple[int, str, str, str, str] | None:
+        """A division heading (rank, kind, token, number, title), never words in a paragraph."""
+        found = self.division_pattern.match(text)
+        if not found or len(text) > 300 or text.endswith((".", ";", ",")):
+            return None
+        if found.group(1):
+            word, number = found.group(2), FRENCH_ORDINALS[folded(found.group(1))]
+        else:
+            word, number = found.group(3), found.group(4)
+        rank, kind, token = self.ranks[unicodedata.normalize("NFC", word).upper()]
+        return rank, kind, token, number, found.group(5).strip()
+
+    def division(self, index: int, leaf: Leaf, found: tuple[int, str, str, str, str]) -> None:
+        rank, kind, token, number, title = found
+        while self.open and self.open[-1][0] >= rank:
+            self.open.pop()
+        parent = self.open[-1][1] if self.open else self.root
+        own = f"{token}_{number if re.fullmatch(r'[\d-]+', number) else slug(number)}"
+        within = parent.locator if parent is not self.root else ""
+        node = self.add(parent, kind, f"{within}__{own}" if within else own, leaf)
+        node.label = (
+            clean(leaf.text)[: len(clean(leaf.text)) - len(title)].strip(" :.-–—")
+            if title
+            else clean(leaf.text)
+        )
+        node.heading = title
+        self.open.append((rank, node))
+        self.provision, self.levels = None, []
+        self.awaiting = None if title else node
+        self.named.add(index)
+        self.put(node, index)
+
+    def provision_of(self, text: str, heading_unit: bool) -> re.Match | None:
+        """An article's opening: in a heading, its number alone or with its heading; in a paragraph,
+        only with the separator printed after the number, so a sentence citing one is not one."""
+        found = self.provision_pattern.match(text)
+        if not found or (not heading_unit and found.group(3) and not found.group(2).strip()):
+            return None
+        return found
+
+    def open_provision(self, index: int, leaf: Leaf, found: re.Match, heading_unit: bool) -> None:
+        raw = found.group(1)
+        number = "1" if folded(raw) in [folded(w) for w in ONE] else raw
+        kind = self.edition.provision
+        token = "sec" if kind == "section" else "art"
+        # A section's label is its printed number, as the Commonwealth Acts' are ("8": cited s. 8); an
+        # article's, its printed opening ("ARTICLE 7", "Art. 2"), as OHADA's.
+        label = raw if kind == "section" else clean(leaf.text)[: found.end(1)].strip()
+        parent = self.open[-1][1] if self.open else self.root
+        node = self.add(parent, kind, f"{token}_{number}", leaf, label=label)
+        self.provision, self.levels = node, []
+        self.named.add(index)
+        self.notes_to(node, True)
+        rest = found.group(3)
+        if heading_unit or not rest:
+            node.heading = rest.strip()
+            self.hold(node, index)
+            self.heading_due = None if node.heading else node
+        else:  # "Art. 2. — La présente loi …": the article's first words, after its number
+            offset = len(leaf.text[: found.start(3)].encode())
+            if self.style.alineas:
+                alinea = self.add(node, "paragraph", f"{node.locator}__al_1", leaf, label=self.item(rest))
+                alinea.trim[index], node.opens_at = offset, leaf.start
+                self.hold(alinea, index)
+            elif (numbered := self.style.paragraph.match(rest)) is not None:
+                sub = self.open_level(1, numbered.group(1), rest[: numbered.end()], leaf)
+                sub.trim[index], node.opens_at = offset, leaf.start
+                self.hold(sub, index)
+            else:
+                self.hold(node, index)
+        order = tuple(int(n) for n in number.split("-"))
+        if self.last and order < self.last[0]:
+            self.issue("warning", "article_order", leaf, f"{label} follows {self.last[1]}")
+        self.last = (order, label)
+
+    def item(self, text: str) -> str:
+        found = OHADA_ITEM.match(text)
+        return found.group(1) if found else ""
+
+    def inside(self, index: int, leaf: Leaf, text: str, unit: dict) -> None:
+        """A unit of the open article: an alinéa, or a numbered paragraph or item, or words of the
+        innermost one open."""
+        provision = self.provision
+        if self.style.alineas:
+            number = sum(1 for child in provision.children if child.kind == "paragraph") + 1
+            node = self.add(
+                provision, "paragraph", f"{provision.locator}__al_{number}", leaf, label=self.item(text)
+            )
+            self.put(node, index)
+            return
+        level, number, label = self.numbered(text)
+        if level:
+            self.put(self.open_level(level, number, label, leaf), index)
+            return
+        owner = self.owner()
+        if unit.get("kind") == "list_item":  # an item whose letter the reading did not keep
+            self.unlettered.setdefault(owner.locator, []).append(leaf)
+        self.put(owner, index)
+
+    def numbered(self, text: str) -> tuple[int, str, str]:
+        """A unit's level and number: 1 a numbered paragraph, 2 a lettered item, 3 a roman one (0: none).
+        "(i)", "(v)" and "(x)" after "(h)", "(u)" and "(w)" go on the letters."""
+        if found := self.style.paragraph.match(text):
+            return 1, found.group(1), text[: found.end()]
+        letter, roman = LETTER_LEVEL.match(text), ROMAN_LEVEL.match(text)
+        last = next((n.label for lvl, n in reversed(self.levels) if lvl == 2), "")
+        continues = letter and last and ord(letter.group(1)) == ord(number_of(last)[-1:] or "`") + 1
+        if roman and not continues and (len(roman.group(1)) > 1 or letter is None or self.levels_at(3)):
+            return 3, roman.group(1), text[: roman.end()]
+        if letter:
+            return 2, letter.group(1), text[: letter.end()]
+        if roman:
+            return 3, roman.group(1), text[: roman.end()]
+        return 0, "", ""
+
+    def levels_at(self, level: int) -> bool:
+        return any(lvl == level for lvl, _ in self.levels)
+
+    def open_level(self, level: int, number: str, label: str, leaf: Leaf) -> Node:
+        while self.levels and self.levels[-1][0] >= level:
+            self.levels.pop()
+        parent = self.levels[-1][1] if self.levels else self.provision
+        if self.edition.provision == "section":
+            kind = {1: "subsection", 2: "paragraph", 3: "subparagraph"}[level]
+        else:
+            kind = {1: "paragraph", 2: "subparagraph", 3: "subparagraph"}[level]
+        node = self.add(
+            parent, kind, f"{parent.locator}__{BODY_TOKENS[kind]}_{number}", leaf, label=label.strip()
+        )
+        self.levels.append((level, node))
+        return node
+
+    def table(self, index: int, leaf: Leaf) -> None:
+        caption, self.caption = self.caption, None
+        if leaf.role == "table" and caption is not None:
+            first = self.leaves[caption.leaves[0]]
+            if (first.page, first.unit) == (leaf.page, leaf.unit):
+                self.hold(caption, index)
+                return
+        owner = self.owner()
+        self.notes_to(owner, False)
+        node = self.add(
+            owner, "table", f"{owner.locator}__table_{self.next_number('table:' + owner.locator)}", leaf
+        )
+        if leaf.role == "caption":
+            node.heading, self.caption = leaf.text, node
+        self.hold(node, index)
+
+    def repeatable(self) -> set[int]:
+        below = {i for i, leaf in enumerate(self.leaves) if leaf.unit != 0}
+        return super().repeatable() | self.named | below
+
+    def build(self) -> None:
+        super().build()
+        for locator, leaves in self.unlettered.items():
+            node = self.locators[locator]
+            where = node.label or locator
+            self.issue(
+                "warning",
+                "unlettered_items",
+                leaves[0],
+                f"{len(leaves)} item{'s' if len(leaves) > 1 else ''} of {where} {'have' if len(leaves) > 1 else 'has'} "
+                "no printed letter in the reading: if the page prints (a), (b) …, set each one's number",
+            )
 
 
 # --- judgment-paragraphs-1 ---------------------------------------------------------------------------
