@@ -3,9 +3,11 @@ each cited part is still public with the same bytes, says when a newer text of t
 exists (with the same locator's anchor there), and gives the part's currentness at a date; asked with a
 jurisdiction, also whether the record binds there on that date (api.applicable: bound, not_bound or
 unknown, with its basis). A part that is not public now and one that never was are the same answer:
-unavailable (DAT-06)."""
+unavailable (DAT-06); only for a keyed caller is a part whose text was public and was withdrawn for a
+reason that may be told ``withdrawn`` instead (owner decision, 2026-10-22; changes.feed.Withdrawals)."""
 
 import hashlib
+from collections.abc import Callable
 from datetime import UTC, date, datetime
 
 from api.catalogue import LegacyCatalogue, SourceUnavailable, expression_id
@@ -15,8 +17,16 @@ from schema.public import CheckItem, CheckPage, CheckResult, NodeViewRecord
 
 
 class Checker:
-    def __init__(self, service: LegacyCatalogue, *, today: date | None = None):
+    def __init__(
+        self,
+        service: LegacyCatalogue,
+        *,
+        today: date | None = None,
+        withdrawn: Callable[[CheckItem], bool] | None = None,
+    ):
         self.service = service
+        # For a keyed caller: whether a part that is not public may be told withdrawn.
+        self.withdrawn = withdrawn
         self.today = today or datetime.now(UTC).date()
         self._nodes: dict[str, list[NodeViewRecord]] = {}
         self.jurisdictions: set[str] = set()  # of the parts found, for the plan's admission
@@ -79,8 +89,10 @@ class Checker:
         for index, item in enumerate(items):
             located = self._locate(item)
             if located is None:
-                results.append(CheckResult(index=index, result="unavailable", anchor_id=item.anchor_id,
-                                           version_id=item.version_id, locator=item.locator))  # fmt: skip
+                told = self.withdrawn is not None and self.withdrawn(item)
+                results.append(CheckResult(index=index, result="withdrawn" if told else "unavailable",
+                                           anchor_id=item.anchor_id, version_id=item.version_id,
+                                           locator=item.locator))  # fmt: skip
                 continue
             version, source, node = located
             self.jurisdictions.add(source.jurisdiction_id)

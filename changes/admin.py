@@ -6,15 +6,24 @@ new-epoch --reason  start a new feed epoch: required after any database restore 
                     cursor key (SYS-07); clients then reconcile (409 feed_reset)
 purge               remove events past retention (400 days) and raise purged_through
 status              epoch, baseline, events and the highest publication revision
+withdraw-confidentially --work ID
+                    take a public record out of public view for a reason that must not be told
+                    (privacy, a legal or court order, or another confidential reason): its rights
+                    record stops allowing its metadata, and its withdrawal names nothing, to anyone
+
+Any other write that takes a record out of public view by changing its rights record is announced as a
+withdrawal with reason_code rights_changed, which names the record by its IDs to keyed callers (owner
+decision, 2026-10-22). Use withdraw-confidentially, not a catalogue edit, when the reason must not be
+told: the withdrawal is recorded with the write that makes it, so it cannot be made confidential later.
 """
 
 import argparse
 import json
 
-from sqlalchemy import text
+from sqlalchemy import select, text, update
 
-from api.store import check_legacy_authority, engine_for
-from changes.record import namespace, sweep
+from api.store import check_legacy_authority, engine_for, tables
+from changes.record import current, namespace, publish, sweep
 
 
 def main(argv=None) -> int:
@@ -27,6 +36,8 @@ def main(argv=None) -> int:
     epoch.add_argument("--reason", required=True)
     commands.add_parser("purge")
     commands.add_parser("status")
+    confidential = commands.add_parser("withdraw-confidentially")
+    confidential.add_argument("--work", required=True)
     args = parser.parse_args(argv)
     engine = engine_for()
     if engine.dialect.name != "postgresql":
@@ -37,6 +48,19 @@ def main(argv=None) -> int:
         if args.command == "sweep":
             check_legacy_authority(conn, write=False)
             print(f"Recorded {sweep(conn)} changes")
+        elif args.command == "withdraw-confidentially":
+            check_legacy_authority(conn, write=True)
+            if not current(conn, [args.work]):
+                raise SystemExit("No public record has that ID")
+            rights = tables["rights"]
+            record = conn.scalar(select(rights.c.payload).where(rights.c.source_id == args.work))
+            conn.execute(
+                update(rights)
+                .where(rights.c.source_id == args.work)
+                .values(payload=record | {"metadata_public": False})
+            )
+            recorded = publish(conn, [args.work], confidential=[args.work])
+            print(f"Withdrawn; recorded {recorded} changes, none naming the record")
         elif args.command == "new-epoch":
             conn.execute(
                 text(

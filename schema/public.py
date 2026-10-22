@@ -1025,11 +1025,13 @@ class CheckRequest(WireModel):
 class CheckResult(WireModel):
     """What became of a cited part: ``unchanged``; ``newer_version`` (a later text of the same expression,
     with the same locator's anchor there and whether its words are identical); ``span_mismatch`` (the
-    hash sent is not this part's); or ``unavailable`` (not public now, or never: not told apart). Asked with
-    a jurisdiction, ``applicability`` says whether the record binds there on the date (api.applicable)."""
+    hash sent is not this part's); ``unavailable`` (not public now, or never: not told apart); or, only
+    for a keyed caller, ``withdrawn`` (its text was public and was withdrawn for a reason that may be
+    told; owner decision, 2026-10-22). Asked with a jurisdiction, ``applicability`` says whether the
+    record binds there on the date (api.applicable)."""
 
     index: int = Field(ge=0)
-    result: Literal["unchanged", "newer_version", "span_mismatch", "unavailable"]
+    result: Literal["unchanged", "newer_version", "span_mismatch", "unavailable", "withdrawn"]
     anchor_id: ID | None = Field(**OMIT)
     version_id: ID | None = Field(**OMIT)
     locator: str | None = Field(**OMIT)

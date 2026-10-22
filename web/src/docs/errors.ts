@@ -71,7 +71,11 @@ export const CODES: [number, string, string][] = [
     "gone",
     "The anonymous API has closed. Use /api/v1 with a key or a connected app; the change feed stays open at /api/changes.",
   ],
-  [410, "withdrawn", "The file was withdrawn and is no longer served."],
+  [
+    410,
+    "withdrawn",
+    "The release file, record or text was withdrawn and is no longer served: stop serving any copy you hold. A record or text answers this only to a keyed caller, when it was public and was withdrawn because its rights record changed or lapsed or its approval was withdrawn; withdrawn for a confidential reason, or never public, it answers unavailable, as one that never existed does.",
+  ],
   [410, "replay_window_expired", "Changes after this position are no longer kept. Reconcile from a current release."],
   [413, "result_too_large", "The answer is too large for one response."],
   [

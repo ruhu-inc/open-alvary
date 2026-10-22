@@ -305,6 +305,181 @@ def test_every_surface_answers_a_feed_refusal_with_its_request_id(surfaces, tmp_
         assert refused.headers["x-request-id"] == refused.json()["request_id"], refused.request.url
 
 
+# A record named by its IDs only, once it is no longer public (owner decision, 2026-10-22).
+def by_ids(work, jurisdiction="ng"):
+    return {
+        "id": work,
+        "title": None,
+        "citation": None,
+        "legal_status": None,
+        "jurisdiction_id": jurisdiction,
+        "document_class": None,
+        "language": None,
+        "url": None,
+        "api_url": None,
+    }
+
+
+def feed_withdrawals(client, path, **kwargs):
+    page = client.get(path, **kwargs)
+    assert page.status_code == 200, page.text
+    return [e for e in page.json()["events"] if e["event_type"] == "withdrawal"]
+
+
+def test_a_record_withdrawn_for_a_reason_that_may_be_told_is_named_by_its_ids_to_keyed_callers(
+    surfaces, cleared, tmp_path
+):
+    from api.v1 import create_v1_app
+
+    store, client, headers = surfaces
+    store.save(cleared)
+    work = cleared.sources[0].id
+    # Filtered consumers, keyed: by the record's country, by the record itself, and by a keyword.
+    tokens = {
+        name: client.get("/api/v1/changes", params=params, headers=headers).json()["resume_token"]
+        for name, params in (("ng", {"jurisdiction": "ng"}), ("work", {"work": work}), ("q", {"q": "zebra"}))
+    }
+    # Its text's approval is withdrawn (named while the record is public), then its rights record no
+    # longer allows its metadata: a withdrawal whose reason may be told.
+    edit(store, lambda c: setattr(rights_of(c, work), "approved_content_hashes", []))
+    edit(store, lambda c: setattr(rights_of(c, work), "metadata_public", False))
+    [stored] = [e for e in events(store) if e["event_type"] == "withdrawal" and e["version_id"] is None]
+    assert stored["payload"]["withdrawal"] == {
+        "action": "stop_serving",
+        "reason_code": "rights_changed",
+        "versions": [],
+    }
+
+    for name, params in (("ng", {"jurisdiction": "ng"}), ("work", {"work": work}), ("q", {"q": "zebra"})):
+        replay = feed_withdrawals(
+            client, "/api/v1/changes", params=params | {"resume_token": tokens[name]}, headers=headers
+        )
+        text_, record = sorted(replay, key=lambda e: e["publication_revision"])
+        assert record["work"] == by_ids(work) and record["version"] is None, name
+        assert record["jurisdiction"] == {"id": "ng", "name": "Nigeria"}
+        assert record["withdrawal"] == {
+            "scope_disclosure": "named",
+            "action": "stop_serving",
+            "reason_code": "rights_changed",
+        }
+        assert record["summary"] == "A previously public record was withdrawn. Stop serving it and its texts."
+        assert (record["sources"], record["changed_fields"], record["rights_revision"]) == ([], [], None)
+        # The earlier stop_serving keeps its IDs, and only them, now that its record is withdrawn too.
+        assert text_["work"] == by_ids(work) and text_["withdrawal"]["reason_code"] == "correction"
+        assert text_["version"] == {"id": "test-version", "content_hash": None, "language": None}
+        assert text_["withdrawal"]["scope_disclosure"] == "named"
+    single = client.get(f"/api/v1/changes/{record['event_id']}", headers=headers).json()
+    assert single["work"] == by_ids(work)
+
+    # Without a key nothing names it, as before.
+    for path in ("/api/changes", "/site/v1/changes"):
+        for event in feed_withdrawals(client, path):
+            assert event["work"] is None and event["version"] is None and event["jurisdiction"] is None
+            assert event["withdrawal"] == {
+                "scope_disclosure": "revalidate_releases",
+                "action": "revalidate",
+                "reason_code": None,
+            }
+
+    # Reads: a keyed caller is told it was withdrawn; without a key, and for a record never public, the
+    # answer is unavailable.
+    for path in (
+        f"/api/v1/sources/{work}",
+        f"/api/v1/rights/{work}",
+        f"/api/v1/sources/{work}/versions",
+        "/api/v1/versions/test-version/text",
+        "/api/v1/versions/test-version/structure",
+        "/api/v1/anchors/test-node",
+    ):
+        told = client.get(path, headers=headers)
+        assert told.status_code == 410 and told.json()["code"] == "withdrawn", path
+        assert told.headers["content-type"] == "application/problem+json"
+        assert "withdrawn" in told.json()["detail"]
+    bare = TestClient(create_v1_app(store, tmp_path, lambda: []))  # no gate: not keyed
+    for unkeyed in (
+        client.get(f"/site/v1/sources/{work}"),
+        bare.get(f"/sources/{work}"),
+        bare.get("/versions/test-version/text"),
+        client.get("/api/v1/sources/no-such-record", headers=headers),
+    ):
+        assert unkeyed.status_code == 404 and unkeyed.json()["code"] == "unavailable", unkeyed.request.url
+
+    items = {"items": [{"anchor_id": "test-node"}, {"version_id": "test-version", "locator": "section/1"},
+                       {"anchor_id": "no-such-anchor"}]}  # fmt: skip
+    checked = client.post("/api/v1/currentness", json=items, headers=headers).json()["results"]
+    assert [r["result"] for r in checked] == ["withdrawn", "withdrawn", "unavailable"]
+    unkeyed = bare.post("/currentness", json=items).json()["results"]
+    assert [r["result"] for r in unkeyed] == ["unavailable"] * 3
+
+
+def test_a_record_never_public_or_withdrawn_confidentially_is_never_named_or_told_apart(
+    surfaces, cleared, monkeypatch
+):
+    from schema.models import RightsRecord, Source
+
+    store, client, headers = surfaces
+    store.save(cleared)
+    work, other = cleared.sources[0].id, cleared.sources[1].id
+
+    def private(corpus):  # a record catalogued but never public
+        corpus.sources.append(
+            Source(
+                id="ng-never-public",
+                jurisdiction_id="ng",
+                authority_id=corpus.sources[0].authority_id,
+                title="Synthetic record never made public",
+                document_type="act",
+                canonical_url="https://example.org/never-public",
+                citation="Synthetic 1/2026",
+            )
+        )
+        corpus.rights.append(RightsRecord(id="rights-ng-never-public", source_id="ng-never-public"))
+
+    edit(store, private)
+    # Withdrawn with the operator command for a confidential reason (privacy, a legal or court order).
+    monkeypatch.setattr(admin, "engine_for", lambda: store.engine)
+    assert admin.main(["withdraw-confidentially", "--work", work]) == 0
+    # And another whose privacy review is now blocked: confidential too.
+    edit(
+        store,
+        lambda c: [
+            setattr(rights_of(c, other), "privacy_status", "blocked"),
+            setattr(rights_of(c, other), "metadata_public", False),
+        ],
+    )
+    stored = [e for e in events(store) if e["event_type"] == "withdrawal"]
+    assert len(stored) == 2 and all("withdrawal" not in e["payload"] for e in stored)  # as before G15
+    for event in feed_withdrawals(client, "/api/v1/changes", headers=headers):
+        assert event["work"] is None and event["withdrawal"]["scope_disclosure"] == "revalidate_releases"
+    for path in (f"/api/v1/sources/{work}", f"/api/v1/sources/{other}", "/api/v1/sources/ng-never-public",
+                 "/api/v1/versions/test-version/text", "/api/v1/anchors/test-node"):  # fmt: skip
+        refused = client.get(path, headers=headers)
+        assert refused.status_code == 404 and refused.json()["code"] == "unavailable", path
+    checked = client.post(
+        "/api/v1/currentness", json={"items": [{"anchor_id": "test-node"}]}, headers=headers
+    ).json()
+    assert checked["results"][0]["result"] == "unavailable"
+
+    # A withdrawal told before stops being told once a later one is confidential.
+    edit(
+        store,
+        lambda c: [
+            setattr(rights_of(c, other), "privacy_status", "cleared"),
+            setattr(rights_of(c, other), "metadata_public", True),
+        ],
+    )
+    edit(store, lambda c: setattr(rights_of(c, other), "metadata_public", False))  # may be told
+    assert client.get(f"/api/v1/sources/{other}", headers=headers).json()["code"] == "withdrawn"
+    assert any(
+        e["work"] == by_ids(other) for e in feed_withdrawals(client, "/api/v1/changes", headers=headers)
+    )
+    edit(store, lambda c: setattr(rights_of(c, other), "metadata_public", True))
+    monkeypatch.setattr(admin, "engine_for", lambda: store.engine)
+    assert admin.main(["withdraw-confidentially", "--work", other]) == 0
+    assert client.get(f"/api/v1/sources/{other}", headers=headers).json()["code"] == "unavailable"
+    assert all(e["work"] is None for e in feed_withdrawals(client, "/api/v1/changes", headers=headers))
+
+
 def test_atom_and_rss_are_well_formed_and_escape_titles(feed, cleared):
     from email.utils import parsedate_to_datetime
 

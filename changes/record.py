@@ -14,6 +14,12 @@ the official file its text was read from; null for every other type, whose chang
 publisher_published_at is when the publisher published it: the catalogue the log is computed from keeps
 no publication date for a record or a text, so it is null on every event; the column is kept for
 source_publication_observed, which is not emitted yet.
+
+Why a whole record stopped being public is recorded with its withdrawal when it may be told (owner
+decision, 2026-10-22): ``rights_changed`` when the same write changed its rights record so that it is no
+longer public; nothing otherwise, a confidential withdrawal that is never named (the operator marked it
+confidential, its privacy review is blocked, or nothing recorded says why). changes.feed names the first
+by its IDs to keyed callers; the second stays as every whole-record withdrawal was before.
 """
 
 import hashlib
@@ -60,6 +66,10 @@ RIGHTS_FIELDS = tuple(RightsViewRecord.model_fields)
 WITH_RIGHTS_REVISION = (
     "catalogue_added", "metadata_corrected", "rights_changed", "text_version_published", "withdrawal",
 )  # fmt: skip
+# The reasons a record's or a text's withdrawal may be told to keyed callers: the record or text is named
+# by its IDs, and reads answer `withdrawn` (owner decision, 2026-10-22). Any other reason, or none, is
+# confidential: the withdrawal names nothing and reads answer `unavailable`.
+DISCLOSED_REASONS = ("rights_changed", "correction")
 # A correction may show a field's previous value only where it can never have been withheld (SUB C1).
 SAFE_PREVIOUS = ("legal_status", "rights_status", "document_type", "year")
 # Checked links between works that change what law applies (legal_effect_recorded): the effect, and
@@ -157,8 +167,9 @@ def _names(conn, ids):
 
 
 class _Recorder:
-    def __init__(self, conn: Connection):
+    def __init__(self, conn: Connection, confidential: Iterable[str] = ()):
         self.conn = conn
+        self.confidential = set(confidential)  # works whose withdrawal by this write must not be told
         ns = namespace(conn)
         self.t = {
             name: ns.qualified(conn, "changes", name)
@@ -180,6 +191,7 @@ class _Recorder:
         self.allocate = ns.qualified(conn, "policy", "allocate_publication_revision") + "()"
         self.events: list[dict] = []
         self.rights_revision: dict[str, int] = {}  # work -> the rights revision in force after this write
+        self.revised: set[str] = set()  # works whose rights record this write changed (a new revision)
 
     def next_revision(self, event_type, key):
         planned = sum(
@@ -250,12 +262,16 @@ class _Recorder:
         return event
 
 
-def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
+def publish(
+    conn: Connection, work_ids: Iterable[str] | None = None, *, confidential: Iterable[str] = ()
+) -> int:
     """Append the events for what changed among these works (all when None); returns how many.
-    Call inside the transaction that wrote the catalogue, after the writes."""
+    Call inside the transaction that wrote the catalogue, after the writes. A work in ``confidential``
+    that stops being public is withdrawn for a reason that must not be told (privacy, a legal or court
+    order, or another confidential reason): its withdrawal never names it."""
     if conn.dialect.name != "postgresql":
         return 0
-    rec = _Recorder(conn)
+    rec = _Recorder(conn, confidential)
     if conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["feed_state"]}) is None:
         return 0  # a database before migration 0023 has no change log
     keeps_links = conn.scalar(text("SELECT to_regclass(:t)"), {"t": rec.t["link_state"]}) is not None
@@ -395,6 +411,7 @@ def _rights_revisions(rec: _Recorder, scope) -> list[dict]:
             rec.rights_revision[row.source_id] = number
             continue
         rec.rights_revision[row.source_id] = number + 1
+        rec.revised.add(row.source_id)
         item = {
             "work_id": row.source_id,
             "revision": number + 1,
@@ -1190,6 +1207,21 @@ def _withdrawn_because(conn: Connection, work_id: str, version_id: str) -> str:
     return "rights_changed"
 
 
+def _record_withdrawn_because(rec: _Recorder, work_id: str) -> str | None:
+    """Why a whole record stopped being public, when that may be told (owner decision, 2026-10-22):
+    ``rights_changed`` when this write changed its rights record (a new revision) so that it is no longer
+    public. None, a confidential withdrawal, when the operator marked it confidential, when its privacy
+    review is blocked, or when nothing recorded says why: its rights record unchanged or gone (the
+    record's rows were changed or removed by other means)."""
+    if work_id in rec.confidential or work_id not in rec.revised:
+        return None
+    rights = tables["rights"]
+    record = rec.conn.scalar(select(rights.c.payload).where(rights.c.source_id == work_id))
+    if record is None or record.get("privacy_status") == "blocked":
+        return None
+    return "rights_changed"
+
+
 def _compare(rec: _Recorder, work_id: str, now: dict | None, before) -> None:
     was_visible = before is not None and before["visible"]
     if now and not was_visible:
@@ -1214,12 +1246,21 @@ def _compare(rec: _Recorder, work_id: str, now: dict | None, before) -> None:
         return
     title = (now or {}).get("projection", {}).get("title") or before["projection"].get("title")
     if now is None:
+        # Why, when it may be told, with the texts that were readable; nothing, as before G15, when not.
+        reason = _record_withdrawn_because(rec, work_id)
         rec.add(
             "withdrawal",
             f"{work_id}:w",
             work_id,
             {"projection": before["projection"]},
             summary="A previously public record was withdrawn. Revalidate any copies you keep.",
+            withdrawal={
+                "action": "stop_serving",
+                "reason_code": reason,
+                "versions": sorted(before["readable_versions"]),
+            }
+            if reason
+            else None,
         )
         return
     if digest(now["projection"]) != before["projection_hash"]:

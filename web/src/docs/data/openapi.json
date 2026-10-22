@@ -2200,6 +2200,16 @@
               }
             }
           },
+          "410": {
+            "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
             "headers": {
@@ -2470,6 +2480,16 @@
               }
             }
           },
+          "410": {
+            "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
             "headers": {
@@ -2612,6 +2632,16 @@
                 "$ref": "#/components/headers/RateLimitPolicy"
               }
             },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2868,6 +2898,16 @@
               }
             }
           },
+          "410": {
+            "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "413": {
             "description": "The answer would be larger than one response may be (`result_too_large`).",
             "headers": {
@@ -3051,6 +3091,16 @@
                 "$ref": "#/components/headers/RateLimitPolicy"
               }
             },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3302,6 +3352,16 @@
               }
             }
           },
+          "410": {
+            "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
             "headers": {
@@ -3464,6 +3524,16 @@
                 "$ref": "#/components/headers/RateLimitPolicy"
               }
             },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -4745,7 +4815,7 @@
             }
           }
         },
-        "description": "Before showing an answer that cites the corpus: for each cited part (up to 100), whether it is still published with the same words (`span_mismatch` when its words don't hash to the `span_hash` sent), whether a newer text of the same edition exists (with the same part's anchor there and whether its words changed), and whether it was in force on a date. Given a `jurisdiction`, also whether the record binds there on that date (`applicability`): a regional instrument through the country's reviewed membership and the instrument's legal effect, a treaty through the country's own ratification or accession. A part that is not public now and one that never was get the same answer, `unavailable`.",
+        "description": "Before showing an answer that cites the corpus: for each cited part (up to 100), whether it is still published with the same words (`span_mismatch` when its words don't hash to the `span_hash` sent), whether a newer text of the same edition exists (with the same part's anchor there and whether its words changed), and whether it was in force on a date. Given a `jurisdiction`, also whether the record binds there on that date (`applicability`): a regional instrument through the country's reviewed membership and the instrument's legal effect, a treaty through the country's own ratification or accession. A part that is not public now and one that never was get the same answer, `unavailable`; only a part whose text was public and was withdrawn for a reason that may be told (its rights record changed or lapsed, or its approval was withdrawn) is `withdrawn` instead, to a keyed caller.",
         "tags": [
           "Retrieval"
         ]
@@ -5418,6 +5488,16 @@
               }
             }
           },
+          "410": {
+            "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
             "headers": {
@@ -5560,6 +5640,16 @@
                 "$ref": "#/components/headers/RateLimitPolicy"
               }
             },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6738,7 +6828,8 @@
               "unchanged",
               "newer_version",
               "span_mismatch",
-              "unavailable"
+              "unavailable",
+              "withdrawn"
             ],
             "title": "Result",
             "description": "`unchanged`; `newer_version` (a later text of the same edition exists); `span_mismatch` (the hash sent is not this part's); or `unavailable` (not public now, or never)."
@@ -6849,7 +6940,7 @@
           "result"
         ],
         "title": "CheckResult",
-        "description": "What became of a cited part: ``unchanged``; ``newer_version`` (a later text of the same expression,\nwith the same locator's anchor there and whether its words are identical); ``span_mismatch`` (the\nhash sent is not this part's); or ``unavailable`` (not public now, or never: not told apart). Asked with\na jurisdiction, ``applicability`` says whether the record binds there on the date (api.applicable)."
+        "description": "What became of a cited part: ``unchanged``; ``newer_version`` (a later text of the same expression,\nwith the same locator's anchor there and whether its words are identical); ``span_mismatch`` (the\nhash sent is not this part's); ``unavailable`` (not public now, or never: not told apart); or, only\nfor a keyed caller, ``withdrawn`` (its text was public and was withdrawn for a reason that may be\ntold; owner decision, 2026-10-22). Asked with a jurisdiction, ``applicability`` says whether the\nrecord binds there on the date (api.applicable)."
       },
       "CitationView": {
         "properties": {
@@ -13256,43 +13347,64 @@
       },
       "ChangeWork": {
         "type": "object",
-        "description": "The record a change is about.",
+        "description": "The record a change is about. A record that is no longer public, named to a keyed caller in a withdrawal, is named by its IDs only: `id` and `jurisdiction_id`, every other field null.",
         "properties": {
           "id": {
             "type": "string",
             "description": "The record's ID."
           },
           "title": {
-            "type": "string",
-            "description": "Its title."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its title; null when named by its IDs only."
           },
           "citation": {
-            "type": "string",
-            "description": "Its citation."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its citation; null when named by its IDs only."
           },
           "legal_status": {
-            "type": "string",
-            "description": "Whether it is in force now, as the catalogue has it: `current`, `historical`, `repealed`, `superseded` or `unknown`."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Whether it is in force now, as the catalogue has it: `current`, `historical`, `repealed`, `superseded` or `unknown`; null when named by its IDs only."
           },
           "jurisdiction_id": {
             "type": "string",
             "description": "Its jurisdiction."
           },
           "document_class": {
-            "type": "string",
-            "description": "Its document type, such as `act`."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its document type, such as `act`; null when named by its IDs only."
           },
           "language": {
-            "type": "string",
-            "description": "Its language."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its language; null when named by its IDs only."
           },
           "url": {
-            "type": "string",
-            "description": "Its page on the website."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its page on the website; null when named by its IDs only."
           },
           "api_url": {
-            "type": "string",
-            "description": "The record in this API: Get a record."
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The record in this API: Get a record; null when named by its IDs only."
           }
         }
       },
@@ -13392,23 +13504,29 @@
                 "type": "null"
               }
             ],
-            "description": "The record, or null when it may no longer be named."
+            "description": "The record, or null when it may no longer be named. To a keyed caller, a withdrawal from a record that is no longer public names it by its IDs only when the reason may be told (see `withdrawal`)."
           },
           "version": {
             "type": [
               "object",
               "null"
             ],
-            "description": "For a published or withdrawn text: {id, content_hash, language}.",
+            "description": "For a published or withdrawn text: {id, content_hash, language}. A text withdrawn from a record named by its IDs only has its `id`, with `content_hash` and `language` null.",
             "properties": {
               "id": {
                 "type": "string"
               },
               "content_hash": {
-                "type": "string"
+                "type": [
+                  "string",
+                  "null"
+                ]
               },
               "language": {
-                "type": "string"
+                "type": [
+                  "string",
+                  "null"
+                ]
               }
             }
           },
@@ -13442,7 +13560,7 @@
           },
           "summary": {
             "type": "string",
-            "description": "One plain sentence saying what changed."
+            "description": "One plain sentence saying what changed. A withdrawal that names no record, or names it by its IDs only, never gives its title."
           },
           "sources": {
             "type": "array",
@@ -13456,7 +13574,7 @@
               "object",
               "null"
             ],
-            "description": "For a withdrawal: {scope_disclosure, action, reason_code}. A text version withdrawn from a record that stays public is `named`, with the version in `version`, `action` `stop_serving` (stop serving copies of that text) and `reason_code` `rights_changed` (its rights record changed or lapsed) or `correction` (its approval was withdrawn). When `scope_disclosure` is `revalidate_releases`, check your copies against a current release."
+            "description": "For a withdrawal: {scope_disclosure, action, reason_code}. A text version withdrawn from a record that stays public is `named`, with the version in `version`, `action` `stop_serving` (stop serving copies of that text) and `reason_code` `rights_changed` (its rights record changed or lapsed) or `correction` (its approval was withdrawn). To a keyed caller, a record that is no longer public is `named` too when the reason may be told: a whole record withdrawn because its rights record changed (`rights_changed`, `version` null, stop serving the record and its texts), and a text withdrawn from it earlier, both by IDs only. Anything else is `revalidate_releases`, `action` `revalidate`, `reason_code` null and no record named: every withdrawal to a caller without a key, a record withdrawn for a confidential reason (privacy, a legal or court order, or another reason that must not be told), and one withdrawn before reasons were recorded. Then check your copies against a current release."
           },
           "legal_effect": {
             "type": [

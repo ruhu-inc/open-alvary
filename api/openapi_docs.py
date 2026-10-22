@@ -21,6 +21,12 @@ GATE = {
 }
 BAD = {"400": "A parameter is unknown, malformed or out of range (`invalid_input`)."}
 MISSING = {"404": "There is no such record, or it is not public (`unavailable`)."}
+WITHDRAWN = {
+    "410": "The record or text was public and was withdrawn for a reason that may be told: its rights record "
+    "changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is "
+    "told this; a record or text withdrawn for a confidential reason, or never public, answers 404 "
+    "`unavailable`, as one that never existed does."
+}
 TOO_LARGE = {"413": "The answer would be larger than one response may be (`result_too_large`)."}
 FEED = {
     "400": "A parameter, filter, cursor or token is not valid (`invalid_input`, `invalid_filter`, "
@@ -113,7 +119,7 @@ OPERATIONS: dict[str, dict] = {
         "description": "One record: its title, citation, type, legal status, official link and rights "
         "status.",
         "parameters": {"source_id": "The record's ID, such as `ng-foi-act-2011`."},
-        "errors": MISSING,
+        "errors": MISSING | WITHDRAWN,
     },
     "/sources/{source_id}/versions": {
         "conditional": True,
@@ -131,7 +137,7 @@ OPERATIONS: dict[str, dict] = {
             "language": "A language, such as `en`; `en` also matches `en-NG`.",
             "expression_id": "One language edition, such as `ng-foi-act-2011:en`, from Get a record's editions.",
         },
-        "errors": MISSING | BAD | TOO_LARGE,
+        "errors": MISSING | WITHDRAWN | BAD | TOO_LARGE,
     },
     "/sources/{source_id}/expressions": {
         "operationId": "get_expressions",
@@ -145,7 +151,7 @@ OPERATIONS: dict[str, dict] = {
         "authoritative. An edition's ID is `{source_id}:{language}`; pass it as `expression_id` to Get a "
         "record's texts.",
         "parameters": {"source_id": "The record's ID."},
-        "errors": MISSING,
+        "errors": MISSING | WITHDRAWN,
     },
     "/versions/{version_id}/text": {
         "conditional": True,
@@ -159,7 +165,7 @@ OPERATIONS: dict[str, dict] = {
         "not exist.",
         "path": {"version_id": "The version's ID, from a record's texts."},
         "answer": ("text/plain", {"type": "string"}),
-        "errors": MISSING | TOO_LARGE,
+        "errors": MISSING | WITHDRAWN | TOO_LARGE,
     },
     "/versions/{version_id}/structure": {
         "conditional": True,
@@ -174,7 +180,7 @@ OPERATIONS: dict[str, dict] = {
             "limit": "Parts per page, 1 to 500. The default is 100.",
             "cursor": "The `next_cursor` of the previous page, to continue it.",
         },
-        "errors": MISSING | BAD,
+        "errors": MISSING | WITHDRAWN | BAD,
     },
     "/anchors/{anchor_id}": {
         "conditional": True,
@@ -187,7 +193,7 @@ OPERATIONS: dict[str, dict] = {
         "words are never shortened. A part of a text that is not public answers like one that does "
         "not exist.",
         "path": {"anchor_id": "The part's ID, from a text's structure."},
-        "errors": MISSING | TOO_LARGE,
+        "errors": MISSING | WITHDRAWN | TOO_LARGE,
     },
     "/sources/{source_id}/relationships": {
         "operationId": "get_relationships",
@@ -214,7 +220,7 @@ OPERATIONS: dict[str, dict] = {
             "limit": "Links per page, 1 to 100. The default is 25.",
             "cursor": "The `next_cursor` of the previous page, to continue it.",
         },
-        "errors": MISSING | BAD,
+        "errors": MISSING | WITHDRAWN | BAD,
     },
     "/rights/{source_id}": {
         "operationId": "get_rights",
@@ -223,7 +229,7 @@ OPERATIONS: dict[str, dict] = {
         "description": "The rights record behind a record (licence, permissions, evidence, review) and "
         "the decision taken from it: whether the catalogue record and the text may be shown, and why.",
         "parameters": {"source_id": "The record's ID."},
-        "errors": MISSING,
+        "errors": MISSING | WITHDRAWN,
     },
     "/rights/{source_id}/history": {
         "operationId": "get_rights_history",
@@ -235,7 +241,7 @@ OPERATIONS: dict[str, dict] = {
         "force (`rights_revision`), so a copy of a text can say which rights record it was published "
         "under.",
         "parameters": {"source_id": "The record's ID."},
-        "errors": MISSING,
+        "errors": MISSING | WITHDRAWN,
     },
     "/search/text": {
         "conditional": True,
@@ -335,7 +341,9 @@ OPERATIONS: dict[str, dict] = {
         "force on a date. Given a `jurisdiction`, also whether the record binds there on that date "
         "(`applicability`): a regional instrument through the country's reviewed membership and the "
         "instrument's legal effect, a treaty through the country's own ratification or accession. A part that "
-        "is not public now and one that never was get the same answer, `unavailable`.",
+        "is not public now and one that never was get the same answer, `unavailable`; only a part whose text "
+        "was public and was withdrawn for a reason that may be told (its rights record changed or lapsed, or "
+        "its approval was withdrawn) is `withdrawn` instead, to a keyed caller.",
         "body": "The parts to check: `items`, each an `anchor_id`, or a `version_id` with a `locator`, "
         "with the `span_hash` you hold, an optional `as_of` date and an optional `jurisdiction`.",
         "errors": BAD,
@@ -590,21 +598,24 @@ SCHEMAS: dict[str, dict] = {
     },
     "ChangeWork": {
         "type": "object",
-        "description": "The record a change is about.",
+        "description": "The record a change is about. A record that is no longer public, named to a keyed "
+        "caller in a withdrawal, is named by its IDs only: `id` and `jurisdiction_id`, every other field null.",
         "properties": {
             "id": {"type": S, "description": "The record's ID."},
-            "title": {"type": S, "description": "Its title."},
-            "citation": {"type": S, "description": "Its citation."},
-            "legal_status": {
-                "type": S,
+            "title": NULL_S | {"description": "Its title; null when named by its IDs only."},
+            "citation": NULL_S | {"description": "Its citation; null when named by its IDs only."},
+            "legal_status": NULL_S
+            | {
                 "description": "Whether it is in force now, as the catalogue has it: `current`, `historical`, "
-                "`repealed`, `superseded` or `unknown`.",
+                "`repealed`, `superseded` or `unknown`; null when named by its IDs only.",
             },
             "jurisdiction_id": {"type": S, "description": "Its jurisdiction."},
-            "document_class": {"type": S, "description": "Its document type, such as `act`."},
-            "language": {"type": S, "description": "Its language."},
-            "url": {"type": S, "description": "Its page on the website."},
-            "api_url": {"type": S, "description": "The record in this API: Get a record."},
+            "document_class": NULL_S
+            | {"description": "Its document type, such as `act`; null when named by its IDs only."},
+            "language": NULL_S | {"description": "Its language; null when named by its IDs only."},
+            "url": NULL_S | {"description": "Its page on the website; null when named by its IDs only."},
+            "api_url": NULL_S
+            | {"description": "The record in this API: Get a record; null when named by its IDs only."},
         },
     },
     "ChangeEvent": {
@@ -678,12 +689,15 @@ SCHEMAS: dict[str, dict] = {
             },
             "work": {
                 "oneOf": [{"$ref": "#/components/schemas/ChangeWork"}, {"type": "null"}],
-                "description": "The record, or null when it may no longer be named.",
+                "description": "The record, or null when it may no longer be named. To a keyed caller, a "
+                "withdrawal from a record that is no longer public names it by its IDs only when the reason "
+                "may be told (see `withdrawal`).",
             },
             "version": {
                 "type": ["object", "null"],
-                "description": "For a published or withdrawn text: {id, content_hash, language}.",
-                "properties": {"id": {"type": S}, "content_hash": {"type": S}, "language": {"type": S}},
+                "description": "For a published or withdrawn text: {id, content_hash, language}. A text withdrawn "
+                "from a record named by its IDs only has its `id`, with `content_hash` and `language` null.",
+                "properties": {"id": {"type": S}, "content_hash": NULL_S, "language": NULL_S},
             },
             "rights_revision": {
                 "type": ["integer", "null"],
@@ -709,7 +723,11 @@ SCHEMAS: dict[str, dict] = {
                 "type": ["object", "null"],
                 "description": "For a corrected change: the {event_id, event_revision} it replaces.",
             },
-            "summary": {"type": S, "description": "One plain sentence saying what changed."},
+            "summary": {
+                "type": S,
+                "description": "One plain sentence saying what changed. A withdrawal that names no record, or "
+                "names it by its IDs only, never gives its title.",
+            },
             "sources": {
                 "type": "array",
                 "items": {"type": S},
@@ -720,8 +738,15 @@ SCHEMAS: dict[str, dict] = {
                 "description": "For a withdrawal: {scope_disclosure, action, reason_code}. A text version "
                 "withdrawn from a record that stays public is `named`, with the version in `version`, `action` "
                 "`stop_serving` (stop serving copies of that text) and `reason_code` `rights_changed` (its "
-                "rights record changed or lapsed) or `correction` (its approval was withdrawn). When "
-                "`scope_disclosure` is `revalidate_releases`, check your copies against a current release.",
+                "rights record changed or lapsed) or `correction` (its approval was withdrawn). To a keyed "
+                "caller, a record that is no longer public is `named` too when the reason may be told: a whole "
+                "record withdrawn because its rights record changed (`rights_changed`, `version` null, stop "
+                "serving the record and its texts), and a text withdrawn from it earlier, both by IDs only. "
+                "Anything else is `revalidate_releases`, `action` `revalidate`, `reason_code` null and no "
+                "record named: every withdrawal to a caller without a key, a record withdrawn for a "
+                "confidential reason (privacy, a legal or court order, or another reason that must not be "
+                "told), and one withdrawn before reasons were recorded. Then check your copies against a "
+                "current release.",
             },
             "legal_effect": {
                 "type": ["object", "null"],
