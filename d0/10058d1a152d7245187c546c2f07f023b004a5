@@ -1,0 +1,30 @@
+deployment/ingestion-jobs.Dockerfile
+  s_d665c62e07d76f::t_2ac99915fac833 4
+deployment/gcp/ingestion_jobs.sh
+  s_d665c62e07d76f::t_4cf188b0272e07 12-13,20-26,34-35,70-71,128-134,150-155,157,176,178
+tests/test_fetch_job.py
+  s_d665c62e07d76f::t_1fa8422f047a04 1-63,72-108,113,119-129,139-146,153-169,173,177-187,191-212,220-221
+  s_d665c62e07d76f::t_f60e1ed80f753e 64-71,109-112,114-118,130-138,147-152,170-172,174-176,188-190,213-219,222-224
+ingestion/fetch_job.py
+  s_d665c62e07d76f::t_bc82d509c8e6c8 108-109,113-120,127,135,146,148,153-154,190,192-201,209-211,213-216,283-285,291-297,310,342-345
+  s_d665c62e07d76f::t_78a6e23815f57d 139
+  s_d665c62e07d76f::t_7cd5532e4fe0ac 1-107,110-112,121-126,128-134,136-138,140-145,149-152,156-189,191,202-208,212,217-282,286-290,298-309,311-341,346-356
+  s_d665c62e07d76f::t_f60e1ed80f753e 155
+  s_d665c62e07d76f::t_5da316bab7572a 147
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d010058d1a152d7245187c546c2f07f023b004a5",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
