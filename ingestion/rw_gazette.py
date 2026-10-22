@@ -25,7 +25,7 @@ from schema.jurisdictions import registry
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-21.4"  # the Gazette's publisher as Rwanda's profile names it
+PIPELINE = "2026-10-22.1"  # born-digital pages checked against Google's OCR (check_text_layer)
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -912,6 +912,77 @@ def _box(lines: list[dict], size: tuple[float, float]) -> list[float]:
         round(max(line["x1"] for line in lines) / width, 4),
         round(max(line["y1"] for line in lines) / height, 4),
     ]
+
+
+# The same printed sign read as two characters ("nº", "n°"), and an OCR's Greek or Cyrillic look-alikes
+# of Latin letters ("ΝΟΜΙΝΑTION", "КOAANA"): never differences of the text.
+LOOK_ALIKE = str.maketrans(
+    {"º": "°", "ª": "a"}
+    | dict(
+        zip(
+            "ΑΒΕΖΗΙΚΜΝΟΡΤΥΧαβεικνορτυχАВЕКМНОРСТУХаеорсухі",
+            "ABEZHIKMNOPTYXabeiknoptyxABEKMHOPCTYXaeopcyxi",
+            strict=True,
+        )
+    )
+)
+
+
+def check_text_layer(
+    nodes: list[dict], ocr_pages: dict[int, dict], sizes: dict[int, tuple[float, float]]
+) -> set[int]:
+    """Born-digital pages checked against an independent reading (CPR-01, DIG-01): each printed line the
+    text layer gave, against the words Google's OCR read inside the same box on the page image. A unit
+    whose lines differ is flagged as a scanned page's differences are: words read otherwise
+    (``text_layer_differs``, medium; a number or negation among them sends the page to full review) and
+    accents the page prints but the text layer lacks (``accents_missing``, low). A number or negation
+    the OCR reads in a line that the layer lacks is a difference too; other words only it reads are
+    not (specks, the next column's edge). The text stays the layer's: the check never changes a word.
+    Table cells are not checked: a table's page is reviewed whole. Returns the pages checked."""
+    from ingestion.compare import NEGATIONS
+    from ingestion.native import align, words
+
+    checked: set[int] = set()
+    for node in nodes:
+        worded, accents = [], []
+        for line in node.get("lines", []):
+            page = ocr_pages.get(line["page"])
+            if page is None or line.get("table"):
+                continue
+            checked.add(line["page"])
+            x0, y0, x1, y1 = _box([line], sizes[line["page"]])
+            pad = (y1 - y0) * 0.3
+            seen = [
+                w["text"]
+                for w in page["words"]
+                if x0 - 0.003 <= (w["x0"] + w["x1"]) / 2 <= x1 + 0.003
+                and y0 - pad <= (w["y0"] + w["y1"]) / 2 <= y1 + pad
+            ]
+            mine = words(line["text"].translate(LOOK_ALIKE))
+            if not mine:
+                continue
+            missing, extra = align(words(" ".join(seen).translate(LOOK_ALIKE)), mine)["unmatched"]
+            risky = [w for w in extra if w.isdigit() or w in NEGATIONS]
+            if not missing and not risky:
+                continue
+            if missing and sorted(map(_fold, missing)) == sorted(map(_fold, extra)):
+                accents.append((" ".join(missing), " ".join(extra)))
+            else:
+                worded.append((" ".join(missing) or "∅", " ".join(extra) or "∅"))
+        for kind, severity, group in (
+            ("accents_missing", "low", accents),
+            ("text_layer_differs", "medium", worded),
+        ):
+            if group:
+                node.setdefault("flags", []).append(
+                    {
+                        "severity": severity,
+                        "kind": kind,
+                        "primary": "; ".join(kept for kept, _ in group)[:400],
+                        "others": {"Google OCR": "; ".join(other for _, other in group)[:400]},
+                    }
+                )
+    return checked
 
 
 def reading(
