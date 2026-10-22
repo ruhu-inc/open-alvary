@@ -64,6 +64,29 @@ def test_list_blocks_become_items():
     ]
 
 
+def test_a_line_break_returned_as_backslash_n_is_read_as_a_line_break():
+    escaped = {"blocks": [text("paragraph", r"Taux\nannuel")], "row_span": 1, "col_span": 1}
+    nodes = lp.convert_blocks(
+        [
+            text("heading-1", r"CHAPITRE IV\nDISPOSITIONS FINALES"),
+            text("paragraph", r"les États\nmembres"),
+            ordered_list(r"Article 32\nMesures"),
+            {"table_block": {"body_rows": [{"cells": [escaped]}]}, "page_span": {"page_start": 1}},
+        ]
+    )
+    assert [n.get("text") for n in nodes[:3]] == [
+        "CHAPITRE IV\nDISPOSITIONS FINALES",
+        "les États\nmembres",
+        "Article 32\nMesures",
+    ]
+    assert nodes[3]["body_rows"][0][0]["text"] == "Taux\nannuel"
+    # A heading's two lines; within a paragraph, words.
+    assert lp.page_text(nodes, 1).split("\n")[:2] == ["CHAPITRE IV", "DISPOSITIONS FINALES"]
+    assert "les États membres" in " ".join(lp.page_text(nodes, 1).split())
+    # Not between words, the two characters are left as read.
+    assert lp.convert_blocks([text("paragraph", r"voir \n")])[0]["text"] == r"voir \n"
+
+
 def test_disagreements_mark_only_differing_candidate_words():
     differing, missing, agreement = lp.disagreements(
         "the Counci! may make rules", "the Council may make rules"
