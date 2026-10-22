@@ -914,10 +914,11 @@ def _box(lines: list[dict], size: tuple[float, float]) -> list[float]:
     ]
 
 
-# The same printed sign read as two characters ("nº", "n°"), and an OCR's Greek or Cyrillic look-alikes
-# of Latin letters ("ΝΟΜΙΝΑTION", "КOAANA"): never differences of the text.
+# The same printed sign read as two characters ("nº", "n°"; the apostrophe of "n’amategeko" read as the
+# letter "ʼ"), and an OCR's Greek or Cyrillic look-alikes of Latin letters ("ΝΟΜΙΝΑTION", "КOAANA"):
+# never differences of the text.
 LOOK_ALIKE = str.maketrans(
-    {"º": "°", "ª": "a"}
+    {"º": "°", "ª": "a", "ʼ": "’", "ʻ": "’", "‘": "’", "`": "’", "´": "’"}
     | dict(
         zip(
             "ΑΒΕΖΗΙΚΜΝΟΡΤΥΧαβεικνορτυχАВЕКМНОРСТУХаеорсухі",
@@ -928,6 +929,21 @@ LOOK_ALIKE = str.maketrans(
 )
 
 
+# "Nº 12" however printed or read: the raised o a separate letter ("N o 12"), or run in ("No 12"); and
+# the ordinal sign after a number, its o apart ("1 o Ms. …" for "1º Ms. …").
+NUMBER_SIGN = re.compile(r"\b([Nn])(?:\s*[o°]|°)(?=\s*\d)")
+ORDINAL = re.compile(r"\b(\d{1,3})\s?o\b")
+# Below this mean confidence of its words, Google's OCR of a line is no check: the image is too unclear
+# there (a smudged or faint print it misreads as other words), and the line is flagged as unchecked.
+CLEAR = 0.6
+
+
+def _checked_words(text: str) -> list[str]:
+    from ingestion.native import words
+
+    return words(ORDINAL.sub(r"\1°", NUMBER_SIGN.sub(r"\1°", text.translate(LOOK_ALIKE))))
+
+
 def check_text_layer(
     nodes: list[dict], ocr_pages: dict[int, dict], sizes: dict[int, tuple[float, float]]
 ) -> set[int]:
@@ -935,16 +951,18 @@ def check_text_layer(
     text layer gave, against the words Google's OCR read inside the same box on the page image. A unit
     whose lines differ is flagged as a scanned page's differences are: words read otherwise
     (``text_layer_differs``, medium; a number or negation among them sends the page to full review) and
-    accents the page prints but the text layer lacks (``accents_missing``, low). A number or negation
+    accents the page prints but the text layer lacks (``accents_missing``, low). A line the OCR read
+    with a mean confidence below CLEAR is no check (``check_unclear``, low): the page is still not
+    passed as agreed. A number or negation
     the OCR reads in a line that the layer lacks is a difference too; other words only it reads are
     not (specks, the next column's edge). The text stays the layer's: the check never changes a word.
     Table cells are not checked: a table's page is reviewed whole. Returns the pages checked."""
     from ingestion.compare import NEGATIONS
-    from ingestion.native import align, words
+    from ingestion.native import align
 
     checked: set[int] = set()
     for node in nodes:
-        worded, accents = [], []
+        worded, accents, unclear = [], [], []
         for line in node.get("lines", []):
             page = ocr_pages.get(line["page"])
             if page is None or line.get("table"):
@@ -952,25 +970,34 @@ def check_text_layer(
             checked.add(line["page"])
             x0, y0, x1, y1 = _box([line], sizes[line["page"]])
             pad = (y1 - y0) * 0.3
-            seen = [
-                w["text"]
+            found = [
+                w
                 for w in page["words"]
                 if x0 - 0.003 <= (w["x0"] + w["x1"]) / 2 <= x1 + 0.003
                 and y0 - pad <= (w["y0"] + w["y1"]) / 2 <= y1 + pad
             ]
-            mine = words(line["text"].translate(LOOK_ALIKE))
+            mine = _checked_words(line["text"])
             if not mine:
                 continue
-            missing, extra = align(words(" ".join(seen).translate(LOOK_ALIKE)), mine)["unmatched"]
+            seen = [w["text"] for w in found]
+            missing, extra = align(_checked_words(" ".join(seen)), mine)["unmatched"]
+            # A word both readings have, read in another order (a neighbouring line's edge), is no difference.
+            missing, extra = (
+                list((Counter(missing) - Counter(extra)).elements()),
+                list((Counter(extra) - Counter(missing)).elements()),
+            )
             risky = [w for w in extra if w.isdigit() or w in NEGATIONS]
             if not missing and not risky:
                 continue
-            if missing and sorted(map(_fold, missing)) == sorted(map(_fold, extra)):
+            if found and sum(w.get("confidence", 1.0) for w in found) / len(found) < CLEAR:
+                unclear.append((line["text"], " ".join(seen)))
+            elif missing and sorted(map(_fold, missing)) == sorted(map(_fold, extra)):
                 accents.append((" ".join(missing), " ".join(extra)))
             else:
                 worded.append((" ".join(missing) or "∅", " ".join(extra) or "∅"))
         for kind, severity, group in (
             ("accents_missing", "low", accents),
+            ("check_unclear", "low", unclear),
             ("text_layer_differs", "medium", worded),
         ):
             if group:
