@@ -20,6 +20,9 @@ const KIND_LABEL = {
   number_differs: "the number is printed differently in two places",
   reading_differs: "scanned page: Document AI read words differently from the OCR layer; Document AI's are shown",
   accents_restored: "scanned page: accents restored by Document AI where the OCR layer dropped them",
+  text_layer_differs: "the PDF's own text reads differently from the page image (Google's OCR); the PDF's words are kept: check them against the image",
+  accents_missing: "the page prints accents the PDF's own text lacks: check them against the image",
+  check_unclear: "the image is too unclear here for Google's OCR to check the PDF's words: check them against the image",
 };
 const DECISION_LABEL = { keep: "kept as read", use_check: "used check reading", edited: "edited by hand", dismissed: "dismissed" };
 // What a page still needs (/api/documents/{id} pages[].todo); audit pages are "review" pages too.
