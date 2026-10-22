@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse, Response
 from api import text_index
 from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
 from api.repositories import EDGE_ORDER, ResultTooLarge
-from changes.feed import Feed, FeedError, Filters
+from changes.feed import Feed, FeedError, Filters, Withdrawals
 from changes.routes import tokens
 from retrieval.check import Checker
 from retrieval.pack import Request as EvidenceRequest
@@ -336,7 +336,8 @@ TOOLS = [
         "description": "Before showing an answer that cites the corpus: for each cited part, whether it is "
         "still published with the same words (unchanged), whether a newer text of the same edition exists "
         "(newer_version, with the same part's anchor_id there and whether its words changed), whether the "
-        "span_hash sent is wrong (span_mismatch) or the part is not public (unavailable); whether it "
+        "span_hash sent is wrong (span_mismatch) or the part is not public (unavailable; with a key, "
+        "withdrawn instead when its text was public and was withdrawn for a reason that may be told); whether it "
         "was in force on a date; and, given a jurisdiction, whether the record binds there on that date "
         "(applicability: bound, not_bound or unknown, with the memberships, legal effect or treaty party "
         "entry it rests on).",
@@ -413,7 +414,9 @@ TOOLS = [
         "reviewer checked) recorded or withdrawn, reviewed memberships of the African Union and the "
         "regional bodies recorded, ended or corrected, and members' suspensions from participation recorded "
         "or lifted (a suspended member remains one). Filter by jurisdiction, work, type, document class, "
-        "language or keyword. Pass the returned resume_token next time to get only newer changes. Changes "
+        "language or keyword. Pass the returned resume_token next time to get only newer changes. With a "
+        "key, a record withdrawn because its rights record changed is named by its IDs only; other "
+        "withdrawals of records no longer public, and a text withdrawn for privacy, name nothing. Changes "
         "to what Open Alvary holds, not every change in a country's law.",
         "inputSchema": {
             "type": "object",
@@ -480,7 +483,7 @@ TOOLS = [
     {
         "name": "get_change",
         "title": "Get one change",
-        "description": "One catalogue change by its event_id.",
+        "description": "One catalogue change by its event_id, as list_changes gives it.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -506,10 +509,11 @@ TOOLS = [
 ]
 
 
-def changes_tool(conn, name, arguments):
-    """The change feed as MCP tools: the same events and errors as GET /changes (changes-contracts)."""
+def changes_tool(conn, name, arguments, keyed: bool = False):
+    """The change feed as MCP tools: the same events and errors as GET /changes (changes-contracts),
+    keyed or not as the caller is (changes.feed.Withdrawals)."""
     origin = "https://" + os.getenv("PUBLIC_DOMAIN", "open.alvary.ai")
-    feed = Feed(conn, tokens(), origin)
+    feed = Feed(conn, tokens(), origin, keyed=keyed)
     if name == "get_change":
         if set(arguments) != {"event_id"} or not isinstance(arguments["event_id"], str):
             return None
@@ -591,7 +595,9 @@ def create_router(
     other jurisdiction at the Starter rate."""
     router = APIRouter()
 
-    def call_tool(name, arguments, plan: Reach):
+    def call_tool(name, arguments, plan: Reach, keyed: bool = False):
+        """``keyed``: the credential gate admitted a key or token, so the change tools and the check tell
+        what a keyed caller is told of withdrawals (changes.feed.Withdrawals)."""
         if not isinstance(arguments, dict):
             return None
         with catalogue_factory() as service:
@@ -795,12 +801,14 @@ def create_router(
                     request = CheckRequest.model_validate(arguments)
                 except ValueError:
                     return None
-                checker = Checker(service)
+                connection = service.repository.connection
+                told = Withdrawals(connection) if keyed and connection.dialect.name == "postgresql" else None
+                checker = Checker(service, withdrawn=told.item if told else None)
                 page = checker.check(request.items)
                 plan.admit(*sorted(checker.jurisdictions))
                 return _bounded(page.model_dump(mode="json"))
             if name in ("list_changes", "get_change"):
-                return changes_tool(service.repository.connection, name, arguments)
+                return changes_tool(service.repository.connection, name, arguments, keyed)
             if name == "get_coverage" and not arguments:
                 return service.coverage().model_dump(mode="json")
         return None
@@ -845,7 +853,11 @@ def create_router(
             try:
                 # Database work runs in a worker thread, never on the event loop.
                 payload = await run_in_threadpool(
-                    call_tool, params["name"], params.get("arguments", {}), reach(request)
+                    call_tool,
+                    params["name"],
+                    params.get("arguments", {}),
+                    reach(request),
+                    getattr(request.state, "access", None) is not None,
                 )
             except TooLarge as refused:
                 return _result(id_, _tool_error("result_too_large", str(refused)))

@@ -49,6 +49,8 @@ The body's `type` is one of:
 
 Every body also has `payload_version` (1), `delivery_id` and `attempted_at`. A change too large to send in full (over 64 KB) comes with `truncated: true` and the event's details without its long fields; fetch the rest from the record's `api_url`.
 
+While your organisation has API access (every plan, Starter included, unless access was revoked), your inbox, digests and webhook deliveries are told of withdrawals what a caller with a key is: a record withdrawn because its rights record changed is named by its IDs only (its `work` has `id` and `jurisdiction_id`, every other field null; a digest names it by its ID), so you can stop serving it. A record withdrawn for a confidential reason, and a text withdrawn for privacy, name nothing. See [When a text is published or withdrawn](/docs/changes#when-a-text-is-published-or-withdrawn).
+
 To receive them:
 
 1. Read the body as raw bytes, **before** parsing it.

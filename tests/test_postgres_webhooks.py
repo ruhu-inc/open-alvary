@@ -257,3 +257,35 @@ def test_replay_and_rotation(world):
     with pytest.raises(AccountError) as limited:
         hooks.replay(owner, organisation, created["endpoint"]["id"], original["id"])
     assert limited.value.code == "rate_limited"
+
+
+def test_a_keyed_organisations_endpoint_is_told_of_a_withdrawal_by_its_ids_only(world, monkeypatch):
+    from changes import admin
+
+    endpoint_with_monitor(world)  # a Developer plan: the organisation could call the API with a key
+    store, accounts, hooks, receiver, owner, organisation = world
+    corpus = store.load()
+    next(r for r in corpus.rights if r.source_id == "ng-foi-act-2011").metadata_public = False
+    store.save(corpus)  # its rights record changed: a reason that may be told
+    monkeypatch.setattr(admin, "engine_for", lambda: store.engine)
+    assert admin.main(["withdraw-confidentially", "--work", "ng-cbn-act-2007"]) == 0  # never told
+    worker.match(accounts)
+    assert deliver(accounts, hooks, Mailer(), BASE)["delivered"] == 2
+    sent = [p["event"] for p, _ in receiver.deliveries() if p["event"]["event_type"] == "withdrawal"]
+    [told] = [e for e in sent if e["work"]]
+    assert told["work"]["id"] == "ng-foi-act-2011" and told["work"]["title"] is None
+    assert told["work"]["url"] is None and told["withdrawal"]["action"] == "stop_serving"
+    [unnamed] = [e for e in sent if not e["work"]]
+    assert unnamed["withdrawal"]["scope_disclosure"] == "revalidate_releases"
+    # Once the organisation has no access, a replay of the same delivery names nothing.
+    with accounts.engine.connect() as conn:
+        original = conn.scalar(
+            text(f"SELECT id FROM {accounts._t(conn, 'webhook_delivery')} WHERE event_id = :e"),
+            {"e": told["event_id"]},
+        )
+    endpoint = hooks.listing(owner, organisation)["endpoints"][0]["id"]
+    accounts.revoke_access("op", organisation, "Test")
+    hooks.replay(owner, organisation, endpoint, original)
+    deliver(accounts, hooks, Mailer(), BASE)
+    payload, _ = receiver.deliveries()[-1]
+    assert payload["event"]["event_type"] == "withdrawal" and payload["event"]["work"] is None

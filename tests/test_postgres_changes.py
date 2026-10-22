@@ -489,6 +489,122 @@ def test_a_record_never_public_or_withdrawn_confidentially_is_never_named_or_tol
     assert told_of(other) == ("unavailable", [])
 
 
+UNNAMED = {"scope_disclosure": "revalidate_releases", "action": "revalidate", "reason_code": None}
+
+
+def test_a_text_withdrawn_for_privacy_names_nothing_to_anyone_though_its_record_stays_public(
+    surfaces, cleared, tmp_path
+):
+    from api.v1 import create_v1_app
+
+    store, client, headers = surfaces
+    store.save(cleared)
+    work, other = cleared.sources[0].id, cleared.sources[1].id
+    # Keyed consumers filtered by another record, by a keyword, and by the text's country.
+    filters = {"other": {"work": other}, "q": {"q": "zebra"}, "ng": {"jurisdiction": "ng"}}
+    tokens = {
+        name: client.get("/api/v1/changes", params=params, headers=headers).json()["resume_token"]
+        for name, params in filters.items()
+    }
+    # The record's privacy review no longer clears its text: the record stays public, its text is
+    # withdrawn, and the reason is privacy.
+    edit(store, lambda c: setattr(rights_of(c, work), "privacy_status", "blocked"))
+    [stored] = [e for e in events(store) if e["event_type"] == "withdrawal"]
+    assert stored["version_id"] == "test-version"
+    assert stored["payload"]["withdrawal"] == {"action": "stop_serving", "reason_code": "privacy"}
+
+    def unnamed(event):
+        assert event["withdrawal"] == UNNAMED and event["summary"].startswith("A previously public record")
+        assert (event["work"], event["version"], event["jurisdiction"]) == (None, None, None)
+        assert (event["sources"], event["changed_fields"], event["rights_revision"]) == ([], [], None)
+
+    for path, kwargs in (
+        ("/api/v1/changes", {"headers": headers}),
+        ("/api/changes", {}),
+        ("/site/v1/changes", {}),
+    ):
+        [event] = feed_withdrawals(client, path, **kwargs)
+        unnamed(event)
+    for name, params in filters.items():  # a notice: every filter but the type selects it
+        [event] = feed_withdrawals(
+            client, "/api/v1/changes", params=params | {"resume_token": tokens[name]}, headers=headers
+        )
+        unnamed(event)
+    unnamed(client.get(f"/api/v1/changes/{stored['event_id']}", headers=headers).json())
+    assert client.get(f"/api/v1/sources/{work}", headers=headers).status_code == 200  # still public
+    bare = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    for refused in (
+        client.get("/api/v1/versions/test-version/text", headers=headers),
+        client.get("/api/v1/anchors/test-node", headers=headers),
+        bare.get("/versions/test-version/text"),
+    ):
+        assert refused.status_code == 404 and refused.json()["code"] == "unavailable", refused.request.url
+    check = {"items": [{"anchor_id": "test-node"}]}
+    assert (
+        client.post("/api/v1/currentness", json=check, headers=headers).json()["results"][0]["result"]
+        == "unavailable"
+    )
+
+    # The record is withdrawn later for a reason that may be told: it is named to keyed callers, and its
+    # text, withdrawn for privacy, stays unnamed and unavailable.
+    edit(
+        store,
+        lambda c: [
+            setattr(rights_of(c, work), "privacy_status", "cleared"),
+            setattr(rights_of(c, work), "metadata_public", False),
+        ],
+    )
+    text_, record = sorted(
+        feed_withdrawals(client, "/api/v1/changes", headers=headers), key=lambda e: e["publication_revision"]
+    )
+    unnamed(text_)
+    assert record["work"] == by_ids(work) and record["withdrawal"]["reason_code"] == "rights_changed"
+    assert client.get(f"/api/v1/sources/{work}", headers=headers).json()["code"] == "withdrawn"
+    assert client.get("/api/v1/versions/test-version/text", headers=headers).json()["code"] == "unavailable"
+
+
+def mcp_call(client, name, arguments, headers=None):
+    answer = client.post(
+        "/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        },
+        headers=headers or {},
+    )
+    assert answer.status_code == 200, answer.text
+    result = answer.json()["result"]
+    assert not result["isError"], result
+    return __import__("json").loads(result["content"][0]["text"])
+
+
+def test_keyed_mcp_tools_are_told_of_withdrawals_what_the_keyed_feed_is(surfaces, cleared):
+    store, client, headers = surfaces
+    store.save(cleared)
+    work = cleared.sources[0].id
+    edit(store, lambda c: setattr(rights_of(c, work), "metadata_public", False))
+    anonymous = TestClient(create_app(store=store))  # the public API's MCP, without a key
+    [keyed] = [
+        e for e in mcp_call(client, "list_changes", {}, headers)["events"] if e["event_type"] == "withdrawal"
+    ]
+    assert keyed["work"] == by_ids(work) and keyed["withdrawal"]["scope_disclosure"] == "named"
+    assert mcp_call(client, "get_change", {"event_id": keyed["event_id"]}, headers)["work"] == by_ids(work)
+    [plain] = [
+        e for e in mcp_call(anonymous, "list_changes", {})["events"] if e["event_type"] == "withdrawal"
+    ]
+    assert plain["work"] is None and plain["withdrawal"] == UNNAMED
+    assert mcp_call(anonymous, "get_change", {"event_id": keyed["event_id"]})["work"] is None
+    items = {"items": [{"anchor_id": "test-node"}, {"anchor_id": "no-such-anchor"}]}
+    checked = mcp_call(client, "check_currentness", items, headers)["results"]
+    assert [r["result"] for r in checked] == ["withdrawn", "unavailable"]
+    assert [r["result"] for r in mcp_call(anonymous, "check_currentness", items)["results"]] == [
+        "unavailable",
+        "unavailable",
+    ]
+
+
 def test_atom_and_rss_are_well_formed_and_escape_titles(feed, cleared):
     from email.utils import parsedate_to_datetime
 

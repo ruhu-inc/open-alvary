@@ -832,7 +832,11 @@ def _attempt(accounts, hooks, mailer, base, delivery_id, now) -> str:
             .mappings()
             .first()
         )
-        event = Feed(conn, None, base).project(dict(source), _Visibility(conn)) if source else None
+        # A keyed organisation's endpoint is told of withdrawals what a keyed caller is.
+        keyed = accounts.keyed(row["organisation_id"], conn) if source else False
+        event = (
+            Feed(conn, None, base, keyed=keyed).project(dict(source), _Visibility(conn)) if source else None
+        )
         keys = hooks._keys(conn, row["endpoint_id"]) if event else []
     if event is None:  # no longer public: nothing is sent (SUB-06 reauthorisation)
         _finish(accounts, delivery_id, "withheld", None, None, now)
