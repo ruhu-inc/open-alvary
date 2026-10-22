@@ -14,6 +14,15 @@ Changes that affect how you use the API and the MCP server, newest first. New fi
 - The [OpenAPI document](https://api.open.alvary.ai/api/v1/openapi.json) declares the headers each answer carries (`X-Request-ID`, `RateLimit`, `RateLimit-Policy`, `ETag`, `Retry-After`) and the `304` of each route that answers `If-None-Match`.
 - New page: [Compatibility](/docs/compatibility), on which changes come at any time and how breaking changes are announced.
 
+## 22 October 2026
+
+- The change feed's new type `rights_changed` records every new revision of a public record's [rights record](/docs/api/get-rights): its status, licence, attribution, conditions, expiry or any other field. `changed_fields` lists the rights record's fields that changed, `rights_revision` the new revision, and the new `rights` field gives it with the `decision` taken from it. A change of rights status is still also a `metadata_corrected` with `rights_status`. `catalogue_added` and `metadata_corrected` changes now carry `rights_revision` too. See [What a change says](/docs/changes#what-a-change-says).
+- A `text_version_published` change gives `observed_at`: when the official file its text was read from was retrieved. It is null for every other kind of change, and `publisher_published_at` is null on every change for now. See [What a change says](/docs/changes#what-a-change-says).
+- With a key, the change feed names a record withdrawn because its rights record changed or lapsed, by its IDs only (`work.id` and `work.jurisdiction_id`, every other field of `work` null), with `scope_disclosure` `named` and `action` `stop_serving`; a text withdrawn from it earlier keeps its `version.id`. Reading such a record or text with a key answers `410` [`withdrawn`](/docs/errors#withdrawn), and [Check cited parts](/docs/api/check-currentness) answers `withdrawn` for its parts. A record withdrawn for a confidential reason, any withdrawal read without a key, and a record never public answer as before: `revalidate_releases` and `404 unavailable`. See [When a text is published or withdrawn](/docs/changes#when-a-text-is-published-or-withdrawn).
+- `/api/v1/changes` accepts `resume_token`. It was refused as a credential in the address (`400 credential_not_accepted`).
+- Every refusal from the change feed carries `X-Request-ID`, the same as its `request_id`, on every address.
+- A withdrawal that shows no record's title matches every `q`, as a whole record's withdrawal already did, so a keyword filter never selects it by words it no longer shows.
+
 ## 21 October 2026
 
 - New version 2026-10-21 of the terms, the [acceptable use policy](/acceptable-use) and the [privacy notice](/privacy), accepted at your next sign-in. You may keep and index copies of what your organisation is entitled to, and apply withdrawals and corrections within 7 days. Website request logs never keep what you search for, and pages tell other sites at most that you came from Open Alvary.

@@ -743,10 +743,11 @@ SCHEMAS: dict[str, dict] = {
                 "record withdrawn because its rights record changed (`rights_changed`, `version` null, stop "
                 "serving the record and its texts), and a text withdrawn from it earlier, both by IDs only. "
                 "Anything else is `revalidate_releases`, `action` `revalidate`, `reason_code` null and no "
-                "record named: every withdrawal to a caller without a key, a record withdrawn for a "
-                "confidential reason (privacy, a legal or court order, or another reason that must not be "
-                "told), and one withdrawn before reasons were recorded. Then check your copies against a "
-                "current release.",
+                "record named. That is so for every withdrawal from a record no longer public read without a "
+                "key, for a record withdrawn for a confidential reason (privacy, a legal or court order, or "
+                "another reason that must not be told), for one withdrawn before reasons were recorded, and for "
+                "anything announced before a record's last confidential withdrawal. Then check your copies "
+                "against a current release.",
             },
             "legal_effect": {
                 "type": ["object", "null"],

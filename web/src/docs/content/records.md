@@ -275,14 +275,14 @@ response = requests.get(
 )
 if response.status_code == 304:
     print("Unchanged and still public")
-elif response.status_code == 404:
+elif response.status_code in (404, 410):
     print("No longer public: stop serving it")
 else:
     response.raise_for_status()
     etag, part = response.headers["ETag"], response.json()
 ```
 
-`304` means your copy is unchanged and still public: the same check runs as for a full answer. It counts as a request but sends no bytes, so it uses none of your [data a day](/docs/plans#how-limits-are-counted). `404` means the text or part is no longer public. A text or part too large for one answer is refused with `413` [`result_too_large`](/docs/errors#result_too_large): read a large text a part at a time.
+`304` means your copy is unchanged and still public: the same check runs as for a full answer. It counts as a request but sends no bytes, so it uses none of your [data a day](/docs/plans#how-limits-are-counted). `404` means the text or part is not public; `410` [`withdrawn`](/docs/errors#withdrawn) means it was public and was withdrawn for a reason that may be told. Either way, stop serving it. A text or part too large for one answer is refused with `413` [`result_too_large`](/docs/errors#result_too_large): read a large text a part at a time.
 
 ## Language editions
 
