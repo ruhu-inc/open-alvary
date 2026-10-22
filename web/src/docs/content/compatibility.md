@@ -33,5 +33,5 @@ The old one keeps working for at least 180 days after the announcement. From the
 
 ## What is not a change to the API
 
-- Withdrawals and corrections of records and texts take effect at once. They are changes to the data, recorded in the [change feed](/docs/changes), never held back for a notice period. See [Apply withdrawals and corrections](/docs/mirror#apply-withdrawals-and-corrections).
+- Withdrawals and corrections of records and texts take effect at once. They are changes to the data, recorded in the [change feed](/docs/changes), never held back for a notice period; you apply them to the copies you keep within 7 days, as the [acceptable use policy](/acceptable-use) asks. See [Apply withdrawals and corrections](/docs/mirror#apply-withdrawals-and-corrections).
 - Ranking and routing in [Retrieve evidence](/docs/retrieval) improve over time, so the same request may give a different answer. Each answer names the revisions it used, in `revisions`.
