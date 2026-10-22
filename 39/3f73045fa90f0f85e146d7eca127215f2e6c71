@@ -1,0 +1,57 @@
+accounts/operator.py
+  s_d665c62e07d76f::t_5ce4b3ef586575 19-22,31,80-83,87-88,141-150
+  s_d665c62e07d76f::t_f4bbd0f7321424 84-86
+tests/test_mail.py
+  s_d665c62e07d76f::t_e92a1308a4d3bb 4,67-75
+accounts/mail.py
+  s_d665c62e07d76f::t_714bd8aa82a9f9 175
+  s_d665c62e07d76f::t_1e1f092ec3a94e 1-2,160-173
+  s_d665c62e07d76f::t_5e90d2ef67de02 174
+deployment/gcp-terraform/env/jobs.tf
+  s_d665c62e07d76f::t_a6387e24f20a84 8,60
+  s_d665c62e07d76f::t_d77b67c4cb7431 9,58-59,61-64
+  s_d665c62e07d76f::t_2b944d144dedb3 65-66
+accounts/access_admin.py
+  s_d665c62e07d76f::t_9e65b8fb7d8a5e 21,25,437-485,489-502
+  s_d665c62e07d76f::t_714bd8aa82a9f9 486-488
+  s_d665c62e07d76f::t_9cb60a53f53c5b 503
+deployment/azure/env/jobs.tf
+  s_d665c62e07d76f::t_a6387e24f20a84 61
+  s_d665c62e07d76f::t_d77b67c4cb7431 59-60,62-67
+deployment/runbook.md
+  s_d665c62e07d76f::t_efd712e35311ac 529-549
+web/src/docs/content/retrieval.md
+  s_d665c62e07d76f::t_37b35b9776d6b4 42
+tests/test_policies.py
+  s_d665c62e07d76f::t_e92a1308a4d3bb 15-18
+web/src/docs/content/authentication.md
+  s_d665c62e07d76f::t_37b35b9776d6b4 44
+tests/test_postgres_access_admin.py
+  s_d665c62e07d76f::t_e92a1308a4d3bb 5,252-290
+web/src/docs/content/changelog.md
+  s_d665c62e07d76f::t_224f92c8f679d2 10
+web/src/legal.tsx
+  s_d665c62e07d76f::t_548487cd2124af 8,13-15,85-87,104-112,126,133,136-139,143,150,158,160-163,167,198,210,213-227
+  s_d665c62e07d76f::t_73e42b6ef0e9c4 232-234
+web/src/console/pages.tsx
+  s_d665c62e07d76f::t_5ce4b3ef586575 1800
+accounts/policies.py
+  s_d665c62e07d76f::t_548487cd2124af 7-9
+  s_d665c62e07d76f::t_ccaed9a7141a75 2-4,12-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "393f73045fa90f0f85e146d7eca127215f2e6c71",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
