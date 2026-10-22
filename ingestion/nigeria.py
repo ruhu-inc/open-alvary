@@ -1398,11 +1398,12 @@ def nicn_page(page_html: str) -> dict:
     )
     if representation:
         out["representation"] = representation.group(1).strip(" :")
-    heading = re.search(
-        r"\b(RULING/JUDGMENT|JUDGE?MENT|RULING)\b", head[representation.end() if representation else 0 :]
-    )
+    start = representation.end() if representation else 0
+    heading = re.search(r"\b(RULING/JUDGMENT|JUDGE?MENT|RULING)\b", head[start:])
     if heading:
         out["heading"] = heading.group(1)
+        if representation:  # the header as printed ends at the heading: the judgment's text is not kept
+            out["header_text"] = head[: start + heading.end()]
     return {k: v for k, v in out.items() if v}
 
 
