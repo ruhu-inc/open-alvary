@@ -13310,7 +13310,7 @@
           },
           "event_revision": {
             "type": "integer",
-            "description": "1, or higher when we corrected the change itself (see `supersedes`)."
+            "description": "1, or higher when we corrected the change itself (see `supersedes`). A `metadata_corrected` is never revised: each correction of a record is a new change with its own `event_id`, and an earlier one stays true."
           },
           "event_type": {
             "type": "string",

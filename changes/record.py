@@ -1223,6 +1223,12 @@ def _compare(rec: _Recorder, work_id: str, now: dict | None, before) -> None:
         )
         return
     if digest(now["projection"]) != before["projection_hash"]:
+        # Each correction of a record is a new event, keyed by the projection it leaves, never the next
+        # revision of an earlier one (G15): an earlier correction stays true, and a revision with
+        # `supersedes` means the earlier one is replaced. As revisions, GET /changes/{event_id} (the latest
+        # revision only) would lose an earlier correction's fields and previous values, Atom and RSS
+        # (entry ID and guid: the event_id) would show a later correction as an update of the earlier
+        # entry, and consumers that keep only the highest revision would drop one.
         changed = sorted(f for f in PUBLIC_FIELDS if now["projection"].get(f) != before["projection"].get(f))
         rec.add(
             "metadata_corrected",

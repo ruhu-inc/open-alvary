@@ -40,6 +40,8 @@ Each change carries `schema_version` (`change-event-1`). New kinds of change and
 
 If we correct a change itself, for example the date of a legal effect, or withdraw a legal effect we recorded, it keeps its `event_id`, its `event_revision` goes up, `change_reason` is `corrected`, and `supersedes` names the revision it replaces. So store changes by **(`feed_epoch`, `event_id`, `event_revision`)**, keep the highest revision of each change, and never apply the same one twice.
 
+A `metadata_corrected` is different: it records a correction of the record, not of an earlier change. Each correction is a new change with its own `event_id`, and an earlier one stays true (it says what was corrected then, with its `previous` values), so apply every one.
+
 ## Keep a copy current
 
 The feed is public: these examples use `https://open.alvary.ai/api/changes` without a key. With a key, `https://api.open.alvary.ai/api/v1/changes` answers the same, within your plan's limits.
