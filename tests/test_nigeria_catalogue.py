@@ -287,6 +287,7 @@ def test_the_industrial_court_is_read_by_record_id_a_share_each_run_from_the_cur
         "Representation" not in new["listed"] and "F. Counsel" in new["listed"]["from_page"]["representation"]
     )
     assert new["listed_raw"]["header_text"].startswith("IN THE NATIONAL INDUSTRIAL COURT")
+    assert new["listed_raw"]["header_text"].endswith("JUDGMENT")  # the header only, not the judgment's text
 
 
 def test_the_aviation_authority_record_pages_give_number_dates_and_whether_current():
