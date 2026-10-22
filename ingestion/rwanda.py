@@ -920,7 +920,8 @@ class BucketCollection:
 
     def done(self, sha: str) -> bool:
         """Prepared by this version of the pipeline with the readings there are now: an index from an
-        older pipeline is redone, and so is a scan prepared before its OCR or Layout Parser reading."""
+        older pipeline is redone, and so is a scan prepared before its OCR or Layout Parser reading,
+        and an issue whose OCR check reading has changed since (a later batch checked more pages)."""
         name = f"{self.prefix}issues/{sha}.json"
         if not self.store.exists(name):
             return False
@@ -928,6 +929,8 @@ class BucketCollection:
         if not isinstance(index, dict) or index.get("pipeline") != rw_gazette.PIPELINE:
             return False
         used = index.get("readings") or {}
+        if used.get("ocr-check") != reading_fingerprint("ocr-check", sha, self.store):
+            return False
         return all(
             used.get(folder) or not self.store.exists(f"readings/{COUNTRY}/{folder}/{sha}.json")
             for folder in ("ocr", "docai")
@@ -1122,7 +1125,9 @@ def prepare_selection(
         rlrc, rlrc_checked = rlrc_index()
         # Born-digital pages Google's OCR has read as a check on their text layer (owner, 2026-10-22):
         # pages read from the layer itself, never those our OCR or the Layout Parser read.
-        check = stored_reading("ocr-check", sha, store)
+        raw_check = _stored_bytes("ocr-check", sha, store)
+        check = json.loads(raw_check) if raw_check is not None else None
+        check_fingerprint = hashlib.sha256(raw_check).hexdigest() if raw_check is not None else None
         check_pages = {
             page["page"]: page
             for page in (check or {}).get("pages", [])
@@ -1287,7 +1292,7 @@ def prepare_selection(
         collection.finish_issue(
             sha,
             [d for d in documents.values() if d.get("url") == record["url"]],
-            {"ocr": bool(ocr), "docai": bool(layout)},
+            {"ocr": bool(ocr), "docai": bool(layout), "ocr-check": check_fingerprint},
         )
         if pdf.parent == Path(scratch.name):
             pdf.unlink(missing_ok=True)
@@ -1307,16 +1312,28 @@ def listing_title(name: str) -> str:
     return re.sub(r"\s+", " ", title.replace("_", " ")).strip()
 
 
+def _stored_bytes(folder: str, sha: str, store=None) -> bytes | None:
+    local = STAGING / folder / f"{sha}.json"
+    if local.exists():
+        return local.read_bytes()
+    remote = f"readings/{COUNTRY}/{folder}/{sha}.json"
+    if store is not None and store.exists(remote):
+        return store.get(remote)
+    return None
+
+
 def stored_reading(folder: str, sha: str, store=None) -> dict | None:
     """A file's reading by one of the services (folder "ocr", "docai", or "ocr-check" for the OCR that
     checks born-digital pages), here or in the bucket."""
-    local = STAGING / folder / f"{sha}.json"
-    if local.exists():
-        return json.loads(local.read_text())
-    remote = f"readings/{COUNTRY}/{folder}/{sha}.json"
-    if store is not None and store.exists(remote):
-        return json.loads(store.get(remote))
-    return None
+    raw = _stored_bytes(folder, sha, store)
+    return json.loads(raw) if raw is not None else None
+
+
+def reading_fingerprint(folder: str, sha: str, store=None) -> str | None:
+    """The SHA-256 of a file's stored reading, or None: an issue's index records the OCR check reading
+    it was prepared with, so a reading that grows (a later batch) prepares the issue again."""
+    raw = _stored_bytes(folder, sha, store)
+    return hashlib.sha256(raw).hexdigest() if raw is not None else None
 
 
 def scanned_in_survey() -> dict[str, int]:

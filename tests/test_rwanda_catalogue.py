@@ -817,6 +817,17 @@ def test_an_issue_prepared_by_an_older_pipeline_is_prepared_again_and_the_manife
     assert not collection.done("new")
     collection.finish_issue("new", [{"id": "rw-law-2-2002-en"}], {"ocr": True, "docai": False})
     assert collection.done("new")
+    store.objects["readings/rw/ocr-check/new.json"] = b'{"pages": [{"page": 1}]}'  # its layer checked since
+    assert not collection.done("new")
+    checked = rwanda.reading_fingerprint("ocr-check", "new", store)
+    collection.finish_issue(
+        "new", [{"id": "rw-law-2-2002-en"}], {"ocr": True, "docai": False, "ocr-check": checked}
+    )
+    assert collection.done("new")
+    store.objects["readings/rw/ocr-check/new.json"] = (
+        b'{"pages": [{"page": 1}, {"page": 2}]}'  # a later batch
+    )
+    assert not collection.done("new")
     assert json.loads(store.objects["collections/rw/issues/new.json"])["pipeline"] == rw_gazette.PIPELINE
     collection.save_manifest(rwanda.new_manifest())
     manifest = json.loads(store.objects["collections/rw/manifest.json"])
