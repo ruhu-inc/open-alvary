@@ -1,0 +1,20 @@
+ingestion/fetch_job.py
+  s_d665c62e07d76f::t_e7938c52d687b3 150-152
+  s_d665c62e07d76f::t_a76e14f2427979 153-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "5a01391d667d5e328124d4b80cea52f040d24a24",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
