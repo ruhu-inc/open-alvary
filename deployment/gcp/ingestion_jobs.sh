@@ -8,6 +8,8 @@
 #   deployment/gcp/ingestion_jobs.sh run layout 1    # read them with the Layout Parser, in 1 task
 #   deployment/gcp/ingestion_jobs.sh run check 8     # Google's OCR checks born-digital pages' text layer, in 8
 #                                                    # tasks (the work list: python -m ingestion.rwanda check-worklist)
+#   deployment/gcp/ingestion_jobs.sh run survey 8 1 ng  # another collection (ingestion.cloud_read): survey, then
+#                                                    # layout and ocr from its reading work list
 #   deployment/gcp/ingestion_jobs.sh prepare 8       # prepare every stored file for review, in 8 tasks
 #   deployment/gcp/ingestion_jobs.sh status
 #
@@ -119,11 +121,11 @@ deploy() {
 }
 
 run() {
-  local reader="${1:?ocr or layout}" tasks="${2:-1}" files="${3:-}"
+  local reader="${1:?ocr, layout, check or survey}" tasks="${2:-1}" files="${3:-}" country="${4:-rw}"
   # The Layout Parser's quota is per minute for the whole project: one file at a time is enough.
   [[ -n "$files" ]] || { [[ "$reader" == "layout" ]] && files=1 || files=4; }
   "${GC[@]}" run jobs execute "$SCAN_JOB" --region="$REGION" --tasks="$tasks" --async \
-    --update-env-vars="SCAN_READER=$reader,SCAN_FILES_AT_ONCE=$files"
+    --update-env-vars="SCAN_READER=$reader,SCAN_FILES_AT_ONCE=$files,SCAN_COUNTRY=$country"
 }
 
 prepare() {

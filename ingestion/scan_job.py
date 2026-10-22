@@ -5,6 +5,9 @@
     SCAN_READER=check   Google's OCR of born-digital pages, the check on their text layer (the work
                         list rwanda check-worklist writes; readings/<country>/ocr-check/)
 
+With SCAN_COUNTRY other than rw (the Rwandan Gazette, the default), the job reads that collection
+through ingestion.cloud_read instead: SCAN_READER=survey, layout or ocr.
+
 The files to read are the work list in the corpus bucket (rwanda scan-worklist, written with the
 operator's approval of the budget). Each of the job's tasks takes every n-th file of the list
 (CLOUD_RUN_TASK_INDEX of CLOUD_RUN_TASK_COUNT), reads each file from the bucket and writes its
@@ -20,7 +23,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from ingestion import corpus_store, rwanda
+from ingestion import cloud_read, corpus_store, rwanda
 
 
 def share(files: list[dict], task: int, tasks: int) -> list[dict]:
@@ -30,10 +33,13 @@ def share(files: list[dict], task: int, tasks: int) -> list[dict]:
 
 def main() -> int:
     kind = os.environ["SCAN_READER"]
-    if kind not in ("ocr", "layout", "check"):
-        raise SystemExit("SCAN_READER is ocr, layout or check")
     task = int(os.environ.get("CLOUD_RUN_TASK_INDEX", "0"))
     tasks = int(os.environ.get("CLOUD_RUN_TASK_COUNT", "1"))
+    country = os.environ.get("SCAN_COUNTRY", "rw")
+    if country != "rw":  # every other collection: cloud_read (survey, layout, ocr)
+        return cloud_read.run(kind, country, task, tasks, log=lambda message: print(message, flush=True))
+    if kind not in ("ocr", "layout", "check"):
+        raise SystemExit("SCAN_READER is ocr, layout or check")
     files_at_once = int(os.environ.get("SCAN_FILES_AT_ONCE", "2"))
     store = corpus_store.open_store()
     if kind == "check":
