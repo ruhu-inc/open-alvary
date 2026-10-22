@@ -44,11 +44,23 @@ SPLIT = re.compile(
     # "ARTICLE 4.- Le …", "Article 5 : …", "Article premier. — …", "Art. 2. — …", "ARTIGO 6.º …".
     r"|(?:SECTION|ARTICLE|Article|ARTIGO|Artigo)\s+(?:\d{1,4}(?:-\d{1,3})*|premier|1er)"
     r"(?:\s*[:]|\.\s*[-–—]|\s+[-–—]\s|\.?\s*º)"
-    r"|Art\.\s*\d{1,4}(?:-\d{1,3})*\.\s*[—–]"
+    # Senegal's "… ne prend pas part au vote. Article 7. Le Président …": the number, a full stop and a
+    # capital after a sentence has ended, which is never how a sentence cites an article; or the number
+    # and its full stop ending the block, a page's last line ("… de la Commission. Article 54.").
+    r"|Article\s+(?:\d{1,4}|[Pp]remier)\.(?:\s+[A-ZÀ-ÖØ-Þ]|\s*$)"
+    r"|Art\.\s*\d{1,4}(?:-\d{1,3})*\.\s*[—–-]"  # "Art. 2. — …", Senegal's "Art. 4. - Les personnes …"
+    # A French division heading by the dash printed after its number: "… en est informé. Chapitre II. –
+    # Recommandé électronique."
+    r"|(?:CHAPITRE|Chapitre|SECTION|Section|TITRE|Titre)\s+(?:[IVXLC]{1,6}|\d{1,3}|premier|première|PREMI[EÈ]RE?)"
+    r"\.\s*[-–—]\s*[A-ZÀ-ÖØ-Þ]"
     # The closing words after a law's last article, and the next act a gazette prints after it: "…
     # comme loi de l'Etat. Fait à Abidjan, le 19 juin 2013. Alassane OUATTARA. DECRET n° 2012-525 …",
-    # "… à data da sua publicação. Vista e aprovada pela Assembleia Nacional …".
-    r"|Fait\s+à\s+[A-Z]|Vista\s+e\s+aprovada\b"
+    # "… à data da sua publicação. Vista e aprovada pela Assembleia Nacional …", Mozambique's "… após a sua
+    # publicação. Aprovada pela Assembleia da República, aos 29 de Abril de 2026 …".
+    r"|Fait\s+à\s+[A-Z]|Vista\s+e\s+aprovada\b|Aprovada\s+pela\s+Assembleia\s+da\s+República\b"
+    r"|FAIT\s+[ÀA]\s+[A-Z]|DONE\s+(?:AT|IN)\s+[A-Z]|FEITO\s+EM\s+[A-Z]"  # ECOWAS's, in capitals
+    r"|La\s+présente\s+loi\s+sera\s+exécutée\s+comme\s+loi\s+de\s+l"  # Senegal's, after the last article
+    r"|Ainsi\s+fait\s+et\s+délibéré\b"  # Burkina Faso's: "… comme loi de l'Etat. Ainsi fait et délibéré …"
     r"|(?:LOI|D[ÉE]CRET|ARR[ÊE]T[ÉE]|ORDONNANCE)\s+n\s*°"
     r")"
 )
