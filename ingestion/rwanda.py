@@ -1269,7 +1269,7 @@ def prepare_selection(
                     "id": doc_id,
                     "summary": reading["summary"],
                     "type": parent["kind"],
-                    "title": f"Annex: {annex['title'][:200]}",
+                    "title": f"Annex: {rw_gazette.shortened(annex['title'], 200)}",
                     "jurisdiction": "rw",
                     "language": language,
                     "work": work,

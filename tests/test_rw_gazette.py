@@ -1092,3 +1092,34 @@ def test_a_page_whose_text_layer_the_ocr_checked_counts_as_compared_for_routing(
         "pages": [{"page": 2, "checks": {}}, {"page": 3, "checks": {}}],
     }
     assert routing.compared(reading) == {3}
+
+
+def test_a_long_title_is_read_whole_but_stops_at_a_heading_the_next_page_or_the_contents():
+    """A ratification law's title runs a dozen narrow-column lines; it was cut at eight. Its date is
+    still the first printed in its opening lines, never the ratified agreement's."""
+    lines = [
+        "LAW N° 001/2026 OF 19/01/2026",
+        "APPROVING THE RATIFICATION OF",
+        "THE GRANT AGREEMENT BETWEEN",
+        "THE REPUBLIC OF RWANDA AND",
+        "THE INTERNATIONAL BANK FOR",
+        "RECONSTRUCTION AND",
+        "DEVELOPMENT ACTING AS AN",
+        "IMPLEMENTING AGENCY OF THE",
+        "GLOBAL FUND SIGNED IN KIGALI",
+        "ON 12/11/2025",
+        "TABLE OF CONTENTS",
+    ]
+    found = RG.openings([{"text": t, "page": 1} for t in lines], "en")[0]
+    assert found["title"].endswith("SIGNED IN KIGALI ON 12/11/2025") and found["date"] == "2026-01-19"
+    chapter = RG.openings(
+        [{"text": t, "page": 1} for t in [*lines[:3], "CHAPTER ONE: GENERAL PROVISIONS"]], "en"
+    )[0]
+    assert (
+        chapter["title"]
+        == "LAW N° 001/2026 OF 19/01/2026 APPROVING THE RATIFICATION OF THE GRANT AGREEMENT BETWEEN"
+    )
+    paged = RG.openings([{"text": t, "page": 1 if n < 4 else 2} for n, t in enumerate(lines)], "en")[0]
+    assert paged["title"].endswith("THE REPUBLIC OF RWANDA AND")
+    assert RG.shortened("UMUGEREKA W'ITEGEKO RYEMERA KWEMEZA", 20) == "UMUGEREKA W'ITEGEKO…"
+    assert RG.shortened("Short", 20) == "Short"

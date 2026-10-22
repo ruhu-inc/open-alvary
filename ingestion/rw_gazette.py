@@ -25,7 +25,7 @@ from schema.jurisdictions import registry
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-22.2"  # a turned (landscape) page measured as it is shown (gazette_layout.words)
+PIPELINE = "2026-10-22.3"  # a long title read whole (openings), an annex title cut at a word
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -447,7 +447,7 @@ def annexes(split: list[dict], roles: dict[int, int]) -> list[dict]:
             )
     for annex in found.values():
         first = next(iter(annex["versions"].values()), [])
-        annex["title"] = " ".join(line["text"] for line in first[:6] if line["text"])[:300]
+        annex["title"] = shortened(" ".join(line["text"] for line in first[:6] if line["text"]), 300)
         annex["refers_to"] = next(
             (m.group(1) for line in first[:8] if (m := re.search(r"N\s?[°ºO0]\.?\s*(\S+)", line["text"]))),
             None,
@@ -488,6 +488,16 @@ def _instrument_number(printed: str) -> str:
     return re.sub(r"(\d)\s*(bis|ter)\b", lambda m: m.group(1) + m.group(2).lower(), number, flags=re.I)
 
 
+def shortened(text: str, limit: int) -> str:
+    """Text cut to at most `limit` characters at a word, marked "…" where it was cut."""
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1]
+    if not text[limit - 1].isspace():  # cut inside a word: back to the word before it
+        cut = cut.rsplit(" ", 1)[0]
+    return cut.rstrip(" ,;:") + "…"
+
+
 def openings(lines: list[dict], language: str) -> list[dict]:
     """Where each instrument begins in one language: its heading, kind, number, date and title."""
     found = []
@@ -503,15 +513,27 @@ def openings(lines: list[dict], language: str) -> list[dict]:
             continue
         heading = [lines[i]["text"].strip()]
         j = i + 1
-        # The title runs on in capitals until the contents or the first non-capital line.
-        while j < len(lines) and len(heading) < 8:
+        # The title runs on in capitals until the contents, the first non-capital line, a division or
+        # article heading or the next page, and never past HEADING_MAX: a ratification law's title in a
+        # narrow column takes a dozen lines, so no count of lines bounds it.
+        while j < len(lines) and len(" ".join(heading)) < HEADING_MAX:
             text = lines[j]["text"].strip()
             letters = [c for c in text if c.isalpha()]
-            if CONTENTS.match(text) or not letters or sum(c.isupper() for c in letters) < 0.8 * len(letters):
+            if (
+                CONTENTS.match(text)
+                or not letters
+                or sum(c.isupper() for c in letters) < 0.8 * len(letters)
+                or lines[j].get("page") != lines[i].get("page")
+                or STANDARD_ARTICLE[language].match(text)
+                or any(pattern.match(text) for _, pattern in DIVISIONS[language])
+            ):
                 break
             heading.append(text)
             j += 1
         title = " ".join(heading)
+        # Its date is the first printed in its opening lines, never one a long title goes on to cite
+        # (the date of an agreement it ratifies).
+        opening = " ".join(heading[:8])
         word = match.group(1).replace("'", "’").upper() if match else ""
         word = (
             word.replace("ARRETE", "ARRÊTÉ")
@@ -521,7 +543,7 @@ def openings(lines: list[dict], language: str) -> list[dict]:
             .replace("DECRET", "DÉCRET")
             .replace("LEGISLATIVE", "LÉGISLATIVE")
         )
-        date = _plain_date(title) or spoken_date(title)
+        date = _plain_date(opening) or spoken_date(opening)
         number = _instrument_number(match.group(2) or "") if match else "constitution"
         if not number:
             # An older law known by its date: the date is its key across the languages.
