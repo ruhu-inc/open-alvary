@@ -1094,7 +1094,7 @@ def test_a_page_whose_text_layer_the_ocr_checked_counts_as_compared_for_routing(
     assert routing.compared(reading) == {3}
 
 
-def test_a_long_title_is_read_whole_but_stops_at_a_heading_the_next_page_or_the_contents():
+def test_a_long_title_is_read_whole_over_a_page_break_but_stops_at_a_heading_or_the_contents():
     """A ratification law's title runs a dozen narrow-column lines; it was cut at eight. Its date is
     still the first printed in its opening lines, never the ratified agreement's."""
     lines = [
@@ -1119,7 +1119,14 @@ def test_a_long_title_is_read_whole_but_stops_at_a_heading_the_next_page_or_the_
         chapter["title"]
         == "LAW N° 001/2026 OF 19/01/2026 APPROVING THE RATIFICATION OF THE GRANT AGREEMENT BETWEEN"
     )
-    paged = RG.openings([{"text": t, "page": 1 if n < 4 else 2} for n, t in enumerate(lines)], "en")[0]
-    assert paged["title"].endswith("THE REPUBLIC OF RWANDA AND")
+    # Begun at the foot of a page, it goes on over the next page's running head, however spelt.
+    paged = [{"text": t, "page": 1} for t in lines[:4]]
+    paged += [{"text": "Oficcial Gazette nº 53 of 31/12/2012", "page": 2}]
+    paged += [{"text": t, "page": 2} for t in lines[4:]]
+    crossed = RG.openings(paged, "en")[0]
+    assert crossed["title"].endswith("SIGNED IN KIGALI ON 12/11/2025") and "Gazette" not in crossed["title"]
+    assert crossed["date"] == "2026-01-19"
+    contents = RG.openings([{"text": t, "page": 1} for t in [*lines[:3], "IBIRIMO"]], "en")[0]
+    assert contents["title"].endswith("GRANT AGREEMENT BETWEEN")
     assert RG.shortened("UMUGEREKA W'ITEGEKO RYEMERA KWEMEZA", 20) == "UMUGEREKA W'ITEGEKO…"
     assert RG.shortened("Short", 20) == "Short"

@@ -25,7 +25,7 @@ from schema.jurisdictions import registry
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-22.3"  # a long title read whole (openings), an annex title cut at a word
+PIPELINE = "2026-10-23.1"  # a title that runs on to the next page (openings), more contents words
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -41,6 +41,15 @@ FURNITURE = re.compile(
     rf"|^\d{{1,4}}$|^{PAGE_NUMBER}$",
     re.I,
 )
+
+# A running head at the top of a page, however spelt, by the Gazette's name and the issue's date.
+RUNNING_HEAD = re.compile(
+    r"(?i)^(?:[-–—]?\s*\d{1,4}\s*[-–—]?\s*)?(?:o\w{3,9}\s+gazet\w*|igazeti|journal\s+officiel)\b"
+    r".*\d{1,2}[/.]\d{1,2}[/.]\d{4}"
+)
+# Other words that head an instrument's contents and so end its title: Kinyarwanda's "IBIRIMO" and
+# "AMASHAKIRO", and the Gazette's own "TABLE DES CONTENTS".
+CONTENTS_WORDS = re.compile(r"(?i)^(?:i?birimo|amashakiro|table\s+des\s+contents)\b")
 
 # The heading that opens an instrument, as printed in capitals in each language: its kind, then its
 # number ("N° 11/2001"), or on older laws only its date ("LOI DU 19 FÉVRIER 1964", "ITEGEKO RYO KUWA
@@ -513,17 +522,22 @@ def openings(lines: list[dict], language: str) -> list[dict]:
             continue
         heading = [lines[i]["text"].strip()]
         j = i + 1
-        # The title runs on in capitals until the contents, the first non-capital line, a division or
-        # article heading or the next page, and never past HEADING_MAX: a ratification law's title in a
-        # narrow column takes a dozen lines, so no count of lines bounds it.
+        # The title runs on in capitals until the contents, the first non-capital line or a division or
+        # article heading, and never past HEADING_MAX: a ratification law's title in a narrow column
+        # takes a dozen lines, so no count of lines bounds it. A title begun at the foot of a page goes
+        # on over the next page's running head, which the Gazette sometimes misspells ("Oficcial
+        # Gazette nº 53 of 31/12/2012"), so its date is the instrument's, never the issue's.
         while j < len(lines) and len(" ".join(heading)) < HEADING_MAX:
             text = lines[j]["text"].strip()
+            if lines[j].get("page") != lines[j - 1].get("page") and RUNNING_HEAD.search(text):
+                j += 1
+                continue
             letters = [c for c in text if c.isalpha()]
             if (
                 CONTENTS.match(text)
+                or CONTENTS_WORDS.match(text)
                 or not letters
                 or sum(c.isupper() for c in letters) < 0.8 * len(letters)
-                or lines[j].get("page") != lines[i].get("page")
                 or STANDARD_ARTICLE[language].match(text)
                 or any(pattern.match(text) for _, pattern in DIVISIONS[language])
             ):

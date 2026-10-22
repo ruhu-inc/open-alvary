@@ -829,6 +829,99 @@ def one_per_file(ledger: dict, items: list[str]) -> list[str]:
     return [item for item in items if item in kept]
 
 
+SAME_TITLE = 0.3  # the share of their title's words two printings of one instrument have in common, at least
+_TITLE_FORMS = re.compile(
+    r"(?i)\b(?:law|loi|itegeko|regulations?|r[eè]glement|amabwiriza|order|arr[eê]t[eé]|iteka|decree|"
+    r"d[eé]cret|ordinance|ordonnance|n[°º]?|of|du|ryo|ku|wa|kuwa|the|de|la|le|les|des|on|and|et|n0)\b"
+)
+
+
+def _title_words(title: str) -> set[str]:
+    return set(re.findall(r"[a-zà-ÿ’']{4,}", _TITLE_FORMS.sub(" ", (title or "").lower())))
+
+
+def _printing_dates(docs: list[dict]) -> set[str]:
+    found = set()
+    for d in docs:
+        for match in rw_gazette.DATE.finditer(d.get("title") or ""):
+            day, month = int(match.group(1)), int(match.group(2))
+            if 1 <= day <= 31 and 1 <= month <= 12:
+                found.add(f"{match.group(3)}-{month:02d}-{day:02d}")
+                break
+    return found
+
+
+def _same_instrument(one: list[dict], other: list[dict]) -> bool:
+    """Two printings of a work are one instrument unless their dates differ or their titles share
+    too few words (compared in a language both have, English first)."""
+    first, second = _printing_dates(one), _printing_dates(other)
+    if first and second and not first & second:
+        return False
+    titles = [{d.get("language"): d.get("title") for d in docs if not d.get("part")} for docs in (one, other)]
+    common = [lang for lang in ("en", "fr", "rw") if lang in titles[0] and lang in titles[1]]
+    if not common:
+        return True  # nothing to compare: the number and year decide, as before
+    a, b = _title_words(titles[0][common[0]]), _title_words(titles[1][common[0]])
+    return not (a and b) or len(a & b) / len(a | b) >= SAME_TITLE
+
+
+def separate_instruments(documents: list[dict]) -> tuple[list[dict], dict[str, str]]:
+    """Different instruments that came to share a work, and so its ids, from separate files: two laws
+    printed with one number (a misprint, or an older number read short), told apart by their dates
+    and titles. The instrument dated first keeps the work and its ids; each other one takes its date
+    (or its file's fingerprint) after the work, and its documents name the files they were stored
+    under (``stored_as``). All of them are marked as sharing the number (``shares_number_with``), for
+    the reviewer to check the number as printed. The same instrument from two files (the Gazette
+    and RLRC) stays one, and one_per_id keeps one of its copies. Returns the documents and each
+    renamed document's stored name by its new id."""
+    by_work: dict[str, list[dict]] = {}
+    for document in documents:
+        by_work.setdefault(document.get("work") or document["id"], []).append(document)
+    out, renamed = [], {}
+    for work, docs in by_work.items():
+        printings: dict[str, list[dict]] = {}
+        for document in docs:
+            printings.setdefault(document.get("objects") or document["id"], []).append(document)
+        clusters: list[list[str]] = []
+        for key in printings:
+            home = next((c for c in clusters if _same_instrument(printings[key], printings[c[0]])), None)
+            if home is None:
+                clusters.append([key])
+            else:
+                home.append(key)
+        if len(clusters) < 2:
+            out.extend(docs)
+            continue
+
+        def dated(cluster: list[str], printings: dict = printings) -> str:
+            return min((d for key in cluster for d in _printing_dates(printings[key])), default="")
+
+        clusters.sort(key=lambda c: (dated(c) or "9999", min(c)))
+        names = [work]
+        for cluster in clusters[1:]:
+            name = f"{work}-{dated(cluster) or cluster[0].strip('/').rsplit('/', 1)[-1][:6]}"
+            names.append(name if name not in names else f"{name}-{len(names)}")
+        for name, cluster in zip(names, clusters, strict=True):
+            for key in cluster:
+                for document in printings[key]:
+                    document = {**document, "shares_number_with": [n for n in names if n != name]}
+                    if name != work and document["id"].startswith(f"{work}-"):
+                        new_id = name + document["id"][len(work) :]
+                        renamed[new_id] = document.get("stored_as") or document["id"]
+                        document = {
+                            **document,
+                            "id": new_id,
+                            "stored_as": renamed[new_id],
+                            "work": name,
+                            "versions": {
+                                lang: name + v[len(work) :] if v.startswith(f"{work}-") else v
+                                for lang, v in (document.get("versions") or {}).items()
+                            },
+                        }
+                    out.append(document)
+    return out, renamed
+
+
 def one_per_id(documents: list[dict]) -> list[dict]:
     """The manifest's documents, one per id, the others it was found in recorded on it."""
     groups: dict[str, list[dict]] = {}
@@ -981,6 +1074,17 @@ class BucketCollection:
         for name in self.store.list(f"{self.prefix}issues/"):
             index = json.loads(self.store.get(name))
             documents += index["documents"] if isinstance(index, dict) else index  # older: a bare list
+        documents, renamed = separate_instruments(documents)
+        for document in documents:
+            stored = renamed.get(document["id"])
+            if not stored:
+                continue
+            # The workbench reads a document by its id: a renamed one's files under its new name too.
+            for suffix in (".reading.json", ".document.json", ".provenance.json"):
+                source = f"{self.prefix}{document['objects']}{stored}{suffix}"
+                target = f"{self.prefix}{document['objects']}{document['id']}{suffix}"
+                if self.store.exists(source) and not self.store.exists(target):
+                    self.store.put(target, self.store.get(source), "application/json", replace=True)
         manifest["documents"] = link_works(one_per_id(documents))
         self.store.put(
             f"{self.prefix}manifest.json",
@@ -1133,6 +1237,8 @@ def prepare_selection(
             for page in (check or {}).get("pages", [])
             if page["page"] not in ocr_pages and page["page"] not in read_pages
         }
+        taken: dict[str, str | None] = {}  # this issue's works, by the date of the instrument holding each
+        assigned: dict[int, str] = {}  # each instrument's work, for its annexes
         for entry in found:
             lines = {lang: streams[lang][v["start"] : v["end"]] for lang, v in entry["versions"].items()}
             versions = {lang: rw_gazette.structure(lines[lang], lang) for lang in lines}
@@ -1180,6 +1286,12 @@ def prepare_selection(
             }
             number = issue.get("date", "") if entry["number"] == "constitution" else entry["number"]
             work = work_id(entry["kind"], number, (entry.get("date") or issue.get("date") or "")[:4])
+            if work in taken and taken[work] != entry.get("date"):
+                # Two instruments of one issue printed with one number: the second takes its date,
+                # as separate_instruments names one from another file, so neither replaces the other.
+                work = f"{work}-{entry.get('date') or len(taken)}"
+            taken.setdefault(work, entry.get("date"))
+            assigned[id(entry)] = work
             for language, nodes in versions.items():
                 doc_id = f"{work}-{language}"
                 reading = rw_gazette.reading(
@@ -1256,7 +1368,9 @@ def prepare_selection(
             if parent is None:
                 continue
             number = issue.get("date", "") if parent["number"] == "constitution" else parent["number"]
-            work = work_id(parent["kind"], number, (parent.get("date") or issue.get("date") or "")[:4])
+            work = assigned.get(id(parent)) or work_id(
+                parent["kind"], number, (parent.get("date") or issue.get("date") or "")[:4]
+            )
             part = f"annex-{annex['annex']}"
             for language, lines in annex["versions"].items():
                 doc_id = f"{work}-{part}-{language}"
