@@ -27,6 +27,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from urllib.parse import parse_qsl
 
 import httpx
 from anyio import to_thread
@@ -330,8 +331,11 @@ class CredentialGate:
         if path in self.config.public_paths or scope.get("method") == "OPTIONS":
             # Public answers need no credential, and carry a request ID like every other answer.
             return await self.app(scope, receive, _stamped(send, [(b"x-request-id", request_id.encode())]))
-        query = scope.get("query_string", b"").decode("latin-1").lower()
-        if any(f"{name}=" in query for name in ("api_key", "key", "access_token", "token")):
+        # A credential in the address: a parameter named as a key or a token (api_key, key, access_token,
+        # token and the like), but not the change feed's own resume_token, which is no credential.
+        query = parse_qsl(scope.get("query_string", b"").decode("latin-1"), keep_blank_values=True)
+        names = {name.lower() for name, _ in query} - {"resume_token"}
+        if any(name.endswith(("key", "token")) for name in names):
             return await self._refuse("credential_not_accepted", request_id)(scope, receive, send)
         authorization = [
             v.decode("latin-1") for k, v in scope.get("headers", []) if k.lower() == b"authorization"
