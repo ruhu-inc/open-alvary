@@ -125,6 +125,24 @@ def test_each_unit_carries_its_editions_authority_as_the_record_states_it(store,
     assert json.loads(answer.json()["result"]["content"][0]["text"]) == page
 
 
+def test_a_weak_etag_sent_back_as_it_came_answers_304(store, client):
+    """An evidence pack's and a check's tags are weak (W/"..."): sent back as If-None-Match as they came,
+    or without W/, an unchanged answer is 304, by the weak comparison of RFC 9110 (G13)."""
+    _, version, nodes = publish_act(store, UNITS)
+    params = {"q": "repaid from salary"}
+    pack = client.get("/retrieve", params=params)
+    tag = pack.headers["etag"]
+    assert tag.startswith('W/"')
+    for offered in (tag, tag.removeprefix("W/"), f'"other", {tag}'):
+        again = client.get("/retrieve", params=params, headers={"If-None-Match": offered})
+        assert again.status_code == 304 and again.content == b"" and again.headers["etag"] == tag, offered
+    body = {"items": [{"anchor_id": nodes["sec_1"].id}]}
+    checked = client.post("/currentness", json=body)
+    unchanged = client.post("/currentness", json=body, headers={"If-None-Match": checked.headers["etag"]})
+    assert unchanged.status_code == 304
+    assert client.get("/retrieve", params=params, headers={"If-None-Match": 'W/"other"'}).status_code == 200
+
+
 def test_routes_for_an_instrument_a_definition_and_a_citation(store, client):
     _, version, nodes = publish_act(store, UNITS)
     named = retrieve(client, "Example Act")

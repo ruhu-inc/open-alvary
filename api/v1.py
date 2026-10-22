@@ -297,8 +297,10 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
     # Conditional requests (BUD-01): a matching If-None-Match answers 304 with no body, after the same
     # eligibility check as a full answer; nothing is cacheable by intermediaries (no-store).
     def unchanged(request: Request, tag: str) -> bool:
+        # The weak comparison If-None-Match uses (RFC 9110, 13.1.2): W/"x" and "x" match each other, so an
+        # evidence pack's or a check's weak tag, sent back as it came, matches too.
         offered = {t.strip().removeprefix("W/") for t in request.headers.get("if-none-match", "").split(",")}
-        return "*" in offered or tag in offered
+        return "*" in offered or tag.removeprefix("W/") in offered
 
     def checked(request: Request, payload: bytes, recheck, tag: str, kind=CheckedResponse) -> Response:
         if unchanged(request, tag):
