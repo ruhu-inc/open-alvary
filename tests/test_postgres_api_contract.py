@@ -305,3 +305,11 @@ def test_an_address_that_is_no_route_is_a_problem_document_not_a_missing_record(
     assert missing["code"] == "unavailable"
     # Without a key, the credential is asked for first, as for any other address.
     assert client.get("/api/v1/no-such-route").json()["code"] == "credential_required"
+
+
+def test_the_served_document_names_only_its_absolute_server(contract):
+    """A client generated from a saved copy of the document calls the API, never the mount path."""
+    client, *_ = contract
+    assert client.get("/api/v1/openapi.json").json()["servers"] == [
+        {"url": "https://api.open.alvary.ai/api/v1", "description": "The REST API"}
+    ]
