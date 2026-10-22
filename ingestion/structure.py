@@ -62,7 +62,14 @@ SPLIT = re.compile(
     r"|La\s+présente\s+loi\s+sera\s+exécutée\s+comme\s+loi\s+de\s+l"  # Senegal's, after the last article
     r"|Ainsi\s+fait\s+et\s+délibéré\b"  # Burkina Faso's: "… comme loi de l'Etat. Ainsi fait et délibéré …"
     r"|(?:LOI|D[ÉE]CRET|ARR[ÊE]T[ÉE]|ORDONNANCE)\s+n\s*°"
+    # Cape Verde's: "… após a sua publicação. Aprovada em 11 de fevereiro de 2021.", and the text an amending
+    # article quotes after its words: "… que passam a ter a seguinte redação: «Artigo 2.º […] …".
+    r"|Aprovad[ao]\s+em\s+\d{1,2}\s+de\s"
+    r"|«\s*(?:ARTIGO|Artigo)\s+\d{1,4}"
     r")"
+    # The law Cape Verde's Boletim Oficial republishes after an amending law's signatures, though no
+    # punctuation ends them: "… Jorge Pedro Maurício dos Santos REPUBLICAÇÃO Lei nº 133/V/2001, …".
+    r"|\s+(?=REPUBLICAÇÃO\s+Lei\s+n)"
 )
 LEVEL = [
     (re.compile(r"^\d{1,3}[A-Z]?\."), 0),
