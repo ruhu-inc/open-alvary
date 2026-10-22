@@ -1,0 +1,21 @@
+{"success": true, "data": [
+ {"case_id": 521, "court_room_id": null, "type": "Judgment", "suitNo": "SC/CV/499/2026", "caseType": null, "caseTitle": null,
+  "petitioner": "SOCIAL DEMOCRATIC PARTY", "respondent": "INDEPENDENT NATIONAL ELECTORAL COMMISSION (INEC)", "petCounsel": null, "respCounsel": null,
+  "mainjudge": "HON. JUSTICE JOSEPH OLUBUNMI KAYODE OYEWOLE, JSC",
+  "judgeName": "HON. JUSTICE ADAMU JAURO, JSC; HON. JUSTICE HARUNA SIMON TSAMMANI, JSC; HON. JUSTICE JOSEPH OLUBUNMI KAYODE OYEWOLE, JSC",
+  "leadJudgeName": "HON. JUSTICE JOSEPH OLUBUNMI KAYODE OYEWOLE, JSC", "dissentingJudgeName": null, "judgeDoc": null, "citation": null,
+  "judgement": null, "decision": null, "year_id": null, "dateJudgement": "2026-09-24", "year": 2026, "amount": null,
+  "pdfFile": "https://scnwebsites3.s3.af-south-1.amazonaws.com/judgements/original/f595739b-a64a-4dbf-9c36-4190e7a8cef8.pdf",
+  "watermark_settings": "https://scnwebsites3.s3.af-south-1.amazonaws.com/judgements/watermarked/lead_ae096fcd-af49-4120-bdb9-4ffce0b9cf45.pdf"},
+ {"case_id": 17, "court_room_id": null, "type": "Judgment", "suitNo": "SC78/2007", "caseType": null, "caseTitle": "A. Appellant v. B. Respondent",
+  "petitioner": "A. Appellant", "respondent": "B. Respondent", "petCounsel": null, "respCounsel": null, "mainjudge": null,
+  "judgeName": "Justice One, Justice Two, Justice Three", "leadJudgeName": "Justice One", "dissentingJudgeName": null, "judgeDoc": null,
+  "citation": null, "judgement": "<p>Synthetic judgment text for a test.</p>", "decision": null, "year_id": null, "dateJudgement": "2011-12-16",
+  "year": 2011, "amount": null, "pdfFile": null, "watermark_settings": null},
+ {"case_id": 215, "court_room_id": null, "type": "Ruling", "suitNo": "SC/CR/1/2025", "caseType": null, "caseTitle": null,
+  "petitioner": "THE STATE", "respondent": "C. Respondent", "petCounsel": null, "respCounsel": null, "mainjudge": null, "judgeName": null,
+  "leadJudgeName": null, "dissentingJudgeName": null, "judgeDoc": null, "citation": null, "judgement": null, "decision": null, "year_id": null,
+  "dateJudgement": "2025-03-01", "year": 2025, "amount": null,
+  "pdfFile": "https://scnwebsites3.s3.af-south-1.amazonaws.com/judgements/original/0aa1bb2c-0000-4000-8000-000000000215.pdf",
+  "watermark_settings": "{\"type\":\"image\",\"image_path\":\"images/watermark-logo.gif\",\"opacity\":8}"}
+]}
