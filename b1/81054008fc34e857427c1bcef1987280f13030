@@ -1,0 +1,29 @@
+ingestion/rw_gazette.py
+  s_d665c62e07d76f::t_12966bd6bc465e 47-48
+  s_d665c62e07d76f::t_220d959dd6da97 52-53,525-529,532-534,538
+  s_d665c62e07d76f::t_4821cc61c076bc 28,45-46,49-51
+ingestion/rwanda.py
+  s_d665c62e07d76f::t_f98e4e24d87179 896
+  s_d665c62e07d76f::t_ae068beca4b1fb 1240-1241,1289-1294,1371-1373
+  s_d665c62e07d76f::t_001879b44ad5d8 832-895,897-924,1077-1087
+tests/test_rw_gazette.py
+  s_d665c62e07d76f::t_4d12dc585ad7a2 1097,1122-1130
+tests/test_rwanda_catalogue.py
+  s_d665c62e07d76f::t_30ba5f4e38faef 1241-1275
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "b181054008fc34e857427c1bcef1987280f13030",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
