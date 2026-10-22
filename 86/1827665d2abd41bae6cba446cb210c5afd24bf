@@ -1,0 +1,22 @@
+tests/test_batch_pipeline.py
+  s_d665c62e07d76f::t_ca730735ffeb31 549-555,560-570
+  s_d665c62e07d76f::t_67ba7a9cd830ff 556-559
+ingestion/structure.py
+  s_d665c62e07d76f::t_dee7551eb67ded 65-68,70-72
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "861827665d2abd41bae6cba446cb210c5afd24bf",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
