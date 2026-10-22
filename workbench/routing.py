@@ -13,7 +13,7 @@ Routes (route profile ROUTES), one per page:
   flagged   disagreements or flags, none of a risky kind and no table: the reviewer resolves each
             flag against the image; the rest of the page is not proofread
   full      a table; a flag whose words carry a number, an amount, a date, a cross-reference or a
-            negation or exception; a high flag; the first page, a contents page or a page where a
+            negation or exception, in English, French or Kinyarwanda; a high flag; the first page, a contents page or a page where a
             schedule starts; a structure error or warning on the page; a clean text layer that
             differs from the units where no flag says so; a page read only once (nothing
             compared) and not native: reviewed whole, as before
@@ -38,15 +38,50 @@ from workbench import content
 ROUTES = "oa-route-pages-1"
 UNREVIEWED = ("agreed", "native")  # verified without review, and covered by one audit sample
 POLICY = Path(__file__).resolve().parents[1] / "ingestion" / "decisions" / "verification-routing.json"
-# Words that make a disagreement risky (TXP-06's material classes).
-RISKY = re.compile(
-    r"\d|\b(?:not|no|nor|never|unless|except|without|notwithstanding|neither|cannot|shall\s+not|may\s+not)\b"
-    r"|\b(?:section|sections|subsection|article|paragraph|schedule|part|naira|kobo|percent|per\s+cent)\b",
-    re.IGNORECASE,
+# Words that make a disagreement risky (TXP-06's material classes: numbers, amounts, dates,
+# cross-references, negations and exceptions), in each language the corpus prints so far; the Rwandan
+# Gazette prints every law in Kinyarwanda, English and French. Any digit is risky. A word risky in one
+# language and ordinary in another (French "si" is "if", Kinyarwanda's "is not") only sends a page to
+# full review, never past it. French "un" and "une" are left out: they are mostly articles.
+# Kinyarwanda negates with nti-/nta- verb forms, si, ntabwo and -tari, which are listed; a negative
+# infix inside a relative verb (u-da-fite, "who has not") is not, and is caught only by other words.
+RISKY_WORDS = {
+    "en": (
+        r"not|no|nor|never|unless|except|without|notwithstanding|neither|cannot|shall\s+not|may\s+not"
+        r"|section|sections|subsection|article|paragraph|schedule|part"
+        r"|naira|kobo|francs?|percent|per\s+cent"
+        r"|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen"
+        r"|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety"
+        r"|hundred|thousand|million|billion"
+        r"|january|february|march|april|may|june|july|august|september|october|november|december"
+    ),
+    "fr": (
+        r"ne|n['’ʼ]|pas|non|ni|jamais|aucun|aucune|nul|nulle|sans|sauf|except[ée]e?s?|hormis|nonobstant"
+        r"|toutefois|moins|r[ée]serve|interdite?s?"
+        r"|articles?|art|alin[ée]as?|al|paragraphes?|points?|chapitres?|titres?|annexes?|parties?"
+        r"|frw|rwf|fcfa|cfa|pour\s*cent|pourcentage"
+        r"|deux|trois|quatre|cinq|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingts?"
+        r"|trente|quarante|cinquante|soixante|cents?|mille|millions?|milliards?|premier|premi[èe]re"
+        r"|janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre"
+    ),
+    "rw": (
+        r"nti\w*|nta\w*|si|ntabwo|oya|keretse|uretse|usibye|(?:a|i|u|ba|bi|ki|zi|ri|ka|tu|bu|ku|ha|ya)tari"
+        r"|i?ngingo|i?gika|a?gace|i?gice|u?mutwe|i?cyiciro|a?kiciro|i?nteruro|u?mugereka"
+        r"|amafaranga|ijanisha"
+        r"|rimwe|\w*(?:biri|byiri|tatu|tanu|tandatu|rindwi|munani|cyenda)|kane|ane|ine|bine|bane|enye"
+        r"|i?cumi|makumyabiri|mirongo|i?jana|amajana|i?gihumbi|i?bihumbi|miliyoni|miliyari|mbere"
+        r"|mutarama|gashyantare|werurwe|mata|gicurasi|kamena|nyakanga|kanama|nzeri|ukwakira|ugushyingo"
+        r"|ukuboza"
+    ),
+}
+RISKY = re.compile(r"\d|%|\b(?:" + "|".join(RISKY_WORDS.values()) + r")\b", re.IGNORECASE)
+SCHEDULE_START = re.compile(
+    r"^\s*(?:(?:(?:first|second|third|fourth|fifth|sixth)\s+)?schedule|annexe|u?mugereka)\b", re.IGNORECASE
 )
-SCHEDULE_START = re.compile(r"^\s*(?:(?:first|second|third|fourth|fifth|sixth)\s+)?schedule\b", re.IGNORECASE)
 CONTENTS = re.compile(
-    r"^\s*(?:arrangement\s+of\s+(?:sections|clauses|articles)|table\s+of\s+contents)\b", re.I
+    r"^\s*(?:arrangement\s+of\s+(?:sections|clauses|articles)|table\s+of\s+contents|sommaire"
+    r"|table\s+des\s+mati[èe]res|i?birimo)\b",
+    re.I,
 )
 
 

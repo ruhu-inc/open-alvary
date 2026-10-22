@@ -68,6 +68,42 @@ def test_each_page_gets_one_route_from_its_evidence():
     assert routing.route(page(5, "ARRANGEMENT OF SECTIONS"), first=False, structure_issues=0)[0] == "full"
 
 
+def test_risky_words_are_known_in_french_and_kinyarwanda_as_in_english():
+    """The Rwandan Gazette prints each law in Kinyarwanda, English and French (TXP-06's classes)."""
+    for primary, check in (
+        ("n'est", "est"),  # negations and exceptions
+        ("sauf", "sau"),
+        ("nonobstant", "nonobstan"),
+        ("ntibyemewe", "byemewe"),
+        ("keretse", "kerese"),
+        ("alinéa", "alinea"),  # cross-references
+        ("Ingingo", "Ingino"),
+        ("igika", "igka"),
+        ("vingt", "vint"),  # numbers, amounts and dates written in words
+        ("gatatu", "gatat"),
+        ("amafaranga", "amafaranqa"),
+        ("février", "fevrier"),
+        ("Kamena", "Kamera"),
+        ("thirty", "thirly"),
+    ):
+        assert (
+            routing.route(page(3, "3. Words.", [flag(primary, check)]), first=False, structure_issues=0)[0]
+            == "full"
+        ), primary
+    for primary, check in (
+        ("publié", "publie"),
+        ("Repubulika", "Repubulka"),
+        ("itegeko", "itegeka"),
+        ("une", "un"),
+    ):
+        assert (
+            routing.route(page(3, "3. Words.", [flag(primary, check)]), first=False, structure_issues=0)[0]
+            == "flagged"
+        ), primary
+    for text in ("SOMMAIRE", "IBIRIMO", "Table des matières", "ANNEXE I", "UMUGEREKA"):
+        assert routing.route(page(5, text), first=False, structure_issues=0)[0] == "full", text
+
+
 def test_a_page_read_only_once_is_never_agreed():
     # A Gazette page read from its own text layer has no flag because nothing was compared.
     once = {**page(2, "2. Plain words."), "checks": {}}
