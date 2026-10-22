@@ -41,6 +41,30 @@ def test_a_sample_is_read_as_the_workbench_would_hold_it_then_by_its_familys_rul
     assert "901" not in json.dumps(report["outline"])  # the page's furniture is never a unit
 
 
+def test_an_annexs_articles_restart_and_are_checked_in_order_within_it(tmp_path):
+    # cv-lei-1: an amending law's articles 1 and 2, then the law it republishes in an annex, from article 1.
+    texts = [
+        ("heading", "Lei nº 120/IX/2021"),
+        ("heading", "Artigo 1.º"),
+        ("paragraph", "A presente lei procede à alteração da Lei nº 42/VIII/2013."),
+        ("heading", "Artigo 2.º"),
+        ("paragraph", "A presente lei entra em vigor trinta dias após a sua publicação."),
+        ("paragraph", "Aprovada em 11 de fevereiro de 2021."),
+        ("heading", "REPUBLICAÇÃO"),
+        ("heading", "Artigo 1.º"),
+        ("paragraph", "A presente lei regula a composição da CNPD."),
+        ("heading", "Artigo 3.º"),
+        ("paragraph", "A CNPD rege-se pelo disposto no presente Estatuto."),
+    ]
+    nodes = [{"kind": kind, "level": 0, "page": 1, "text": text} for kind, text in texts]
+    report = calibrate.calibrate(
+        sample(tmp_path / "cv", nodes, {1: [word("Lei", 0.1, 0.1)]}), structure.CV_LAW, "pt"
+    )
+    assert report["provisions"] == ["art_1", "art_2", "annex_1__art_1", "annex_1__art_3"]
+    assert report["checks"]["in_order"] and report["checks"]["locators_unique"]
+    assert report["checks"]["missing_numbers"] == [] and report["checks"]["missing_in"] == {"annex_1": [2]}
+
+
 def test_language_versions_are_compared_provision_by_provision(tmp_path):
     whole = calibrate.calibrate(act(tmp_path / "en", ["1", "2", "3"]), structure.KE_ACT, "en")
     short = calibrate.calibrate(act(tmp_path / "sw", ["1", "3"]), structure.KE_ACT, "sw")

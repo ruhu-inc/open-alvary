@@ -276,6 +276,7 @@ NodeKind = Literal[
     "schedule",
     "annex",
     "table",
+    "quotation",
     "opinion",
     "order",
 ]
