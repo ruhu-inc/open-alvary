@@ -6,6 +6,14 @@ repository's visibility and ``rights.policy.decide``), compares it with the last
 appends events for the differences, all under one LIF-02 publication revision. The first call
 records a baseline without events, so existing records are never announced as new. ``sweep`` runs
 the same comparison over every work, for changes nobody writes, such as a rights record's expiry.
+
+Two times an event may carry besides committed_at (G15). observed_at is when Open Alvary saw at the
+official source what the event announces: written for text_version_published, as the retrieved_at of
+the official file its text was read from; null for every other type, whose change is Open Alvary's own
+(cataloguing, a review, a correction, a rights decision, a withdrawal) and is seen nowhere else.
+publisher_published_at is when the publisher published it: the catalogue the log is computed from keeps
+no publication date for a record or a text, so it is null on every event; the column is kept for
+source_publication_observed, which is not emitted yet.
 """
 
 import hashlib
@@ -201,9 +209,11 @@ class _Recorder:
         extra=None,
         corrects=None,
         legal_effective=None,
+        observed_at=None,
     ):
         """Plan one event; ``corrects`` (event_id, event_revision) makes it the next revision of that
-        event (SUB C1). Returns the planned event."""
+        event (SUB C1); ``observed_at`` is when Open Alvary saw at the official source what it announces,
+        where that is recorded (the module's notes). Returns the planned event."""
         projection = facts["projection"]
         payload = {
             "schema_version": SCHEMA_VERSION,
@@ -233,6 +243,7 @@ class _Recorder:
             "document_class": projection.get("document_type"),
             "language": (version or {}).get("language") or projection.get("language"),
             "change_reason": "corrected" if corrects else reason,
+            "observed_at": observed_at,
             "payload": payload,
         }
         self.events.append(event)
@@ -338,13 +349,15 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
                     f"INSERT INTO {rec.t['change_event']} (event_id, event_revision, event_type, logical_event_key,"
                     " reviewed_revision, publication_revision, feed_epoch, legal_effective, jurisdiction_id,"
                     " work_id, version_id, document_class, language, change_reason, supersedes_event_id,"
-                    " supersedes_revision, payload, payload_hash) VALUES (:event_id, :event_revision, :event_type,"
-                    " :logical_event_key, :reviewed_revision, :revision, :epoch, CAST(:legal_effective AS jsonb),"
-                    " :jurisdiction_id, :work_id, :version_id, :document_class, :language, :change_reason,"
-                    " :supersedes_event_id, :supersedes_revision, CAST(:payload AS jsonb), :hash)"
+                    " supersedes_revision, observed_at, payload, payload_hash) VALUES (:event_id, :event_revision,"
+                    " :event_type, :logical_event_key, :reviewed_revision, :revision, :epoch,"
+                    " CAST(:legal_effective AS jsonb), :jurisdiction_id, :work_id, :version_id, :document_class,"
+                    " :language, :change_reason, :supersedes_event_id, :supersedes_revision,"
+                    " CAST(:observed_at AS timestamptz), CAST(:payload AS jsonb), :hash)"
                 ),
                 event
                 | {
+                    "observed_at": event.get("observed_at"),
                     "revision": revision,
                     "epoch": state["epoch"],
                     "payload": json.dumps(event["payload"], ensure_ascii=False),
@@ -1244,6 +1257,10 @@ def _compare(rec: _Recorder, work_id: str, now: dict | None, before) -> None:
 
 def _text(rec, work_id, now, version_id, facts, *, first):
     title = now["projection"].get("title")
+    versions = tables["versions"]
+    retrieved = (rec.conn.scalar(select(versions.c.payload).where(versions.c.id == version_id)) or {}).get(
+        "retrieved_at"
+    )
     rec.add(
         "text_version_published",
         version_id,
@@ -1252,6 +1269,7 @@ def _text(rec, work_id, now, version_id, facts, *, first):
         version={"id": version_id, **facts},
         reason="first_text" if first else _reason(rec, version_id),
         extra={"version_diff": diff} if (diff := _version_diff(rec.conn, version_id)) else None,
+        observed_at=retrieved,  # when the official file this text was read from was retrieved
         summary=f"The text of {title} is now available."
         if first
         else f"A new text version of {title} was published.",
