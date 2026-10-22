@@ -2202,6 +2202,17 @@
           },
           "410": {
             "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2482,6 +2493,17 @@
           },
           "410": {
             "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2642,6 +2664,17 @@
           },
           "410": {
             "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2900,6 +2933,17 @@
           },
           "410": {
             "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3101,6 +3145,17 @@
           },
           "410": {
             "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3354,6 +3409,17 @@
           },
           "410": {
             "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3534,6 +3600,17 @@
           },
           "410": {
             "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5490,6 +5567,17 @@
           },
           "410": {
             "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5650,6 +5738,17 @@
           },
           "410": {
             "description": "The record or text was public and was withdrawn for a reason that may be told: its rights record changed or lapsed, or its approval was withdrawn (`withdrawn`). Stop serving it. Only a keyed caller is told this; a record or text withdrawn for a confidential reason, or never public, answers 404 `unavailable`, as one that never existed does.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
