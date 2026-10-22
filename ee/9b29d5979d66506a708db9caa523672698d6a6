@@ -1,0 +1,23 @@
+ingestion/gazette_layout.py
+  s_d665c62e07d76f::t_65d2a518141ddd 122-136,140-142,269-272,288-289,296-297
+tests/test_rwanda_catalogue.py
+  s_d665c62e07d76f::t_fc86cec20030e9 777-780,782-785,792-810
+ingestion/rw_gazette.py
+  s_d665c62e07d76f::t_dd4518e2bb9717 28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ee9b29d5979d66506a708db9caa523672698d6a6",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
