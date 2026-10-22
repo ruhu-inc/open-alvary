@@ -518,6 +518,34 @@ def test_a_laws_closing_words_and_the_next_act_in_its_gazette_are_split_from_its
     ]
 
 
+def test_senegals_and_burkina_fasos_article_heads_divisions_and_closing_words_are_split():
+    # Senegal's laws as the CDP publishes them: "Article 7." then a capital after a sentence has ended, or
+    # alone at the end of a page's last block; "Art. 4. - " with a hyphen; a chapter heading by the dash
+    # after its number; the enacting formula after the last article. Burkina Faso's "Ainsi fait …". A
+    # sentence citing an article ("l'Article 3 de la loi", "Article 9.2 of …") is never cut.
+    text = (
+        "ne prend pas part au vote. Article 7. Le Président nomme, comme le prévoit l'Article 3 de la loi. "
+        "Article 8. Le mandat est de quatre ans; Article 9.2 of the Convention. Art. 4. - Les personnes "
+        "mentionnées en sont informées. Chapitre II. – Recommandé électronique. Art. 54. – Le message "
+        "constitue un envoi recommandé. "
+        "La présente loi sera exécutée comme loi de l'Etat. Ainsi fait et délibéré en séance publique. "
+        "Article 54."
+    )
+    out = structure.split_units([node(text, "paragraph")])
+    assert [n["text"][:14] for n in out] == [
+        "ne prend pas p",
+        "Article 7. Le ",
+        "Article 8. Le ",
+        "Art. 4. - Les ",
+        "Chapitre II. –",
+        "Art. 54. – Le ",
+        "La présente lo",
+        "Ainsi fait et ",
+        "Article 54.",
+    ]
+    assert " ".join(n["text"] for n in out) == text
+
+
 def test_a_section_after_a_closing_quotation_mark_is_split():
     out = structure.split_units(
         [
