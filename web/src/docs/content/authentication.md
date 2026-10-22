@@ -24,7 +24,7 @@ Create keys in the console under **API keys** ([pictures](/docs/console#keys)). 
 | When the person leaves | Stops working | Keeps working; it belongs to the organisation |
 | How many | 10 per person per organisation | 20 per organisation |
 
-Every key expires: after 90 days unless you choose otherwise, and after at most 365. The console shows when each key was last used.
+Every key expires: after 90 days unless you choose otherwise, and after at most 365. The console shows when each key was last used. Your code can read its own key's expiry from [Get the calling key](/docs/api/get-key) (`GET /api/v1/key`): `expires_at`, whether a rotation has `replaced` it, and your organisation's plan and countries, never the secret. A server can check it once a day and warn well before `expires_at`.
 
 - **Rotate** a key to replace it. The new key has the old one's name, type and lifetime: a key made for 90 days is replaced by one that lasts 90 days from now. The old key keeps working for an overlap of at most 24 hours, or until its own expiry if that comes sooner, so you can switch over; the console marks it **Replaced**. Rotation is never refused because you have as many keys as allowed: the new key takes the old one's place, and a replaced key isn't counted. A replaced key can't be rotated again: that answers `409` with the code `already_rotated`, so rotate or revoke its replacement. Rotating the replacement during the overlap stops the old key at once.
 - **Revoke** a key to stop it at once.

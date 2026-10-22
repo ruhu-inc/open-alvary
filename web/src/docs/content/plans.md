@@ -21,6 +21,17 @@ The current plans are also published, without a key, at [`/api/v1/tiers`](/docs/
 
 You can see today's requests and data, by key and app, under **Usage** in the console.
 
+## Pace yourself
+
+Every answer counted against your organisation's requests a minute says how much of the allowance is left:
+
+```http
+RateLimit-Policy: "organisation";q=100;w=10
+RateLimit: "organisation";r=87;t=2
+```
+
+`RateLimit-Policy` gives your plan's burst (`q`, in requests) and how many seconds it takes to refill from empty (`w`). `RateLimit` gives the requests left now (`r`) and the seconds until the burst is full again (`t`). When `r` gets low, slow down rather than wait for a `429`. The headers count requests only: requests at once, data a day and the Starter rate outside your plan's countries aren't in them. They follow the IETF draft [RateLimit header fields for HTTP](https://datatracker.ietf.org/doc/draft-ietf-httpapi-ratelimit-headers/).
+
 ## When you reach a limit
 
 The request is refused with `429` and the code [`rate_limited`](/docs/errors#rate_limited). The `Retry-After` header, and `retry_after_seconds` in the body, say how many seconds to wait:

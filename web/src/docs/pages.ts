@@ -119,7 +119,7 @@ export function buildPages(
         ...groups.map((group) => ({ group, items: reference.filter((p) => p.group === group).map((p) => p.slug) })),
       ],
     },
-    { title: "Help", items: ["help", "changelog"] },
+    { title: "Help", items: ["help", "changelog", "compatibility"] },
   ];
   for (const section of nav)
     for (const item of section.items)

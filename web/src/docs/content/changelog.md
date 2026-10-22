@@ -3,7 +3,16 @@ title: Changelog
 description: Changes to the API, the MCP server and these docs.
 ---
 
-Changes that affect how you use the API and the MCP server, newest first.
+Changes that affect how you use the API and the MCP server, newest first. New fields, values and routes can come at any time; a breaking change comes only as a new version, announced here first. See [Compatibility](/docs/compatibility).
+
+## 22 October 2026
+
+- [Get the calling key](/docs/api/get-key) (`GET /api/v1/key`): the key or connected app that sent the request, with its `kind`, `name` and `expires_at`, whether a rotation has `replaced` it, and your organisation's plan, countries and when its access ends. It never returns the secret, and counts as one request. See [API keys](/docs/authentication#api-keys).
+- Answers from `/api/v1` and `/mcp` that count against your organisation's requests a minute have `RateLimit` and `RateLimit-Policy` headers: what is left of the allowance and how fast it refills. See [Pace yourself](/docs/plans#pace-yourself).
+- An address under `/api/v1` that is no route answers `404` with a problem document and the code [`not_found_route`](/docs/errors#not_found_route), where it gave `{"detail": "Not Found"}`. A missing record is still [`unavailable`](/docs/errors#unavailable).
+- The plans, the quota policy and the OpenAPI document also carry `X-Request-ID`.
+- The [OpenAPI document](https://api.open.alvary.ai/api/v1/openapi.json) declares the headers each answer carries (`X-Request-ID`, `RateLimit`, `RateLimit-Policy`, `ETag`, `Retry-After`) and the `304` of each route that answers `If-None-Match`.
+- New page: [Compatibility](/docs/compatibility), on which changes come at any time and how breaking changes are announced.
 
 ## 21 October 2026
 
