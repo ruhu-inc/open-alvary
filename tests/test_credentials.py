@@ -118,6 +118,12 @@ def test_missing_malformed_and_address_credentials_are_refused_with_the_right_ch
     )
     in_address = client.get("/api/v1/sources?api_key=oa_live_x", headers={"Authorization": "Bearer x"})
     assert in_address.status_code == 400 and in_address.json()["code"] == "credential_not_accepted"
+    for named in ("token=x", "Access_Token=x", "limit=1&KEY=x", "apikey=x", "id_token=x"):
+        refused = client.get(f"/api/v1/changes?{named}", headers={"Authorization": "Bearer x"})
+        assert refused.json()["code"] == "credential_not_accepted", named
+    # The change feed's resume token is no credential: the request goes on to the credential check.
+    resumed = client.get("/api/v1/changes?resume_token=r1.abc", headers={"Authorization": "Bearer x"})
+    assert resumed.json()["code"] == "invalid_credentials"
     assert client.get("/api/v1/tiers").status_code == 200  # public
 
 
