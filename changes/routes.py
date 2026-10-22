@@ -2,6 +2,7 @@
 (changes-contracts.md C1). Every surface answers the same events; only admission differs."""
 
 import os
+import uuid
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from functools import cache
@@ -28,6 +29,10 @@ def tokens() -> Tokens | None:
 
 
 def problem(error: FeedError, request: Request) -> JSONResponse:
+    """A refusal as a problem document carrying its request ID in the body and in X-Request-ID, as
+    /api/v1's problems do (api.credentials.problem): the surface's own ID, or a new one where the
+    surface gives none."""
+    request_id = getattr(request.state, "request_id", None) or uuid.uuid4().hex[:16]
     body = {
         "type": f"https://open.alvary.ai/docs/errors#{error.code}",
         "title": "Request refused",
@@ -35,11 +40,9 @@ def problem(error: FeedError, request: Request) -> JSONResponse:
         "detail": error.detail,
         "code": error.code,
         "retryable": error.status in (429, 503),
+        "request_id": request_id,
     }
-    request_id = getattr(request.state, "request_id", None)
-    if request_id:
-        body["request_id"] = request_id
-    headers = {"Cache-Control": "no-store"}
+    headers = {"Cache-Control": "no-store", "X-Request-ID": request_id}
     if error.retry_after:
         headers["Retry-After"] = str(error.retry_after)
     return JSONResponse(
