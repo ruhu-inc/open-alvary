@@ -1022,7 +1022,7 @@ def test_a_born_digital_line_is_checked_against_the_ocr_words_inside_its_box():
             **extra,
         }
 
-    def ocr(text, row):
+    def ocr(text, row, confidence=0.98):
         x = 0.1
         out = []
         for word in text.split():
@@ -1033,6 +1033,7 @@ def test_a_born_digital_line_is_checked_against_the_ocr_words_inside_its_box():
                     "y0": 0.1 + 0.04 * row + 0.003,
                     "x1": x + 0.02,
                     "y1": 0.117 + 0.04 * row,
+                    "confidence": confidence,
                 }
             )
             x += 0.025
@@ -1044,6 +1045,11 @@ def test_a_born_digital_line_is_checked_against_the_ocr_words_inside_its_box():
         line("fevrier 1950 est remplace", 2),  # the page prints the accents the layer lacks
         line("Iteka rya Minisitiri nº 93/03", 3),  # º and ° are one sign
         line("NOMINATION DU DIRECTEUR", 4),  # the OCR's Greek look-alikes are not a difference
+        line("Ingingo ya 3 n’amategeko", 6),  # the apostrophe the OCR reads as a letter is the same sign
+        line("est du est", 7),  # the same words in another order are no difference
+        line("Itegeko Ngenga N o 31/2008 nk’uko", 8),  # "Nº" with its raised o apart; another apostrophe
+        line("2 o Ms. UWITONZE", 9),  # an ordinal's raised o apart
+        line("valables et bulletins nuls", 10),  # an unclear image: the OCR is no check here
         line("Taux 12 % 15 %", 5, table=True),  # a table's cells: its page is reviewed whole
         line("Article 9 : Abrogation", 0, page=2),  # a page the OCR did not check
     ]
@@ -1054,14 +1060,21 @@ def test_a_born_digital_line_is_checked_against_the_ocr_words_inside_its_box():
         + ocr("Iteka rya Minisitiri n° 93/03", 3)
         + ocr("ΝΟΜΙΝΑTION DU DIRECTEUR", 4)
         + ocr("Taux 21 % 15 %", 5)
+        + ocr("Ingingo ya 3 nʼamategeko", 6)
+        + ocr("du est est", 7)
+        + ocr("Itegeko Ngenga N°31/2008 nkʻuko", 8)
+        + ocr("2° Ms. UWITONZE", 9)
+        + ocr("valavis tulles nuis", 10, confidence=0.34)
     )
     node = {"kind": "paragraph", "page": 1, "lines": lines}
-    checked = RG.check_text_layer(
-        [node], {1: {"words": words}}, {1: (1000.0, 1000.0), 2: (1000.0, 1000.0)}
-    )
+    checked = RG.check_text_layer([node], {1: {"words": words}}, {1: (1000.0, 1000.0), 2: (1000.0, 1000.0)})
     assert checked == {1}
     flags = {f["kind"]: f for f in node["flags"]}
-    assert set(flags) == {"text_layer_differs", "accents_missing"}
+    assert set(flags) == {"text_layer_differs", "accents_missing", "check_unclear"}
+    assert (flags["check_unclear"]["severity"], flags["check_unclear"]["primary"]) == (
+        "low",
+        "valables et bulletins nuls",
+    )
     assert (flags["text_layer_differs"]["severity"], flags["text_layer_differs"]["primary"]) == (
         "medium",
         "5",
