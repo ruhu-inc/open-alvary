@@ -38,7 +38,7 @@
   {
     "name": "get_source",
     "title": "Get one source",
-    "description": "Get one catalogued source by its ID, including rights status and access mode.",
+    "description": "Get one catalogued source by its ID, including rights status and access mode. With a key, a record that was public and was withdrawn for a reason that may be told answers withdrawn, not unavailable: stop serving it and its texts.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -164,7 +164,7 @@
   {
     "name": "get_anchor",
     "title": "Get one part of a text exactly",
-    "description": "One part of a published text, such as a section or article, exactly: its words, its span as UTF-8 byte offsets, the hash of its bytes for checking a quotation, a citation such as s. 23(1)(a), the official file and the attribution its rights record asks for. Never shortened: a part too large for one answer is refused; read it from the REST text route with its offsets.",
+    "description": "One part of a published text, such as a section or article, exactly: its words, its span as UTF-8 byte offsets, the hash of its bytes for checking a quotation, a citation such as s. 23(1)(a), the official file and the attribution its rights record asks for. Never shortened: a part too large for one answer is refused; read it from the REST text route with its offsets. With a key, a part whose text was public and was withdrawn for a reason that may be told answers withdrawn, not unavailable.",
     "inputSchema": {
       "type": "object",
       "properties": {

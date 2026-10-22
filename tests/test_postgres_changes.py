@@ -604,6 +604,25 @@ def test_keyed_mcp_tools_are_told_of_withdrawals_what_the_keyed_feed_is(surfaces
         "unavailable",
     ]
 
+    # The record reads answer as REST's do: withdrawn to a keyed caller, unavailable otherwise.
+    def refusal(client, name, arguments, headers=None):
+        call = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": arguments},
+        }
+        result = client.post("/mcp", json=call, headers=headers or {}).json()["result"]
+        assert result["isError"], result
+        return result["structuredContent"]["code"]
+
+    for tool in ("get_source", "get_relationships", "list_expressions"):
+        assert refusal(client, tool, {"source_id": work}, headers) == "withdrawn", tool
+        assert refusal(anonymous, tool, {"source_id": work}) == "unavailable", tool
+    assert refusal(client, "get_anchor", {"anchor_id": "test-node"}, headers) == "withdrawn"
+    assert refusal(anonymous, "get_anchor", {"anchor_id": "test-node"}) == "unavailable"
+    assert refusal(client, "get_source", {"source_id": "no-such-record"}, headers) == "unavailable"
+
 
 def test_atom_and_rss_are_well_formed_and_escape_titles(feed, cleared):
     from email.utils import parsedate_to_datetime

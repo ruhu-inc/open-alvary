@@ -29,7 +29,7 @@ A change is breaking when code written to these pages could stop working: a fiel
 
 A breaking change never comes within the current version. It comes as a new versioned path (such as `/api/v2`) or a new format name (such as `change-event-2`), and an MCP tool is renamed only by adding the new name beside the old one. The old path, format or name keeps working beside the new one until it is retired. The changelog announces the new one, with the date the old one will be retired, before that date.
 
-> Warning: [Placeholder for the owner: state the shortest notice between the announcement and the retirement, for example "The old one keeps working for at least … after the announcement."]
+The old one keeps working for at least 180 days after the announcement. From the announcement, a route or format being retired answers with the `Deprecation` and `Sunset` headers (RFC 9745 and RFC 8594), and we email the organisations whose keys used it in the 90 days before.
 
 ## What is not a change to the API
 

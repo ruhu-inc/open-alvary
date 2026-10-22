@@ -76,7 +76,9 @@ TOOLS = [
     {
         "name": "get_source",
         "title": "Get one source",
-        "description": "Get one catalogued source by its ID, including rights status and access mode.",
+        "description": "Get one catalogued source by its ID, including rights status and access mode. With a key, a "
+        "record that was public and was withdrawn for a reason that may be told answers withdrawn, not "
+        "unavailable: stop serving it and its texts.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -174,7 +176,9 @@ TOOLS = [
         "description": "One part of a published text, such as a section or article, exactly: its words, its "
         "span as UTF-8 byte offsets, the hash of its bytes for checking a quotation, a citation such as "
         "s. 23(1)(a), the official file and the attribution its rights record asks for. Never shortened: a "
-        "part too large for one answer is refused; read it from the REST text route with its offsets.",
+        "part too large for one answer is refused; read it from the REST text route with its offsets. With a key, "
+        "a part whose text was public and was withdrawn for a reason that may be told answers withdrawn, not "
+        "unavailable.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -571,6 +575,23 @@ def _result(id_, result):
     return {"jsonrpc": "2.0", "id": id_, "result": result}
 
 
+class ToldWithdrawn(Exception):
+    """A keyed caller asked for a record, text or part that was public and was withdrawn for a reason that
+    may be told (changes.feed.Withdrawals): answered ``withdrawn``, as REST's reads are (owner decision
+    2026-10-22). ``argument`` names what was withdrawn: source_id or anchor_id."""
+
+    def __init__(self, argument: str):
+        super().__init__(argument)
+        self.argument = argument
+
+
+# As REST's reads say it (api.v1.WITHDRAWN).
+WITHDRAWN = {
+    "source_id": "withdrawn: this record was public and has been withdrawn. Stop serving it and its texts.",
+    "anchor_id": "withdrawn: the text this part is in was public and has been withdrawn. Stop serving copies of it.",
+}
+
+
 def _tool_result(payload, is_error=False):
     text = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
@@ -596,8 +617,25 @@ def create_router(
     router = APIRouter()
 
     def call_tool(name, arguments, plan: Reach, keyed: bool = False):
-        """``keyed``: the credential gate admitted a key or token, so the change tools and the check tell
-        what a keyed caller is told of withdrawals (changes.feed.Withdrawals)."""
+        """``keyed``: the credential gate admitted a key or token, so the change tools, the check and the
+        record reads tell what a keyed caller is told of withdrawals (changes.feed.Withdrawals): a record
+        read that finds nothing public answers ``withdrawn`` where the record or the part's text was
+        public and its withdrawal may be told, as REST's reads do."""
+        try:
+            return read_tool(name, arguments, plan, keyed)
+        except LookupError:
+            if keyed and isinstance(arguments, dict):
+                with catalogue_factory() as service:
+                    connection = service.repository.connection
+                    if connection.dialect.name == "postgresql":
+                        told = Withdrawals(connection)
+                        for argument, test in (("source_id", told.record), ("anchor_id", told.anchor)):
+                            value = arguments.get(argument)
+                            if isinstance(value, str) and test(value):
+                                raise ToldWithdrawn(argument) from None
+            raise
+
+    def read_tool(name, arguments, plan: Reach, keyed: bool = False):
         if not isinstance(arguments, dict):
             return None
         with catalogue_factory() as service:
@@ -870,6 +908,8 @@ def create_router(
             except OutsidePlanLimited as outside:
                 message = f"{outside} Retry after {outside.retry_after} seconds."
                 return _result(id_, _tool_error("rate_limited", message, outside.retry_after))
+            except ToldWithdrawn as told:
+                return _result(id_, _tool_error("withdrawn", WITHDRAWN[told.argument]))
             except LookupError:
                 return _result(id_, _tool_error("unavailable", "Source not available"))
             except ResultTooLarge:
