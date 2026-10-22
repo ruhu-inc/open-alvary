@@ -1,0 +1,28 @@
+api/openapi_docs.py
+  s_d665c62e07d76f::t_0f86c17f780703 603-605
+changes/record.py
+  s_d665c62e07d76f::t_d8477c935f4fbe 1226-1231
+web/src/docs/data/openapi.json
+  s_d665c62e07d76f::t_94bf67f7eb09c9 10869
+web/src/docs/content/changes.md
+  s_d665c62e07d76f::t_0f86c17f780703 43-44
+tests/test_postgres_changes.py
+  s_d665c62e07d76f::t_94bf67f7eb09c9 676-679
+  s_d665c62e07d76f::t_cf3c899e5632cf 673-675,680-681
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "6fc39fd4993cfe311185bfce3ec0a52939195a1b",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
