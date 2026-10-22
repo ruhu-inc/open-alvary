@@ -25,7 +25,7 @@ from schema.jurisdictions import registry
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-22.1"  # born-digital pages checked against Google's OCR (check_text_layer)
+PIPELINE = "2026-10-22.2"  # a turned (landscape) page measured as it is shown (gazette_layout.words)
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
