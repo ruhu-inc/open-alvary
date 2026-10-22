@@ -121,9 +121,11 @@ A later text of the same record names the one it replaces in `prior_version_id`,
 
 | `scope_disclosure` | `action` | What to do |
 |---|---|---|
-| `named`, with `version` | `stop_serving` | Stop serving the text in `version` now. `reason_code` says why: `rights_changed` (its rights record changed or lapsed) or `correction` (its approval was withdrawn). A corrected text, if there is one, arrives as a new `text_version_published`. |
-| `named`, `version` null | `stop_serving` | With a key only: the record in `work` is no longer public because its rights record changed (`reason_code` `rights_changed`). Stop serving it and every text of it now. |
+| `named`, with `version` | `stop_serving` | Stop serving the text in `version`. `reason_code` says why: `rights_changed` (its rights record changed or lapsed) or `correction` (its approval was withdrawn). A corrected text, if there is one, arrives as a new `text_version_published`. |
+| `named`, `version` null | `stop_serving` | With a key only: the record in `work` is no longer public because its rights record changed (`reason_code` `rights_changed`). Stop serving it and every text of it. |
 | `revalidate_releases` | `revalidate` | A record stopped being public, and which one is not said. Check each record you hold: one that answers `404` or `410` is no longer public; stop serving it. |
+
+Apply a withdrawal to the copies you keep within 7 days of its publication, as the [acceptable use policy](/acceptable-use) asks; the sooner, the better.
 
 Whether a withdrawal names what it withdraws depends on why it was withdrawn:
 
