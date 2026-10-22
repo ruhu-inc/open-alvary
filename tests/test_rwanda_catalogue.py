@@ -1238,3 +1238,38 @@ def test_the_cloud_ocr_check_reads_each_files_unchecked_pages_and_merges_them(tm
     store.objects["readings/rw/ocr-check/bbb.json"] = None  # stored but unreadable: never replaced
     failed = rwanda.check_layers(store, worklist["files"], 10, log=lambda m: None, reader=Reader())
     assert failed["failed"][0]["sha256"] == "bbb" and store.objects["readings/rw/ocr-check/bbb.json"] is None
+
+
+def test_different_instruments_with_one_number_are_kept_apart_and_one_instrument_twice_stays_one():
+    """Two laws printed with one number (here a misprint: 002/2024 dated 2025) came to share a work and
+    its ids, and the manifest kept only one. Now the first dated keeps the ids, the other takes its
+    date and names the files it is stored under, and both are marked; the same law from the Gazette
+    and RLRC stays one work."""
+
+    def doc(objects, title, language="en"):
+        return {"id": f"rw-law-002-2024-{language}", "work": "rw-law-002-2024", "objects": objects,
+                "title": title, "language": language,
+                "versions": {"en": "rw-law-002-2024-en", "fr": "rw-law-002-2024-fr"}}  # fmt: skip
+
+    ratify = doc(
+        "files/aaa/",
+        "Law n° 002/2024 of 17/01/2024 approving the ratification of the credit facility agreement",
+    )
+    amend = doc(
+        "files/bbb/", "Law n° 002/2024 of 22/01/2025 amending law n° 045/2021 governing the financial centre"
+    )
+    copy = doc(
+        "files/ccc/",
+        "Law n° 002/2024 of 17/01/2024 approving the ratification of the credit facility agreement",
+    )
+    out, renamed = rwanda.separate_instruments([amend, ratify, copy])
+    by_objects = {d["objects"]: d for d in out}
+    assert by_objects["files/aaa/"]["id"] == by_objects["files/ccc/"]["id"] == "rw-law-002-2024-en"
+    second = by_objects["files/bbb/"]
+    assert second["id"] == "rw-law-002-2024-2025-01-22-en" and second["work"] == "rw-law-002-2024-2025-01-22"
+    assert second["stored_as"] == "rw-law-002-2024-en" and renamed == {second["id"]: "rw-law-002-2024-en"}
+    assert second["versions"]["fr"] == "rw-law-002-2024-2025-01-22-fr"
+    assert second["shares_number_with"] == ["rw-law-002-2024"]
+    assert by_objects["files/aaa/"]["shares_number_with"] == ["rw-law-002-2024-2025-01-22"]
+    alone, none = rwanda.separate_instruments([ratify, copy])
+    assert none == {} and all("shares_number_with" not in d for d in alone)
