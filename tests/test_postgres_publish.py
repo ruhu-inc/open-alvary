@@ -44,7 +44,12 @@ def test_an_approved_work_is_published_as_a_record_and_taken_down_when_approval_
     assert dry["published"] == [WORK] and events(store) == []
     report = publish.publish_records(store, "rw", approved, set(), decision)
     assert report["published"] == [WORK]
-    assert sorted(events(store)) == [("catalogue_added", WORK), ("coverage_changed", "rw")]
+    # Its rights record's first revision is announced with it.
+    assert sorted(events(store)) == [
+        ("catalogue_added", WORK),
+        ("coverage_changed", "rw"),
+        ("rights_changed", WORK),
+    ]
     client = TestClient(create_app(store=store))
     record = client.get(f"/sources/{WORK}").json()
     assert record["title"].startswith("Law n° 055/2024") and record["has_full_text"] is False
@@ -54,10 +59,10 @@ def test_an_approved_work_is_published_as_a_record_and_taken_down_when_approval_
     ).items()
     # Publishing again changes nothing; a lapsed approval takes the record down.
     assert publish.publish_records(store, "rw", approved, set(), decision)["updated"] == [WORK]
-    assert len(events(store)) == 2
+    assert len(events(store)) == 3
     assert publish.publish_records(store, "rw", [], {WORK}, decision)["taken_down"] == [WORK]
     # One save, one revision: the withdrawal and Rwanda losing its last public record (any order).
-    assert set(events(store)[2:]) == {("withdrawal", WORK), ("coverage_changed", "rw")}
+    assert set(events(store)[3:]) == {("withdrawal", WORK), ("coverage_changed", "rw")}
     assert client.get(f"/sources/{WORK}").status_code == 404
 
 

@@ -19,6 +19,7 @@ Changes cover what Open Alvary holds, not every change in a country's law. [Chan
 |---|---|
 | `catalogue_added` | A record became public: an existing law newly catalogued (not necessarily a new law), or one restored after a withdrawal. |
 | `metadata_corrected` | A record's catalogue details were corrected; `changed_fields` lists which. A correction never changes legal text. |
+| `rights_changed` | A record's [rights record](/docs/rights) has a new revision: its status, licence, attribution, conditions, expiry or any other field changed. `changed_fields` lists the rights record's fields that changed, `rights_revision` is the new revision, and `rights` gives it with the `decision` taken from it (whether the record and its text may be shown, and why). Refresh the licence, attribution and conditions you show from [Get a record's rights](/docs/api/get-rights). A change of rights status is also a `metadata_corrected` with `rights_status`. A record the change takes out of public view has a `withdrawal` instead. |
 | `text_version_published` | A text was cleared and published; `change_reason` says whether it is the first text, a revision at the source, or a correction. A text that replaces another lists in `version_diff` the provisions it adds, removes and changes. |
 | `legal_effect_recorded` | A reviewer checked, against the official text, that another public record repeals, amends, supersedes or brings into force this one, or that a law transposes, domesticates or ratifies a treaty or directive. `legal_effect` names the record that had the effect (`by`) and the date it took effect, when known. A transposition, domestication or ratification changes the law on both sides, so each record has its own change; the law's names the instrument it gives effect to (`of`). It may describe a past effect recorded late. If the link is withdrawn, the same change is corrected with `review_state` `withdrawn`, still naming the link. |
 | `treatment_recorded` | A legally qualified reviewer recorded how a paragraph of a judgment treats another judgment: `follows`, `applies`, `distinguishes`, `doubts` or `overrules`. `treatment` names the judgment treated (`of`), the treating paragraph (`citing_pinpoint`), the part treated and the `opinion` the paragraph is in; `assertion` is `direct_treatment`, a reviewer's reading, never an inferred risk. An overruling also has a change on the overruled judgment, naming the overruling one in `by`. The passage itself is on the judgment's [history](/docs/records#case-law-citations-and-treatment). If the treatment is withdrawn, the same changes are corrected with `review_state` `withdrawn`. No change means no treatment was recorded, not that a judgment is good law. |
@@ -31,7 +32,7 @@ Only links that change what law applies record a `legal_effect_recorded` change.
 
 Each change has a plain `summary` sentence, the `work` it concerns (ID, title, citation, and its links on the website and in the API) and, for a text, the `version`. A correction of a record's legal status, rights status, type or year gives the old value in `previous`. Every field is listed in the [reference](/docs/api/list-changes).
 
-Each change carries `schema_version` (`change-event-1`). New kinds of change and new fields can appear within a version, so ignore the ones you don't know. [Change coverage](/docs/api/get-change-coverage) lists the kinds recorded.
+Each change carries `schema_version` (`change-event-1`). New kinds of change and new fields can appear within a version without notice: skip an `event_type` you don't know, and ignore fields you don't know, rather than refusing the page. A parser that rejects them stops at the first new kind of change. Existing fields keep their names, types and meaning within a version. [Change coverage](/docs/api/get-change-coverage) lists the kinds recorded.
 
 {{example:list_changes}}
 
@@ -102,7 +103,7 @@ writeFileSync("resume_token.txt", page.resume_token); // only after the changes 
 
 ### When a text is published or withdrawn
 
-**A text is published** (`text_version_published`): the change names the `version` (its `id`, `content_hash` and `language`) and the `rights_revision` in force. With a key:
+**A text is published** (`text_version_published`): the change names the `version` (its `id`, `content_hash` and `language`) and the `rights_revision` in force. A later change to the record's rights record arrives as `rights_changed`, with the new revision. With a key:
 
 1. Get the text from `https://api.open.alvary.ai/api/v1/versions/{id}/text` and check that its SHA-256 equals `content_hash`.
 2. Get its parts, a page at a time, from `/api/v1/versions/{id}/structure`. Offsets are UTF-8 bytes into that exact text. Each part's `id` is an anchor: `/api/v1/anchors/{id}` gives its words, a citation and the attribution to show.

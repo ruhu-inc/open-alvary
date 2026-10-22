@@ -435,7 +435,7 @@ TOOLS = [
                     "type": "array",
                     "items": {"type": "string"},
                     "maxItems": 10,
-                    "description": "Kinds of change: catalogue_added, metadata_corrected, "
+                    "description": "Kinds of change: catalogue_added, metadata_corrected, rights_changed, "
                     "text_version_published, legal_effect_recorded, treatment_recorded, withdrawal, "
                     "coverage_changed, membership_recorded, suspension_recorded.",
                 },

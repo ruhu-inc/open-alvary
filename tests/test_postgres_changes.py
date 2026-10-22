@@ -57,9 +57,13 @@ def test_the_first_publication_is_a_baseline_and_reseeding_changes_nothing(feed)
 
 def test_each_kind_of_change_is_one_event_and_one_save_shares_a_revision(feed, cleared):
     store, client = feed
-    store.save(cleared)  # opens text and changes the rights status of the first source
+    store.save(cleared)  # opens text and changes the rights record and rights status of the first source
     first = events(store)
-    assert {e["event_type"] for e in first} == {"text_version_published", "metadata_corrected"}
+    assert sorted(e["event_type"] for e in first) == [
+        "metadata_corrected",
+        "rights_changed",
+        "text_version_published",
+    ]
     assert len({e["publication_revision"] for e in first}) == 1
     text_event = next(e for e in first if e["event_type"] == "text_version_published")
     assert text_event["change_reason"] == "first_text" and text_event["version_id"] == "test-version"
@@ -68,7 +72,7 @@ def test_each_kind_of_change_is_one_event_and_one_save_shares_a_revision(feed, c
 
     work = cleared.sources[1].id
     edit(store, lambda c: setattr(next(s for s in c.sources if s.id == work), "summary", "A new summary."))
-    [summary] = events(store)[2:]
+    [summary] = events(store)[3:]
     assert summary["event_type"] == "metadata_corrected" and summary["payload"]["changed_fields"] == [
         "summary"
     ]
@@ -81,10 +85,14 @@ def test_each_kind_of_change_is_one_event_and_one_save_shares_a_revision(feed, c
     assert len(withdrawn) == 1 and withdrawn[0]["work"] is None
     assert withdrawn[0]["withdrawal"]["scope_disclosure"] == "revalidate_releases"
     assert all((e["work"] or {}).get("id") != work for e in page["events"])
-    # Restored, it is added again and named again.
+    # Restored, it is added again and named again, with its rights record's new revision.
     edit(store, lambda c: setattr(next(r for r in c.rights if r.source_id == work), "metadata_public", True))
-    restored = events(store)[-1]
-    assert restored["event_type"] == "catalogue_added" and restored["change_reason"] == "restored"
+    last = [
+        e for e in events(store) if e["publication_revision"] == events(store)[-1]["publication_revision"]
+    ]
+    [restored] = [e for e in last if e["event_type"] == "catalogue_added"]
+    assert restored["change_reason"] == "restored"
+    assert {e["event_type"] for e in last} == {"catalogue_added", "rights_changed"}
     assert sweep_count(store) == 0
 
 
@@ -100,7 +108,9 @@ def test_pages_cursors_resume_tokens_and_their_refusals(feed, cleared):
     assert len(first["events"]) == 1 and first["has_more"] and first["next_cursor"]
     second = client.get("/changes", params={"limit": 1, "cursor": first["next_cursor"]}).json()
     assert second["events"][0]["event_id"] != first["events"][0]["event_id"]
-    rest = client.get("/changes", params={"limit": 1, "cursor": second["next_cursor"]}).json()
+    third = client.get("/changes", params={"limit": 1, "cursor": second["next_cursor"]}).json()
+    assert third["events"][0]["event_id"] not in {e["event_id"] for e in first["events"] + second["events"]}
+    rest = client.get("/changes", params={"limit": 1, "cursor": third["next_cursor"]}).json()
     assert rest["events"] == [] and not rest["has_more"]
     # From the window's resume token, only newer changes arrive.
     assert client.get("/changes", params={"resume_token": rest["resume_token"]}).json()["events"] == []
@@ -137,14 +147,14 @@ def test_filters_single_events_feeds_and_mcp(feed, cleared):
     for unknown in ({"jurisdiction": "ke"}, {"work": "no-such-work"}, {"class": "novel"}, {"language": "xx"}):
         refused = client.get("/changes", params=unknown)
         assert refused.status_code == 400 and refused.json()["detail"] == "The filter is not valid."
-    assert len(client.get("/changes", params={"jurisdiction": "ng"}).json()["events"]) == 2
+    assert len(client.get("/changes", params={"jurisdiction": "ng"}).json()["events"]) == 3
     one = client.get(f"/changes/{texts[0]['event_id']}")
     assert one.json()["event_type"] == "text_version_published"
     assert client.get("/changes/00000000-0000-4000-8000-000000000000").status_code == 404
 
     atom = client.get("/changes/feed.atom")
     assert atom.headers["content-type"].startswith("application/atom+xml")
-    assert len(ET.fromstring(atom.text).findall("{http://www.w3.org/2005/Atom}entry")) == 2
+    assert len(ET.fromstring(atom.text).findall("{http://www.w3.org/2005/Atom}entry")) == 3
     rss = ET.fromstring(client.get("/changes/feed.rss", params={"type": "metadata_corrected"}).text)
     assert len(rss.findall("./channel/item")) == 1
 
@@ -355,13 +365,15 @@ def test_an_expired_rights_review_withdraws_its_text_within_one_worker_run(feed,
     store.save(cleared)
     work = cleared.sources[0].id
     rights = tables["rights"]
-    with store.engine.begin() as conn:  # time passes: nothing is written to the catalogue
+    with store.engine.begin() as conn:  # an expiry date already past, written without publishing
         payload = conn.scalar(select(rights.c.payload).where(rights.c.source_id == work))
         payload["expires_at"] = "2020-01-01T00:00:00+00:00"
         conn.execute(update(rights).where(rights.c.source_id == work).values(payload=payload))
     assert withdrawals(client) == []  # unseen until something compares the work
     with store.engine.begin() as conn:
-        assert expired(conn) == 1
+        assert expired(conn) == 2  # the withdrawal, and the rights record's revision with its new expiry
+    [revised] = of_type(client, "rights_changed")[1:]
+    assert revised["changed_fields"] == ["expires_at"] and revised["rights"]["decision"]["full_text"] is False
     [withdrawn] = withdrawals(client)
     assert withdrawn["version"]["id"] == "test-version"
     assert withdrawn["withdrawal"]["action"] == "stop_serving"
@@ -408,8 +420,8 @@ def test_the_rights_history_downgrade_drops_a_baseline_but_never_history(feed, c
 
     run(command.downgrade, "0028")
     run(command.upgrade, "head")
-    store.save(cleared)  # a real revision: now history
-    with pytest.raises(RuntimeError, match="public rights history"):
+    store.save(cleared)  # a real revision: now history, and announced (0043 refuses first)
+    with pytest.raises(RuntimeError, match="public rights history|Rights change events exist"):
         run(command.downgrade, "0028")
 
 
@@ -639,6 +651,69 @@ def test_a_status_correction_says_what_it_was_and_only_for_fields_never_withheld
     edit(store, lambda c: setattr(next(s for s in c.sources if s.id == work), "summary", "A new summary."))
     summary = of_type(client, "metadata_corrected")[-1]
     assert summary["changed_fields"] == ["summary"] and summary["previous"] == {}
+
+
+def rights_of(corpus, work):
+    return next(r for r in corpus.rights if r.source_id == work)
+
+
+def test_every_revision_of_a_public_records_rights_record_is_announced(feed, cleared, tmp_path):
+    from api.v1 import create_v1_app
+
+    store, client = feed
+    v1 = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    work = cleared.sources[0].id
+    store.save(cleared)  # its text opened: revision 2 of its rights record
+    [opened] = of_type(client, "rights_changed")
+    assert opened["work"]["id"] == work and opened["rights_revision"] == 2
+    assert opened["rights"] == {
+        "revision": 2,
+        "decision": {"metadata": True, "full_text": True, "reasons": []},
+    }
+    assert {"status", "licence", "approved_content_hashes"} <= set(opened["changed_fields"])
+    assert opened["rights"]["decision"] == v1.get(f"/rights/{work}").json()["decision"]
+    # The other events of a record now name the revision in force too.
+    [status] = of_type(client, "metadata_corrected")
+    assert status["changed_fields"] == ["rights_status"] and status["rights_revision"] == 2
+
+    def change(**fields):
+        before = len(events(store))
+        edit(store, lambda c: [setattr(rights_of(c, work), k, v) for k, v in fields.items()])
+        return [e["event_type"] for e in events(store)[before:]], of_type(client, "rights_changed")[-1]
+
+    # Conditions, attribution, licence and expiry: no status, text or catalogue detail changes, and
+    # each is announced, with its new revision.
+    kinds, met = change(conditions=["Show the publisher's notice."], conditions_satisfied=True)
+    assert kinds == ["rights_changed"] and met["changed_fields"] == ["conditions", "conditions_satisfied"]
+    kinds, reworded = change(conditions=["Show the publisher's notice with each text."])
+    assert kinds == ["rights_changed"] and reworded["changed_fields"] == ["conditions"]
+    assert reworded["rights_revision"] == reworded["rights"]["revision"] == 4
+    assert reworded["summary"] == f"The rights record for {cleared.sources[0].title} changed (conditions)."
+    assert v1.get(f"/rights/{work}").json()["revision"] == 4
+    kinds, attributed = change(attribution_text="Synthetic test author, with thanks")
+    assert kinds == ["rights_changed"] and attributed["changed_fields"] == ["attribution_text"]
+    kinds, licensed = change(licence="TEST-ONLY-ANOTHER-LICENCE")
+    assert kinds == ["rights_changed"] and licensed["changed_fields"] == ["licence"]
+    kinds, renewed = change(expires_at=datetime.fromisoformat("2099-01-01T00:00:00+00:00"))
+    assert kinds == ["rights_changed"] and renewed["changed_fields"] == ["expires_at"]
+    assert renewed["rights"]["revision"] == 7 and renewed["change_reason"] is None
+    # A status change is still a correction of the record's rights status as well.
+    kinds, conditional = change(status="OPEN_WITH_CONDITIONS")
+    assert sorted(kinds) == ["metadata_corrected", "rights_changed"]
+    assert conditional["changed_fields"] == ["status"]
+    assert of_type(client, "metadata_corrected")[-1]["previous"] == {"rights_status": "OPEN"}
+    assert (
+        len(of_type(client, "rights_changed"))
+        == len(client.get("/changes", params={"type": "rights_changed"}).json()["events"])
+        == 7
+    )
+    # A record that is not public is never named: its rights record's revisions are not announced.
+    hidden = cleared.sources[1].id
+    edit(store, lambda c: setattr(rights_of(c, hidden), "metadata_public", False))
+    before = len(events(store))
+    edit(store, lambda c: setattr(rights_of(c, hidden), "licence", "TEST-ONLY-HIDDEN"))
+    assert events(store)[before:] == []
+    assert all((e["work"] or {}).get("id") != hidden for e in of_type(client, "rights_changed"))
 
 
 def test_a_text_that_replaces_another_names_the_provisions_it_adds_removes_and_changes(feed, cleared):
