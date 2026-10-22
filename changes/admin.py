@@ -9,7 +9,9 @@ status              epoch, baseline, events and the highest publication revision
 withdraw-confidentially --work ID
                     take a public record out of public view for a reason that must not be told
                     (privacy, a legal or court order, or another confidential reason): its rights
-                    record stops allowing its metadata, and its withdrawal names nothing, to anyone
+                    record stops allowing its metadata, and its withdrawal names nothing, to anyone.
+                    For a record already withdrawn whose withdrawal keyed callers are told of, stop
+                    telling them: a withdrawal naming nothing is appended (what was delivered stays)
 
 Any other write that takes a record out of public view by changing its rights record is announced as a
 withdrawal with reason_code rights_changed, which names the record by its IDs to keyed callers (owner
@@ -23,7 +25,7 @@ import json
 from sqlalchemy import select, text, update
 
 from api.store import check_legacy_authority, engine_for, tables
-from changes.record import current, namespace, publish, sweep
+from changes.record import current, namespace, publish, sweep, withhold
 
 
 def main(argv=None) -> int:
@@ -51,7 +53,10 @@ def main(argv=None) -> int:
         elif args.command == "withdraw-confidentially":
             check_legacy_authority(conn, write=True)
             if not current(conn, [args.work]):
-                raise SystemExit("No public record has that ID")
+                if not withhold(conn, args.work):
+                    raise SystemExit("No public record, or withdrawal told to keyed callers, has that ID")
+                print("Its withdrawal is no longer told; answers already delivered cannot be recalled")
+                return 0
             rights = tables["rights"]
             record = conn.scalar(select(rights.c.payload).where(rights.c.source_id == args.work))
             conn.execute(

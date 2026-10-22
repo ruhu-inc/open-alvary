@@ -460,24 +460,33 @@ def test_a_record_never_public_or_withdrawn_confidentially_is_never_named_or_tol
     ).json()
     assert checked["results"][0]["result"] == "unavailable"
 
-    # A withdrawal told before stops being told once a later one is confidential.
-    edit(
-        store,
-        lambda c: [
-            setattr(rights_of(c, other), "privacy_status", "cleared"),
-            setattr(rights_of(c, other), "metadata_public", True),
-        ],
-    )
-    edit(store, lambda c: setattr(rights_of(c, other), "metadata_public", False))  # may be told
-    assert client.get(f"/api/v1/sources/{other}", headers=headers).json()["code"] == "withdrawn"
-    assert any(
-        e["work"] == by_ids(other) for e in feed_withdrawals(client, "/api/v1/changes", headers=headers)
-    )
+    # A withdrawal told before stops being told once the operator finds its reason must not be told,
+    # and once a later withdrawal of the record is confidential.
+    def told_of(work):
+        named = [e for e in feed_withdrawals(client, "/api/v1/changes", headers=headers) if e["work"]]
+        return client.get(f"/api/v1/sources/{work}", headers=headers).json()["code"], named
+
+    def may_be_told(work):
+        edit(
+            store,
+            lambda c: [
+                setattr(rights_of(c, work), "privacy_status", "cleared"),
+                setattr(rights_of(c, work), "metadata_public", True),
+            ],
+        )
+        edit(store, lambda c: setattr(rights_of(c, work), "metadata_public", False))
+        code, named = told_of(work)
+        assert code == "withdrawn" and [e["work"] for e in named] == [by_ids(work)]
+
+    may_be_told(other)
+    assert admin.main(["withdraw-confidentially", "--work", other]) == 0  # already withdrawn: withheld
+    assert told_of(other) == ("unavailable", [])
+    with pytest.raises(SystemExit):
+        admin.main(["withdraw-confidentially", "--work", other])  # nothing left to withhold
+    may_be_told(other)
     edit(store, lambda c: setattr(rights_of(c, other), "metadata_public", True))
-    monkeypatch.setattr(admin, "engine_for", lambda: store.engine)
     assert admin.main(["withdraw-confidentially", "--work", other]) == 0
-    assert client.get(f"/api/v1/sources/{other}", headers=headers).json()["code"] == "unavailable"
-    assert all(e["work"] is None for e in feed_withdrawals(client, "/api/v1/changes", headers=headers))
+    assert told_of(other) == ("unavailable", [])
 
 
 def test_atom_and_rss_are_well_formed_and_escape_titles(feed, cleared):

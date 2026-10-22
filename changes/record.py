@@ -359,28 +359,68 @@ def publish(
     if rec.events or revisions:
         revision = conn.scalar(text(f"SELECT {rec.allocate}"))
         _record_rights(rec, revisions, revision)
-        for event in rec.events:
-            conn.execute(
-                text(
-                    f"INSERT INTO {rec.t['change_event']} (event_id, event_revision, event_type, logical_event_key,"
-                    " reviewed_revision, publication_revision, feed_epoch, legal_effective, jurisdiction_id,"
-                    " work_id, version_id, document_class, language, change_reason, supersedes_event_id,"
-                    " supersedes_revision, observed_at, payload, payload_hash) VALUES (:event_id, :event_revision,"
-                    " :event_type, :logical_event_key, :reviewed_revision, :revision, :epoch,"
-                    " CAST(:legal_effective AS jsonb), :jurisdiction_id, :work_id, :version_id, :document_class,"
-                    " :language, :change_reason, :supersedes_event_id, :supersedes_revision,"
-                    " CAST(:observed_at AS timestamptz), CAST(:payload AS jsonb), :hash)"
-                ),
-                event
-                | {
-                    "observed_at": event.get("observed_at"),
-                    "revision": revision,
-                    "epoch": state["epoch"],
-                    "payload": json.dumps(event["payload"], ensure_ascii=False),
-                    "hash": digest(event["payload"]),
-                },
-            )
+        _insert(rec, revision, state["epoch"])
     return len(rec.events)
+
+
+def _insert(rec: _Recorder, revision: int, epoch) -> None:
+    """Append the planned events under one publication revision of the feed's epoch."""
+    for event in rec.events:
+        rec.conn.execute(
+            text(
+                f"INSERT INTO {rec.t['change_event']} (event_id, event_revision, event_type, logical_event_key,"
+                " reviewed_revision, publication_revision, feed_epoch, legal_effective, jurisdiction_id,"
+                " work_id, version_id, document_class, language, change_reason, supersedes_event_id,"
+                " supersedes_revision, observed_at, payload, payload_hash) VALUES (:event_id, :event_revision,"
+                " :event_type, :logical_event_key, :reviewed_revision, :revision, :epoch,"
+                " CAST(:legal_effective AS jsonb), :jurisdiction_id, :work_id, :version_id, :document_class,"
+                " :language, :change_reason, :supersedes_event_id, :supersedes_revision,"
+                " CAST(:observed_at AS timestamptz), CAST(:payload AS jsonb), :hash)"
+            ),
+            event
+            | {
+                "observed_at": event.get("observed_at"),
+                "revision": revision,
+                "epoch": epoch,
+                "payload": json.dumps(event["payload"], ensure_ascii=False),
+                "hash": digest(event["payload"]),
+            },
+        )
+
+
+def withhold(conn: Connection, work_id: str) -> int:
+    """Stop telling keyed callers of the withdrawal of a record that is no longer public, when its
+    reason turns out to be confidential after it was recorded (a legal or court order received later,
+    say): append a withdrawal of it that names nothing, which changes.feed.Withdrawals then reads as its
+    latest. Copies and answers already delivered cannot be recalled. Returns the events appended: 1, or
+    0 when the record is public, never was, or its latest withdrawal is confidential already."""
+    rec = _Recorder(conn)
+    held = conn.execute(
+        text(f"SELECT visible, projection FROM {rec.t['published_state']} WHERE work_id = :w FOR UPDATE"),
+        {"w": work_id},
+    ).first()
+    if held is None or held.visible or current(conn, [work_id]):
+        return 0
+    latest = conn.scalar(
+        text(
+            f"SELECT payload FROM {rec.t['change_event']} WHERE work_id = :w AND version_id IS NULL"
+            " AND event_type IN ('withdrawal', 'catalogue_added')"
+            " ORDER BY publication_revision DESC, event_revision DESC LIMIT 1"
+        ),
+        {"w": work_id},
+    )
+    if (latest or {}).get("withdrawal", {}).get("reason_code") not in DISCLOSED_REASONS:
+        return 0
+    epoch = conn.scalar(text(f"SELECT epoch FROM {rec.t['feed_state']} FOR UPDATE"))
+    rec.add(
+        "withdrawal",
+        f"{work_id}:w",
+        work_id,
+        {"projection": held.projection},
+        summary="A previously public record was withdrawn. Revalidate any copies you keep.",
+    )
+    _insert(rec, conn.scalar(text(f"SELECT {rec.allocate}")), epoch)
+    return 1
 
 
 def _rights_revisions(rec: _Recorder, scope) -> list[dict]:

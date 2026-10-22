@@ -652,14 +652,17 @@ class Withdrawals:
     (changes.record.DISCLOSED_REASONS: its rights record changed or lapsed, or its approval was withdrawn)
     is named by its IDs in the feed, and reads answer `withdrawn`. One withdrawn for a confidential reason
     (privacy, a legal or court order, another confidential reason, or none recorded), one never public and
-    one that never existed are the same: unnamed, and `unavailable`. Read from the change log: what the
-    last comparison recorded, so a record hidden by a write not yet compared is told nothing."""
+    one that never existed are the same: unnamed, and `unavailable`. Nothing announced before a record's
+    last confidential withdrawal is told again (changes.record.withhold appends one when a reason turns
+    out to be confidential later). Read from the change log: what the last comparison recorded, so a
+    record hidden by a write not yet compared is told nothing."""
 
     def __init__(self, conn: Connection):
         ns = namespace(conn)
         self.conn = conn
         self.t = {n: ns.qualified(conn, "changes", n) for n in ("change_event", "published_state")}
         self.records: dict[str, dict | None] = {}
+        self.withheld: dict[str, int] = {}  # work -> publication revision of its last confidential withdrawal
 
     def record(self, work_id: str | None) -> dict | None:
         """The withdrawal of a record that is no longer public, when it may be told: what its latest
@@ -682,11 +685,26 @@ class Withdrawals:
 
     def told(self, row: dict) -> dict | None:
         """For a withdrawal event of a record that is no longer public: what may be told of it, when its
-        own reason may be told and so may the record's latest withdrawal."""
+        own reason may be told, so may the record's latest withdrawal, and no confidential withdrawal of
+        the record came after it (one withheld later stays unnamed, whatever follows)."""
         told = row["payload"].get("withdrawal") or {}
-        if told.get("reason_code") not in DISCLOSED_REASONS or self.record(row["work_id"]) is None:
+        work_id = row["work_id"]
+        if told.get("reason_code") not in DISCLOSED_REASONS or self.record(work_id) is None:
             return None
-        return told
+        return told if row["publication_revision"] > self._withheld(work_id) else None
+
+    def _withheld(self, work_id: str) -> int:
+        """The publication revision of the record's last confidential withdrawal; 0 when it has none."""
+        if work_id not in self.withheld:
+            self.withheld[work_id] = self.conn.scalar(
+                text(
+                    f"SELECT coalesce(max(publication_revision), 0) FROM {self.t['change_event']}"
+                    " WHERE work_id = :w AND version_id IS NULL AND event_type = 'withdrawal'"
+                    " AND coalesce(payload #>> '{withdrawal,reason_code}', '') <> ALL(:told)"
+                ),
+                {"w": work_id, "told": list(DISCLOSED_REASONS)},
+            )
+        return self.withheld[work_id]
 
     def version(self, version_id: str | None) -> bool:
         """Whether a keyed caller may be told this text was withdrawn: it was public, it is not readable
@@ -706,14 +724,14 @@ class Withdrawals:
         if not state.visible:  # the whole record was withdrawn: was this one of its public texts?
             told = self.record(owner)
             return told is not None and (
-                version_id in told.get("versions", []) or self._announced(version_id)
+                version_id in told.get("versions", []) or self._announced(version_id, self._withheld(owner))
             )
         if version_id in state.readable_versions:
             return False
         latest = self.conn.execute(
             text(
-                f"SELECT event_type, payload FROM {self.t['change_event']} WHERE version_id = :v"
-                " AND event_type IN ('text_version_published', 'withdrawal')"
+                f"SELECT event_type, payload, publication_revision FROM {self.t['change_event']}"
+                " WHERE version_id = :v AND event_type IN ('text_version_published', 'withdrawal')"
                 " ORDER BY publication_revision DESC, event_revision DESC LIMIT 1"
             ),
             {"v": version_id},
@@ -722,6 +740,7 @@ class Withdrawals:
             latest is not None
             and latest.event_type == "withdrawal"
             and (latest.payload.get("withdrawal") or {}).get("reason_code") in DISCLOSED_REASONS
+            and latest.publication_revision > self._withheld(owner)
         )
 
     def item(self, item) -> bool:
@@ -737,15 +756,16 @@ class Withdrawals:
         version_id = self.conn.scalar(select(structure.c.version_id).where(structure.c.id == anchor_id))
         return version_id is not None and self.version(version_id)
 
-    def _announced(self, version_id: str) -> bool:
-        """Whether the change log ever announced this text as public, or its withdrawal."""
+    def _announced(self, version_id: str, since: int) -> bool:
+        """Whether the change log announced this text as public, or its withdrawal, after a publication
+        revision (its record's last confidential withdrawal: what came before it is never told)."""
         return bool(
             self.conn.scalar(
                 text(
                     f"SELECT EXISTS(SELECT 1 FROM {self.t['change_event']} WHERE version_id = :v"
-                    " AND event_type IN ('text_version_published', 'withdrawal'))"
+                    " AND event_type IN ('text_version_published', 'withdrawal') AND publication_revision > :r)"
                 ),
-                {"v": version_id},
+                {"v": version_id, "r": since},
             )
         )
 
