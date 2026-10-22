@@ -17,6 +17,11 @@ import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+# An item's provenance beside what its listing shows: its own record or detail page, the listing
+# request (with its query or page) it came from, the source's record verbatim, and the addresses of
+# other renditions of the same document (not fetched).
+PROVENANCE = ("record_url", "listing_url", "listed_raw", "alternate_urls")
+
 CADENCE = {"daily": timedelta(days=1), "weekly": timedelta(days=7), "monthly": timedelta(days=30)}
 
 
@@ -61,6 +66,28 @@ class Ledger:
             finally:
                 fcntl.flock(lock, fcntl.LOCK_UN)
 
+    def save_source(self, source_id: str) -> None:
+        """Write back one source's state and items, merged into the ledger as it now stands on
+        disk, under the same lock: catalogues of two sources run at once keep each other's records."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with open(self.path.with_suffix(".lock"), "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                current = (
+                    json.loads(self.path.read_text()) if self.path.exists() else {"sources": {}, "items": {}}
+                )
+                current["items"] = {
+                    k: v for k, v in current["items"].items() if v.get("source") != source_id
+                } | {k: v for k, v in self.data["items"].items() if v.get("source") == source_id}
+                if source_id in self.data["sources"]:
+                    current["sources"][source_id] = self.data["sources"][source_id]
+                tmp = self.path.with_suffix(f".{os.getpid()}.tmp")
+                tmp.write_text(json.dumps(current, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+                tmp.replace(self.path)
+                self.data = current
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
+
     def source(self, source_id: str) -> dict:
         return self.data["sources"].get(source_id, {})
 
@@ -80,8 +107,12 @@ class Ledger:
         key=lambda item: item["url"],
         cursor: dict | None = None,
         at: datetime | None = None,
+        shown=None,
     ) -> dict:
-        """Record one check of a listing; returns what changed."""
+        """Record one check of a listing; returns what changed. `shown` gives what the listing shows
+        of an item (by default a file browser's name, size, date and folder). Beside it are kept, where
+        the listing gives them, the item's `type` and its provenance (PROVENANCE): its own record
+        page, the listing request it came from, the source's record verbatim, other renditions."""
         moment = at or now()
         when = stamp(moment)
         items = self.data["items"]
@@ -90,40 +121,64 @@ class Ledger:
         for item in crawl["files"]:
             item_id = f"{source_id}:{key(item)}"
             seen[item_id] = item
-            shown = {k: item.get(k) for k in ("name", "size", "modified", "folder")}
+            listed = (
+                shown(item) if shown else {k: item.get(k) for k in ("name", "size", "modified", "folder")}
+            )
+            kind = {k: item[k] for k in ("type", *PROVENANCE) if item.get(k) not in (None, "", [])}
             record = items.get(item_id)
             if record is None:
                 items[item_id] = {
                     "source": source_id,
                     "url": item["url"],
+                    **kind,
                     "first_seen": when,
                     "last_seen": when,
-                    "listed": shown,
+                    "listed": listed,
                     "history": [{"at": when, "run": run_id, "change": "new"}],
                 }
                 added.append(item_id)
                 continue
             record["last_seen"] = when
+            before = {k: record.get(k) for k in ("type", "alternate_urls")}
+            record.update(kind)
             if record.get("gone"):
                 record.pop("gone")
                 record["history"].append({"at": when, "run": run_id, "change": "listed again"})
-            if record["listed"].get("folder") != shown["folder"]:
+            if shown:  # a listing with details of its own: any change to them is recorded
+                for k in PROVENANCE:
+                    if k not in kind:
+                        record.pop(k, None)
+                now_ = {k: record.get(k) for k in ("type", "alternate_urls")}
+                if record["listed"] != listed or before != now_:
+                    record["history"].append(
+                        {
+                            "at": when,
+                            "run": run_id,
+                            "change": "listing changed",
+                            "before": record["listed"],
+                            **({"before_also": before} if before != now_ else {}),
+                        }
+                    )
+                    changed.append(item_id)
+                record["listed"] = listed
+                continue
+            if record["listed"].get("folder") != listed["folder"]:
                 record["history"].append(
                     {
                         "at": when,
                         "run": run_id,
                         "change": "moved",
                         "from": record["listed"].get("folder"),
-                        "to": shown["folder"],
+                        "to": listed["folder"],
                     }
                 )
                 moved.append(item_id)
-            elif any(record["listed"].get(k) != shown[k] for k in ("name", "size", "modified")):
+            elif any(record["listed"].get(k) != listed[k] for k in ("name", "size", "modified")):
                 record["history"].append(
                     {"at": when, "run": run_id, "change": "listing changed", "before": record["listed"]}
                 )
                 changed.append(item_id)
-            record["listed"] = shown
+            record["listed"] = listed
         gone = []
         if crawl["complete"]:  # only a complete check can say an item is no longer listed
             for item_id, record in items.items():
