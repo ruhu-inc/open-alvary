@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?><OAI-PMH xmlns="http://www.openarchives.org/OAI/2.0/"><responseDate>2026-10-22T22:11:35Z</responseDate><request verb="ListRecords">https://nigeriareposit.nln.gov.ng/server/oai/request</request><ListRecords><record><header><identifier>oai:nigeriareposit.nln.gov.ng:20.500.14186/1682</identifier><datestamp>2024-11-26T03:00:21Z</datestamp><setSpec>com_20.500.14186_321</setSpec><setSpec>col_20.500.14186_403</setSpec></header><metadata><metadata xmlns="http://www.lyncode.com/xoai" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.lyncode.com/xoai http://www.lyncode.com/xsd/xoai.xsd">
+   <element name="dc">
+      <element name="contributor">
+         <element name="author">
+            <element name="none">
+               <field name="value">FEDERAL Government of Nigeria</field>
+            </element>
+         </element>
+      </element>
+      <element name="date">
+         <element name="accessioned">
+            <element name="none">
+               <field name="value">2024-11-25T11:10:28Z</field>
+            </element>
+         </element>
+         <element name="available">
+            <element name="none">
+               <field name="value">2024-11-25T11:10:28Z</field>
+            </element>
+         </element>
+         <element name="issued">
+            <element name="none">
+               <field name="value">2023-05</field>
+            </element>
+         </element>
+      </element>
+      <element name="identifier">
+         <element name="uri">
+            <element name="none">
+               <field name="value">https://nigeriareposit.nln.gov.ng/handle/20.500.14186/1682</field>
+            </element>
+         </element>
+      </element>
+      <element name="description">
+         <element name="none">
+            <field name="value">The act established the National Commission for Almajiri and Out of School Children Education to provide for a multi modal system of education to tackle the menace of illiteracy, develop skill acquisition and entrepreneurship programmes, prevent youth poverty, delinquency and destitution in Nigeria. Assented by President Muhammadu Buhari on 27th May, 2023.</field>
+         </element>
+         <element name="abstract">
+            <element name="none">
+               <field name="value">Establishment of the commission; Citation</field>
+            </element>
+         </element>
+      </element>
+      <element name="language">
+         <element name="iso">
+            <element name="none">
+               <field name="value">en</field>
+            </element>
+         </element>
+      </element>
+      <element name="publisher">
+         <element name="none">
+            <field name="value">Abuja: Federal Government of Nigeria,</field>
+         </element>
+      </element>
+      <element name="title">
+         <element name="none">
+            <field name="value">National commission for almajiri and out of school children education act, 2023</field>
+         </element>
+      </element>
+      <element name="type">
+         <element name="none">
+            <field name="value">Other</field>
+         </element>
+      </element>
+   </element>
+   <element name="bundles">
+      <element name="bundle">
+         <field name="name">ORIGINAL</field>
+         <element name="bitstreams">
+            <element name="bitstream">
+               <field name="name">NCAOOSCE ACT SIGNED PMB.pdf</field>
+               <field name="originalName">NCAOOSCE ACT SIGNED PMB.pdf</field>
+               <field name="format">application/pdf</field>
+               <field name="size">5505101</field>
+               <field name="url">https://nigeriareposit.nln.gov.ng/bitstreams/49832e2c-d269-4da4-b108-3bd7b54f9345/download</field>
+               <field name="checksum">beff81fa4a19464f178701c21df63303</field>
+               <field name="checksumAlgorithm">MD5</field>
+               <field name="sid">1</field>
+            </element>
+         </element>
+      </element>
+      
+      
+      
+   </element>
+   <element name="others">
+      <field name="handle">20.500.14186/1682</field>
+      <field name="identifier">oai:nigeriareposit.nln.gov.ng:20.500.14186/1682</field>
+      <field name="lastModifyDate">2024-11-26 03:00:21.209</field>
+      <element name="access-status">
+         <field name="value">open.access</field>
+      </element>
+   </element>
+   
+   
+</metadata></metadata></record></ListRecords></OAI-PMH>
