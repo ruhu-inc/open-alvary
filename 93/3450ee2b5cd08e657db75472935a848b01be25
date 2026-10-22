@@ -1,0 +1,23 @@
+ingestion/rwanda.py
+  s_d665c62e07d76f::t_0c395f79f99c70 923-924,932-933,1295,1315,1318,1321,1325-1336
+  s_d665c62e07d76f::t_c19ce19ea740ea 1128-1130
+  s_d665c62e07d76f::t_3d1f3c49141531 1337-1338
+tests/test_rwanda_catalogue.py
+  s_d665c62e07d76f::t_c19ce19ea740ea 820-830
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "933450ee2b5cd08e657db75472935a848b01be25",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
