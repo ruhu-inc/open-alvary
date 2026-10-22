@@ -220,13 +220,16 @@ def test_a_save_still_open_cannot_appear_behind_a_readers_position(feed, cleared
     assert [(e["event_type"], e["changed_fields"]) for e in newer] == [("metadata_corrected", ["summary"])]
 
 
-def test_anonymous_keyed_and_website_routes_answer_the_same_changes(pg_engine, cleared, monkeypatch):
+@pytest.fixture
+def surfaces(pg_engine, monkeypatch):
+    """The public service with accounts on, over a seeded catalogue, and the headers of a key whose
+    organisation has access: (store, client, headers). The feed is at /api/changes (anonymous),
+    /site/v1/changes (the website) and /api/v1/changes (keyed)."""
     from test_postgres_api_v1 import PEPPER, TIER, grant, key
 
     from accounts import policies
     from accounts.store import Accounts
     from api.service import create_service
-    from rights.database import PolicyNamespace
 
     monkeypatch.setenv("ALVARY_ACCOUNTS", "1")
     monkeypatch.setenv("ALVARY_KEY_PEPPER", __import__("base64").b64encode(PEPPER).decode())
@@ -240,7 +243,6 @@ def test_anonymous_keyed_and_website_routes_answer_the_same_changes(pg_engine, c
     migrate(pg_engine)
     store = Store(pg_engine)
     seed(store)
-    store.save(cleared)
     with pg_engine.connect() as conn:
         accounts = Accounts(
             pg_engine, PolicyNamespace(conn.scalar(text("SELECT current_schema()"))), key_pepper=PEPPER
@@ -256,7 +258,12 @@ def test_anonymous_keyed_and_website_routes_answer_the_same_changes(pg_engine, c
     accounts.accept_policies(signed["id"], dict(policies.CURRENT))
     organisation = accounts.welcome(signed["id"], "Amina", "Amina")
     grant(accounts, organisation)
-    client = TestClient(create_service(store=store))
+    return store, TestClient(create_service(store=store)), key(accounts, signed["id"], organisation)
+
+
+def test_anonymous_keyed_and_website_routes_answer_the_same_changes(surfaces, cleared):
+    store, client, headers = surfaces
+    store.save(cleared)
 
     def ids(response):
         assert response.status_code == 200, response.text
@@ -264,9 +271,28 @@ def test_anonymous_keyed_and_website_routes_answer_the_same_changes(pg_engine, c
 
     anonymous = ids(client.get("/api/changes"))
     assert anonymous and anonymous == ids(client.get("/site/v1/changes"))
-    keyed = client.get("/api/v1/changes", headers=key(accounts, signed["id"], organisation))
+    keyed = client.get("/api/v1/changes", headers=headers)
     assert ids(keyed) == anonymous
     assert client.get("/api/v1/changes").status_code == 401  # the keyed surface still needs a key
+
+
+def test_every_surface_answers_a_feed_refusal_with_its_request_id(surfaces, tmp_path):
+    from api.v1 import create_v1_app
+
+    store, client, headers = surfaces
+    bare = TestClient(create_v1_app(store, tmp_path, lambda: []))  # no middleware gives a request ID
+    for refused in (
+        client.get("/api/changes", params={"colour": "red"}),
+        client.get("/site/v1/changes", params={"colour": "red"}),
+        client.get("/api/v1/changes", params={"colour": "red"}, headers=headers),
+        client.get("/api/v1/changes/not-a-change", headers=headers),
+        bare.get("/changes", params={"limit": "0"}),
+    ):
+        assert (
+            refused.status_code in (400, 404)
+            and refused.headers["content-type"] == "application/problem+json"
+        )
+        assert refused.headers["x-request-id"] == refused.json()["request_id"], refused.request.url
 
 
 def test_atom_and_rss_are_well_formed_and_escape_titles(feed, cleared):
