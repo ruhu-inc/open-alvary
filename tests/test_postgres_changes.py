@@ -382,6 +382,25 @@ def test_an_expired_rights_review_withdraws_its_text_within_one_worker_run(feed,
         assert expired(conn) == 0  # already compared: nothing new
 
 
+def test_a_published_text_says_when_its_official_file_was_retrieved_and_nothing_else_invents_a_time(
+    feed, cleared
+):
+    store, client = feed
+    store.save(cleared)
+    served = {e["event_type"]: e for e in client.get("/changes").json()["events"]}
+    assert set(served) == {"text_version_published", "metadata_corrected", "rights_changed"}
+    # The fixture's official file was retrieved on 1 January 2026 (conftest.NOW).
+    assert served["text_version_published"]["observed_at"] == "2026-01-01T00:00:00Z"
+    assert (
+        served["metadata_corrected"]["observed_at"] is None
+        and served["rights_changed"]["observed_at"] is None
+    )
+    # No record or text keeps a publication date: null on every event, never guessed.
+    assert all(e["publisher_published_at"] is None for e in served.values())
+    stored = {e["event_type"]: e for e in events(store)}
+    assert stored["text_version_published"]["observed_at"] == cleared.versions[0].retrieved_at
+
+
 def test_each_change_to_a_rights_record_is_a_revision_the_text_events_name(feed, cleared, tmp_path):
     from api.v1 import create_v1_app
 

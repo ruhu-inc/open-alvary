@@ -32,6 +32,8 @@ Only links that change what law applies record a `legal_effect_recorded` change.
 
 Each change has a plain `summary` sentence, the `work` it concerns (ID, title, citation, and its links on the website and in the API) and, for a text, the `version`. A correction of a record's legal status, rights status, type or year gives the old value in `previous`. Every field is listed in the [reference](/docs/api/list-changes).
 
+`committed_at` is when the change was recorded. `observed_at` is when we saw at the official source what the change announces: for `text_version_published`, when the official file the text was read from was retrieved. It is null for every other kind of change, which is our own (cataloguing, a review, a correction, a rights decision or a withdrawal). `publisher_published_at` is null on every change for now: the catalogue keeps no publication date for a record or a text, and we don't guess one.
+
 Each change carries `schema_version` (`change-event-1`). New kinds of change and new fields can appear within a version without notice: skip an `event_type` you don't know, and ignore fields you don't know, rather than refusing the page. A parser that rejects them stops at the first new kind of change. Existing fields keep their names, types and meaning within a version. [Change coverage](/docs/api/get-change-coverage) lists the kinds recorded.
 
 {{example:list_changes}}

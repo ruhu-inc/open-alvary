@@ -648,8 +648,20 @@ SCHEMAS: dict[str, dict] = {
             },
             "committed_at": {"type": S, "format": "date-time", "description": "When it was recorded."},
             "observed_at": NULL_S
-            | {"description": "When the change was seen at the official source, if known."},
-            "publisher_published_at": NULL_S | {"description": "When the publisher published it, if known."},
+            | {
+                "format": "date-time",
+                "description": "When Open Alvary saw at the official source what the change announces. For "
+                "`text_version_published`: when the official file the text was read from was retrieved. Null "
+                "for every other kind of change, which is Open Alvary's own (cataloguing, a review, a correction, "
+                "a rights decision or a withdrawal) and is seen nowhere else, and for texts announced before it "
+                "was recorded.",
+            },
+            "publisher_published_at": NULL_S
+            | {
+                "description": "When the publisher published what the change announces (`YYYY`, `YYYY-MM` or "
+                "`YYYY-MM-DD`). Null on every change for now: the catalogue keeps no publication date for a "
+                "record or a text, and none is guessed."
+            },
             "legal_effective": {
                 "type": ["object", "null"],
                 "description": "When it takes legal effect, if known: {from, until, precision}. A membership's or "
