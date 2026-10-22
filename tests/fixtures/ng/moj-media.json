@@ -1,0 +1,29 @@
+[
+ {
+  "id": 84,
+  "date": "2020-09-03T20:15:33",
+  "date_gmt": "2020-09-03T20:15:33",
+  "modified": "2021-07-28T16:10:42",
+  "modified_gmt": "2021-07-28T16:10:42",
+  "slug": "attachment-nigerian-constitution",
+  "status": "inherit",
+  "type": "attachment",
+  "link": "http://justice.gov.ng/nigerian-constitution/attachment-nigerian-constitution/",
+  "title": {
+   "rendered": "Nigerian-Constitution"
+  },
+  "author": 1,
+  "featured_media": 0,
+  "comment_status": "open",
+  "ping_status": "closed",
+  "template": "",
+  "alt_text": "",
+  "media_type": "file",
+  "mime_type": "application/pdf",
+  "media_details": {},
+  "post": 85,
+  "source_url": "http://justice.gov.ng/wp-content/uploads/2020/09/Nigerian-Constitution.pdf",
+  "filename": "Nigerian-Constitution.pdf",
+  "filesize": 672495
+ }
+]

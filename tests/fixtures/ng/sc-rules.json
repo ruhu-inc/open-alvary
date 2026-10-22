@@ -1,0 +1,5 @@
+{"success": true, "data": {"courtrules": {"current_page": 1, "data": [
+ {"id": 34, "title": "Supreme Court Rule", "content": "<p><strong>The Supreme Court Rule 2024</strong></p>", "created_at": "2025-05-04",
+  "updated_at": "2025-05-04", "document": "https://scnwebsites3.s3.af-south-1.amazonaws.com/courtrule/1746367810.pdf", "active": 1,
+  "file_path": "https://supreme-cms.supremecourt.gov.ng/courtrules/document/https://scnwebsites3.s3.af-south-1.amazonaws.com/courtrule/1746367810.pdf"}],
+ "next_page_url": null, "per_page": 50, "total": 1}}}

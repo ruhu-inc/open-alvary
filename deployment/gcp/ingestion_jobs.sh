@@ -11,14 +11,21 @@
 #   deployment/gcp/ingestion_jobs.sh run survey 8 1 ng  # another collection (ingestion.cloud_read): survey, then
 #                                                    # layout and ocr from its reading work list
 #   deployment/gcp/ingestion_jobs.sh prepare 8       # prepare every stored file for review, in 8 tasks
+#   deployment/gcp/ingestion_jobs.sh fetch 4         # fetch the approved Nigerian work list, in 4 tasks
+#                                                    # (the list: python -m ingestion.nigeria fetch-worklist)
 #   deployment/gcp/ingestion_jobs.sh status
 #
 # scan-reader reads the work list in the corpus bucket, which the operator writes with the approved
 # budget (python -m ingestion.rwanda scan-worklist ...); each reading lands in
 # gs://$CORPUS_BUCKET/readings/<country>/<ocr|docai>/. corpus-preparer reads the sources, readings and
 # state (python -m ingestion.rwanda push-held mirrors the ledger and catalogues) and writes the review
-# documents to gs://$CORPUS_BUCKET/collections/<country>/. Either run that stops is run again: work
-# already done is skipped. Billed: Document AI per page read, Cloud Run per task-hour (cents).
+# documents to gs://$CORPUS_BUCKET/collections/<country>/. corpus-fetcher fetches a country's approved
+# work list (work/<country>/fetch.json), shared out by host so that one host is never fetched by two
+# tasks, politely (robots.txt, at least 2 s between requests to a host), and stores each file once by
+# its fingerprint in gs://$CORPUS_BUCKET/sources/<country>/<source>/ with a sidecar; then
+# python -m ingestion.nigeria pull-fetched records what it did in the ledger. Any run that stops is
+# run again: work already done is skipped. Billed: Document AI per page read, Cloud Run per
+# task-hour (cents); fetching costs Cloud Run time and egress only.
 set -euo pipefail
 
 PROJECT="${GCP_PROJECT:-open-alvary-ingestion}"
@@ -26,7 +33,8 @@ REGION="${GCP_REGION:-europe-west1}"
 REPOSITORY="open-alvary"
 SCAN_JOB="scan-reader"
 PREPARE_JOB="corpus-preparer"
-# Both jobs run as this account: Document AI use, and objects in the corpus bucket only.
+FETCH_JOB="corpus-fetcher"
+# The jobs run as this account: Document AI use, and objects in the corpus bucket only.
 RUNNER="scan-reader"
 RUNNER_EMAIL="${RUNNER}@${PROJECT}.iam.gserviceaccount.com"
 # Builds run as their own account: the project's default compute account has no rights here.
@@ -61,7 +69,8 @@ Project $PROJECT, region $REGION. Would create (if absent):
     in gs://$CORPUS_BUCKET only
   - Service account $BUILDER_EMAIL for image builds: read the uploaded sources in
     gs://$BUILD_SOURCES, push to the $REPOSITORY registry, write build logs
-  - Cloud Run jobs $SCAN_JOB (per reader: ocr, layout) and $PREPARE_JOB, 2 vCPU and 4 GiB per task
+  - Cloud Run jobs $SCAN_JOB (per reader: ocr, layout) and $PREPARE_JOB, 2 vCPU and 4 GiB per task;
+    $FETCH_JOB (fetches an approved work list from official sites), 1 vCPU and 2 GiB per task
 Billed: Document AI per page read (Enterprise OCR \$1.50, Layout Parser \$10 per 1,000 pages);
 Cloud Run a few cents per hour of a task; the registry a few cents a month.
 PLAN
@@ -118,6 +127,13 @@ deploy() {
   "${GC[@]}" run jobs deploy "$PREPARE_JOB" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
     --args=ingestion.prepare_job --tasks=1 --max-retries=1 --task-timeout=24h --cpu=2 --memory=4Gi \
     --set-env-vars="$env"
+  # The fetcher names itself to the sites it reads (OpenAlvaryBot), with a contact when one is set.
+  local fetch_env="ALVARY_CORPUS_BUCKET=$CORPUS_BUCKET,FETCH_COUNTRY=${FETCH_COUNTRY:-ng}" contact
+  contact="$(setting ALVARY_CRAWLER_CONTACT)"
+  [[ -z "$contact" ]] || fetch_env+=",ALVARY_CRAWLER_CONTACT=$contact"
+  "${GC[@]}" run jobs deploy "$FETCH_JOB" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
+    --args=ingestion.fetch_job --tasks=1 --max-retries=0 --task-timeout="${FETCH_TASK_TIMEOUT:-48h}" \
+    --cpu=1 --memory=2Gi --set-env-vars="$fetch_env"
 }
 
 run() {
@@ -133,8 +149,14 @@ prepare() {
   "${GC[@]}" run jobs execute "$PREPARE_JOB" --region="$REGION" --tasks="$tasks" --async
 }
 
+fetch() {  # more tasks than the work list has hosts only leaves some idle: each host is one task's
+  local tasks="${1:-4}" country="${2:-ng}"
+  "${GC[@]}" run jobs execute "$FETCH_JOB" --region="$REGION" --tasks="$tasks" --async \
+    --update-env-vars="FETCH_COUNTRY=$country"
+}
+
 status() {
-  for job in "$SCAN_JOB" "$PREPARE_JOB"; do
+  for job in "$SCAN_JOB" "$PREPARE_JOB" "$FETCH_JOB"; do
     "${GC[@]}" run jobs executions list --job="$job" --region="$REGION" --limit=5 2>/dev/null || true
   done
 }
@@ -153,6 +175,7 @@ case "${1:-plan}" in
   deploy) deploy ;;
   run) shift; run "$@" ;;
   prepare) shift; prepare "$@" ;;
+  fetch) shift; fetch "$@" ;;
   status) status ;;
-  *) echo "usage: $0 plan|setup|deploy|run <ocr|layout> [tasks] [files-at-once]|prepare [tasks]|status" >&2; exit 2 ;;
+  *) echo "usage: $0 plan|setup|deploy|run <ocr|layout> [tasks] [files-at-once]|prepare [tasks]|fetch [tasks] [country]|status" >&2; exit 2 ;;
 esac
