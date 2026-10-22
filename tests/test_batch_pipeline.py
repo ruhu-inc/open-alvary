@@ -546,6 +546,28 @@ def test_senegals_and_burkina_fasos_article_heads_divisions_and_closing_words_ar
     assert " ".join(n["text"] for n in out) == text
 
 
+def test_cape_verdes_quoted_articles_closing_words_and_republication_are_split():
+    # The Boletim Oficial's amending laws (I Série n.º 28, 2021), as the Layout Parser runs them together: the
+    # quoted text after "… a seguinte redação:", "Aprovada em …" after the last article, and "REPUBLICAÇÃO"
+    # after the signatures, though no punctuation ends them. A quoted article cited in the words ("artigos
+    # 2.º, 10.º") and an approval in the words ("aprovada pela Lei nº …") are never cut.
+    text = (
+        "A presente lei altera os artigos 2.º, 10.º, 12.º, 13.º, 18.º, 27.º e 29.º, que passam a ter a "
+        "seguinte redação: «Artigo 2.º [...] A CNPD é uma entidade administrativa independente, "
+        "aprovada pela Lei nº 133/V/2001. A presente lei entra em vigor trinta dias após a sua "
+        "publicação. Aprovada em 11 de fevereiro de 2021. O Presidente da Assembleia Nacional, Jorge "
+        "Pedro Maurício dos Santos REPUBLICAÇÃO Lei nº 133/V/2001, de 22 de janeiro"
+    )
+    out = structure.split_units([node(text, "paragraph")])
+    assert [n["text"][:14] for n in out] == [
+        "A presente lei",
+        "«Artigo 2.º [.",
+        "Aprovada em 11",
+        "REPUBLICAÇÃO L",
+    ]
+    assert " ".join(n["text"] for n in out) == text
+
+
 def test_a_section_after_a_closing_quotation_mark_is_split():
     out = structure.split_units(
         [
