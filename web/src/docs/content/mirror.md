@@ -104,6 +104,7 @@ You may keep and index copies of what your organisation is entitled to. The [acc
 | `withdrawal`, `scope_disclosure` `named` | Stop serving the text in `version` now. A corrected text, if there is one, arrives as a new `text_version_published`. |
 | `withdrawal`, `scope_disclosure` `revalidate_releases` | A record stopped being public, and which one is not said. Check each record you hold with [Get a record](/docs/api/get-source); stop serving one that answers `404`. |
 | `metadata_corrected` | Update the fields in `changed_fields`. |
+| `rights_changed` | Get the record's [rights](/docs/api/get-rights) again and show its licence, attribution and conditions from then on; keep the `rights_revision` with your copy. |
 | `text_version_published` | Get the text and check its SHA-256 equals `content_hash` (see [When a text is published or withdrawn](/docs/changes#when-a-text-is-published-or-withdrawn)). |
 | `legal_effect_recorded` | Update the record's history and status. |
 | A correction of a change (`change_reason` `corrected`) | Keep the highest `event_revision` of each change. |

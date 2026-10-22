@@ -25,7 +25,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import select, text
 from sqlalchemy.engine import Connection
 
-from changes.record import current, digest, namespace
+from changes.record import WITH_RIGHTS_REVISION, current, digest, namespace
 from schema.models import Source
 
 TYPES = (
@@ -40,6 +40,7 @@ TYPES = (
     "coverage_changed",
     "membership_recorded",
     "suspension_recorded",
+    "rights_changed",
 )
 SUPPORTED = (
     "catalogue_added",
@@ -51,7 +52,11 @@ SUPPORTED = (
     "coverage_changed",
     "membership_recorded",
     "suspension_recorded",
+    "rights_changed",
 )
+# Events about a record shown only while it is public.
+NAMED_ONLY = ("catalogue_added", "metadata_corrected", "legal_effect_recorded", "treatment_recorded",
+              "rights_changed")  # fmt: skip
 # Events about a jurisdiction rather than a record: never subject to a record's visibility.
 PLACE_EVENTS = ("coverage_changed", "membership_recorded", "suspension_recorded")
 # Events about a member and a body, each in the payload's object of that name.
@@ -460,10 +465,7 @@ class Feed:
                 place = (told.get(side) or {}).get("id")
                 told[side] = {"id": place, "name": visible.jurisdiction(place)}
             membership, suspension = (told, None) if kind == "membership_recorded" else (None, told)
-        if (
-            kind in ("catalogue_added", "metadata_corrected", "legal_effect_recorded", "treatment_recorded")
-            and not named
-        ):
+        if kind in NAMED_ONLY and not named:
             return None
         legal_effect = treatment = None
         if kind in ("legal_effect_recorded", "treatment_recorded"):
@@ -528,8 +530,10 @@ class Feed:
             "jurisdiction": jurisdiction,
             "work": self._work(row, payload, work) if named else None,
             "version": version,
-            # The rights record revision in force for a text published or withdrawn (OA-R1).
-            "rights_revision": payload.get("rights_revision") if version is not None else None,
+            # The rights record revision in force after the change, where it was recorded (OA-R1).
+            "rights_revision": payload.get("rights_revision")
+            if named and kind in WITH_RIGHTS_REVISION
+            else None,
             "changed_fields": payload.get("changed_fields", []) if named or kind in BODY_EVENTS else [],
             "change_reason": row["change_reason"],
             "supersedes": {
@@ -550,6 +554,8 @@ class Feed:
             # A correction's previous values, only for fields that can never have been withheld.
             "previous": payload.get("previous", {}) if named and kind == "metadata_corrected" else {},
             "version_diff": payload.get("version_diff") if kind == "text_version_published" else None,
+            # A new revision of the record's rights record: {revision, decision} (G15).
+            "rights": payload.get("rights") if kind == "rights_changed" else None,
         }
 
     def _work(self, row, payload, current=None):
@@ -701,6 +707,7 @@ LABELS = {
     "membership_recorded": "Membership",
     "suspension_recorded": "Suspension",
     "treatment_recorded": "Treatment",
+    "rights_changed": "Rights",
 }
 
 

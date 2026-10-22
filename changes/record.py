@@ -22,6 +22,7 @@ from api.store import tables
 from rights.database import PolicyNamespace
 from rights.policy import decide
 from schema.dates import UncertainDate
+from schema.public import RightsViewRecord
 
 # The public fields a correction compares; text availability is reported by text events instead.
 PUBLIC_FIELDS = (
@@ -43,6 +44,14 @@ PUBLIC_FIELDS = (
 # Public events say which version of their shape they are; new event types and fields may be added
 # within a version, and consumers ignore what they do not know (SUB-02).
 SCHEMA_VERSION = "change-event-1"
+# A rights record's fields, as GET /rights/{id} serves them: what a rights_changed event names as changed.
+RIGHTS_FIELDS = tuple(RightsViewRecord.model_fields)
+# The events about a record that carry the revision of its rights record in force after the change they
+# announce (OA-R1), as rights_revision. Recorded on catalogue_added, metadata_corrected and rights_changed
+# from G15 on; events recorded before then carry it only on text_version_published and withdrawal.
+WITH_RIGHTS_REVISION = (
+    "catalogue_added", "metadata_corrected", "rights_changed", "text_version_published", "withdrawal",
+)  # fmt: skip
 # A correction may show a field's previous value only where it can never have been withheld (SUB C1).
 SAFE_PREVIOUS = ("legal_status", "rights_status", "document_type", "year")
 # Checked links between works that change what law applies (legal_effect_recorded): the effect, and
@@ -207,7 +216,7 @@ class _Recorder:
             **({"withdrawal": withdrawal} if withdrawal else {}),
             **(extra or {}),
         }
-        if event_type in ("text_version_published", "withdrawal") and work_id in self.rights_revision:
+        if event_type in WITH_RIGHTS_REVISION and work_id in self.rights_revision:
             payload["rights_revision"] = self.rights_revision[work_id]
         event = {
             "event_id": corrects[0] if corrects else uuid.uuid4(),
@@ -277,6 +286,8 @@ def publish(conn: Connection, work_ids: Iterable[str] | None = None) -> int:
     if state["baselined"]:
         for work_id in sorted(scope):
             _compare(rec, work_id, now.get(work_id), previous.get(work_id))
+        for item in revisions:
+            _rights_changed(rec, item, now.get(item["work_id"]))
     for work_id in sorted(scope):
         _remember(rec, work_id, now.get(work_id), previous.get(work_id))
     # The section index follows the same public state, in the same transaction (migration 0031).
@@ -351,10 +362,10 @@ def _rights_revisions(rec: _Recorder, scope) -> list[dict]:
         return []  # a database before migration 0029 keeps no rights history
     ids = sorted(scope)
     latest = {
-        row.work_id: (row.revision, row.record_hash)
+        row.work_id: (row.revision, row.record_hash, row.record)
         for row in rec.conn.execute(
             text(
-                f"SELECT DISTINCT ON (work_id) work_id, revision, record_hash FROM {table}"
+                f"SELECT DISTINCT ON (work_id) work_id, revision, record_hash, record FROM {table}"
                 " WHERE work_id = ANY(:ids) ORDER BY work_id, revision DESC"
             ),
             {"ids": ids},
@@ -365,14 +376,20 @@ def _rights_revisions(rec: _Recorder, scope) -> list[dict]:
     for row in rec.conn.execute(
         select(rights.c.source_id, rights.c.payload).where(rights.c.source_id.in_(ids))
     ):
-        record_hash, (number, held) = digest(row.payload), latest.get(row.source_id, (0, None))
+        record_hash = digest(row.payload)
+        number, held, before = latest.get(row.source_id, (0, None, None))
         if held == record_hash:
             rec.rights_revision[row.source_id] = number
             continue
         rec.rights_revision[row.source_id] = number + 1
-        changed.append(
-            {"work_id": row.source_id, "revision": number + 1, "record": row.payload, "hash": record_hash}
-        )
+        item = {
+            "work_id": row.source_id,
+            "revision": number + 1,
+            "record": row.payload,
+            "hash": record_hash,
+            "previous": before,
+        }
+        changed.append(item)
     return changed
 
 
@@ -383,8 +400,47 @@ def _record_rights(rec: _Recorder, revisions: list[dict], publication_revision: 
                 f"INSERT INTO {rec.t['rights_revision']} (work_id, revision, publication_revision, record,"
                 " record_hash) VALUES (:work_id, :revision, :at, CAST(:record AS jsonb), :hash)"
             ),
-            item | {"at": publication_revision, "record": json.dumps(item["record"], ensure_ascii=False)},
+            {
+                "work_id": item["work_id"],
+                "revision": item["revision"],
+                "at": publication_revision,
+                "record": json.dumps(item["record"], ensure_ascii=False),
+                "hash": item["hash"],
+            },
         )
+
+
+def _rights_changed(rec: _Recorder, item: dict, now: dict | None) -> None:
+    """Announce a new revision of a work's rights record (G15) when the work is public after it: the
+    revision, the rights record's fields that changed (every field, for its first revision) and the
+    decision taken from it. A work that is not public is never named; one that stopped being public by
+    this change is announced by its withdrawal instead."""
+    if now is None:
+        return
+    work_id, record, before = item["work_id"], item["record"], item["previous"]
+    changed = [f for f in RIGHTS_FIELDS if before is None or record.get(f) != before.get(f)]
+    title = now["projection"].get("title")
+    rec.add(
+        "rights_changed",
+        f"{work_id}:rights:{item['revision']}",
+        work_id,
+        now,
+        changed=changed,
+        summary=f"The rights record for {title} changed ({', '.join(f.replace('_', ' ') for f in changed)})."
+        if before is not None
+        else f"The rights record for {title} was recorded.",
+        extra={"rights": {"revision": item["revision"], "decision": _decision(rec.conn, work_id)}},
+    )
+
+
+def _decision(conn: Connection, work_id: str) -> dict:
+    """The decision taken from a public work's rights record, as GET /rights/{id} answers it: for its
+    first readable text, or for none when it has none."""
+    repository, now = LegacyRepository(conn), datetime.now(UTC)
+    source, rights = repository.source(work_id)
+    gates = repository.version_gates(source.id, rights.approved_content_hashes)
+    readable = next((gate for gate in gates if decide(rights, gate, now=now).full_text), None)
+    return decide(rights, readable, now=now).model_dump(mode="json")
 
 
 def _as_public(rec: _Recorder, known: dict, work_id: str) -> dict:

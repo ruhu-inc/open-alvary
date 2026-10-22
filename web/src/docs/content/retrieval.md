@@ -254,6 +254,7 @@ If you cache evidence for your users, key each part by `anchor_id` and `content_
 | `withdrawal` | Stop serving everything that cites that text, at once. |
 | `text_version_published` | Treat cached parts of that edition as stale: check them before reuse. |
 | `metadata_corrected` | Refresh the record's details you hold. |
+| `rights_changed` | Refresh the licence, attribution and conditions you show with that record's parts. |
 | `legal_effect_recorded` | Treat cached currentness for that law as stale. |
 | A feed reset | Check every cached part before reuse. |
 

@@ -39,7 +39,7 @@ FILTERS = [
     ("work", "Record IDs, such as `ng-foi-act-2011`. Up to 50."),
     (
         "type",
-        "Kinds of change: `catalogue_added`, `metadata_corrected`, `text_version_published`, "
+        "Kinds of change: `catalogue_added`, `metadata_corrected`, `rights_changed`, `text_version_published`, "
         "`legal_effect_recorded`, `treatment_recorded`, `withdrawal`, `coverage_changed`, "
         "`membership_recorded`, `suspension_recorded`.",
     ),
@@ -230,7 +230,8 @@ OPERATIONS: dict[str, dict] = {
         "tag": "Catalogue",
         "summary": "Get a record's rights history",
         "description": "Every revision of the record's rights record, newest first, as recorded when the "
-        "catalogue changed; revisions are never edited. Text and withdrawal events name the revision in "
+        "catalogue changed; revisions are never edited. Each new revision of a public record's rights record "
+        "is announced as a `rights_changed` change, and text and withdrawal events name the revision in "
         "force (`rights_revision`), so a copy of a text can say which rights record it was published "
         "under.",
         "parameters": {"source_id": "The record's ID."},
@@ -623,8 +624,9 @@ SCHEMAS: dict[str, dict] = {
             "event_type": {
                 "type": S,
                 "description": "What changed: `catalogue_added` (a record added: an old law newly catalogued, "
-                "not a new law), `metadata_corrected` (its catalogue details corrected), "
-                "`text_version_published`, `legal_effect_recorded` (a checked link with another public "
+                "not a new law), `metadata_corrected` (its catalogue details corrected), `rights_changed` (a "
+                "new revision of its rights record: its status, licence, attribution, conditions, expiry or any "
+                "other field), `text_version_published`, `legal_effect_recorded` (a checked link with another public "
                 "record that changes what law applies: a repeal, amendment, supersession, commencement, "
                 "transposition, domestication or ratification; or a reviewed event on its provisions), "
                 "`treatment_recorded` (a reviewed judicial treatment: how a judgment's paragraph follows, "
@@ -671,13 +673,17 @@ SCHEMAS: dict[str, dict] = {
             },
             "rights_revision": {
                 "type": ["integer", "null"],
-                "description": "For a published or withdrawn text: the revision of the record's rights record "
-                "in force (see `/rights/{source_id}/history`).",
+                "description": "The revision of the record's rights record in force after the change (see "
+                "`/rights/{source_id}/history`): for a published or withdrawn text, a `rights_changed` change, and "
+                "a record added or corrected since rights changes were announced. Null for every other change, "
+                "for a record added or corrected before then, and when the record is no longer public.",
             },
             "changed_fields": {
                 "type": "array",
                 "items": {"type": S},
-                "description": "For a correction: the fields that changed. A correction never changes legal text.",
+                "description": "For a correction: the record's fields that changed. A correction never changes "
+                "legal text. For `rights_changed`: the fields of its rights record that changed, as Get a record's "
+                "rights names them (every field, for its first revision).",
             },
             "change_reason": NULL_S
             | {
@@ -763,6 +769,14 @@ SCHEMAS: dict[str, dict] = {
                 "description": "For a text that replaces an earlier one: {prior_version_id, added, removed, "
                 "changed, truncated}, the locators of the provisions added, removed and changed (their words "
                 "differ), in document order, at most 200 each.",
+            },
+            "rights": {
+                "type": ["object", "null"],
+                "description": "For `rights_changed`: {revision, decision}. `revision` is the rights record's new "
+                "revision (the same as `rights_revision`); `decision` {metadata, full_text, reasons} is the "
+                "decision taken from it when it was recorded, as Get a record's rights answers it. Refresh the "
+                "licence, attribution and conditions you show from Get a record's rights. Null for every other "
+                "change.",
             },
         },
     },
