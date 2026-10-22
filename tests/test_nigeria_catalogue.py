@@ -309,6 +309,8 @@ def test_the_aviation_authority_record_pages_give_number_dates_and_whether_curre
     )
     assert "Is Current" in item["listed_raw"]["record"] and item["listing_url"] == listing
     assert any(r["reason"].startswith("record page HTTP 404") for r in found.rejected)  # the others' pages
+    assert (listed["part"], listed["year"]) == (2, 2023)  # the same Part in another set: a likely duplicate
+    assert nigeria.ncaa_part("Nig.CARs/2023/002", "Part 2 - Personnel Licensing") == 2
 
 
 def test_the_communications_commission_published_and_draft_sections_and_determinations():

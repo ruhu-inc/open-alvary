@@ -1556,6 +1556,20 @@ def ncaa_record(soup, page_url: str) -> tuple[dict, list[tuple[str, str]], str |
     return details, links, raw or None
 
 
+def ncaa_part(number: str | None, title: str) -> int | None:
+    """The Part of the Nig.CARs a record is, as its number or title states it: 'PART 2',
+    'Nig.CARs/2023/002', 'Part 2 - Personnel Licensing'."""
+    for text, pattern in (
+        (number, r"\bPART\s*(\d+)"),
+        (number, r"Nig\.?\s*CARs/\d{4}/0*(\d+)"),
+        (title, r"^Part\s*(\d+)\b"),
+    ):
+        match = re.search(pattern, text or "", re.I)
+        if match:
+            return int(match.group(1))
+    return None
+
+
 def read_ncaa(client, found: Found, state: dict, log=print, budget=None) -> None:
     failures = Failures()
     for set_name, listing_url in NCAA_LISTINGS:
@@ -1598,6 +1612,8 @@ def read_ncaa(client, found: Found, state: dict, log=print, budget=None) -> None
                 "description": details.get("Description"),
                 "record_details": details,
             }
+            listed["part"] = ncaa_part(details.get("Number"), card["title"])
+            listed["year"] = int((listed.get("issue_date") or "")[:4] or 0) or year_in(set_name)
             raw = {"listing_card": card["html"], "record": record_html}
             if not links:
                 found.no_file(
@@ -2646,7 +2662,7 @@ def duplicate_keys(record: dict) -> list[tuple[str, str]]:
     if len(words) >= 2 and any(not w.isdigit() for w in words) and re.search(r"\b(?:18|19|20)\d\d\b", title):
         keys.append(("title", f"{family} {title}"))
     year = listed.get("year")
-    for field in ("si_number", "bill_number", "number"):
+    for field in ("si_number", "bill_number", "number", "part"):
         if listed.get(field) and year:
             number = re.sub(r"\W", "", str(listed[field]).upper())
             keys.append(("number", f"{family} {field} {number} {year}"))
