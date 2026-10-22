@@ -1005,3 +1005,77 @@ def test_a_page_whose_measure_leaves_a_column_empty_takes_the_page_befores_langu
     table = _two_columns(["Administrative Unit"] * 12, ["Job Title Director of Unit"] * 12)
     lone = RG.split_issue([table, second])[1]
     assert [(c["x0"], c["x1"]) for c in lone["columns"]] == margin
+
+
+# --- born-digital pages checked against Google's OCR (check_text_layer) -----------------------------
+
+
+def test_a_born_digital_line_is_checked_against_the_ocr_words_inside_its_box():
+    def line(text, row, page=1, **extra):
+        return {
+            "text": text,
+            "page": page,
+            "x0": 100,
+            "y0": 100 + 40 * row,
+            "x1": 400,
+            "y1": 120 + 40 * row,
+            **extra,
+        }
+
+    def ocr(text, row):
+        x = 0.1
+        out = []
+        for word in text.split():
+            out.append(
+                {
+                    "text": word,
+                    "x0": x,
+                    "y0": 0.1 + 0.04 * row + 0.003,
+                    "x1": x + 0.02,
+                    "y1": 0.117 + 0.04 * row,
+                }
+            )
+            x += 0.025
+        return out
+
+    lines = [
+        line("Article 4 : Le décret est publié.", 0),  # agrees
+        line("Article 5 du décret n° 12", 1),  # the page prints 3: a number differs
+        line("fevrier 1950 est remplace", 2),  # the page prints the accents the layer lacks
+        line("Iteka rya Minisitiri nº 93/03", 3),  # º and ° are one sign
+        line("NOMINATION DU DIRECTEUR", 4),  # the OCR's Greek look-alikes are not a difference
+        line("Taux 12 % 15 %", 5, table=True),  # a table's cells: its page is reviewed whole
+        line("Article 9 : Abrogation", 0, page=2),  # a page the OCR did not check
+    ]
+    words = (
+        ocr("Article 4 : Le décret est publié.", 0)
+        + ocr("Article 3 du décret n° 12", 1)
+        + ocr("février 1950 est remplacé", 2)
+        + ocr("Iteka rya Minisitiri n° 93/03", 3)
+        + ocr("ΝΟΜΙΝΑTION DU DIRECTEUR", 4)
+        + ocr("Taux 21 % 15 %", 5)
+    )
+    node = {"kind": "paragraph", "page": 1, "lines": lines}
+    checked = RG.check_text_layer(
+        [node], {1: {"words": words}}, {1: (1000.0, 1000.0), 2: (1000.0, 1000.0)}
+    )
+    assert checked == {1}
+    flags = {f["kind"]: f for f in node["flags"]}
+    assert set(flags) == {"text_layer_differs", "accents_missing"}
+    assert (flags["text_layer_differs"]["severity"], flags["text_layer_differs"]["primary"]) == (
+        "medium",
+        "5",
+    )
+    assert flags["text_layer_differs"]["others"] == {"Google OCR": "3"}
+    assert flags["accents_missing"]["severity"] == "low"
+    assert flags["accents_missing"]["others"] == {"Google OCR": "février remplacé"}
+
+
+def test_a_page_whose_text_layer_the_ocr_checked_counts_as_compared_for_routing():
+    from workbench import routing
+
+    reading = {
+        "checks": {"text_checked_by_ocr": [3]},
+        "pages": [{"page": 2, "checks": {}}, {"page": 3, "checks": {}}],
+    }
+    assert routing.compared(reading) == {3}

@@ -1120,11 +1120,22 @@ def prepare_selection(
                 title=listing_title(record["listed"]["name"]),
             )
         rlrc, rlrc_checked = rlrc_index()
+        # Born-digital pages Google's OCR has read as a check on their text layer (owner, 2026-10-22):
+        # pages read from the layer itself, never those our OCR or the Layout Parser read.
+        check = stored_reading("ocr-check", sha, store)
+        check_pages = {
+            page["page"]: page
+            for page in (check or {}).get("pages", [])
+            if page["page"] not in ocr_pages and page["page"] not in read_pages
+        }
         for entry in found:
             lines = {lang: streams[lang][v["start"] : v["end"]] for lang, v in entry["versions"].items()}
             versions = {lang: rw_gazette.structure(lines[lang], lang) for lang in lines}
             check = rw_gazette.alignment(versions)
             rw_gazette.flag_differences(versions)
+            text_checked = set().union(
+                *(rw_gazette.check_text_layer(nodes, check_pages, sizes) for nodes in versions.values())
+            )
             if entry.get("title_from_listing"):
                 for nodes in versions.values():
                     if nodes:
@@ -1174,6 +1185,7 @@ def prepare_selection(
                         "alignment": check,
                         "scans_read_by_ocr": sorted(ocr_pages),
                         "scans_read_by_docai": sorted(read_pages),
+                        "text_checked_by_ocr": sorted(text_checked),
                     },
                     sizes,
                     scanned,
@@ -1296,7 +1308,8 @@ def listing_title(name: str) -> str:
 
 
 def stored_reading(folder: str, sha: str, store=None) -> dict | None:
-    """A file's reading by one of the services (folder "ocr" or "docai"), here or in the bucket."""
+    """A file's reading by one of the services (folder "ocr", "docai", or "ocr-check" for the OCR that
+    checks born-digital pages), here or in the bucket."""
     local = STAGING / folder / f"{sha}.json"
     if local.exists():
         return json.loads(local.read_text())

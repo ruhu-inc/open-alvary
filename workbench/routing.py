@@ -70,11 +70,13 @@ def _flag_words(flag: dict) -> str:
 
 def compared(reading: dict) -> set[int]:
     """The pages an independent reading was compared on: a check reader's words for the page (the
-    batch readers), or a scanned page both Google's OCR and the Layout Parser read (the Rwandan
-    Gazette). A page read once, such as a Gazette page read from its own text layer only, has no flag
-    because nothing was compared, not because readers agreed."""
+    batch readers), a scanned page both Google's OCR and the Layout Parser read, or a born-digital page
+    whose text layer Google's OCR checked (the Rwandan Gazette). A page read once, such as a Gazette
+    page read from its own text layer only, has no flag because nothing was compared, not because
+    readers agreed."""
     top = reading.get("checks") or {}
     both = set(top.get("scans_read_by_ocr") or []) & set(top.get("scans_read_by_docai") or [])
+    both |= set(top.get("text_checked_by_ocr") or [])  # a born-digital page Google's OCR checked
     return {p["page"] for p in reading["pages"] if any((p.get("checks") or {}).values()) or p["page"] in both}
 
 
