@@ -1,0 +1,33 @@
+web/src/docs/content/plans.md
+  s_d665c62e07d76f::t_2cc210ac32fc0d 24-34
+web/src/docs/content/authentication.md
+  s_d665c62e07d76f::t_506354303ab48c 27
+web/src/docs/pages.ts
+  s_d665c62e07d76f::t_0cf6fc4b72cdf1 122
+web/src/docs/reference.ts
+  s_d665c62e07d76f::t_a9d8f360ba1edc 37-40
+  s_d665c62e07d76f::t_911640764072ee 445
+  s_d665c62e07d76f::t_bf352c4138ee60 474-477,479-482,487
+  s_d665c62e07d76f::t_2546f1a0ec540f 308-311,316,323-324
+web/src/docs/content/compatibility.md
+  s_d665c62e07d76f::t_3c8ddc0c9a50bb 1-23,25-37
+  s_d665c62e07d76f::t_691fde05d234d0 24
+web/src/docs/content/changelog.md
+  s_d665c62e07d76f::t_74132c03d57b89 6-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ee7c1c8c4a809c4ecf1c87f29e694771d3cbe182",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
