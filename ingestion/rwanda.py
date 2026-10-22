@@ -1393,6 +1393,137 @@ def scan_progress(store) -> dict:
     return out
 
 
+CHECK_WORKLIST = f"work/{COUNTRY}/ocr-check.json"
+CHECK_PROFILE = "oa-ocr-check-1"
+
+
+def check_worklist(store, approval: dict) -> dict:
+    """The born-digital pages whose text layer Google's OCR checks in the cloud (scan_job,
+    SCAN_READER=check), with the operator's approval of the budget: of every issue read from its own
+    text layer (an issue with an OCR or Layout Parser reading has its two readings), the pages of its
+    documents not yet checked, largest first so that the job's tasks share the pages evenly."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    manifest = json.loads(store.get(f"collections/{COUNTRY}/manifest.json"))
+    wanted: dict[str, set[int]] = {}
+    sources: dict[str, str] = {}
+    for document in manifest["documents"]:
+        if not document.get("objects"):
+            continue
+        sha = document["objects"].split("/")[1]
+        first, last = (document.get("pages") or [0, -1])[:2]
+        wanted.setdefault(sha, set()).update(range(first, last + 1))
+        sources[sha] = document["source_object"]
+
+    def checked(sha: str) -> tuple[str, set[int] | None]:
+        index = json.loads(store.get(f"collections/{COUNTRY}/issues/{sha}.json"))
+        used = index.get("readings") or {} if isinstance(index, dict) else {}
+        if used.get("ocr") or used.get("docai"):
+            return sha, None
+        name = f"readings/{COUNTRY}/ocr-check/{sha}.json"
+        pages = json.loads(store.get(name))["pages"] if store.exists(name) else []
+        return sha, {page["page"] for page in pages}
+
+    with ThreadPoolExecutor(16) as pool:
+        done = dict(pool.map(checked, sorted(wanted)))
+    files = [
+        {"sha256": sha, "source_object": sources[sha], "pages": sorted(wanted[sha] - done[sha])}
+        for sha in sorted(wanted)
+        if done[sha] is not None and wanted[sha] - done[sha]
+    ]
+    files.sort(key=lambda f: (-len(f["pages"]), f["sha256"]))
+    return {
+        "made_at": stamp(now()),
+        "approval": approval,
+        "pages": sum(len(f["pages"]) for f in files),
+        "files": files,
+    }
+
+
+def check_layers(store, worklist: list[dict], max_pages: int, log=print, reader=None) -> dict:
+    """Born-digital pages checked by Google's OCR in the cloud: each file's listed pages not yet
+    checked and not pictures (a scanned page has its own two readings), cut into one PDF inside this
+    job's container, read, and merged by page into the file's stored check reading
+    (readings/<country>/ocr-check/<sha256>.json), which keeps every page read before: a stored reading
+    that cannot be read fails its file rather than be replaced. A file whose pages are all checked is
+    skipped, so a stopped run is simply run again. No file is started that would take the pages read
+    past `max_pages`; an expired sign-in or a refusal (billing, permission), or five failures in a row,
+    stop the run."""
+    import tempfile
+    from io import BytesIO
+
+    import google.api_core.exceptions
+    from pypdf import PdfReader, PdfWriter
+
+    from ingestion import readers
+
+    if reader is None:
+        reader = readers.DocOCRReader()
+        reader.preflight()
+    stopping = (
+        google.api_core.exceptions.PermissionDenied,
+        google.api_core.exceptions.Unauthenticated,
+        google.api_core.exceptions.Forbidden,
+    )
+    pages_read = in_a_row = 0
+    failed, stop, files_read = [], None, 0
+    for item in worklist:
+        sha, name = item["sha256"], f"readings/{COUNTRY}/ocr-check/{item['sha256']}.json"
+        try:
+            earlier = json.loads(store.get(name))["pages"] if store.exists(name) else []
+            left = sorted(set(item["pages"]) - {page["page"] for page in earlier})
+            if not left:
+                continue
+            if pages_read + len(left) > max_pages:
+                stop = "budget"
+                break
+            with tempfile.TemporaryDirectory() as scratch:
+                pdf = Path(scratch) / "file.pdf"
+                pdf.write_bytes(store.get(item["source_object"]))
+                pictures = ruled_tables.image_pages(pdf)
+                source = PdfReader(str(pdf))
+                left = [n for n in left if n not in pictures and 1 <= n <= len(source.pages)]
+                if not left:
+                    continue
+                writer = PdfWriter()
+                for number in left:
+                    writer.add_page(source.pages[number - 1])
+                buffer = BytesIO()
+                writer.write(buffer)
+                part = Path(scratch) / "pages.pdf"
+                part.write_bytes(buffer.getvalue())
+                reading = reader.read(part)
+            if len(reading.pages) != len(left):
+                raise ValueError(f"{len(reading.pages)} pages read of {len(left)}")
+            pages = {page["page"]: page for page in earlier}
+            pages.update(
+                {number: {**page, "page": number} for number, page in zip(left, reading.pages, strict=True)}
+            )
+            kept = {
+                "profile": CHECK_PROFILE,
+                "purpose": "an independent reading of born-digital pages, checking their text layer",
+                "processor": reader.version(),
+                "read_at": stamp(now()),
+                "pages": [pages[number] for number in sorted(pages)],
+            }
+            store.put(name, json.dumps(kept, ensure_ascii=False).encode(), "application/json", replace=True)
+            pages_read += len(left)
+            files_read += 1
+            in_a_row = 0
+            log(f"{sha[:12]}: {len(left)} pages checked ({pages_read} so far)")
+        except stopping as error:
+            stop = f"refused: {type(error).__name__}"
+            break
+        except Exception as error:  # noqa: BLE001 - one file's failure is noted; the run goes on
+            failed.append({"sha256": sha, "error": f"{type(error).__name__}: {str(error)[:200]}"})
+            log(f"{sha[:12]}: failed ({type(error).__name__})")
+            in_a_row += 1
+            if in_a_row >= 5:
+                stop = "five failures in a row"
+                break
+    return {"files": files_read, "pages": pages_read, "failed": failed, "stopped": stop}
+
+
 def read_scans(
     selection: dict | None = None,
     log=print,
@@ -1726,6 +1857,12 @@ def main(argv=None) -> int:
     scans.add_argument("--reader", choices=["ocr", "layout"], required=True)
     scans.add_argument("--again", action="store_true", help="read the selection's files again (billed)")
     sub.add_parser("scan-progress", help="how far the cloud job has read the work list")
+    check = sub.add_parser(
+        "check-worklist", help="write the cloud job's list of born-digital pages for Google's OCR to check"
+    )
+    check.add_argument("--approved-by", required=True)
+    check.add_argument("--max-pages", type=int, required=True, help="the approved budget, in pages")
+    check.add_argument("--basis", required=True, help="where and when the budget was approved")
     work = sub.add_parser("scan-worklist", help="write the cloud job's list of files with scanned pages")
     work.add_argument("--approved-by", required=True)
     work.add_argument(
@@ -1767,6 +1904,24 @@ def main(argv=None) -> int:
             WORKLIST, json.dumps(worklist, ensure_ascii=False).encode(), "application/json", replace=True
         )
         print(json.dumps({"files": len(worklist["files"]), "pages": worklist["pages"], "object": WORKLIST}))
+        return 0
+    if args.command == "check-worklist":
+        approval = {"approved_by": args.approved_by, "max_pages": args.max_pages, "basis": args.basis}
+        store = corpus_store.open_store()
+        worklist = check_worklist(store, approval)
+        if worklist["pages"] > args.max_pages:
+            parser.error(f"{worklist['pages']} pages exceed the approved {args.max_pages}")
+        store.put(
+            CHECK_WORKLIST,
+            json.dumps(worklist, ensure_ascii=False).encode(),
+            "application/json",
+            replace=True,
+        )
+        print(
+            json.dumps(
+                {"files": len(worklist["files"]), "pages": worklist["pages"], "object": CHECK_WORKLIST}
+            )
+        )
         return 0
     if args.command == "read-scans":
         if args.again and not args.selection:

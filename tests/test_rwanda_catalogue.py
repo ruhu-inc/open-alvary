@@ -1154,3 +1154,87 @@ def test_a_file_listed_twice_is_prepared_once_under_the_same_entry_every_time():
     kept = rwanda.one_per_file(ledger, items)
     assert kept == ["gazette", "pending", "rlrc-a"]  # the Gazette's copy; then the first address
     assert rwanda.one_per_file(ledger, list(reversed(items))) == ["rlrc-a", "pending", "gazette"]
+
+
+def test_the_cloud_ocr_check_reads_each_files_unchecked_pages_and_merges_them(tmp_path):
+    """SCAN_READER=check: the work list holds born-digital issues' unchecked pages (an issue with scan
+    readings has its two readings); the job reads only pages not yet checked and merges them into
+    the stored reading, keeping the pages read before, and fails a file whose reading it cannot read."""
+    import json
+    from io import BytesIO
+
+    from pypdf import PdfWriter
+
+    from ingestion.readers import Reading
+
+    def pdf(pages):
+        writer = PdfWriter()
+        for _ in range(pages):
+            writer.add_blank_page(width=595, height=842)
+        out = BytesIO()
+        writer.write(out)
+        return out.getvalue()
+
+    class Store:
+        def __init__(self, objects):
+            self.objects = objects
+
+        def exists(self, name):
+            return name in self.objects
+
+        def get(self, name):
+            if self.objects[name] is None:
+                raise OSError("unreadable")
+            return self.objects[name]
+
+        def put(self, name, data, content_type, replace=False):
+            self.objects[name] = data
+
+    manifest = {
+        "documents": [
+            {"id": "a-en", "objects": "files/aaa/", "pages": [1, 3], "source_object": "sources/rw/g/aaa.pdf"},
+            {"id": "b-en", "objects": "files/bbb/", "pages": [2, 4], "source_object": "sources/rw/g/bbb.pdf"},
+            {"id": "s-en", "objects": "files/sss/", "pages": [1, 9], "source_object": "sources/rw/g/sss.pdf"},
+        ]
+    }
+    store = Store(
+        {
+            "collections/rw/manifest.json": json.dumps(manifest).encode(),
+            "collections/rw/issues/aaa.json": json.dumps(
+                {"readings": {"ocr": False, "docai": False}}
+            ).encode(),
+            "collections/rw/issues/bbb.json": json.dumps({"readings": {}}).encode(),
+            "collections/rw/issues/sss.json": json.dumps({"readings": {"ocr": True, "docai": True}}).encode(),
+            "readings/rw/ocr-check/aaa.json": json.dumps(
+                {"pages": [{"page": 1, "words": ["kept"]}]}
+            ).encode(),
+            "sources/rw/g/aaa.pdf": pdf(3),
+            "sources/rw/g/bbb.pdf": pdf(4),
+        }
+    )
+    worklist = rwanda.check_worklist(store, {"approved_by": "Owner", "max_pages": 10, "basis": "chat"})
+    assert [(f["sha256"], f["pages"]) for f in worklist["files"]] == [("bbb", [2, 3, 4]), ("aaa", [2, 3])]
+    assert worklist["pages"] == 5
+
+    class Reader:
+        def read(self, part):
+            from pypdf import PdfReader
+
+            count = len(PdfReader(str(part)).pages)
+            return Reading(
+                "docai-ocr", {}, [{"page": k, "words": ["new"]} for k in range(1, count + 1)], count, {}
+            )
+
+        def version(self):
+            return {"processor": "p", "version": "v"}
+
+    result = rwanda.check_layers(store, worklist["files"], 10, log=lambda m: None, reader=Reader())
+    assert (result["files"], result["pages"], result["failed"], result["stopped"]) == (2, 5, [], None)
+    merged = json.loads(store.objects["readings/rw/ocr-check/aaa.json"])
+    assert [(p["page"], p["words"]) for p in merged["pages"]] == [(1, ["kept"]), (2, ["new"]), (3, ["new"])]
+    assert merged["profile"] == rwanda.CHECK_PROFILE
+    again = rwanda.check_layers(store, worklist["files"], 10, log=lambda m: None, reader=Reader())
+    assert again["pages"] == 0  # all checked: a stopped run is run again
+    store.objects["readings/rw/ocr-check/bbb.json"] = None  # stored but unreadable: never replaced
+    failed = rwanda.check_layers(store, worklist["files"], 10, log=lambda m: None, reader=Reader())
+    assert failed["failed"][0]["sha256"] == "bbb" and store.objects["readings/rw/ocr-check/bbb.json"] is None

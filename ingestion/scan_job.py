@@ -2,6 +2,8 @@
 
     SCAN_READER=ocr     Google's Enterprise Document OCR: every word with its place
     SCAN_READER=layout  the Layout Parser: the second reading that checks the OCR's words
+    SCAN_READER=check   Google's OCR of born-digital pages, the check on their text layer (the work
+                        list rwanda check-worklist writes; readings/<country>/ocr-check/)
 
 The files to read are the work list in the corpus bucket (rwanda scan-worklist, written with the
 operator's approval of the budget). Each of the job's tasks takes every n-th file of the list
@@ -28,12 +30,14 @@ def share(files: list[dict], task: int, tasks: int) -> list[dict]:
 
 def main() -> int:
     kind = os.environ["SCAN_READER"]
-    if kind not in ("ocr", "layout"):
-        raise SystemExit("SCAN_READER is ocr or layout")
+    if kind not in ("ocr", "layout", "check"):
+        raise SystemExit("SCAN_READER is ocr, layout or check")
     task = int(os.environ.get("CLOUD_RUN_TASK_INDEX", "0"))
     tasks = int(os.environ.get("CLOUD_RUN_TASK_COUNT", "1"))
     files_at_once = int(os.environ.get("SCAN_FILES_AT_ONCE", "2"))
     store = corpus_store.open_store()
+    if kind == "check":
+        return check(store, task, tasks)
     worklist = json.loads(store.get(rwanda.WORKLIST))
     mine = share(worklist["files"], task, tasks)
     budget = sum(f["scanned_pages"] for f in mine)
@@ -55,6 +59,21 @@ def main() -> int:
         )
     print(json.dumps(result, ensure_ascii=False), flush=True)
     # A stop for the budget is the end of the share; any other stop is a failure to look at.
+    return 1 if result["stopped"] and "budget" not in result["stopped"] else 0
+
+
+def check(store, task: int, tasks: int) -> int:
+    """This task's share of the born-digital pages Google's OCR checks (rwanda.check_layers)."""
+    worklist = json.loads(store.get(rwanda.CHECK_WORKLIST))
+    if worklist["pages"] > worklist["approval"]["max_pages"]:
+        raise SystemExit("the work list exceeds its approved budget")
+    mine = share(worklist["files"], task, tasks)
+    budget = sum(len(f["pages"]) for f in mine)
+    print(f"task {task + 1} of {tasks}: {len(mine)} files, {budget} pages to check", flush=True)
+    with tempfile.TemporaryDirectory() as scratch:
+        rwanda.STAGING = Path(scratch)
+        result = rwanda.check_layers(store, mine, budget, log=lambda message: print(message, flush=True))
+    print(json.dumps(result, ensure_ascii=False), flush=True)
     return 1 if result["stopped"] and "budget" not in result["stopped"] else 0
 
 

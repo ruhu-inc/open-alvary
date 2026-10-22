@@ -6,6 +6,8 @@
 #   deployment/gcp/ingestion_jobs.sh deploy          # build the image from the committed code, deploy both jobs
 #   deployment/gcp/ingestion_jobs.sh run ocr 2       # read scanned pages with Google's OCR, in 2 tasks
 #   deployment/gcp/ingestion_jobs.sh run layout 1    # read them with the Layout Parser, in 1 task
+#   deployment/gcp/ingestion_jobs.sh run check 8     # Google's OCR checks born-digital pages' text layer, in 8
+#                                                    # tasks (the work list: python -m ingestion.rwanda check-worklist)
 #   deployment/gcp/ingestion_jobs.sh prepare 8       # prepare every stored file for review, in 8 tasks
 #   deployment/gcp/ingestion_jobs.sh status
 #
