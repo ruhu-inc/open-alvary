@@ -34,7 +34,10 @@ type Operation = {
   parameters?: Parameter[];
   security?: unknown[];
   requestBody?: { description: string; required?: boolean; content: Record<string, { schema: Schema }> };
-  responses: Record<string, { description: string; content?: Record<string, { schema: Schema }> }>;
+  responses: Record<
+    string,
+    { description: string; content?: Record<string, { schema: Schema }>; headers?: Record<string, unknown> }
+  >;
 };
 type Methods = { get?: Operation; post?: Operation };
 export type Spec = {
@@ -302,17 +305,23 @@ function operationPage(path: string, methods: Methods, spec: Spec, examples: Exa
   const body = content?.schema;
   lines.push("## Request", ...requestExamples(path, operation, media, example, method));
   lines.push("## Response");
+  // A route that answers If-None-Match declares 304 (Not Modified) beside 200; it has no body.
+  const notModified = operation.responses["304"]
+    ? "The answer has an `ETag`. Send it back as `If-None-Match`: if the answer is unchanged, it is `304 Not Modified` with no body, after the same checks as a full answer. See [Check a copy without downloading it again](/docs/records#check-a-copy-without-downloading-it-again)."
+    : null;
   if (media && media !== "application/json") lines.push(`\`200 OK\` with \`${media}\`.`);
   else if (body) {
     const root = body.$ref ? refName(body.$ref) : body.items?.$ref ? refName(body.items.$ref) : null;
     lines.push(`\`200 OK\` with ${body.type === "array" ? "an array of " : ""}${root ? `\`${root}\`` : "JSON"}.`);
+    if (notModified) lines.push(notModified);
     if (example?.answer !== undefined) {
       lines.push(fence("json", JSON.stringify(example.answer, null, 2)));
       if (example.note) lines.push(example.note);
     }
     if (root) lines.push(...fields(root, spec));
   }
-  const errors = Object.entries(operation.responses).filter(([status]) => status !== "200");
+  if (notModified && media && media !== "application/json") lines.push(notModified);
+  const errors = Object.entries(operation.responses).filter(([status]) => status !== "200" && status !== "304");
   if (errors.length) {
     lines.push(
       "## Errors",
@@ -433,6 +442,7 @@ const READING_ORDER = [
   "get-change-coverage",
   "list-plans",
   "get-quota-policy",
+  "get-key",
   "list-releases",
   "get-bulk-file",
 ];
@@ -461,12 +471,20 @@ export function referenceOverview(spec: Spec): string {
           "`Authorization: Bearer <key>`: an API key from the console, or an access token from a connected app. See [Authentication](/docs/authentication).",
         ],
         ["Format", "JSON in UTF-8; dates and times in ISO 8601, UTC"],
-        ["Errors", "Problem documents with a `code`. See [Errors](/docs/errors)."],
+        [
+          "Errors",
+          "Problem documents with a `code`. An address that is no route is `404` [`not_found_route`](/docs/errors#not_found_route). See [Errors](/docs/errors).",
+        ],
         ["Limits", "Per organisation, shared by its keys and apps. See [Plans and rate limits](/docs/plans)."],
+        [
+          "Headers",
+          "Every answer has `X-Request-ID`. Answers counted against your allowance have `RateLimit` and `RateLimit-Policy` ([how to read them](/docs/plans#pace-yourself)); a `429` has `Retry-After`. Texts, structures, parts, text searches, evidence and checks have an `ETag` and answer `If-None-Match` with `304`.",
+        ],
         [
           "OpenAPI",
           `[\`${BASE}/openapi.json\`](${BASE}/openapi.json): import it into Postman, Insomnia or a client generator.`,
         ],
+        ["Changes", "Additive changes come at any time. See [Compatibility](/docs/compatibility)."],
       ],
     ),
   ];
