@@ -23,12 +23,17 @@ structure rules for the document's jurisdiction and type (RULES):
                      SOMMAIRE, the Council of Ministers' preamble, PARTIE, LIVRE, TITRE, SOUS-TITRE,
                      CHAPITRE and Section, articles numbered through the Act ("Article 2-1"
                      inserted) and their alinéas, and the signatures
-  au-treaty-1        The AU's charters and protocols, in English, French and Portuguese: the
-                     preamble to the enacting words, parts ("PREMIERE PARTIE") and chapters, articles
-                     with their heading after the number, numbered paragraphs and lettered items
+  au-treaty-1        The AU's charters, protocols and conventions, in English, French and Portuguese:
+                     the preamble to the enacting words, parts ("PREMIERE PARTIE"), chapters and their
+                     sections, articles with their heading after the number or on the next line,
+                     numbered paragraphs and lettered items
   ecowas-act-1       ECOWAS's Supplementary Acts in English: as au-treaty-1, with a heading inside an
                      article (a defined term) kept in it, the logo text on every page reported, and
                      the signatures ("H. E. …") a notice
+  ecowas-directive-1, ecowas-regulation-1
+                     ECOWAS's directives (English, Portuguese) and regulations (English, French), as
+                     its legal journal publishes them signed: as ecowas-act-1, closing with the place
+                     and date ("DONE IN FREETOWN …", "FAIT À …", "FEITO EM …")
   ci-loi-1           Ivorian laws as the Journal officiel prints them: the issue's front matter, the
                      title with its enacting words, TITRE, CHAPITRE and Section, articles opening with
                      their first alinéa ("Art. 2. — …"), alinéas as OHADA's, and "Fait à …" a notice
@@ -38,6 +43,14 @@ structure rules for the document's jurisdiction and type (RULES):
   ao-lei-1           Angolan laws as the Diário da República prints them: CAPÍTULO, SECÇÃO, articles
                      ("ARTIGO 3.º") with their heading in brackets, números and alíneas, and "Vista e
                      aprovada …" a notice
+  mz-lei-1           Mozambican laws as the Boletim da República prints them: as ao-lei-1, with
+                     "ARTIGO 3" unmarked, "Aprovada pela Assembleia da República …" a notice, the
+                     annexes after the signatures ("Anexo I"), and the next law in the issue a notice
+  sn-loi-1, bf-loi-1 Senegalese laws as the Commission de protection des données personnelles publishes
+                     them and Burkinabè laws as the Assemblée nationale does: as ci-loi-1, with the
+                     first chapter or section numbered in words ("Chapitre premier", "Section
+                     première"), "Article 2." or "Article 2 :" above its alinéas, and the closing words
+                     ("La présente loi sera exécutée comme loi de l'Etat.", "Ainsi fait et délibéré …")
   rw-law-1           Rwandan laws, orders and the other instruments of the Official Gazette, one
                      language at a time: titles, chapters, divisions (a civil-law "section" groups
                      articles) and articles
@@ -81,9 +94,14 @@ OHADA_UNIFORM_ACT = "ohada-uniform-act-1"
 RW_LAW = "rw-law-1"
 AU_TREATY = "au-treaty-1"
 ECOWAS_ACT = "ecowas-act-1"
+ECOWAS_DIRECTIVE = "ecowas-directive-1"
+ECOWAS_REGULATION = "ecowas-regulation-1"
 CI_LAW = "ci-loi-1"
 CM_LAW = "cm-law-1"
 AO_LAW = "ao-lei-1"
+SN_LAW = "sn-loi-1"
+BF_LAW = "bf-loi-1"
+MZ_LAW = "mz-lei-1"
 JUDGMENT = "judgment-paragraphs-1"
 JUDGMENT_TYPES = {"judgment", "ruling"}
 # The kinds of instrument the Rwandan Gazette reader names from the heading that opens each one
@@ -113,10 +131,16 @@ RULES = {
     ("aa-ohada", "uniform_act"): OHADA_UNIFORM_ACT,
     ("aa-au", "charter"): AU_TREATY,
     ("aa-au", "protocol"): AU_TREATY,
+    ("aa-au", "convention"): AU_TREATY,
     ("aa-ecowas", "supplementary_act"): ECOWAS_ACT,
+    ("aa-ecowas", "directive"): ECOWAS_DIRECTIVE,
+    ("aa-ecowas", "regulation"): ECOWAS_REGULATION,
     ("ci", "law"): CI_LAW,
     ("cm", "law"): CM_LAW,
     ("ao", "law"): AO_LAW,
+    ("sn", "law"): SN_LAW,
+    ("bf", "law"): BF_LAW,
+    ("mz", "law"): MZ_LAW,
     **{("ng", kind): JUDGMENT for kind in JUDGMENT_TYPES},
     **{("rw", kind): RW_LAW for kind in RW_INSTRUMENTS},
 }
@@ -1266,17 +1290,24 @@ class UniformActBuilder(Builder):
                 )
 
 
-# --- au-treaty-1, ecowas-act-1, ci-loi-1, cm-law-1, ao-lei-1: articles and their paragraphs ----------
+# --- the article families (ARTICLE_STYLES): articles and their paragraphs ----------------------------
 
 # Ordinal parts of the French editions: "PREMIERE PARTIE : DES DROITS ET DES DEVOIRS".
 FRENCH_ORDINALS = {
     "premiere": "1", "deuxieme": "2", "troisieme": "3", "quatrieme": "4", "cinquieme": "5", "sixieme": "6",
 }  # fmt: skip
 ONE = ("premier", "1er", "primeiro", "unico", "único")  # "Article premier", "Artigo único": article 1
-ROMAN_LEVEL = re.compile(r"^\(?((?:x{0,3})(?:ix|iv|v?i{1,3}|v))\)(?=\s)")
-LETTER_LEVEL = re.compile(r"^\(?([a-z])\)(?=\s)")
+# "(a)", "a)" and ECOWAS's and Mozambique's "a.", "i.": an item's printed letter or roman number.
+ROMAN_LEVEL = re.compile(r"^\(?((?:x{0,3})(?:ix|iv|v?i{1,3}|v))[.)](?=\s)")
+LETTER_LEVEL = re.compile(r"^\(?([a-z])[.)](?=\s)")
 # Angola's heading on the line after "ARTIGO 1.º", alone or before the article's first words.
 BRACKETED_HEADING = re.compile(r"^\(([^()]{1,200})\)(?=\s|$)", re.S)
+# ECOWAS's directives and regulations close with the place and date, then the Chairperson's name: "DONE AT
+# ABUJA, THIS 19TH DAY …", "DONE IN FREETOWN …", "FAIT À FREETOWN …", "FEITO EM FREETOWN …".
+ECOWAS_SIGNATURE = re.compile(
+    r"^(?:in\s+(?:faith|witness)\s+whereof\b|done\s+(?:at|in)\b|fait\s+[àa]\b|feito\s+em\b|[HS]\.\s?E\.\s)",
+    re.I,
+)
 
 
 @dataclass(frozen=True)
@@ -1292,7 +1323,8 @@ class Edition:
 class ArticleStyle:
     """What an article family prints (ArticleBuilder): the editions calibrated, each a language with its
     words; whether every unit of an article is an alinéa (French drafting) or its paragraphs are
-    numbered; how the title, the closing words and any stamp on every page are printed."""
+    numbered; how the title, the closing words, any stamp on every page and any annex after the closing
+    words are printed."""
 
     rules_id: str
     family: str  # as an error names it: "aa-au/charter"
@@ -1303,28 +1335,46 @@ class ArticleStyle:
     paragraph: re.Pattern = re.compile(r"^(\d{1,2})\.(?=\s)")  # "1." (or Cameroon's "(1)")
     title_units: tuple[str, ...] = ("heading",)
     running_head: re.Pattern | None = None
+    annex: re.Pattern | None = None  # "Anexo I": (number, title on the same line)
 
 
 ARTICLE_STYLES = {
     AU_TREATY: ArticleStyle(
         AU_TREATY,
-        "aa-au/charter or protocol",
+        "aa-au/charter, protocol or convention",
         {
-            "en": Edition((("PART", 0, "part", "part"), ("CHAPTER", 1, "chapter", "chap"))),
-            "fr": Edition((("PARTIE", 0, "part", "part"), ("CHAPITRE", 1, "chapter", "chap"))),
+            "en": Edition(
+                (
+                    ("PART", 0, "part", "part"),
+                    ("CHAPTER", 1, "chapter", "chap"),
+                    ("SECTION", 2, "division", "dvs"),
+                )
+            ),
+            "fr": Edition(
+                (
+                    ("PARTIE", 0, "part", "part"),
+                    ("CHAPITRE", 1, "chapter", "chap"),
+                    ("SECTION", 2, "division", "dvs"),
+                )
+            ),
             "pt": Edition(
-                (("PARTE", 0, "part", "part"), ("CAPÍTULO", 1, "chapter", "chap")),
+                (
+                    ("PARTE", 0, "part", "part"),
+                    ("CAPÍTULO", 1, "chapter", "chap"),
+                    ("SECÇÃO", 2, "division", "dvs"),
+                ),
                 ("ARTIGO", "Artigo", "Art."),
             ),
         },
         title=re.compile(
             r"^(?:african\s+charter\b|protocol\s+(?:to|on|relating)\b|charte\s+africaine\b|protocole\s+relatif\b"
-            r"|carta\s+africana\b|protocolo\s+relativo\b)",
+            r"|carta\s+africana\b|protocolo\s+relativo\b|african\s+union\s+convention\b"
+            r"|convention\s+de\s+l['’]\s*union\s+africaine\b|conven[çc][ãa]o\s+da\s+uni[ãa]o\s+africana\b)",
             re.I,
         ),
         signature=re.compile(
             r"^(?:adopted\s+by\b|done\s+at\b|in\s+(?:witness|faith)\s+whereof\b|adopt[ée]e?\s+par\b|fait\s+[àa]\b"
-            r"|feito\s+em\b|adoptad[oa]\s+(?:pel|em)\b)",
+            r"|feito\s+em\b|adoptad[oa]\s+(?:pel[ao]|em)\b)",  # "ADOPTADA PELA …"
             re.I,
         ),
     ),
@@ -1335,6 +1385,31 @@ ARTICLE_STYLES = {
         title=re.compile(r"^supplementary\s+act\b", re.I),
         # The signatures open with the closing formula, or, where it is not printed, the first "H. E."
         signature=re.compile(r"^(?:in\s+(?:faith|witness)\s+whereof\b|done\s+at\b|H\.\s?E\.\s)", re.I),
+        running_head=re.compile(r"^CEDEAO\s+ECOWAS\b\s*"),
+    ),
+    ECOWAS_DIRECTIVE: ArticleStyle(
+        ECOWAS_DIRECTIVE,
+        "aa-ecowas/directive",
+        {
+            "en": Edition((("PART", 0, "part", "part"), ("CHAPTER", 1, "chapter", "chap"))),
+            "pt": Edition(
+                (("PARTE", 0, "part", "part"), ("CAPÍTULO", 1, "chapter", "chap")),
+                ("ARTIGO", "Artigo", "Art."),
+            ),
+        },
+        title=re.compile(r"^(?:directive|diretiva|directiva)\s+c\s*/\s*dir\b", re.I),
+        signature=ECOWAS_SIGNATURE,
+        running_head=re.compile(r"^CEDEAO\s+ECOWAS\b\s*"),
+    ),
+    ECOWAS_REGULATION: ArticleStyle(
+        ECOWAS_REGULATION,
+        "aa-ecowas/regulation",
+        {
+            "en": Edition((("PART", 0, "part", "part"), ("CHAPTER", 1, "chapter", "chap"))),
+            "fr": Edition((("PARTIE", 0, "part", "part"), ("CHAPITRE", 1, "chapter", "chap"))),
+        },
+        title=re.compile(r"^(?:regulation|r[èe]glement)\s+c\s*/\s*reg\b", re.I),
+        signature=ECOWAS_SIGNATURE,
         running_head=re.compile(r"^CEDEAO\s+ECOWAS\b\s*"),
     ),
     CI_LAW: ArticleStyle(
@@ -1394,6 +1469,65 @@ ARTICLE_STYLES = {
         title=re.compile(r"^lei\s+n\.?\s*[º°o]", re.I),
         signature=re.compile(r"^vista\s+e\s+aprovada\b", re.I),
     ),
+    MZ_LAW: ArticleStyle(
+        MZ_LAW,
+        "mz/law",
+        {
+            "pt": Edition(
+                (
+                    ("TÍTULO", 0, "title", "title"),
+                    ("CAPÍTULO", 1, "chapter", "chap"),
+                    ("SECÇÃO", 2, "division", "dvs"),
+                    ("SUBSECÇÃO", 3, "division", "subdvs"),
+                ),
+                ("ARTIGO", "Artigo", "Art."),
+            )
+        },
+        # "Lei n.º 13/2026", alone or before its date ("Lei n.º 14/2026 de 1 de Julho Havendo …"); the
+        # issue's summary lists each with a colon ("Lei n.º 13/2026: Aprova …").
+        title=re.compile(r"^lei\s+n\.?\s*[º°o]\s*\d{1,3}/\d{4}(?:$|\s+de\s+\d)", re.I),
+        title_units=("heading", "paragraph"),
+        signature=re.compile(r"^aprovada\s+pela\s+assembleia\s+da\s+rep[úu]blica\b", re.I),
+        annex=re.compile(
+            r"^anexo(?:\s+([IVXLC]{1,6}|\d{1,2}|[ÚU]NICO))?(?!\w)\s*[-–—:.]?\s*(.*)$", re.I | re.S
+        ),
+    ),
+    SN_LAW: ArticleStyle(
+        SN_LAW,
+        "sn/law",
+        {
+            "fr": Edition(
+                (
+                    ("TITRE", 0, "title", "title"),
+                    ("CHAPITRE", 1, "chapter", "chap"),
+                    ("SECTION", 2, "division", "dvs"),
+                )
+            )
+        },
+        title=re.compile(r"^loi\s+n\s*[°o]", re.I),
+        # The enacting formula printed after the last article, unnumbered, then "Fait à Dakar, le …".
+        signature=re.compile(
+            r"^(?:la\s+pr[ée]sente\s+loi\s+sera\s+ex[ée]cut[ée]e\s+comme\s+loi\s+de\s+l|fait\s+[àa]\s)", re.I
+        ),
+        alineas=True,
+    ),
+    BF_LAW: ArticleStyle(
+        BF_LAW,
+        "bf/law",
+        {
+            "fr": Edition(
+                (
+                    ("TITRE", 0, "title", "title"),
+                    ("CHAPITRE", 1, "chapter", "chap"),
+                    ("SECTION", 2, "division", "dvs"),
+                )
+            )
+        },
+        title=re.compile(r"^loi\s+n\s*[°o]", re.I),
+        # "La présente loi sera exécutée comme loi de l'Etat" is the last article here, numbered.
+        signature=re.compile(r"^ainsi\s+fait\s+et\s+d[ée]lib[ée]r[ée]\b", re.I),
+        alineas=True,
+    ),
 }
 
 
@@ -1404,14 +1538,16 @@ class ArticleBuilder(Builder):
     division it is in because numbering restarts in each (part_ii__chap_1), titled on the same line or
     the next heading; articles numbered through the text (art_12, art_2-1 inserted after it, "premier"
     and "único" art_1), their heading the words after the number in a heading ("ARTICLE 3 : COMPETENCE
-    DE LA COUR") or the bracketed line after it ("(Objecto)"), their first words in a paragraph unit
-    ("Art. 2. — La présente loi …") the article's own. In French drafting every later unit is an
-    alinéa (art_10__al_2), as OHADA's; otherwise numbered paragraphs ("1.", Cameroon's "(1)"), lettered
-    items ("(a)", "a)") and roman ones ("(i)") nest (art_7__para_1__subpara_a, cited art. 7(1)(a)), and
-    an unnumbered unit stays in the innermost open one. A unit opening with the family's closing words
-    ("Fait à …", "Vista e aprovada …") opens the closing notice, which holds the rest of the issue. A
-    stamp printed on every page (Cameroon's, ECOWAS's logo text) is reported, for the reviewer to remove.
-    Another language's edition is refused, never read by these patterns."""
+    DE LA COUR"), the bracketed line after it ("(Objecto)") or the heading after it ("Article 2" then
+    "Scope of application"), their first words in a paragraph unit ("Art. 2. — La présente loi …") the
+    article's own. In French drafting every later unit is an alinéa (art_10__al_2), as OHADA's;
+    otherwise numbered paragraphs ("1.", Cameroon's "(1)"), lettered items ("(a)", "a)", "a.") and roman
+    ones ("(i)", "i.") nest (art_7__para_1__subpara_a, cited art. 7(1)(a)), and an unnumbered unit stays
+    in the innermost open one. A unit opening with the family's closing words ("Fait à …", "Vista e
+    aprovada …") opens the closing notice, which holds the rest of the issue but for the law's own
+    annexes printed after its signatures (Mozambique's "Anexo I": annex_i). A stamp printed on every
+    page (Cameroon's, ECOWAS's logo text) is reported, for the reviewer to remove. Another language's
+    edition is refused, never read by these patterns."""
 
     def __init__(self, style: ArticleStyle, language: str | None, *args):
         super().__init__(*args)
@@ -1442,9 +1578,11 @@ class ArticleBuilder(Builder):
             self.edition = next(iter(style.editions.values()))  # the text is held, never published
         words = "|".join(re.escape(w) for w, *_ in self.edition.divisions)
         ordinals = "|".join(FRENCH_ORDINALS)
+        # The number in figures, roman numerals or words ("Chapitre premier", "Section première"), then
+        # any separators before the title: "CHAPITRE II.- Commission …", "Chapitre premier. - Dispositions".
         self.division_pattern = re.compile(
             rf"^(?:({ordinals})\s+({words})|({words})(?:\s+|(?=\d))(\d{{1,3}}(?:-\d{{1,2}})?|[IVXLC]{{1,6}}|"
-            rf"PR[ÉE]LIMINAIRE|UNIQUE|[ÚU]NIC[OA]))(?!\w)\s*[-–—:.]?\s*(.*)$",
+            rf"PREMI[EÈ]RE?|1ERE?|1RE|PR[ÉE]LIMINAIRE|UNIQUE|[ÚU]NIC[OA]))(?!\w)(\s*(?:[-–—:.]+\s*)*)(.*)$",
             re.S | re.I,
         )
         self.ranks = {
@@ -1491,7 +1629,7 @@ class ArticleBuilder(Builder):
                 self.put(self.owner(), index)
                 return
         if self.region == "endmatter":
-            self.put(self.region_node, index)
+            self.endmatter(index, leaf, text, heading_unit, awaiting)
             return
         if self.region == "body" and self.style.signature.match(text):
             self.region, self.provision, self.levels, self.open = "endmatter", None, [], []
@@ -1509,7 +1647,7 @@ class ArticleBuilder(Builder):
             self.put(self.root, index)
             self.region = "preamble"
             return
-        division = self.division_of(text)
+        division = self.division_of(text, heading_unit)
         provision = self.provision_of(text, heading_unit)
         if self.region in ("front", "preamble") and not (division or provision):
             if self.region == "preamble" and self.region_node is None:
@@ -1538,23 +1676,63 @@ class ArticleBuilder(Builder):
                 self.put(sub, index)
             else:
                 self.put(heading_due, index)
+        elif heading_due is not None and heading_unit:
+            heading_due.heading = text  # "Article 2" then "Scope of application of electronic commerce"
+            self.named.add(index)
+            self.put(heading_due, index)
         elif self.provision is not None:
             self.inside(index, leaf, text, unit)
         else:
             self.issue("warning", "outside_article", leaf, f"“{text[:40]}…” is outside any article")
             self.put(self.owner(), index)
 
-    def division_of(self, text: str) -> tuple[int, str, str, str, str] | None:
-        """A division heading (rank, kind, token, number, title), never words in a paragraph."""
+    def endmatter(self, index: int, leaf: Leaf, text: str, heading_unit: bool, awaiting: Node | None) -> None:
+        """After the closing words: the notice they open holds the rest of the issue, except, where a
+        family prints them, the law's annexes after its signatures ("Anexo I" then "Glossário"), each
+        an annex of the document; the next act's title after them opens a notice of its own."""
+        found = self.style.annex.match(text) if self.style.annex and heading_unit else None
+        if found:
+            number = found.group(1) or str(self.counts.get("annex", 0) + 1)
+            self.next_number("annex")
+            own = f"annex_{number if number.isdigit() else slug(number)}"
+            label = text[: len(text) - len(found.group(2))].strip(" :.-–—")
+            node = self.add(self.root, "annex", own, leaf, label=label, heading=found.group(2).strip())
+            self.region_node, self.awaiting = node, None if node.heading else node
+            self.named.add(index)
+        elif awaiting is not None and heading_unit:
+            awaiting.heading = text  # "Anexo I" then "Glossário"
+            self.named.add(index)
+        elif (
+            self.region_node.kind == "annex"
+            and self.unit(leaf).get("kind") in self.style.title_units
+            and self.style.title.match(text)
+        ):
+            self.region_node = self.add(self.root, "notice", f"notice_{self.next_number('notice')}", leaf)
+        self.put(self.region_node, index)
+
+    def division_of(self, text: str, heading_unit: bool) -> tuple[int, str, str, str, str] | None:
+        """A division heading (rank, kind, token, number, title), never words in a paragraph: a heading
+        may end with a full stop ("Section II. - Attributions de la Commission."), a paragraph only after
+        that heading form, its number, a full stop and a dash ("Chapitre II. – Recommandé électronique.");
+        and either opens with the word as printed, never in lower case ("chapitre 2 du titre II de la
+        présente loi" cites one)."""
         found = self.division_pattern.match(text)
-        if not found or len(text) > 300 or text.endswith((".", ";", ",")):
+        if (
+            not found
+            or len(text) > 300
+            or not text[:1].isupper()
+            or text.endswith((";", ","))
+            or (text.endswith(".") and not heading_unit and not re.match(r"\s*\.\s*[-–—]", found.group(5)))
+        ):
             return None
         if found.group(1):
             word, number = found.group(2), FRENCH_ORDINALS[folded(found.group(1))]
         else:
             word, number = found.group(3), found.group(4)
+            if folded(number) in ("premier", "premiere", "1er", "1ere", "1re"):
+                number = "1"
         rank, kind, token = self.ranks[unicodedata.normalize("NFC", word).upper()]
-        return rank, kind, token, number, found.group(5).strip()
+        return rank, kind, token, number, found.group(6).strip()
 
     def division(self, index: int, leaf: Leaf, found: tuple[int, str, str, str, str]) -> None:
         rank, kind, token, number, title = found
@@ -1564,11 +1742,8 @@ class ArticleBuilder(Builder):
         own = f"{token}_{number if re.fullmatch(r'[\d-]+', number) else slug(number)}"
         within = parent.locator if parent is not self.root else ""
         node = self.add(parent, kind, f"{within}__{own}" if within else own, leaf)
-        node.label = (
-            clean(leaf.text)[: len(clean(leaf.text)) - len(title)].strip(" :.-–—")
-            if title
-            else clean(leaf.text)
-        )
+        printed = clean(leaf.text)
+        node.label = (printed[: len(printed) - len(title)] if title else printed).strip(" :.-–—")
         node.heading = title
         self.open.append((rank, node))
         self.provision, self.levels = None, []
@@ -1645,13 +1820,18 @@ class ArticleBuilder(Builder):
 
     def numbered(self, text: str) -> tuple[int, str, str]:
         """A unit's level and number: 1 a numbered paragraph, 2 a lettered item, 3 a roman one (0: none).
-        "(i)", "(v)" and "(x)" after "(h)", "(u)" and "(w)" go on the letters."""
+        "(i)", "(v)" and "(x)" after "(h)", "(u)" and "(w)" go on the letters; after any other letter they
+        are roman, inside it ("a) Órgãos:" then "i. Conselho Nacional …")."""
         if found := self.style.paragraph.match(text):
             return 1, found.group(1), text[: found.end()]
         letter, roman = LETTER_LEVEL.match(text), ROMAN_LEVEL.match(text)
         last = next((n.label for lvl, n in reversed(self.levels) if lvl == 2), "")
         continues = letter and last and ord(letter.group(1)) == ord(number_of(last)[-1:] or "`") + 1
-        if roman and not continues and (len(roman.group(1)) > 1 or letter is None or self.levels_at(3)):
+        if (
+            roman
+            and not continues
+            and (len(roman.group(1)) > 1 or letter is None or last or self.levels_at(3))
+        ):
             return 3, roman.group(1), text[: roman.end()]
         if letter:
             return 2, letter.group(1), text[: letter.end()]
