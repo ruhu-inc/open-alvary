@@ -21,10 +21,12 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Query, Request, Response
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api import courts, text_index
 from api.admission import AdmissionUnavailable
@@ -53,6 +55,7 @@ from schema.public import (
     ExpressionPage,
     JurisdictionDetail,
     JurisdictionView,
+    KeyView,
     RelationKind,
     RightsHistory,
     RightsView,
@@ -78,7 +81,14 @@ ONE_JURISDICTION = (
 )
 
 
-def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]]) -> FastAPI:
+def create_v1_app(
+    store: Store,
+    releases: Path,
+    tiers: Callable[[], list[dict]],
+    credentials: Callable[[str, str], dict | None] | None = None,
+) -> FastAPI:
+    """``credentials`` describes the credential the gate checked (accounts.store.Accounts.credential),
+    for GET /key."""
     app = FastAPI(
         title="Open Alvary API",
         version="1.0.0",
@@ -109,7 +119,14 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
             "rate_limited", request_id(request), retry_after=exception.retry_after, detail=str(exception)
         )
 
-    # Every refusal is a problem document with a code from the errors page.
+    # Every refusal is a problem document with a code from the errors page. An address that is no route
+    # answers not_found_route, so a consumer can tell a missing route from a missing record (unavailable).
+    @app.exception_handler(StarletteHTTPException)
+    async def no_route(request, exception):
+        if exception.status_code == 404:
+            return problem("not_found_route", request_id(request))
+        return await http_exception_handler(request, exception)
+
     @app.exception_handler(RequestValidationError)
     async def invalid(request, exception):
         first = exception.errors()[0] if exception.errors() else {}
@@ -207,6 +224,32 @@ def create_v1_app(store: Store, releases: Path, tiers: Callable[[], list[dict]])
     @app.get("/tiers")
     def tier_catalogue():
         return {"tiers": tiers()}
+
+    # The calling key and the access it reads under (G13), so a server can warn before the key expires.
+    # It passes the gate like any other read and counts as one; it names only the credential the gate
+    # checked, never its secret.
+    @app.get("/key")
+    def calling_key(request: Request) -> KeyView:
+        access = getattr(request.state, "access", None)
+        if access is None:
+            return problem("credential_required", request_id(request))
+        found = credentials(access["organisation"], access["credential"]) if credentials else None
+        if found is None:
+            raise PublicUnavailable("The credential cannot be described")
+        tier = access.get("tier") or {}
+        return KeyView(
+            **found,
+            organisation_id=access["organisation"],
+            entitlement={
+                "tier": {
+                    "id": tier.get("id"),
+                    "includes": tier.get("includes") or (),
+                    "allowance": tier.get("allowance") or {},
+                },
+                "scope": access.get("scope") or {},
+                "ends_at": access.get("ends_at"),
+            },
+        )
 
     # Jurisdictions and their memberships are reference data: plan countries do not narrow them.
     @app.get("/jurisdictions")

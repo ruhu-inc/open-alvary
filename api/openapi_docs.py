@@ -17,7 +17,7 @@ GATE = {
     "`entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
     "429": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
     "503": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, "
-    "`capacity_exhausted`). Try again after Retry-After.",
+    "`capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
 }
 BAD = {"400": "A parameter is unknown, malformed or out of range (`invalid_input`)."}
 MISSING = {"404": "There is no such record, or it is not public (`unavailable`)."}
@@ -116,6 +116,7 @@ OPERATIONS: dict[str, dict] = {
         "errors": MISSING,
     },
     "/sources/{source_id}/versions": {
+        "conditional": True,
         "operationId": "get_versions",
         "tag": "Catalogue",
         "summary": "Get a record's texts",
@@ -147,6 +148,7 @@ OPERATIONS: dict[str, dict] = {
         "errors": MISSING,
     },
     "/versions/{version_id}/text": {
+        "conditional": True,
         "operationId": "get_version_text",
         "tag": "Catalogue",
         "summary": "Get a text",
@@ -160,6 +162,7 @@ OPERATIONS: dict[str, dict] = {
         "errors": MISSING | TOO_LARGE,
     },
     "/versions/{version_id}/structure": {
+        "conditional": True,
         "operationId": "get_version_structure",
         "tag": "Catalogue",
         "summary": "Get a text's structure",
@@ -174,6 +177,7 @@ OPERATIONS: dict[str, dict] = {
         "errors": MISSING | BAD,
     },
     "/anchors/{anchor_id}": {
+        "conditional": True,
         "operationId": "get_anchor",
         "tag": "Catalogue",
         "summary": "Get one part of a text exactly",
@@ -233,6 +237,7 @@ OPERATIONS: dict[str, dict] = {
         "errors": MISSING,
     },
     "/search/text": {
+        "conditional": True,
         "operationId": "search_text",
         "tag": "Catalogue",
         "summary": "Search published texts",
@@ -270,6 +275,7 @@ OPERATIONS: dict[str, dict] = {
         "errors": BAD,
     },
     "/retrieve": {
+        "conditional": True,
         "operationId": "retrieve_evidence",
         "tag": "Retrieval",
         "summary": "Retrieve evidence",
@@ -317,6 +323,7 @@ OPERATIONS: dict[str, dict] = {
         "errors": BAD,
     },
     "/currentness": {
+        "conditional": True,
         "operationId": "check_currentness",
         "tag": "Retrieval",
         "summary": "Check cited parts",
@@ -449,6 +456,7 @@ OPERATIONS: dict[str, dict] = {
             "410": "The release was withdrawn: a record in it changed or stopped being public (`withdrawn`).",
         },
         "answer": ("application/octet-stream", {"type": "string", "format": "binary"}),
+        "headers": {"ETag": "FileETag"},
     },
     "/tiers": {
         "operationId": "list_plans",
@@ -458,6 +466,17 @@ OPERATIONS: dict[str, dict] = {
         "errors": {},
         "public": True,
         "answer": "PlanCatalogue",
+    },
+    "/key": {
+        "operationId": "get_key",
+        "tag": "Plans",
+        "summary": "Get the calling key",
+        "description": "The key or connected app that sent the request: its ID, kind, name and when it "
+        "expires, and your organisation's access as this request was admitted under it: its plan, the "
+        "countries it covers and when it ends. Never the secret. A server can read `expires_at` and warn "
+        "before the key stops working, then rotate it in the console. It counts as one request, like any "
+        "other.",
+        "errors": {},
     },
     "/quota-policy": {
         "operationId": "get_quota_policy",
@@ -544,7 +563,7 @@ TAGS = [
         "on the others, with their sources.",
     },
     {"name": "Changes", "description": "What changed in the catalogue, in order, and feeds."},
-    {"name": "Plans", "description": "Plans, limits and how limits are counted."},
+    {"name": "Plans", "description": "Plans, limits, how limits are counted, and the calling key."},
     {"name": "Releases", "description": "Versioned data releases to download."},
 ]
 
@@ -629,11 +648,12 @@ SCHEMAS: dict[str, dict] = {
             "observed_at": NULL_S
             | {"description": "When the change was seen at the official source, if known."},
             "publisher_published_at": NULL_S | {"description": "When the publisher published it, if known."},
-            "legal_effective": NULL_S
-            | {
+            "legal_effective": {
+                "type": ["object", "null"],
                 "description": "When it takes legal effect, if known: {from, until, precision}. A membership's or "
                 "suspension's dates are EDTF dates, each stating its own precision (a window `[FIRST..LAST]` "
-                "holds one day); `precision` is that of `from`."
+                "holds one day); `precision` is that of `from`.",
+                "properties": {"from": NULL_S, "until": NULL_S, "precision": {"type": S}},
             },
             "jurisdiction": {
                 "type": ["object", "null"],
@@ -1808,10 +1828,105 @@ FIELDS: dict[str, dict[str, str]] = {
         "because they do not bind there, by relation.",
         "notices": "What the widening covered and did not, in sentences.",
     },
+    "KeyView": {
+        "id": "The key's ID, `key_` and 32 hexadecimal characters, as the console shows it; for a connected "
+        "app, its grant's ID (`grt_…`). Never the secret.",
+        "kind": "`personal` (a person's key, which stops when they leave the organisation), `service` (a "
+        "shared key for servers, which belongs to the organisation) or `app` (a connected app's access "
+        "token).",
+        "name": "The key's name in the console, or the connected app's name.",
+        "created_at": "When the key was created, or the app connected.",
+        "expires_at": "When the key stops working. A rotated key's is the end of its overlap. Null for a "
+        "connected app, which works until it is disconnected.",
+        "replaced": "Whether a rotation has replaced the key: it works until `expires_at`, so switch to its "
+        "replacement before then.",
+        "organisation_id": "Your organisation's ID.",
+        "entitlement": "Your organisation's access, as this request was admitted under it.",
+    },
+    "EntitlementView": {
+        "tier": "The plan.",
+        "scope": "The countries read at the plan's limits. Every other country answers at the Starter rate.",
+        "ends_at": "When the access ends; null when no end is set.",
+    },
+    "EntitlementTier": {
+        "id": "The plan's ID, such as `starter`, as List plans gives it.",
+        "includes": "What it includes: `rest`, `mcp`, and `bulk` for bulk releases with full text.",
+        "allowance": "Its limits, as List plans gives them: requests_per_minute, burst, concurrency, "
+        "bytes_per_day and the rest.",
+    },
+    "EntitlementScope": {
+        "all": "`true` when every country is read at the plan's limits.",
+        "jurisdictions": "Otherwise the countries that are, by jurisdiction ID.",
+    },
 }
 
 
-def _responses(found: dict, answer, errors: dict) -> dict:
+# The response headers the service sends (G13), declared on each answer that carries them: every answer
+# has its request ID (the credential gate adds it); an answer counted against the organisation's
+# allowance has the allowance (also the gate's); a conditional route's answer has its tag (api.v1); and a
+# 429, always, or a 503, when the service knows, says when to try again.
+HEADERS = {
+    "RequestId": {
+        "description": "This answer's ID. Quote it when you ask us about a request.",
+        "required": True,
+        "schema": {"type": "string"},
+    },
+    "RateLimit": {
+        "description": "What is left of your organisation's request allowance: "
+        '`"organisation";r=<requests left>;t=<seconds until the burst is full again>`. On every answer '
+        "counted against the allowance; not on a refusal made before it is counted, such as `401` or a "
+        "`429` for the organisation's allowance.",
+        "schema": {"type": "string"},
+    },
+    "RateLimitPolicy": {
+        "description": "Your organisation's request allowance: "
+        '`"organisation";q=<burst>;w=<seconds for the burst to refill>`. Sent with `RateLimit`.',
+        "schema": {"type": "string"},
+    },
+    "ETag": {
+        "description": "The answer's tag. Send it back as `If-None-Match`: if the answer is unchanged, it is "
+        "`304` with no body.",
+        "required": True,
+        "schema": {"type": "string"},
+    },
+    "FileETag": {
+        "description": "The file's tag, from its size and when it was written. Compare it with the tag of an "
+        "earlier download; this route does not answer `If-None-Match`.",
+        "required": True,
+        "schema": {"type": "string"},
+    },
+    "RetryAfter": {
+        "description": "How many seconds to wait before trying again.",
+        "required": True,
+        "schema": {"type": "integer"},
+    },
+    "RetryAfterWhenKnown": {
+        "description": "How many seconds to wait before trying again, when the service knows.",
+        "schema": {"type": "integer"},
+    },
+}
+NOT_MODIFIED = (
+    "Not modified: the tag sent as `If-None-Match` is still the answer's `ETag`. No body. The answer was "
+    "checked as a full one would be, so a record no longer public is `404`, never `304`."
+)
+
+
+def _header(name: str) -> dict:
+    return {"$ref": f"#/components/headers/{name}"}
+
+
+def _responses(
+    found: dict,
+    answer,
+    errors: dict,
+    *,
+    keyed: bool = True,
+    conditional: bool = False,
+    own: dict[str, str] | None = None,
+) -> dict:
+    """``keyed``: the route needs a key, so its answers are counted against the allowance;
+    ``conditional``: it answers ``If-None-Match``; ``own``: headers only its answer carries, by name, each
+    a component of HEADERS."""
     responses = {"200": found.get("200", {"description": "OK"})}
     responses["200"]["description"] = "OK"
     if isinstance(answer, str):
@@ -1822,9 +1937,23 @@ def _responses(found: dict, answer, errors: dict) -> dict:
         responses["200"]["content"] = {answer[0]: {"schema": answer[1]}}
     elif isinstance(answer, dict):
         responses["200"]["content"] = {"application/json": {"schema": answer}}
+    named = {"X-Request-ID": _header("RequestId")}
+    # A 401 is always refused before the request is counted, so it never carries the allowance.
+    counted = (
+        named | {"RateLimit": _header("RateLimit"), "RateLimit-Policy": _header("RateLimitPolicy")}
+        if keyed
+        else named
+    )
+    tagged = counted | {"ETag": _header("ETag")} if conditional else counted
+    responses["200"]["headers"] = tagged | {name: _header(ref) for name, ref in (own or {}).items()}
+    if conditional:
+        responses["304"] = {"description": NOT_MODIFIED, "headers": dict(tagged)}
     for status, text in sorted(errors.items()):
+        wait = {"429": "RetryAfter", "503": "RetryAfterWhenKnown"}.get(status)
         responses[status] = {
             "description": text,
+            "headers": (named if status == "401" else counted)
+            | ({"Retry-After": _header(wait)} if wait else {}),
             "content": {"application/problem+json": {"schema": PROBLEM}},
         }
     return responses
@@ -1843,6 +1972,7 @@ def describe(generated: dict) -> dict:
     }
     spec["externalDocs"] = {"description": "Documentation", "url": "https://open.alvary.ai/docs"}
     components = spec.setdefault("components", {})
+    components["headers"] = deepcopy(HEADERS)
     schemas = components.setdefault("schemas", {})
     for name in ("HTTPValidationError", "ValidationError"):
         schemas.pop(name, None)
@@ -1888,7 +2018,14 @@ def describe(generated: dict) -> dict:
         errors = {} if words.get("public") else dict(GATE)
         for status, text in words["errors"].items():
             errors[status] = f"{errors[status]} {text}" if status in errors else text
-        operation["responses"] = _responses(operation.get("responses", {}), words.get("answer"), errors)
+        operation["responses"] = _responses(
+            operation.get("responses", {}),
+            words.get("answer"),
+            errors,
+            keyed=not words.get("public"),
+            conditional=words.get("conditional", False),
+            own=words.get("headers"),
+        )
     for name, fields in FIELDS.items():
         for field, text in fields.items():
             schemas[name]["properties"][field]["description"] = text

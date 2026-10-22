@@ -142,7 +142,9 @@ def create_service(
         config = ConsoleConfig.from_environment()
         resource = api_origin + "/api/v1"
         metadata = api_origin + "/.well-known/oauth-protected-resource/api/v1"
-        v1 = create_v1_app(store, release_root, lambda: accounts.tiers(published_only=True))
+        v1 = create_v1_app(
+            store, release_root, lambda: accounts.tiers(published_only=True), credentials=accounts.credential
+        )
         # Outside a plan's countries, requests also run at the Starter rate (api.reach).
         starter = next(t for t in json.loads(TIERS.read_text()) if t["id"] == "starter")["allowance"]
         outside = {

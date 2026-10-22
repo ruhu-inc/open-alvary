@@ -24,10 +24,32 @@
                   "$ref": "#/components/schemas/ChangePage"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "400": {
             "description": "A parameter, filter, cursor or token is not valid (`invalid_input`, `invalid_filter`, `unsupported_filter`, `invalid_cursor`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -38,6 +60,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -48,6 +75,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -58,6 +96,17 @@
           },
           "409": {
             "description": "The cursor expired, or the feed was reset (`stale_cursor`, `feed_reset`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -68,6 +117,17 @@
           },
           "410": {
             "description": "Changes after this position are no longer kept (`replay_window_expired`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -78,6 +138,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -87,7 +161,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -238,10 +326,32 @@
                   "$ref": "#/components/schemas/RecentChanges"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "400": {
             "description": "A parameter, filter, cursor or token is not valid (`invalid_input`, `invalid_filter`, `unsupported_filter`, `invalid_cursor`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -252,6 +362,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -262,6 +377,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -272,6 +398,17 @@
           },
           "409": {
             "description": "The cursor expired, or the feed was reset (`stale_cursor`, `feed_reset`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -282,6 +419,17 @@
           },
           "410": {
             "description": "Changes after this position are no longer kept (`replay_window_expired`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -292,6 +440,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -301,7 +463,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -410,10 +586,32 @@
                   "type": "string"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "400": {
             "description": "A parameter, filter, cursor or token is not valid (`invalid_input`, `invalid_filter`, `unsupported_filter`, `invalid_cursor`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -424,6 +622,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -434,6 +637,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -444,6 +658,17 @@
           },
           "409": {
             "description": "The cursor expired, or the feed was reset (`stale_cursor`, `feed_reset`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -454,6 +679,17 @@
           },
           "410": {
             "description": "Changes after this position are no longer kept (`replay_window_expired`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -464,6 +700,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -473,7 +723,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -583,10 +847,32 @@
                   "type": "string"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "400": {
             "description": "A parameter, filter, cursor or token is not valid (`invalid_input`, `invalid_filter`, `unsupported_filter`, `invalid_cursor`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -597,6 +883,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -607,6 +898,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -617,6 +919,17 @@
           },
           "409": {
             "description": "The cursor expired, or the feed was reset (`stale_cursor`, `feed_reset`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -627,6 +940,17 @@
           },
           "410": {
             "description": "Changes after this position are no longer kept (`replay_window_expired`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -637,6 +961,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -646,7 +984,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -768,10 +1120,26 @@
                   "$ref": "#/components/schemas/ChangeEvent"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -782,6 +1150,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -792,6 +1171,17 @@
           },
           "404": {
             "description": "There is no such record, or it is not public (`unavailable`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -802,6 +1192,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -811,7 +1215,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -840,10 +1258,26 @@
                   "$ref": "#/components/schemas/ChangeCoverage"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -854,6 +1288,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -864,6 +1309,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -873,7 +1332,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -902,6 +1375,11 @@
                   "$ref": "#/components/schemas/QuotaPolicy"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
             }
           }
         },
@@ -925,6 +1403,11 @@
                   "$ref": "#/components/schemas/PlanCatalogue"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
             }
           }
         },
@@ -933,6 +1416,123 @@
           "Plans"
         ],
         "security": []
+      }
+    },
+    "/key": {
+      "get": {
+        "summary": "Get the calling key",
+        "operationId": "get_key",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyView"
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            }
+          },
+          "401": {
+            "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "description": "The key or connected app that sent the request: its ID, kind, name and when it expires, and your organisation's access as this request was admitted under it: its plan, the countries it covers and when it ends. Never the secret. A server can read `expires_at` and warn before the key stops working, then rotate it in the console. It counts as one request, like any other.",
+        "tags": [
+          "Plans"
+        ]
       }
     },
     "/jurisdictions": {
@@ -972,10 +1572,32 @@
                   "title": "Response Jurisdictions Jurisdictions Get"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "400": {
             "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -986,6 +1608,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -996,6 +1623,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1006,6 +1644,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1015,7 +1667,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1074,10 +1740,32 @@
                   "$ref": "#/components/schemas/JurisdictionDetail"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "400": {
             "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1088,6 +1776,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1098,6 +1791,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1108,6 +1812,17 @@
           },
           "404": {
             "description": "There is no such jurisdiction (`unavailable`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1118,6 +1833,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1127,7 +1856,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1216,10 +1959,32 @@
                   "$ref": "#/components/schemas/SourcePage"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "400": {
             "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1230,6 +1995,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1240,6 +2010,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1250,6 +2031,17 @@
           },
           "413": {
             "description": "The answer would be larger than one response may be (`result_too_large`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1260,6 +2052,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1269,7 +2075,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1310,10 +2130,26 @@
                   "$ref": "#/components/schemas/SourceView"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1324,6 +2160,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1334,6 +2181,17 @@
           },
           "404": {
             "description": "There is no such record, or it is not public (`unavailable`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1344,6 +2202,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1353,7 +2225,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1493,10 +2379,32 @@
                   "$ref": "#/components/schemas/SourceRelationships"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "400": {
             "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1507,6 +2415,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1517,6 +2430,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1527,6 +2451,17 @@
           },
           "404": {
             "description": "There is no such record, or it is not public (`unavailable`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1537,6 +2472,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1546,7 +2495,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1587,10 +2550,26 @@
                   "$ref": "#/components/schemas/ExpressionPage"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1601,6 +2580,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1611,6 +2601,17 @@
           },
           "404": {
             "description": "There is no such record, or it is not public (`unavailable`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1621,6 +2622,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1630,7 +2645,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1728,10 +2757,52 @@
                   "$ref": "#/components/schemas/VersionPage"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: the tag sent as `If-None-Match` is still the answer's `ETag`. No body. The answer was checked as a full one would be, so a record no longer public is `404`, never `304`.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
             }
           },
           "400": {
             "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1742,6 +2813,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1752,6 +2828,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1762,6 +2849,17 @@
           },
           "404": {
             "description": "There is no such record, or it is not public (`unavailable`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1772,6 +2870,17 @@
           },
           "413": {
             "description": "The answer would be larger than one response may be (`result_too_large`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1782,6 +2891,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1791,7 +2914,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1832,10 +2969,46 @@
                   "type": "string"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: the tag sent as `If-None-Match` is still the answer's `ETag`. No body. The answer was checked as a full one would be, so a record no longer public is `404`, never `304`.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
             }
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1846,6 +3019,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1856,6 +3040,17 @@
           },
           "404": {
             "description": "There is no such record, or it is not public (`unavailable`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1866,6 +3061,17 @@
           },
           "413": {
             "description": "The answer would be larger than one response may be (`result_too_large`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1876,6 +3082,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1885,7 +3105,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1957,10 +3191,52 @@
                   "$ref": "#/components/schemas/StructurePage"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: the tag sent as `If-None-Match` is still the answer's `ETag`. No body. The answer was checked as a full one would be, so a record no longer public is `404`, never `304`.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
             }
           },
           "400": {
             "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1971,6 +3247,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1981,6 +3262,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1991,6 +3283,17 @@
           },
           "404": {
             "description": "There is no such record, or it is not public (`unavailable`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2001,6 +3304,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2010,7 +3327,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2051,10 +3382,46 @@
                   "$ref": "#/components/schemas/AnchorView"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: the tag sent as `If-None-Match` is still the answer's `ETag`. No body. The answer was checked as a full one would be, so a record no longer public is `404`, never `304`.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
             }
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2065,6 +3432,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2075,6 +3453,17 @@
           },
           "404": {
             "description": "There is no such record, or it is not public (`unavailable`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2085,6 +3474,17 @@
           },
           "413": {
             "description": "The answer would be larger than one response may be (`result_too_large`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2095,6 +3495,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2104,7 +3518,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2205,10 +3633,32 @@
                   "$ref": "#/components/schemas/SearchPage"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "400": {
             "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2219,6 +3669,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2229,6 +3684,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2239,6 +3705,17 @@
           },
           "413": {
             "description": "The answer would be larger than one response may be (`result_too_large`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2249,6 +3726,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2258,7 +3749,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2525,10 +4030,52 @@
                   "$ref": "#/components/schemas/TextSearchPage"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: the tag sent as `If-None-Match` is still the answer's `ETag`. No body. The answer was checked as a full one would be, so a record no longer public is `404`, never `304`.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
             }
           },
           "400": {
             "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2539,6 +4086,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2549,6 +4101,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2559,6 +4122,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2568,7 +4145,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2846,10 +4437,52 @@
                   "$ref": "#/components/schemas/EvidencePack"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: the tag sent as `If-None-Match` is still the answer's `ETag`. No body. The answer was checked as a full one would be, so a record no longer public is `404`, never `304`.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
             }
           },
           "400": {
             "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2860,6 +4493,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2870,6 +4508,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2880,6 +4529,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2889,7 +4552,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2929,10 +4606,52 @@
                   "$ref": "#/components/schemas/CheckPage"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified: the tag sent as `If-None-Match` is still the answer's `ETag`. No body. The answer was checked as a full one would be, so a record no longer public is `404`, never `304`.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/ETag"
+              }
             }
           },
           "400": {
             "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2943,6 +4662,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2953,6 +4677,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2963,6 +4698,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2972,7 +4721,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3051,10 +4814,32 @@
                   "$ref": "#/components/schemas/CitationView"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "400": {
             "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3065,6 +4850,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3075,6 +4865,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3085,6 +4886,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3094,7 +4909,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3123,10 +4952,26 @@
                   "$ref": "#/components/schemas/CoverageView"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3137,6 +4982,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3147,6 +5003,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3156,7 +5026,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3185,10 +5069,26 @@
                   "$ref": "#/components/schemas/CourtRegisters"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3199,6 +5099,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3209,6 +5120,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3218,7 +5143,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3259,10 +5198,32 @@
                   "$ref": "#/components/schemas/CourtRegisterView"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "400": {
             "description": "A parameter is unknown, malformed or out of range (`invalid_input`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3273,6 +5234,11 @@
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3283,6 +5249,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3293,6 +5270,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3302,7 +5293,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3343,10 +5348,26 @@
                   "$ref": "#/components/schemas/RightsView"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3357,6 +5378,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3367,6 +5399,17 @@
           },
           "404": {
             "description": "There is no such record, or it is not public (`unavailable`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3377,6 +5420,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3386,7 +5443,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3427,10 +5498,26 @@
                   "$ref": "#/components/schemas/RightsHistory"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3441,6 +5528,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3451,6 +5549,17 @@
           },
           "404": {
             "description": "There is no such record, or it is not public (`unavailable`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3461,6 +5570,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3470,7 +5593,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3502,10 +5639,26 @@
                   }
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
             }
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3516,6 +5669,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3526,6 +5690,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3535,7 +5713,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3607,10 +5799,29 @@
                   "format": "binary"
                 }
               }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "ETag": {
+                "$ref": "#/components/headers/FileETag"
+              }
             }
           },
           "401": {
             "description": "No key or token, or one that is unknown, revoked, expired or for another resource (`credential_required`, `invalid_credentials`). WWW-Authenticate says where to get one.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3621,6 +5832,17 @@
           },
           "403": {
             "description": "The organisation has no access, or its access does not include this (`entitlement_required`, `entitlement_lapsed`, `insufficient_scope`, `account_inactive`, `organisation_suspended`). Or the release's country is outside your plan (`jurisdiction_not_included`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3631,6 +5853,17 @@
           },
           "404": {
             "description": "There is no such release or file (`unavailable`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3641,6 +5874,17 @@
           },
           "410": {
             "description": "The release was withdrawn: a record in it changed or stopped being public (`withdrawn`).",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3651,6 +5895,20 @@
           },
           "429": {
             "description": "An allowance is used up for now (`rate_limited`). Retry-After says when to try again.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfter"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3660,7 +5918,21 @@
             }
           },
           "503": {
-            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again after Retry-After.",
+            "description": "Access or the corpus cannot be checked right now (`temporarily_unavailable`, `capacity_exhausted`). Try again shortly, or after Retry-After when it is sent.",
+            "headers": {
+              "X-Request-ID": {
+                "$ref": "#/components/headers/RequestId"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimitPolicy"
+              },
+              "Retry-After": {
+                "$ref": "#/components/headers/RetryAfterWhenKnown"
+              }
+            },
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6170,6 +8442,107 @@
         ],
         "title": "DecisionView"
       },
+      "EntitlementScope": {
+        "properties": {
+          "all": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "All",
+            "description": "`true` when every country is read at the plan's limits."
+          },
+          "jurisdictions": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jurisdictions",
+            "description": "Otherwise the countries that are, by jurisdiction ID."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "EntitlementScope",
+        "description": "The countries an organisation's access covers at its plan's limits: every one (``all``), or those\nlisted."
+      },
+      "EntitlementTier": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The plan's ID, such as `starter`, as List plans gives it."
+          },
+          "includes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Includes",
+            "description": "What it includes: `rest`, `mcp`, and `bulk` for bulk releases with full text."
+          },
+          "allowance": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Allowance",
+            "description": "Its limits, as List plans gives them: requests_per_minute, burst, concurrency, bytes_per_day and the rest."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "includes",
+          "allowance"
+        ],
+        "title": "EntitlementTier",
+        "description": "The plan an organisation's access is on, as the credential check reads it: its ID, the classes of\nuse it includes and its limits (the same fields as the plan catalogue's allowance)."
+      },
+      "EntitlementView": {
+        "properties": {
+          "tier": {
+            "$ref": "#/components/schemas/EntitlementTier",
+            "description": "The plan."
+          },
+          "scope": {
+            "$ref": "#/components/schemas/EntitlementScope",
+            "description": "The countries read at the plan's limits. Every other country answers at the Starter rate."
+          },
+          "ends_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ends At",
+            "description": "When the access ends; null when no end is set."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "tier",
+          "scope",
+          "ends_at"
+        ],
+        "title": "EntitlementView",
+        "description": "The organisation's access in force for this request, as the credential gate admitted it."
+      },
       "EvidenceAuthority": {
         "properties": {
           "document_type": {
@@ -7623,6 +9996,77 @@
           "name"
         ],
         "title": "JurisdictionView"
+      },
+      "KeyView": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The key's ID, `key_` and 32 hexadecimal characters, as the console shows it; for a connected app, its grant's ID (`grt_…`). Never the secret."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "personal",
+              "service",
+              "app"
+            ],
+            "title": "Kind",
+            "description": "`personal` (a person's key, which stops when they leave the organisation), `service` (a shared key for servers, which belongs to the organisation) or `app` (a connected app's access token)."
+          },
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "The key's name in the console, or the connected app's name."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "When the key was created, or the app connected."
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At",
+            "description": "When the key stops working. A rotated key's is the end of its overlap. Null for a connected app, which works until it is disconnected."
+          },
+          "replaced": {
+            "type": "boolean",
+            "title": "Replaced",
+            "description": "Whether a rotation has replaced the key: it works until `expires_at`, so switch to its replacement before then."
+          },
+          "organisation_id": {
+            "type": "string",
+            "title": "Organisation Id",
+            "description": "Your organisation's ID."
+          },
+          "entitlement": {
+            "$ref": "#/components/schemas/EntitlementView",
+            "description": "Your organisation's access, as this request was admitted under it."
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "created_at",
+          "expires_at",
+          "replaced",
+          "organisation_id",
+          "entitlement"
+        ],
+        "title": "KeyView",
+        "description": "The credential that sent a request to REST v1 (GET /key): an API key, or a connected app's grant.\nNever its secret, its hash or any other credential's data."
       },
       "LanguageRuleView": {
         "properties": {
@@ -10901,10 +13345,27 @@
           },
           "legal_effective": {
             "type": [
-              "string",
+              "object",
               "null"
             ],
-            "description": "When it takes legal effect, if known: {from, until, precision}. A membership's or suspension's dates are EDTF dates, each stating its own precision (a window `[FIRST..LAST]` holds one day); `precision` is that of `from`."
+            "description": "When it takes legal effect, if known: {from, until, precision}. A membership's or suspension's dates are EDTF dates, each stating its own precision (a window `[FIRST..LAST]` holds one day); `precision` is that of `from`.",
+            "properties": {
+              "from": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "until": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "precision": {
+                "type": "string"
+              }
+            }
           },
           "jurisdiction": {
             "type": [
@@ -11213,6 +13674,54 @@
         "additionalProperties": true
       }
     },
+    "headers": {
+      "RequestId": {
+        "description": "This answer's ID. Quote it when you ask us about a request.",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "RateLimit": {
+        "description": "What is left of your organisation's request allowance: `\"organisation\";r=<requests left>;t=<seconds until the burst is full again>`. On every answer counted against the allowance; not on a refusal made before it is counted, such as `401` or a `429` for the organisation's allowance.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "RateLimitPolicy": {
+        "description": "Your organisation's request allowance: `\"organisation\";q=<burst>;w=<seconds for the burst to refill>`. Sent with `RateLimit`.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ETag": {
+        "description": "The answer's tag. Send it back as `If-None-Match`: if the answer is unchanged, it is `304` with no body.",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "FileETag": {
+        "description": "The file's tag, from its size and when it was written. Compare it with the tag of an earlier download; this route does not answer `If-None-Match`.",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "RetryAfter": {
+        "description": "How many seconds to wait before trying again.",
+        "required": true,
+        "schema": {
+          "type": "integer"
+        }
+      },
+      "RetryAfterWhenKnown": {
+        "description": "How many seconds to wait before trying again, when the service knows.",
+        "schema": {
+          "type": "integer"
+        }
+      }
+    },
     "securitySchemes": {
       "bearer": {
         "type": "http",
@@ -11240,7 +13749,7 @@
     },
     {
       "name": "Plans",
-      "description": "Plans, limits and how limits are counted."
+      "description": "Plans, limits, how limits are counted, and the calling key."
     },
     {
       "name": "Releases",

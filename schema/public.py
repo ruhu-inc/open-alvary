@@ -1163,6 +1163,45 @@ class CourtRegisters(WireModel):
     registers: tuple[CourtRegisterSummary, ...]
 
 
+class EntitlementTier(WireModel):
+    """The plan an organisation's access is on, as the credential check reads it: its ID, the classes of
+    use it includes and its limits (the same fields as the plan catalogue's allowance)."""
+
+    id: str
+    includes: tuple[str, ...]
+    allowance: dict[str, object]
+
+
+class EntitlementScope(WireModel):
+    """The countries an organisation's access covers at its plan's limits: every one (``all``), or those
+    listed."""
+
+    all: bool | None = Field(**OMIT)
+    jurisdictions: tuple[str, ...] | None = Field(**OMIT)
+
+
+class EntitlementView(WireModel):
+    """The organisation's access in force for this request, as the credential gate admitted it."""
+
+    tier: EntitlementTier
+    scope: EntitlementScope
+    ends_at: AwareDatetime | None
+
+
+class KeyView(WireModel):
+    """The credential that sent a request to REST v1 (GET /key): an API key, or a connected app's grant.
+    Never its secret, its hash or any other credential's data."""
+
+    id: str
+    kind: Literal["personal", "service", "app"]
+    name: str
+    created_at: AwareDatetime
+    expires_at: AwareDatetime | None
+    replaced: bool
+    organisation_id: str
+    entitlement: EntitlementView
+
+
 class PublicContracts(WireModel):
     schema_version: Literal["pilot-public-1"] = "pilot-public-1"
     sources: tuple[SourcePage, ...] = ()

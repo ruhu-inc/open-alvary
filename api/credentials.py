@@ -46,6 +46,7 @@ GRANT_CLAIM = "https://open.alvary.ai/grant"
 STATUS = {
     "invalid_input": 400,
     "unavailable": 404,
+    "not_found_route": 404,
     "withdrawn": 410,
     "result_too_large": 413,
     "credential_not_accepted": 400,
@@ -77,6 +78,7 @@ DETAIL = {
     "temporarily_unavailable": "Access cannot be checked right now. Try again shortly.",
     "credential_not_accepted": "Send the key in the Authorization header, never in the address.",
     "unavailable": "There is no such record, or it is not public.",
+    "not_found_route": "There is no such route. Every route is listed at https://open.alvary.ai/docs/api.",
     "withdrawn": "This release was withdrawn and is no longer served. Use the latest release.",
     "result_too_large": "The answer would be larger than one response may be.",
 }
@@ -109,6 +111,21 @@ def _length(message: dict) -> int | None:
             except ValueError:
                 return None
     return None
+
+
+def _stamp(message: dict, headers: list[tuple[bytes, bytes]]) -> dict:
+    """A response's start message with these headers added, each only where the answer has not set it
+    already (a refusal from the app carries its own request ID)."""
+    present = {name.lower() for name, _ in message.get("headers", [])}
+    extra = [(name, value) for name, value in headers if name not in present]
+    return {**message, "headers": [*message.get("headers", []), *extra]} if extra else message
+
+
+def _stamped(send, headers: list[tuple[bytes, bytes]]):
+    async def stamped(message):
+        await send(_stamp(message, headers) if message["type"] == "http.response.start" else message)
+
+    return stamped
 
 
 def jsonrpc_problem(
@@ -306,10 +323,13 @@ class CredentialGate:
         root = scope.get("root_path", "")
         if root and path.startswith(root):
             path = path[len(root) :] or "/"
-        if scope["type"] != "http" or path in self.config.public_paths or scope.get("method") == "OPTIONS":
+        if scope["type"] != "http":
             return await self.app(scope, receive, send)
         request_id = uuid.uuid4().hex[:16]
         scope.setdefault("state", {})["request_id"] = request_id
+        if path in self.config.public_paths or scope.get("method") == "OPTIONS":
+            # Public answers need no credential, and carry a request ID like every other answer.
+            return await self.app(scope, receive, _stamped(send, [(b"x-request-id", request_id.encode())]))
         query = scope.get("query_string", b"").decode("latin-1").lower()
         if any(f"{name}=" in query for name in ("api_key", "key", "access_token", "token")):
             return await self._refuse("credential_not_accepted", request_id)(scope, receive, send)
@@ -349,6 +369,7 @@ class CredentialGate:
                 detail=NOT_INCLUDED.get(resource_class, NOT_INCLUDED_DEFAULT),
             )(scope, receive, send)
         lease = None
+        stamped = [(b"x-request-id", request_id.encode())]
         if self.admission is not None:
             allowance = result["tier"].get("allowance") or {}
             rate = max(1, int(allowance.get("requests_per_minute", 60)))
@@ -359,16 +380,11 @@ class CredentialGate:
                 if credential.startswith("key_")
                 else ("grant:" + credential.removeprefix("grt_"))
             )
+            bucket_key = "org:" + organisation.removeprefix("org_")
             admit = {
-                "buckets": [
-                    {
-                        "key": "org:" + organisation.removeprefix("org_"),
-                        "capacity": burst,
-                        "refill_per_minute": rate,
-                    }
-                ],
+                "buckets": [{"key": bucket_key, "capacity": burst, "refill_per_minute": rate}],
                 "concurrency": [
-                    {"key": "org:" + organisation.removeprefix("org_"), "limit": concurrency},
+                    {"key": bucket_key, "limit": concurrency},
                     {"key": credential_key, "limit": max(1, math.ceil(concurrency / 2))},
                     {"key": "global:api", "limit": self.config.global_concurrency},
                 ],
@@ -384,11 +400,22 @@ class CredentialGate:
                     "rate_limited", request_id, retry_after=int(decision["retry_after"])
                 )(scope, receive, send)
             lease = decision["lease_id"]
+            # The organisation's request allowance, as the website's data path states its own
+            # (api.admission): the burst over the time it takes to refill, and what is left of it now.
+            bucket = (decision.get("buckets") or {}).get(bucket_key)
+            if bucket is not None:
+                window = math.ceil(60 * burst / rate)
+                left, reset = int(bucket["remaining"]), int(bucket["reset"])
+                stamped += [
+                    (b"ratelimit-policy", f'"organisation";q={burst};w={window}'.encode()),
+                    (b"ratelimit", f'"organisation";r={left};t={reset}'.encode()),
+                ]
         scope["state"]["access"] = {
             "organisation": organisation,
             "credential": credential,
             "scope": result.get("scope") or {},
             "tier": result.get("tier"),
+            "ends_at": result.get("ends_at"),
             "reach": Reach.of(result.get("scope"), lambda: self._outside(organisation)),
         }
         sent = {"bytes": 0, "refused": None, "status": 0, "reservation": None, "reserved": 0}
@@ -450,10 +477,7 @@ class CredentialGate:
                 if not await reserve(message):
                     return
                 sent["status"] = message["status"]
-                message = {
-                    **message,
-                    "headers": [*message.get("headers", []), (b"x-request-id", request_id.encode())],
-                }
+                message = _stamp(message, stamped)
             elif message["type"] == "http.response.body":
                 if sent["refused"]:
                     return
