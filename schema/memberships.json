@@ -1490,9 +1490,15 @@
       "status": "proposal",
       "valid_from": "2007-07-01",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Treaty of Accession of the Republic of Burundi into the East African Community (Kampala, 18 June 2007)",
+        "pinpoint": "art. 11",
+        "evidence_url": "https://rtais.wto.org/rtadocs/838/TOA/English/EAC_Treaty%20of%20Accession%20of%20Burundi.pdf",
+        "quote": "This Treaty shall enter into force on 1st July, 2007 provided that all the instruments of ratification have been deposited before that date."
+      },
       "evidence_url": "https://www.eac.int/overview-of-eac",
-      "note": "Acceded to the EAC Treaty on 18 June 2007 and became a full member from 1 July 2007, as the EAC says. Basis not evidenced: the article of its Treaty of Accession that sets 1 July 2007 has not been read.",
+      "note": "Acceded to the EAC Treaty on 18 June 2007 and became a full member from 1 July 2007, as the EAC says. Basis: Article 11 of its Treaty of Accession, read in a scan of the signed treaty held in the WTO's database of regional trade agreements (not an EAC copy): it enters into force on 1 July 2007 provided all instruments of ratification were deposited before that date. The EAC Gazette of 30 December 2007 (Vol. AT 1 No. 004, https://archive.gazettes.africa/archive/eac/2007/eac-gazette-dated-2007-12-30-no-4.pdf) records the Summit's decision of 30 November 2006 to admit it as a full member effective 1 July 2007, and the Summit of 20 August 2007 noting that it had deposited its instrument of ratification with the Secretary General; the day of that deposit has not been read.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1504,9 +1510,15 @@
       "status": "proposal",
       "valid_from": "2007-07-01",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Treaty of Accession of the Republic of Rwanda into the East African Community (Kampala, 18 June 2007)",
+        "pinpoint": "art. 11",
+        "evidence_url": "https://rtais.wto.org/rtadocs/838/TOA/English/EAC_Treaty%20of%20Accession%20of%20Rwanda.pdf",
+        "quote": "This Treaty shall enter into force on 1st July, 2007 provided that all the instruments of ratification have been deposited before that date."
+      },
       "evidence_url": "https://www.eac.int/overview-of-eac",
-      "note": "Acceded to the EAC Treaty on 18 June 2007 and became a full member from 1 July 2007, as the EAC says. Basis not evidenced: the article of its Treaty of Accession that sets 1 July 2007 has not been read.",
+      "note": "Acceded to the EAC Treaty on 18 June 2007 and became a full member from 1 July 2007, as the EAC says. Basis: Article 11 of its Treaty of Accession, read in a scan of the signed treaty held in the WTO's database of regional trade agreements (not an EAC copy): it enters into force on 1 July 2007 provided all instruments of ratification were deposited before that date. The EAC Gazette of 30 December 2007 (Vol. AT 1 No. 004, https://archive.gazettes.africa/archive/eac/2007/eac-gazette-dated-2007-12-30-no-4.pdf) records the Summit's decision of 30 November 2006 to admit it as a full member effective 1 July 2007, and the Summit of 20 August 2007 noting that it had deposited its instrument of ratification with the Secretary General; the day of that deposit has not been read.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1540,7 +1552,7 @@
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.eac.int/overview-of-eac",
-      "note": "Acceded to the EAC Treaty on 15 December 2023 and became a full member on 4 March 2024, the day it deposited its instrument of ratification of the Treaty of Accession (EAC press release of that day, https://www.eac.int/press-releases/3049-somalia-finally-joins-eac-as-the-bloc-s-8th-partner-state). Basis not evidenced: the press release cites Article 153(1) of the EAC Treaty, but the article of Somalia's Treaty of Accession on its entry into force has not been read.",
+      "note": "Acceded to the EAC Treaty on 15 December 2023 and became a full member on 4 March 2024, the day it deposited its instrument of ratification of the Treaty of Accession (EAC press release of that day, https://www.eac.int/press-releases/3049-somalia-finally-joins-eac-as-the-bloc-s-8th-partner-state: the Secretary General pronounced it a member \"after receiving the instrument of ratification\", in line with the EAC's admission procedure). Basis not evidenced: no text of Somalia's Treaty of Accession was found online (EAC sites and repository, EAC Gazettes of January to May 2024, the UN Treaty Series), so its entry-into-force article has not been read; the press release cites Article 153 of the EAC Treaty only for notifying the deposit and registering the Treaty of Accession.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1550,11 +1562,11 @@
       "target_id": "aa-eac",
       "kind": "member_of",
       "status": "proposal",
-      "valid_from": "[2016-08-15..2016-09-05]",
+      "valid_from": "[2016-08-15..2016-10-01]",
       "valid_to": null,
       "basis": null,
       "evidence_url": "https://www.eac.int/overview-of-eac",
-      "note": "A Partner State; it signed its Treaty of Accession on 15 April 2016. EAC pages disagree on when it became a full member: 15 August 2016 on this page; 5 September 2016, the day it deposited its instrument of ratification, on https://www.eac.int/eac-history and in the EAC's press release of that day (https://www.eac.int/press-releases/550-951-449-republic-of-south-sudan-deposits-instruments-of-ratification-on-the-accession-of-the-treaty-for-the-establishment-of-the-east-african-community-to-the-secretary-general), which the Summit's communiqué of 8 September 2016 confirms. The window holds the day. Basis not evidenced: the entry-into-force article of its Treaty of Accession has not been read (the DRC's entered into force on deposit).",
+      "note": "A Partner State; it signed its Treaty of Accession on 15 April 2016. Primary sources disagree on when it became a full member: 15 August 2016 on https://www.eac.int/overview-of-eac; 5 September 2016, the day it deposited its instrument of ratification, on https://www.eac.int/eac-history, in the EAC's press release of that day (https://www.eac.int/press-releases/550-951-449-republic-of-south-sudan-deposits-instruments-of-ratification-on-the-accession-of-the-treaty-for-the-establishment-of-the-east-african-community-to-the-secretary-general) and in the EAC Annual Report 2016/2017, p. 5 (https://repository.eac.int/server/api/core/bitstreams/59a046c6-2973-478d-9235-c3c15a6d1c74/content: \"on 5th September 2016; thereby attaining full membership to the Community\"), which the Summit's communiqué of 8 September 2016 confirms; 1 October 2016, after a deposit \"in late September\", on the page of South Sudan's Ministry of East African Community Affairs (archived 16 July 2025, https://web.archive.org/web/20250716011017/https://meaca.gov.ss/south-sudan-in-eac/; the same page dates the signature to May 2016). The window holds all three. Basis not evidenced: no text of its Treaty of Accession was found online (EAC sites and repository, EAC Gazettes of 2016, the UN Treaty Series), so its entry-into-force article has not been read (the DRC's entered into force on deposit).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1584,11 +1596,17 @@
       "target_id": "aa-ohada",
       "kind": "member_of",
       "status": "proposal",
-      "valid_from": null,
+      "valid_from": "1995-09-18",
       "valid_to": null,
-      "basis": null,
-      "evidence_url": "https://www.ohada.org/etats-parties-benin/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-03-08, deposit 1995-03-10, and no entry into force: start not yet evidenced. Basis not evidenced while the page gives no entry into force.",
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
+      "evidence_url": "https://www.ohada.org/en/history-of-ohada/",
+      "note": "One of OHADA's seventeen member states. OHADA's table of the ratification and entry into force of the OHADA Treaty of 17 October 1993 in each member state, on the English, Spanish and Portuguese versions of its history page (https://www.ohada.org/en/history-of-ohada/; the French version has no table), gives for Benin: ratification 8 March 1995, deposit 10 March 1995, entry into force 18 September 1995. Its page for Benin (https://www.ohada.org/etats-parties-benin/) gives the same ratification and deposit and no entry into force. Basis: the entry into force the table gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1818,11 +1836,17 @@
       "target_id": "aa-ohada",
       "kind": "member_of",
       "status": "proposal",
-      "valid_from": null,
+      "valid_from": "1995-09-18",
       "valid_to": null,
-      "basis": null,
-      "evidence_url": "https://www.ohada.org/etats-parties-niger/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-06-05, deposit 1995-07-18, and no entry into force: start not yet evidenced. Niger's and Senegal's pages give identical dates, which may be a copying error on the site. Basis not evidenced while the page gives no entry into force.",
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
+      "evidence_url": "https://www.ohada.org/en/history-of-ohada/",
+      "note": "One of OHADA's seventeen member states. OHADA's table of the ratification and entry into force of the OHADA Treaty of 17 October 1993 in each member state, on the English, Spanish and Portuguese versions of its history page (https://www.ohada.org/en/history-of-ohada/; the French version has no table), gives for Niger: ratification 5 June 1995, deposit 18 July 1995, entry into force 18 September 1995. Its page for Niger (https://www.ohada.org/etats-parties-niger/) gives the same ratification and deposit and no entry into force. Basis: the entry into force the table gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1832,11 +1856,17 @@
       "target_id": "aa-ohada",
       "kind": "member_of",
       "status": "proposal",
-      "valid_from": null,
+      "valid_from": "1995-09-18",
       "valid_to": null,
-      "basis": null,
-      "evidence_url": "https://www.ohada.org/etats-parties-senegal/",
-      "note": "One of OHADA's seventeen member states. OHADA's page for it gives, for the OHADA Treaty of 17 October 1993: ratification 1995-06-05, deposit 1995-07-18, and no entry into force: start not yet evidenced. Senegal's and Niger's pages give identical dates, which may be a copying error on the site. Basis not evidenced while the page gives no entry into force.",
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité relatif à l'harmonisation du droit des affaires en Afrique (Port-Louis, 17 octobre 1993)",
+        "pinpoint": "art. 52 (art. 53 for an acceding state)",
+        "evidence_url": "https://www.ohada.org/traite-relatif-a-lharmonisation-du-droit-des-affaires-en-afrique/",
+        "quote": "Le présent Traité entrera en vigueur soixante jours après la date du dépôt du septième instrument de ratification. … A l'égard de tout Etat signataire déposant ultérieurement son instrument de ratification, le Traité et les actes uniformes adoptés avant la ratification entreront en vigueur soixante jours après la date dudit dépôt."
+      },
+      "evidence_url": "https://www.ohada.org/en/history-of-ohada/",
+      "note": "One of OHADA's seventeen member states. OHADA's table of the ratification and entry into force of the OHADA Treaty of 17 October 1993 in each member state, on the English, Spanish and Portuguese versions of its history page (https://www.ohada.org/en/history-of-ohada/; the French version has no table), gives for Senegal: ratification 14 June 1994, deposit 14 June 1994, entry into force 18 September 1995. Its page for Senegal (https://www.ohada.org/etats-parties-senegal/) gives no entry into force and a different ratification (5 June 1995) and deposit (18 July 1995), the same as Niger's: the two OHADA sources disagree on those dates, not on the entry into force. Basis: the entry into force the table gives. Article 52 sets it sixty days after the seventh deposit for the first parties and sixty days after a later signatory's deposit; Article 53 does the same for an acceding state's instrument of accession (the Quebec revision of 2008 left both unchanged). Which applies to this state is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1888,9 +1918,15 @@
       "status": "proposal",
       "valid_from": null,
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité de l'Union économique et monétaire ouest-africaine (Dakar, 10 janvier 1994)",
+        "pinpoint": "art. 116",
+        "evidence_url": "https://archive.gazettes.africa/archive/sn/1994/sn-journal-officiel-dated-1994-04-28-no-5577.pdf",
+        "quote": "Le présent traité entrera en vigueur le premier jour du mois suivant le dépôt de l'instrument de ratification de l'Etat signataire qui procédera le dernier à cette formalité. Toutefois, si le dépôt a lieu moins de quinze (15) jours avant le début du mois suivant, l'entrée en vigueur du traité sera reportée au premier jour du deuxième mois suivant la date de ce dépôt"
+      },
       "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
+      "note": "One of UEMOA's eight member states and one of the seven signatories of the UEMOA Treaty (Dakar, 10 January 1994). Basis: Article 116 of that Treaty, read in its text as published in Senegal's Journal officiel no. 5577 of 28 April 1994, p. 214 (Senegal is the depositary): the Treaty enters into force on the first day of the month after the last signatory's deposit (the second month if that deposit is less than fifteen days before the month begins). Start not yet evidenced: no primary source read gives the date of the last deposit or of the Treaty's entry into force (read: uemoa.int, its annual reports and acts, the UEMOA Court's site, Senegal's Journal officiel for 1994). The BCEAO, which is not UEMOA, says the Treaty entered into force on 1 August 1994 (Histoire de l'UMOA, tome II, https://www.bceao.int/sites/default/files/inline-files/TOME-II_Histoire_de_l-UMOA.pdf): context only.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1902,9 +1938,15 @@
       "status": "proposal",
       "valid_from": null,
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité de l'Union économique et monétaire ouest-africaine (Dakar, 10 janvier 1994)",
+        "pinpoint": "art. 116",
+        "evidence_url": "https://archive.gazettes.africa/archive/sn/1994/sn-journal-officiel-dated-1994-04-28-no-5577.pdf",
+        "quote": "Le présent traité entrera en vigueur le premier jour du mois suivant le dépôt de l'instrument de ratification de l'Etat signataire qui procédera le dernier à cette formalité. Toutefois, si le dépôt a lieu moins de quinze (15) jours avant le début du mois suivant, l'entrée en vigueur du traité sera reportée au premier jour du deuxième mois suivant la date de ce dépôt"
+      },
       "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
+      "note": "One of UEMOA's eight member states and one of the seven signatories of the UEMOA Treaty (Dakar, 10 January 1994). Basis: Article 116 of that Treaty, read in its text as published in Senegal's Journal officiel no. 5577 of 28 April 1994, p. 214 (Senegal is the depositary): the Treaty enters into force on the first day of the month after the last signatory's deposit (the second month if that deposit is less than fifteen days before the month begins). Start not yet evidenced: no primary source read gives the date of the last deposit or of the Treaty's entry into force (read: uemoa.int, its annual reports and acts, the UEMOA Court's site, Senegal's Journal officiel for 1994). The BCEAO, which is not UEMOA, says the Treaty entered into force on 1 August 1994 (Histoire de l'UMOA, tome II, https://www.bceao.int/sites/default/files/inline-files/TOME-II_Histoire_de_l-UMOA.pdf): context only.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1916,9 +1958,15 @@
       "status": "proposal",
       "valid_from": null,
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité de l'Union économique et monétaire ouest-africaine (Dakar, 10 janvier 1994)",
+        "pinpoint": "art. 116",
+        "evidence_url": "https://archive.gazettes.africa/archive/sn/1994/sn-journal-officiel-dated-1994-04-28-no-5577.pdf",
+        "quote": "Le présent traité entrera en vigueur le premier jour du mois suivant le dépôt de l'instrument de ratification de l'Etat signataire qui procédera le dernier à cette formalité. Toutefois, si le dépôt a lieu moins de quinze (15) jours avant le début du mois suivant, l'entrée en vigueur du traité sera reportée au premier jour du deuxième mois suivant la date de ce dépôt"
+      },
       "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
+      "note": "One of UEMOA's eight member states and one of the seven signatories of the UEMOA Treaty (Dakar, 10 January 1994). Basis: Article 116 of that Treaty, read in its text as published in Senegal's Journal officiel no. 5577 of 28 April 1994, p. 214 (Senegal is the depositary): the Treaty enters into force on the first day of the month after the last signatory's deposit (the second month if that deposit is less than fifteen days before the month begins). Start not yet evidenced: no primary source read gives the date of the last deposit or of the Treaty's entry into force (read: uemoa.int, its annual reports and acts, the UEMOA Court's site, Senegal's Journal officiel for 1994). The BCEAO, which is not UEMOA, says the Treaty entered into force on 1 August 1994 (Histoire de l'UMOA, tome II, https://www.bceao.int/sites/default/files/inline-files/TOME-II_Histoire_de_l-UMOA.pdf): context only.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1928,11 +1976,17 @@
       "target_id": "aa-uemoa",
       "kind": "member_of",
       "status": "proposal",
-      "valid_from": null,
+      "valid_from": "1997-05-02",
       "valid_to": null,
-      "basis": null,
-      "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. The BCEAO's annual report for 1997 says Guinea-Bissau's accession took effect on 2 May 1997; the central bank is not UEMOA, so the reviewer decides whether that evidences the start. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Accord d'adhésion de la République de Guinée-Bissau à l'Union économique et monétaire ouest-africaine (Ouagadougou et Bissau, 5 mars 1997)",
+        "pinpoint": "art. 3",
+        "evidence_url": "https://www.uemoa.int/sites/default/files/bibliotheque/doc16a.pdf",
+        "quote": "Article premier : La République de Guinée-Bissau est admise à l'UEMOA. Elle adhère, en conséquence, au Traité du 10 janvier 1994 instituant cette Union. … Art. 3 : Le présent Accord entrera en application après notification, par la République Guinée-Bissau, des instruments de ratification du Traité de l'UEMOA, au Gouvernement de la République du Sénégal."
+      },
+      "evidence_url": "https://www.uemoa.int/sites/default/files/bibliotheque/doc17a.pdf",
+      "note": "One of UEMOA's eight member states; not a signatory of the 1994 Treaty. Its admission took effect on 2 May 1997, as the UEMOA Conference of Heads of State and Government records in Actes additionnels n°03/97 and n°04/97 (Lomé, 23 June 1997; UEMOA's copy, https://www.uemoa.int/sites/default/files/bibliotheque/doc17a.pdf): \"CONSIDERANT que l'admission de la Guinée-Bissau à l'UEMOA est devenue effective, le 02 mai 1997\". It acceded by the Accord d'adhésion signed at Ouagadougou and Bissau on 5 March 1997 (UEMOA's copy, https://www.uemoa.int/sites/default/files/bibliotheque/doc16a.pdf): its article 1 admits it and has it accede to the Treaty of 10 January 1994; its article 3 has the Accord apply after Guinea-Bissau notifies its instruments of ratification of the UEMOA Treaty to the Government of Senegal. Basis: that article (it says the Accord \"entrera en application\"; whether the kind is entry into force or deposit is for the reviewer). No source read gives the date of the notification itself, so whether 2 May 1997 is that date is for the reviewer.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1944,9 +1998,15 @@
       "status": "proposal",
       "valid_from": null,
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité de l'Union économique et monétaire ouest-africaine (Dakar, 10 janvier 1994)",
+        "pinpoint": "art. 116",
+        "evidence_url": "https://archive.gazettes.africa/archive/sn/1994/sn-journal-officiel-dated-1994-04-28-no-5577.pdf",
+        "quote": "Le présent traité entrera en vigueur le premier jour du mois suivant le dépôt de l'instrument de ratification de l'Etat signataire qui procédera le dernier à cette formalité. Toutefois, si le dépôt a lieu moins de quinze (15) jours avant le début du mois suivant, l'entrée en vigueur du traité sera reportée au premier jour du deuxième mois suivant la date de ce dépôt"
+      },
       "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
+      "note": "One of UEMOA's eight member states and one of the seven signatories of the UEMOA Treaty (Dakar, 10 January 1994). Basis: Article 116 of that Treaty, read in its text as published in Senegal's Journal officiel no. 5577 of 28 April 1994, p. 214 (Senegal is the depositary): the Treaty enters into force on the first day of the month after the last signatory's deposit (the second month if that deposit is less than fifteen days before the month begins). Start not yet evidenced: no primary source read gives the date of the last deposit or of the Treaty's entry into force (read: uemoa.int, its annual reports and acts, the UEMOA Court's site, Senegal's Journal officiel for 1994). The BCEAO, which is not UEMOA, says the Treaty entered into force on 1 August 1994 (Histoire de l'UMOA, tome II, https://www.bceao.int/sites/default/files/inline-files/TOME-II_Histoire_de_l-UMOA.pdf): context only.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1958,9 +2018,15 @@
       "status": "proposal",
       "valid_from": null,
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité de l'Union économique et monétaire ouest-africaine (Dakar, 10 janvier 1994)",
+        "pinpoint": "art. 116",
+        "evidence_url": "https://archive.gazettes.africa/archive/sn/1994/sn-journal-officiel-dated-1994-04-28-no-5577.pdf",
+        "quote": "Le présent traité entrera en vigueur le premier jour du mois suivant le dépôt de l'instrument de ratification de l'Etat signataire qui procédera le dernier à cette formalité. Toutefois, si le dépôt a lieu moins de quinze (15) jours avant le début du mois suivant, l'entrée en vigueur du traité sera reportée au premier jour du deuxième mois suivant la date de ce dépôt"
+      },
       "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
+      "note": "One of UEMOA's eight member states and one of the seven signatories of the UEMOA Treaty (Dakar, 10 January 1994). Basis: Article 116 of that Treaty, read in its text as published in Senegal's Journal officiel no. 5577 of 28 April 1994, p. 214 (Senegal is the depositary): the Treaty enters into force on the first day of the month after the last signatory's deposit (the second month if that deposit is less than fifteen days before the month begins). Start not yet evidenced: no primary source read gives the date of the last deposit or of the Treaty's entry into force (read: uemoa.int, its annual reports and acts, the UEMOA Court's site, Senegal's Journal officiel for 1994). The BCEAO, which is not UEMOA, says the Treaty entered into force on 1 August 1994 (Histoire de l'UMOA, tome II, https://www.bceao.int/sites/default/files/inline-files/TOME-II_Histoire_de_l-UMOA.pdf): context only.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1972,9 +2038,15 @@
       "status": "proposal",
       "valid_from": null,
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité de l'Union économique et monétaire ouest-africaine (Dakar, 10 janvier 1994)",
+        "pinpoint": "art. 116",
+        "evidence_url": "https://archive.gazettes.africa/archive/sn/1994/sn-journal-officiel-dated-1994-04-28-no-5577.pdf",
+        "quote": "Le présent traité entrera en vigueur le premier jour du mois suivant le dépôt de l'instrument de ratification de l'Etat signataire qui procédera le dernier à cette formalité. Toutefois, si le dépôt a lieu moins de quinze (15) jours avant le début du mois suivant, l'entrée en vigueur du traité sera reportée au premier jour du deuxième mois suivant la date de ce dépôt"
+      },
       "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
+      "note": "One of UEMOA's eight member states and one of the seven signatories of the UEMOA Treaty (Dakar, 10 January 1994). Basis: Article 116 of that Treaty, read in its text as published in Senegal's Journal officiel no. 5577 of 28 April 1994, p. 214 (Senegal is the depositary): the Treaty enters into force on the first day of the month after the last signatory's deposit (the second month if that deposit is less than fifteen days before the month begins). Start not yet evidenced: no primary source read gives the date of the last deposit or of the Treaty's entry into force (read: uemoa.int, its annual reports and acts, the UEMOA Court's site, Senegal's Journal officiel for 1994). The BCEAO, which is not UEMOA, says the Treaty entered into force on 1 August 1994 (Histoire de l'UMOA, tome II, https://www.bceao.int/sites/default/files/inline-files/TOME-II_Histoire_de_l-UMOA.pdf): context only.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1986,9 +2058,15 @@
       "status": "proposal",
       "valid_from": null,
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité de l'Union économique et monétaire ouest-africaine (Dakar, 10 janvier 1994)",
+        "pinpoint": "art. 116",
+        "evidence_url": "https://archive.gazettes.africa/archive/sn/1994/sn-journal-officiel-dated-1994-04-28-no-5577.pdf",
+        "quote": "Le présent traité entrera en vigueur le premier jour du mois suivant le dépôt de l'instrument de ratification de l'Etat signataire qui procédera le dernier à cette formalité. Toutefois, si le dépôt a lieu moins de quinze (15) jours avant le début du mois suivant, l'entrée en vigueur du traité sera reportée au premier jour du deuxième mois suivant la date de ce dépôt"
+      },
       "evidence_url": "https://www.uemoa.int/presentation",
-      "note": "One of UEMOA's eight member states. UEMOA says it was created in Dakar on 10 January 1994 but not which states founded it, nor from when each is a member: start not yet evidenced. Basis not evidenced: no UEMOA source read gives the Treaty's entry into force or the article setting it (secondary sources give 1 August 1994 for the signatories and 2 May 1997 for Guinea-Bissau).",
+      "note": "One of UEMOA's eight member states and one of the seven signatories of the UEMOA Treaty (Dakar, 10 January 1994). Basis: Article 116 of that Treaty, read in its text as published in Senegal's Journal officiel no. 5577 of 28 April 1994, p. 214 (Senegal is the depositary): the Treaty enters into force on the first day of the month after the last signatory's deposit (the second month if that deposit is less than fifteen days before the month begins). Start not yet evidenced: no primary source read gives the date of the last deposit or of the Treaty's entry into force (read: uemoa.int, its annual reports and acts, the UEMOA Court's site, Senegal's Journal officiel for 1994). The BCEAO, which is not UEMOA, says the Treaty entered into force on 1 August 1994 (Histoire de l'UMOA, tome II, https://www.bceao.int/sites/default/files/inline-files/TOME-II_Histoire_de_l-UMOA.pdf): context only.",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -1998,11 +2076,17 @@
       "target_id": "aa-cemac",
       "kind": "member_of",
       "status": "proposal",
-      "valid_from": null,
+      "valid_from": "1999-06",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité instituant la Communauté économique et monétaire de l'Afrique centrale (N'Djaména, 16 mars 1994)",
+        "pinpoint": "art. 7",
+        "evidence_url": "https://web.archive.org/web/20160520233125/http://cemac.int/sites/default/files/documents/files/Traite_CEMAC.pdf",
+        "quote": "Le présent Traité rédigé en un exemplaire unique en langues française, espagnole et anglaise, le français faisant foi en cas de divergence d’interprétation, entrera en vigueur dès sa ratification par tous les Etats signataires auprès de la République du Tchad, désignée comme Etat dépositaire de tous les Actes afférents à la Communauté Economique et Monétaire de l’Afrique Centrale."
+      },
       "evidence_url": "https://cemac.int/about/",
-      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced. Basis not evidenced: CEMAC's site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification); no source read gives the 1994 Treaty's entry into force for each state (a WTO fact sheet gives 24 June 1999).",
+      "note": "One of CEMAC's six member states and one of the six signatories of the Treaty instituting CEMAC (N'Djaména, 16 March 1994). Basis: Article 7 of that Treaty, read in the copy on the CEMAC Commission's former site (archived 20 May 2016) and in Congo's Journal officiel, édition spéciale lois, December 2000, p. 18 (https://archive.gazettes.africa/archive/cg/2000/cg-journal-officiel-dated-2000-12-01-no-special-lois.pdf): it enters into force once all signatories have ratified it with Chad, the depositary. Start: June 1999, as CEMAC says on its former Historique page (\"Juin 1999, entrée en vigueur du traité instituant la CEMAC\", archived 9 October 2021, https://web.archive.org/web/20211009232951/https://www.cemac.int/Historique) and in its Executive Secretariat's activity report for 2004, p. 3 (\"son Traité constitutif étant entré en vigueur en Juin 1999 à la suite de sa ratification par tous les Etats membres\", https://web.archive.org/web/20160520234255/http://cemac.int/sites/default/files/documents/files/CemacRA2004_0.pdf). Only the month is evidenced: no primary source read gives the day or any deposit with Chad (secondary sources give 24 or 25 June 1999). CEMAC's current site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -2012,11 +2096,17 @@
       "target_id": "aa-cemac",
       "kind": "member_of",
       "status": "proposal",
-      "valid_from": null,
+      "valid_from": "1999-06",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité instituant la Communauté économique et monétaire de l'Afrique centrale (N'Djaména, 16 mars 1994)",
+        "pinpoint": "art. 7",
+        "evidence_url": "https://web.archive.org/web/20160520233125/http://cemac.int/sites/default/files/documents/files/Traite_CEMAC.pdf",
+        "quote": "Le présent Traité rédigé en un exemplaire unique en langues française, espagnole et anglaise, le français faisant foi en cas de divergence d’interprétation, entrera en vigueur dès sa ratification par tous les Etats signataires auprès de la République du Tchad, désignée comme Etat dépositaire de tous les Actes afférents à la Communauté Economique et Monétaire de l’Afrique Centrale."
+      },
       "evidence_url": "https://cemac.int/about/",
-      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced. Basis not evidenced: CEMAC's site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification); no source read gives the 1994 Treaty's entry into force for each state (a WTO fact sheet gives 24 June 1999).",
+      "note": "One of CEMAC's six member states and one of the six signatories of the Treaty instituting CEMAC (N'Djaména, 16 March 1994). Basis: Article 7 of that Treaty, read in the copy on the CEMAC Commission's former site (archived 20 May 2016) and in Congo's Journal officiel, édition spéciale lois, December 2000, p. 18 (https://archive.gazettes.africa/archive/cg/2000/cg-journal-officiel-dated-2000-12-01-no-special-lois.pdf): it enters into force once all signatories have ratified it with Chad, the depositary. Start: June 1999, as CEMAC says on its former Historique page (\"Juin 1999, entrée en vigueur du traité instituant la CEMAC\", archived 9 October 2021, https://web.archive.org/web/20211009232951/https://www.cemac.int/Historique) and in its Executive Secretariat's activity report for 2004, p. 3 (\"son Traité constitutif étant entré en vigueur en Juin 1999 à la suite de sa ratification par tous les Etats membres\", https://web.archive.org/web/20160520234255/http://cemac.int/sites/default/files/documents/files/CemacRA2004_0.pdf). Only the month is evidenced: no primary source read gives the day or any deposit with Chad (secondary sources give 24 or 25 June 1999). CEMAC's current site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -2026,11 +2116,17 @@
       "target_id": "aa-cemac",
       "kind": "member_of",
       "status": "proposal",
-      "valid_from": null,
+      "valid_from": "1999-06",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité instituant la Communauté économique et monétaire de l'Afrique centrale (N'Djaména, 16 mars 1994)",
+        "pinpoint": "art. 7",
+        "evidence_url": "https://web.archive.org/web/20160520233125/http://cemac.int/sites/default/files/documents/files/Traite_CEMAC.pdf",
+        "quote": "Le présent Traité rédigé en un exemplaire unique en langues française, espagnole et anglaise, le français faisant foi en cas de divergence d’interprétation, entrera en vigueur dès sa ratification par tous les Etats signataires auprès de la République du Tchad, désignée comme Etat dépositaire de tous les Actes afférents à la Communauté Economique et Monétaire de l’Afrique Centrale."
+      },
       "evidence_url": "https://cemac.int/about/",
-      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced. Basis not evidenced: CEMAC's site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification); no source read gives the 1994 Treaty's entry into force for each state (a WTO fact sheet gives 24 June 1999).",
+      "note": "One of CEMAC's six member states and one of the six signatories of the Treaty instituting CEMAC (N'Djaména, 16 March 1994). Basis: Article 7 of that Treaty, read in the copy on the CEMAC Commission's former site (archived 20 May 2016) and in Congo's Journal officiel, édition spéciale lois, December 2000, p. 18 (https://archive.gazettes.africa/archive/cg/2000/cg-journal-officiel-dated-2000-12-01-no-special-lois.pdf): it enters into force once all signatories have ratified it with Chad, the depositary. Start: June 1999, as CEMAC says on its former Historique page (\"Juin 1999, entrée en vigueur du traité instituant la CEMAC\", archived 9 October 2021, https://web.archive.org/web/20211009232951/https://www.cemac.int/Historique) and in its Executive Secretariat's activity report for 2004, p. 3 (\"son Traité constitutif étant entré en vigueur en Juin 1999 à la suite de sa ratification par tous les Etats membres\", https://web.archive.org/web/20160520234255/http://cemac.int/sites/default/files/documents/files/CemacRA2004_0.pdf). Only the month is evidenced: no primary source read gives the day or any deposit with Chad (secondary sources give 24 or 25 June 1999). CEMAC's current site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -2040,11 +2136,17 @@
       "target_id": "aa-cemac",
       "kind": "member_of",
       "status": "proposal",
-      "valid_from": null,
+      "valid_from": "1999-06",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité instituant la Communauté économique et monétaire de l'Afrique centrale (N'Djaména, 16 mars 1994)",
+        "pinpoint": "art. 7",
+        "evidence_url": "https://web.archive.org/web/20160520233125/http://cemac.int/sites/default/files/documents/files/Traite_CEMAC.pdf",
+        "quote": "Le présent Traité rédigé en un exemplaire unique en langues française, espagnole et anglaise, le français faisant foi en cas de divergence d’interprétation, entrera en vigueur dès sa ratification par tous les Etats signataires auprès de la République du Tchad, désignée comme Etat dépositaire de tous les Actes afférents à la Communauté Economique et Monétaire de l’Afrique Centrale."
+      },
       "evidence_url": "https://cemac.int/about/",
-      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced. Basis not evidenced: CEMAC's site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification); no source read gives the 1994 Treaty's entry into force for each state (a WTO fact sheet gives 24 June 1999).",
+      "note": "One of CEMAC's six member states and one of the six signatories of the Treaty instituting CEMAC (N'Djaména, 16 March 1994). Basis: Article 7 of that Treaty, read in the copy on the CEMAC Commission's former site (archived 20 May 2016) and in Congo's Journal officiel, édition spéciale lois, December 2000, p. 18 (https://archive.gazettes.africa/archive/cg/2000/cg-journal-officiel-dated-2000-12-01-no-special-lois.pdf): it enters into force once all signatories have ratified it with Chad, the depositary. Start: June 1999, as CEMAC says on its former Historique page (\"Juin 1999, entrée en vigueur du traité instituant la CEMAC\", archived 9 October 2021, https://web.archive.org/web/20211009232951/https://www.cemac.int/Historique) and in its Executive Secretariat's activity report for 2004, p. 3 (\"son Traité constitutif étant entré en vigueur en Juin 1999 à la suite de sa ratification par tous les Etats membres\", https://web.archive.org/web/20160520234255/http://cemac.int/sites/default/files/documents/files/CemacRA2004_0.pdf). Only the month is evidenced: no primary source read gives the day or any deposit with Chad (secondary sources give 24 or 25 June 1999). CEMAC's current site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -2054,11 +2156,17 @@
       "target_id": "aa-cemac",
       "kind": "member_of",
       "status": "proposal",
-      "valid_from": null,
+      "valid_from": "1999-06",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité instituant la Communauté économique et monétaire de l'Afrique centrale (N'Djaména, 16 mars 1994)",
+        "pinpoint": "art. 7",
+        "evidence_url": "https://web.archive.org/web/20160520233125/http://cemac.int/sites/default/files/documents/files/Traite_CEMAC.pdf",
+        "quote": "Le présent Traité rédigé en un exemplaire unique en langues française, espagnole et anglaise, le français faisant foi en cas de divergence d’interprétation, entrera en vigueur dès sa ratification par tous les Etats signataires auprès de la République du Tchad, désignée comme Etat dépositaire de tous les Actes afférents à la Communauté Economique et Monétaire de l’Afrique Centrale."
+      },
       "evidence_url": "https://cemac.int/about/",
-      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced. Basis not evidenced: CEMAC's site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification); no source read gives the 1994 Treaty's entry into force for each state (a WTO fact sheet gives 24 June 1999).",
+      "note": "One of CEMAC's six member states and one of the six signatories of the Treaty instituting CEMAC (N'Djaména, 16 March 1994). Basis: Article 7 of that Treaty, read in the copy on the CEMAC Commission's former site (archived 20 May 2016) and in Congo's Journal officiel, édition spéciale lois, December 2000, p. 18 (https://archive.gazettes.africa/archive/cg/2000/cg-journal-officiel-dated-2000-12-01-no-special-lois.pdf): it enters into force once all signatories have ratified it with Chad, the depositary. Start: June 1999, as CEMAC says on its former Historique page (\"Juin 1999, entrée en vigueur du traité instituant la CEMAC\", archived 9 October 2021, https://web.archive.org/web/20211009232951/https://www.cemac.int/Historique) and in its Executive Secretariat's activity report for 2004, p. 3 (\"son Traité constitutif étant entré en vigueur en Juin 1999 à la suite de sa ratification par tous les Etats membres\", https://web.archive.org/web/20160520234255/http://cemac.int/sites/default/files/documents/files/CemacRA2004_0.pdf). Only the month is evidenced: no primary source read gives the day or any deposit with Chad (secondary sources give 24 or 25 June 1999). CEMAC's current site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification).",
       "reviewed_by": null,
       "reviewed_at": null
     },
@@ -2068,11 +2176,17 @@
       "target_id": "aa-cemac",
       "kind": "member_of",
       "status": "proposal",
-      "valid_from": null,
+      "valid_from": "1999-06",
       "valid_to": null,
-      "basis": null,
+      "basis": {
+        "kind": "entry_into_force",
+        "instrument": "Traité instituant la Communauté économique et monétaire de l'Afrique centrale (N'Djaména, 16 mars 1994)",
+        "pinpoint": "art. 7",
+        "evidence_url": "https://web.archive.org/web/20160520233125/http://cemac.int/sites/default/files/documents/files/Traite_CEMAC.pdf",
+        "quote": "Le présent Traité rédigé en un exemplaire unique en langues française, espagnole et anglaise, le français faisant foi en cas de divergence d’interprétation, entrera en vigueur dès sa ratification par tous les Etats signataires auprès de la République du Tchad, désignée comme Etat dépositaire de tous les Actes afférents à la Communauté Economique et Monétaire de l’Afrique Centrale."
+      },
       "evidence_url": "https://cemac.int/about/",
-      "note": "One of CEMAC's six member states. CEMAC's revised treaty of 2009 refers to the founding treaty of 16 March 1994, but no date from which each state is a member is stated: start not yet evidenced. Basis not evidenced: CEMAC's site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification); no source read gives the 1994 Treaty's entry into force for each state (a WTO fact sheet gives 24 June 1999).",
+      "note": "One of CEMAC's six member states and one of the six signatories of the Treaty instituting CEMAC (N'Djaména, 16 March 1994). Basis: Article 7 of that Treaty, read in the copy on the CEMAC Commission's former site (archived 20 May 2016) and in Congo's Journal officiel, édition spéciale lois, December 2000, p. 18 (https://archive.gazettes.africa/archive/cg/2000/cg-journal-officiel-dated-2000-12-01-no-special-lois.pdf): it enters into force once all signatories have ratified it with Chad, the depositary. Start: June 1999, as CEMAC says on its former Historique page (\"Juin 1999, entrée en vigueur du traité instituant la CEMAC\", archived 9 October 2021, https://web.archive.org/web/20211009232951/https://www.cemac.int/Historique) and in its Executive Secretariat's activity report for 2004, p. 3 (\"son Traité constitutif étant entré en vigueur en Juin 1999 à la suite de sa ratification par tous les Etats membres\", https://web.archive.org/web/20160520234255/http://cemac.int/sites/default/files/documents/files/CemacRA2004_0.pdf). Only the month is evidenced: no primary source read gives the day or any deposit with Chad (secondary sources give 24 or 25 June 1999). CEMAC's current site holds only the revised Treaty of 2009 (Article 65: in force after signature and ratification).",
       "reviewed_by": null,
       "reviewed_at": null
     }

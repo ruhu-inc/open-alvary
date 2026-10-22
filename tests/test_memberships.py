@@ -162,7 +162,7 @@ def test_the_registers_windows_are_written_as_edtf_sets_and_match_its_published_
     assert windows == {
         "ss:aa-au:1": "[2011-07-26..2011-07-27]",
         "cv:aa-ecowas:1": "[1976..1977]",
-        "ss:aa-eac:1": "[2016-08-15..2016-09-05]",
+        "ss:aa-eac:1": "[2016-08-15..2016-10-01]",
     }
     published = json.loads((path().parent / "membership.schema.json").read_text())
     pattern = re.compile(published["$defs"]["Membership"]["properties"]["valid_from"]["anyOf"][0]["pattern"])
@@ -494,12 +494,28 @@ def test_ecowas_founders_start_on_signature_under_article_62_and_mauritania_left
 
 def test_a_basis_is_set_only_where_its_source_states_it():
     eac, ohada = researched("aa-eac"), researched("aa-ohada")
-    assert str(eac["ss"].valid_from) == "[2016-08-15..2016-09-05]" and eac["ss"].basis is None
-    assert {k for k, m in eac.items() if m.basis} == {"ke", "tz", "ug", "cd"}
+    # South Sudan's and Somalia's Treaties of Accession were not found: no basis. South Sudan's sources give
+    # 15 August, 5 September and 1 October 2016; the window holds all three.
+    assert str(eac["ss"].valid_from) == "[2016-08-15..2016-10-01]" and eac["ss"].basis is None
+    assert eac["so"].basis is None
+    assert {k for k, m in eac.items() if m.basis} == {"ke", "tz", "ug", "cd", "rw", "bi"}
+    assert all(
+        eac[k].basis.pinpoint == "art. 11" and str(eac[k].valid_from) == "2007-07-01" for k in ("rw", "bi")
+    )
     assert all(m.basis.kind == "entry_into_force" for m in ohada.values() if m.valid_from is not None)
     assert all(m.basis is None for m in ohada.values() if m.valid_from is None)
-    for body in ("aa-uemoa", "aa-cemac"):
-        assert all(m.basis is None and "Basis not evidenced" in m.note for m in researched(body).values())
+    # UEMOA's seven signatories rest on Article 116 of the 1994 Treaty, Guinea-Bissau on Article 3 of its
+    # Accord d'adhésion. Only Guinea-Bissau's start is evidenced (the Conference's acts of June 1997); the
+    # signatories stay undated and say so.
+    uemoa = researched("aa-uemoa")
+    founders = dict.fromkeys(("bf", "bj", "ci", "ml", "ne", "sn", "tg"), "art. 116")
+    assert {k: m.basis.pinpoint for k, m in uemoa.items()} == founders | {"gw": "art. 3"}
+    assert str(uemoa["gw"].valid_from) == "1997-05-02"
+    assert all(uemoa[k].valid_from is None and "Start not yet evidenced" in uemoa[k].note for k in founders)
+    # CEMAC's six signatories rest on Article 7 of the 1994 Treaty; CEMAC dates its entry into force to a month.
+    cemac = researched("aa-cemac")
+    assert len(cemac) == 6 and all(m.basis.pinpoint == "art. 7" for m in cemac.values())
+    assert all(str(m.valid_from) == "1999-06" and m.valid_from.precision == "month" for m in cemac.values())
     # Every row without a basis says why in its note.
     assert all(m.basis or "basis" in m.note.lower() for m in register().memberships)
 
