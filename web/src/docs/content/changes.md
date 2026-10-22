@@ -115,7 +115,7 @@ writeFileSync("resume_token.txt", page.resume_token); // only after the changes 
 
 A later text of the same record names the one it replaces in `prior_version_id`, and `change_reason` says why: `extraction_correction` (read again from the same official file) or `source_revision` (a new official file). The same provision keeps the same `locator` across versions.
 
-**To check a text you hold**, send its `ETag` back as `If-None-Match`. `304` means it is unchanged and still public. `404` means it is no longer public. A `304` costs a request but no bytes.
+**To check a text you hold**, send its `ETag` back as `If-None-Match`. `304` means it is unchanged and still public. `404`, or `410` [`withdrawn`](/docs/errors#withdrawn), means it is no longer public. A `304` costs a request but no bytes.
 
 **A record or a text is withdrawn** (`withdrawal`):
 
@@ -129,7 +129,7 @@ Whether a withdrawal names what it withdraws depends on why it was withdrawn:
 
 - **A text withdrawn from a record that stays public** is named to everyone, with its `version`.
 - **With a key** (`https://api.open.alvary.ai/api/v1/changes`), a record that was public and was withdrawn because its rights record changed or lapsed is named too, by its IDs only: `work` has its `id` and `jurisdiction_id`, and every other field of `work` is null (no title, citation or links). A text withdrawn from it earlier keeps its `version.id`, with `content_hash` and `language` null. Reading the record or its texts with a key then answers `410` [`withdrawn`](/docs/errors#withdrawn), and a check of a part of it answers `withdrawn`.
-- **Anything else is `revalidate_releases`** and names nothing: every withdrawal of a record to a caller without a key; a record withdrawn for a confidential reason, such as privacy or a legal or court order, whatever the caller; a record withdrawn before Open Alvary began recording why; and a text withdrawn earlier from a record that is now withdrawn for one of those reasons. Open Alvary can't say which texts these concern, so check every record you hold. Reads answer `404` [`unavailable`](/docs/errors#unavailable), the same as for a record that was never public or never existed.
+- **Anything else is `revalidate_releases`** and names nothing: every withdrawal of a record to a caller without a key; a record withdrawn for a confidential reason, such as privacy or a legal or court order, whatever the caller; a record withdrawn before Open Alvary began recording why; and a text withdrawn earlier from a record that is now withdrawn for one of those reasons. If the reason for a withdrawal named to you turns out later to be confidential, a further `withdrawal` naming nothing follows, and from then on the earlier ones name nothing either. Open Alvary can't say which texts these concern, so check every record you hold. Reads answer `404` [`unavailable`](/docs/errors#unavailable), the same as for a record that was never public or never existed.
 
 When a rights review expires, its withdrawal is in the feed within minutes. Nothing already sent can be recalled, so poll at least daily if you serve texts to others.
 

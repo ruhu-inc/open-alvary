@@ -1367,12 +1367,12 @@
       "events": [
         {
           "schema_version": "change-event-1",
-          "event_id": "ce22283d-5d15-4ae2-8cdb-4ddcb67793de",
+          "event_id": "d8ff0fc5-4b40-4f4e-b50c-05491e3b45ed",
           "event_revision": 1,
           "event_type": "metadata_corrected",
-          "feed_epoch": "a13ecf36-b00b-4b85-bad1-10958d2881bd",
+          "feed_epoch": "0c2a8ec2-b663-4a8b-bb4c-20e302776bcd",
           "publication_revision": 1,
-          "committed_at": "2026-10-21T07:05:17.227327Z",
+          "committed_at": "2026-10-22T02:22:02.475140Z",
           "observed_at": null,
           "publisher_published_at": null,
           "legal_effective": null,
@@ -1392,7 +1392,7 @@
             "api_url": "https://api.open.alvary.ai/api/v1/sources/ng-foi-act-2011"
           },
           "version": null,
-          "rights_revision": null,
+          "rights_revision": 1,
           "changed_fields": [
             "summary"
           ],
@@ -1408,12 +1408,13 @@
           "membership": null,
           "suspension": null,
           "previous": {},
-          "version_diff": null
+          "version_diff": null,
+          "rights": null
         }
       ],
       "has_more": false,
-      "feed_epoch": "a13ecf36-b00b-4b85-bad1-10958d2881bd",
-      "resume_token": "r1.CWVwaGVtZXJhbO_Lk…"
+      "feed_epoch": "0c2a8ec2-b663-4a8b-bb4c-20e302776bcd",
+      "resume_token": "r1.CWVwaGVtZXJhbGdn7…"
     },
     "note": "An example: one catalogue correction, recorded in a scratch copy of the catalogue. Your answers carry the changes recorded since you started following."
   },
@@ -1429,12 +1430,12 @@
       "events": [
         {
           "schema_version": "change-event-1",
-          "event_id": "ce22283d-5d15-4ae2-8cdb-4ddcb67793de",
+          "event_id": "d8ff0fc5-4b40-4f4e-b50c-05491e3b45ed",
           "event_revision": 1,
           "event_type": "metadata_corrected",
-          "feed_epoch": "a13ecf36-b00b-4b85-bad1-10958d2881bd",
+          "feed_epoch": "0c2a8ec2-b663-4a8b-bb4c-20e302776bcd",
           "publication_revision": 1,
-          "committed_at": "2026-10-21T07:05:17.227327Z",
+          "committed_at": "2026-10-22T02:22:02.475140Z",
           "observed_at": null,
           "publisher_published_at": null,
           "legal_effective": null,
@@ -1454,7 +1455,7 @@
             "api_url": "https://api.open.alvary.ai/api/v1/sources/ng-foi-act-2011"
           },
           "version": null,
-          "rights_revision": null,
+          "rights_revision": 1,
           "changed_fields": [
             "summary"
           ],
@@ -1470,7 +1471,8 @@
           "membership": null,
           "suspension": null,
           "previous": {},
-          "version_diff": null
+          "version_diff": null,
+          "rights": null
         }
       ]
     },
@@ -1499,12 +1501,12 @@
     "query": [],
     "answer": {
       "schema_version": "change-event-1",
-      "event_id": "ce22283d-5d15-4ae2-8cdb-4ddcb67793de",
+      "event_id": "d8ff0fc5-4b40-4f4e-b50c-05491e3b45ed",
       "event_revision": 1,
       "event_type": "metadata_corrected",
-      "feed_epoch": "a13ecf36-b00b-4b85-bad1-10958d2881bd",
+      "feed_epoch": "0c2a8ec2-b663-4a8b-bb4c-20e302776bcd",
       "publication_revision": 1,
-      "committed_at": "2026-10-21T07:05:17.227327Z",
+      "committed_at": "2026-10-22T02:22:02.475140Z",
       "observed_at": null,
       "publisher_published_at": null,
       "legal_effective": null,
@@ -1524,7 +1526,7 @@
         "api_url": "https://api.open.alvary.ai/api/v1/sources/ng-foi-act-2011"
       },
       "version": null,
-      "rights_revision": null,
+      "rights_revision": 1,
       "changed_fields": [
         "summary"
       ],
@@ -1540,7 +1542,8 @@
       "membership": null,
       "suspension": null,
       "previous": {},
-      "version_diff": null
+      "version_diff": null,
+      "rights": null
     },
     "note": "An example: one catalogue correction, recorded in a scratch copy of the catalogue. Your answers carry the changes recorded since you started following."
   },
@@ -1548,18 +1551,20 @@
     "path": {},
     "query": [],
     "answer": {
-      "feed_started_at": "2026-10-21T07:03:44.576431Z",
-      "feed_epoch": "a13ecf36-b00b-4b85-bad1-10958d2881bd",
-      "earliest_replayable_at": "2026-10-21T07:05:17.227327Z",
+      "feed_started_at": "2026-10-22T02:21:40.505017Z",
+      "feed_epoch": "0c2a8ec2-b663-4a8b-bb4c-20e302776bcd",
+      "earliest_replayable_at": "2026-10-22T02:22:02.475140Z",
       "supported_event_types": [
         "catalogue_added",
         "metadata_corrected",
         "text_version_published",
         "legal_effect_recorded",
+        "treatment_recorded",
         "withdrawal",
         "coverage_changed",
         "membership_recorded",
-        "suspension_recorded"
+        "suspension_recorded",
+        "rights_changed"
       ],
       "supported_filters": [
         "jurisdiction",
@@ -1575,7 +1580,7 @@
           "name": "Nigeria",
           "works": 5,
           "readable_works": 0,
-          "last_change_at": "2026-10-21T07:05:17.227327Z",
+          "last_change_at": "2026-10-22T02:22:02.475140Z",
           "last_checked_at": null,
           "expected_cadence": null,
           "known_gaps": null
