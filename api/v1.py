@@ -112,6 +112,9 @@ def create_v1_app(
         docs_url=None,
         redoc_url=None,
         openapi_url="/openapi.json",
+        # The document names its own absolute server (api.openapi_docs.describe): FastAPI would put the
+        # mount path ("/api/v1") before it, which a client generated from a saved copy would call.
+        root_path_in_servers=False,
     )
 
     @app.middleware("http")
