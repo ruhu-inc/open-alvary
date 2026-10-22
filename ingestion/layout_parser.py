@@ -28,6 +28,10 @@ MARKER = re.compile(
     r"^(?:\d{1,3}[A-Z]?\.|\([a-z]{1,2}\)|\([ivxl]{1,6}\)|\(\d{1,3}[A-Z]?\)|\d{1,3}[A-Z]?\.[—–-]+\(\d{1,3}[A-Z]?\))$"
 )
 HEADINGS = {f"heading-{n}" for n in range(1, 7)} | {"subheading"}
+# The service sometimes returns a line break inside a block as the two characters "\n"
+# ("CHAPITRE IV\nDISPOSITIONS FINALES", printed on two lines); between words they are the line break
+# they stand for.
+ESCAPED_BREAK = re.compile(r"(?<=\S)\\n(?=\S)")
 
 
 @dataclass(frozen=True)
@@ -89,12 +93,17 @@ def _type(block: dict) -> str:
     return block.get("type_") or block.get("type") or ""
 
 
+def _words(text: str) -> str:
+    """A block's text as read, with any line break the service escaped restored."""
+    return ESCAPED_BREAK.sub("\n", text) if text else text
+
+
 def _text_of(blocks: list[dict]) -> str:
     """Verbatim text of nested blocks, in reading order, one block per line."""
     lines = []
     for block in blocks or []:
         if "text_block" in block:
-            text = block["text_block"].get("text", "")
+            text = _words(block["text_block"].get("text", ""))
             if text:
                 lines.append(text)
             lines.extend(filter(None, [_text_of(block["text_block"].get("blocks", []))]))
@@ -124,11 +133,11 @@ def convert_blocks(blocks: list[dict], offset: int = 1) -> list[dict]:
         page_start, page_end = _page(block, offset)
         if "text_block" in block:
             text_block = block["text_block"]
-            kind = _type(text_block)
+            kind, text = _type(text_block), _words(text_block.get("text", ""))
             if kind in FURNITURE:
-                nodes.append({"kind": "furniture", "text": text_block.get("text", ""), "page": page_start})
+                nodes.append({"kind": "furniture", "text": text, "page": page_start})
                 continue
-            if text_block.get("text"):
+            if text:
                 nodes.append(
                     {
                         "kind": "heading"
@@ -137,7 +146,7 @@ def convert_blocks(blocks: list[dict], offset: int = 1) -> list[dict]:
                         if kind == "list_item"
                         else "paragraph",
                         "level": kind,
-                        "text": text_block["text"],
+                        "text": text,
                         "page": page_start,
                     }
                 )
@@ -161,7 +170,7 @@ def convert_blocks(blocks: list[dict], offset: int = 1) -> list[dict]:
             nodes.append(
                 {
                     "kind": "table",
-                    "caption": table.get("caption", ""),
+                    "caption": _words(table.get("caption", "")),
                     "header_rows": rows("header_rows"),
                     "body_rows": rows("body_rows"),
                     "page": page_start,
@@ -177,7 +186,7 @@ def convert_blocks(blocks: list[dict], offset: int = 1) -> list[dict]:
                 for inner in entry.get("blocks", []):
                     if "text_block" in inner:
                         if inner["text_block"].get("text"):
-                            own.append(inner["text_block"]["text"])
+                            own.append(_words(inner["text_block"]["text"]))
                         children.extend(inner["text_block"].get("blocks", []))
                     else:
                         children.append(inner)
