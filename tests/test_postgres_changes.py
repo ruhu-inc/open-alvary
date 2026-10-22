@@ -670,6 +670,15 @@ def test_a_status_correction_says_what_it_was_and_only_for_fields_never_withheld
     edit(store, lambda c: setattr(next(s for s in c.sources if s.id == work), "summary", "A new summary."))
     summary = of_type(client, "metadata_corrected")[-1]
     assert summary["changed_fields"] == ["summary"] and summary["previous"] == {}
+    # Each correction of the record is its own change, never a revision superseding the earlier one,
+    # which stays readable as it was.
+    assert summary["event_id"] != status["event_id"]
+    assert (summary["event_revision"], summary["supersedes"]) == (
+        status["event_revision"],
+        status["supersedes"],
+    )
+    assert (status["event_revision"], status["supersedes"]) == (1, None)
+    assert client.get(f"/changes/{status['event_id']}").json()["previous"] == {"legal_status": "unknown"}
 
 
 def rights_of(corpus, work):
