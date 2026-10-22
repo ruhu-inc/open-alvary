@@ -147,8 +147,11 @@ class Fetcher:
                             self.stop(host, f"no answer {failures} times in a row: {error}", queue[n:])
                         )
                         break
-                except (polite.Disallowed, polite.OffHost, polite.TooLarge, NotTaken, HttpFailure) as error:
-                    self.failed(item, str(error))
+                except Exception as error:  # noqa: BLE001 - this item's failure, recorded; the task goes on
+                    known = (polite.Disallowed, polite.OffHost, polite.TooLarge, NotTaken, HttpFailure)
+                    self.failed(
+                        item, str(error) if isinstance(error, known) else f"{type(error).__name__}: {error}"
+                    )
                     totals["failed"] += 1
                     misses += 1
                     if misses >= 10:
