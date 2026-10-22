@@ -1,6 +1,7 @@
 # The ingestion jobs on Cloud Run (deployment/gcp/ingestion_jobs.sh), one image:
 #   scan-reader      python -m ingestion.scan_job     reads scanned pages with Document AI
 #   corpus-preparer  python -m ingestion.prepare_job  prepares every file for review
+#   corpus-fetcher   python -m ingestion.fetch_job    fetches an approved work list from official sites
 # Built from the commit itself (git archive); .gcloudignore keeps private material out regardless.
 # pdftotext reads each PDF's text layer here: the job's container is its sandbox.
 FROM python:3.12-slim

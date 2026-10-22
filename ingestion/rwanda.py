@@ -513,37 +513,41 @@ def _fetch_one(
     return {"item": item_id, "sha256": sha, "fetched": True}
 
 
-def push_held(store, log=print) -> int:
-    """Upload to the corpus bucket every file already held here and not yet stored there."""
-    ledger = Ledger(STAGING / "sync-ledger.json")
+def push_held(store, log=print, staging: Path | None = None, country: str | None = None) -> int:
+    """Upload to the corpus bucket every file already held here and not yet stored there (this
+    country's staging folder by default; another country's when given)."""
+    staging, country = staging or STAGING, country or COUNTRY
+    ledger = Ledger(staging / "sync-ledger.json")
     pushed = 0
     for record in ledger.data["items"].values():
         sha = record.get("sha256")
-        local = STAGING / "sources" / str(record.get("source")) / f"{sha}.pdf"
+        local = staging / "sources" / str(record.get("source")) / f"{sha}.pdf"
         if not sha or record.get("stored") or not local.exists():
             continue
-        name = corpus_store.source_name(COUNTRY, record["source"], sha)
+        name = corpus_store.source_name(country, record["source"], sha)
         store.put(name, local.read_bytes(), "application/pdf", {"sha256": sha, "url": record["url"]})
         sidecar = local.with_suffix(".json")
         if sidecar.exists():
             store.put(name[: -len(".pdf")] + ".json", sidecar.read_bytes(), "application/json")
         record["stored"] = store.uri(name)
         pushed += 1
-        log(f"stored {record['listed']['name'][:70]}")
+        log(f"stored {(record['listed'].get('name') or record['listed'].get('title') or record['url'])[:70]}")
     ledger.save()
     return pushed
 
 
-def mirror_state(store) -> None:
-    """The sync ledger, catalogues, selections and access decisions, copied to the bucket."""
+def mirror_state(store, staging: Path | None = None, country: str | None = None) -> None:
+    """The sync ledger, catalogues, selections and access decisions, copied to the bucket (this
+    country's by default; another country's staging folder when given)."""
+    staging, country = staging or STAGING, country or COUNTRY
     for path in [
-        STAGING / "sync-ledger.json",
-        *sorted((STAGING / "catalogue").glob("*.json")),
-        *sorted((STAGING / "selections").glob("*.json")),
-        *sorted((STAGING / "access").glob("*.json")),
+        staging / "sync-ledger.json",
+        *sorted((staging / "catalogue").glob("*.json")),
+        *sorted((staging / "selections").glob("*.json")),
+        *sorted((staging / "access").glob("*.json")),
     ]:
         if path.exists():
-            name = f"state/{COUNTRY}/{path.relative_to(STAGING)}"
+            name = f"state/{country}/{path.relative_to(staging)}"
             store.put(name, path.read_bytes(), "application/json", replace=True)
 
 
