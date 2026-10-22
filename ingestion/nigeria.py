@@ -1640,7 +1640,9 @@ def read_ncc(client, found: Found, state: dict, log=print, budget=None) -> None:
                 )
                 if not link:
                     continue
-                description = media.select_one("div.field--name-field-description")
+                description = media.select_one(
+                    "div.field--name-field-description .field__item"
+                ) or media.select_one("div.field--name-field-description")
                 tags = [
                     clean(t.get_text(" "))
                     for t in media.select("div.field--name-field-tag-s div.field__item")
