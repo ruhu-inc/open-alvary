@@ -2,8 +2,10 @@
 tokens, replay pages, single events, Atom and RSS windows and coverage.
 
 Every read rechecks that a work is public now before naming it; a withdrawal of a record that is no
-longer public is shown without identifying it. Positions are (publication revision, event ID,
-event revision); a window freezes its upper revision H, so nothing committed later appears inside it.
+longer public is shown without identifying it, except to a keyed caller when the withdrawal's reason may
+be told (owner decision, 2026-10-22; Withdrawals): then it names the record, and the text, by their IDs
+only. Positions are (publication revision, event ID, event revision); a window freezes its upper
+revision H, so nothing committed later appears inside it.
 """
 
 import base64
@@ -25,7 +27,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import select, text
 from sqlalchemy.engine import Connection
 
-from changes.record import WITH_RIGHTS_REVISION, current, digest, namespace
+from changes.record import DISCLOSED_REASONS, WITH_RIGHTS_REVISION, current, digest, namespace
 from schema.models import Source
 
 TYPES = (
@@ -176,6 +178,13 @@ class Filters:
         ).casefold()
         return all(re.search(r"\b" + re.escape(word) + r"\b", haystack) for word in self.q.casefold().split())
 
+    def selects(self, row: dict, shown: dict) -> bool:
+        """keyword() for an event as served: a withdrawal that shows no title of its record (unnamed, or
+        named by its IDs only) is never selected by words it no longer shows."""
+        if self.q and shown["event_type"] == "withdrawal" and not (shown["work"] or {}).get("title"):
+            return True
+        return self.keyword(row)
+
     def matches(self, event: dict) -> list[str] | None:
         """The same test as sql() and keyword(), for one event: the dimensions it matched, or None."""
         if self.type and event["event_type"] not in self.type:
@@ -260,6 +269,9 @@ class Feed:
     conn: Connection
     tokens: "Tokens | None"
     origin: str = "https://open.alvary.ai"
+    # A caller with a key or token (api.credentials admitted it): told, by IDs, of the records and texts
+    # withdrawn for a reason that may be told (Withdrawals).
+    keyed: bool = False
     t: dict = field(init=False)
 
     def __post_init__(self):
@@ -350,7 +362,7 @@ class Feed:
         for row in rows:
             last = (row["publication_revision"], row["event_id"], row["event_revision"])
             shown = self.project(dict(row), visible)
-            if shown is not None and filters.keyword(dict(row)):
+            if shown is not None and filters.selects(dict(row), shown):
                 events.append(shown)
                 if len(events) == limit:
                     break
@@ -444,7 +456,7 @@ class Feed:
         visible, found = _Visibility(self.conn), []
         for row in rows:
             shown = self.project(dict(row), visible)
-            if shown is not None and filters.keyword(dict(row)):
+            if shown is not None and filters.selects(dict(row), shown):
                 found.append(shown)
                 if len(found) == FEED_ENTRIES:
                     break
@@ -490,26 +502,37 @@ class Feed:
             return None
         summary = payload.get("summary")
         withdrawal = None
+        # A withdrawal from a record no longer public, told to a keyed caller by IDs only (Withdrawals).
+        by_id = kind == "withdrawal" and not named and self.keyed and visible.told(row) is not None
         if kind == "withdrawal":
-            # A text version withdrawn from a record still public is named, with what to do and why;
-            # anything else says only to revalidate, never that a hidden record exists.
-            told = (payload.get("withdrawal") or {}) if named else {}
+            # A text version withdrawn from a record still public is named, with what to do and why; so,
+            # to a keyed caller, is a record or text withdrawn for a reason that may be told. Anything else
+            # says only to revalidate, never that a hidden record exists.
+            told = (payload.get("withdrawal") or {}) if named or by_id else {}
             withdrawal = {
-                "scope_disclosure": "named" if named else "revalidate_releases",
+                "scope_disclosure": "named" if named or by_id else "revalidate_releases",
                 "action": told.get("action", "revalidate"),
                 "reason_code": told.get("reason_code"),
             }
-            if not named:
+            if by_id:
+                summary = (
+                    "A text of a record that is no longer public was withdrawn. Stop serving copies of it."
+                    if row["version_id"]
+                    else "A previously public record was withdrawn. Stop serving it and its texts."
+                )
+            elif not named:
                 summary = "A previously public record was withdrawn. Revalidate any copies you keep."
         jurisdiction = None
-        if named or kind in PLACE_EVENTS:
+        if named or by_id or kind in PLACE_EVENTS:
             jurisdiction = {
                 "id": row["jurisdiction_id"],
                 "name": visible.jurisdiction(row["jurisdiction_id"]),
             }
         version = None
-        if kind == "text_version_published" or (kind == "withdrawal" and named and row["version_id"]):
-            facts = payload.get("version") or {}
+        if kind == "text_version_published" or (
+            kind == "withdrawal" and (named or by_id) and row["version_id"]
+        ):
+            facts = (payload.get("version") or {}) if named or kind == "text_version_published" else {}
             version = {
                 "id": row["version_id"],
                 "content_hash": facts.get("content_hash"),
@@ -528,7 +551,7 @@ class Feed:
             "publisher_published_at": row["publisher_published_at"],
             "legal_effective": row["legal_effective"],
             "jurisdiction": jurisdiction,
-            "work": self._work(row, payload, work) if named else None,
+            "work": self._work(row, payload, work) if named else (self._ids(row) if by_id else None),
             "version": version,
             # The rights record revision in force after the change, where it was recorded (OA-R1).
             "rights_revision": payload.get("rights_revision")
@@ -556,6 +579,21 @@ class Feed:
             "version_diff": payload.get("version_diff") if kind == "text_version_published" else None,
             # A new revision of the record's rights record: {revision, decision} (G15).
             "rights": payload.get("rights") if kind == "rights_changed" else None,
+        }
+
+    @staticmethod
+    def _ids(row):
+        """A record that is no longer public, named by its IDs only: every other field is null."""
+        return {
+            "id": row["work_id"],
+            "title": None,
+            "citation": None,
+            "legal_status": None,
+            "jurisdiction_id": row["jurisdiction_id"],
+            "document_class": None,
+            "language": None,
+            "url": None,
+            "api_url": None,
         }
 
     def _work(self, row, payload, current=None):
@@ -608,11 +646,122 @@ class Feed:
         }
 
 
+class Withdrawals:
+    """What a keyed caller may be told of records and texts that are no longer public (owner decision,
+    2026-10-22). A record or text that was public and was withdrawn for a reason that may be told
+    (changes.record.DISCLOSED_REASONS: its rights record changed or lapsed, or its approval was withdrawn)
+    is named by its IDs in the feed, and reads answer `withdrawn`. One withdrawn for a confidential reason
+    (privacy, a legal or court order, another confidential reason, or none recorded), one never public and
+    one that never existed are the same: unnamed, and `unavailable`. Read from the change log: what the
+    last comparison recorded, so a record hidden by a write not yet compared is told nothing."""
+
+    def __init__(self, conn: Connection):
+        ns = namespace(conn)
+        self.conn = conn
+        self.t = {n: ns.qualified(conn, "changes", n) for n in ("change_event", "published_state")}
+        self.records: dict[str, dict | None] = {}
+
+    def record(self, work_id: str | None) -> dict | None:
+        """The withdrawal of a record that is no longer public, when it may be told: what its latest
+        whole-record withdrawal recorded ({action, reason_code, versions}). None while the record is
+        public as last recorded, when its latest withdrawal was confidential, and when none is recorded
+        (it was never public, or never existed)."""
+        if work_id not in self.records:
+            latest = self.conn.execute(
+                text(
+                    f"SELECT e.payload FROM {self.t['change_event']} e JOIN {self.t['published_state']} p"
+                    " ON p.work_id = e.work_id AND NOT p.visible WHERE e.work_id = :w AND e.version_id IS NULL"
+                    " AND e.event_type IN ('withdrawal', 'catalogue_added')"
+                    " ORDER BY e.publication_revision DESC, e.event_revision DESC LIMIT 1"
+                ),
+                {"w": work_id},
+            ).scalar()
+            told = (latest or {}).get("withdrawal") or {}
+            self.records[work_id] = told if told.get("reason_code") in DISCLOSED_REASONS else None
+        return self.records[work_id]
+
+    def told(self, row: dict) -> dict | None:
+        """For a withdrawal event of a record that is no longer public: what may be told of it, when its
+        own reason may be told and so may the record's latest withdrawal."""
+        told = row["payload"].get("withdrawal") or {}
+        if told.get("reason_code") not in DISCLOSED_REASONS or self.record(row["work_id"]) is None:
+            return None
+        return told
+
+    def version(self, version_id: str | None) -> bool:
+        """Whether a keyed caller may be told this text was withdrawn: it was public, it is not readable
+        as last recorded, and its withdrawal, or its record's, may be told."""
+        from api.store import tables
+
+        versions = tables["versions"]
+        owner = self.conn.scalar(select(versions.c.source_id).where(versions.c.id == version_id))
+        if owner is None:
+            return False
+        state = self.conn.execute(
+            text(f"SELECT visible, readable_versions FROM {self.t['published_state']} WHERE work_id = :w"),
+            {"w": owner},
+        ).first()
+        if state is None:
+            return False
+        if not state.visible:  # the whole record was withdrawn: was this one of its public texts?
+            told = self.record(owner)
+            return told is not None and (
+                version_id in told.get("versions", []) or self._announced(version_id)
+            )
+        if version_id in state.readable_versions:
+            return False
+        latest = self.conn.execute(
+            text(
+                f"SELECT event_type, payload FROM {self.t['change_event']} WHERE version_id = :v"
+                " AND event_type IN ('text_version_published', 'withdrawal')"
+                " ORDER BY publication_revision DESC, event_revision DESC LIMIT 1"
+            ),
+            {"v": version_id},
+        ).first()
+        return (
+            latest is not None
+            and latest.event_type == "withdrawal"
+            and (latest.payload.get("withdrawal") or {}).get("reason_code") in DISCLOSED_REASONS
+        )
+
+    def item(self, item) -> bool:
+        """For a cited part to check (schema.public.CheckItem) that is not public: whether its text may be
+        told withdrawn."""
+        return self.anchor(item.anchor_id) if item.anchor_id is not None else self.version(item.version_id)
+
+    def anchor(self, anchor_id: str | None) -> bool:
+        """Whether a keyed caller may be told the text this anchor is in was withdrawn."""
+        from api.store import tables
+
+        structure = tables["structure"]
+        version_id = self.conn.scalar(select(structure.c.version_id).where(structure.c.id == anchor_id))
+        return version_id is not None and self.version(version_id)
+
+    def _announced(self, version_id: str) -> bool:
+        """Whether the change log ever announced this text as public, or its withdrawal."""
+        return bool(
+            self.conn.scalar(
+                text(
+                    f"SELECT EXISTS(SELECT 1 FROM {self.t['change_event']} WHERE version_id = :v"
+                    " AND event_type IN ('text_version_published', 'withdrawal'))"
+                ),
+                {"v": version_id},
+            )
+        )
+
+
 class _Visibility:
     """Current public state, looked up once per work per request."""
 
     def __init__(self, conn):
         self.conn, self.works, self.names = conn, {}, {}
+        self._withdrawals: Withdrawals | None = None
+
+    def told(self, row: dict) -> dict | None:
+        """Withdrawals.told, for a withdrawal event of a record that is no longer public."""
+        if self._withdrawals is None:
+            self._withdrawals = Withdrawals(self.conn)
+        return self._withdrawals.told(row)
 
     def work(self, work_id):
         if work_id not in self.works:

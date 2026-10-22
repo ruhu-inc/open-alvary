@@ -44,7 +44,7 @@ A `metadata_corrected` is different: it records a correction of the record, not 
 
 ## Keep a copy current
 
-The feed is public: these examples use `https://open.alvary.ai/api/changes` without a key. With a key, `https://api.open.alvary.ai/api/v1/changes` answers the same, within your plan's limits.
+The feed is public: these examples use `https://open.alvary.ai/api/changes` without a key. With a key, `https://api.open.alvary.ai/api/v1/changes` answers the same changes, within your plan's limits, and names more of the records withdrawn ([see below](#when-a-text-is-published-or-withdrawn)).
 
 1. **Note where the feed is now**, before you copy anything: `start=now` answers a resume token at the latest change.
 2. **Load the catalogue**: a [data release](/docs/api/list-releases), or [every record](/docs/pagination).
@@ -117,12 +117,19 @@ A later text of the same record names the one it replaces in `prior_version_id`,
 
 **To check a text you hold**, send its `ETag` back as `If-None-Match`. `304` means it is unchanged and still public. `404` means it is no longer public. A `304` costs a request but no bytes.
 
-**A text is withdrawn** (`withdrawal`):
+**A record or a text is withdrawn** (`withdrawal`):
 
 | `scope_disclosure` | `action` | What to do |
 |---|---|---|
-| `named` | `stop_serving` | Stop serving the text in `version` now. `reason_code` says why: `rights_changed` (its rights record changed or lapsed) or `correction` (its approval was withdrawn). A corrected text, if there is one, arrives as a new `text_version_published`. |
-| `revalidate_releases` | `revalidate` | A record stopped being public, and which one is not said. Check each record you hold: one that answers `404` is no longer public; stop serving it. |
+| `named`, with `version` | `stop_serving` | Stop serving the text in `version` now. `reason_code` says why: `rights_changed` (its rights record changed or lapsed) or `correction` (its approval was withdrawn). A corrected text, if there is one, arrives as a new `text_version_published`. |
+| `named`, `version` null | `stop_serving` | With a key only: the record in `work` is no longer public because its rights record changed (`reason_code` `rights_changed`). Stop serving it and every text of it now. |
+| `revalidate_releases` | `revalidate` | A record stopped being public, and which one is not said. Check each record you hold: one that answers `404` or `410` is no longer public; stop serving it. |
+
+Whether a withdrawal names what it withdraws depends on why it was withdrawn:
+
+- **A text withdrawn from a record that stays public** is named to everyone, with its `version`.
+- **With a key** (`https://api.open.alvary.ai/api/v1/changes`), a record that was public and was withdrawn because its rights record changed or lapsed is named too, by its IDs only: `work` has its `id` and `jurisdiction_id`, and every other field of `work` is null (no title, citation or links). A text withdrawn from it earlier keeps its `version.id`, with `content_hash` and `language` null. Reading the record or its texts with a key then answers `410` [`withdrawn`](/docs/errors#withdrawn), and a check of a part of it answers `withdrawn`.
+- **Anything else is `revalidate_releases`** and names nothing: every withdrawal of a record to a caller without a key; a record withdrawn for a confidential reason, such as privacy or a legal or court order, whatever the caller; a record withdrawn before Open Alvary began recording why; and a text withdrawn earlier from a record that is now withdrawn for one of those reasons. Open Alvary can't say which texts these concern, so check every record you hold. Reads answer `404` [`unavailable`](/docs/errors#unavailable), the same as for a record that was never public or never existed.
 
 When a rights review expires, its withdrawal is in the feed within minutes. Nothing already sent can be recalled, so poll at least daily if you serve texts to others.
 
@@ -139,7 +146,7 @@ Narrow the feed with any of these; repeat a parameter for several values. Values
 | `language` | The language of the affected text. |
 | `q` | Whole words in the title, citation or summary. |
 
-A withdrawal that names no record (`scope_disclosure` `revalidate_releases`) matches every filter except `type`, so a filtered feed never misses one.
+A withdrawal of a whole record, named or not, matches every filter except `type`, so a filtered feed never misses one. A withdrawal that shows no title is never selected by `q` on words it no longer shows: it matches every `q`.
 
 A resume token belongs to its filters: keep one token per set of filters.
 

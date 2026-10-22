@@ -1,5 +1,6 @@
 """Change-feed routes, mounted on the public API, the keyed API and the website's data API
-(changes-contracts.md C1). Every surface answers the same events; only admission differs."""
+(changes-contracts.md C1). Every surface answers the same events; only admission differs, and a keyed
+caller is also told, by IDs, of the withdrawals whose reason may be told (changes.feed.Withdrawals)."""
 
 import os
 import uuid
@@ -72,9 +73,11 @@ def create_router(
     router = APIRouter()
 
     def run(request: Request, work):
+        # Keyed: the credential gate admitted a key or token for this request (/api/v1 only).
+        keyed = getattr(request.state, "access", None) is not None
         try:
             with connect() as conn:
-                return work(Feed(conn, tokens(), origin(request)))
+                return work(Feed(conn, tokens(), origin(request), keyed=keyed))
         except FeedError as error:
             return problem(error, request)
 

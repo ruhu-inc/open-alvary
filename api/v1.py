@@ -10,6 +10,11 @@ Releases with full text download only from /bulk, in the gate's bulk class: the 
 must include bulk and the release's country must be within its plan (MAC-06; owner direction,
 2026-10-19: bulk text for the sovereign tier only). Catalogue metadata releases stay keyless at
 /downloads.
+
+A record or text that was public and was withdrawn for a reason that may be told answers a keyed
+caller 410 `withdrawn`, and `withdrawn` in /currentness; one withdrawn for a confidential reason, one
+never public and one that never existed answer `unavailable` (owner decision, 2026-10-22;
+changes.feed.Withdrawals). Without the gate's word that the caller is keyed, every one is `unavailable`.
 """
 
 import hashlib
@@ -26,6 +31,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
+from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api import courts, text_index
@@ -38,6 +44,7 @@ from api.reach import EVERYWHERE, OutsidePlanLimited, Reach
 from api.release_adapter import LegacyReleases, ReleaseMissing, ReleaseWithdrawn, holds_text
 from api.repositories import LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import Store, check_legacy_authority
+from changes.feed import Withdrawals
 from changes.routes import create_router as create_changes_router
 from retrieval.check import Checker
 from retrieval.pack import INCLUDE, Retriever
@@ -75,6 +82,12 @@ DocumentType = Literal["constitution", "act", "regulation", "judgment", "gazette
 # A BCP 47 language tag, such as en, fr or en-NG.
 LANGUAGE = Query(None, min_length=2, max_length=35, pattern=r"^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$")
 PLACE = re.compile(r"[a-z]{2}(?:-[a-z0-9]{1,12})?")  # a court register's jurisdiction (schema.record)
+# What a keyed caller is told of a record or text withdrawn for a reason that may be told.
+WITHDRAWN = {
+    "source_id": "This record was public and has been withdrawn. Stop serving it and its texts.",
+    "version_id": "This text was public and has been withdrawn. Stop serving copies of it.",
+    "anchor_id": "The text this part is in was public and has been withdrawn. Stop serving copies of it.",
+}
 ONE_JURISDICTION = (
     "scope=applicable needs exactly one jurisdiction: the country, or the place within one, whose applicable "
     "law you ask for."
@@ -135,8 +148,32 @@ def create_v1_app(
             "invalid_input", request_id(request), detail=f"{where}: {first.get('msg', 'not valid')}."
         )
 
+    def keyed(request: Request) -> bool:
+        """Whether the credential gate admitted a key or token for this request."""
+        return getattr(request.state, "access", None) is not None
+
+    def withdrawn(request: Request) -> str | None:
+        """The path parameter naming a record, text or part this keyed caller may be told was withdrawn
+        (changes.feed.Withdrawals); None when there is none, or nothing may be told."""
+        if not keyed(request) or store.engine.dialect.name != "postgresql":
+            return None
+        with store.engine.begin() as connection:
+            check_legacy_authority(connection, write=False)
+            told = Withdrawals(connection)
+            for name, test in (
+                ("source_id", told.record),
+                ("version_id", told.version),
+                ("anchor_id", told.anchor),
+            ):
+                if name in request.path_params and test(request.path_params[name]):
+                    return name
+        return None
+
     @app.exception_handler(SourceUnavailable)
     async def missing(request, exception):
+        named = await run_in_threadpool(withdrawn, request)
+        if named is not None:
+            return problem("withdrawn", request_id(request), detail=WITHDRAWN[named])
         return problem("unavailable", request_id(request))
 
     @app.exception_handler(InvalidSearch)
@@ -541,7 +578,9 @@ def create_v1_app(
     def currentness(
         request: Request, body: CheckRequest, service: LegacyCatalogue = Depends(catalogue)
     ) -> CheckPage:
-        checker = Checker(service)
+        connection = service.repository.connection
+        told = Withdrawals(connection) if keyed(request) and connection.dialect.name == "postgresql" else None
+        checker = Checker(service, withdrawn=told.item if told else None)
         page = checker.check(body.items)
         reach(request).admit(*sorted(checker.jurisdictions))
         payload = page.model_dump_json().encode()
