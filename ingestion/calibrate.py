@@ -87,16 +87,29 @@ def calibrate(sample: Path, rules_id: str, language: str | None) -> dict:
             nested = False
         if node.parent and not node.parent.start <= node.start <= node.end <= node.parent.end:
             nested = False
-    numbers = [int(p.split("_")[1]) for p in provisions if p.split("_")[1].isdigit()]
+    # The provisions' numbers in each run that numbers them: the text's own, and each annex's that
+    # republishes a law (annex_1__art_1), whose numbering restarts.
+    runs: dict[str, list[int]] = {}
+    for locator in provisions:
+        within, _, own = locator.rpartition("__")
+        if own.split("_")[1].isdigit():
+            runs.setdefault(within, []).append(int(own.split("_")[1]))
+    numbers = runs.get("", [])
     codes = {i.code for i in found.issues}
+
+    def missing(run: list[int]) -> list[int]:
+        return sorted(set(range(1, max(run, default=0) + 1)) - set(run))
+
     checks = {
         # TXP-03's calibration: every provision found in order, locators unique, every leaf held once.
         "leaves_held_once": sorted(i for n in found.nodes for i in n.leaves) == list(range(len(text.leaves))),
         "spans_nest": nested,
         "locators_unique": "repeated_locator" not in codes,
-        "in_order": "article_order" not in codes and numbers == sorted(numbers),
-        "missing_numbers": sorted(set(range(1, max(numbers, default=0) + 1)) - set(numbers)),
+        "in_order": "article_order" not in codes and all(run == sorted(run) for run in runs.values()),
+        "missing_numbers": missing(numbers),
     }
+    if set(runs) - {""}:
+        checks["missing_in"] = {within: missing(run) for within, run in runs.items() if within}
     return {
         "sample": str(sample),
         "rules": rules_id,

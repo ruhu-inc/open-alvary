@@ -81,6 +81,7 @@ def test_documents_with_rules_keep_exactly_the_structure_they_had(document, page
         ({"id": "cm-law-2024-017-en", "jurisdiction": "cm", "type": "law"}, "cm-law-1"),
         ({"id": "ao-lei-22-11", "jurisdiction": "ao", "type": "law"}, "ao-lei-1"),
         ({"id": "mz-lei-2026-13", "jurisdiction": "mz", "type": "law"}, "mz-lei-1"),
+        ({"id": "cv-lei-2021-121", "jurisdiction": "cv", "type": "law"}, "cv-lei-1"),
     ],
 )  # fmt: skip
 def test_rules_are_chosen_by_jurisdiction_and_type(document, rules):
@@ -102,7 +103,7 @@ def test_rules_are_chosen_by_jurisdiction_and_type(document, rules):
             "aa-ecowas/decision",
         ),
         ({"id": "ao-decreto-presidencial-2016-108", "jurisdiction": "ao", "type": "decree"}, "ao/decree"),
-        ({"id": "cv-lei-2021-121", "jurisdiction": "cv", "type": "law"}, "cv/law"),
+        ({"id": "cv-decreto-lei-2021-21", "jurisdiction": "cv", "type": "decree_law"}, "cv/decree_law"),
         ({"id": "ug-example-act-2024", "type": "act"}, "ug/act"),
         ({"id": "ke-example-order-2024", "jurisdiction": "ke", "type": "order"}, "ke/order"),
         (

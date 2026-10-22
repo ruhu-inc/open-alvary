@@ -46,6 +46,12 @@ structure rules for the document's jurisdiction and type (RULES):
   mz-lei-1           Mozambican laws as the Boletim da República prints them: as ao-lei-1, with
                      "ARTIGO 3" unmarked, "Aprovada pela Assembleia da República …" a notice, the
                      annexes after the signatures ("Anexo I"), and the next law in the issue a notice
+  cv-lei-1           Cape Verdean laws as the Boletim Oficial prints them: as ao-lei-1, with "Artigo 4.º"
+                     opening an article in any unit by its ordinal sign, an amending article's quoted
+                     text ("… a seguinte redação:" then «Artigo 2.º […] …») a quotation inside it, never
+                     the law's own articles, "Aprovada em …" a notice, the law it amends republished in
+                     an annex after the signatures ("REPUBLICAÇÃO") whose divisions and articles restart
+                     and are qualified by it (annex_1__art_1), and the next act in the issue a notice
   sn-loi-1, bf-loi-1 Senegalese laws as the Commission de protection des données personnelles publishes
                      them and Burkinabè laws as the Assemblée nationale does: as ci-loi-1, with the
                      first chapter or section numbered in words ("Chapitre premier", "Section
@@ -102,6 +108,7 @@ AO_LAW = "ao-lei-1"
 SN_LAW = "sn-loi-1"
 BF_LAW = "bf-loi-1"
 MZ_LAW = "mz-lei-1"
+CV_LAW = "cv-lei-1"
 JUDGMENT = "judgment-paragraphs-1"
 JUDGMENT_TYPES = {"judgment", "ruling"}
 # The kinds of instrument the Rwandan Gazette reader names from the heading that opens each one
@@ -141,6 +148,7 @@ RULES = {
     ("sn", "law"): SN_LAW,
     ("bf", "law"): BF_LAW,
     ("mz", "law"): MZ_LAW,
+    ("cv", "law"): CV_LAW,
     **{("ng", kind): JUDGMENT for kind in JUDGMENT_TYPES},
     **{("rw", kind): RW_LAW for kind in RW_INSTRUMENTS},
 }
@@ -1302,6 +1310,10 @@ ROMAN_LEVEL = re.compile(r"^\(?((?:x{0,3})(?:ix|iv|v?i{1,3}|v))[.)](?=\s)")
 LETTER_LEVEL = re.compile(r"^\(?([a-z])[.)](?=\s)")
 # Angola's heading on the line after "ARTIGO 1.º", alone or before the article's first words.
 BRACKETED_HEADING = re.compile(r"^\(([^()]{1,200})\)(?=\s|$)", re.S)
+# An amending article's words before the text it quotes: "… que passam a ter a seguinte redação:".
+INTRODUCES_QUOTATION = re.compile(r"\bredac?[çc][ãa]o\s*:\s*$", re.I)
+# The closing mark ending a quotation whose opening mark was not printed: "… resultar prejuízo efetivo".".
+QUOTATION_ENDS = re.compile(r"[»\"”]\s*[.;,]?\s*$")
 # ECOWAS's directives and regulations close with the place and date, then the Chairperson's name: "DONE AT
 # ABUJA, THIS 19TH DAY …", "DONE IN FREETOWN …", "FAIT À FREETOWN …", "FEITO EM FREETOWN …".
 ECOWAS_SIGNATURE = re.compile(
@@ -1324,7 +1336,7 @@ class ArticleStyle:
     """What an article family prints (ArticleBuilder): the editions calibrated, each a language with its
     words; whether every unit of an article is an alinéa (French drafting) or its paragraphs are
     numbered; how the title, the closing words, any stamp on every page and any annex after the closing
-    words are printed."""
+    words are printed; and, for an amending law (Cape Verde's), its quoted text and the law it republishes."""
 
     rules_id: str
     family: str  # as an error names it: "aa-au/charter"
@@ -1336,6 +1348,15 @@ class ArticleStyle:
     title_units: tuple[str, ...] = ("heading",)
     running_head: re.Pattern | None = None
     annex: re.Pattern | None = None  # "Anexo I": (number, title on the same line)
+    annex_units: tuple[str, ...] = ("heading",)  # where an annex's name opens it (in capitals if no heading)
+    # The line after the annex's name that titles it though it is no heading: the law it republishes
+    # ("REPUBLICAÇÃO" then "Lei nº 42/VIII/2013, de 17 de setembro").
+    annex_title: re.Pattern | None = None
+    annex_articles: bool = False  # an annex's divisions and articles are read, qualified by it
+    next_act: re.Pattern | None = None  # after an annex, the next act's title (else the family's title form)
+    ordinal_opens: bool = False  # "Artigo 4.º Revogação …" opens an article by its ordinal sign
+    quotations: bool = False  # "… a seguinte redação:" then the quoted text: a quotation, never the law's own
+    unnumbered_divisions: bool = False  # "Subsecção" printed without its number, numbered by its place
 
 
 ARTICLE_STYLES = {
@@ -1492,6 +1513,41 @@ ARTICLE_STYLES = {
             r"^anexo(?:\s+([IVXLC]{1,6}|\d{1,2}|[ÚU]NICO))?(?!\w)\s*[-–—:.]?\s*(.*)$", re.I | re.S
         ),
     ),
+    CV_LAW: ArticleStyle(
+        CV_LAW,
+        "cv/law",
+        {
+            "pt": Edition(
+                (
+                    ("CAPÍTULO", 1, "chapter", "chap"),
+                    ("SECÇÃO", 2, "division", "dvs"),
+                    ("SUBSECÇÃO", 3, "division", "subdvs"),
+                ),
+                ("ARTIGO", "Artigo", "Art."),
+            )
+        },
+        # "Lei nº 120/IX/2021" alone in a heading, as the reading may space it ("Lei nº 121 /IX//2021"); never
+        # the republished law's "Lei nº 42/VIII/2013, de 17 de setembro".
+        title=re.compile(r"^lei\s+n\.?\s*[º°o]\.?\s*\d{1,4}\s*/+\s*[IVXLC]{1,6}\s*/+\s*\d{4}$", re.I),
+        # "Aprovada em 11 de fevereiro de 2021.", then the President of the Assembly, "Promulgada em …",
+        # "Publique-se." and the signatures.
+        signature=re.compile(r"^aprovad[ao]\s+em\s+\d{1,2}\s+de\b", re.I),
+        annex=re.compile(
+            r"^(?:anexo(?:\s+([IVXLC]{1,6}|\d{1,2}|[ÚU]NICO))?|republica[çc][ãa]o)(?!\w)\s*[-–—:.]?\s*(.*)$",
+            re.I | re.S,
+        ),
+        annex_units=("heading", "paragraph"),  # "REPUBLICAÇÃO Lei nº 133/V/2001, de 22 de janeiro, …"
+        annex_title=re.compile(r"^lei\s+n\.?\s*[º°o]", re.I),
+        annex_articles=True,
+        # The next act's title, or the issuing body's heading above it ("CONSELHO DE MINISTROS" then
+        # "Decreto-lei nº 21/2021").
+        next_act=re.compile(
+            r"^(?:lei|decreto-lei)\s+n\.?\s*[º°o]\.?\s*\d{1,4}\s*/+\s*(?:[IVXLC]{1,6}\s*/+\s*)?\d{4}$", re.I
+        ),
+        ordinal_opens=True,
+        quotations=True,
+        unnumbered_divisions=True,
+    ),
     SN_LAW: ArticleStyle(
         SN_LAW,
         "sn/law",
@@ -1545,9 +1601,13 @@ class ArticleBuilder(Builder):
     ones ("(i)", "i.") nest (art_7__para_1__subpara_a, cited art. 7(1)(a)), and an unnumbered unit stays
     in the innermost open one. A unit opening with the family's closing words ("Fait à …", "Vista e
     aprovada …") opens the closing notice, which holds the rest of the issue but for the law's own
-    annexes printed after its signatures (Mozambique's "Anexo I": annex_i). A stamp printed on every
-    page (Cameroon's, ECOWAS's logo text) is reported, for the reviewer to remove. Another language's
-    edition is refused, never read by these patterns."""
+    annexes printed after its signatures (Mozambique's "Anexo I": annex_i), and in Cape Verde the law
+    an amending law republishes in one ("REPUBLICAÇÃO"), whose divisions and articles restart and are
+    read as the body's, qualified by it (annex_1__chap_i, annex_1__art_1). An amending article's quoted
+    text ("… a seguinte redação:" then «Artigo 2.º […] …», to its closing mark or, where none was
+    printed, the amending law's next article) is a quotation of it (art_2__quot_1), holding its words.
+    A stamp printed on every page (Cameroon's, ECOWAS's logo text) is reported, for the reviewer to
+    remove. Another language's edition is refused, never read by these patterns."""
 
     def __init__(self, style: ArticleStyle, language: str | None, *args):
         super().__init__(*args)
@@ -1568,6 +1628,11 @@ class ArticleBuilder(Builder):
         self.unlettered: dict[str, list[Leaf]] = {}
         self.last: tuple[tuple[int, ...], str] | None = None
         self.counts: dict[str, int] = {}
+        self.base: Node = self.root  # what divisions and articles open in: the document, or an annex
+        self.rest_of_issue = False  # after the next act's title, nothing is the law's
+        self.quotation: Node | None = None  # the text an amending article quotes, while it is open
+        self.marks: int | None = None  # the quotation's « not yet closed by », or None where it printed none
+        self.introduces: Node | None = None  # the part whose words end "… a seguinte redação:"
         if self.edition is None:
             message = (
                 f"No structure rules for {style.family} in {language}: this layout is not supported yet"
@@ -1604,15 +1669,26 @@ class ArticleBuilder(Builder):
         self.hold(node, index)
 
     def owner(self) -> Node:
+        if self.quotation is not None:
+            return self.quotation
         if self.levels:
             return self.levels[-1][1]
         return self.provision or (self.open[-1][1] if self.open else self.region_node or self.root)
 
     def place(self, index: int, leaf: Leaf) -> None:
+        self.read(index, leaf)
+        # "… a seguinte redação:" ending a unit of an article: the text it quotes is next.
+        introduces = self.style.quotations and self.quotation is None and self.provision is not None
+        self.introduces = (
+            self.owner() if introduces and INTRODUCES_QUOTATION.search(clean(leaf.text)) else None
+        )
+
+    def read(self, index: int, leaf: Leaf) -> None:
         unit, text = self.unit(leaf), clean(leaf.text)
         heading_unit = unit.get("kind") == "heading"
         awaiting, self.awaiting = self.awaiting, None
         heading_due, self.heading_due = self.heading_due, None
+        introduced, self.introduces = self.introduces, None
         if leaf.role in ("caption", "table"):
             self.table(index, leaf)
             return
@@ -1628,7 +1704,12 @@ class ArticleBuilder(Builder):
             if not text:
                 self.put(self.owner(), index)
                 return
-        if self.region == "endmatter":
+        if introduced is not None and (text.startswith("«") or self.provision_pattern.match(text)):
+            self.open_quotation(index, text, introduced)
+            return
+        if self.quotation is not None and self.quoted(index, leaf, text, heading_unit):
+            return
+        if self.region == "endmatter" and not self.reads_annex(index, text, unit, awaiting):
             self.endmatter(index, leaf, text, heading_unit, awaiting)
             return
         if self.region == "body" and self.style.signature.match(text):
@@ -1654,7 +1735,7 @@ class ArticleBuilder(Builder):
                 self.region_node = self.add(self.root, "preamble", "preamble", leaf)
             self.put(self.region_node or self.root, index)
             return
-        if self.region != "body":
+        if self.region in ("front", "preamble"):
             self.region, self.region_node = "body", None
         if division:
             self.division(index, leaf, division)
@@ -1686,12 +1767,116 @@ class ArticleBuilder(Builder):
             self.issue("warning", "outside_article", leaf, f"“{text[:40]}…” is outside any article")
             self.put(self.owner(), index)
 
+    def open_quotation(self, index: int, text: str, parent: Node) -> None:
+        """The text an amending article quotes after "… a seguinte redação:", the articles it inserts or
+        replaces as printed («Artigo 2.º […] …»): words of the article (art_2__quot_1), never the law's
+        own articles."""
+        number = sum(1 for child in parent.children if child.kind == "quotation") + 1
+        self.quotation = self.add(parent, "quotation", f"{parent.locator}__quot_{number}", self.leaves[index])
+        self.marks = 0 if text.startswith("«") else None
+        self.hold_quoted(index, text)
+
+    def quoted(self, index: int, leaf: Leaf, text: str, heading_unit: bool) -> bool:
+        """A unit of the open quotation, held by it; False for a unit after its end where no closing mark
+        was printed: the amending law's next article ("Artigo 3.º" after article 2's quotation), or the
+        closing words."""
+        if self.style.signature.match(text):
+            where = self.quotation.parent.label or self.quotation.parent.locator
+            self.issue(
+                "warning",
+                "quotation_unclosed",
+                leaf,
+                f"The text {where} quotes has no end before the closing words: it holds everything to them",
+            )
+            self.quotation = None
+            return False
+        if self.marks is None and (found := self.provision_of(text, heading_unit)):
+            raw = found.group(1)
+            following = str(self.last[0][0] + 1) if self.last else "1"
+            if ("1" if folded(raw) in [folded(w) for w in ONE] else raw) == following:
+                self.quotation = None
+                return False
+        self.hold_quoted(index, text)
+        return True
+
+    def hold_quoted(self, index: int, text: str) -> None:
+        """A quoted unit, which ends the quotation if it closes its «, or, where no « was printed, leaves
+        a closing mark open ("… resultar prejuízo efetivo".")."""
+        self.put(self.quotation, index)
+        if self.marks is not None:
+            self.marks += text.count("«") - text.count("»")
+            ends = self.marks <= 0
+        else:
+            ends = QUOTATION_ENDS.search(text) is not None and (
+                text.count('"') % 2 == 1
+                or text.count("»") > text.count("«")
+                or text.count("”") > text.count("“")
+            )
+        if ends:
+            self.quotation = None
+
+    def reads_annex(self, index: int, text: str, unit: dict, awaiting: Node | None) -> bool:
+        """Whether a unit after the closing words is the law an annex republishes, read as the body is:
+        not the annex's name or title, another annex, the next act or that law's own closing words."""
+        if self.base is self.root or self.titles(awaiting, text, unit):
+            return False
+        return not (
+            self.annex_name(text, unit)
+            or self.next_act(index, text, unit)
+            or self.style.signature.match(text)
+        )
+
+    def titles(self, awaiting: Node | None, text: str, unit: dict) -> bool:
+        """Whether a unit is the title of the annex just named: a heading ("Anexo I" then "Glossário"), or
+        the law it republishes ("REPUBLICAÇÃO" then "Lei nº 42/VIII/2013, de 17 de setembro"), never the
+        republished law's first division or article."""
+        if awaiting is None or awaiting.kind != "annex":
+            return False
+        heading_unit = unit.get("kind") == "heading"
+        if self.style.annex_articles and (
+            self.division_of(text, heading_unit) or self.provision_of(text, heading_unit)
+        ):
+            return False
+        return heading_unit or (
+            self.style.annex_title is not None and self.style.annex_title.match(text) is not None
+        )
+
+    def annex_name(self, text: str, unit: dict) -> re.Match | None:
+        """An annex's name before the next act in the issue: in a heading, or in capitals opening a
+        paragraph ("REPUBLICAÇÃO Lei nº 133/V/2001, de 22 de janeiro, …")."""
+        if not self.style.annex or self.rest_of_issue or unit.get("kind") not in self.style.annex_units:
+            return None
+        found = self.style.annex.match(text)
+        if found and unit.get("kind") != "heading" and not text.split()[0].isupper():
+            return None
+        return found
+
+    def next_act(self, index: int, text: str, unit: dict) -> bool:
+        """After the law's annexes, the next act in the issue: its title, or the issuing body's heading
+        printed above it ("CONSELHO DE MINISTROS" then "Decreto-lei nº 21/2021")."""
+        if self.rest_of_issue or self.region_node is None or self.region_node.kind != "annex":
+            return False
+        pattern = self.style.next_act or self.style.title
+        if unit.get("kind") in self.style.title_units and pattern.match(text):
+            return True
+        if self.style.next_act is None or unit.get("kind") != "heading":
+            return False
+        after = next((leaf for leaf in self.leaves[index + 1 :] if leaf.role != "note"), None)
+        return (
+            after is not None
+            and after.role == "text"
+            and self.unit(after).get("kind") in self.style.title_units
+            and pattern.match(clean(after.text)) is not None
+        )
+
     def endmatter(self, index: int, leaf: Leaf, text: str, heading_unit: bool, awaiting: Node | None) -> None:
         """After the closing words: the notice they open holds the rest of the issue, except, where a
-        family prints them, the law's annexes after its signatures ("Anexo I" then "Glossário"), each
-        an annex of the document; the next act's title after them opens a notice of its own."""
-        found = self.style.annex.match(text) if self.style.annex and heading_unit else None
-        if found:
+        family prints them, the law's annexes after its signatures ("Anexo I" then "Glossário"), each an
+        annex of the document, whose divisions and articles are read where it republishes a law (Cape
+        Verde's "REPUBLICAÇÃO"), to that law's own closing words; the next act's title after them opens a
+        notice of its own, and nothing after it is the law's."""
+        unit = self.unit(leaf)
+        if found := self.annex_name(text, unit):
             number = found.group(1) or str(self.counts.get("annex", 0) + 1)
             self.next_number("annex")
             own = f"annex_{number if number.isdigit() else slug(number)}"
@@ -1699,15 +1884,18 @@ class ArticleBuilder(Builder):
             node = self.add(self.root, "annex", own, leaf, label=label, heading=found.group(2).strip())
             self.region_node, self.awaiting = node, None if node.heading else node
             self.named.add(index)
-        elif awaiting is not None and heading_unit:
-            awaiting.heading = text  # "Anexo I" then "Glossário"
+            self.open, self.provision, self.levels, self.last = [], None, [], None
+            self.base = node if self.style.annex_articles else self.root
+        elif self.titles(awaiting, text, unit):
+            awaiting.heading = text
             self.named.add(index)
-        elif (
-            self.region_node.kind == "annex"
-            and self.unit(leaf).get("kind") in self.style.title_units
-            and self.style.title.match(text)
-        ):
+        elif self.next_act(index, text, unit):
+            self.base, self.open, self.provision, self.levels = self.root, [], None, []
             self.region_node = self.add(self.root, "notice", f"notice_{self.next_number('notice')}", leaf)
+            self.rest_of_issue = True
+        elif self.base is not self.root and self.style.signature.match(text):
+            # The republished law's own closing words: the annex holds them and its signatures.
+            self.base, self.open, self.provision, self.levels = self.root, [], None, []
         self.put(self.region_node, index)
 
     def division_of(self, text: str, heading_unit: bool) -> tuple[int, str, str, str, str] | None:
@@ -1715,8 +1903,12 @@ class ArticleBuilder(Builder):
         may end with a full stop ("Section II. - Attributions de la Commission."), a paragraph only after
         that heading form, its number, a full stop and a dash ("Chapitre II. – Recommandé électronique.");
         and either opens with the word as printed, never in lower case ("chapitre 2 du titre II de la
-        présente loi" cites one)."""
+        présente loi" cites one). Where a family prints one without its number ("Subsecção" alone in a
+        heading), it is a division numbered by its place."""
         found = self.division_pattern.match(text)
+        word = unicodedata.normalize("NFC", text).upper()
+        if not found and self.style.unnumbered_divisions and heading_unit and word in self.ranks:
+            return *self.ranks[word], "", ""
         if (
             not found
             or len(text) > 300
@@ -1738,11 +1930,21 @@ class ArticleBuilder(Builder):
         rank, kind, token, number, title = found
         while self.open and self.open[-1][0] >= rank:
             self.open.pop()
-        parent = self.open[-1][1] if self.open else self.root
+        parent = self.open[-1][1] if self.open else self.base
+        printed = clean(leaf.text)
+        if not number:  # "Subsecção", then "Subsecção II": the first is numbered by its place
+            number = str(
+                1 + sum(1 for c in parent.children if c.locator.rsplit("__", 1)[-1].startswith(f"{token}_"))
+            )
+            self.issue(
+                "warning",
+                "unnumbered_division",
+                leaf,
+                f"“{printed[:40]}” is printed without its number: read as number {number} by its place",
+            )
         own = f"{token}_{number if re.fullmatch(r'[\d-]+', number) else slug(number)}"
         within = parent.locator if parent is not self.root else ""
         node = self.add(parent, kind, f"{within}__{own}" if within else own, leaf)
-        printed = clean(leaf.text)
         node.label = (printed[: len(printed) - len(title)] if title else printed).strip(" :.-–—")
         node.heading = title
         self.open.append((rank, node))
@@ -1753,10 +1955,14 @@ class ArticleBuilder(Builder):
 
     def provision_of(self, text: str, heading_unit: bool) -> re.Match | None:
         """An article's opening: in a heading, its number alone or with its heading; in a paragraph,
-        only with the separator printed after the number, so a sentence citing one is not one."""
+        only with the separator printed after the number, so a sentence citing one is not one, or where a
+        family drafts so, the ordinal sign ("Artigo 4.º Revogação …", "Artigo 44.º (Finalidades) Os …")."""
         found = self.provision_pattern.match(text)
         if not found or (not heading_unit and found.group(3) and not found.group(2).strip()):
-            return None
+            ordinal = (
+                found and self.style.ordinal_opens and re.search("[º°]", text[found.end(1) : found.start(2)])
+            )
+            return found if ordinal else None
         return found
 
     def open_provision(self, index: int, leaf: Leaf, found: re.Match, heading_unit: bool) -> None:
@@ -1767,8 +1973,10 @@ class ArticleBuilder(Builder):
         # A section's label is its printed number, as the Commonwealth Acts' are ("8": cited s. 8); an
         # article's, its printed opening ("ARTICLE 7", "Art. 2"), as OHADA's.
         label = raw if kind == "section" else clean(leaf.text)[: found.end(1)].strip()
-        parent = self.open[-1][1] if self.open else self.root
-        node = self.add(parent, kind, f"{token}_{number}", leaf, label=label)
+        parent = self.open[-1][1] if self.open else self.base
+        own = f"{token}_{number}"  # an annex's articles restart: annex_1__art_1
+        locator = own if self.base is self.root else f"{self.base.locator}__{own}"
+        node = self.add(parent, kind, locator, leaf, label=label)
         self.provision, self.levels = node, []
         self.named.add(index)
         self.notes_to(node, True)
@@ -1779,7 +1987,21 @@ class ArticleBuilder(Builder):
             self.heading_due = None if node.heading else node
         else:  # "Art. 2. — La présente loi …": the article's first words, after its number
             offset = len(leaf.text[: found.start(3)].encode())
-            if self.style.alineas:
+            if self.style.ordinal_opens and (bracket := BRACKETED_HEADING.match(rest)):
+                # "Artigo 44.º (Finalidades) Os códigos …": its heading, then the article's first words
+                node.heading, rest = bracket.group(1).strip(), rest[bracket.end() :].lstrip()
+                offset = len(leaf.text.encode()) - len(rest.encode())
+            elif self.style.ordinal_opens:
+                self.issue(
+                    "warning",
+                    "heading_in_words",
+                    leaf,
+                    f"{label} has no heading apart from its words (“{rest[:40]}…”): if it opens with its "
+                    "heading, split the heading off",
+                )
+            if not rest:
+                self.hold(node, index)
+            elif self.style.alineas:
                 alinea = self.add(node, "paragraph", f"{node.locator}__al_1", leaf, label=self.item(rest))
                 alinea.trim[index], node.opens_at = offset, leaf.start
                 self.hold(alinea, index)
@@ -1878,6 +2100,14 @@ class ArticleBuilder(Builder):
 
     def build(self) -> None:
         super().build()
+        if self.quotation is not None:
+            where = self.quotation.parent.label or self.quotation.parent.locator
+            self.issue(
+                "warning",
+                "quotation_unclosed",
+                self.leaves[self.quotation.leaves[0]],
+                f"The text {where} quotes has no end: it holds everything after it",
+            )
         for locator, leaves in self.unlettered.items():
             node = self.locators[locator]
             where = node.label or locator

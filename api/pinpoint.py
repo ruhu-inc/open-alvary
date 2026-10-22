@@ -10,6 +10,12 @@ no printed number) is cited "art. 10, al. 2". An article inserted after another 
 ("art. 853-1", "art. 626-1-1-1"). A work may follow its pinpoint after "of" or the French "de", "du",
 "de la", "de l'" or "des": "article 10, alinéa 2, de l'Acte uniforme …".
 
+An annex's parts are cited after its name, "Anexo I, art. 3", "Republicação, art. 1(2)" (Cape Verde's
+annex republishing the law an amending law amends, whose articles restart), and keyed within it, so an
+annex's article 1 is never the law's own. A Portuguese article's ordinal sign is read as no part of its
+number: "art. 1.º" is "art. 1". The text an amending article quotes has no pinpoint of its own: it is
+words of that article.
+
 A judgment's paragraph (judgment-paragraphs-1) is cited by its number in brackets after the neutral
 citation, "[2019] NGSC 4 [12]" or "[2019] NGSC 4 at [12]", or "[2019] NGSC 4, para. 12"; a paragraph
 of a later opinion that numbers its own paragraphs is "op. 2 [4]". "para. 12" alone is read only
@@ -40,9 +46,14 @@ SECTION = re.compile(
     re.I,
 )
 ARTICLE = re.compile(
-    rf"^(?:{_ARTICLE_LEADS})\.?\s*(\d{{1,4}}(?:-\d{{1,3}}){{0,4}}|[ivxlc]{{1,8}}|mbere|premier|one|first)(?:er|ère)?\.?\s*"
-    rf"{_SUBS}{_ALINEA}$",
+    rf"^(?:{_ARTICLE_LEADS})\.?\s*(\d{{1,4}}(?:-\d{{1,3}}){{0,4}}|[ivxlc]{{1,8}}|mbere|premier|one|first)"
+    rf"(?:er|ère|\.?\s*[º°])?\.?\s*{_SUBS}{_ALINEA}$",
     re.I,
+)
+# An annex, by its name and number, and what is cited within it: "Anexo I, art. 3", "Republicação, art. 1(2)".
+_ANNEX_LEADS = r"anexo|annexe?|republica[çc][ãa]o"
+ANNEX = re.compile(
+    rf"^(?:{_ANNEX_LEADS})\.?\s*(?:(\d{{1,2}}|[ivxlc]{{1,6}}|[úu]nico)(?!\w))?\s*,?\s*(.*)$", re.I
 )
 SCHEDULE = re.compile(
     rf"^(?:({'|'.join(ORDINALS)}|\d{{1,2}}(?:st|nd|rd|th))\s+schedule|(?:schedule|sch)\.?\s*(\d{{1,2}}|[ivxlc]{{1,6}})?)"
@@ -78,7 +89,7 @@ AFTER_NEUTRAL = re.compile(
 # Where a pinpoint may begin within a citation: "NDPA s. 23(1)(a)", "ISA 2025, First Schedule, para. 3".
 _STARTS = re.compile(
     rf"(?:^|(?<=[\s,;(]))(?:{_SECTION_LEADS}|{_ARTICLE_LEADS}|(?:{'|'.join(ORDINALS)}|\d{{1,2}}(?:st|nd|rd|th))\s+schedule"
-    r"|schedule|sch|part|pt|chapter|chap|ch)(?=[\s.,\d(]|$)",
+    rf"|schedule|sch|part|pt|chapter|chap|ch|{_ANNEX_LEADS})(?=[\s.,\d(]|$)",
     re.I,
 )
 
@@ -123,6 +134,14 @@ def _token_number(locator: str, token: str) -> str:
     return found.group(1) if found else ""
 
 
+def _annex_title(label: str | None) -> str:
+    """An annex's name as cited: "REPUBLICAÇÃO" → "Republicação", "ANEXO II" → "Anexo II"."""
+    words = (label or "Annex").split()
+    return " ".join(
+        w.capitalize() if w.isupper() and not _ROMAN.fullmatch(w.casefold()) else w for w in words
+    )
+
+
 def _schedule_title(label: str | None) -> str:
     words = (label or "Schedule").split()
     return " ".join(
@@ -142,6 +161,7 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
     key: list[str] = []
     shown = ""
     schedule = False
+    annex: tuple[list[str], str] | None = None  # within an annex: its key and name, before what is in it
     opinion: str | None = None  # within a judgment's opinion: its number, "1" for the first
     lead = "reg. " if document_type == "regulation" else "s. "
     named = False  # whether the last part itself is named: a table in s. 23 is not s. 23
@@ -158,6 +178,12 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
         elif part.kind == "schedule":
             schedule, key = True, [f"sch:{_ordinal(_token_number(part.locator, 'sch')) or '1'}"]
             shown = _schedule_title(part.label)
+        elif part.kind == "annex":
+            annex = (
+                [f"annex:{_ordinal(_token_number(part.locator, 'annex')) or '1'}"],
+                _annex_title(part.label),
+            )
+            key, shown = list(annex[0]), annex[1]
         elif schedule and part.kind == "part" and part.label:
             number = re.sub(r"^part\s+", "", _printed(part.label), flags=re.I)
             key.append(f"part:{_ordinal(number)}")
@@ -170,15 +196,19 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
                 number = _token_number(part.locator, "part" if part.kind == "part" else "chap") or number
             key = [f"{'part' if part.kind == 'part' else 'chap'}:{_ordinal(number)}"]
             shown = f"{word} {number.upper() if _ROMAN.fullmatch(number.casefold()) else number}"
+            if annex:  # "Republicação, Chapter II"
+                key, shown = [*annex[0], *key], f"{annex[1]}, {shown}"
         elif part.kind == "section" and part.label and not schedule:
             key, shown = [f"s:{_plain(part.label)}"], f"{lead}{_printed(part.label)}"
         elif part.kind == "article" and part.label:
             number = _token_number(part.locator, "art")
             key, shown = [f"art:{number}"], f"art. {number}"
+            if annex:  # "Republicação, art. 1": the article of the law the annex republishes
+                key, shown = [*annex[0], *key], f"{annex[1]}, {shown}"
         elif (
             part.kind == "paragraph"
-            and key[:1]
-            and key[0].startswith("art:")
+            and key
+            and key[-1].startswith("art:")
             and _token_number(part.locator, "al")
         ):
             alinea = _token_number(part.locator, "al")  # counted, never printed: art_10__al_2
@@ -188,7 +218,11 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
             if schedule and not any(k.startswith("para:") for k in key):
                 key.append(f"para:{_plain(part.label)}")
                 shown += f", para. {_printed(part.label)}"
-            elif key and not key[0].startswith(("part:", "chap:")):
+            elif (
+                key
+                and not key[0].startswith(("part:", "chap:"))
+                and not key[-1].startswith(("annex:", "chap:"))
+            ):
                 key.append(_plain(part.label))
                 shown += f"({_printed(part.label)})"
             else:
@@ -230,6 +264,13 @@ def read(pinpoint: str) -> tuple[str, ...] | None:
         if found.group(4):
             key += [f"para:{_plain(found.group(4))}", *subs(found.group(5))]
         return tuple(key)
+    found = ANNEX.match(value)
+    if found:
+        number = (found.group(1) or "").casefold()
+        within = read(found.group(2)) if found.group(2) else ()
+        if within is None or (within and within[0].split(":")[0] not in ("art", "s", "part", "chap")):
+            return None
+        return (f"annex:{'1' if number in ('', 'único', 'unico') else _ordinal(number)}", *within)
     return _paragraph(value)
 
 
@@ -276,7 +317,7 @@ def split(citation: str) -> list[tuple[str, str, tuple[str, ...]]]:
         pin = " ".join(words[:n]).strip(" ,;")
         work = re.sub(r"^(?:of\s+)?(?:the\s+)?", "", " ".join(words[n:]).strip(" ,;"), flags=re.I)
         key = read(pin)
-        if key is not None and key[0].split(":")[0] in ("s", "art", "sch", "part", "chap"):
+        if key is not None and key[0].split(":")[0] in ("s", "art", "sch", "part", "chap", "annex"):
             if work and all(f[1] != pin for f in found):
                 found.append((work, pin, key))
             break

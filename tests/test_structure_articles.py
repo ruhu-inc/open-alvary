@@ -1,9 +1,9 @@
 """Structure rules for texts of articles (TXP-03, ArticleBuilder): the AU's charters, protocols and
 conventions, ECOWAS's Supplementary Acts, directives and regulations, and the laws of Côte d'Ivoire,
-Senegal, Burkina Faso, Cameroon, Angola and Mozambique. Each family is tried on short excerpts of an
-official text it was calibrated on, reviewed units as the workbench holds them after the cloud reading
-(ingestion.calibrate): its front matter, preamble, divisions, articles, paragraphs or alinéas, closing
-words, annexes and any stamp, and pinpoints resolved to their part.
+Senegal, Burkina Faso, Cameroon, Angola, Mozambique and Cape Verde. Each family is tried on short excerpts
+of an official text it was calibrated on, reviewed units as the workbench holds them after the cloud
+reading (ingestion.calibrate): its front matter, preamble, divisions, articles, paragraphs or alinéas,
+quoted text, closing words, annexes and any stamp, and pinpoints resolved to their part.
 
 The excerpts are a few provisions each, copied from the official files listed in
 private-staging/structure-samples/manifest.tsv; never add more of their text than a test needs."""
@@ -558,6 +558,287 @@ def test_a_mozambican_law_holds_its_annexes_after_its_signatures_and_the_next_la
     spans_nest(text, result)
 
 
+# --- cv-lei-1 -----------------------------------------------------------------------------------------
+
+
+def words(text, node):
+    """A node's span as words, the separators between its leaves as spaces."""
+    return " ".join(span(text, node).split())
+
+
+# Lei nº 120/IX/2021, de 17 de março, as the Boletim Oficial (I Série, número 28) prints it, from the
+# Imprensa Nacional de Cabo Verde: the issue's front matter, an amending law whose article 2 quotes the
+# articles it replaces in «…», its closing words, the law it amends republished after them (with
+# "CAPÍTULO II" printed twice, as the Boletim prints it), that law's own closing words, and the next law in
+# the issue.
+CV_120 = [
+    [para("REPÚBLICA DE CABO VERDE"), head("BOLETIM OFICIAL")],
+    [
+        head("ASSEMBLEIA NACIONAL"),
+        head("Lei nº 120/IX/2021"),
+        head("de 17 de março"),
+        head("PREÂMBULO"),
+        para("A Lei nº 42/VIII/2013, de 17 de setembro, que ora se propõe alterar, regula a composição"),
+        head("Artigo 1.º"),
+        head("Objeto"),
+        para("A presente lei procede à alteração da Lei nº 42/VIII/2013, de 17 de setembro"),
+        head("Artigo 2.º"),
+        head("Alterações"),
+        para(
+            "A presente lei altera os artigos 2.º, 10.º, 12.º, 13.º, 18.º, 27.º e 29.º, que passam a ter a "
+            "seguinte redação:"
+        ),
+        para(
+            "«Artigo 2.º [...] A CNPD é uma entidade administrativa independente, com personalidade jurídica"
+        ),
+        para("Artigo 10.º [...] 1. [...] [...] e) Fixar o tempo da conservação dos dados pessoais"),
+        para(
+            "A CNPD deve ser consultada para emitir parecer sobre quaisquer iniciativas",
+            "list_item",
+            marker="1.",
+        ),
+    ],
+    [
+        head("Artigo 29.º"),
+        para("[...]"),
+        para("c) Revogada;", "list_item"),
+        head("Artigo 32.º"),
+        head("Competências e substituição do presidente"),
+        para("f) Convocar as reuniões e fixar a ordem de trabalhos;", "list_item"),
+        para("2. [...]»"),
+        head("Artigo 3.º"),
+        head("Revogação"),
+        para("São revogados os artigos 29.º, alínea c), 47.º e 50.º."),
+        head("Artigo 5.º"),
+        head("Entrada em vigor"),
+        para("A presente lei entra em vigor trinta dias após a sua publicação."),
+        para(
+            "Aprovada em 11 de fevereiro de 2021. O Presidente da Assembleia Nacional, Jorge Pedro "
+            "Maurício dos Santos Promulgada em 1 de março de 2021. Publique-se."
+        ),
+        head("REPUBLICAÇÃO"),
+        para("Lei nº 42/VIII/2013, de 17 de setembro"),
+        head("CAPÍTULO I"),
+        head("Disposições gerais"),
+        head("Artigo 1.º"),
+        head("Objeto"),
+        para("A presente lei regula a composição, a competência, a organização e o funcionamento da CNPD"),
+    ],
+    [
+        head("CAPÍTULO II"),
+        head("Atribuições e competências"),
+        para("Artigo 8.º"),
+        head("Atribuições"),
+        para("1. A CNPD é a autoridade nacional à qual incumbe controlar e fiscalizar o cumprimento"),
+        head("CAPÍTULO II"),
+        head("Organização e estatuto dos membros"),
+        head("Secção I"),
+        head("Composição, mandato e posse"),
+        head("Artigo 13.º"),
+        head("Composição e eleição"),
+        para("A CNPD é composta por três personalidades de reconhecida competência e integridade moral"),
+    ],
+    [
+        para("Artigo 49.º"),
+        head("Entrada em vigor"),
+        para("O presente diploma entra em vigor no dia seguinte ao da sua publicação"),
+        para("Aprovada em 24 de julho de 2013. O Presidente da Assembleia Nacional, Basílio Mosso Ramos"),
+        head("Lei nº 121 /IX//2021"),
+        head("de 17 de março"),
+        head("Artigo 1.º"),
+        head("Objeto"),
+    ],
+]
+
+
+def test_a_cape_verdean_amending_law_quotes_what_it_replaces_and_republishes_the_law_in_an_annex():
+    text, result = build(CV_120, structure.CV_LAW, "pt")
+    nodes = by_locator(result)
+    assert result.root.heading == "Lei nº 120/IX/2021"
+    assert words(text, nodes["preamble"]).startswith("de 17 de março PREÂMBULO")
+    articles = [n for n in result.nodes if n.kind == "article"]
+    assert [n.locator for n in articles if n.parent.kind != "annex" and "annex" not in n.locator] == [
+        "art_1",
+        "art_2",
+        "art_3",
+        "art_5",
+    ]
+    assert (nodes["art_2"].heading, nodes["art_3"].heading) == ("Alterações", "Revogação")
+    # The articles article 2 quotes are its words, to the closing », never the law's own articles.
+    quotation = nodes["art_2__quot_1"]
+    quoted = words(text, quotation)
+    assert (quotation.kind, quotation.parent) == ("quotation", nodes["art_2"])
+    assert quoted.startswith("«Artigo 2.º [...]") and quoted.endswith("2. [...]»")
+    assert not quotation.children and "art_29" not in nodes and "art_32" not in nodes
+    assert words(text, nodes["art_2"]).startswith("Artigo 2.º Alterações A presente lei altera")
+    assert words(text, nodes["notice_1"]).startswith("Aprovada em 11 de fevereiro de 2021.")
+    annex = nodes["annex_1"]
+    assert (annex.kind, annex.label, annex.heading, annex.parent) == (
+        "annex",
+        "REPUBLICAÇÃO",
+        "Lei nº 42/VIII/2013, de 17 de setembro",
+        result.root,
+    )
+    # The republished law's articles restart, qualified by the annex; its chapters nest in it.
+    first = nodes["annex_1__art_1"]
+    assert (first.label, first.heading, first.parent) == ("Artigo 1", "Objeto", nodes["annex_1__chap_i"])
+    assert nodes["annex_1__chap_i"].parent is annex
+    assert nodes["annex_1__art_8"].heading == "Atribuições"
+    assert nodes["annex_1__art_8__para_1"].label == "1."
+    assert nodes["annex_1__chap_ii_2"].heading == "Organização e estatuto dos membros"  # printed twice
+    assert nodes["annex_1__art_13"].parent is nodes["annex_1__chap_ii_2__dvs_i"]
+    # That law's own closing words are the annex's; the next law in the issue is a notice.
+    assert "Aprovada em 24 de julho" not in words(text, nodes["annex_1__art_49"])
+    assert words(text, annex).endswith("Basílio Mosso Ramos")
+    assert words(text, nodes["notice_2"]).startswith("Lei nº 121 /IX//2021")  # its Artigo 1.º is no article
+    assert resolve(result, "art. 1") is nodes["art_1"]
+    assert resolve(result, "Republicação, art. 1") is first
+    assert resolve(result, "Anexo, art. 8.º(1)") is nodes["annex_1__art_8__para_1"]
+    assert codes(result) == ["repeated_locator"]
+    spans_nest(text, result)
+
+
+# Lei nº 121/IX/2021, de 17 de março, the second law in the same issue, as a document holding its own
+# pages: article 2 quotes the articles it replaces and article 3 those it inserts, without «; articles whose
+# heading the reading kept with their words ("Artigo 4.º Revogação É revogado …"); the republished law in an
+# annex named after the signatures in the same block, with a "Subsecção" printed without its number; and
+# the decree printed after it.
+CV_121 = [
+    [
+        head("Lei nº 121 /IX//2021"),
+        head("de 17 de março"),
+        head("PREÂMBULO"),
+        para("1. O regime jurídico geral de proteção de dados pessoais das pessoas singulares"),
+        head("Artigo 1.º"),
+        head("Objeto"),
+        para("A presente lei procede à segunda alteração do regime jurídico geral de proteção de dados"),
+        head("Artigo 2.º"),
+        head("Alterações"),
+        para(
+            "São alterados os artigos 2.º, 4.º, 5.º, 6.º, 8.º, 9.º, 10.º, 11.º, 12.º, 13.º, 14.º, 15.º, "
+            "26.º e 41.º, que passam a ter a seguinte redação:"
+        ),
+        para("Artigo 2.º [...]"),
+        para(
+            "A presente lei aplica-se ao tratamento de dados pessoais por meios total",
+            "list_item",
+            marker="1.",
+        ),
+        para("Artigo 4.º [...] O tratamento de dados pessoais deve processar-se no estrito respeito"),
+        para("Artigo 8.º (Tratamento de dados especiais)"),
+        para("3. [...]"),
+    ],
+    [
+        head("Artigo 3.º"),
+        head("Aditamentos"),
+        para(
+            "São aditados os artigos 8.º -A e 8.º - B, 12.º -A, 44.º -C e 44.º - D, com a seguinte redação:"
+        ),
+        para("Artigo 8.º -A"),
+        head("(Condições aplicáveis ao consentimento)"),
+        para("1. Quando o tratamento for realizado com base no consentimento, o responsável pelo tratamento"),
+        para(
+            "2. A pena é agravada para o dobro nos seus limites se da inserção referida no número anterior "
+            'resultar prejuízo efetivo".'
+        ),
+        para(
+            "Artigo 4.º Revogação É revogado o artigo 48.º da Lei nº 133/V/2001, de 22 de janeiro, "
+            "alterada pela Lei nº 41/VIII/2013, de 17 de setembro."
+        ),
+        para("Artigo 6.º Entrada em vigor A presente lei entra em vigor trinta dias após a sua publicação."),
+        para(
+            "Aprovada em 11 de fevereiro de 2021. O Presidente da Assembleia Nacional, Jorge Pedro Maurício"
+        ),
+        para(
+            "REPUBLICAÇÃO Lei nº 133/V/2001, de 22 de janeiro, alterada pela Lei nº 41/VIII/2013, de 17 de "
+            "setembro, que estabelece o regime jurídico geral de proteção de dados pessoais"
+        ),
+        head("CAPÍTULO I"),
+        head("Disposições gerais"),
+        para("Artigo 1.º (Objeto) A presente lei estabelece o regime jurídico geral de proteção de dados"),
+        para("Artigo 2.º"),
+        head("(Âmbito de aplicação)"),
+        para("1. A presente lei aplica-se ao tratamento de dados pessoais por meios total ou parcialmente"),
+    ],
+    [
+        head("CAPÍTULO VI"),
+        head("Recursos judiciais, responsabilidade civil, infrações e sanções"),
+        head("Secção II"),
+        head("Infrações e sanções"),
+        head("Subsecção"),
+        head("Contraordenações"),
+        para("Artigo 48.º (Legislação subsidiária) Às infrações previstas na presente subsecção é"),
+        head("Subsecção II"),
+        head("Crimes"),
+        head("Artigo 59.º"),
+        head("(Não cumprimento de obrigações relativas a proteção de dados)"),
+        head("Artigo 71.º"),
+        head("(Entrada em vigor)"),
+        para("A presente lei entra em vigor trinta dias após a sua publicação."),
+        para("Aprovada em 20 de dezembro de 2000. O Presidente da Assembleia Nacional, António do Espírito"),
+        head("CONSELHO DE MINISTROS"),
+        head("Decreto-lei nº 21/2021"),
+        head("de 17 de março"),
+        head("Artigo 1º"),
+        head("Objeto"),
+        para("Anexo (A que se refere o artigo 1º) Zona de Desenvolvimento Turístico Integrado (ZDTI)"),
+    ],
+]
+
+
+def test_a_quotation_without_marks_ends_at_the_amending_laws_next_article_or_its_closing_mark():
+    text, result = build(CV_121, structure.CV_LAW, "pt")
+    nodes = by_locator(result)
+    assert result.root.heading == "Lei nº 121 /IX//2021"
+    own = [n.locator for n in result.nodes if n.kind == "article" and not n.locator.startswith("annex_")]
+    assert own == ["art_1", "art_2", "art_3", "art_4", "art_6"]  # the quoted articles 2, 4, 8 and 8-A are not
+    altered, added = words(text, nodes["art_2__quot_1"]), words(text, nodes["art_3__quot_1"])
+    assert altered.startswith("Artigo 2.º [...] 1. A presente lei") and altered.endswith("3. [...]")
+    assert added.startswith("Artigo 8.º -A (Condições") and added.endswith('efetivo".')  # its closing mark
+    assert (nodes["art_3__quot_1"].parent, nodes["art_3"].heading) == (nodes["art_3"], "Aditamentos")
+    # "Artigo 4.º Revogação É revogado …": the heading is not cut from the words, and the reviewer is told.
+    assert nodes["art_4"].heading == "" and words(text, nodes["art_4"]).startswith("Artigo 4.º Revogação É")
+    assert words(text, nodes["notice_1"]).startswith("Aprovada em 11 de fevereiro")
+    annex = nodes["annex_1"]
+    assert (annex.label, annex.heading[:31]) == ("REPUBLICAÇÃO", "Lei nº 133/V/2001, de 22 de jan")
+    first = nodes["annex_1__art_1"]
+    assert first.heading == "Objeto" and words(text, first).startswith("Artigo 1.º (Objeto) A presente lei")
+    assert nodes["annex_1__art_2"].heading == "Âmbito de aplicação" and "annex_1__art_2__para_1" in nodes
+    # "Subsecção" without its number is numbered by its place; "Subsecção II" follows it.
+    unnumbered, inside = nodes["annex_1__chap_vi__dvs_ii__subdvs_1"], nodes["annex_1__art_48"]
+    assert (unnumbered.label, unnumbered.heading) == ("Subsecção", "Contraordenações")
+    assert (inside.parent, inside.heading) == (unnumbered, "Legislação subsidiária")
+    assert nodes["annex_1__chap_vi__dvs_ii__subdvs_ii"].heading == "Crimes"
+    assert "Aprovada em 20 de dezembro" not in words(text, nodes["annex_1__art_71"])
+    # The issuing body's heading opens the decree printed next; its "Anexo" is the decree's, not the law's.
+    assert words(text, nodes["notice_2"]).startswith("CONSELHO DE MINISTROS Decreto-lei nº 21/2021")
+    assert [n.locator for n in result.nodes if n.kind == "annex"] == ["annex_1"]
+    assert resolve(result, "art. 2") is nodes["art_2"]  # its quotation has no pinpoint of its own
+    assert resolve(result, "Republicação, art. 48") is nodes["annex_1__art_48"]
+    assert sorted(codes(result)) == ["heading_in_words", "heading_in_words", "unnumbered_division"]
+    spans_nest(text, result)
+
+
+def test_a_quotation_left_open_holds_the_text_to_the_closing_words_and_is_reported():
+    pages = [
+        [
+            head("Lei nº 120/IX/2021"),
+            head("Artigo 2.º"),
+            head("Alterações"),
+            para("A presente lei altera o artigo 2.º, que passa a ter a seguinte redação:"),
+            para("«Artigo 2.º [...] A CNPD é uma entidade administrativa independente"),
+            head("Artigo 3.º"),
+            head("Revogação"),
+            para("Aprovada em 11 de fevereiro de 2021."),
+        ]
+    ]
+    text, result = build(pages, structure.CV_LAW, "pt")
+    nodes = by_locator(result)
+    assert "art_3" not in nodes and words(text, nodes["art_2__quot_1"]).endswith("Artigo 3.º Revogação")
+    assert codes(result) == ["quotation_unclosed"] and "notice_1" in nodes
+    spans_nest(text, result)
+
+
 # --- sn-loi-1 -----------------------------------------------------------------------------------------
 
 # Loi n° 2008-12 du 25 janvier 2008 sur la protection des données à caractère personnel, as the Commission
@@ -848,15 +1129,16 @@ def test_the_families_are_read_by_jurisdiction_and_type_and_nothing_else():
     assert rules("aa-ecowas", "directive") == structure.ECOWAS_DIRECTIVE
     assert rules("aa-ecowas", "regulation") == structure.ECOWAS_REGULATION
     assert rules("aa-ecowas", "decision") is None  # no whole official decision to calibrate on yet
-    assert [rules(code, "law") for code in ("ci", "sn", "bf", "cm", "ao", "mz")] == [
+    assert [rules(code, "law") for code in ("ci", "sn", "bf", "cm", "ao", "mz", "cv")] == [
         structure.CI_LAW,
         structure.SN_LAW,
         structure.BF_LAW,
         structure.CM_LAW,
         structure.AO_LAW,
         structure.MZ_LAW,
+        structure.CV_LAW,
     ]
-    assert rules("ao", "decree") is None and rules("cv", "law") is None
+    assert rules("ao", "decree") is None and rules("cv", "decree_law") is None
 
 
 def test_each_ecowas_class_is_read_only_in_the_languages_it_was_calibrated_in():

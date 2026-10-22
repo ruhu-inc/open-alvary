@@ -40,6 +40,14 @@ def part(kind, label=None, locator="x"):
         ("art. 853-1", ("art:853-1",)),
         ("article 626-1-1-1, alinéa 2", ("art:626-1-1-1", "2")),
         ("art. 2-1 al. 1", ("art:2-1", "1")),
+        # A Portuguese article's ordinal sign; an annex's article, keyed within it.
+        ("art. 5.º", ("art:5",)),
+        ("Anexo I, art. 3", ("annex:1", "art:3")),
+        ("Anexo, art. 1.º(2)", ("annex:1", "art:1", "2")),
+        ("Republicação, art. 1(2)(a)", ("annex:1", "art:1", "2", "a")),
+        ("Annex 2", ("annex:2",)),
+        ("Anexo II, Chapter III", ("annex:2", "chap:3")),
+        ("Anexo, First Schedule", None),
         ("First Schedule, para. 3(a)", ("sch:1", "para:3", "a")),
         ("Schedule 2, Part II, paragraph 4", ("sch:2", "part:2", "para:4")),
         ("Sch. 1 para 3", ("sch:1", "para:3")),
@@ -216,6 +224,38 @@ def test_an_alinea_and_an_inserted_article_are_cited_and_read_back():
     assert pinpoint.read("art. 853-1") == ("art:853-1",)
     # A paragraph without a number inside a section is still not cited.
     assert pinpoint.cite([part("section", "23.", "sec_23"), part("paragraph", "", "sec_23__para_x")]) is None
+
+
+def test_an_annexs_parts_are_cited_within_it_and_a_quotation_has_no_pinpoint_of_its_own():
+    # cv-lei-1: the law an amending law republishes in an annex restarts its articles, so its article 1 is
+    # cited after the annex's name, never as the amending law's own; mz-lei-1's "Anexo I" likewise.
+    annex = part("annex", "REPUBLICAÇÃO", "annex_1")
+    chapter = part("chapter", "CAPÍTULO I", "annex_1__chap_i")
+    article = part("article", "Artigo 1", "annex_1__art_1")
+    item = [part("paragraph", "1.", "annex_1__art_1__para_1"), part("subparagraph", "a)", "x")]
+    for chain, shown in (
+        ([part("document"), annex], "Republicação"),
+        ([annex, chapter], "Republicação, Chapter I"),
+        ([annex, chapter, article], "Republicação, art. 1"),
+        ([annex, chapter, article, *item], "Republicação, art. 1(1)(a)"),
+        (
+            [part("annex", "Anexo II", "annex_ii"), part("article", "ARTIGO 3", "annex_ii__art_3")],
+            "Anexo II, art. 3",
+        ),
+    ):
+        key, cited = pinpoint.cite(chain)
+        assert cited == shown and pinpoint.read(cited) == key
+    assert pinpoint.cite([part("article", "Artigo 1", "art_1")])[0] != pinpoint.cite([annex, article])[0]
+    assert pinpoint.cite([annex, chapter, part("paragraph", "1.", "annex_1__chap_i__para_1")]) is None
+    # The text an amending article quotes is that article's words: its own span names nothing.
+    assert (
+        pinpoint.cite([part("article", "Artigo 2", "art_2"), part("quotation", "", "art_2__quot_1")]) is None
+    )
+    assert pinpoint.split("Lei n.º 121/IX/2021, Republicação, art. 1")[0] == (
+        "Lei n.º 121/IX/2021",
+        "Republicação, art. 1",
+        ("annex:1", "art:1"),
+    )
 
 
 def node(id_, kind, start, end, raw, parent=None, label=None, heading=None, locator=None):
