@@ -1711,6 +1711,15 @@ SEC_CIRCULARS = "https://sec.gov.ng/for-investors/keep-track-of-circulars/"
 GENERIC_LINK = re.compile(r"^download(?: the)?(?: full)?(?: document)?$", re.I)
 
 
+def sec_title(heading: str | None, label: str) -> str | None:
+    """A document's title: its link's own words where they name an instrument ("Download the Full
+    Investment and Securities Act, 2025"), else the heading above it, else the link's words."""
+    named = re.sub(r"^download\s+(?:the\s+)?(?:full\s+)?", "", label or "", flags=re.I).strip()
+    if named and law_type(named) and not GENERIC_LINK.match(label or ""):
+        return named
+    return heading or (None if GENERIC_LINK.match(label or "") else label)
+
+
 def sec_blocks(soup, page_url: str) -> list[dict]:
     """The documents of a Wagtail page, each with the heading and paragraphs before it and their HTML:
     a download block's file, or a file linked inside a paragraph (an item of a list, titled by its
@@ -1749,7 +1758,7 @@ def sec_blocks(soup, page_url: str) -> list[dict]:
                     document(link, label, rest, None, fragment(entry))
                 else:
                     text = clean(block.get_text(" ")).replace(label, " ").strip()
-                    title = heading or (None if GENERIC_LINK.match(label) else label)
+                    title = sec_title(heading, label)
                     description = " ".join(p for p in [*paragraphs, text] if p)
                     document(
                         link,
@@ -1766,7 +1775,7 @@ def sec_blocks(soup, page_url: str) -> list[dict]:
             spans = [clean(s.get_text(" ")) for s in link.find_all("span")]
             label = spans[0] if spans else clean(link.get_text(" "))
             size = next((s for s in spans if re.search(r"\b[KMG]?B\b", s)), None)
-            title = heading or (None if GENERIC_LINK.match(label or "") else label)
+            title = sec_title(heading, label)
             description = " ".join(p for p in paragraphs if p)
             document(link, title, description, size, "".join(filter(None, [*html_parts, fragment(block)])))
             out[-1]["link_text"] = label
@@ -2610,10 +2619,12 @@ FAMILY = {"constitutional_alteration": "constitution", "judgment": "case", "ruli
 
 
 def _title_key(title: str) -> str:
-    """A title as words, markup, punctuation and filler aside, in order: 'JOINT REVENUE BOARD OF NIGERIA
-    (ESTABLISHMENT) ACT, 2025' and 'Joint Revenue Board of Nigeria (Establishment) Act 2025' alike."""
+    """A title as its words, markup, punctuation, filler, plurals and order aside: 'JOINT REVENUE BOARD
+    OF NIGERIA (ESTABLISHMENT) ACT, 2025' and 'Joint Revenue Board of Nigeria (Establishment) Act 2025'
+    alike, '1999 CONSTITUTION OF NIGERIA' and 'Constitution of the Federal Republic of Nigeria 1999' too."""
     words = re.findall(r"[a-z0-9]+", clean(title).lower().replace("&", " and "))
-    return " ".join(w for w in words if w not in TITLE_NOISE)
+    stems = {w[:-1] if w.endswith("s") and len(w) > 4 else w for w in words if w not in TITLE_NOISE}
+    return " ".join(sorted(stems))
 
 
 def duplicate_keys(record: dict) -> list[tuple[str, str]]:
@@ -2629,7 +2640,8 @@ def duplicate_keys(record: dict) -> list[tuple[str, str]]:
             keys.append(("case", f"{number} {listed['judgment_date']}"))
         return keys
     title = _title_key(listed.get("title") or "")
-    if len([w for w in title.split() if not w.isdigit()]) >= 2 and re.search(r"\b(?:18|19|20)\d\d\b", title):
+    words = title.split()
+    if len(words) >= 2 and any(not w.isdigit() for w in words) and re.search(r"\b(?:18|19|20)\d\d\b", title):
         keys.append(("title", f"{family} {title}"))
     year = listed.get("year")
     for field in ("si_number", "bill_number", "number"):
