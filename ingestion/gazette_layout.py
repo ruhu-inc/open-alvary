@@ -119,10 +119,27 @@ class _Words(HTMLParser):
             self._word["text"] += data
 
 
-def words(bbox_html: str) -> list[dict]:
+# pdfinfo's "Page   3 rot:   90": the quarter turns a file asks a viewer to give its pages.
+ROTATION = re.compile(r"^Page\s+(\d+)\s+rot:\s+(\d+)", re.MULTILINE)
+# Between pdfinfo's rotations and pdftotext's words in one sandbox run's output.
+RUN_BREAK = "<!-- pdftotext -->"
+
+
+def rotations(pdfinfo: str) -> dict[int, int]:
+    return {int(page): int(turn) % 360 for page, turn in ROTATION.findall(pdfinfo or "")}
+
+
+def words(bbox_html: str, turned: dict[int, int] | None = None) -> list[dict]:
+    """Pages and their words. pdftotext places a turned page's words on the page as it is shown
+    (a Gazette issue's landscape pages, /Rotate 90 or 270) but states its size unturned, so such a
+    page's width and height are swapped here (``turned``, from pdfinfo): every position is then a share
+    of the page it is on, as Google's OCR of the page image gives its words."""
     parser = _Words()
     parser.feed(bbox_html)
     pages = parser.pages
+    for number, page in enumerate(pages, 1):
+        if (turned or {}).get(number, 0) in (90, 270):
+            page["width"], page["height"] = page["height"], page["width"]
     # A page with no size is a reference to a page missing from a damaged file (RLRC's 2003
     # Constitution lists 60 pages and holds 49); poppler repeats another page's words on it. It
     # keeps its place, so the pages after it keep their numbers, but nothing is read from it.
@@ -249,7 +266,10 @@ def text_layer(pdf: Path) -> list[dict]:
             timeout=600,
             check=True,
         )
-        return words(completed.stdout)
+        info = subprocess.run(  # a damaged file's pdfinfo may fail: its pages are then read unturned
+            ["pdfinfo", "-f", "1", "-l", "99999", str(pdf)], capture_output=True, text=True, timeout=600
+        )
+        return words(completed.stdout, rotations(info.stdout))
     completed = subprocess.run(
         [
             "docker",
@@ -265,14 +285,16 @@ def text_layer(pdf: Path) -> list[dict]:
             "-v",
             f"{Path(pdf).resolve()}:/in/doc.pdf:ro",
             SANDBOX_IMAGE,
-            "pdftotext -bbox-layout -enc UTF-8 /in/doc.pdf -",
+            f"pdfinfo -f 1 -l 99999 /in/doc.pdf 2>/dev/null; echo '{RUN_BREAK}';"
+            " pdftotext -bbox-layout -enc UTF-8 /in/doc.pdf -",
         ],
         capture_output=True,
         text=True,
         timeout=600,
         check=True,
     )
-    return words(completed.stdout)
+    info, _, html = completed.stdout.partition(RUN_BREAK)
+    return words(html, rotations(info))
 
 
 def probe(pdf: Path) -> list[dict]:

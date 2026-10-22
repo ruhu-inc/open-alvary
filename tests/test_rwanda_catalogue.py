@@ -774,15 +774,40 @@ def test_in_a_cloud_job_the_text_layer_is_read_by_pdftotext_in_its_own_container
 
     def run(command, **kwargs):
         seen.append(command)
+        if command[0] == "pdfinfo":
+            return subprocess.CompletedProcess(
+                command, 0, "Pages: 2\nPage    1 rot:   0\nPage    2 rot:  90\n", ""
+            )
         return subprocess.CompletedProcess(
-            command, 0, '<doc><page width="600" height="840"></page></doc>', ""
+            command,
+            0,
+            '<doc><page width="600" height="840"></page><page width="600" height="840"></page></doc>',
+            "",
         )
 
     monkeypatch.setattr(gazette_layout.subprocess, "run", run)
     monkeypatch.setenv("ALVARY_TEXT_LAYER", "direct")
     pages = gazette_layout.text_layer(tmp_path / "issue.pdf")
     assert seen[0][:2] == ["pdftotext", "-bbox-layout"] and "docker" not in seen[0]
-    assert pages[0]["width"] == 600.0
+    assert seen[1][0] == "pdfinfo"
+    assert (pages[0]["width"], pages[1]["width"], pages[1]["height"]) == (600.0, 840.0, 600.0)
+
+
+def test_a_turned_page_has_the_size_it_is_shown_at_as_its_words_do():
+    """pdftotext places a landscape page's words (/Rotate 90 or 270) on the turned page but states its
+    size unturned: the size is swapped, so a word's position is a share of the page it is on."""
+    from ingestion import gazette_layout
+
+    html = (
+        '<doc><page width="595.22" height="842"><word xMin="731" yMin="40" xMax="760" yMax="48">15/04/2007</word>'
+        '</page><page width="595.22" height="842"></page></doc>'
+    )
+    turned = gazette_layout.words(html, gazette_layout.rotations("Page    1 rot:   90\nPage    2 rot:   0"))
+    assert (turned[0]["width"], turned[0]["height"]) == (842.0, 595.22)
+    assert turned[0]["words"][0]["xmax"] / turned[0]["width"] < 1  # on the page, as Google's OCR places it
+    assert (turned[1]["width"], turned[1]["height"]) == (595.22, 842.0)
+    assert gazette_layout.rotations("Page   12 rot:  270") == {12: 270}
+    assert gazette_layout.words(html)[0]["width"] == 595.22  # no rotations known: as stated
 
 
 def test_an_issue_prepared_by_an_older_pipeline_is_prepared_again_and_the_manifest_reads_both():
