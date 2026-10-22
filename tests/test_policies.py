@@ -12,3 +12,7 @@ def test_the_website_shows_the_version_people_accept():
     assert set(policies.CURRENT.values()) == {shown}
     for path in policies.PATHS.values():
         assert f'pathname === "{path}"' in Path("web/src/main.tsx").read_text()
+
+
+def test_the_current_version_says_what_it_changes_for_the_owners_notice():
+    assert set(policies.CURRENT.values()) <= set(policies.CHANGES)

@@ -1797,6 +1797,7 @@ const ACTIONS: Record<string, string> = {
   "member.removed": "Removed a member",
   "member.role_changed": "Changed a role",
   "ownership.transferred": "Transferred ownership",
+  "terms.notice_sent": "Emailed an owner about new terms",
 };
 
 export function Settings({ org, refresh }: PageProps) {

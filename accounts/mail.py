@@ -1,4 +1,5 @@
-"""Account email (ACS-07, MAC-04, MAC-08): invitations, access requests and decisions, sign-in changes.
+"""Account email (ACS-07, MAC-04, MAC-08): invitations, access requests and decisions, sign-in changes,
+new terms.
 
 Sent through Resend's HTTP API from Ruhu, Inc.'s verified domain (ALVARY_MAIL_FROM, by default
 "Open Alvary <no-reply@ruhu.ai>"), with RESEND_API_KEY from Secret Manager. Without a
@@ -153,6 +154,22 @@ def access_revoked(to: str, organisation: str, base: str) -> Message:
         f"{organisation}'s access to the Open Alvary API and MCP has ended. Keys and connected apps are "
         f"kept, and work again if access is granted later.\n\nQuestions or an appeal: reply to this email. "
         f"Details at {base}/console/access.\n\n" + SIGN_OFF,
+    )
+
+
+def terms_notice(to: str, version: str, effective, changes: str, base: str) -> Message:
+    """New terms, emailed to each organisation's owners at least 30 days ahead (terms, "Changes")."""
+    when = f"{effective.day} {effective:%B %Y}"
+    return Message(
+        to,
+        f"Open Alvary's terms change on {when}",
+        f"We have published version {version} of the Open Alvary terms of service, acceptable use policy "
+        f"and privacy notice. It takes effect on {when}.\n\nWhat changes:\n\n{changes}\n\n"
+        f"Read them at {base}/terms, {base}/acceptable-use and {base}/privacy. Using your organisation's "
+        f"keys or connected apps after {when} counts as accepting them, and the console asks you to accept "
+        "them at your next sign-in. If you don't accept them, you can close your account in the console.\n\n"
+        "You receive this because you own an organisation on Open Alvary. Questions: reply to this email.\n\n"
+        + SIGN_OFF,
     )
 
 

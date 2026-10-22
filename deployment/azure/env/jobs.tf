@@ -56,6 +56,15 @@ locals {
           AZURE_CLIENT_ID    = azurerm_user_assigned_identity.public.client_id
         }
       }
+      # New terms, emailed to organisations' owners (runbook, "New terms"), started by hand with
+      # --args: the operator, then the notice's arguments.
+      terms = {
+        command = ["sh", "-c", "exec python -m accounts.operator --operator \"$0\" terms-notice \"$@\""]
+        cron    = null
+        timeout = 900
+        secrets = {}
+        env     = {}
+      }
     } : {},
   )
 }

@@ -2,6 +2,7 @@
 secrets, and every one is audited with its reason and evidence (accounts.access_admin)."""
 
 import json
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 
 import pytest
@@ -248,3 +249,42 @@ def test_operators_pin_and_unpin_verified_publishers_and_the_label_follows(world
         "client.unpinned",
         "client.pinned",
     ]
+
+
+def test_owners_are_told_of_new_terms_once_each_and_at_least_30_days_ahead(world):
+    owner_store, admin, _, _ = world
+    amina, own = person(owner_store, "amina")
+    second = owner_store.create_organisation(amina, "Amina Two")
+    _, bola_org = person(owner_store, "bola")
+    version = next(iter(policies.CHANGES))
+    today = datetime.now(UTC).date()
+    soon, later = today + timedelta(days=10), today + timedelta(days=policies.NOTICE_DAYS)
+    with pytest.raises(AccountError, match="at least 30 days"):
+        admin.terms_notice(act("New terms"), version, soon)
+    with pytest.raises(AccountError, match="no CHANGES"):
+        admin.terms_notice(act("New terms"), "2000-01-01", later)
+    counted = admin.terms_notice(act("New terms"), version, later, dry_run=True)
+    assert (counted["owners"], counted["organisations"]) == (2, 3) and admin.mailer.sent == []
+
+    class FailsForBola(RecordingMailer):
+        def send(self, message):
+            super().send(message)
+            return message.to != "bola@example.org"
+
+    admin.mailer = FailsForBola()
+    told = admin.terms_notice(act("Owner approved"), version, later)
+    assert (told["sent"], told["failed"]) == (1, 1)
+    assert sorted(m.to for m in admin.mailer.sent) == ["amina@example.org", "bola@example.org"]
+    notice = admin.mailer.sent[0] if admin.mailer.sent[0].to == "amina@example.org" else admin.mailer.sent[1]
+    assert version in notice.text and "https://site.test/terms" in notice.text
+
+    admin.mailer = RecordingMailer()  # the next run tells only the owner whose mail failed
+    again = admin.terms_notice(act("Owner approved"), version, later)
+    assert (again["owners"], again["sent"]) == (1, 1)
+    assert [m.to for m in admin.mailer.sent] == ["bola@example.org"]
+    assert admin.terms_notice(act("Owner approved"), version, later)["owners"] == 0
+    events = admin.audit(action="terms.")
+    assert sorted(e["organisation_id"] for e in events) == sorted([own, second, bola_org])
+    assert {e["summary"]["version"] for e in events} == {version}
+    sooner = admin.terms_notice(act("Court order"), version, soon, sooner=True, dry_run=True)
+    assert sooner["owners"] == 0

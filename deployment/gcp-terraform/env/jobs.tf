@@ -5,7 +5,8 @@
 #   section index is rebuilt when its analyzer changed (python -m retrieval.worker run);
 # - indexer: the semantic index's operator commands, run by hand (python -m retrieval.indexer);
 # - worker and daily (activation B): monitors, digests and webhooks every five minutes; audit seals,
-#   sweeps and purges once a day at 03:15 UTC, as today. Their schedules stay paused until the
+#   sweeps and purges once a day at 03:15 UTC, as today; terms, run by hand, emails owners of
+#   new terms. Their schedules stay paused until the
 #   public domains point here (domain_live): only the live environment writes to the outside world.
 
 locals {
@@ -52,6 +53,15 @@ locals {
         args    = []
         cron    = "15 3 * * *"
         timeout = 600
+        secrets = {}
+      }
+      # New terms, emailed to organisations' owners (runbook, "New terms"), run by hand with the
+      # operator and the notice's arguments. The command is fixed, so the job can do nothing else.
+      terms = {
+        command = ["sh", "-c", "exec python -m accounts.operator --operator \"$0\" terms-notice \"$@\""]
+        args    = []
+        cron    = null
+        timeout = 900
         secrets = {}
       }
     } : {},
