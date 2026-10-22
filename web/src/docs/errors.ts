@@ -55,6 +55,11 @@ export const CODES: [number, string, string][] = [
   [403, "organisation_suspended", "The organisation is suspended."],
   [403, "wrong_address", "The request did not come through open.alvary.ai or api.open.alvary.ai. Use those addresses."],
   [404, "unavailable", "There is no such record or change, or it is not public."],
+  [
+    404,
+    "not_found_route",
+    "There is no route at this address: a mistyped path, or one the API doesn't have. A missing record is `unavailable` instead. Check the path against the API reference.",
+  ],
   [409, "stale_cursor", "The cursor expired (after 15 minutes). Continue from your last resume token."],
   [
     409,

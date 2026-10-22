@@ -185,6 +185,34 @@ class Accounts:
                 text(f"SELECT {self._fn(conn, 'record_usage')}(CAST(:e AS jsonb))"), {"e": json.dumps(entry)}
             )
 
+    def credential(self, organisation_id: str, credential: str) -> dict | None:
+        """The credential the gate has just checked, as REST v1's GET /key describes it: an API key's ID,
+        kind, name, creation, expiry and whether a rotation replaced it, or a connected app's grant. Only
+        that credential, read within its own organisation; never a secret or a hash."""
+        with self.engine.connect() as conn:
+            if credential.startswith("key_"):
+                keys_table = self._t(conn, "api_key")
+                row = conn.execute(
+                    text(
+                        f"SELECT 'key_' || k.key_id AS id, k.kind, k.name, k.created_at, k.expires_at,"
+                        f" EXISTS (SELECT 1 FROM {keys_table} n WHERE n.organisation_id = k.organisation_id"
+                        f" AND n.rotated_from = k.key_id) AS replaced FROM {keys_table} k"
+                        " WHERE k.key_id = :k AND k.organisation_id = :o"
+                    ),
+                    {"k": credential.removeprefix("key_"), "o": organisation_id},
+                )
+            else:
+                row = conn.execute(
+                    text(
+                        "SELECT g.id, 'app' AS kind, g.client_name AS name, g.created_at,"
+                        " NULL::timestamptz AS expires_at, false AS replaced"
+                        f" FROM {self._t(conn, 'client_grant')} g WHERE g.id = :g AND g.organisation_id = :o"
+                    ),
+                    {"g": credential, "o": organisation_id},
+                )
+            found = row.mappings().first()
+            return dict(found) if found else None
+
     # ---------- who to tell ----------
     def notice_recipients(self, organisation_id: str, request_id: str | None = None) -> dict:
         """The organisation's name and who hears about its access: the request's contact, else its owners."""

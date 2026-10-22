@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.testclient import TestClient
 
 from accounts import keys
-from api.credentials import GRANT_CLAIM, CredentialGate, GateConfig, TokenVerifier
+from api.credentials import GRANT_CLAIM, CredentialGate, GateConfig, TokenVerifier, problem
 from rights.bytes import LedgerUnavailable, Reservation
 
 ISSUER = "https://login.example.test/"
@@ -45,10 +45,14 @@ def app():
     def unchanged():
         return Response(status_code=304)
 
+    @inner.get("/missing")
+    def missing(request: Request):
+        return problem("unavailable", request.state.request_id)
+
     return inner
 
 
-def gate(check, verifier=None, usage=None, ledger=None):
+def gate(check, verifier=None, usage=None, ledger=None, admission=None):
     parent = FastAPI()
     parent.mount(
         "/api/v1",
@@ -57,7 +61,7 @@ def gate(check, verifier=None, usage=None, ledger=None):
             config=GateConfig(RESOURCE, "rest", "api", METADATA, public_paths=frozenset({"/tiers"})),
             check=check,
             record_usage=(usage.append if usage is not None else lambda e: None),
-            admission=None,
+            admission=admission,
             verifier=verifier,
             key_pepper=PEPPER,
             ledger=ledger,
@@ -156,6 +160,60 @@ def test_the_second_check_stops_a_response_when_access_changed_during_the_reques
     )
     assert passed.status_code == 200 and passed.headers["x-request-id"]
     assert usage[-1]["bytes"] == len(passed.content)
+
+
+class Admission:
+    """api.admission.AdmissionStore's two calls: admitted with what is left of each bucket, or refused."""
+
+    def __init__(self, remaining=None):
+        self.remaining, self.requests, self.released = remaining, [], []
+
+    def admit(self, request):
+        self.requests.append(request)
+        if self.remaining is None:
+            return {"admitted": False, "blocked": [request["buckets"][0]["key"]], "retry_after": 7}
+        return {
+            "admitted": True,
+            "lease_id": "lease-1",
+            "buckets": {b["key"]: {"remaining": self.remaining, "reset": 1} for b in request["buckets"]},
+        }
+
+    def release(self, lease):
+        self.released.append(lease)
+
+
+ALLOWANCE = {**OK, "tier": {**OK["tier"], "allowance": {"requests_per_minute": 600, "burst": 100}}}
+
+
+def test_admitted_answers_state_the_organisations_request_allowance():
+    """G13: as the website's data path does (api.admission), each answer counted against the organisation's
+    allowance says what is left of it: the burst, its refill time, the requests left and the seconds until
+    the burst is full again."""
+    admission = Admission(remaining=87)
+    client = gate(lambda r: ALLOWANCE, admission=admission)
+    headers = {"Authorization": f"Bearer {keys.generate().secret}"}
+    for path, status in (("/api/v1/sources", 200), ("/api/v1/unchanged", 304), ("/api/v1/missing", 404)):
+        answer = client.get(path, headers=headers)
+        assert answer.status_code == status, path
+        assert answer.headers["ratelimit-policy"] == '"organisation";q=100;w=10', path
+        assert answer.headers["ratelimit"] == '"organisation";r=87;t=1', path
+        # A refusal from the route carries its own request ID: the gate never sends a second one.
+        assert len(answer.headers.get_list("x-request-id")) == 1, path
+    assert admission.requests[0]["buckets"] == [
+        {"key": "org:00000000000000000000000000", "capacity": 100, "refill_per_minute": 600}
+    ]
+    assert admission.released == ["lease-1"] * 3
+    refused = gate(lambda r: ALLOWANCE, admission=Admission()).get("/api/v1/sources", headers=headers)
+    assert refused.status_code == 429 and refused.headers["retry-after"] == "7"
+    assert "ratelimit" not in refused.headers and refused.headers["x-request-id"]
+    unknown = gate(lambda r: ALLOWANCE, admission=Admission(remaining=87)).get("/api/v1/sources")
+    assert unknown.status_code == 401 and "ratelimit" not in unknown.headers
+
+
+def test_public_answers_need_no_credential_and_still_carry_a_request_id():
+    public = gate(lambda r: OK, admission=Admission(remaining=1)).get("/api/v1/tiers")
+    assert public.status_code == 200 and len(public.headers["x-request-id"]) == 16
+    assert "ratelimit" not in public.headers  # nothing is counted
 
 
 def test_a_tier_without_rest_is_refused():
