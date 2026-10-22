@@ -71,10 +71,16 @@ def test_documents_with_rules_keep_exactly_the_structure_they_had(document, page
         ({"id": "aa-ohada-auscgie-2014-fr", "jurisdiction": "aa-ohada", "type": "uniform_act"}, "ohada-uniform-act-1"),
         ({"id": "aa-au-charter-1981-en", "jurisdiction": "aa-au", "type": "charter"}, "au-treaty-1"),
         ({"id": "aa-au-protocol-1998-pt", "jurisdiction": "aa-au", "type": "protocol"}, "au-treaty-1"),
+        ({"id": "aa-au-convention-2014-fr", "jurisdiction": "aa-au", "type": "convention"}, "au-treaty-1"),
         ({"id": "aa-ecowas-sa-2010-1-en", "jurisdiction": "aa-ecowas", "type": "supplementary_act"}, "ecowas-act-1"),
+        ({"id": "aa-ecowas-dir-2011-1-en", "jurisdiction": "aa-ecowas", "type": "directive"}, "ecowas-directive-1"),
+        ({"id": "aa-ecowas-reg-2026-3-fr", "jurisdiction": "aa-ecowas", "type": "regulation"}, "ecowas-regulation-1"),
         ({"id": "ci-loi-2013-450", "jurisdiction": "ci", "type": "law"}, "ci-loi-1"),
+        ({"id": "sn-loi-2008-12", "jurisdiction": "sn", "type": "law"}, "sn-loi-1"),
+        ({"id": "bf-loi-2021-1", "jurisdiction": "bf", "type": "law"}, "bf-loi-1"),
         ({"id": "cm-law-2024-017-en", "jurisdiction": "cm", "type": "law"}, "cm-law-1"),
         ({"id": "ao-lei-22-11", "jurisdiction": "ao", "type": "law"}, "ao-lei-1"),
+        ({"id": "mz-lei-2026-13", "jurisdiction": "mz", "type": "law"}, "mz-lei-1"),
     ],
 )  # fmt: skip
 def test_rules_are_chosen_by_jurisdiction_and_type(document, rules):
@@ -91,6 +97,12 @@ def test_rules_are_chosen_by_jurisdiction_and_type(document, rules):
         ({"id": "rw-other-00f8ef71645e-fr", "jurisdiction": "rw", "type": "other"}, "rw/other"),
         ({"id": "rw-sc-2020-1", "jurisdiction": "rw", "type": "judgment"}, "rw/judgment"),
         ({"id": "aa-au-afchpr-2026-9", "jurisdiction": "aa-au", "type": "judgment"}, "aa-au/judgment"),
+        (
+            {"id": "aa-ecowas-dec-1980-21", "jurisdiction": "aa-ecowas", "type": "decision"},
+            "aa-ecowas/decision",
+        ),
+        ({"id": "ao-decreto-presidencial-2016-108", "jurisdiction": "ao", "type": "decree"}, "ao/decree"),
+        ({"id": "cv-lei-2021-121", "jurisdiction": "cv", "type": "law"}, "cv/law"),
         ({"id": "ug-example-act-2024", "type": "act"}, "ug/act"),
         ({"id": "ke-example-order-2024", "jurisdiction": "ke", "type": "order"}, "ke/order"),
         (

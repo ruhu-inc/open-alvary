@@ -1,8 +1,9 @@
-"""Structure rules for texts of articles (TXP-03, ArticleBuilder): the AU's charters and protocols, ECOWAS's
-Supplementary Acts, and the laws of Côte d'Ivoire, Cameroon and Angola. Each family is tried on short
-excerpts of an official text it was calibrated on, reviewed units as the workbench holds them after the
-cloud reading (ingestion.calibrate): its front matter, preamble, divisions, articles, paragraphs or
-alinéas, closing words and any stamp, and pinpoints resolved to their part.
+"""Structure rules for texts of articles (TXP-03, ArticleBuilder): the AU's charters, protocols and
+conventions, ECOWAS's Supplementary Acts, directives and regulations, and the laws of Côte d'Ivoire,
+Senegal, Burkina Faso, Cameroon, Angola and Mozambique. Each family is tried on short excerpts of an
+official text it was calibrated on, reviewed units as the workbench holds them after the cloud reading
+(ingestion.calibrate): its front matter, preamble, divisions, articles, paragraphs or alinéas, closing
+words, annexes and any stamp, and pinpoints resolved to their part.
 
 The excerpts are a few provisions each, copied from the official files listed in
 private-staging/structure-samples/manifest.tsv; never add more of their text than a test needs."""
@@ -147,6 +148,100 @@ def test_a_protocols_article_heading_follows_its_number_and_the_enacting_words_e
     spans_nest(text, result)
 
 
+# African Union Convention on Cyber Security and Personal Data Protection (Malabo, 27 June 2014), in
+# English as the AU publishes it (au.int, treaty 0048): the cover's title, the preamble, an article before
+# the first chapter, sections in each chapter, each article's heading on the line after its number, and
+# the adoption.
+MALABO_EN = [
+    [head("AFRICAN UNION CONVENTION ON CYBER SECURITY AND PERSONAL DATA PROTECTION")],
+    [
+        head("PREAMBLE"),
+        para("The Member States of the African Union: Guided by the Constitutive Act of the African Union"),
+        para("reflected primarily by the need for appropriate criminal legislation. HAVE AGREED AS FOLLOWS:"),
+        head("Article 1"),
+        head("Definitions"),
+        para("For the purposes of this Convention:"),
+    ],
+    [
+        head("CHAPTER I"),
+        head("ELECTRONIC TRANSACTIONS"),
+        head("Section I: Electronic Commerce"),
+        head("Article 2"),
+        head("Scope of application of electronic commerce"),
+        para(
+            "States Parties shall ensure that e-commerce activities are exercised freely in their territories"
+        ),
+        head("Section II: Contractual Obligations in Electronic Form"),
+        head("Article 5"),
+        head("Electronic contracts"),
+        para("The information requested for the purpose of concluding a contract", "list_item", marker="1."),
+        para("A service provider or supplier, who offers goods and services", "list_item", marker="2."),
+    ],
+    [
+        head("CHAPTER II"),
+        head("PERSONAL DATA PROTECTION"),
+        head("Section I: Personal data protection"),
+        head("Article 8"),
+        head("Objective of this Convention with respect to personal data"),
+        para("Each State Party shall commit itself to establishing a legal framework"),
+        para("ADOPTED BY THE TWENTY-THIRD ORDINARY SESSION OF THE ASSEMBLY, HELD IN MALABO"),
+    ],
+]
+
+
+def test_an_au_convention_has_sections_in_each_chapter_and_its_article_headings_on_the_next_line():
+    text, result = build(MALABO_EN, structure.AU_TREATY, "en")
+    nodes = by_locator(result)
+    assert result.root.heading.startswith("AFRICAN UNION CONVENTION ON CYBER SECURITY")
+    assert span(text, nodes["preamble"]).endswith("HAVE AGREED AS FOLLOWS:")
+    assert (nodes["art_1"].heading, nodes["art_1"].parent) == ("Definitions", result.root)
+    chapter, section = nodes["chap_i"], nodes["chap_i__dvs_ii"]
+    assert (section.label, section.heading, section.parent) == (
+        "Section II",
+        "Contractual Obligations in Electronic Form",
+        chapter,
+    )
+    assert nodes["chap_ii__dvs_i"].parent is nodes["chap_ii"]  # sections restart in each chapter
+    article = nodes["art_5"]
+    assert (article.heading, article.parent) == ("Electronic contracts", section)
+    assert resolve(result, "art. 5(2)") is nodes["art_5__para_2"]
+    assert span(text, nodes["notice_1"]).startswith("ADOPTED BY")
+    assert codes(result) == []
+    spans_nest(text, result)
+
+
+# The same Convention in Portuguese: "Secção" in its chapters, "Artigo 1º" and "Artigo 2: …", and the
+# adoption, "ADOPTADA PELA …".
+MALABO_PT = [
+    [
+        head("CONVENÇÃO DA UNIÃO AFRICANA SOBRE CIBERSEGURANÇA E PROTECÇÃO DE DADOS PESSOAIS"),
+        head("PREÂMBULO"),
+        para("Os Estados-membros da União Africana; Guiados pelo Acto Constitutivo da União Africana"),
+        para("ACORDARAM NO SEGUINTE:"),
+        head("Artigo 1º"),
+        head("Definições"),
+        head("CAPÍTULO I"),
+        head("TRANSACÇÕES ELECTRÓNICAS"),
+        head("Secção I: Comércio Electrónico"),
+        head("Artigo 2: Âmbito de aplicação do comércio electrónico"),
+        para("Os Estados-membros devem garantir que as actividades do comércio electrónico", "list_item"),
+        para("ADOPTADA PELA VIGÉSIMA TERCEIRA SESSÃO ORDINÁRIA DA CIMEIRA, REALIZADA EM MALABO"),
+    ]
+]
+
+
+def test_the_portuguese_convention_prints_seccao_and_closes_with_its_adoption():
+    text, result = build(MALABO_PT, structure.AU_TREATY, "pt")
+    nodes = by_locator(result)
+    assert (nodes["art_1"].label, nodes["art_1"].heading) == ("Artigo 1", "Definições")
+    section = nodes["chap_i__dvs_i"]
+    assert (section.label, section.heading) == ("Secção I", "Comércio Electrónico")
+    assert nodes["art_2"].heading == "Âmbito de aplicação do comércio electrónico"
+    assert nodes["art_2"].parent is section
+    assert span(text, nodes["notice_1"]).startswith("ADOPTADA PELA")
+    spans_nest(text, result)
+
+
 def test_an_edition_not_calibrated_is_refused_never_read_by_another_languages_patterns():
     _, result = build(PROTOCOL_PT, structure.AU_TREATY, "ar")
     assert "no_structure_rules" in codes(result) and result.errors
@@ -154,7 +249,7 @@ def test_an_edition_not_calibrated_is_refused_never_read_by_another_languages_pa
     # one reads it by that one.
     _, unknown = build(PROTOCOL_PT, structure.AU_TREATY, None)
     assert [i.message for i in unknown.errors] == [
-        "aa-au/charter or protocol is read in en, fr, pt: set the document's language"
+        "aa-au/charter, protocol or convention is read in en, fr, pt: set the document's language"
     ]
     _, ivorian = build(CI, structure.CI_LAW, None)
     assert not ivorian.errors and "art_54" in by_locator(ivorian)
@@ -392,13 +487,385 @@ def test_an_angolan_law_has_bracketed_article_headings_numeros_and_alineas():
     spans_nest(text, result)
 
 
+# --- mz-lei-1 -----------------------------------------------------------------------------------------
+
+# Lei n.º 13/2026, de 1 de Julho, Lei de Segurança Cibernética, as the Boletim da República (I Série,
+# número 123) prints it, from the Instituto Nacional das Comunicações de Moçambique: the issue's summary
+# listing both its laws, the law's title and preamble, a chapter of subsections, articles with the heading
+# in brackets below, the closing words the reading kept with the last article, the law's annexes after its
+# signatures, and the next law in the issue.
+MZ = [
+    [
+        head("BOLETIM DA REPÚBLICA"),
+        head("SUMÁRIO"),
+        para("Assembleia da República: Lei n.º 13/2026: Aprova a Lei de Segurança Cibernética."),
+        head("ASSEMBLEIA DA REPÚBLICA"),
+        head("Lei n.º 13/2026"),
+        para("de 1 de Julho Havendo necessidade de estabelecer o regime jurídico da Segurança Cibernética"),
+        head("CAPÍTULO II"),
+        head("Organização do Sistema Nacional de Segurança Cibernética"),
+        head("ARTIGO 6"),
+        head("(Estrutura)"),
+        para("O Sistema Nacional de Segurança Cibernética é composto por órgãos e entidades"),
+        para("a) Órgãos:", "list_item"),
+        para("i. Conselho Nacional de Segurança Cibernética;", "list_item"),
+        head("SUBSECÇÃO I"),
+        head("Conselho Nacional de Segurança Cibernética"),
+        head("ARTIGO 7"),
+        head("(Natureza)"),
+        para("O Conselho Nacional de Segurança Cibernética, abreviadamente designado por CNSC"),
+    ],
+    [
+        head("ARTIGO 80"),
+        head("(Entrada em vigor)"),
+        para("A presente Lei entra em vigor 90 dias após a sua publicação."),
+        para("Aprovada pela Assembleia da República, aos 29 de Abril de 2026."),
+        head("Anexo I"),
+        head("Glossário"),
+        para("Activo de Informação – todo elemento que agrega valor ao negócio"),
+        head("Anexo II"),
+        head("Sectores, subsectores e tipos de entidades dos operadores de serviços essenciais"),
+        head("ASSEMBLEIA DA REPÚBLICA"),
+        para("Lei n.º 14/2026 de 1 de Julho Havendo necessidade de estabelecer o regime jurídico dos crimes"),
+        head("ARTIGO 1"),
+        head("(Objecto)"),
+    ],
+]
+
+
+def test_a_mozambican_law_holds_its_annexes_after_its_signatures_and_the_next_law_is_a_notice():
+    text, result = build(MZ, structure.MZ_LAW, "pt")
+    nodes = by_locator(result)
+    assert result.root.heading == "Lei n.º 13/2026"  # never the summary's "Lei n.º 13/2026:"
+    assert span(text, nodes["preamble"]).startswith("de 1 de Julho Havendo")
+    division = nodes["chap_ii__subdvs_i"]  # a subsection straight inside the chapter, as printed
+    assert (division.label, division.parent) == ("SUBSECÇÃO I", nodes["chap_ii"])
+    assert (nodes["art_7"].heading, nodes["art_7"].parent) == ("Natureza", division)
+    item = nodes["art_6__subpara_a__subpara_i"]  # "a)" then "i."
+    assert item.label == "i." and resolve(result, "art. 6(a)(i)") is item
+    assert span(text, nodes["notice_1"]).startswith("Aprovada pela Assembleia")
+    annex = nodes["annex_i"]
+    assert (annex.kind, annex.label, annex.heading, annex.parent) == (
+        "annex",
+        "Anexo I",
+        "Glossário",
+        result.root,
+    )
+    assert nodes["annex_ii"].heading.startswith("Sectores, subsectores")
+    assert span(text, nodes["notice_2"]).startswith("Lei n.º 14/2026")  # its own ARTIGO 1 is no article here
+    assert [n.locator for n in result.nodes if n.kind == "article"] == ["art_6", "art_7", "art_80"]
+    assert codes(result) == []
+    spans_nest(text, result)
+
+
+# --- sn-loi-1 -----------------------------------------------------------------------------------------
+
+# Loi n° 2008-12 du 25 janvier 2008 sur la protection des données à caractère personnel, as the Commission
+# de protection des données personnelles publishes it (cdp.sn): the title, the exposé des motifs and the
+# enacting words before "Chapitre premier", sections in each chapter, articles headed "Article 2." with
+# their words below, and articles the reading kept in one block with their words ("Article 3. La …").
+SN = [
+    [
+        head("LOI n° 2008-12 du 25 janvier 2008 portant sur la Protection des données à caractère personnel"),
+        head("EXPOSE DES MOTIFS"),
+        para("Avec le développement de l'informatique et de ses applications, le domaine traditionnel"),
+    ],
+    [
+        para("Le Président de la République promulgue la loi sont la teneur suit :"),
+        head("Chapitre premier. - Dispositions générales."),
+        head("Section première. - Objet de la loi sur les données à caractère personnel."),
+        head("Article Premier."),
+        para("La présente loi a pour objet de mettre en place un dispositif permettant de lutter contre"),
+        head("Section II. - Champ d'application de la loi sur les données à caractère personnel"),
+        head("Article 2."),
+        para("Sont soumis à la présente loi :"),
+        para(
+            "Toute collecte, tout traitement, toute transmission, tout stockage et toute utilisation",
+            "list_item",
+        ),
+        para("Article 3. La présente loi ne s'applique pas :"),
+        para("aux traitements de données mis en œuvre par une personne physique dans le cadre", "list_item"),
+    ],
+]
+
+# Loi n° 2008-08 du 25 janvier 2008 sur les transactions électroniques, from the same publisher: TITRE
+# PREMIER, articles opening with their words after a dash ("Art. 2. - …"), a chapter heading and the
+# enacting formula each split from the article before them by the reading.
+SN_TRANSACTIONS = [
+    [
+        head("LOI n° 2008-08 du 25 janvier 2008 sur les transactions électroniques"),
+        head("TITRE PREMIER. - LIBERTE DE COMMUNICATION PAR VOIE ELECTRONIQUE."),
+        head("Chapitre premier. - Communication au public par voie électronique."),
+        para("Art. 2. - Au sens de la présente loi, on entend par :"),
+    ],
+    [
+        head("TITRE IV. – Transmission par voie électronique des documents ou actes administratifs."),
+        para("Art. 53. – Tout document électronique envoyé par un candidat dans lequel un virus"),
+        para("Chapitre II. – Recommandé électronique."),
+        para("Art. 54. – Le message signé électroniquement sur la base d'un certificat numérique"),
+        para("La présente loi sera exécutée comme loi de l'Etat."),
+    ],
+]
+
+
+def test_a_senegalese_law_numbers_its_first_chapter_and_section_in_words_and_counts_alineas():
+    text, result = build(SN, structure.SN_LAW, "fr")
+    nodes = by_locator(result)
+    assert result.root.heading.startswith("LOI n° 2008-12")
+    assert span(text, nodes["preamble"]).startswith("EXPOSE DES MOTIFS")  # the motives, then enacting words
+    chapter, section = nodes["chap_1"], nodes["chap_1__dvs_1"]
+    assert (chapter.label, chapter.heading) == ("Chapitre premier", "Dispositions générales.")
+    assert section.label == "Section première" and nodes["chap_1__dvs_ii"].parent is chapter
+    assert (nodes["art_1"].label, nodes["art_1"].parent) == ("Article Premier", section)
+    assert span(text, nodes["art_2__al_2"]).startswith("Toute collecte")
+    assert span(text, nodes["art_3__al_1"]).startswith("La présente loi ne s'applique")
+    assert resolve(result, "art. 3, al. 2") is nodes["art_3__al_2"]
+    assert codes(result) == []
+    spans_nest(text, result)
+
+
+def test_a_senegalese_laws_titles_restart_its_chapters_and_its_enacting_formula_closes_it():
+    text, result = build(SN_TRANSACTIONS, structure.SN_LAW, "fr")
+    nodes = by_locator(result)
+    assert nodes["title_1__chap_1"].parent is nodes["title_1"] and nodes["title_1"].label == "TITRE PREMIER"
+    assert span(text, nodes["art_2__al_1"]).startswith("Au sens")  # after "Art. 2. - "
+    assert nodes["art_54"].parent is nodes["title_iv__chap_ii"]  # a paragraph printed as a heading is one
+    assert span(text, nodes["notice_1"]) == "La présente loi sera exécutée comme loi de l'Etat."
+    assert codes(result) == []
+    spans_nest(text, result)
+
+
+# --- bf-loi-1 -----------------------------------------------------------------------------------------
+
+# Loi n° 001-2021/AN du 30 mars 2021 portant protection des personnes à l'égard du traitement des données à
+# caractère personnel, as the Assemblée nationale publishes it: its cover, the title, the "Vu" and
+# enacting words, TITRE and CHAPITRE numbered in figures, "Article 1 :" with its alinéas below, and the
+# closing words the reading kept with the last article.
+BF = [
+    [
+        para("BURKINA FASO ----------- UNITE-PROGRES-JUSTICE ----------- ASSEMBLEE NATIONALE IVE REPUBLIQUE"),
+        head("LOI N°001-2021/AN"),
+        head("PORTANT PROTECTION DES PERSONNES A L'EGARD DU TRAITEMENT DES DONNEES A CARACTERE PERSONNEL"),
+    ],
+    [
+        head("L'ASSEMBLEE NATIONALE"),
+        para(
+            "Vu la Constitution ; a délibéré en sa séance du 30 mars 2021 et adopté la loi dont la teneur suit :"
+        ),
+    ],
+    [
+        head("TITRE I : DISPOSITIONS GENERALES"),
+        head("CHAPITRE 1 : OBJET ET CHAMP D'APPLICATION"),
+        head("Article 1 :"),
+        para("La présente loi a pour objet de protéger les droits et libertés fondamentaux des personnes"),
+        head("Article 4 :"),
+        para("La présente loi ne s'applique pas aux :"),
+        para("traitements effectués par une personne physique pour l'exercice d'activités", "list_item"),
+    ],
+    [
+        head("TITRE V : DISPOSITIONS DIVERSES, TRANSITOIRES ET FINALES"),
+        head("Article 83 :"),
+        para("La présente loi sera exécutée comme loi de l'Etat."),
+        para("Ainsi fait et délibéré en séance publique à Ouagadougou, le 30 mars 2021 Le Président"),
+    ],
+]
+
+
+def test_a_burkinabe_law_has_titles_chapters_and_articles_of_alineas_and_closes_with_ainsi_fait():
+    text, result = build(BF, structure.BF_LAW, "fr")
+    nodes = by_locator(result)
+    assert result.root.heading == "LOI N°001-2021/AN"
+    assert span(text, result.root).startswith("BURKINA FASO")  # the cover, held by the document
+    assert span(text, nodes["preamble"]).endswith("dont la teneur suit :")
+    chapter = nodes["title_i__chap_1"]
+    assert (chapter.label, chapter.heading) == ("CHAPITRE 1", "OBJET ET CHAMP D'APPLICATION")
+    assert nodes["art_4"].parent is chapter and nodes["art_4"].label == "Article 4"
+    assert span(text, nodes["art_4__al_2"]).startswith("traitements effectués")
+    # The last article is the enacting formula, numbered; "Ainsi fait …" closes the law.
+    assert span(text, nodes["art_83__al_1"]) == "La présente loi sera exécutée comme loi de l'Etat."
+    assert span(text, nodes["notice_1"]).startswith("Ainsi fait")
+    assert codes(result) == []
+    spans_nest(text, result)
+
+
+# --- ecowas-directive-1 --------------------------------------------------------------------------------
+
+# Directive C/DIR.1/08/11 on Fighting Cyber Crime within ECOWAS (Abuja, 19 August 2011), as the ECOWAS
+# legal journal publishes it signed: the session before the title, the preamble to "PRESCRIBES:", chapters
+# titled on the next line, articles with their heading after the number and no separator, and the
+# Chairman's signature.
+ECOWAS_DIRECTIVE = [
+    [
+        head("SIXTY-SIXTH ORDINARY SESSION OF THE COUNCIL OF MINISTERS"),
+        head("DIRECTIVE C/DIR. 1/08/11 ON FIGHTING CYBER CRIME WITHIN ECOWAS"),
+        head("THE COUNCIL OF MINISTERS,"),
+        para("MINDFUL of Articles 10, 11 and 12 of the ECOWAS Treaty as amended; PRESCRIBES:"),
+        head("CHAPTER I"),
+        head("GENERAL PROVISIONS"),
+        head("Article 1 Definitions"),
+        para("For the purposes of this Directive:"),
+    ],
+    [
+        head("CHAPTER VII:"),
+        head("FINAL PROVISIONS"),
+        head("Article 35 Implementation"),
+        para(
+            "Member States shall adopt the necessary legislative, regulatory and administrative",
+            "list_item",
+            marker="1.",
+        ),
+        para(
+            "The measures referred to in Paragraph 1 of this Article should make reference",
+            "list_item",
+            marker="2.",
+        ),
+        para("DONE AT ABUJA, THIS 19TH DAY OF AUGUST 2011 H.E. OLUGBENGA ASHIRU CHAIRMAN FOR COUNCIL"),
+    ],
+]
+
+
+def test_an_ecowas_directive_has_its_preamble_chapters_articles_numbered_paragraphs_and_signature():
+    text, result = build(ECOWAS_DIRECTIVE, structure.ECOWAS_DIRECTIVE, "en")
+    nodes = by_locator(result)
+    assert result.root.heading == "DIRECTIVE C/DIR. 1/08/11 ON FIGHTING CYBER CRIME WITHIN ECOWAS"
+    assert span(text, result.root).startswith("SIXTY-SIXTH ORDINARY SESSION")
+    assert span(text, nodes["preamble"]).endswith("PRESCRIBES:")
+    assert (nodes["chap_i"].heading, nodes["art_1"].heading) == ("GENERAL PROVISIONS", "Definitions")
+    chapter = nodes["chap_vii"]
+    assert (chapter.label, chapter.heading) == ("CHAPTER VII", "FINAL PROVISIONS")
+    assert nodes["art_35"].parent is chapter and nodes["art_35__para_2"].label == "2."
+    assert resolve(result, "art. 35(2)") is nodes["art_35__para_2"]
+    assert span(text, nodes["notice_1"]).startswith("DONE AT ABUJA")
+    assert codes(result) == []
+    spans_nest(text, result)
+
+
+# Directive C/DIR.3/7/26 on Open Data within ECOWAS (Freetown, 17 July 2026), in Portuguese, as the legal
+# journal publishes it (in the file named for the roaming regulation's Portuguese text): the logo text
+# on its cover, "ADOTA:", chapters titled after a dash, "Artigo 5.º - Direito de acesso", and "FEITO EM".
+ECOWAS_DIRECTIVE_PT = [
+    [
+        para("CEDEAO ECOWAS COMMISSION COMMISSION DE LA CEDEAO COMISSÃO DA CEDEAO 51 ECOWAS"),
+        head("DIRETIVA C/DIR.3/7/26 RELATIVA AOS DADOS ABERTOS NO SEIO DA CEDEAO"),
+        para("O CONSELHO DE MINISTROS, CIENTE do Tratado da CEDEAO revisto, tal como alterado"),
+        head("ADOTA:"),
+        head("CAPÍTULO II - ACESSIBILIDADE DOS DOCUMENTOS"),
+        head("Artigo 5.º - Direito de acesso"),
+        para(
+            "O direito de acesso é reconhecido às pessoas singulares ou coletivas", "list_item", marker="1."
+        ),
+        para("Os seguintes documentos estão excluídos do direito de acesso:", "list_item", marker="3."),
+        para("FEITO EM FREETOWN, AOS 17 DIAS DE JULHO DE 2026. PELO CONSELHO, O PRESIDENTE"),
+    ]
+]
+
+
+def test_an_ecowas_directive_in_portuguese_reads_artigo_and_closes_with_feito_em():
+    text, result = build(ECOWAS_DIRECTIVE_PT, structure.ECOWAS_DIRECTIVE, "pt")
+    nodes = by_locator(result)
+    assert span(text, nodes["preamble"]).endswith("ADOTA:")
+    assert nodes["chap_ii"].heading == "ACESSIBILIDADE DOS DOCUMENTOS"
+    article = nodes["art_5"]
+    assert (article.label, article.heading, article.parent) == (
+        "Artigo 5",
+        "Direito de acesso",
+        nodes["chap_ii"],
+    )
+    assert resolve(result, "art. 5(3)") is nodes["art_5__para_3"]
+    assert span(text, nodes["notice_1"]).startswith("FEITO EM FREETOWN")
+    assert codes(result) == ["running_head"]  # the logo text on the cover, for the reviewer to remove
+    spans_nest(text, result)
+
+
+# --- ecowas-regulation-1 -------------------------------------------------------------------------------
+
+# Regulation C/REG.3/7/26 relating to Roaming on Public Mobile Communications Networks (Freetown, 17 July
+# 2026), in its English and French texts as the ECOWAS legal journal publishes them: "ENACTS:" / "EDICTE :",
+# chapters titled after a dash or a colon ("CHAPITRE PREMIER : …"), articles headed in capitals, items
+# lettered "a." and the closing words the reading kept with the last article.
+ECOWAS_REGULATION_EN = [
+    [
+        head("NINETY-SIXTH ORDINARY SESSION OF THE COUNCIL OF MINISTERS"),
+        head("REGULATION C/REG.3/7/26 RELATING TO ROAMING ON PUBLIC MOBILE COMMUNICATIONS NETWORKS"),
+        para("THE COUNCIL OF MINISTERS, MINDFUL of the ECOWAS Revised Treaty, as amended"),
+        head("ENACTS:"),
+        head("CHAPTER I—DEFINITIONS, OBJECTIVE AND SCOPE OF APPLICATION"),
+        head("ARTICLE 2: OBJECTIVE AND SCOPE OF APPLICATION"),
+        para("This Regulation shall apply to:", "list_item", marker="2."),
+        para("all mobile communications service operators and providers established in a Member State."),
+    ],
+    [
+        head("ARTICLE 16: MEMBER STATES' OBLIGATIONS"),
+        para("A Member State shall:"),
+        para("a. comply with this Regulation within its territory and shall provide the public", "list_item"),
+        para("b. be alert to the particular case of inadvertent roaming in the border regions", "list_item"),
+        head("ARTICLE 26"),
+        para("This REGULATION C/REG.3/7/26 shall enter into force upon its publication."),
+        para("DONE IN FREETOWN, THIS 17TH DAY OF JULY 2026 H.E. ALHAJI MUSA TIMOTHY KABBA"),
+    ],
+]
+ECOWAS_REGULATION_FR = [
+    [
+        head("RÈGLEMENT C/REG.3/7/26 RELATIF À L'ITINÉRANCE SUR LES RÉSEAUX PUBLICS DE TÉLÉPHONIE MOBILE"),
+        para("LE CONSEIL DES MINISTRES, VU le Traité révisé de la CEDEAO tel qu'amendé"),
+        head("EDICTE :"),
+        head("CHAPITRE PREMIER : DÉFINITIONS, OBJECTIF ET CHAMP D'APPLICATION"),
+        head("ARTICLE 1er : DÉFINITIONS"),
+        para("Aux termes du présent Règlement, on entend par :"),
+        head("ARTICLE 26 : ENTRÉE EN VIGUEUR"),
+        para("Le présent Règlement C/REG.3/7/26 entre en vigueur dès sa publication."),
+        para("FAIT À FREETOWN, CE 17 JUILLET 2026. POUR LE CONSEIL, LE PRESIDENT"),
+    ]
+]
+
+
+def test_an_ecowas_regulation_letters_its_items_and_its_french_text_numbers_chapter_one_in_words():
+    text, result = build(ECOWAS_REGULATION_EN, structure.ECOWAS_REGULATION, "en")
+    nodes = by_locator(result)
+    assert span(text, nodes["preamble"]).endswith("ENACTS:")
+    assert nodes["chap_i"].heading == "DEFINITIONS, OBJECTIVE AND SCOPE OF APPLICATION"
+    assert "all mobile communications" in span(text, nodes["art_2__para_2"])
+    assert nodes["art_16__subpara_b"].label == "b."  # "a." and "b.", as printed
+    assert resolve(result, "art. 16(b)") is nodes["art_16__subpara_b"]
+    assert span(text, nodes["notice_1"]).startswith("DONE IN FREETOWN")
+    assert codes(result) == []
+    spans_nest(text, result)
+    text, french = build(ECOWAS_REGULATION_FR, structure.ECOWAS_REGULATION, "fr")
+    nodes = by_locator(french)
+    assert (nodes["chap_1"].label, nodes["art_1"].heading) == ("CHAPITRE PREMIER", "DÉFINITIONS")
+    assert nodes["art_26"].heading == "ENTRÉE EN VIGUEUR" and "notice_1" in nodes
+    assert codes(french) == []
+    spans_nest(text, french)
+
+
 def test_the_families_are_read_by_jurisdiction_and_type_and_nothing_else():
-    rules = structure.rules_for
-    assert rules({"jurisdiction": "aa-au", "document_type": "charter"}) == structure.AU_TREATY
-    assert rules({"jurisdiction": "aa-au", "document_type": "protocol"}) == structure.AU_TREATY
-    assert rules({"jurisdiction": "aa-au", "document_type": "convention"}) is None  # not yet calibrated
-    assert rules({"jurisdiction": "aa-ecowas", "document_type": "supplementary_act"}) == structure.ECOWAS_ACT
-    assert rules({"jurisdiction": "aa-ecowas", "document_type": "directive"}) is None
-    assert rules({"jurisdiction": "ci", "document_type": "law"}) == structure.CI_LAW
-    assert rules({"jurisdiction": "cm", "document_type": "law"}) == structure.CM_LAW
-    assert rules({"jurisdiction": "ao", "document_type": "law"}) == structure.AO_LAW
+    def rules(jurisdiction, kind):
+        return structure.rules_for({"jurisdiction": jurisdiction, "document_type": kind})
+
+    assert {rules("aa-au", kind) for kind in ("charter", "protocol", "convention")} == {structure.AU_TREATY}
+    assert rules("aa-au", "treaty") is None  # not yet calibrated
+    assert rules("aa-ecowas", "supplementary_act") == structure.ECOWAS_ACT
+    assert rules("aa-ecowas", "directive") == structure.ECOWAS_DIRECTIVE
+    assert rules("aa-ecowas", "regulation") == structure.ECOWAS_REGULATION
+    assert rules("aa-ecowas", "decision") is None  # no whole official decision to calibrate on yet
+    assert [rules(code, "law") for code in ("ci", "sn", "bf", "cm", "ao", "mz")] == [
+        structure.CI_LAW,
+        structure.SN_LAW,
+        structure.BF_LAW,
+        structure.CM_LAW,
+        structure.AO_LAW,
+        structure.MZ_LAW,
+    ]
+    assert rules("ao", "decree") is None and rules("cv", "law") is None
+
+
+def test_each_ecowas_class_is_read_only_in_the_languages_it_was_calibrated_in():
+    # The Supplementary Act in English only; a directive in English and Portuguese; a regulation in
+    # English and French. A French directive is refused, never read by the regulation's French patterns.
+    _, french = build(ECOWAS_REGULATION_FR, structure.ECOWAS_DIRECTIVE, "fr")
+    assert [i.message for i in french.errors] == [
+        "No structure rules for aa-ecowas/directive in fr: this layout is not supported yet"
+    ]
+    assert list(structure.ARTICLE_STYLES[structure.ECOWAS_ACT].editions) == ["en"]
+    assert list(structure.ARTICLE_STYLES[structure.ECOWAS_DIRECTIVE].editions) == ["en", "pt"]
+    assert list(structure.ARTICLE_STYLES[structure.ECOWAS_REGULATION].editions) == ["en", "fr"]
