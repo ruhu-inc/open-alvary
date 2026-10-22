@@ -1,0 +1,24 @@
+api/credentials.py
+  s_d665c62e07d76f::t_e3605d5700f1a6 30
+  s_d665c62e07d76f::t_88007cb4ddfeba 336
+  s_d665c62e07d76f::t_2cbf1ed92ac35c 334-335,337-338
+tests/test_credentials.py
+  s_d665c62e07d76f::t_559289ef584707 122-126
+  s_d665c62e07d76f::t_10c8b9957886e2 121
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "778e3388c5e0840808a129942977d2b3c3deacf3",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
