@@ -39,7 +39,7 @@ const pack = await (
 ).json();
 ```
 
-> Note: A question can carry details of a client's matter. Remove confidential client or case details before you send it: ask about the law, not the case. See [Privacy of your requests](/docs/authentication#privacy-of-your-requests).
+> Note: A question can carry details of a client's matter. Leave out names or other details that identify a client before you send it: ask about the law, not the case. See [Privacy of your requests](/docs/authentication#privacy-of-your-requests).
 
 Each unit in `evidence` is one part of a published text, best first:
 

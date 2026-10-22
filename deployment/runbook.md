@@ -526,6 +526,27 @@ A lost passkey: the operator removes it at `#/access` after checking with anothe
 they have none left, check who is asking, then `deployment/gcp/workbench.sh enrol <email> --replace`
 revokes their passkeys and issues a new code (a code is accepted only while no passkey remains).
 
+## New terms
+
+The terms of service, the acceptable use policy and the privacy notice share one version, the date
+in `web/src/legal.tsx` (`LEGAL_VERSION`) and `accounts/policies.py` (`CURRENT`). A new version needs
+the owner's approval and a summary of what it changes in `policies.CHANGES`, in the same release.
+The console asks everyone to accept it at their next sign-in.
+
+The terms promise each organisation's owners an email at least 30 days before a new version takes
+effect; using keys or connected apps after that date counts as accepting it. After the release, send
+it from the hand-run `terms` job, which can only send this notice. First count, then send:
+
+```
+gcloud run jobs execute open-alvary-staging-terms --region europe-west1 --project open-alvary-staging \
+  --wait --args='^;^<operator email>;<version>;--effective;<YYYY-MM-DD>;--reason;<why>;--dry-run'
+```
+
+Run it again without `--dry-run` to send. Each owner told is in the audit log of each organisation
+they own (`terms.notice_sent`), so a second run tells only owners not yet told: new ones, or anyone
+whose mail failed. A date less than 30 days away is refused unless the law or the service's
+protection needs it sooner: say why in the reason and add `--sooner`.
+
 ## Workbench operators: who may use the workbench
 
 Administrators (role `admin`) manage operators on the workbench's **Operators** page: add a person

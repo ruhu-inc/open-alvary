@@ -16,6 +16,10 @@ both run accounts.access_admin.
                                      make a member the owner where no active person owns it
     revoke-credential KEY_OR_ID --reason R [--evidence E]
                                      a leaked key (or its ID), or a connected app's grant ID
+    terms-notice VERSION --effective 2026-11-21 --reason R [--sooner] [--dry-run]
+                                     email each organisation owner not yet told that a new
+                                     version of the terms takes effect (at least 30 days ahead,
+                                     unless --sooner); --dry-run counts them
 
 Every action is in the accounts audit log with the operator named by --operator. Needs
 DATABASE_URL for the PostgreSQL database that holds the accounts schema.
@@ -24,7 +28,7 @@ DATABASE_URL for the PostgreSQL database that holds the accounts schema.
 import argparse
 import json
 import os
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import text
 
@@ -73,6 +77,15 @@ def main(argv=None) -> int:
     owner.add_argument("organisation")
     owner.add_argument("membership")
     change("revoke-credential").add_argument("credential")
+    notice = change("terms-notice")
+    notice.add_argument("version", help="The version in accounts/policies.py CHANGES, such as 2026-10-22")
+    notice.add_argument("--effective", required=True, help="When it takes effect (UTC), YYYY-MM-DD")
+    notice.add_argument(
+        "--sooner",
+        action="store_true",
+        help="Less than 30 days' notice: the reason says why the law or the service's protection needs it",
+    )
+    notice.add_argument("--dry-run", action="store_true", help="Count the owners to tell, and send nothing")
     args = parser.parse_args(argv)
 
     if not os.environ.get("DATABASE_URL", "").startswith("postgresql"):
@@ -125,6 +138,16 @@ def main(argv=None) -> int:
         elif args.command == "restore-owner":
             admin.restore_owner(action, args.organisation, args.membership)
             print("Owner restored")
+        elif args.command == "terms-notice":
+            show(
+                admin.terms_notice(
+                    action,
+                    args.version,
+                    date.fromisoformat(args.effective),
+                    sooner=args.sooner,
+                    dry_run=args.dry_run,
+                )
+            )
         else:
             show(admin.revoke_credential(action, args.credential))
     except AccountError as error:

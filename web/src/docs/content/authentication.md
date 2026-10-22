@@ -41,7 +41,7 @@ Every key expires: after 90 days unless you choose otherwise, and after at most 
 
 What you send the API and MCP, such as search words, questions, citations and the records you ask for, is used only to answer that request. The API and MCP keep no request logs, and an error never records what was sent. Your organisation's usage counts requests and bytes per key or app, never what they asked. On the website, request logs never keep an address's query string, such as the words of a search, and every answer sends `Referrer-Policy: strict-origin-when-cross-origin`, so a page's full address never reaches the sites it links to.
 
-Even so, remove confidential client or case details before you send a request: ask about the law, not the case. The [acceptable use policy](/acceptable-use) asks this too. The [privacy notice](/privacy) says what else is kept, and for how long.
+Even so, send only what a search needs, and leave out names or other details that identify a client: ask about the law, not the case. The [acceptable use policy](/acceptable-use) asks this too. The [privacy notice](/privacy) says what else is kept, and for how long.
 
 ## Connected apps
 

@@ -18,11 +18,11 @@ import argparse
 import os
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import text
 
-from accounts import keys, mail
+from accounts import keys, mail, policies
 from accounts.store import AccountError, Accounts, Context
 
 STATES = {"suspend": "suspended", "restore": "active"}
@@ -433,6 +433,73 @@ class AccessAdmin:
                 context=action.context,
             )
             return {"kind": kind, "id": value, "organisation_id": row["organisation_id"]}
+
+    # --- new terms (terms of service, "Changes") ------------------------------------------------
+
+    def terms_notice(
+        self, action: Action, version: str, effective: date, *, sooner: bool = False, dry_run: bool = False
+    ) -> dict:
+        """Email every owner of an organisation that a new version takes effect on `effective`, at least
+        policies.NOTICE_DAYS ahead unless `sooner` (the law or the service's protection, said in the
+        reason). Each owner told is in the audit log of each organisation they own, so running it again
+        tells only those not yet told: new owners, or anyone whose mail failed."""
+        changes = policies.CHANGES.get(version)
+        if changes is None:
+            raise AccountError("invalid_input", 400, f"accounts/policies.py has no CHANGES for {version}.")
+        today = datetime.now(UTC).date()
+        if effective < today:
+            raise AccountError("invalid_input", 400, "The date the terms take effect has passed.")
+        if effective < today + timedelta(days=policies.NOTICE_DAYS) and not sooner:
+            raise AccountError(
+                "invalid_input",
+                400,
+                f"New terms take effect at least {policies.NOTICE_DAYS} days after the notice. If the law or"
+                " the service's protection needs it sooner, say why in the reason and add --sooner.",
+            )
+        with self.accounts.engine.connect() as conn:
+            rows = self._rows(
+                conn,
+                f"SELECT p.id AS person_id, p.email, m.organisation_id FROM {self._t(conn, 'membership')} m"
+                f" JOIN {self._t(conn, 'person')} p ON p.id = m.person_id"
+                f" JOIN {self._t(conn, 'organisation')} o ON o.id = m.organisation_id"
+                " WHERE m.role = 'owner' AND p.state = 'active' AND o.state IN ('active', 'suspended')"
+                f" AND NOT EXISTS (SELECT 1 FROM {self._t(conn, 'audit_event')} e"
+                " WHERE e.action = 'terms.notice_sent' AND e.organisation_id = m.organisation_id"
+                " AND e.target_type = 'person' AND e.target_id = p.id AND e.summary->>'version' = :v)"
+                " ORDER BY p.id, m.organisation_id",
+                v=version,
+            )
+        owners: dict[str, dict] = {}
+        for row in rows:
+            owner = owners.setdefault(row["person_id"], {"email": row["email"], "organisations": []})
+            owner["organisations"].append(row["organisation_id"])
+        result = {
+            "version": version,
+            "effective": effective.isoformat(),
+            "owners": len(owners),
+            "organisations": len({row["organisation_id"] for row in rows}),
+        }
+        if dry_run or self.mailer is None:
+            return result
+        sent = 0
+        for person_id, owner in owners.items():
+            if not self.mailer.send(
+                mail.terms_notice(owner["email"], version, effective, changes, self.site)
+            ):
+                continue  # logged by the mailer; the next run tries again
+            sent += 1
+            with self.accounts.engine.begin() as conn:
+                for organisation_id in owner["organisations"]:
+                    self.accounts._audit(
+                        conn,
+                        ("operator", action.operator),
+                        "terms.notice_sent",
+                        organisation=organisation_id,
+                        target=("person", person_id),
+                        summary=action.summary(version=version, effective=effective.isoformat()),
+                        context=action.context,
+                    )
+        return {**result, "sent": sent, "failed": len(owners) - sent}
 
     # --- verified publishers (MAC-07) ---------------------------------------------------------
 

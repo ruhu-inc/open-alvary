@@ -1,6 +1,7 @@
 """Account email (ACS-07): messages say what happened and what to do; sending never blocks a change."""
 
 import json
+from datetime import date
 
 import httpx
 
@@ -63,3 +64,12 @@ def test_decisions_say_what_to_do_next():
     assert "until 14 January 2027" in granted.text and "second factor" in granted.text
     changed = mail.sign_in_changed("a@example.org", True, "google", "https://x")
     assert changed.subject == "A sign-in method was added" and "Google was added" in changed.text
+
+
+def test_new_terms_say_when_they_take_effect_and_what_counts_as_accepting():
+    notice = mail.terms_notice(
+        "a@example.org", "2026-10-22", date(2026, 11, 21), "- One change.", "https://x"
+    )
+    assert notice.subject == "Open Alvary's terms change on 21 November 2026"
+    assert "- One change." in notice.text and "https://x/acceptable-use" in notice.text
+    assert "after 21 November 2026 counts as accepting" in notice.text

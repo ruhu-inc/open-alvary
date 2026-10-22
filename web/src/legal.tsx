@@ -5,12 +5,14 @@
 import React from "react";
 import { Link, PageTitle } from "./site";
 
-export const LEGAL_VERSION = "2026-10-21";
+export const LEGAL_VERSION = "2026-10-22";
 // Approved by the owner on 2026-10-16 (terms, acceptable use, privacy, and the security page's
 // disclosure terms); version 2026-10-18 (data a day in the terms, no request logs for the API and MCP
 // in the privacy notice) approved on 2026-10-18; version 2026-10-21 (no query strings in website request
 // logs and the Referrer-Policy in the privacy notice; keeping copies in the acceptable use policy)
-// approved on 2026-10-21. A new version starts as a draft again: set this to false until it is approved.
+// approved on 2026-10-21; version 2026-10-22 (serving your own users, what you send us, notice of
+// changes to the terms and to limits, the scope of a suspension; searches in the acceptable use policy)
+// approved on 2026-10-22. A new version starts as a draft again: set this to false until it is approved.
 const APPROVED = true;
 const TO_CONFIRM: string[] = [];
 const OPERATOR = "Ruhu, Inc.";
@@ -80,8 +82,9 @@ export function Terms() {
         <p>
           The API and MCP are for organisations with access. We grant access, including any
           free or reduced access for public-interest work, at our discretion, for the jurisdictions and
-          period we state. Each plan has limits on requests and on how much data you receive each day; we
-          publish them and may change them with notice, or at once to protect the service.
+          period we state. Each plan has limits on requests and on how much data you receive each day, which
+          we publish. We may raise them at any time. We lower them only with 30 days' notice by email, unless
+          we must act sooner to protect the service, and then we say why.
         </p>
         <p>
           There are no charges while Open Alvary is in its pilot. Before any paid plan applies to you, we will
@@ -98,7 +101,15 @@ export function Terms() {
         </p>
       </section>
       <section>
-        <h2>6. The corpus and its rights</h2>
+        <h2>6. What you send us</h2>
+        <p>
+          We use what your organisation sends the API and MCP only to answer that request. We don't keep it or
+          share it, and we don't use it to train anything. The <Link to="/privacy">privacy notice</Link> says
+          what we do keep, such as usage totals and the monitors you create.
+        </p>
+      </section>
+      <section>
+        <h2>7. The corpus and its rights</h2>
         <p>
           Access controls how you reach the corpus, not the rights in it. Each record says what may be
           reused and on what conditions; follow them, including attribution. Metadata is published under the
@@ -112,29 +123,31 @@ export function Terms() {
         </p>
       </section>
       <section>
-        <h2>7. Acceptable use</h2>
+        <h2>8. Acceptable use</h2>
         <p>
           Use the services within the <Link to="/acceptable-use">acceptable use policy</Link>, which is part of
           these terms.
         </p>
       </section>
       <section>
-        <h2>8. Suspension and closing</h2>
+        <h2>9. Suspension and closing</h2>
         <p>
           We may suspend or end an account, an organisation, a key or a connection that breaks these terms or
-          endangers the service or others, telling you why unless the law or security prevents it. You can
-          appeal by writing to <Email address={LEGAL_EMAIL} />. You may close your account at any time in the console.
+          endangers the service or others, telling you why unless the law or security prevents it. We act on
+          the narrowest scope that deals with the problem, a key or a connection before a whole organisation.
+          Unless the risk is urgent, we tell you first and give you a chance to fix it. You can appeal by
+          writing to <Email address={LEGAL_EMAIL} />. You may close your account at any time in the console.
         </p>
       </section>
       <section>
-        <h2>9. No warranty</h2>
+        <h2>10. No warranty</h2>
         <p>
           We provide the services as they are and as available. We work to keep them accurate and running but
           do not promise that they will be error-free, complete or uninterrupted.
         </p>
       </section>
       <section>
-        <h2>10. Liability</h2>
+        <h2>11. Liability</h2>
         <p>
           To the extent the law allows, we are not liable for indirect or consequential loss, or for loss
           arising from reliance on the corpus without checking the official source. Nothing in these terms
@@ -142,14 +155,16 @@ export function Terms() {
         </p>
       </section>
       <section>
-        <h2>11. Changes</h2>
+        <h2>12. Changes</h2>
         <p>
-          When we change these terms, we publish the new version with its date and ask you to accept it at your
-          next sign-in. If you don't accept it, you can close your account.
+          When we change these terms, we publish the new version with its date. We email each organisation's
+          owners at least 30 days before a new version takes effect, unless the law or the service's protection
+          needs it sooner. Using keys or connected apps after that counts as accepting it. The console still
+          asks you to accept it at your next sign-in. If you don't accept it, you can close your account.
         </p>
       </section>
       <section>
-        <h2>12. Law and disputes</h2>
+        <h2>13. Law and disputes</h2>
         <p>
           These terms are governed by the laws of the State of Delaware, United States. If a dispute arises, we
           will first try to settle it with you in good faith for at least 30 days, and then through mediation,
@@ -180,7 +195,7 @@ export function AcceptableUse() {
         <h2>Use the services as they are offered</h2>
         <ul>
           <li>Stay within your organisation's limits. Don't spread requests across accounts, organisations or keys to get around them.</li>
-          <li>Don't share keys outside your organisation, sell access, or let others use your account.</li>
+          <li>Don't share keys outside your organisation, resell or pass on access to the API or MCP, or let others use your account.</li>
           <li>Don't probe, scan or test the services' security without our written agreement. Report what you find to us instead.</li>
           <li>Don't disrupt the services, overload them, or interfere with other people's use.</li>
           <li>Don't scrape the website to get around the API's access and limits.</li>
@@ -192,16 +207,31 @@ export function AcceptableUse() {
           <li>Follow each record's rights status and conditions, including attribution.</li>
           <li>Don't present Open Alvary's records as official publications, or remove notices that say where a text comes from.</li>
           <li>Don't use the services to identify, profile or target individuals named in legal texts.</li>
-          <li>Don't send us confidential client or case information in requests, access requests or support messages.</li>
+          <li>Don't send us confidential client or case information in access requests or support messages.</li>
         </ul>
+      </section>
+      <section>
+        <h2>Searches and requests</h2>
+        <p>
+          Searches and requests are used only to answer them and are not kept. Send only what a search needs,
+          and leave out names or other details that identify a client.
+        </p>
+      </section>
+      <section>
+        <h2>Serving your own users</h2>
+        <p>
+          You may use the services in apps you offer to others and show your users the records and texts your
+          organisation is entitled to, within each record's rights status and conditions, including
+          attribution. Don't give your users your keys, or resell the API or MCP itself as a service.
+        </p>
       </section>
       <section>
         <h2>Keeping copies</h2>
         <p>
           You may keep copies of the records and texts your organisation is entitled to, and index them for
-          your own search, within each record's rights status and conditions. Keep your copies current: apply
-          the withdrawals and corrections the change feed announces within 7 days of their publication, and
-          stop showing a withdrawn text from then on.
+          search, in your own services or for your users, within each record's rights status and conditions.
+          Keep your copies current: apply the withdrawals and corrections the change feed announces within 7
+          days of their publication, and stop showing a withdrawn text from then on.
         </p>
       </section>
       <section>
