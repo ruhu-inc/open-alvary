@@ -68,8 +68,12 @@ WITH_RIGHTS_REVISION = (
 )  # fmt: skip
 # The reasons a record's or a text's withdrawal may be told to keyed callers: the record or text is named
 # by its IDs, and reads answer `withdrawn` (owner decision, 2026-10-22). Any other reason, or none, is
-# confidential: the withdrawal names nothing and reads answer `unavailable`.
+# confidential: the withdrawal names nothing and reads answer `unavailable`. A text withdrawn because of
+# its record's privacy review is recorded with the reason `privacy` and is confidential even while the
+# record stays public (owner decision, 2026-10-22).
 DISCLOSED_REASONS = ("rights_changed", "correction")
+# The privacy review's states under which a text may be public (rights.policy.decide).
+PRIVACY_CLEARED = ("cleared", "redacted")
 # A correction may show a field's previous value only where it can never have been withheld (SUB C1).
 SAFE_PREVIOUS = ("legal_status", "rights_status", "document_type", "year")
 # Checked links between works that change what law applies (legal_effect_recorded): the effect, and
@@ -1232,11 +1236,15 @@ def expired(conn: Connection, now: datetime | None = None) -> int:
 
 
 def _withdrawn_because(conn: Connection, work_id: str, version_id: str) -> str:
-    """The withdrawal notice's reason (access-contracts.md): the rights record lapsed or changed, or the
-    text's own approval was withdrawn (a correction) while the rights record still stands."""
+    """The withdrawal notice's reason (access-contracts.md): its record's privacy review no longer
+    clears the text (``privacy``, confidential: never named, whatever else changed); the rights record
+    lapsed or changed; or the text's own approval was withdrawn (a correction) while the rights record
+    still stands."""
     rights, versions = tables["rights"], tables["versions"]
     record = conn.scalar(select(rights.c.payload).where(rights.c.source_id == work_id)) or {}
     version = conn.scalar(select(versions.c.payload).where(versions.c.id == version_id)) or {}
+    if record and record.get("privacy_status") not in PRIVACY_CLEARED:
+        return "privacy"
     until = record.get("expires_at")
     if until and datetime.fromisoformat(until) <= datetime.now(UTC):
         return "rights_changed"

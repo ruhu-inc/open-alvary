@@ -317,7 +317,7 @@
   {
     "name": "check_currentness",
     "title": "Check cited parts",
-    "description": "Before showing an answer that cites the corpus: for each cited part, whether it is still published with the same words (unchanged), whether a newer text of the same edition exists (newer_version, with the same part's anchor_id there and whether its words changed), whether the span_hash sent is wrong (span_mismatch) or the part is not public (unavailable); whether it was in force on a date; and, given a jurisdiction, whether the record binds there on that date (applicability: bound, not_bound or unknown, with the memberships, legal effect or treaty party entry it rests on).",
+    "description": "Before showing an answer that cites the corpus: for each cited part, whether it is still published with the same words (unchanged), whether a newer text of the same edition exists (newer_version, with the same part's anchor_id there and whether its words changed), whether the span_hash sent is wrong (span_mismatch) or the part is not public (unavailable; with a key, withdrawn instead when its text was public and was withdrawn for a reason that may be told); whether it was in force on a date; and, given a jurisdiction, whether the record binds there on that date (applicability: bound, not_bound or unknown, with the memberships, legal effect or treaty party entry it rests on).",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -409,7 +409,7 @@
   {
     "name": "list_changes",
     "title": "List catalogue changes",
-    "description": "Changes to the catalogue in commit order: records added, corrected or withdrawn, text published, legal effects (repeals, amendments, commencements, transpositions and others a reviewer checked) recorded or withdrawn, reviewed memberships of the African Union and the regional bodies recorded, ended or corrected, and members' suspensions from participation recorded or lifted (a suspended member remains one). Filter by jurisdiction, work, type, document class, language or keyword. Pass the returned resume_token next time to get only newer changes. Changes to what Open Alvary holds, not every change in a country's law.",
+    "description": "Changes to the catalogue in commit order: records added, corrected or withdrawn, text published, legal effects (repeals, amendments, commencements, transpositions and others a reviewer checked) recorded or withdrawn, reviewed memberships of the African Union and the regional bodies recorded, ended or corrected, and members' suspensions from participation recorded or lifted (a suspended member remains one). Filter by jurisdiction, work, type, document class, language or keyword. Pass the returned resume_token next time to get only newer changes. With a key, a record withdrawn because its rights record changed is named by its IDs only; other withdrawals of records no longer public, and a text withdrawn for privacy, name nothing. Changes to what Open Alvary holds, not every change in a country's law.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -485,7 +485,7 @@
   {
     "name": "get_change",
     "title": "Get one change",
-    "description": "One catalogue change by its event_id.",
+    "description": "One catalogue change by its event_id, as list_changes gives it.",
     "inputSchema": {
       "type": "object",
       "properties": {

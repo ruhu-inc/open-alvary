@@ -184,8 +184,10 @@ def digest(
     for name, events, stop in groups:
         lines = [name]
         for e in events:
+            # A record no longer public, named by its IDs only, is named by its ID.
+            work = e.get("work") or {}
             title = (
-                (e.get("work") or {}).get("title") or (e.get("jurisdiction") or {}).get("name") or "A record"
+                work.get("title") or work.get("id") or (e.get("jurisdiction") or {}).get("name") or "A record"
             )
             lines.append(
                 f"- {LABELS.get(e['event_type'], e['event_type'])}: {title} ({e['committed_at'][:10]})"

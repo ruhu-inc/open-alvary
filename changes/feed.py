@@ -136,8 +136,9 @@ class Filters:
         return digest(self.canonical())[:32]
 
     def sql(self) -> tuple[str, dict]:
-        """WHERE conditions. A withdrawal that names nothing is a notice for everyone: only the type
-        filter applies to it (SUB: mandatory notices are independent of routine filters)."""
+        """WHERE conditions. A withdrawal of a whole record, or of a text for a confidential
+        reason (_notice), is a notice for everyone: only the type filter applies to it (SUB: mandatory
+        notices are independent of routine filters)."""
         params: dict = {}
         dims = []
         if self.jurisdiction:
@@ -164,8 +165,10 @@ class Filters:
             params["types"] = list(self.type)
             clauses.append("e.event_type = ANY(:types)")
         if dims:
+            params["disclosed"] = list(DISCLOSED_REASONS)
             clauses.append(
-                "((" + " AND ".join(dims) + ") OR (e.event_type = 'withdrawal' AND e.version_id IS NULL))"
+                "((" + " AND ".join(dims) + ") OR (e.event_type = 'withdrawal' AND (e.version_id IS NULL"
+                " OR coalesce(e.payload #>> '{withdrawal,reason_code}', '') <> ALL(:disclosed))))"
             )
         return (" AND ".join(clauses) or "true"), params
 
@@ -217,7 +220,21 @@ class Filters:
 
 
 def _notice(event: dict) -> bool:
-    return event["event_type"] == "withdrawal" and event.get("version_id") is None
+    """A withdrawal of a whole record, or of a text for a reason that must not be told (_confidential):
+    every filter but the type selects it."""
+    return event["event_type"] == "withdrawal" and (event.get("version_id") is None or _confidential(event))
+
+
+def _confidential(event: dict) -> bool:
+    """A text's withdrawal for a reason that must not be told (privacy; owner decision, 2026-10-22): it
+    names nothing, to anyone, even while its record stays public. Text withdrawals recorded before carry
+    rights_changed or correction and are named as they were announced."""
+    told = event["payload"].get("withdrawal") or {}
+    return (
+        event["event_type"] == "withdrawal"
+        and event.get("version_id") is not None
+        and told.get("reason_code") not in DISCLOSED_REASONS
+    )
 
 
 # ---------- tokens ----------
@@ -467,7 +484,8 @@ class Feed:
         payload = row["payload"]
         kind = row["event_type"]
         work = visible.work(row["work_id"]) if kind not in PLACE_EVENTS else None
-        named = work is not None
+        # A text withdrawn for a confidential reason is never named, though its record is public.
+        named = work is not None and not _confidential(row)
         membership = suspension = None
         if kind in BODY_EVENTS:
             # A reviewed membership or suspension is a public fact about two jurisdictions; their names are
@@ -721,13 +739,6 @@ class Withdrawals:
         ).first()
         if state is None:
             return False
-        if not state.visible:  # the whole record was withdrawn: was this one of its public texts?
-            told = self.record(owner)
-            return told is not None and (
-                version_id in told.get("versions", []) or self._announced(version_id, self._withheld(owner))
-            )
-        if version_id in state.readable_versions:
-            return False
         latest = self.conn.execute(
             text(
                 f"SELECT event_type, payload, publication_revision FROM {self.t['change_event']}"
@@ -736,12 +747,18 @@ class Withdrawals:
             ),
             {"v": version_id},
         ).first()
-        return (
-            latest is not None
-            and latest.event_type == "withdrawal"
-            and (latest.payload.get("withdrawal") or {}).get("reason_code") in DISCLOSED_REASONS
-            and latest.publication_revision > self._withheld(owner)
-        )
+        withdrawn = latest is not None and latest.event_type == "withdrawal"
+        if withdrawn and (latest.payload.get("withdrawal") or {}).get("reason_code") not in DISCLOSED_REASONS:
+            return False  # the text's own withdrawal was confidential (privacy), whatever followed
+        if not state.visible:  # the whole record was withdrawn: was this one of its public texts?
+            told = self.record(owner)
+            return told is not None and (
+                version_id in told.get("versions", [])
+                or (latest is not None and latest.publication_revision > self._withheld(owner))
+            )
+        if version_id in state.readable_versions:
+            return False
+        return withdrawn and latest.publication_revision > self._withheld(owner)
 
     def item(self, item) -> bool:
         """For a cited part to check (schema.public.CheckItem) that is not public: whether its text may be
@@ -755,19 +772,6 @@ class Withdrawals:
         structure = tables["structure"]
         version_id = self.conn.scalar(select(structure.c.version_id).where(structure.c.id == anchor_id))
         return version_id is not None and self.version(version_id)
-
-    def _announced(self, version_id: str, since: int) -> bool:
-        """Whether the change log announced this text as public, or its withdrawal, after a publication
-        revision (its record's last confidential withdrawal: what came before it is never told)."""
-        return bool(
-            self.conn.scalar(
-                text(
-                    f"SELECT EXISTS(SELECT 1 FROM {self.t['change_event']} WHERE version_id = :v"
-                    " AND event_type IN ('text_version_published', 'withdrawal') AND publication_revision > :r)"
-                ),
-                {"v": version_id, "r": since},
-            )
-        )
 
 
 class _Visibility:

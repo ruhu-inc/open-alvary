@@ -211,7 +211,8 @@ def _digest(accounts, watches, conn, mailer, base, person_id, cadence, now) -> i
         return 0
     rows = conn.execute(
         text(
-            f"SELECT w.id AS watch_id, w.name AS watch_name, e.* FROM {accounts._t(conn, 'inbox_item')} i"
+            f"SELECT w.id AS watch_id, w.name AS watch_name, w.organisation_id AS watch_organisation, e.*"
+            f" FROM {accounts._t(conn, 'inbox_item')} i"
             f" JOIN {accounts._t(conn, 'watch')} w ON w.id = i.watch_id"
             f" JOIN {accounts._t(conn, 'watch_member')} m ON m.watch_id = w.id AND m.person_id = :p"
             f" JOIN {accounts.namespace.qualified(conn, 'changes', 'change_event')} e"
@@ -221,10 +222,15 @@ def _digest(accounts, watches, conn, mailer, base, person_id, cadence, now) -> i
         ),
         {"p": person_id, "c": cadence, "s": start, "end": end},
     ).mappings()
-    feed, visible = Feed(conn, None, base), _Visibility(conn)
+    # Each watch's organisation, when keyed, is told of withdrawals what a keyed caller is.
+    feeds = {keyed: Feed(conn, None, base, keyed=keyed) for keyed in (False, True)}
+    visible, keyed_organisations = _Visibility(conn), {}
     groups: dict[str, dict] = {}
     for row in rows:
-        event = feed.project(dict(row), visible)
+        organisation = row["watch_organisation"]
+        if organisation not in keyed_organisations:
+            keyed_organisations[organisation] = accounts.keyed(organisation, conn)
+        event = feeds[keyed_organisations[organisation]].project(dict(row), visible)
         if event is not None:
             groups.setdefault(row["watch_id"], {"name": row["watch_name"], "events": []})["events"].append(
                 event

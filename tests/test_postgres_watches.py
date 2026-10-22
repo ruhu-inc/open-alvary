@@ -339,3 +339,46 @@ def test_a_first_digest_after_missed_sends_gathers_every_match_since_the_watch_b
         worker.digests(accounts, mailer, BASE, now=weeks_later) == 1 and "1 change" in mailer.sent[0].subject
     )
     assert worker.digests(accounts, mailer, BASE, now=weeks_later + timedelta(days=7)) == 0
+
+
+def withdraw(store, work):
+    corpus = store.load()
+    next(r for r in corpus.rights if r.source_id == work).metadata_public = False
+    store.save(corpus)
+
+
+def test_a_keyed_organisations_monitors_are_told_of_a_withdrawal_by_its_ids_and_others_are_not(
+    world, monkeypatch
+):
+    store, accounts, watches = world
+    keyed, keyed_organisation = person(accounts, "amina")  # Starter: it could call the API with a key
+    revoked, revoked_organisation = person(accounts, "bola")
+    for owner, organisation in ((keyed, keyed_organisation), (revoked, revoked_organisation)):
+        watches.set_preferences(owner, {"timezone": "Africa/Kigali", "daily_time": "07:00", "weekly_day": 1})
+        watches.create(owner, organisation, {"name": "Nigeria", "filters": NIGERIA, "email": "weekly"})
+    accounts.revoke_access("op", revoked_organisation, "Test")  # no access now: not keyed
+    worker.match(accounts)
+    withdraw(store, "ng-foi-act-2011")  # its rights record changed: a reason that may be told
+    monkeypatch.setattr(admin, "engine_for", lambda: store.engine)
+    assert admin.main(["withdraw-confidentially", "--work", "ng-cbn-act-2007"]) == 0  # never told
+    worker.match(accounts)
+
+    def withdrawals(owner, organisation):
+        items = watches.inbox(owner, organisation, BASE)["items"]
+        return [i["event"] for i in items if i["event"]["event_type"] == "withdrawal"]
+
+    told = [e for e in withdrawals(keyed, keyed_organisation) if e["work"]]
+    assert [e["work"]["id"] for e in told] == ["ng-foi-act-2011"]
+    assert told[0]["work"]["title"] is None and told[0]["withdrawal"]["scope_disclosure"] == "named"
+    assert len(withdrawals(keyed, keyed_organisation)) == 2  # the confidential one names nothing
+    unkeyed = withdrawals(revoked, revoked_organisation)
+    assert len(unkeyed) == 2 and all(e["work"] is None for e in unkeyed)
+    preview = watches.preview(keyed, keyed_organisation, NIGERIA, BASE)["events"]
+    assert any((e["work"] or {}).get("id") == "ng-foi-act-2011" for e in preview)
+    # The digest names the record by its ID for the keyed organisation only.
+    mailer = Mailer()
+    assert worker.digests(accounts, mailer, BASE, now=datetime.now(UTC) + timedelta(days=8)) == 2
+    by_person = {m.to: m.text for m in mailer.sent}
+    assert "ng-foi-act-2011" in by_person["amina@example.org"]
+    assert "ng-foi-act-2011" not in by_person["bola@example.org"]
+    assert "ng-cbn-act-2007" not in by_person["amina@example.org"]

@@ -159,7 +159,7 @@ A monitor tells you about changes after it starts. To check your choices first, 
 
 ![Preview recent changes listing a corrected catalogue record](/guide/monitor-preview.webp)
 
-Matches arrive in the **Inbox**, newest first, with the kind of change, the date and the monitor that matched. Each links to the record. **Mark all read** clears the count; **Your monitors** lists your monitors to edit or delete. The page also shows how many monitors your plan allows.
+Matches arrive in the **Inbox**, newest first, with the kind of change, the date and the monitor that matched. Each links to the record; a record withdrawn because its rights record changed is shown by its ID only, with no link. **Mark all read** clears the count; **Your monitors** lists your monitors to edit or delete. The page also shows how many monitors your plan allows.
 
 ![The Monitor inbox with one new match: a corrected record](/guide/monitor-inbox.webp)
 

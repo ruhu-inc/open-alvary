@@ -349,7 +349,7 @@ class Watches:
         filters = parse_filters(raw_filters)
         with self.engine.connect() as conn:
             self.accounts._membership(conn, person_id, organisation_id)
-            feed = Feed(conn, None, origin)
+            feed = Feed(conn, None, origin, keyed=self.accounts.keyed(organisation_id, conn))
             self._validate(feed, filters)
             coverage = feed.coverage()
             return {
@@ -383,7 +383,9 @@ class Watches:
                 ),
                 params,
             ).mappings()
-            feed, visible = Feed(conn, None, origin), _Visibility(conn)
+            # A keyed organisation's inbox is told of withdrawals what a keyed caller is.
+            keyed = self.accounts.keyed(organisation_id, conn)
+            feed, visible = Feed(conn, None, origin, keyed=keyed), _Visibility(conn)
             items = []
             for row in rows:
                 event = feed.project(dict(row), visible)

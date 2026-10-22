@@ -170,6 +170,21 @@ class Accounts:
             )
         return access
 
+    def keyed(self, organisation_id: str, conn: Connection) -> bool:
+        """Whether the organisation could call the API with a key now, as check_credential tests an
+        organisation: not suspended or deleted, with access whose tier includes REST or MCP (every
+        organisation has Starter unless its access was revoked). Its monitors' inbox, digests and webhook
+        deliveries are told of withdrawals what a keyed caller is (changes.feed.Withdrawals; owner
+        decision, 2026-10-22)."""
+        state = conn.scalar(
+            text(f"SELECT state FROM {self._t(conn, 'organisation')} WHERE id = :o"), {"o": organisation_id}
+        )
+        if state is None or state in ("suspended", "deleted"):
+            return False
+        access = self.access(organisation_id, conn) or {}
+        includes = (access.get("tier") or {}).get("includes") or []
+        return access.get("state") == "active" and bool({"rest", "mcp"} & set(includes))
+
     # ---------- the runtime's view ----------
     def check_credential(self, request: dict) -> dict:
         """The narrow database check (check_credential): organisation, credential, tier and scope."""

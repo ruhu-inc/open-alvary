@@ -25,7 +25,8 @@ type ChangeEvent = {
   event_type: string;
   committed_at: string;
   jurisdiction: { id: string; name: string } | null;
-  work: { id: string; title: string; url: string } | null;
+  // A record no longer public, named by its IDs only, has no title or link.
+  work: { id: string; title: string | null; url: string | null } | null;
   summary: string;
 };
 type InboxItem = { id: string; watch: { id: string; name: string }; matched_at: string; read: boolean; event: ChangeEvent };
@@ -153,10 +154,12 @@ export function WatchesPage({ org }: PageProps) {
                     <span>{when(item.event.committed_at)}</span>
                     <span>· {item.watch.name}</span>
                   </div>
-                  {item.event.work ? (
+                  {item.event.work?.url ? (
                     <External href={item.event.work.url} className="inbox-title">
                       {item.event.work.title}
                     </External>
+                  ) : item.event.work ? (
+                    <span className="inbox-title">{item.event.work.id}</span>
                   ) : null}
                   <p>{item.event.summary}</p>
                 </li>
