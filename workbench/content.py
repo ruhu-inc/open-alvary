@@ -523,12 +523,30 @@ def replace_in(
     for unit in units:
         unit = json.loads(json.dumps(unit))
         if unit["kind"] == "table":
-            unit["caption"], count = pattern.subn(lambda _: replacement, unit.get("caption", ""))
+            unit["caption"], marks, count = _replace_text(
+                pattern, unit.get("caption", ""), replacement, unit.get("caption_marks") or []
+            )
+            if marks:
+                unit["caption_marks"] = marks
+            else:
+                unit.pop("caption_marks", None)
             total += count
-            for row in unit["rows"]:
+            cell_marks = unit.get("cell_marks") or {}
+            for r, row in enumerate(unit["rows"]):
                 for c, cell in enumerate(row):
-                    row[c], count = pattern.subn(lambda _: replacement, cell)
+                    key = f"{r},{c}"
+                    row[c], marks, count = _replace_text(
+                        pattern, cell, replacement, cell_marks.get(key) or []
+                    )
+                    if marks:
+                        cell_marks[key] = marks
+                    else:
+                        cell_marks.pop(key, None)
                     total += count
+            if cell_marks:
+                unit["cell_marks"] = cell_marks
+            else:
+                unit.pop("cell_marks", None)
         else:
             unit["text"], marks, count = _replace_text(
                 pattern, unit.get("text", ""), replacement, unit.get("marks") or []
@@ -642,6 +660,47 @@ def reading_sha256(page: dict) -> str:
     ).hexdigest()
 
 
+def _clean_marks(marks, text: str) -> list[dict]:
+    """Formatting ranges over `text`: bold, italic, underline, superscript or subscript, each
+    within the text. Formatting is not in the published text bytes (TXP-02 rule 5)."""
+    if not isinstance(marks, list) or len(marks) > 200:
+        raise ValueError("marks must be a list of at most 200 ranges")
+    clean = []
+    for mark in marks:
+        if (
+            not isinstance(mark, dict)
+            or mark.get("type") not in MARK_TYPES
+            or not all(
+                isinstance(mark.get(k), int) and not isinstance(mark.get(k), bool) for k in ("start", "end")
+            )
+            or not 0 <= mark["start"] < mark["end"] <= len(text)
+        ):
+            raise ValueError("each mark needs a type and a range within the text")
+        clean.append({"type": mark["type"], "start": mark["start"], "end": mark["end"]})
+    return clean
+
+
+def _clean_cell_marks(cell_marks, rows: list[list[str]], spans: list[list[int]]) -> dict:
+    """A table's formatting, cell by cell ({"row,column": ranges}), the ranges as in a unit's
+    marks. A position a merged cell covers holds no words, so no formatting either."""
+    if not isinstance(cell_marks, dict):
+        raise ValueError('cell_marks must map "row,column" to ranges')
+    covered = {(r + dr, c + dc) for r, c, rs, cs in spans for dr in range(rs) for dc in range(cs) if dr or dc}
+    clean, total = {}, 0
+    for key, marks in cell_marks.items():
+        place = re.fullmatch(r"(0|[1-9]\d*),(0|[1-9]\d*)", key) if isinstance(key, str) else None
+        r, c = (int(place[1]), int(place[2])) if place else (-1, -1)
+        if not (0 <= r < len(rows) and 0 <= c < len(rows[r])) or (r, c) in covered:
+            raise ValueError('cell_marks must name cells of the table as "row,column"')
+        ranges = _clean_marks(marks, rows[r][c])
+        total += len(ranges)
+        if ranges:
+            clean[key] = ranges
+    if total > 2000:
+        raise ValueError("a table holds at most 2000 formatting ranges")
+    return clean
+
+
 def validate_units(units) -> list[dict]:
     """Accept only the unit shapes the corpus can hold; bounded so a request cannot balloon."""
     if not isinstance(units, list) or len(units) > 400:
@@ -694,6 +753,12 @@ def validate_units(units) -> list[dict]:
                 raise ValueError("table spans must be [row, column, rows, columns] within the table")
             if spans:
                 table["spans"] = spans
+            caption_marks = _clean_marks(unit.get("caption_marks") or [], table["caption"])
+            if caption_marks:
+                table["caption_marks"] = caption_marks
+            cell_marks = _clean_cell_marks(unit.get("cell_marks") or {}, rows, spans)
+            if cell_marks:
+                table["cell_marks"] = cell_marks
             clean.append(table)
             continue
         text = unit.get("text", "")
@@ -707,22 +772,7 @@ def validate_units(units) -> list[dict]:
             if not isinstance(level, int) or isinstance(level, bool) or not 0 <= level <= 3:
                 raise ValueError("level must be 0 (section) to 3 (sub-paragraph)")
             item["level"] = level
-        marks = unit.get("marks") or []
-        if not isinstance(marks, list) or len(marks) > 200:
-            raise ValueError("marks must be a list of at most 200 ranges")
-        clean_marks = []
-        for mark in marks:
-            if (
-                not isinstance(mark, dict)
-                or mark.get("type") not in MARK_TYPES
-                or not all(
-                    isinstance(mark.get(k), int) and not isinstance(mark.get(k), bool)
-                    for k in ("start", "end")
-                )
-                or not 0 <= mark["start"] < mark["end"] <= len(text)
-            ):
-                raise ValueError("each mark needs a type and a range within the text")
-            clean_marks.append({"type": mark["type"], "start": mark["start"], "end": mark["end"]})
+        clean_marks = _clean_marks(unit.get("marks") or [], text)
         if clean_marks:
             item["marks"] = clean_marks
         align = unit.get("align")
@@ -798,7 +848,7 @@ def plain_text(pages: list[dict]) -> str:
 # What a page's units become on the public site: the reviewer's structure and formatting, without
 # where a restored number came from.
 PUBLIC_KEYS = ("kind", "rank", "text", "marker", "level", "align", "marks", "notes")
-TABLE_KEYS = ("kind", "caption", "header_rows", "rows", "spans")
+TABLE_KEYS = ("kind", "caption", "caption_marks", "header_rows", "rows", "spans", "cell_marks")
 
 
 def public_source(document: dict, manifest: dict) -> dict:

@@ -50,9 +50,11 @@ export type DocumentBlock =
   | {
       kind: "table";
       caption?: string;
+      caption_marks?: Mark[];
       header_rows: number;
       rows: string[][];
       spans?: [number, number, number, number][]; // merged cells: [row, column, rows, columns]
+      cell_marks?: Record<string, Mark[]>; // each cell's formatting, keyed "row,column"
     };
 
 export type DocumentPageContent = {
@@ -320,7 +322,14 @@ export function DocumentText({
                   tabIndex={0}
                 >
                   <table>
-                    {block.caption ? <caption>{block.caption}</caption> : null}
+                    {block.caption ? (
+                      <caption>
+                        <Formatted
+                          text={block.caption}
+                          marks={block.caption_marks}
+                        />
+                      </caption>
+                    ) : null}
                     <tbody>
                       {block.rows.map((row, r) => (
                         <tr key={r}>
@@ -330,6 +339,12 @@ export function DocumentText({
                             const [rowSpan, colSpan] = extent.get(
                               `${r},${c}`,
                             ) ?? [1, 1];
+                            const words = (
+                              <Formatted
+                                text={cell}
+                                marks={block.cell_marks?.[`${r},${c}`]}
+                              />
+                            );
                             return r < block.header_rows ? (
                               <th
                                 key={c}
@@ -337,11 +352,11 @@ export function DocumentText({
                                 rowSpan={rowSpan}
                                 colSpan={colSpan}
                               >
-                                {cell}
+                                {words}
                               </th>
                             ) : (
                               <td key={c} rowSpan={rowSpan} colSpan={colSpan}>
-                                {cell}
+                                {words}
                               </td>
                             );
                           })}

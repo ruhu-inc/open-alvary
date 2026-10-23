@@ -1,9 +1,10 @@
 // Tables as printed, edited with prosemirror-tables: cells selected by dragging or Shift+arrows,
-// merged and split, rows and columns added and removed, header rows marked. What is stored does not
-// change (workbench.content): a full grid of text, one string per position, merges listed as
-// [row, column, rows, columns] with the positions they cover left empty, and how many leading rows
-// are headers. In the editor a merged cell spans its rows and columns and the covered positions
-// are not there, so no words can hide in them.
+// merged and split, rows and columns added and removed, header rows marked. What is stored
+// (workbench.content): a full grid of text, one string per position, merges listed as
+// [row, column, rows, columns] with the positions they cover left empty, how many leading rows are
+// headers, and the formatting of the caption and of each cell ({"row,column": ranges}), as a unit's
+// marks are kept. In the editor a merged cell spans its rows and columns and the covered positions
+// are not there, so no words, and no formatting, can hide in them.
 
 import { EditorState, Plugin, Selection, TextSelection } from "prosemirror-state";
 import {
@@ -12,10 +13,9 @@ import {
   addColumnBefore, addColumnAfter, deleteColumn as deleteColumnCells,
   mergeCells as mergeCellsKeepingText, splitCell,
 } from "prosemirror-tables";
-import { schema } from "./schema.js";
+import { schema, formatted, wordsAndMarks } from "./schema.js";
 
 const N = schema.nodes;
-const text = (value) => (value ? [schema.text(value)] : []);
 
 // --- stored table <-> table node -------------------------------------------------------------------
 
@@ -41,28 +41,35 @@ export function tableNode(unit, notes = []) {
   const tableRows = rows.map((row, r) => N.table_row.create(null, row.flatMap((value, c) => {
     if (covered.has(`${r},${c}`)) return [];
     const [rowspan, colspan] = extent.get(`${r},${c}`) || [1, 1];
-    return [(r < header ? N.table_header : N.table_cell).create({ rowspan, colspan }, text(value))];
+    const marks = unit.cell_marks && unit.cell_marks[`${r},${c}`];
+    return [(r < header ? N.table_header : N.table_cell).create({ rowspan, colspan }, formatted(value, marks))];
   })));
-  return N.table_unit.create({ header_rows: header }, [N.table_caption.create(null, text(unit.caption || "")), N.table.create(null, tableRows)]);
+  const caption = N.table_caption.create(null, formatted(unit.caption || "", unit.caption_marks));
+  return N.table_unit.create({ header_rows: header }, [caption, N.table.create(null, tableRows)]);
 }
 
 export function tableUnit(block) {
-  const caption = block.child(0).textContent;
+  const caption = wordsAndMarks(block.child(0));
   const table = block.child(1);
   const map = TableMap.get(table);
   const rows = Array.from({ length: map.height }, () => Array(map.width).fill(""));
   const spans = [];
+  const cellMarks = {};
   const seen = new Set();
   // Row by row, so a cell is met first at its top-left corner and the merges come in grid order.
   for (const pos of map.map) {
     if (seen.has(pos)) continue;
     seen.add(pos);
     const { top, left, bottom, right } = map.findCell(pos);
-    rows[top][left] = table.nodeAt(pos).textContent;
+    const { words, ranges } = wordsAndMarks(table.nodeAt(pos));
+    rows[top][left] = words;
+    if (ranges.length) cellMarks[`${top},${left}`] = ranges;
     if (bottom - top > 1 || right - left > 1) spans.push([top, left, bottom - top, right - left]);
   }
-  const unit = { kind: "table", caption, header_rows: Math.min(block.attrs.header_rows, rows.length), rows };
+  const unit = { kind: "table", caption: caption.words, header_rows: Math.min(block.attrs.header_rows, rows.length), rows };
+  if (caption.ranges.length) unit.caption_marks = caption.ranges;
   if (spans.length) unit.spans = spans;
+  if (Object.keys(cellMarks).length) unit.cell_marks = cellMarks;
   return unit;
 }
 
@@ -165,18 +172,37 @@ export function deleteColumn(state, dispatch) {
   return deleteColumnCells(state, dispatch);
 }
 
-// Merging keeps every cell's words, in reading order, separated by a space.
+// A cell's words without the spaces at either end, each word keeping its formatting.
+function trimmedWords(cell) {
+  const nodes = [];
+  cell.forEach((node) => nodes.push(node));
+  while (nodes.length) {
+    const value = nodes[0].text.replace(/^\s+/, "");
+    if (value) { nodes[0] = schema.text(value, nodes[0].marks); break; }
+    nodes.shift();
+  }
+  while (nodes.length) {
+    const last = nodes.length - 1, value = nodes[last].text.replace(/\s+$/, "");
+    if (value) { nodes[last] = schema.text(value, nodes[last].marks); break; }
+    nodes.pop();
+  }
+  return nodes;
+}
+
+// Merging keeps every cell's words, in reading order, separated by a space, and each word its
+// formatting.
 export function mergeCells(state, dispatch) {
   if (!mergeCellsKeepingText(state)) return false;
   if (!dispatch) return true;
   const rect = selectedRect(state);
   const cells = [...new Set(rect.map.cellsInRect(rect))].sort((a, b) => a - b);
-  const words = cells.map((pos) => rect.table.nodeAt(pos).textContent.trim()).filter(Boolean).join(" ");
+  const words = cells.map((pos) => trimmedWords(rect.table.nodeAt(pos))).filter((nodes) => nodes.length)
+    .flatMap((nodes, i) => (i ? [schema.text(" "), ...nodes] : nodes));
   const tr = state.tr;
   cells.forEach((pos, i) => {
     const cell = rect.table.nodeAt(pos);
     const from = tr.mapping.map(rect.tableStart + pos + 1), to = tr.mapping.map(rect.tableStart + pos + cell.nodeSize - 1);
-    tr.replaceWith(from, to, i === 0 ? text(words) : []);
+    tr.replaceWith(from, to, i === 0 ? words : []);
   });
   const emptied = EditorState.create({ doc: tr.doc, selection: state.selection.map(tr.doc, tr.mapping) });
   let merged = null;

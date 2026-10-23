@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { EditorState, TextSelection, NodeSelection } from "prosemirror-state";
 import { baseKeymap } from "prosemirror-commands";
 import { CellSelection } from "prosemirror-tables";
-import { schema, toDoc, fromDoc, commands, keyCommands, plugins, pasteUnits, unitNode, unitsFromText } from "../src/editor.js";
+import { schema, toDoc, fromDoc, commands, keyCommands, plugins, pasteUnits, pastedWords, unitNode, unitsFromText } from "../src/editor.js";
 import { findKey } from "../src/find.js";
 
 const N = schema.nodes;
@@ -174,6 +174,35 @@ test("a short row is filled out to the table's width", () => {
   assert.deepEqual(units[0].rows, [["a", "b"], ["c", ""]]);
 });
 
+// Footnote markers, units and emphasis in a table, as legal tables print them.
+const AREA_TABLE = {
+  kind: "table",
+  caption: "Table 1: Plot sizes",
+  caption_marks: [{ type: "italic", start: 0, end: 7 }],
+  header_rows: 1,
+  rows: [["Zone", "Area (m2)", "Note"], ["R1", "450", "minimum1"], ["Total", "", ""]],
+  spans: [[2, 0, 1, 3]],
+  cell_marks: {
+    "0,0": [{ type: "bold", start: 0, end: 4 }],
+    "0,1": [{ type: "bold", start: 0, end: 4 }, { type: "superscript", start: 7, end: 8 }],
+    "1,2": [{ type: "underline", start: 0, end: 7 }, { type: "superscript", start: 7, end: 8 }],
+    "2,0": [{ type: "bold", start: 0, end: 5 }],
+  },
+};
+
+test("a table's formatting, in its cells and caption, comes back from the document unchanged", () => {
+  assert.deepEqual(fromDoc(toDoc([AREA_TABLE])), [AREA_TABLE]);
+  const cell = toDoc([AREA_TABLE]).child(0).child(1).child(0).child(1); // a header cell
+  assert.deepEqual(cell.content.content.map((n) => [n.text, n.marks.map((m) => m.type.name)]), [["Area", ["strong"]], [" (m", []], ["2", ["sup"]], [")", []]]);
+});
+
+test("a table without formatting comes back byte for byte; a covered position never holds marks", () => {
+  assert.equal(JSON.stringify(fromDoc(toDoc([TAX_TABLE]))[0]), JSON.stringify(TAX_TABLE));
+  const covered = { kind: "table", caption: "", header_rows: 0, rows: [["abc", ""]], spans: [[0, 0, 1, 2]], cell_marks: { "0,1": [{ type: "bold", start: 0, end: 3 }] } };
+  const { cell_marks: _, ...unmarked } = covered;
+  assert.deepEqual(fromDoc(toDoc([covered])), [unmarked]);
+});
+
 test("a merge that would hide words is shown apart, and said so", () => {
   const notes = [];
   const unit = { kind: "table", caption: "", header_rows: 0, rows: [["a", "hidden"], ["c", "d"]], spans: [[0, 0, 1, 2]] };
@@ -203,12 +232,45 @@ test("bold never goes on a number chip, and spaces at the ends stay plain", () =
   assert.deepEqual(fromDoc(state.doc)[0].marks, [{ type: "bold", start: 0, end: 3 }]);
 });
 
-test("formatting does not apply in a margin note or a table cell", () => {
+test("formatting does not apply in a margin note", () => {
   let state = stateOf(PAGE);
   state = select(state, inBlock(state.doc, N.note, 0, 1), inBlock(state.doc, N.note, 0, 5));
   assert.equal(apply(state, commands.mark("strong")).done, false);
-  state = select(state, inBlock(state.doc, N.table_cell, 0, 1));
-  assert.equal(apply(state, commands.mark("strong")).done, false);
+});
+
+test("bold in a cell, a header cell and a caption; superscript typed at the cursor in a cell", () => {
+  let state = stateOf([{ kind: "table", caption: "Rates of tax", header_rows: 1, rows: [["Band", "Rate"], ["Area in m", "20%"]] }]);
+  state = select(state, inBlock(state.doc, N.table_cell, 0, 8), inBlock(state.doc, N.table_cell, 0, 9)); // "m"
+  state = apply(state, commands.mark("strong")).state;
+  state = select(state, inBlock(state.doc, N.table_header, 1), inBlock(state.doc, N.table_header, 1, 4)); // "Rate"
+  state = apply(state, commands.mark("em")).state;
+  state = select(state, inBlock(state.doc, N.table_caption, 0, 0), inBlock(state.doc, N.table_caption, 0, 5));
+  state = apply(state, commands.mark("strong")).state;
+  state = select(state, inBlock(state.doc, N.table_cell, 0, 9)); // after "m"
+  state = press(state, "Mod-b"); // bold off for what is typed next
+  state = press(state, "Mod-.");
+  state = state.apply(state.tr.insertText("2"));
+  const unit = fromDoc(state.doc)[0];
+  assert.deepEqual(unit.rows, [["Band", "Rate"], ["Area in m2", "20%"]]);
+  assert.deepEqual(unit.caption_marks, [{ type: "bold", start: 0, end: 5 }]);
+  assert.deepEqual(unit.cell_marks, {
+    "0,1": [{ type: "italic", start: 0, end: 4 }],
+    "1,0": [{ type: "bold", start: 8, end: 9 }, { type: "superscript", start: 9, end: 10 }],
+  });
+});
+
+test("bold over selected cells formats every cell; again, it comes off", () => {
+  let state = stateOf([{ kind: "table", caption: "", header_rows: 0, rows: [["From", "To"], ["0", "360,000"]] }]);
+  const a = inBlock(state.doc, N.table_cell, 0) - 1, d = inBlock(state.doc, N.table_cell, 3) - 1;
+  state = state.apply(state.tr.setSelection(CellSelection.create(state.doc, a, d)));
+  assert.equal(apply(state, commands.mark("strong")).done, true);
+  state = apply(state, commands.mark("strong")).state;
+  assert.deepEqual(fromDoc(state.doc)[0].cell_marks, {
+    "0,0": [{ type: "bold", start: 0, end: 4 }], "0,1": [{ type: "bold", start: 0, end: 2 }],
+    "1,0": [{ type: "bold", start: 0, end: 1 }], "1,1": [{ type: "bold", start: 0, end: 7 }],
+  });
+  state = apply(state, commands.mark("strong")).state;
+  assert.equal(fromDoc(state.doc)[0].cell_marks, undefined);
 });
 
 test("bold at the cursor applies to the words typed next", () => {
@@ -219,13 +281,15 @@ test("bold at the cursor applies to the words typed next", () => {
   assert.deepEqual(fromDoc(state.doc)[0], { kind: "paragraph", text: "Words more", marks: [{ type: "bold", start: 5, end: 10 }] });
 });
 
-test("bold across units, past a table, formats the words only", () => {
+test("bold across units and a table formats every word, in the cells too", () => {
   let state = stateOf(PAGE);
   state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, inWords(state.doc, 2), inWords(state.doc, 4, 5))));
   state = apply(state, commands.mark("strong")).state;
   const units = fromDoc(state.doc);
   assert.deepEqual(units[2].marks.find((m) => m.type === "bold"), { type: "bold", start: 0, end: 39 });
-  assert.deepEqual(units[3], TAX_TABLE);
+  const bold = {};
+  TAX_TABLE.rows.forEach((row, r) => row.forEach((cell, c) => { if (cell) bold[`${r},${c}`] = [{ type: "bold", start: 0, end: cell.length }]; }));
+  assert.deepEqual(units[3], { ...TAX_TABLE, cell_marks: bold });
   assert.deepEqual(units[4].marks, [{ type: "bold", start: 0, end: 5 }]);
 });
 
@@ -322,6 +386,30 @@ test("merging cells keeps every cell's words; splitting gives the positions back
   assert.equal(fromDoc(state.doc)[0].spans, undefined);
 });
 
+test("merging cells keeps each cell's formatting with its words", () => {
+  const unit = {
+    kind: "table", caption: "", header_rows: 0, rows: [["From", " 10 m2 "], ["0", "360,000"]],
+    cell_marks: { "0,0": [{ type: "bold", start: 0, end: 4 }], "0,1": [{ type: "italic", start: 1, end: 3 }, { type: "superscript", start: 5, end: 6 }] },
+  };
+  let state = stateOf([unit]);
+  const a = inBlock(state.doc, N.table_cell, 0) - 1, b = inBlock(state.doc, N.table_cell, 1) - 1;
+  state = state.apply(state.tr.setSelection(CellSelection.create(state.doc, a, b)));
+  state = apply(state, commands.mergeCells).state;
+  const merged = fromDoc(state.doc)[0];
+  assert.deepEqual(merged.rows, [["From 10 m2", ""], ["0", "360,000"]]);
+  assert.deepEqual(merged.spans, [[0, 0, 1, 2]]);
+  assert.deepEqual(merged.cell_marks, { "0,0": [{ type: "bold", start: 0, end: 4 }, { type: "italic", start: 5, end: 7 }, { type: "superscript", start: 9, end: 10 }] });
+  state = apply(state, commands.splitCell).state;
+  assert.deepEqual(fromDoc(state.doc)[0].cell_marks, merged.cell_marks); // the words stay in the first cell
+});
+
+test("a row that joins or leaves the header rows keeps its cells' formatting", () => {
+  let state = stateOf([AREA_TABLE]);
+  state = select(state, inBlock(state.doc, N.table_cell, 0, 1)); // first body row
+  state = apply(state, commands.toggleHeaderRow).state;
+  assert.deepEqual(fromDoc(state.doc), [{ ...AREA_TABLE, header_rows: 2 }]);
+});
+
 test("the header-row toggle moves the header boundary to the row under the cursor", () => {
   let state = stateOf([TAX_TABLE]);
   state = select(state, inBlock(state.doc, N.table_cell, 0, 1)); // first body row
@@ -413,6 +501,21 @@ test("find counts matches in words, notes and cells; replace keeps the formattin
   assert.deepEqual(unit.marks, [{ type: "bold", start: 4, end: 8 }]);
   assert.deepEqual(unit.notes, ["Levy"]);
   assert.deepEqual(table.rows, [["Taxes", "Levy"]]);
+});
+
+test("replace in a cell keeps the formatting of the words it replaces", () => {
+  let state = stateOf([{ kind: "table", caption: "", header_rows: 0, rows: [["Area in m2"]], cell_marks: { "0,0": [{ type: "bold", start: 0, end: 4 }] } }]);
+  state = state.apply(state.tr.setMeta(findKey, { query: "Area", options: {} }));
+  state = apply(state, commands.replaceAll("Floor area")).state;
+  assert.deepEqual(fromDoc(state.doc)[0].cell_marks, { "0,0": [{ type: "bold", start: 0, end: 10 }] });
+});
+
+test("words pasted into a cell keep their formatting; into a margin note they are plain", () => {
+  const blocks = [unitNode({ kind: "paragraph", marker: "6.", text: "Area  in m2", marks: [{ type: "bold", start: 0, end: 4 }, { type: "superscript", start: 10, end: 11 }] })];
+  const words = pastedWords(blocks, N.table_cell);
+  assert.deepEqual(words.content.map((n) => [n.text, n.marks.map((m) => m.type.name)]), [["6. ", []], ["Area", ["strong"]], [" in m", []], ["2", ["sup"]]]);
+  const plain = pastedWords([...blocks, unitNode({ kind: "paragraph", text: "next", notes: ["note"] })], N.note);
+  assert.deepEqual(plain.content.map((n) => [n.text, n.marks.length]), [["6. Area in m2 next note", 0]]);
 });
 
 test("a match never runs across a number chip", () => {

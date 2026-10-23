@@ -89,9 +89,10 @@ class Container:
 INLINE = {"bold": "b", "italic": "i", "underline": "u", "superscript": "sup", "subscript": "sub"}
 
 
-def paragraph(text: str, marks: list | None = None, offset: int = 0) -> ET.Element:
-    """A <p> whose formatted runs become AKN inline elements (<b>, <i>, <u>, <sup>, <sub>)."""
-    element = ET.Element(q("p"))
+def paragraph(text: str, marks: list | None = None, offset: int = 0, tag: str = "p") -> ET.Element:
+    """A <p> (or another element with inline content, such as a table's <caption>) whose formatted
+    runs become AKN inline elements (<b>, <i>, <u>, <sup>, <sub>)."""
+    element = ET.Element(q(tag))
     ranges = [m for m in marks or [] if m.get("type") in INLINE]
     if not ranges:
         element.text = text
@@ -121,13 +122,17 @@ def paragraph(text: str, marks: list | None = None, offset: int = 0) -> ET.Eleme
 
 
 def table(unit: dict) -> ET.Element:
+    """The table with its caption; each cell's words in a <p>, formatted as in the review."""
     element = ET.Element(q("table"))
+    if unit.get("caption"):
+        element.append(paragraph(unit["caption"], unit.get("caption_marks"), tag="caption"))
+    cell_marks = unit.get("cell_marks") or {}
     for index, row in enumerate(unit["rows"]):
         tr = ET.SubElement(element, q("tr"))
-        for cell in row:
-            ET.SubElement(
-                ET.SubElement(tr, q("th" if index < unit.get("header_rows", 0) else "td")), q("p")
-            ).text = cell
+        for column, cell in enumerate(row):
+            ET.SubElement(tr, q("th" if index < unit.get("header_rows", 0) else "td")).append(
+                paragraph(cell, cell_marks.get(f"{index},{column}"))
+            )
     return element
 
 
