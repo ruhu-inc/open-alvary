@@ -7,6 +7,7 @@ workbench/editor/src/editor.js
   s_08bb3cf5dbda80::t_a499ea9b9d792e 9,549-574,578-579,591,603,610-613
   s_08bb3cf5dbda80::t_67dad8887a04e9 90-91
   s_08bb3cf5dbda80::t_9048f3724a36be 432-433
+  s_08bb3cf5dbda80::t_53ea002d35d949 16
 workbench/content.py
   s_08bb3cf5dbda80::t_a2dbedb29f98b3 756-761
   s_08bb3cf5dbda80::t_bce452b3f91a01 775
@@ -32,9 +33,15 @@ workbench/editor/src/paste.js
   s_08bb3cf5dbda80::t_c924c6d04ad37b 69-88,92-93,95,101-103,113-115,117,147
 workbench/static/public-preview/preview.js
   s_08bb3cf5dbda80::t_b9e4ea41e17e1a 43,46,48,79,134
+  s_08bb3cf5dbda80::t_53ea002d35d949 1
+  s_08bb3cf5dbda80::t_7b46a162375424 9,17,25,33,41,49,64,139
 workbench/editor/test/editor.test.js
   s_08bb3cf5dbda80::t_cf080bc7981a13 9,177-205,235,239-273,284,290-292,389-412,506-519
   s_08bb3cf5dbda80::t_9b046f89334925 520
+workbench/static/editor.js
+  s_08bb3cf5dbda80::t_7b46a162375424 1-6,8-10,12
+workbench/static/public-preview/preview.css
+  s_08bb3cf5dbda80::t_7b46a162375424 1
 ---
 {
   "schema_version": "authorship/3.0.0",
