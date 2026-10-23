@@ -1420,6 +1420,22 @@ main:focus {
   color: var(--primary);
   margin: 30px 0 14px;
 }
+/* By rank as printed: 1 the title, 2 a part or chapter; 3 (and a heading with no rank) as above. */
+.doc-heading.doc-rank-1 {
+  font-size: 19px;
+  line-height: 1.35;
+  margin-top: 36px;
+}
+.doc-heading.doc-rank-2 {
+  font-size: 16px;
+}
+.doc-heading.doc-rank-4,
+.doc-heading.doc-rank-5,
+.doc-heading.doc-rank-6 {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  margin: 24px 0 10px;
+}
 .doc-section h3 {
   font: 600 17px/1.45 "DM Sans", sans-serif;
   margin: 26px 0 8px;

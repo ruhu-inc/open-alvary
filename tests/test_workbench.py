@@ -1144,6 +1144,44 @@ def test_a_table_with_merged_cells_lines_up_and_keeps_its_merges():
         content.validate_units([{**unit, "spans": [[1, 2, 3, 1]]}])  # runs past the last row
 
 
+def test_a_heading_keeps_the_rank_its_reading_gives_it():
+    page = {
+        "page": 3,
+        "nodes": [
+            node("LAW N° 020/2023 ON TAX PROCEDURES", kind="heading", level="heading-1"),
+            node("CHAPTER ONE: GENERAL PROVISIONS", kind="heading", level="heading-2"),
+            node("Purpose of this Law", kind="heading", level="heading-3"),
+            node("Definitions", kind="heading", level="subheading"),
+            node("PART I", kind="heading"),  # a reading that does not rank its headings
+            node("Words.", level="heading-3"),  # a rank on a paragraph is ignored
+        ],
+    }
+    units = content.units_from(page)
+    assert [u.get("rank") for u in units] == [1, 2, 3, None, None, None]
+    assert content.validate_units(units) == units
+    assert content.public_pages([{"page": 3, "units": units}], {})[0]["blocks"][1] == {
+        "kind": "heading",
+        "rank": 2,
+        "text": "CHAPTER ONE: GENERAL PROVISIONS",
+    }
+
+
+def test_only_a_heading_has_a_rank_and_only_1_to_6():
+    heading = {"kind": "heading", "text": "Purpose of this Law"}
+    assert content.validate_units([{**heading, "rank": 6}]) == [{**heading, "rank": 6}]
+    assert content.validate_units([{**heading, "rank": None}]) == [heading]  # unranked, as saved before
+    for rank in (0, 7, True, 2.0, "2"):
+        with pytest.raises(ValueError):
+            content.validate_units([{**heading, "rank": rank}])
+    for unit in (
+        {"kind": "paragraph", "text": "Words"},
+        {"kind": "list_item", "text": "Words"},
+        {"kind": "table", "header_rows": 0, "rows": [["a"]]},
+    ):
+        with pytest.raises(ValueError):
+            content.validate_units([{**unit, "rank": 1}])
+
+
 def test_a_collection_in_the_corpus_bucket_is_read_from_it_and_cached(tmp_path, monkeypatch):
     from ingestion import rw_gazette as RG
 

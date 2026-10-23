@@ -39,6 +39,7 @@ export type Mark = {
 export type DocumentBlock =
   | {
       kind: "heading" | "paragraph" | "list_item";
+      rank?: number | null; // a heading's rank as printed: 1 (the title) to 6
       text: string;
       marker?: string;
       level?: number | null;
@@ -353,17 +354,23 @@ export function DocumentText({
             const align = block.align ? " doc-align-" + block.align : "";
             if (block.kind === "heading" && !(block.text ?? "").trim())
               return null;
-            if (block.kind === "heading")
+            if (block.kind === "heading") {
+              // Set by its rank as printed; a heading with no rank as rank 3.
+              const rank =
+                block.rank && block.rank >= 1 && block.rank <= 6
+                  ? " doc-rank-" + block.rank
+                  : "";
               return (
                 <h2
                   key={item.key}
                   id={item.id ?? undefined}
                   tabIndex={-1}
-                  className={"doc-heading" + align}
+                  className={"doc-heading" + rank + align}
                 >
                   <Formatted text={block.text ?? ""} marks={block.marks} />
                 </h2>
               );
+            }
             const parts = item.lead!;
             const level = block.level ?? depthOf(parts.lead ?? parts.text) ?? 0;
             if (item.section && item.titled) {

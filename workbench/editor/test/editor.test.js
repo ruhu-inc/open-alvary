@@ -79,6 +79,86 @@ test("stored units come back from the document unchanged", () => {
   assert.deepEqual(fromDoc(toDoc(PAGE)), PAGE);
 });
 
+// --- heading ranks ----------------------------------------------------------------------------------
+
+const RANKED = [
+  { kind: "heading", rank: 1, text: "LAW N° 020/2023 OF 31/03/2023 ON TAX PROCEDURES" },
+  { kind: "heading", rank: 2, text: "CHAPTER ONE: GENERAL PROVISIONS", align: "left" },
+  { kind: "heading", rank: 6, text: "Definitions", marks: [{ type: "italic", start: 0, end: 11 }] },
+  { kind: "heading", text: "Purpose of this Law" },
+  { kind: "paragraph", text: "This Law determines tax procedures." },
+];
+
+// The unit's DOM as the editor draws it, read back as copy and paste reads it.
+function throughDOM(node) {
+  const [, attrs] = N.unit.spec.toDOM(node);
+  const dataset = Object.fromEntries(Object.entries(attrs).filter(([key]) => key.startsWith("data-")).map(([key, value]) => [key.slice(5), value]));
+  return { attrs, parsed: N.unit.spec.parseDOM[0].getAttrs({ dataset }) };
+}
+
+test("a heading's rank comes back from the document and from its markup; unranked headings stay unranked", () => {
+  assert.deepEqual(fromDoc(toDoc(RANKED)), RANKED);
+  assert.equal("rank" in fromDoc(toDoc([PAGE[0]]))[0], false);
+  const doc = toDoc(RANKED);
+  const { attrs, parsed } = throughDOM(doc.child(1));
+  assert.equal(attrs.class, "u heading h2 align-left");
+  assert.equal(attrs["data-rank"], "2");
+  assert.equal(parsed.rank, 2);
+  assert.equal(throughDOM(doc.child(3)).attrs["data-rank"], undefined);
+  assert.equal(throughDOM(doc.child(3)).parsed.rank, null);
+});
+
+test("a rank on anything but a heading, or out of range, is not kept", () => {
+  const units = fromDoc(toDoc([{ kind: "paragraph", text: "Words", rank: 2 }, { kind: "heading", text: "Title", rank: 7 }, { kind: "heading", text: "Title", rank: true }]));
+  assert.deepEqual(units, [{ kind: "paragraph", text: "Words" }, { kind: "heading", text: "Title" }, { kind: "heading", text: "Title" }]);
+  assert.equal(N.unit.spec.parseDOM[0].getAttrs({ dataset: { kind: "paragraph", rank: "2" } }).rank, null);
+});
+
+test("Heading 2 makes the units selected headings of rank 2; a heading made a paragraph loses its rank", () => {
+  let state = stateOf(RANKED.slice(3));
+  state = select(state, inWords(state.doc, 0, 2), inWords(state.doc, 1, 2));
+  state = apply(state, commands.rank(2)).state;
+  assert.deepEqual(fromDoc(state.doc).map((u) => [u.kind, u.rank]), [["heading", 2], ["heading", 2]]);
+  state = apply(state, commands.kind("paragraph")).state;
+  assert.deepEqual(fromDoc(state.doc), [{ kind: "paragraph", text: "Purpose of this Law" }, { kind: "paragraph", text: "This Law determines tax procedures." }]);
+  assert.equal(apply(state, commands.rank(0)).done, false);
+  assert.equal(apply(state, commands.rank(7)).done, false);
+});
+
+test("Ctrl/Cmd+Alt+1 makes a heading; pressed again it steps the rank down, 4 back to 1", () => {
+  let state = stateOf([{ kind: "paragraph", text: "Purpose of this Law" }]);
+  state = select(state, inWords(state.doc, 0, 3));
+  const ranks = [];
+  for (let i = 0; i < 6; i++) {
+    state = press(state, "Mod-Alt-1");
+    const [unit] = fromDoc(state.doc);
+    assert.equal(unit.kind, "heading");
+    ranks.push(unit.rank ?? null);
+  }
+  assert.deepEqual(ranks, [null, 1, 2, 3, 4, 1]);
+  state = press(state, "Mod-Alt-2");
+  assert.deepEqual(fromDoc(state.doc), [{ kind: "paragraph", text: "Purpose of this Law" }]);
+});
+
+test("Ctrl/Cmd+Alt+1 over headings and a paragraph makes them all headings and leaves the ranks", () => {
+  let state = stateOf([RANKED[1], RANKED[4]]);
+  state = select(state, inWords(state.doc, 0, 2), inWords(state.doc, 1, 2));
+  state = press(state, "Mod-Alt-1");
+  assert.deepEqual(fromDoc(state.doc).map((u) => [u.kind, u.rank]), [["heading", 2], ["heading", undefined]]);
+  state = press(state, "Mod-Alt-1"); // all headings now: every one takes the rank after the first one's
+  assert.deepEqual(fromDoc(state.doc).map((u) => u.rank), [3, 3]);
+});
+
+test("Enter in a ranked heading: the words after it are a paragraph; at its start, a heading of the same rank opens above", () => {
+  let state = stateOf([RANKED[1]]);
+  state = select(state, inWords(state.doc, 0, 12));
+  state = press(state, "Enter");
+  assert.deepEqual(fromDoc(state.doc), [{ ...RANKED[1], text: "CHAPTER ONE:" }, { kind: "paragraph", text: "GENERAL PROVISIONS" }]);
+  state = select(state, inWords(state.doc, 0));
+  state = press(state, "Enter");
+  assert.deepEqual(fromDoc(state.doc)[0], { kind: "heading", rank: 2, text: "" });
+});
+
 test("a merged table keeps its grid, merges and header rows", () => {
   const doc = toDoc([TAX_TABLE]);
   const table = doc.child(0).child(1);

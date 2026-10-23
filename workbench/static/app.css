@@ -112,7 +112,9 @@ pre.check { white-space: pre-wrap; font: 13px/1.5 ui-monospace, Menlo, monospace
 .toolbar .sep { width: 1px; height: 1.4rem; background: var(--line); margin: 0 .2rem; }
 .toolbar details.keys { position: relative; }
 .toolbar details.keys summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 0 .3rem; }
-.toolbar details.keys p { position: absolute; right: 0; top: 1.6rem; width: 22rem; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: .6rem; z-index: 6; }
+/* One panel holding every paragraph of the help, one under the other. */
+.toolbar details.keys > div { position: absolute; right: 0; top: 1.6rem; width: 24rem; max-width: 80vw; max-height: 70vh; overflow-y: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: .6rem; z-index: 6; }
+.toolbar details.keys p { margin: 0 0 .5rem; } .toolbar details.keys p:last-child { margin-bottom: 0; }
 .surface { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 1rem 1.2rem; margin-bottom: .8rem; }
 .surface .ProseMirror { outline: none; white-space: pre-wrap; word-wrap: break-word; font: 15px/1.6 Georgia, "Times New Roman", serif; }
 .surface .ProseMirror:focus-visible { outline: none; }
@@ -124,6 +126,14 @@ pre.check { white-space: pre-wrap; font: 13px/1.5 ui-monospace, Menlo, monospace
 .surface .u:has(> .note) > .body { grid-row: 1 / span 9; }
 .surface .u:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .surface .u.heading .body { font-weight: 700; text-align: center; letter-spacing: .01em; }
+/* A heading is set by its rank as printed; rank 3, and a heading no one ranked, as before. The rank
+   is named in the margin, where size alone would not say it. */
+.surface .u.h1 .body { font-size: 1.4em; line-height: 1.35; } .surface .u.h2 .body { font-size: 1.18em; line-height: 1.45; }
+.surface .u.h4 .body { font-size: .93em; } .surface .u.h5 .body, .surface .u.h6 .body { font-size: .87em; }
+.surface .u.heading[data-rank] { position: relative; }
+.surface .u.heading[data-rank]::before { content: "H" attr(data-rank); position: absolute; left: -1.15rem; top: .45em; font: 600 10px/1 system-ui, sans-serif; color: var(--muted); pointer-events: none; }
+.layout .h.h1 { font-size: 1.3em; } .layout .h.h2 { font-size: 1.12em; } .layout .h.h4, .layout .h.h5, .layout .h.h6 { font-size: .93em; }
+.toolbar .tool-menu .rank-1 { font-size: 15px; font-weight: 700; } .toolbar .tool-menu .rank-2 { font-size: 14px; font-weight: 700; } .toolbar .tool-menu .rank-3 { font-weight: 700; }
 .surface .u.lvl0 { margin-top: .8rem; } .surface .u.lvl1 { margin-left: 1.4rem; } .surface .u.lvl2 { margin-left: 2.8rem; } .surface .u.lvl3 { margin-left: 4.2rem; }
 .surface .note { font: 12px/1.35 system-ui, sans-serif; color: var(--muted); border-left: 2px solid var(--line); padding-left: .45rem; min-height: 1.2em; }
 .surface .marker { color: var(--accent); font-weight: 700; margin-right: .4em; cursor: pointer; user-select: none; }

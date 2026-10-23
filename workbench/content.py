@@ -579,8 +579,14 @@ def table_grid(cells_by_row: list[list[dict]]) -> tuple[list[list[str]], list[li
     return grid, spans
 
 
+HEADING_RANK = re.compile(r"heading-([1-6])")
+
+
 def units_from(page: dict) -> list[dict]:
-    """Editable units from a reconciled page, in reading order."""
+    """Editable units from a reconciled page, in reading order. A heading the reading ranks
+    ("heading-1" to "heading-6") keeps its rank. A "subheading" (Document AI) stays unranked: a rank
+    inferred from the other headings on its page would differ from page to page for the same
+    printed style, so the reviewer sets it."""
     units = []
     for node in page["nodes"]:
         if node["kind"] == "furniture":
@@ -598,6 +604,9 @@ def units_from(page: dict) -> list[dict]:
             units.append(unit)
             continue
         unit = {"kind": node["kind"] if node["kind"] in KINDS else "paragraph", "text": node.get("text", "")}
+        rank = HEADING_RANK.fullmatch(str(node.get("level") or ""))
+        if unit["kind"] == "heading" and rank:
+            unit["rank"] = int(rank.group(1))
         if node.get("marker"):
             unit["marker"] = node["marker"]
             unit["marker_source"] = node.get("marker_source")
@@ -641,6 +650,14 @@ def validate_units(units) -> list[dict]:
     for unit in units:
         if not isinstance(unit, dict) or unit.get("kind") not in KINDS:
             raise ValueError("every unit needs a kind among heading, paragraph, list_item, table")
+        # A heading's rank as printed, 1 (the title) to 6: how it is set, never in the text bytes
+        # (TXP-02 rule 5) and not its indent `level`. A heading without one is shown as before.
+        rank = unit.get("rank")
+        if rank is not None:
+            if unit["kind"] != "heading":
+                raise ValueError("only a heading has a rank")
+            if not isinstance(rank, int) or isinstance(rank, bool) or not 1 <= rank <= 6:
+                raise ValueError("a heading's rank must be 1 to 6")
         if unit["kind"] == "table":
             rows = unit.get("rows")
             if not isinstance(rows, list) or not rows or len(rows) > 100:
@@ -683,6 +700,8 @@ def validate_units(units) -> list[dict]:
         if not isinstance(text, str) or len(text) > 8192:
             raise ValueError("unit text must be at most 8192 characters")
         item = {"kind": unit["kind"], "text": text}
+        if rank is not None:
+            item["rank"] = rank
         level = unit.get("level")
         if level is not None:
             if not isinstance(level, int) or isinstance(level, bool) or not 0 <= level <= 3:
@@ -778,7 +797,7 @@ def plain_text(pages: list[dict]) -> str:
 
 # What a page's units become on the public site: the reviewer's structure and formatting, without
 # where a restored number came from.
-PUBLIC_KEYS = ("kind", "text", "marker", "level", "align", "marks", "notes")
+PUBLIC_KEYS = ("kind", "rank", "text", "marker", "level", "align", "marks", "notes")
 TABLE_KEYS = ("kind", "caption", "header_rows", "rows", "spans")
 
 
