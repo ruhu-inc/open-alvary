@@ -1919,23 +1919,125 @@ function imageClicked(view, event) {
 
 // --- the editing tab --------------------------------------------------------------------------------
 
-function markButton(surface, type, label, title) {
-  const button = el("button", { class: `small mark-${type}`, title, "aria-label": title, "aria-pressed": "false", "data-mark": type, text: label });
-  button.addEventListener("mousedown", (event) => event.preventDefault()); // keep the text selection
-  button.addEventListener("click", () => surface.run(window.ReviewEditor.commands.mark(type)));
+// A toolbar button for an editing command. It keeps the text selection when clicked; `on` and
+// `can` read the editor's status (updateToolbar), so it shows where it applies and whether it is on.
+function tool(view, { label, name, title, command, on, can, cls = "" }) {
+  const button = el("button", { type: "button", class: `small ${cls}`.trim(), title, "aria-label": name, "aria-pressed": on ? "false" : null }, label);
+  button.addEventListener("mousedown", (event) => event.preventDefault());
+  button.addEventListener("click", () => { view.surface.run(command); updateToolbar(view); });
+  view.tools.push({ button, on, can });
   return button;
 }
 
-function updateMarkButtons(view) {
-  if (!view.surface) return;
-  const inNote = view.surface.inNote();
-  document.querySelectorAll(".toolbar .note-move").forEach((b) => { b.disabled = !inNote; });
-  const active = view.surface.activeMarks();
-  document.querySelectorAll(".toolbar [data-mark]").forEach((b) => {
-    const on = active.has(b.dataset.mark);
-    b.classList.toggle("on", on);
-    b.setAttribute("aria-pressed", String(on));
-  });
+function updateToolbar(view) {
+  if (!view.surface || !view.toolbar) return;
+  const status = view.surface.status();
+  const editable = app.me.roles.includes("reviewer");
+  for (const { button, on, can } of view.tools) {
+    button.disabled = !editable || (can ? !can(status) : false);
+    if (on) {
+      const pressed = Boolean(on(status));
+      button.classList.toggle("on", pressed);
+      button.setAttribute("aria-pressed", String(pressed));
+    }
+  }
+  view.tableTools.classList.toggle("on", status.inTable);
+  rove(view.toolbar);
+  if (view.findBar && !view.findBar.hidden) showFindStatus(view, status.find);
+}
+
+// The toolbar is one stop for Tab; the arrow keys move along it (WAI-ARIA toolbar pattern), Escape
+// goes back to the text. In the text, Escape or Alt+F10 comes to the toolbar.
+const shown = (item) => {
+  if (item.closest("[hidden]")) return false;
+  const menu = item.closest("details");
+  return !menu || menu.open || item.localName === "summary";
+};
+const toolbarItems = (toolbar) => [...toolbar.querySelectorAll("button, input[type=checkbox], summary")].filter((item) => !item.disabled && shown(item));
+
+function rove(toolbar, focus) {
+  const items = toolbarItems(toolbar);
+  const current = focus || items.find((item) => item.tabIndex === 0) || items[0];
+  for (const item of toolbar.querySelectorAll("button, input[type=checkbox], summary")) item.tabIndex = item === current ? 0 : -1;
+  if (focus) focus.focus();
+}
+
+function toolbarKeys(view, event) {
+  if (event.target.matches("input[type=text], input[type=search]")) return;
+  const items = toolbarItems(view.toolbar);
+  const at = items.indexOf(document.activeElement);
+  const move = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: items.length - 1 }[event.key];
+  if (move !== undefined) {
+    event.preventDefault();
+    rove(view.toolbar, items[(move + items.length) % items.length]);
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    view.surface.view.focus();
+  }
+}
+
+function focusToolbar(view) {
+  const items = toolbarItems(view.toolbar);
+  rove(view.toolbar, items.find((item) => item.tabIndex === 0) || items[0]);
+}
+
+// Find and replace on this page (Ctrl/Cmd+F). The document page finds and replaces across every page.
+function findBar(view) {
+  const canEdit = app.me.roles.includes("reviewer");
+  const query = el("input", { type: "search", placeholder: "Find on this page", "aria-label": "Find on this page" });
+  const replacement = el("input", { type: "text", placeholder: "Replace with", "aria-label": "Replace with", disabled: !canEdit });
+  const matchCase = el("input", { type: "checkbox", "aria-label": "Match case" });
+  const wholeWord = el("input", { type: "checkbox", "aria-label": "Whole words" });
+  const count = el("span", { class: "muted find-count", "aria-live": "polite" });
+  const S = () => view.surface, C = window.ReviewEditor.commands;
+  const search = () => showFindStatus(view, S().find(query.value, { matchCase: matchCase.checked, wholeWord: wholeWord.checked }));
+  const step = (direction) => { S().run(C.findNext(direction), { focus: false }); showFindStatus(view, S().findStatus()); };
+  const replaceAll = () => {
+    const { count: total } = S().findStatus();
+    if (total && S().run(C.replaceAll(replacement.value), { focus: false })) toast(`Replaced ${total} on this page (one undo takes it back)`);
+    search();
+  };
+  query.addEventListener("input", search);
+  query.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); step(event.shiftKey ? -1 : 1); } });
+  replacement.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); S().run(C.replaceOne(replacement.value), { focus: false }); search(); } });
+  [matchCase, wholeWord].forEach((box) => box.addEventListener("change", search));
+  const bar = el("div", { class: "findbar-page", role: "search", hidden: true },
+    query, el("button", { type: "button", class: "small", title: "Previous match (Shift+Enter)", "aria-label": "Previous match", text: "↑", on: { click: () => step(-1) } }),
+    el("button", { type: "button", class: "small", title: "Next match (Enter, or Ctrl/Cmd+G in the text)", "aria-label": "Next match", text: "↓", on: { click: () => step(1) } }),
+    count, replacement,
+    el("button", { type: "button", class: "small", text: "Replace", disabled: !canEdit, on: { click: () => { S().run(C.replaceOne(replacement.value), { focus: false }); search(); } } }),
+    el("button", { type: "button", class: "small", text: "Replace all", disabled: !canEdit, on: { click: replaceAll } }),
+    el("label", { class: "muted small" }, matchCase, " Match case"),
+    el("label", { class: "muted small" }, wholeWord, " Whole words"),
+    el("button", { type: "button", class: "small", title: "Close (Escape)", "aria-label": "Close find", text: "✕", on: { click: () => closeFind(view) } }));
+  bar.addEventListener("keydown", (event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeFind(view); } });
+  bar.query = query;
+  bar.count = count;
+  bar.search = search;
+  return bar;
+}
+
+function showFindStatus(view, { count, current }) {
+  const bar = view.findBar;
+  bar.count.textContent = !bar.query.value ? "" : !count ? "No matches" : current ? `${current} of ${count}` : `${count} match${count === 1 ? "" : "es"}`;
+}
+
+function openFind(view) {
+  const bar = view.findBar;
+  bar.hidden = false;
+  // The words selected (on one line) are what to find, as in a word processor.
+  const { from, to } = view.surface.view.state.selection;
+  const selected = view.surface.view.state.doc.textBetween(from, to, "\n");
+  if (selected && selected.length <= 200 && !selected.includes("\n")) bar.query.value = selected;
+  bar.query.focus();
+  bar.query.select();
+  bar.search();
+}
+
+function closeFind(view) {
+  view.findBar.hidden = true;
+  view.surface.find("");
+  view.surface.view.focus();
 }
 
 function alignIcon(side) {
@@ -1966,55 +2068,89 @@ function editTab(view) {
     machineUnits: view.machineUnits,
     flags: view.page.flags.filter((f) => !view.resolutions[f.id] && (view.showLow || f.severity !== "low")),
     editable: canEdit,
+    label: `Text of page ${view.pageNumber}`,
     onChange: () => changed(view),
     onFlagClick: (id, rect) => openFlag(view, id, rect),
     onUnitFocus: (index) => { const units = view.surface ? view.surface.units() : view.units; showRegion(view, units[index] ? regionFor(view, units[index]) : null); },
-    onSelect: () => setTimeout(() => { showLine(view); updateMarkButtons(view); }, 0),
+    onSelect: () => setTimeout(() => { showLine(view); updateToolbar(view); }, 0),
     onMarkerEdit: (value, apply) => { const next = prompt("Section or paragraph number (empty to remove):", value); if (next !== null) apply(next.trim()); },
+    onFind: () => openFind(view),
+    onEscape: () => focusToolbar(view),
+    onNotice: (message) => toast(message),
   });
   view.surface = surface;
+  view.tools = [];
   const C = window.ReviewEditor.commands;
-  const run = (command) => () => surface.run(command);
+  const t = (spec) => tool(view, spec);
+  const format = (type, label, name, keys) => t({ label, name, title: `${name} (${keys})`, cls: `mark-${type}`, command: C.mark(type), on: (s) => s.formats[type].on,
+    can: (s) => s.formats[type].can });
   const group = (label, ...buttons) => el("div", { class: "tool-group", role: "group", "aria-label": label, title: label }, buttons);
+  // The table commands are a menu, so the toolbar keeps its size when the cursor enters a table.
+  const tableMenu = (...buttons) => {
+    const menu = el("details", { class: "tool-menu" }, el("summary", { class: "small", title: "Table commands: put the cursor in a table, or select cells by dragging across them", text: "Table ▾" }),
+      el("div", { role: "group", "aria-label": "Table" }, buttons));
+    menu.addEventListener("click", (event) => { if (event.target.closest("button")) menu.open = false; });
+    menu.addEventListener("keydown", (event) => { if (event.key === "Escape" && menu.open) { event.stopPropagation(); menu.open = false; menu.querySelector("summary").focus(); } });
+    return menu;
+  };
+  view.tableTools = tableMenu(
+    t({ label: "Insert row above", title: "Insert a row above", command: C.addRowBefore, can: (s) => s.can.addRowBefore }),
+    t({ label: "Insert row below", title: "Insert a row below (Tab in the last cell)", command: C.addRowAfter, can: (s) => s.can.addRowAfter }),
+    t({ label: "Insert column left", title: "Insert a column to the left", command: C.addColumnBefore, can: (s) => s.can.addColumnBefore }),
+    t({ label: "Insert column right", title: "Insert a column to the right", command: C.addColumnAfter, can: (s) => s.can.addColumnAfter }),
+    t({ label: "Merge cells", title: "Merge the selected cells (drag across cells, or Shift+arrow keys, to select them); their words are kept", command: C.mergeCells, can: (s) => s.can.mergeCells }),
+    t({ label: "Split cell", title: "Split a merged cell back into its rows and columns", command: C.splitCell, can: (s) => s.can.splitCell }),
+    t({ label: "Header row", title: "Make this row (and those above it) header rows, or this row (and those below it) body rows", command: C.toggleHeaderRow, on: (s) => s.headerRow, can: (s) => s.can.toggleHeaderRow }),
+    t({ label: "Delete row", title: "Delete the selected rows", command: C.deleteRow, cls: "danger-text", can: (s) => s.can.deleteRow }),
+    t({ label: "Delete column", title: "Delete the selected columns", command: C.deleteColumn, cls: "danger-text", can: (s) => s.can.deleteColumn }),
+    t({ label: "Delete table", title: "Delete this table", command: C.deleteTable, cls: "danger-text", can: (s) => s.can.deleteTable }));
+  view.findBar = findBar(view);
   const toolbar = el("div", { class: "toolbar", role: "toolbar", "aria-label": "Editing" },
     group("Structure",
-      el("button", { class: "small", title: "Heading (Ctrl/Cmd+Alt+1)", text: "Heading", on: { click: run(C.kind("heading")) } }),
-      el("button", { class: "small", title: "Paragraph (Ctrl/Cmd+Alt+2)", text: "Paragraph", on: { click: run(C.kind("paragraph")) } }),
-      el("button", { class: "small", title: "List item (Ctrl/Cmd+Alt+3)", text: "List item", on: { click: run(C.kind("list_item")) } }),
-      el("button", { class: "small", title: "Outdent (Shift+Tab)", "aria-label": "Outdent", text: "⇤", on: { click: run(C.level(-1)) } }),
-      el("button", { class: "small", title: "Indent (Tab)", "aria-label": "Indent", text: "⇥", on: { click: run(C.level(1)) } })),
+      t({ label: "Heading", title: "Heading (Ctrl/Cmd+Alt+1)", command: C.kind("heading"), on: (s) => s.kind === "heading" }),
+      t({ label: "Paragraph", title: "Paragraph (Ctrl/Cmd+Alt+2)", command: C.kind("paragraph"), on: (s) => s.kind === "paragraph" }),
+      t({ label: "List item", title: "List item (Ctrl/Cmd+Alt+3)", command: C.kind("list_item"), on: (s) => s.kind === "list_item" }),
+      t({ label: "⇤", name: "Outdent", title: "Outdent (Shift+Tab)", command: C.level(-1), can: (s) => Boolean(s.kind) }),
+      t({ label: "⇥", name: "Indent", title: "Indent (Tab)", command: C.level(1), can: (s) => Boolean(s.kind) })),
     group("Text",
-      markButton(surface, "strong", "B", "Bold (Ctrl/Cmd+B)"),
-      markButton(surface, "em", "I", "Italic (Ctrl/Cmd+I)"),
-      markButton(surface, "underline", "U", "Underline (Ctrl/Cmd+U)"),
-      markButton(surface, "sup", "x²", "Superscript (Ctrl/Cmd+.)"),
-      markButton(surface, "sub", "x₂", "Subscript (Ctrl/Cmd+,)")),
+      format("strong", "B", "Bold", "Ctrl/Cmd+B"),
+      format("em", "I", "Italic", "Ctrl/Cmd+I"),
+      format("underline", "U", "Underline", "Ctrl/Cmd+U"),
+      format("sup", "x²", "Superscript", "Ctrl/Cmd+."),
+      format("sub", "x₂", "Subscript", "Ctrl/Cmd+,")),
     group("Alignment",
-      el("button", { class: "small icon", title: "Align left (Ctrl/Cmd+Alt+L)", "aria-label": "Align left", on: { click: run(C.align("left")) } }, alignIcon("left")),
-      el("button", { class: "small icon", title: "Centre (Ctrl/Cmd+Alt+E)", "aria-label": "Centre", on: { click: run(C.align("center")) } }, alignIcon("center")),
-      el("button", { class: "small icon", title: "Align right (Ctrl/Cmd+Alt+R)", "aria-label": "Align right", on: { click: run(C.align("right")) } }, alignIcon("right")),
-      el("button", { class: "small icon", title: "Justify (Ctrl/Cmd+Alt+J). Select several paragraphs, or Ctrl/Cmd+A, to change them all.", "aria-label": "Justify", on: { click: run(C.align("justify")) } }, alignIcon("justify"))),
+      t({ label: alignIcon("left"), name: "Align left", title: "Align left (Ctrl/Cmd+Alt+L)", cls: "icon", command: C.align("left"), on: (s) => s.align === "left", can: (s) => Boolean(s.kind) }),
+      t({ label: alignIcon("center"), name: "Centre", title: "Centre (Ctrl/Cmd+Alt+E)", cls: "icon", command: C.align("center"), on: (s) => s.align === "center", can: (s) => Boolean(s.kind) }),
+      t({ label: alignIcon("right"), name: "Align right", title: "Align right (Ctrl/Cmd+Alt+R)", cls: "icon", command: C.align("right"), on: (s) => s.align === "right", can: (s) => Boolean(s.kind) }),
+      t({ label: alignIcon("justify"), name: "Justify", title: "Justify (Ctrl/Cmd+Alt+J). Select several paragraphs, or Ctrl/Cmd+A, to change them all.", cls: "icon", command: C.align("justify"), on: (s) => s.align === "justify", can: (s) => Boolean(s.kind) })),
     group("Insert",
-      el("button", { class: "small", title: "Add a margin note (Ctrl/Cmd+Alt+N)", text: "+ Margin note", on: { click: run(C.addNote) } }),
-      el("button", { class: "small note-move", title: "Move this margin note to the previous paragraph (Alt+Shift+↑)", text: "Note ↑", disabled: true, on: { click: run(C.moveNote(-1)) } }),
-      el("button", { class: "small note-move", title: "Move this margin note to the next paragraph (Alt+Shift+↓)", text: "Note ↓", disabled: true, on: { click: run(C.moveNote(1)) } }),
-      el("button", { class: "small", title: "Insert a table after this unit", text: "+ Table", on: { click: run(C.insertTable) } }),
-      el("button", { class: "small", title: "Add a row below (in a table)", text: "+ Row", on: { click: run(C.addRow) } }),
-      el("button", { class: "small", title: "Add a column (in a table)", text: "+ Column", on: { click: run(C.addColumn) } })),
+      t({ label: "+ Margin note", title: "Add a margin note (Ctrl/Cmd+Alt+N)", command: C.addNote, can: (s) => s.can.addNote }),
+      t({ label: "Note ↑", name: "Move note up", title: "Move this margin note to the previous paragraph (Alt+Shift+↑)", command: C.moveNote(-1), can: (s) => s.inNote }),
+      t({ label: "Note ↓", name: "Move note down", title: "Move this margin note to the next paragraph (Alt+Shift+↓)", command: C.moveNote(1), can: (s) => s.inNote }),
+      t({ label: "+ Table", title: "Insert a table after this unit", command: C.insertTable, can: (s) => s.can.insertTable }),
+      view.tableTools),
     group("History",
-      el("button", { class: "small", title: "Undo (Ctrl/Cmd+Z)", "aria-label": "Undo", text: "↶", on: { click: run(C.undo) } }),
-      el("button", { class: "small", title: "Redo (Ctrl/Cmd+Shift+Z)", "aria-label": "Redo", text: "↷", on: { click: run(C.redo) } })),
+      t({ label: "↶", name: "Undo", title: "Undo (Ctrl/Cmd+Z)", command: C.undo }),
+      t({ label: "↷", name: "Redo", title: "Redo (Ctrl/Cmd+Shift+Z)", command: C.redo })),
+    el("button", { type: "button", class: "small", title: "Find and replace on this page (Ctrl/Cmd+F)", text: "Find", on: { click: () => openFind(view) } }),
     el("label", { class: "muted small", title: "Numbers the main reading missed and the check readings supplied" },
       el("input", { type: "checkbox", checked: remember("restored") === "1", on: { change: (e) => { remember("restored", e.target.checked ? "1" : "0"); mount.classList.toggle("show-restored", e.target.checked); } } }),
       " mark restored numbers"),
     el("details", { class: "keys" }, el("summary", { text: "Keys" }),
       el("div", { class: "muted" },
-        el("p", { text: "Type to correct words. Enter splits a paragraph; Backspace at its start joins it to the one above. Tab / Shift+Tab change the level. Ctrl/Cmd+Alt+L, E, R, J align left, centre, right or justify; with several paragraphs selected (or Ctrl/Cmd+A) they all change. Double-click a section number to change it." }),
+        el("p", { text: "Type to correct words. Enter splits a paragraph (at its very start, it opens an empty one above); Backspace at its start joins it to the one above, Delete at its end joins the one below. Tab / Shift+Tab change the level. Ctrl/Cmd+Alt+L, E, R, J align left, centre, right or justify; with several paragraphs selected (or Ctrl/Cmd+A) they all change. Double-click a section number to change it." }),
+        el("p", { text: "Bold, italic and the rest work as in a word processor: on a selection that is only partly bold, B makes all of it bold. They apply to a paragraph's words, not to section numbers, margin notes, captions or table cells (those hold plain text)." }),
+        el("p", { text: "Tables: Tab / Shift+Tab move between cells (Tab in the last cell adds a row). Drag across cells, or Shift+arrow keys, to select several; then Table ▾ › Merge cells, or type to replace their words. The Table menu also adds and deletes rows and columns, splits merged cells and marks header rows." }),
+        el("p", { text: "Paste: text from Word, a web page or a PDF becomes paragraphs, headings, list items and tables; bold, italic, underline, superscript and subscript are kept, fonts and colours are not." }),
         el("p", { text: "Margin notes: click into a note, then Note ↑ / Note ↓ (Alt+Shift+↑ / ↓) moves it to the paragraph it belongs beside." }),
         el("p", { text: "Flags: Alt+N next, Alt+P previous; then Alt+1 / Alt+2 use that reading, Alt+K keep as read, Alt+E I corrected it, Alt+D dismiss. Alt+L keeps all punctuation-only differences." }),
-        el("p", { text: "Ctrl/Cmd+S save as checked; Ctrl/Cmd+Enter save as checked and go to the next page. Ctrl/Cmd + scroll zooms the page image." }))),
+        el("p", { text: "Ctrl/Cmd+F find and replace on this page (Ctrl/Cmd+G next match). Escape or Alt+F10 goes to the toolbar; there the arrow keys move along it and Escape returns to the text. Ctrl/Cmd+S save as checked; Ctrl/Cmd+Enter save as checked and go to the next page. Ctrl/Cmd + scroll zooms the page image." }))),
     // Far from the save buttons: it discards this page's corrections (after asking; nothing is saved).
-    canEdit ? el("button", { class: "small danger restore", title: "Replace the text with the machine reading. Nothing is saved until you save.", text: "Restore machine reading…", on: { click: () => restoreMachineReading(view) } }) : null);
+    canEdit ? el("button", { type: "button", class: "small danger restore", title: "Replace the text with the machine reading. Nothing is saved until you save.", text: "Restore machine reading…", on: { click: () => restoreMachineReading(view) } }) : null,
+    view.findBar);
+  toolbar.addEventListener("keydown", (event) => toolbarKeys(view, event));
+  view.toolbar = toolbar;
+  updateToolbar(view);
   const list = flagList(view);
   return [list, toolbar, mount, saveBar(view)];
 }

@@ -6,96 +6,20 @@
 // these shapes, so editing can change words and structure but never produce something the
 // corpus cannot hold. Flags are highlights that stay attached to their words as the text changes.
 
-import { Schema, Fragment } from "prosemirror-model";
-import { EditorState, Plugin, PluginKey, TextSelection } from "prosemirror-state";
+import { Fragment } from "prosemirror-model";
+import { EditorState, Plugin, PluginKey, Selection, TextSelection } from "prosemirror-state";
 import { EditorView, Decoration, DecorationSet } from "prosemirror-view";
 import { keymap } from "prosemirror-keymap";
-import { baseKeymap, toggleMark } from "prosemirror-commands";
+import { baseKeymap, chainCommands } from "prosemirror-commands";
 import { history, undo, redo } from "prosemirror-history";
+import { tableEditing, isInTable, CellSelection } from "prosemirror-tables";
+import { schema, derivedDepth, unitLead, ALIGNMENTS, KINDS, MARK_NAMES, MARK_TYPES } from "./schema.js";
+import * as tables from "./tables.js";
+import { unitsFromHTML, unitsFromText } from "./paste.js";
+import { findPlugin, findKey, findNext, findStatus, replaceOne, replaceAll } from "./find.js";
 
-const DEPTH = [
-  [/^\d{1,3}[A-Z]?\./, 0],
-  [/^\(\d{1,3}[A-Z]?\)/, 1],
-  [/^\([ivxl]{2,6}\)/, 3],
-  [/^\([a-z]{1,2}\)/, 2],
-];
-
-function derivedDepth(lead) {
-  const text = (lead || "").trimStart();
-  for (const [pattern, depth] of DEPTH) if (pattern.test(text)) return depth;
-  return null;
-}
-
-function unitLead(node) {
-  const body = node.firstChild;
-  let marker = "";
-  body.forEach((child) => { if (child.type.name === "marker" && !marker) marker = child.attrs.value; });
-  return marker || body.textContent;
-}
-
-export const schema = new Schema({
-  nodes: {
-    doc: { content: "block+" },
-    unit: {
-      group: "block",
-      content: "body note*",
-      attrs: { kind: { default: "paragraph" }, level: { default: null }, align: { default: null } },
-      toDOM(node) {
-        const level = node.attrs.level ?? derivedDepth(unitLead(node));
-        const align = node.attrs.align ? `align-${node.attrs.align}` : "";
-        const cls = ["u", node.attrs.kind, level === null ? "" : `lvl${level}`, align];
-        return ["div", { class: cls.join(" ").trim() }, 0];
-      },
-    },
-    body: { content: "inline*", toDOM: () => ["div", { class: "body" }, 0] },
-    note: { content: "text*", marks: "", toDOM: () => ["aside", { class: "note" }, 0] },
-    marker: {
-      inline: true,
-      group: "inline",
-      atom: true,
-      selectable: true,
-      attrs: { value: {}, source: { default: null } },
-      toDOM(node) {
-        const source = node.attrs.source ? `Number restored from ${[].concat(node.attrs.source).join(", ")}` : "Section or paragraph number";
-        return ["span", { class: "marker", title: `${source}. Double-click to change.` }, node.attrs.value];
-      },
-    },
-    table_unit: {
-      group: "block",
-      content: "table_caption table_row+",
-      attrs: { header_rows: { default: 0 } },
-      toDOM: () => ["div", { class: "tbl" }, 0],
-    },
-    table_caption: { content: "text*", marks: "", toDOM: () => ["div", { class: "caption" }, 0] },
-    table_row: { content: "table_cell+", toDOM: () => ["div", { class: "tr" }, 0] },
-    // A merged cell, as printed, keeps its extent (rows x columns); the positions it covers stay in
-    // the grid, shaded, so every column lines up.
-    table_cell: {
-      content: "text*",
-      marks: "",
-      attrs: { rows: { default: 1 }, columns: { default: 1 }, covered: { default: false } },
-      toDOM(node) {
-        const { rows, columns, covered } = node.attrs;
-        if (covered) return ["div", { class: "td covered", title: "Part of the merged cell before it" }, 0];
-        const merged = rows > 1 || columns > 1;
-        return ["div", merged ? { class: "td merged", "data-span": `${rows > 1 ? `${rows} rows` : ""}${rows > 1 && columns > 1 ? ", " : ""}${columns > 1 ? `${columns} columns` : ""}`, title: "Merged cell as printed" } : { class: "td" }, 0];
-      },
-    },
-    text: { group: "inline" },
-  },
-  // Character formatting that can carry meaning in legal text; no fonts, sizes or colours.
-  marks: {
-    strong: { toDOM: () => ["strong", 0] },
-    em: { toDOM: () => ["em", 0] },
-    underline: { toDOM: () => ["u", 0] },
-    sup: { excludes: "sup sub", toDOM: () => ["sup", 0] },
-    sub: { excludes: "sup sub", toDOM: () => ["sub", 0] },
-  },
-});
-
-// Stored names of the formatting marks, as the server and the exports know them.
-const MARK_NAMES = { strong: "bold", em: "italic", underline: "underline", sup: "superscript", sub: "subscript" };
-const MARK_TYPES = Object.fromEntries(Object.entries(MARK_NAMES).map(([type, name]) => [name, type]));
+export { schema };
+export { unitsFromHTML, unitsFromText } from "./paste.js";
 
 // Unit text with formatting ranges -> text nodes carrying marks.
 function formatted(value, ranges) {
@@ -113,7 +37,6 @@ function formatted(value, ranges) {
 }
 
 const N = schema.nodes;
-const ALIGNMENTS = ["left", "center", "right", "justify"];
 
 // A section number hangs in the margin, so its words (and their next lines) form one column
 // starting at "(1)": the class says how wide the number is. The number may be a chip or words.
@@ -152,28 +75,20 @@ const text = (value) => (value ? [schema.text(value)] : []);
 
 // --- units <-> document ---------------------------------------------------------------------------
 
-export function toDoc(units) {
-  const blocks = units.map((unit) => {
-    if (unit.kind === "table") {
-      const extent = new Map(), covered = new Set();
-      for (const [r, c, rs, cs] of unit.spans || []) {
-        extent.set(`${r},${c}`, [rs, cs]);
-        for (let dr = 0; dr < rs; dr++) for (let dc = 0; dc < cs; dc++) if (dr || dc) covered.add(`${r + dr},${c + dc}`);
-      }
-      const rows = (unit.rows && unit.rows.length ? unit.rows : [[""]]).map((row, r) =>
-        N.table_row.create(null, (row.length ? row : [""]).map((cell, c) => {
-          const [rs, cs] = extent.get(`${r},${c}`) || [1, 1];
-          return N.table_cell.create({ rows: rs, columns: cs, covered: covered.has(`${r},${c}`) }, text(cell));
-        })));
-      return N.table_unit.create({ header_rows: unit.header_rows || 0 }, [N.table_caption.create(null, text(unit.caption || "")), ...rows]);
-    }
-    const inline = [];
-    if (unit.marker) inline.push(N.marker.create({ value: unit.marker, source: unit.marker_source || null }));
-    inline.push(...formatted(unit.text || "", unit.marks));
-    const notes = (unit.notes || []).map((note) => N.note.create(null, text(note)));
-    const align = ALIGNMENTS.includes(unit.align) ? unit.align : null;
-    return N.unit.create({ kind: unit.kind, level: Number.isInteger(unit.level) ? unit.level : null, align }, [N.body.create(null, inline), ...notes]);
-  });
+// One stored unit -> its node. `notes` hears about anything that could not be shown as stored.
+export function unitNode(unit, notes = []) {
+  if (unit.kind === "table") return tables.tableNode(unit, notes);
+  const inline = [];
+  if (unit.marker) inline.push(N.marker.create({ value: unit.marker, source: unit.marker_source || null }));
+  inline.push(...formatted(unit.text || "", unit.marks));
+  const noteNodes = (unit.notes || []).map((note) => N.note.create(null, text(note)));
+  const align = ALIGNMENTS.includes(unit.align) ? unit.align : null;
+  const kind = KINDS.includes(unit.kind) ? unit.kind : "paragraph";
+  return N.unit.create({ kind, level: Number.isInteger(unit.level) ? unit.level : null, align }, [N.body.create(null, inline), ...noteNodes]);
+}
+
+export function toDoc(units, notes = []) {
+  const blocks = units.map((unit) => unitNode(unit, notes));
   return N.doc.create(null, blocks.length ? blocks : [N.unit.create(null, [N.body.create()])]);
 }
 
@@ -181,22 +96,7 @@ export function fromDoc(doc) {
   const units = [];
   doc.forEach((block) => {
     if (block.type === N.table_unit) {
-      const rows = [], spans = [];
-      let caption = "";
-      block.forEach((child) => {
-        if (child.type === N.table_caption) caption = child.textContent;
-        else {
-          const row = [];
-          child.forEach((cell) => {
-            if (!cell.attrs.covered && (cell.attrs.rows > 1 || cell.attrs.columns > 1)) spans.push([rows.length, row.length, cell.attrs.rows, cell.attrs.columns]);
-            row.push(cell.textContent);
-          });
-          rows.push(row);
-        }
-      });
-      const width = Math.max(...rows.map((r) => r.length));
-      const kept = spans.filter(([r, c, rs, cs]) => r + rs <= rows.length && c + cs <= width);
-      units.push({ kind: "table", caption, header_rows: Math.min(block.attrs.header_rows, rows.length), rows, ...(kept.length ? { spans: kept } : {}) });
+      units.push(tables.tableUnit(block));
       return;
     }
     const body = block.firstChild;
@@ -375,16 +275,23 @@ function unitAt($pos) {
   return null;
 }
 
-// Enter in a unit's words: the rest of the words become a new unit of the same kind and level.
+// Enter in a unit's words: the rest of the words become a new unit of the same kind and level. At
+// the very start of the words, an empty unit opens above instead, so the margin notes stay put.
 function splitUnit(state, dispatch) {
   const { $from, empty } = state.selection;
   if (!empty || $from.parent.type !== N.body) return false;
   const unit = unitAt($from);
   if (dispatch) {
+    const { kind, level } = unit.node.attrs;
+    if ($from.parentOffset === 0 && $from.parent.content.size) {
+      const tr = state.tr.insert(unit.pos, N.unit.create({ kind, level }, [N.body.create()]));
+      dispatch(tr.scrollIntoView());
+      return true;
+    }
     const rest = $from.parent.content.cut($from.parentOffset);
     const after = unit.pos + unit.node.nodeSize;
     const tr = state.tr.delete($from.pos, $from.end());
-    const fresh = N.unit.create({ kind: unit.node.attrs.kind === "heading" ? "paragraph" : unit.node.attrs.kind, level: unit.node.attrs.level }, [N.body.create(null, trimStart(rest))]);
+    const fresh = N.unit.create({ kind: kind === "heading" ? "paragraph" : kind, level }, [N.body.create(null, trimStart(rest))]);
     const at = tr.mapping.map(after);
     tr.insert(at, fresh);
     tr.setSelection(TextSelection.create(tr.doc, at + 2));
@@ -397,7 +304,7 @@ function trimStart(fragment) {
   const first = fragment.firstChild;
   if (first && first.isText && /^\s/.test(first.text)) {
     const trimmed = first.text.replace(/^\s+/, "");
-    return trimmed ? fragment.replaceChild(0, schema.text(trimmed)) : fragment.cut(first.nodeSize);
+    return trimmed ? fragment.replaceChild(0, schema.text(trimmed, first.marks)) : fragment.cut(first.nodeSize);
   }
   return fragment;
 }
@@ -413,28 +320,113 @@ function splitNote(state, dispatch) {
   return true;
 }
 
-// Backspace at the start of a unit's words: join it to the unit before (words and notes).
+const notesOf = (unit) => {
+  const notes = [];
+  unit.forEach((child, _, i) => { if (i > 0) notes.push(child); });
+  return notes;
+};
+const isEmptyUnit = (node) => node.type === N.unit && node.childCount === 1 && !node.firstChild.content.size;
+
+// A number chip can only stand at the start of a unit's words (the stored unit has one number, before
+// its text): moved anywhere else, it becomes words, so nothing is lost when the page is saved.
+function chipsAsWords(fragment) {
+  const pieces = [];
+  fragment.forEach((child) => pieces.push(child.type === N.marker ? schema.text(`${child.attrs.value} `) : child));
+  return Fragment.fromArray(pieces);
+}
+
+const hasChip = (fragment) => { let found = false; fragment.forEach((child) => { found ||= child.type === N.marker; }); return found; };
+
+// The unit at `index` joins the one before it: its words after a space, its notes after that unit's
+// notes. A number chip cannot stand inside words (it would be lost when saved), so it becomes words.
+// An empty unit before it simply goes.
+function joinUnits(state, index, dispatch) {
+  const previous = state.doc.child(index - 1), unit = state.doc.child(index);
+  const unitPos = unitStart(state.doc, index), previousPos = unitPos - previous.nodeSize;
+  if (!dispatch) return true;
+  if (isEmptyUnit(previous)) {
+    const tr = state.tr.delete(previousPos, unitPos);
+    dispatch(tr.setSelection(TextSelection.create(tr.doc, previousPos + 2)).scrollIntoView());
+    return true;
+  }
+  const previousBody = previous.firstChild;
+  const previousBodyEnd = previousPos + previousBody.nodeSize;
+  const words = trimStart(chipsAsWords(unit.firstChild.content));
+  const last = previousBody.lastChild;
+  const needsSpace = previousBody.content.size > 0 && words.size > 0 && !(last && last.isText && /\s$/.test(last.text));
+  const tr = state.tr.delete(unitPos, unitPos + unit.nodeSize);
+  tr.insert(previousBodyEnd, needsSpace ? Fragment.from(schema.text(" ")).append(words) : words);
+  const notes = notesOf(unit);
+  if (notes.length) tr.insert(tr.mapping.map(unitPos) - 1, notes);
+  tr.setSelection(TextSelection.create(tr.doc, previousBodyEnd + (needsSpace ? 1 : 0)));
+  dispatch(tr.scrollIntoView());
+  return true;
+}
+
+// Backspace at the start of a unit's words joins it to the unit before. After a table, an empty
+// unit goes and the cursor moves into the table; a unit with words stays.
 function joinBackward(state, dispatch) {
   const { $from, empty } = state.selection;
   if (!empty || $from.parent.type !== N.body || $from.parentOffset !== 0) return false;
-  const unit = unitAt($from);
   const index = $from.index(0);
   if (index === 0) return true;
-  const previous = state.doc.child(index - 1);
-  if (previous.type !== N.unit) return true;
-  if (dispatch) {
-    const previousPos = unit.pos - previous.nodeSize;
-    const previousBodyEnd = previousPos + 1 + previous.firstChild.nodeSize - 1;
-    const words = unit.node.firstChild.content;
-    const notes = [];
-    unit.node.forEach((child, _, i) => { if (i > 0) notes.push(child); });
-    const tr = state.tr.delete(unit.pos, unit.pos + unit.node.nodeSize);
-    const needsSpace = previous.firstChild.textContent && words.size;
-    const joined = needsSpace ? Fragment.from(schema.text(" ")).append(words) : words;
-    tr.insert(previousBodyEnd, joined);
-    if (notes.length) tr.insert(tr.mapping.map(previousPos + previous.nodeSize) - 1, notes);
-    tr.setSelection(TextSelection.create(tr.doc, previousBodyEnd + (needsSpace ? 1 : 0)));
-    dispatch(tr.scrollIntoView());
+  if (state.doc.child(index - 1).type === N.unit) return joinUnits(state, index, dispatch);
+  if (isEmptyUnit(state.doc.child(index)) && dispatch) {
+    const at = unitStart(state.doc, index);
+    const tr = state.tr.delete(at, at + state.doc.child(index).nodeSize);
+    dispatch(tr.setSelection(Selection.near(tr.doc.resolve(at), -1)).scrollIntoView());
+  }
+  return true;
+}
+
+// Delete at the end of a unit's words: the next unit's words join them, as Backspace does from the
+// other side. The margin notes beside a unit never run into its words.
+function joinForward(state, dispatch) {
+  const { $from, empty } = state.selection;
+  if (!empty || $from.parent.type !== N.body || $from.parentOffset !== $from.parent.content.size) return false;
+  const index = $from.index(0);
+  const next = state.doc.childCount > index + 1 ? state.doc.child(index + 1) : null;
+  if (next && next.type === N.unit) {
+    // The cursor stays where it was, before the words that joined (an empty unit simply goes).
+    if (isEmptyUnit(state.doc.child(index))) return joinUnits(state, index + 1, dispatch);
+    return joinUnits(state, index + 1, dispatch && ((tr) => dispatch(tr.setSelection(TextSelection.create(tr.doc, $from.pos)))));
+  }
+  if (next && isEmptyUnit(state.doc.child(index)) && dispatch) {
+    const at = unitStart(state.doc, index);
+    const tr = state.tr.delete(at, at + state.doc.child(index).nodeSize);
+    dispatch(tr.setSelection(Selection.near(tr.doc.resolve(at), 1)).scrollIntoView());
+  }
+  return true;
+}
+
+// Backspace at the start of a margin note: an empty note goes; a note joins the note above it; the
+// first note stays where it is (its words never run into the unit's words).
+function noteBackward(state, dispatch) {
+  const { $from, empty } = state.selection;
+  if (!empty || $from.parent.type !== N.note || $from.parentOffset !== 0) return false;
+  const note = $from.parent, start = $from.before();
+  if (!dispatch) return true;
+  if (!note.content.size) {
+    const tr = state.tr.delete(start, start + note.nodeSize);
+    dispatch(tr.setSelection(Selection.near(tr.doc.resolve(start), -1)).scrollIntoView());
+  } else if ($from.index($from.depth - 1) > 1) {
+    const previous = $from.node($from.depth - 1).child($from.index($from.depth - 1) - 1);
+    const tr = state.tr.join(start);
+    if (previous.content.size) tr.insertText(" ", start - 1);
+    dispatch(tr.setSelection(TextSelection.create(tr.doc, start - 1 + (previous.content.size ? 1 : 0))).scrollIntoView());
+  }
+  return true;
+}
+
+// Delete at the end of a margin note: the next note joins it; the last note stays as it is.
+function noteForward(state, dispatch) {
+  const { $from, empty } = state.selection;
+  if (!empty || $from.parent.type !== N.note || $from.parentOffset !== $from.parent.content.size) return false;
+  const unit = $from.node($from.depth - 1), index = $from.index($from.depth - 1);
+  if (index + 1 < unit.childCount && dispatch) {
+    const tr = state.tr.join($from.after());
+    if ($from.parent.content.size && unit.child(index + 1).content.size) tr.insertText(" ", $from.pos);
+    dispatch(tr.setSelection(TextSelection.create(tr.doc, $from.pos)).scrollIntoView());
   }
   return true;
 }
@@ -457,8 +449,172 @@ function setUnitAttrs(change) {
   };
 }
 
+// --- formatting --------------------------------------------------------------------------------------
+
+// The runs of text in the selection a mark can go on: a unit's words, never a number chip, a margin
+// note, a caption or a table cell.
+function formattable(state, type) {
+  const runs = [];
+  for (const { $from, $to } of state.selection.ranges) {
+    state.doc.nodesBetween($from.pos, $to.pos, (node, pos, parent) => {
+      if (!node.isText || !parent.type.allowsMarkType(type)) return;
+      const from = Math.max(pos, $from.pos), to = Math.min(pos + node.nodeSize, $to.pos);
+      if (from < to) runs.push({ from, to, text: node.text.slice(from - pos, to - pos), marks: node.marks });
+    });
+  }
+  return runs;
+}
+
+// Bold, italic and the rest, as in a word processor: over a selection the mark is added unless
+// every word already has it (then it is removed); at the cursor it applies to the words typed next.
+// Spaces at either end of the selection are left as they are.
+export function toggleFormat(type) {
+  return (state, dispatch) => {
+    const { empty, $cursor } = state.selection;
+    if (empty) {
+      if (!$cursor || !$cursor.parent.type.allowsMarkType(type)) return false;
+      if (dispatch) dispatch(type.isInSet(state.storedMarks || $cursor.marks()) ? state.tr.removeStoredMark(type) : state.tr.addStoredMark(type.create()));
+      return true;
+    }
+    const runs = formattable(state, type);
+    const words = runs.filter((run) => run.text.trim());
+    if (!words.length) return false;
+    if (dispatch) {
+      const tr = state.tr;
+      if (words.every((run) => type.isInSet(run.marks))) {
+        runs.forEach((run) => tr.removeMark(run.from, run.to, type));
+      } else {
+        const first = words[0], last = words[words.length - 1];
+        for (const run of runs.slice(runs.indexOf(first), runs.indexOf(last) + 1)) {
+          const from = run === first ? run.from + run.text.length - run.text.trimStart().length : run.from;
+          const to = run === last ? run.to - (run.text.length - run.text.trimEnd().length) : run.to;
+          if (from < to) tr.addMark(from, to, type.create());
+        }
+      }
+      dispatch(tr.scrollIntoView());
+    }
+    return true;
+  };
+}
+
+// For the toolbar: whether each mark can be used here and whether it is on (at the cursor, or on
+// every word of the selection).
+function formatState(state) {
+  const out = {};
+  const { empty, $cursor } = state.selection;
+  for (const [name, type] of Object.entries(schema.marks)) {
+    if (empty) {
+      const can = Boolean($cursor && $cursor.parent.type.allowsMarkType(type));
+      out[name] = { can, on: can && Boolean(type.isInSet(state.storedMarks || $cursor.marks())) };
+    } else {
+      const words = formattable(state, type).filter((run) => run.text.trim());
+      out[name] = { can: words.length > 0, on: words.length > 0 && words.every((run) => type.isInSet(run.marks)) };
+    }
+  }
+  return out;
+}
+
+// --- pasting -----------------------------------------------------------------------------------------
+
+// Units pasted into a unit's words: the first one's words join the words before the cursor, the
+// others follow as units of their own, and the words after the cursor end the last one. The margin
+// notes stay beside the unit they were beside, as with Enter. Returns null where units cannot go.
+export function pasteUnits(state, blocks, open = { start: true, end: true }) {
+  const tr = state.tr;
+  if (!tr.selection.empty) tr.deleteSelection();
+  const $at = tr.selection.$from;
+  if ($at.parent.type !== N.body || $at.depth !== 2 || !blocks.length) return null;
+  const since = tr.steps.length;
+  const map = (pos, assoc = 1) => tr.mapping.slice(since).map(pos, assoc);
+  const unit = $at.node(1), unitPos = $at.before(1), cursor = $at.pos;
+  const list = blocks.slice();
+  const first = open.start && list[0].type === N.unit ? list.shift() : null;
+  const last = open.end && list.length && list[list.length - 1].type === N.unit ? list.pop() : null;
+  const tail = $at.parent.content.cut($at.parentOffset);
+  const after = [...list];
+  const lastWords = last && last.firstChild.content;
+  if (last) after.push(N.unit.create(last.attrs, [N.body.create(null, lastWords.append(lastWords.size ? chipsAsWords(tail) : tail)), ...notesOf(last)]));
+  else if (after.length && tail.size) {
+    const kind = unit.attrs.kind === "heading" ? "paragraph" : unit.attrs.kind;
+    after.push(N.unit.create({ kind, level: unit.attrs.level }, [N.body.create(null, trimStart(tail))]));
+  }
+  if (after.length) tr.delete(cursor, $at.end());
+  let words = first ? first.firstChild.content : Fragment.empty;
+  if ($at.parentOffset > 0 || hasChip($at.parent.content)) words = chipsAsWords(words);
+  // Words pasted straight after the end of a sentence or clause get a space, as in a word processor.
+  const before = $at.nodeBefore, start = words.firstChild;
+  if (before && before.isText && /[.;:!?,)\]]$/.test(before.text) && start && start.isText && /^[\p{L}\p{N}("“]/u.test(start.text)) {
+    words = Fragment.from(schema.text(" ", start.marks)).append(words);
+  }
+  tr.insert(cursor, words);
+  let caret = cursor + words.size;
+  if (first && notesOf(first).length) tr.insert(map(unitPos + unit.nodeSize) - 1, notesOf(first));
+  if (after.length) {
+    const end = map(unitPos + unit.nodeSize);
+    tr.insert(end, after);
+    // The cursor goes where the pasted words end: in the last pasted unit, before the moved words.
+    const pasted = last || !tail.size ? after.length - 1 : after.length - 2;
+    let start = end;
+    for (const node of after.slice(0, pasted)) start += node.nodeSize;
+    const node = after[pasted];
+    caret = last ? start + 2 + last.firstChild.content.size : node.type === N.unit ? start + node.firstChild.nodeSize : start + node.nodeSize - 1;
+    const left = tr.doc.nodeAt(map(unitPos));
+    if (isEmptyUnit(left)) {
+      const steps = tr.steps.length;
+      tr.delete(map(unitPos), map(unitPos) + left.nodeSize);
+      caret = tr.mapping.slice(steps).map(caret);
+    }
+  }
+  return tr.setSelection(Selection.near(tr.doc.resolve(caret), -1));
+}
+
+const chipText = (node) => (node.type === N.marker ? node.attrs.value : "");
+const wordsOf = (node) => (node.isText ? node.text : node.isLeaf ? chipText(node) : node.textBetween(0, node.content.size, " ", chipText));
+const plain = (blocks) => blocks.map(wordsOf).join(" ").replace(/\s+/g, " ").trim();
+
+// Pasting: within one unit's words, copied words go in as they are (formatting and chips kept);
+// several units, or anything from outside the page, are cleaned into units (paste.js). A margin
+// note, a caption or a cell takes the words as plain text. Cells pasted into a table are placed by
+// the table plugin before this runs.
+const pastePlugin = new Plugin({
+  props: {
+    handlePaste(view, event, slice) {
+      const data = event.clipboardData;
+      const html = data ? data.getData("text/html") : "";
+      const { state } = view;
+      const $from = state.selection.$from;
+      let blocks, open = { start: true, end: true };
+      if (/data-pm-slice/.test(html)) {
+        blocks = [];
+        slice.content.forEach((node) => blocks.push(node));
+        if (!blocks.every((node) => node.type === N.unit || node.type === N.table_unit)) return pasteText(view, plain(blocks));
+        const inline = blocks.length === 1 && blocks[0].type === N.unit && blocks[0].childCount === 1 && slice.openStart >= 2 && slice.openEnd >= 2;
+        if (inline && $from.parent.type === N.body) return false;
+        open = { start: slice.openStart >= 2, end: slice.openEnd >= 2 };
+      } else {
+        const unit = $from.depth ? state.doc.child($from.index(0)) : null;
+        const kind = unit && unit.type === N.unit ? unit.attrs.kind : "paragraph";
+        const units = html ? unitsFromHTML(html) : unitsFromText(data ? data.getData("text/plain") : "", kind);
+        blocks = units.map((unit) => unitNode(unit));
+      }
+      if (!blocks.length) return true;
+      const tr = $from.parent.type === N.body || !state.selection.empty ? pasteUnits(state, blocks, open) : null;
+      if (!tr) return pasteText(view, plain(blocks));
+      view.dispatch(tr.scrollIntoView().setMeta("uiEvent", "paste"));
+      return true;
+    },
+  },
+});
+
+function pasteText(view, words) {
+  if (words) view.dispatch(view.state.tr.insertText(words).scrollIntoView().setMeta("uiEvent", "paste"));
+  return true;
+}
+
+// --- commands ----------------------------------------------------------------------------------------
+
 export const commands = {
-  mark: (type) => toggleMark(schema.marks[type]),
+  mark: (type) => toggleFormat(schema.marks[type]),
   kind: (kind) => setUnitAttrs((attrs) => ({ ...attrs, kind })),
   // Alignment as printed; choosing the kind's usual alignment clears the setting.
   align: (align) => setUnitAttrs((attrs) => ({ ...attrs, align: align === (attrs.kind === "heading" ? "center" : "left") ? null : align })),
@@ -500,89 +656,87 @@ export const commands = {
     }
     return true;
   },
-  insertTable: (state, dispatch) => {
-    const unit = unitAt(state.selection.$from);
-    const at = unit ? unit.pos + unit.node.nodeSize : state.doc.content.size;
-    if (dispatch) {
-      const cell = () => N.table_cell.create();
-      const table = N.table_unit.create({ header_rows: 1 }, [N.table_caption.create(), N.table_row.create(null, [cell(), cell()]), N.table_row.create(null, [cell(), cell()])]);
-      dispatch(state.tr.insert(at, table).scrollIntoView());
-    }
-    return true;
-  },
-  addRow: (state, dispatch) => {
-    const { $from } = state.selection;
-    for (let depth = $from.depth; depth > 0; depth--) {
-      if ($from.node(depth).type === N.table_row) {
-        const row = $from.node(depth);
-        const after = $from.after(depth);
-        if (dispatch) dispatch(state.tr.insert(after, N.table_row.create(null, Array.from({ length: row.childCount }, () => N.table_cell.create()))));
-        return true;
-      }
-    }
-    return false;
-  },
-  addColumn: (state, dispatch) => {
-    const unit = unitAt(state.selection.$from);
-    if (!unit || unit.node.type !== N.table_unit) return false;
-    if (dispatch) {
-      const tr = state.tr;
-      let pos = unit.pos + 1;
-      unit.node.forEach((child) => {
-        if (child.type === N.table_row) tr.insert(tr.mapping.map(pos + child.nodeSize - 1), N.table_cell.create());
-        pos += child.nodeSize;
-      });
-      dispatch(tr);
-    }
-    return true;
-  },
+  insertTable: tables.insertTable,
+  addRowBefore: tables.addRowBefore,
+  addRowAfter: tables.addRowAfter,
+  addColumnBefore: tables.addColumnBefore,
+  addColumnAfter: tables.addColumnAfter,
+  deleteRow: tables.deleteRow,
+  deleteColumn: tables.deleteColumn,
+  mergeCells: tables.mergeCells,
+  splitCell: tables.splitCell,
+  toggleHeaderRow: tables.toggleHeaderRow,
+  deleteTable: tables.deleteTable,
+  // The names the toolbar used before: a row below, a column to the right.
+  addRow: tables.addRowAfter,
+  addColumn: tables.addColumnAfter,
+  findNext,
+  replaceOne,
+  replaceAll,
   undo,
   redo,
 };
 
+// Keys within the page; app.js lists them under "Keys".
+export const keyCommands = {
+  Enter: chainCommands(splitNote, splitUnit, tables.enterInTable, () => true),
+  "Shift-Enter": () => true,
+  Backspace: chainCommands(noteBackward, joinBackward),
+  Delete: chainCommands(noteForward, joinForward),
+  Tab: chainCommands(tables.nextCell(1), commands.level(1)),
+  "Shift-Tab": chainCommands(tables.nextCell(-1), commands.level(-1)),
+  "Mod-z": undo,
+  "Mod-y": redo,
+  "Shift-Mod-z": redo,
+  "Mod-Alt-1": commands.kind("heading"),
+  "Mod-Alt-2": commands.kind("paragraph"),
+  "Mod-Alt-3": commands.kind("list_item"),
+  "Mod-Alt-n": commands.addNote,
+  "Alt-Shift-ArrowDown": commands.moveNote(1),
+  "Alt-Shift-ArrowUp": commands.moveNote(-1),
+  "Mod-b": toggleFormat(schema.marks.strong),
+  "Mod-i": toggleFormat(schema.marks.em),
+  "Mod-u": toggleFormat(schema.marks.underline),
+  "Mod-.": toggleFormat(schema.marks.sup),
+  "Mod-,": toggleFormat(schema.marks.sub),
+  "Mod-Alt-l": commands.align("left"),
+  "Mod-Alt-e": commands.align("center"),
+  "Mod-Alt-r": commands.align("right"),
+  "Mod-Alt-j": commands.align("justify"),
+  "Mod-g": findNext(1),
+  "Shift-Mod-g": findNext(-1),
+};
+
+// The plugins of a page, without the view (tests build states with them).
+export function plugins(extra = []) {
+  return [history(), keymap(keyCommands), keymap(baseKeymap), tableEditing(), tables.headerRows, pastePlugin, hangPlugin, findPlugin, ...extra];
+}
+
 // --- the editor ------------------------------------------------------------------------------------
 
-export function createEditor(mount, { units, machineUnits, flags, onChange, onFlagClick, onUnitFocus, onSelect, onMarkerEdit, editable = true }) {
-  const keys = keymap({
-    Enter: (state, dispatch) => splitNote(state, dispatch) || splitUnit(state, dispatch) || true,
-    "Shift-Enter": () => true,
-    Backspace: joinBackward,
-    Tab: commands.level(1),
-    "Shift-Tab": commands.level(-1),
-    "Mod-z": undo,
-    "Mod-y": redo,
-    "Shift-Mod-z": redo,
-    "Mod-Alt-1": commands.kind("heading"),
-    "Mod-Alt-2": commands.kind("paragraph"),
-    "Mod-Alt-3": commands.kind("list_item"),
-    "Mod-Alt-n": commands.addNote,
-    "Alt-Shift-ArrowDown": commands.moveNote(1),
-    "Alt-Shift-ArrowUp": commands.moveNote(-1),
-    "Mod-b": toggleMark(schema.marks.strong),
-    "Mod-i": toggleMark(schema.marks.em),
-    "Mod-u": toggleMark(schema.marks.underline),
-    "Mod-.": toggleMark(schema.marks.sup),
-    "Mod-,": toggleMark(schema.marks.sub),
-    "Mod-Alt-l": commands.align("left"),
-    "Mod-Alt-e": commands.align("center"),
-    "Mod-Alt-r": commands.align("right"),
-    "Mod-Alt-j": commands.align("justify"),
+export function createEditor(mount, { units, machineUnits, flags, onChange, onFlagClick, onUnitFocus, onSelect, onMarkerEdit, onFind, onEscape, onNotice, label = "Page text", editable = true }) {
+  // Keys that reach beyond the page: Ctrl/Cmd+F opens the find bar, Escape (and Alt+F10, as in a
+  // word processor) moves to the toolbar, so the keyboard is never trapped in the text.
+  const outside = keymap({
+    "Mod-f": () => Boolean(onFind && (onFind(), true)),
+    Escape: () => Boolean(onEscape && (onEscape(), true)),
+    "Alt-F10": () => Boolean(onEscape && (onEscape(), true)),
   });
   let lastUnit = -1;
-  const state = EditorState.create({
-    doc: toDoc(units),
-    plugins: [history(), keys, keymap(baseKeymap), hangPlugin, flagPlugin(flags, machineUnits, units, onFlagClick)],
-  });
+  const notes = [];
+  const state = EditorState.create({ doc: toDoc(units, notes), plugins: plugins([outside, flagPlugin(flags, machineUnits, units, onFlagClick)]) });
   const view = new EditorView(mount, {
     state,
     editable: () => editable,
+    attributes: { role: "textbox", "aria-multiline": "true", "aria-label": label },
     dispatchTransaction(tr) {
       const next = view.state.apply(tr);
       view.updateState(next);
       if (tr.docChanged) onChange && onChange();
       const index = next.selection.$from.depth ? next.selection.$from.index(0) : -1;
       if (index !== lastUnit) { lastUnit = index; onUnitFocus && onUnitFocus(index); }
-      if (tr.selectionSet || tr.docChanged) onSelect && onSelect(index);
+      // Formatting turned on at the cursor changes only the stored marks: the toolbar shows it too.
+      if (tr.selectionSet || tr.docChanged || tr.storedMarksSet) onSelect && onSelect(index);
     },
     handleDoubleClickOn(view2, pos, node, nodePos) {
       if (node.type === N.marker && onMarkerEdit) {
@@ -595,6 +749,7 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
       return false;
     },
   });
+  if (notes.length && onNotice) onNotice(notes.join("; "));
 
   function flagRange(id) {
     const found = flagKey.getState(view.state).set.find(undefined, undefined, (spec) => spec.flag === id);
@@ -604,7 +759,7 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
   return {
     view,
     units: () => fromDoc(view.state.doc),
-    run(command) { command(view.state, view.dispatch); view.focus(); },
+    run(command, { focus = true } = {}) { const done = command(view.state, view.dispatch); if (focus) view.focus(); return done; },
     // Replace the flagged words with a check reading's words (or remove / insert them).
     applyReading(id, words) {
       const range = flagRange(id);
@@ -637,14 +792,34 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
     },
     highlighted: (id) => Boolean(flagRange(id)),
     inNote: () => view.state.selection.$from.parent.type === N.note,
-    // Formatting at the cursor or across the selection, for the toolbar's pressed state.
-    activeMarks() {
-      const { from, to, empty, $from } = view.state.selection;
-      const marks = empty ? view.state.storedMarks || $from.marks() : [];
-      const active = new Set(marks.map((m) => m.type.name));
-      if (!empty) for (const type of Object.values(schema.marks)) if (view.state.doc.rangeHasMark(from, to, type)) active.add(type.name);
-      return active;
+    // What the toolbar shows: which buttons apply where the cursor is, and which are on.
+    status() {
+      const st = view.state;
+      const { $from } = st.selection;
+      const kinds = new Set(), aligns = new Set();
+      st.doc.nodesBetween(st.selection.from, st.selection.to, (node) => {
+        if (node.type === N.unit) { kinds.add(node.attrs.kind); aligns.add(node.attrs.align || (node.attrs.kind === "heading" ? "center" : "left")); }
+        return false;
+      });
+      const can = (command) => Boolean(editable && command(st));
+      return {
+        formats: formatState(st),
+        kind: kinds.size === 1 ? [...kinds][0] : null,
+        align: aligns.size === 1 ? [...aligns][0] : null,
+        inNote: $from.parent.type === N.note,
+        inTable: isInTable(st) || st.selection instanceof CellSelection,
+        headerRow: tables.inHeaderRow(st),
+        can: Object.fromEntries(["addRowBefore", "addRowAfter", "addColumnBefore", "addColumnAfter", "deleteRow", "deleteColumn", "mergeCells", "splitCell", "toggleHeaderRow", "deleteTable", "addNote", "insertTable"]
+          .map((name) => [name, can(commands[name])])),
+        find: findStatus(st),
+      };
     },
+    // Find on the page: the query and options, then how many matches and which is selected.
+    find(query, options = {}) {
+      view.dispatch(view.state.tr.setMeta(findKey, { query, options }));
+      return findStatus(view.state);
+    },
+    findStatus: () => findStatus(view.state),
     // The words around the cursor, to find the printed line it sits on.
     caretContext() {
       const { $from } = view.state.selection;
