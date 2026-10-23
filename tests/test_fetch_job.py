@@ -222,3 +222,64 @@ def test_an_answer_that_is_not_the_document_is_recorded_as_a_failure():
     assert (
         "web page instead of the document" in json.loads(store.get("work/ng/fetch-failed/k1.json"))["reason"]
     )
+
+
+def test_an_industrial_court_page_is_read_once_stored_and_catalogued_and_pulled_into_the_ledger(
+    tmp_path, monkeypatch
+):
+    from pathlib import Path
+
+    from ingestion import nigeria
+    from ingestion.sync import Ledger
+
+    monkeypatch.setattr(nigeria, "STAGING", tmp_path)
+    page = (Path(__file__).parent / "fixtures" / "ng" / "nicn-record.html").read_bytes()
+    empty = b"<!doctype html><html><head><title>- National Industrial Court of Nigeria</title></head><body></body></html>"
+    front = {
+        "url": nigeria.NICN,
+        "read_at": "2026-10-23T08:00:00Z",
+        "newest_id": 3,
+        "cards": {3: {"suit_no": "NICN/LA/1/2021", "html": "<div/>"}},
+    }
+    work = nigeria.fetch_worklist(
+        {"approved_by": "owner", "basis": "b"}, ["nicn-judgments"], nicn_front=front
+    )
+    work["items"] = [i for i in work["items"] if i["listed"]["record_id"] in (1, 3)]
+    answers = {
+        nigeria.nicn_url(1): (200, {"content-type": "text/html"}, empty),
+        nigeria.nicn_url(3): (
+            200,
+            {"content-type": "text/html; charset=UTF-8", "last-modified": "Thu, 22 Oct 2026 10:00:00 GMT"},
+            page,
+        ),
+    }
+    store, seen = Store(), []
+    totals = fetcher(store, work, answers, seen).run(work["items"])
+    assert (totals["stored"], totals["empty"]) == (1, 1)
+    assert sorted(url for url, _ in seen if "judgement.php" in url) == [
+        nigeria.nicn_url(1),
+        nigeria.nicn_url(3),
+    ]  # once each
+    (html,) = [n for n in store.list("sources/ng/nicn-judgments/") if n.endswith(".html")]
+    assert store.get(html) == page  # the whole page, as fetched
+    sidecar = json.loads(store.get(html[: -len(".html")] + ".json"))
+    expected = nigeria.nicn_entry(3, page.decode(), work["items"][1]["front_listing"], len(page), False)
+    assert (sidecar["type"], sidecar["listed"], sidecar["listed_raw"]) == expected  # read_nicn's own rule
+    assert sidecar["listed"]["suit_no"] == "NICN/LA/1/2021" and sidecar["listed"]["front_listing"]["suit_no"]
+    assert sidecar["listed_in_work_list"] == {"record_id": 3, "catalogue_from_page": "nicn"}
+    blank = json.loads(store.get(f"work/ng/fetched/{work['items'][0]['key']}.json"))
+    assert blank["outcome"] == "empty" and blank["catalogue"] == {"empty": True, "reason": "an empty record"}
+
+    store.put("work/ng/fetch.json", json.dumps(work).encode(), "application/json", replace=True)
+    summary = nigeria.pull_fetched(store, log=lambda m: None)  # the job's records only: no page is read here
+    assert summary["nicn_catalogued"]["entries"] == 1 and summary["empty"] == 1
+    ledger = Ledger(tmp_path / "sync-ledger.json")
+    item = ledger.data["items"][f"nicn-judgments:{nigeria.nicn_url(3)}"]
+    assert (
+        item["type"] == "judgment"
+        and item["listed"] == sidecar["listed"]
+        and item["stored"].endswith(".html")
+    )
+    assert item["listed_raw"]["header_text"].endswith("JUDGMENT")
+    assert ledger.source("nicn-judgments")["empty_ids"] == [1]
+    assert ledger.source("nicn-judgments")["cursor"]["next_id"] == 2  # id 2 was not fetched: it stays to do

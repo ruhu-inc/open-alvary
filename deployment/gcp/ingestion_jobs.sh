@@ -22,8 +22,10 @@
 # documents to gs://$CORPUS_BUCKET/collections/<country>/. corpus-fetcher fetches a country's approved
 # work list (work/<country>/fetch.json), shared out by host so that one host is never fetched by two
 # tasks, politely (robots.txt, at least 2 s between requests to a host), and stores each file once by
-# its fingerprint in gs://$CORPUS_BUCKET/sources/<country>/<source>/ with a sidecar; then
-# python -m ingestion.nigeria pull-fetched records what it did in the ledger. Any run that stops is
+# its fingerprint in gs://$CORPUS_BUCKET/sources/<country>/<source>/ with a sidecar. The National
+# Industrial Court's ids not yet catalogued are in the list too: the job reads each record page once,
+# stores it and builds its catalogue entry from it, so that host is one task's for many hours. Then
+# python -m ingestion.nigeria pull-fetched records what it did in the ledger, NICN entries included. Any run that stops is
 # run again: work already done is skipped. Billed: Document AI per page read, Cloud Run per
 # task-hour (cents); fetching costs Cloud Run time and egress only.
 set -euo pipefail

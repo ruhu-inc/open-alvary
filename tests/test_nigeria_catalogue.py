@@ -768,6 +768,7 @@ def test_what_the_cloud_fetched_is_recorded_in_the_ledger(tmp_path, monkeypatch)
         "stored": 1,
         "already_stored": 1,
         "unchanged": 0,
+        "empty": 0,
         "failed": 1,
         "hosts_stopped": [],
     }
@@ -798,3 +799,148 @@ def test_every_type_and_source_is_one_the_brief_names():
     assert set(nigeria.READERS) == set(nigeria.SOURCES)
     assert all(meta["wave"] in (1, 2) for meta in nigeria.SOURCES.values())
     assert date.fromisoformat("2026-10-22")  # the owner's decision the sources follow
+
+
+# --- the National Industrial Court catalogued from the cloud fetch -------------------------------
+
+
+def nicn_ledger(tmp_path):
+    """A ledger where ids 1 and 3 are catalogued, 4 was found empty, and the cursor is at 2."""
+    ledger = ledger_with(
+        tmp_path,
+        {
+            f"nicn-judgments:{nigeria.nicn_url(n)}": {
+                "type": "judgment",
+                "listed": {"record_id": n, "title": f"A -VS- B {n}"},
+            }
+            for n in (1, 3)
+        },
+    )
+    ledger.data["sources"]["nicn-judgments"] = {
+        "source": "nicn-judgments",
+        "cursor": {
+            "next_id": 2,
+            "newest_id": 4,
+            "sweep_finished": False,
+            "sweep_started": "2026-10-22T23:08:29Z",
+        },
+        "empty_ids": [4],
+    }
+    ledger.save()
+    card = {
+        "suit_no": "NICN/LA/1/2026",
+        "judge": "Hon. Justice A. Judge",
+        "parties": "A -VS- B",
+        "html": "<div>card</div>",
+    }
+    front = {"url": nigeria.NICN, "read_at": "2026-10-23T08:00:00Z", "newest_id": 6, "cards": {6: card}}
+    return front
+
+
+def test_the_fetch_work_list_adds_the_industrial_court_ids_not_yet_catalogued(tmp_path, monkeypatch):
+    monkeypatch.setattr(nigeria, "STAGING", tmp_path)
+    front = nicn_ledger(tmp_path)
+    work = nigeria.fetch_worklist(
+        {"approved_by": "owner", "basis": "b"}, ["nicn-judgments"], nicn_front=front
+    )
+    pending = [i for i in work["items"] if i["listed"].get("catalogue_from_page")]
+    assert [i["listed"]["record_id"] for i in pending] == [2, 5, 6]  # 3 is catalogued, 4 was empty
+    six = pending[-1]
+    assert six["url"] == "https://nicnadr.gov.ng/judgement/judgement.php?id=6" and six["expect"] == "html"
+    assert six["listed"] == {"record_id": 6, "catalogue_from_page": "nicn"} and six["type"] is None
+    assert six["key"] == nigeria.item_key(f"nicn-judgments:{six['url']}") and six["front_listing"]["suit_no"]
+    assert six["record_url"] == six["listing_url"] == six["url"]
+    assert work["nicn_catalogue"] == {
+        "front_page": nigeria.NICN,
+        "front_read_at": "2026-10-23T08:00:00Z",
+        "newest_id": 6,
+        "ids": 3,
+        "from_id": 2,
+        "to_id": 6,
+    }
+    trial = nigeria.fetch_worklist(
+        {"approved_by": "o", "basis": "b"}, ["nicn-judgments"], nicn_front=front, nicn_limit=1
+    )
+    assert [i["listed"]["record_id"] for i in trial["items"] if i["listed"].get("catalogue_from_page")] == [2]
+    plain = nigeria.fetch_worklist({"approved_by": "o", "basis": "b"}, ["nicn-judgments"])
+    assert not any(i["listed"].get("catalogue_from_page") for i in plain["items"])  # no front page read: none
+
+
+def nicn_fetched(url, record_id, catalogue, key=None, stored=True):
+    item = f"nicn-judgments:{url}"
+    record = {
+        "item": item,
+        "key": key or nigeria.item_key(item),
+        "source": "nicn-judgments",
+        "url": url,
+        "final_url": url,
+        "record_id": record_id,
+        "retrieved_at": "2026-10-23T09:00:00Z",
+        "status": 200,
+        "validators": {"last_modified": "Thu, 22 Oct 2026 10:00:00 GMT"},
+        "catalogue": catalogue,
+        "worklist": "W2",
+    }
+    if catalogue.get("empty"):
+        return record | {"outcome": "empty", "stored": None}
+    sha = f"{record_id:064d}"
+    return record | {
+        "outcome": "stored",
+        "sha256": sha,
+        "bytes": 70000,
+        "suffix": ".html",
+        "stored": f"gs://test/sources/ng/nicn-judgments/{sha}.html",
+    }
+
+
+def test_pull_fetched_builds_the_industrial_court_entries_from_the_job_records(tmp_path, monkeypatch):
+    monkeypatch.setattr(nigeria, "STAGING", tmp_path)
+    front = nicn_ledger(tmp_path)
+    entry = {
+        "type": "ruling",
+        "listed": {
+            "record_id": 2,
+            "title": "C -VS- D",
+            "suit_no": "NICN/ABJ/2/2020",
+            "judgment_date": "2020-01-02",
+        },
+        "listed_raw": {
+            "page_title": "C -VS- D- National Industrial Court of Nigeria",
+            "header_text": "IN THE …",
+        },
+    }
+    six = {
+        "type": "judgment",
+        "listed": {"record_id": 6, "title": "A -VS- B", "front_listing": {"suit_no": "x"}},
+    }
+    records = [
+        nicn_fetched(nigeria.nicn_url(2), 2, entry),
+        nicn_fetched(nigeria.nicn_url(5), 5, {"empty": True, "reason": "an empty record"}),
+        nicn_fetched(nigeria.nicn_url(6), 6, six | {"listed_raw": {}}),
+    ]
+    worklist = {"id": "W2", "nicn_catalogue": {"newest_id": 6}}
+    objects = {"work/ng/fetch.json": json.dumps(worklist).encode()}
+    for record in records:
+        objects[f"work/ng/fetched/{record['key']}.json"] = json.dumps(record).encode()
+        objects[f"work/ng/fetch-done/W2/{record['key']}"] = b""
+    ledger = Ledger(tmp_path / "sync-ledger.json")
+    ledger.data["sources"]["nicn-judgments"]["nicn_worklist_pending"] = "W2"
+    ledger.save()
+    summary = nigeria.pull_fetched(Store(objects), log=lambda m: None)
+    assert (summary["stored"], summary["empty"]) == (2, 1)
+    assert summary["nicn_catalogued"]["entries"] == 2 and summary["nicn_catalogued"]["changes"]["added"] == 2
+    ledger = Ledger(tmp_path / "sync-ledger.json")
+    two = ledger.data["items"][f"nicn-judgments:{nigeria.nicn_url(2)}"]
+    assert two["type"] == "ruling" and two["listed"]["suit_no"] == "NICN/ABJ/2/2020"
+    assert two["listed_raw"]["header_text"] == "IN THE …"
+    assert two["record_url"] == two["listing_url"] == nigeria.nicn_url(2)
+    assert two["stored"].endswith(".html") and two["validators"]["last_modified"].startswith("Thu")
+    assert two["history"][0]["change"] == "new" and "cloud-catalogue" in two["history"][0]["run"]
+    state = ledger.source("nicn-judgments")
+    assert state["empty_ids"] == [4, 5] and "nicn_worklist_pending" not in state
+    assert state["cursor"]["next_id"] == 7 and state["cursor"]["sweep_finished"]  # past 2, 3, 4, 5, 6
+    assert not nigeria.nicn_pending(ledger, front)  # nothing is listed again
+    assert [i["listed"]["record_id"] for i in nigeria.nicn_pending(ledger, {**front, "newest_id": 8})] == [
+        7,
+        8,
+    ]
