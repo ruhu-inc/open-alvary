@@ -148,9 +148,12 @@ def test_a_back_dated_entry_or_an_altered_seal_shows(accounts):
 def test_days_past_retention_verify_through_the_chain_once_purged(accounts):
     entry(accounts, days_ago(800))
     entry(accounts, days_ago(1))
-    seals.seal(accounts, out=io.StringIO())
+    noon = datetime.combine(
+        TODAY, time(12), tzinfo=UTC
+    )  # yesterday ended more than GRACE ago at any clock time
+    seals.seal(accounts, now=noon, out=io.StringIO())
     assert privacy.purge(accounts)["audit_entries"] == 1  # the two-year-old entry; whole days only
-    report = seals.verify(accounts)
+    report = seals.verify(accounts, now=noon)
     # The days more than two years old (about 70 of the 800) are past retention.
     assert report["ok"] and 66 <= report["past_retention"] <= 71 and report["days"] == 800  # to yesterday
 
