@@ -1,0 +1,49 @@
+workbench/editor/test/editor.test.js
+  s_31199151f61536::t_ebeed83bfa92c9 82-161
+workbench/static/app.js
+  s_31199151f61536::t_cf00aa9ef68494 594,1944,2089-2093,2098-2102,2116,2148
+web/src/style.css
+  s_31199151f61536::t_45e93c2fff60b4 1423-1438
+workbench/editor/src/editor.js
+  s_31199151f61536::t_79fa1e96636c03 16,87-88,121-122,282-283,289,291,620-637,640-644,717,825,827-831,838-839
+workbench/content.py
+  s_31199151f61536::t_b1f4278fca8df5 607-609
+  s_31199151f61536::t_7088f8a1e96ff9 653-660
+  s_31199151f61536::t_9a0d7ae326729c 582-584,586-589
+  s_31199151f61536::t_cb22c173b714cd 800
+  s_31199151f61536::t_c8d83164671b58 703-704
+workbench/editor/src/schema.js
+  s_31199151f61536::t_7bb691107d11a1 32-36,39,41,44
+  s_31199151f61536::t_fcb384f17635b7 81,85,87,89
+workbench/static/app.css
+  s_31199151f61536::t_0f3e8970db63b0 129-136
+  s_31199151f61536::t_fcaa112ca5901b 115-117
+workbench/static/editor.js
+  s_31199151f61536::t_22a2dd7164a4c0 1-6,8-10,12
+workbench/static/public-preview/preview.css
+  s_31199151f61536::t_61d5a7f936c8aa 1
+workbench/static/public-preview/preview.js
+  s_31199151f61536::t_61d5a7f936c8aa 1,9,17,25,33,41,48-49,64,79,134,139
+web/src/document.tsx
+  s_31199151f61536::t_7f408c42a7aa60 42,357-362,368
+  s_31199151f61536::t_e0b27a858dec48 373
+tests/test_workbench.py
+  s_31199151f61536::t_d867d8ddc906b4 1147-1155,1157-1184
+  s_31199151f61536::t_08da66cb6aa796 1156
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0a450acb86ac2c5a753e77a67bea530534fcfbfd",
+  "prompts": {},
+  "sessions": {
+    "s_31199151f61536": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cdf58031-a345-4a7e-b794-7fffbd3b8495",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
