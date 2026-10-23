@@ -2,11 +2,13 @@
 
     python -m ingestion.nigeria catalogue nass-acts             # one source's listing, into the ledger
     python -m ingestion.nigeria catalogue all                   # every source due
-    python -m ingestion.nigeria catalogue nicn-judgments        # resumes from the ledger's cursor
+    python -m ingestion.nigeria catalogue nicn-judgments        # a share of ids here (the cloud does the rest)
     python -m ingestion.nigeria reparse nass-acts               # the kept answers read again, no network
     python -m ingestion.nigeria status                          # last check, outcome, counts, per source
     python -m ingestion.nigeria fetch-worklist --approved-by NAME --basis "where and when approved"
-    python -m ingestion.nigeria pull-fetched                    # what the cloud fetch stored or failed
+                                                                # (with the NICN ids not yet catalogued)
+    python -m ingestion.nigeria pull-fetched                    # what the cloud fetch stored, failed or
+                                                                # catalogued (NICN entries from its records)
     python -m ingestion.nigeria push-held                       # mirror the ledger, catalogues and runs
 
 The sources are the official ones openly online that the owner approved on 2026-10-22 (the survey in
@@ -25,7 +27,12 @@ longer listed, in each item's history; nothing is deleted. Items that may be the
 (from one source or two) are flagged ("likely_duplicates") before anything is read twice.
 
 It downloads no document: the cloud job (ingestion.fetch_job) fetches the approved work list, and
-stores each file once by its fingerprint. A listing that stops early (a refusal, a bot check,
+stores each file once by its fingerprint. The National Industrial Court is the one source whose
+listing is its documents (a record page per judgment, found by id): beyond the ids catalogued here,
+`fetch-worklist` adds the ids not yet catalogued (from the cursor to the newest id its front page
+shows), the cloud job reads each page once, stores it and builds its catalogue entry by the same
+rule as read_nicn (nicn_entry), and `pull-fetched` records those entries in the ledger from the
+job's records, moving the cursor on; no page is read twice, and none is downloaded here. A listing that stops early (a refusal, a bot check,
 repeated failures) is recorded as stopped, never as "nothing listed"; what it rejects (an address off
 the expected path, a title that fails the sanity check, injected spam) is logged beside what it kept.
 """
@@ -37,7 +44,7 @@ import json
 import os
 import re
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urljoin, urlsplit
 
@@ -164,8 +171,10 @@ SOURCES: dict[str, dict] = {
         "url": "https://nicnadr.gov.ng/judgement/",
         "kinds": ["judgment", "ruling"],
         "listing": "The portal lists only its newest records by GET (its filters are POST forms, not used); "
-        "records are read by id with GET (judgement.php?id=N), the first 64 KB of each for its header, "
-        "from id 1 to the newest, a share each run, resuming from the ledger's cursor.",
+        "records are read by id with GET (judgement.php?id=N), from id 1 to the newest the front page "
+        "shows. A record page is the judgment itself: the ids not yet catalogued go into the fetch work "
+        "list, and the cloud job catalogues each page as it fetches it (read once); ids 1-1000 were "
+        "catalogued here from the first 64 KB of each page.",
         "robots": "No robots.txt (404). Nothing disallowed.",
         "terms": "© National Industrial Court of Nigeria- ALL RIGHTS RESERVED.",
         "wave": 1,
@@ -1407,6 +1416,51 @@ def nicn_page(page_html: str) -> dict:
     return {k: v for k, v in out.items() if v}
 
 
+def nicn_url(record_id: int) -> str:
+    return f"{NICN}judgement.php?id={record_id}"
+
+
+def nicn_entry(
+    record_id: int,
+    page_html: str,
+    card: dict | None = None,
+    read_bytes: int | None = None,
+    truncated: bool = False,
+) -> tuple[str, dict, dict] | None:
+    """A record page as a catalogue entry: its kind (a ruling when its header says so, else a
+    judgment), what it lists (normalised) and its header as printed (verbatim); None for an empty
+    record (no parties, no suit number). The one rule for the catalogue that reads a page's head
+    (read_nicn) and for the cloud fetch that reads the whole page once (fetch_job)."""
+    page = nicn_page(page_html)
+    if not page.get("parties") and not page.get("suit_numbers"):
+        return None
+    category = (page.get("structured_header") or {}).get("category", "")
+    ruling = page.get("heading") == "RULING" or re.match(r"rulings?$", category, re.I)
+    card = card or {}
+    listed = {
+        "record_id": record_id,
+        "title": page.get("parties"),
+        "suit_no": (page.get("suit_numbers") or [None])[0],
+        "judgment_date": page.get("date"),
+        "division": page.get("division"),
+        "judge": page.get("judge"),
+        "from_page": {k: v for k, v in page.items() if k != "header_text"},
+        "front_listing": {k: v for k, v in card.items() if k != "html"} or None,
+        "read_bytes": read_bytes,
+        "page_truncated": truncated,
+    }
+    raw = {
+        "page_title": page.get("page_title"),
+        "header_text": page.get("header_text"),
+        "front_listing": card.get("html"),
+    }
+    return (
+        ("ruling" if ruling else "judgment"),
+        {k: v for k, v in listed.items() if v not in (None, "", [], {})},
+        raw,
+    )
+
+
 def read_nicn(client, found: Found, state: dict, log=print, budget=None) -> None:
     found.resumable = True
     found.complete = False  # a run reads a share of the ids: it never says a record is gone
@@ -1420,7 +1474,7 @@ def read_nicn(client, found: Found, state: dict, log=print, budget=None) -> None
     read = empty = 0
     record_id = next_id
     while record_id <= newest and read < budget:
-        url = f"{NICN}judgement.php?id={record_id}"
+        url = nicn_url(record_id)
         read += 1
         try:
             answer = client.get(url, head=NICN_HEAD)
@@ -1435,37 +1489,15 @@ def read_nicn(client, found: Found, state: dict, log=print, budget=None) -> None
             record_id += 1
             continue
         failures.ok()
-        page = nicn_page(answer.text)
-        if not page.get("parties") and not page.get("suit_numbers"):
+        entry = nicn_entry(
+            record_id, answer.text, front.get(record_id), len(answer.content), answer.truncated
+        )
+        if entry is None:
             found.reject("an empty record", url=url, record_id=record_id)
             empty += 1
         else:
-            category = (page.get("structured_header") or {}).get("category", "")
-            ruling = page.get("heading") == "RULING" or re.match(r"rulings?$", category, re.I)
-            card = front.get(record_id) or {}
-            found.add(
-                url,
-                "ruling" if ruling else "judgment",
-                {
-                    "record_id": record_id,
-                    "title": page.get("parties"),
-                    "suit_no": (page.get("suit_numbers") or [None])[0],
-                    "judgment_date": page.get("date"),
-                    "division": page.get("division"),
-                    "judge": page.get("judge"),
-                    "from_page": {k: v for k, v in page.items() if k != "header_text"},
-                    "front_listing": {k: v for k, v in card.items() if k != "html"} or None,
-                    "read_bytes": len(answer.content),
-                    "page_truncated": answer.truncated,
-                },
-                raw={
-                    "page_title": page.get("page_title"),
-                    "header_text": page.get("header_text"),
-                    "front_listing": card.get("html"),
-                },
-                listing_url=url,
-                record_url=url,
-            )
+            kind, listed, raw = entry
+            found.add(url, kind, listed, raw=raw, listing_url=url, record_url=url)
         if read % 100 == 0:
             log(f"nicn-judgments: id {record_id} of {newest} ({read} read this run, {empty} empty)")
         record_id += 1
@@ -2758,12 +2790,77 @@ def _changed_since_fetch(record: dict) -> bool:
     )
 
 
-def fetch_worklist(approval: dict, sources: list[str] | None = None, recheck: bool = False) -> dict:
+def nicn_pending(ledger: Ledger, front: dict, limit: int | None = None) -> list[dict]:
+    """The National Industrial Court's record ids not yet catalogued, as fetch items: from the
+    ledger's cursor to the newest id on the portal's front page, less those already in the ledger or
+    already found empty. The cloud job reads each page once, stores it and builds its catalogue entry
+    (nicn_entry); pull-fetched records the entries. A later list adds only newer ids."""
+    state = ledger.source("nicn-judgments")
+    cursor = state.get("cursor") or {}
+    held = {
+        r["listed"].get("record_id")
+        for r in ledger.data["items"].values()
+        if r.get("source") == "nicn-judgments" and r.get("listed")
+    }
+    held |= set(state.get("empty_ids") or [])
+    items = []
+    for record_id in range(int(cursor.get("next_id") or 1), int(front["newest_id"]) + 1):
+        if record_id in held:
+            continue
+        if limit is not None and len(items) >= limit:
+            break
+        url = nicn_url(record_id)
+        item_id = f"nicn-judgments:{url}"
+        items.append(
+            {
+                "item": item_id,
+                "key": item_key(item_id),
+                "source": "nicn-judgments",
+                "url": url,
+                "host": host_of(url),
+                "type": None,  # judgment or ruling: decided from the page, as read_nicn decides
+                "expect": "html",
+                "stated_bytes": None,
+                "size_limit": size_limit(None),
+                "listed": {"record_id": record_id, "catalogue_from_page": "nicn"},
+                "front_listing": (front.get("cards") or {}).get(record_id),
+                "record_url": url,
+                "listing_url": url,
+                "alternate_urls": None,
+                "known": None,
+            }
+        )
+    return items
+
+
+def read_nicn_front(delay: float = polite.LEAST_DELAY, log=print, client=None) -> dict:
+    """The portal's front page read once (politely): its newest record id and the records it lists."""
+    own = client is None
+    client = client or polite.PoliteClient(set(SOURCES["nicn-judgments"]["hosts"]), delay=delay, log=log)
+    try:
+        cards = nicn_front(_soup(client.get(NICN)))
+    finally:
+        if own:
+            client.close()
+    if not cards:
+        raise SourceStopped("the portal's front page lists no records")
+    return {"url": NICN, "read_at": stamp(now()), "newest_id": max(cards), "cards": cards}
+
+
+def fetch_worklist(
+    approval: dict,
+    sources: list[str] | None = None,
+    recheck: bool = False,
+    nicn_front: dict | None = None,
+    nicn_limit: int | None = None,
+) -> dict:
     """The items the cloud job fetches, of the chosen sources (by default those marked for fetching):
     every item not yet stored, and every stored item whose listing has changed since (or, with
     `recheck`, every stored item), sent with its validators (ETag, Last-Modified) so that an
-    unchanged file is not taken again. Refused and no-longer-listed items are left out. Each item
-    carries what the job needs to fetch and describe it: no ledger is needed in the cloud."""
+    unchanged file is not taken again. Refused and no-longer-listed items are left out. With the
+    National Industrial Court's front page (`nicn_front`), its record ids not yet catalogued are
+    added (nicn_pending; at most `nicn_limit`): the job catalogues them from the page it fetches.
+    Each item carries what the job needs to fetch and describe it: no ledger is needed in the cloud."""
     for key in ("approved_by", "basis"):
         if not (approval.get(key) or "").strip():
             raise ValueError(f"a fetch work list needs {key}")
@@ -2816,6 +2913,19 @@ def fetch_worklist(approval: dict, sources: list[str] | None = None, recheck: bo
                 "known": known,
             }
         )
+    nicn = None
+    if nicn_front and "nicn-judgments" in chosen:
+        pending = nicn_pending(ledger, nicn_front, nicn_limit)
+        items += pending
+        ids = [i["listed"]["record_id"] for i in pending]
+        nicn = {
+            "front_page": nicn_front["url"],
+            "front_read_at": nicn_front["read_at"],
+            "newest_id": nicn_front["newest_id"],
+            "ids": len(ids),
+            "from_id": min(ids) if ids else None,
+            "to_id": max(ids) if ids else None,
+        }
     made = stamp(now())
     return {
         "id": made.replace(":", "").replace("-", ""),
@@ -2833,6 +2943,7 @@ def fetch_worklist(approval: dict, sources: list[str] | None = None, recheck: bo
         "stated_bytes": sum(i["stated_bytes"] or 0 for i in items),
         "items_with_stated_size": sum(1 for i in items if i["stated_bytes"]),
         "left_out": left_out,
+        "nicn_catalogue": nicn,
         "items": items,
     }
 
@@ -2842,10 +2953,102 @@ def item_key(item_id: str) -> str:
     return hashlib.sha256(item_id.encode()).hexdigest()
 
 
+def nicn_from_fetch(ledger: Ledger, records: list[dict], worklist: dict) -> dict | None:
+    """The National Industrial Court's catalogue entries the cloud job built from the pages it
+    fetched (its records' `catalogue`), recorded in the ledger as a catalogue run would record them:
+    new or changed items with their provenance, empty records as rejections (and as empty ids, never
+    asked for again), and the cursor moved past every id now catalogued. No page is read here."""
+    entries, empty = [], []
+    for fetched in records:
+        catalogue = fetched.get("catalogue")
+        if not catalogue:
+            continue
+        if catalogue.get("empty"):
+            empty.append(fetched)
+            continue
+        entries.append(
+            {
+                "url": fetched["url"],
+                "type": catalogue["type"],
+                "listed": catalogue["listed"],
+                "listed_raw": catalogue.get("listed_raw"),
+                "listing_url": fetched["url"],
+                "record_url": fetched["url"],
+                "source": "nicn-judgments",
+            }
+        )
+    if not entries and not empty:
+        return None
+    source = SOURCES["nicn-judgments"]
+    state = ledger.data["sources"].setdefault("nicn-judgments", {"source": "nicn-judgments"})
+    cursor = dict(state.get("cursor") or {})
+    empty_ids = set(state.get("empty_ids") or []) | {f["record_id"] for f in empty if f.get("record_id")}
+    done = {
+        r["listed"].get("record_id")
+        for r in ledger.data["items"].values()
+        if r.get("source") == "nicn-judgments" and r.get("listed")
+    }
+    done |= {e["listed"]["record_id"] for e in entries} | empty_ids
+    next_id = int(cursor.get("next_id") or 1)
+    while next_id in done:
+        next_id += 1
+    stated_newest = int((worklist.get("nicn_catalogue") or {}).get("newest_id") or 0)
+    newest = max(int(cursor.get("newest_id") or 0), stated_newest)
+    at = max(f["retrieved_at"] for f in records if f.get("catalogue"))
+    moment = datetime.fromisoformat(at.replace("Z", "+00:00"))
+    run_id = f"{moment.strftime('%Y-%m-%dT%H%M%S')}-cloud-catalogue-nicn-judgments-{worklist['id']}"
+    new_cursor = {
+        **cursor,
+        "next_id": next_id,
+        "newest_id": newest,
+        "sweep_finished": next_id > newest,
+        "sweep_started": cursor.get("sweep_started") or at,
+        "read_last_run": len(entries) + len(empty),
+        "catalogued_by": f"the cloud fetch of work list {worklist['id']}",
+    }
+    crawl = {
+        "complete": False,  # a share of the ids: never says a record is gone
+        "outcome": f"ok (catalogued from the pages the cloud fetch read, work list {worklist['id']})",
+        "pages_read": len(entries) + len(empty),
+        "files": entries,
+    }
+    changes = ledger.observe_listing(
+        "nicn-judgments",
+        source["url"],
+        source["cadence"],
+        crawl,
+        run_id,
+        cursor=new_cursor,
+        at=moment,
+        shown=lambda i: i["listed"],
+    )
+    state = ledger.data["sources"]["nicn-judgments"]
+    state["empty_ids"] = sorted(empty_ids)
+    path = STAGING / "catalogue" / "nicn-judgments.json"
+    if path.exists():  # the catalogue file holds the entries and rejections, as a run writes them
+        record = json.loads(path.read_text())
+        held = {i["url"]: i for i in record.get("items", [])}
+        record["items"] = list((held | {e["url"]: e for e in entries}).values())
+        rejected = {r.get("url") for r in record.get("rejected", [])}
+        record.setdefault("rejected", []).extend(
+            {"reason": "an empty record", "url": f["url"], "record_id": f.get("record_id"), "from": run_id}
+            for f in empty
+            if f["url"] not in rejected
+        )
+        path.write_text(json.dumps(record, ensure_ascii=False, indent=1) + "\n")
+    return {
+        "entries": len(entries),
+        "empty": len(empty),
+        "changes": {k: len(v) for k, v in changes.items()},
+        "cursor": new_cursor,
+    }
+
+
 def pull_fetched(store, log=print) -> dict:
     """Record in the ledger what the cloud fetch of the current work list did: for each item done,
-    its fetch record (stored, the same file already stored from another listing, or unchanged), and
-    what failed and which hosts it stopped on."""
+    its fetch record (stored, the same file already stored from another listing, or unchanged; for a
+    National Industrial Court id it catalogued, its entry, nicn_from_fetch), and what failed and
+    which hosts it stopped on. Only the job's records are read, never the files."""
     from concurrent.futures import ThreadPoolExecutor
 
     prefix = f"work/{COUNTRY}/"
@@ -2855,12 +3058,16 @@ def pull_fetched(store, log=print) -> dict:
     done = [n.rsplit("/", 1)[-1] for n in store.list(f"{prefix}fetch-done/{worklist['id']}/")]
     with ThreadPoolExecutor(16) as pool:
         records = list(pool.map(lambda k: json.loads(store.get(f"{prefix}fetched/{k}.json")), done))
-    counts = {"stored": 0, "already_stored": 0, "unchanged": 0}
+    catalogued = nicn_from_fetch(ledger, records, worklist)
+    counts = {"stored": 0, "already_stored": 0, "unchanged": 0, "empty": 0}
     for fetched in records:
+        outcome = fetched["outcome"]
         record = ledger.data["items"].get(fetched["item"])
+        if outcome == "empty":
+            counts["empty"] += 1
+            continue
         if record is None:
             continue
-        outcome = fetched["outcome"]
         counts[outcome] = counts.get(outcome, 0) + 1
         if outcome != "unchanged" or fetched.get("sha256") != record.get("sha256"):
             ledger.data["sources"].setdefault(record["source"], {"source": record["source"]})
@@ -2900,6 +3107,9 @@ def pull_fetched(store, log=print) -> dict:
                 {"at": failure["at"], "change": "fetch failed", "reason": failure["reason"]}
             )
         failed += 1
+    nicn_state = ledger.data["sources"].get("nicn-judgments") or {}
+    if nicn_state.get("nicn_worklist_pending") == worklist["id"]:  # its ids may now be listed again
+        nicn_state.pop("nicn_worklist_pending")
     stopped = []
     for name in store.list(f"{prefix}fetch-stopped/{worklist['id']}/"):
         stop = json.loads(store.get(name))
@@ -2908,7 +3118,13 @@ def pull_fetched(store, log=print) -> dict:
             state = ledger.data["sources"].setdefault(source_id, {"source": source_id})
             state["last_fetch_outcome"] = f"stopped at {stop['at']} on {stop['host']}: {stop['reason']}"
     ledger.save()
-    summary = {"worklist": worklist["id"], **counts, "failed": failed, "hosts_stopped": sorted(stopped)}
+    summary = {
+        "worklist": worklist["id"],
+        **counts,
+        "failed": failed,
+        "hosts_stopped": sorted(stopped),
+        **({"nicn_catalogued": catalogued} if catalogued else {}),
+    }
     log(json.dumps(summary))
     return summary
 
@@ -2993,6 +3209,16 @@ def main(argv=None) -> int:
     work.add_argument("--source", action="append", choices=list(SOURCES), help="these sources only")
     work.add_argument("--recheck", action="store_true", help="also every stored item (conditional requests)")
     work.add_argument("--local-only", action="store_true", help="write the list here only, not to the bucket")
+    work.add_argument(
+        "--nicn-max",
+        type=int,
+        help="add at most this many National Industrial Court ids (a trial); default all",
+    )
+    work.add_argument(
+        "--no-nicn-ids",
+        action="store_true",
+        help="do not add the National Industrial Court ids not yet catalogued",
+    )
     sub.add_parser(
         "pull-fetched", help="record in the ledger what the cloud fetch stored, failed or stopped on"
     )
@@ -3013,8 +3239,33 @@ def main(argv=None) -> int:
         return 0
     if args.command == "fetch-worklist":
         print(json.dumps(flag_duplicates()))
+        chosen = args.source or [s for s, meta in SOURCES.items() if meta.get("fetch")]
+        front = None
+        if "nicn-judgments" in chosen and not args.no_nicn_ids:
+            pending = (
+                Ledger(STAGING / "sync-ledger.json").source("nicn-judgments").get("nicn_worklist_pending")
+            )
+            if pending:
+                parser.error(
+                    f"work list {pending} added National Industrial Court ids that are not pulled yet: "
+                    "run pull-fetched first (or give --no-nicn-ids)"
+                )
+            try:  # one polite request: the newest id the portal lists, and its front-page records
+                front = read_nicn_front(log=lambda m: print(m, flush=True))
+            except (
+                polite.Refused,
+                polite.Disallowed,
+                polite.Unreachable,
+                polite.OffHost,
+                SourceStopped,
+            ) as error:
+                print(f"nicn-judgments: the front page could not be read ({error}); no ids added", flush=True)
         worklist = fetch_worklist(
-            {"approved_by": args.approved_by, "basis": args.basis}, args.source, recheck=args.recheck
+            {"approved_by": args.approved_by, "basis": args.basis},
+            args.source,
+            recheck=args.recheck,
+            nicn_front=front,
+            nicn_limit=args.nicn_max,
         )
         local = STAGING / "work" / "fetch.json"
         local.parent.mkdir(parents=True, exist_ok=True)
@@ -3024,6 +3275,11 @@ def main(argv=None) -> int:
             from ingestion import corpus_store
 
             store = corpus_store.open_store()
+            if (worklist.get("nicn_catalogue") or {}).get("ids"):  # until pulled, no list adds them again
+                ledger = Ledger(STAGING / "sync-ledger.json")
+                ledger.data["sources"].setdefault("nicn-judgments", {"source": "nicn-judgments"})
+                ledger.data["sources"]["nicn-judgments"]["nicn_worklist_pending"] = worklist["id"]
+                ledger.save_source("nicn-judgments")
             push_held(store)
             store.put(WORKLIST, body.encode(), "application/json", replace=True)
         summary = {k: v for k, v in worklist.items() if k not in ("items", "sources")}

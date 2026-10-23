@@ -11,7 +11,12 @@ requests to a host holds across the job, and the busiest hosts are spread first.
   with a stored item's validators (If-None-Match, If-Modified-Since), so an unchanged file is not
   taken again;
 - sniffs each answer's type (a PDF or Word document, a web page, the court's JSON record) and
-  enforces its size limit; it parses nothing else: reading the files is a later step;
+  enforces its size limit; it parses nothing else (reading the files is a later step), except a
+  National Industrial Court record page the work list asks it to catalogue (catalogue_from_page):
+  that page, fetched whole and once, is stored as any web page and also read by the catalogue's own
+  rule (nigeria.nicn_entry), its entry (kind, listing, header as printed) kept in the sidecar and the
+  item's fetch record for `pull-fetched` to record in the ledger; an empty record is recorded as
+  empty, and no file is stored for it;
 - stores a file once, by its fingerprint: sources/<country>/<source>/<sha256>.<ext> with a sidecar
   <sha256>.json (the address, the final address after redirects, when, the status, content type,
   length, ETag and Last-Modified, the fingerprint, the listing's details and the item's id). A file
@@ -116,6 +121,7 @@ class Fetcher:
             "stored": 0,
             "already_stored": 0,
             "unchanged": 0,
+            "empty": 0,
             "failed": 0,
         }
         stopped = []
@@ -208,6 +214,13 @@ class Fetcher:
         suffix, media_type = sniff(answer.content, item["expect"])
         sha = hashlib.sha256(answer.content).hexdigest()
         base |= {"sha256": sha, "bytes": len(answer.content), "suffix": suffix}
+        catalogue = (
+            self.catalogue(item, answer) if (item.get("listed") or {}).get("catalogue_from_page") else None
+        )
+        if catalogue is not None:
+            base |= {"record_id": item["listed"].get("record_id"), "catalogue": catalogue}
+            if catalogue.get("empty"):  # no parties, no suit number: rejected, as read_nicn rejects it
+                return self.record(base | {"outcome": "empty", "stored": None})
         if known.get("sha256") == sha:
             return self.record(
                 base | {"outcome": "unchanged", "how": "same fingerprint", "stored": known["stored"]}
@@ -223,8 +236,13 @@ class Fetcher:
             "last_modified": validators.get("last_modified"),
             "bytes": len(answer.content),
             "sha256": sha,
-            "type": item.get("type"),
-            "listed": item.get("listed"),
+            "type": (catalogue or {}).get("type") or item.get("type"),
+            "listed": (catalogue or {}).get("listed") or item.get("listed"),
+            **(
+                {"listed_raw": catalogue["listed_raw"], "listed_in_work_list": item.get("listed")}
+                if catalogue
+                else {}
+            ),
             "record_url": item.get("record_url"),
             "listing_url": item.get("listing_url"),
             "alternate_urls": item.get("alternate_urls"),
@@ -250,6 +268,21 @@ class Fetcher:
         self.held[sha] = name
         self.log(f"stored {item['item'][:90]} ({len(answer.content) // 1024} KB)")
         return self.record(base | {"outcome": "stored", "stored": self.store.uri(name)})
+
+    def catalogue(self, item: dict, answer) -> dict:
+        """A National Industrial Court record's catalogue entry, built from the page just fetched (the
+        whole page, read once) by the catalogue's own rule (nigeria.nicn_entry): its kind, what it
+        lists and its header as printed; or, for an empty record, that it is empty."""
+        from ingestion import nigeria
+
+        record_id = item["listed"]["record_id"]
+        entry = nigeria.nicn_entry(
+            record_id, answer.text, item.get("front_listing"), len(answer.content), False
+        )
+        if entry is None:
+            return {"empty": True, "reason": "an empty record"}
+        kind, listed, raw = entry
+        return {"type": kind, "listed": listed, "listed_raw": raw}
 
     def occurrence(self, held: str, sidecar: dict, base: dict) -> str:
         stem = held.rsplit(".", 2)[0] if held.endswith(".api.json") else held.rsplit(".", 1)[0]
