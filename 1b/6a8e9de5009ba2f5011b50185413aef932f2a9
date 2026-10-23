@@ -1,0 +1,59 @@
+workbench/static/app.js
+  s_6bae03ed6829b8::t_95bb6afdc1baa3 1951-1955,2097-2102,2104-2106
+  s_6bae03ed6829b8::t_11fc38f9da7da1 1944,1956,2088-2096,2130-2131
+  s_6bae03ed6829b8::t_f3d9f2617ae86b 1922-1928,1932-1943,1945-1950,1957-2015,2017-2033,2035-2040,2071,2075,2077-2079,2082,2084-2086,2103,2107,2110-2114,2116-2120,2122-2125,2127-2129,2133-2135,2141-2142,2144,2147,2149-2153
+  s_6bae03ed6829b8::t_9d123459e69435 2143
+  s_6bae03ed6829b8::t_5965ab0b3394ff 2016,2034
+workbench/editor/package.json
+  s_6bae03ed6829b8::t_7b881b7e18622f 5,7-8
+  s_6bae03ed6829b8::t_4eb23a974892fc 16,18
+workbench/editor/src/tables.js
+  s_6bae03ed6829b8::t_5d3c0efef5d427 1-235
+workbench/editor/test/editor.test.js
+  s_6bae03ed6829b8::t_bd4da8e1d272dc 349-358
+  s_6bae03ed6829b8::t_dc94a090003fac 359-369
+  s_6bae03ed6829b8::t_f35a9ff7283d5f 275
+  s_6bae03ed6829b8::t_bc6b2ae747bfc8 87
+  s_6bae03ed6829b8::t_bfb8734287a74f 1-86,88-274,276-348
+workbench/editor/src/schema.js
+  s_6bae03ed6829b8::t_fa5f66e10938d2 1-144
+workbench/static/editor.js
+  s_6bae03ed6829b8::t_4260500d6351d8 11
+  s_6bae03ed6829b8::t_dc94a090003fac 1-6,8-10,12
+workbench/static/app.css
+  s_6bae03ed6829b8::t_17805090319620 143
+  s_6bae03ed6829b8::t_a7e4ab807cc889 135-142,144-151,383,391-396
+  s_6bae03ed6829b8::t_11fc38f9da7da1 384-390
+workbench/editor/src/paste.js
+  s_6bae03ed6829b8::t_1446604ee62805 1-164
+workbench/editor/src/find.js
+  s_6bae03ed6829b8::t_a924dca230ef78 1-115
+workbench/editor/src/editor.js
+  s_6bae03ed6829b8::t_d4996d3954c001 390-392,571
+  s_6bae03ed6829b8::t_d057a736df87d3 78-91,99
+  s_6bae03ed6829b8::t_9947789856ed4e 762
+  s_6bae03ed6829b8::t_dc94a090003fac 330-339,354,535-536,543
+  s_6bae03ed6829b8::t_cb8fc94394aace 278-279,285-290,294,307,323-329,340-353,355-367,373-389,393-429,452-534,537-541,549-570,574-615,617,659-675,680-713
+  s_6bae03ed6829b8::t_bd4da8e1d272dc 542,544-548
+  s_6bae03ed6829b8::t_8b98984255ede3 572-573,717-723,726-727,731,738-739,752,795-820,822
+  s_6bae03ed6829b8::t_21c4f48b3dabe3 9-10,13,15-19,21-22
+  s_6bae03ed6829b8::t_bb6dabfd165ca6 714
+workbench/editor/package-lock.json
+  s_6bae03ed6829b8::t_b3ec46b860161e 14,16,565-577
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1b6a8e9de5009ba2f5011b50185413aef932f2a9",
+  "prompts": {},
+  "sessions": {
+    "s_6bae03ed6829b8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f4cc16f8-ff44-47ad-b042-c0ec83fc2f16",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
