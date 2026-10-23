@@ -1,0 +1,369 @@
+// The editor's commands and the units <-> document round trip, on editor states without a view.
+// Run with `npm test` (node --test).
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { EditorState, TextSelection, NodeSelection } from "prosemirror-state";
+import { baseKeymap } from "prosemirror-commands";
+import { CellSelection } from "prosemirror-tables";
+import { schema, toDoc, fromDoc, commands, keyCommands, plugins, pasteUnits, unitNode, unitsFromText } from "../src/editor.js";
+import { findKey } from "../src/find.js";
+
+const N = schema.nodes;
+
+// --- helpers ---------------------------------------------------------------------------------------
+
+function stateOf(units) {
+  return EditorState.create({ doc: toDoc(units), plugins: plugins() });
+}
+
+function apply(state, command) {
+  let next = state;
+  const done = command(state, (tr) => { next = state.apply(tr); });
+  return { state: next, done };
+}
+
+// A key as the editor handles it: the page's own keys, then the standard ones.
+function press(state, key) {
+  for (const command of [keyCommands[key], baseKeymap[key]]) {
+    if (!command) continue;
+    const result = apply(state, command);
+    if (result.done) return result.state;
+  }
+  return state;
+}
+
+// Position of a unit's words (after its chip, if any) plus `offset`.
+function inWords(doc, index, offset = 0) {
+  let pos = 0;
+  for (let i = 0; i < index; i++) pos += doc.child(i).nodeSize;
+  const body = doc.child(index).firstChild;
+  const chip = body.firstChild && body.firstChild.type === N.marker ? 1 : 0;
+  return pos + 2 + chip + offset;
+}
+
+function select(state, from, to = from) {
+  return state.apply(state.tr.setSelection(TextSelection.create(state.doc, from, to)));
+}
+
+// Start of the text of the n-th textblock of a kind (a note, a cell, a caption), in document order.
+function inBlock(doc, type, n = 0, offset = 0) {
+  let found = null, seen = 0;
+  doc.descendants((node, pos) => {
+    if (found !== null) return false;
+    if (node.type === type && seen++ === n) found = pos + 1 + offset;
+    return found === null;
+  });
+  return found;
+}
+
+const TAX_TABLE = {
+  kind: "table",
+  caption: "",
+  header_rows: 2,
+  rows: [["Annual Taxable Income (RWF)", "", "Tax Rate"], ["From", "To", ""], ["0", "360,000", "0%"], ["360,001", "1,200,000", "20%"]],
+  spans: [[0, 0, 1, 2], [0, 2, 2, 1]],
+};
+
+const PAGE = [
+  { kind: "heading", text: "Article 3: Purpose of this Law", marks: [{ type: "italic", start: 0, end: 10 }] },
+  { kind: "paragraph", text: "The Commission shall have powers to —", marker: "6.", marker_source: ["azure", "mineru"], notes: ["Powers of the Commission"] },
+  { kind: "list_item", text: "oversee the implementation of this Act;", marker: "(a)", level: 2, align: "justify", marks: [{ type: "bold", start: 0, end: 7 }, { type: "superscript", start: 12, end: 26 }] },
+  TAX_TABLE,
+  { kind: "paragraph", text: "Small enterprises must pay a lumpsum tax." },
+];
+
+// --- units <-> document -----------------------------------------------------------------------------
+
+test("stored units come back from the document unchanged", () => {
+  assert.deepEqual(fromDoc(toDoc(PAGE)), PAGE);
+});
+
+test("a merged table keeps its grid, merges and header rows", () => {
+  const doc = toDoc([TAX_TABLE]);
+  const table = doc.child(0).child(1);
+  assert.equal(table.child(0).childCount, 2); // the covered position is not a cell
+  assert.equal(table.child(0).child(0).type, N.table_header);
+  assert.deepEqual({ ...table.child(0).child(0).attrs }, { colspan: 2, rowspan: 1, colwidth: null });
+  assert.equal(table.child(2).child(0).type, N.table_cell);
+  assert.deepEqual(fromDoc(doc), [TAX_TABLE]);
+});
+
+test("a short row is filled out to the table's width", () => {
+  const units = fromDoc(toDoc([{ kind: "table", caption: "", header_rows: 0, rows: [["a", "b"], ["c"]] }]));
+  assert.deepEqual(units[0].rows, [["a", "b"], ["c", ""]]);
+});
+
+test("a merge that would hide words is shown apart, and said so", () => {
+  const notes = [];
+  const unit = { kind: "table", caption: "", header_rows: 0, rows: [["a", "hidden"], ["c", "d"]], spans: [[0, 0, 1, 2]] };
+  const doc = toDoc([unit], notes);
+  assert.equal(notes.length, 1);
+  assert.deepEqual(fromDoc(doc)[0].rows, unit.rows);
+  assert.equal(fromDoc(doc)[0].spans, undefined);
+});
+
+// --- formatting ---------------------------------------------------------------------------------------
+
+test("bold over words of which some are bold makes them all bold", () => {
+  let state = stateOf([{ kind: "paragraph", text: "Small enterprises must pay", marks: [{ type: "bold", start: 6, end: 17 }] }]);
+  state = select(state, inWords(state.doc, 0), inWords(state.doc, 0, 26));
+  state = apply(state, commands.mark("strong")).state;
+  assert.deepEqual(fromDoc(state.doc)[0].marks, [{ type: "bold", start: 0, end: 26 }]);
+  state = apply(state, commands.mark("strong")).state; // every word bold: now removed
+  assert.equal(fromDoc(state.doc)[0].marks, undefined);
+});
+
+test("bold never goes on a number chip, and spaces at the ends stay plain", () => {
+  let state = stateOf([PAGE[1]]);
+  const start = inWords(state.doc, 0) - 1; // before the chip
+  state = select(state, start, inWords(state.doc, 0, 4));
+  state = apply(state, commands.mark("strong")).state;
+  assert.equal(state.doc.child(0).firstChild.firstChild.marks.length, 0);
+  assert.deepEqual(fromDoc(state.doc)[0].marks, [{ type: "bold", start: 0, end: 3 }]);
+});
+
+test("formatting does not apply in a margin note or a table cell", () => {
+  let state = stateOf(PAGE);
+  state = select(state, inBlock(state.doc, N.note, 0, 1), inBlock(state.doc, N.note, 0, 5));
+  assert.equal(apply(state, commands.mark("strong")).done, false);
+  state = select(state, inBlock(state.doc, N.table_cell, 0, 1));
+  assert.equal(apply(state, commands.mark("strong")).done, false);
+});
+
+test("bold at the cursor applies to the words typed next", () => {
+  let state = stateOf([{ kind: "paragraph", text: "Words" }]);
+  state = select(state, inWords(state.doc, 0, 5));
+  state = apply(state, commands.mark("strong")).state;
+  state = state.apply(state.tr.insertText(" more"));
+  assert.deepEqual(fromDoc(state.doc)[0], { kind: "paragraph", text: "Words more", marks: [{ type: "bold", start: 5, end: 10 }] });
+});
+
+test("bold across units, past a table, formats the words only", () => {
+  let state = stateOf(PAGE);
+  state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, inWords(state.doc, 2), inWords(state.doc, 4, 5))));
+  state = apply(state, commands.mark("strong")).state;
+  const units = fromDoc(state.doc);
+  assert.deepEqual(units[2].marks.find((m) => m.type === "bold"), { type: "bold", start: 0, end: 39 });
+  assert.deepEqual(units[3], TAX_TABLE);
+  assert.deepEqual(units[4].marks, [{ type: "bold", start: 0, end: 5 }]);
+});
+
+// --- Enter, Backspace, Delete -------------------------------------------------------------------------
+
+test("Backspace at the start of a margin note never runs it into the words", () => {
+  let state = stateOf([PAGE[1]]);
+  state = select(state, inBlock(state.doc, N.note));
+  state = press(state, "Backspace");
+  assert.deepEqual(fromDoc(state.doc), [PAGE[1]]);
+});
+
+test("Backspace removes an empty note and joins a note to the note above", () => {
+  let state = stateOf([{ kind: "paragraph", text: "Words", notes: ["First", "Second"] }]);
+  state = select(state, inBlock(state.doc, N.note, 1));
+  state = press(state, "Backspace");
+  assert.deepEqual(fromDoc(state.doc)[0].notes, ["First Second"]);
+  state = apply(state, commands.addNote).state;
+  state = press(state, "Backspace");
+  assert.deepEqual(fromDoc(state.doc)[0].notes, ["First Second"]);
+});
+
+test("Delete at the end of a unit's words joins the next unit with a space, its number kept as words", () => {
+  let state = stateOf([{ kind: "paragraph", text: "The end.", notes: ["Beside"] }, PAGE[2]]);
+  state = select(state, inWords(state.doc, 0, 8));
+  state = press(state, "Delete");
+  const [unit] = fromDoc(state.doc);
+  assert.equal(unit.text, "The end. (a) oversee the implementation of this Act;");
+  assert.deepEqual(unit.notes, ["Beside"]);
+  assert.deepEqual(unit.marks, [{ type: "bold", start: 13, end: 20 }, { type: "superscript", start: 25, end: 39 }]);
+  assert.equal(state.selection.from, inWords(state.doc, 0, 8));
+});
+
+test("Backspace at the start of a unit after an empty one removes the empty one", () => {
+  let state = stateOf([{ kind: "paragraph", text: "" }, PAGE[0]]);
+  state = select(state, inWords(state.doc, 1));
+  state = press(state, "Backspace");
+  assert.deepEqual(fromDoc(state.doc), [PAGE[0]]);
+});
+
+test("Enter at the start of the words opens a unit above; the notes stay", () => {
+  let state = stateOf([{ kind: "paragraph", text: "Words", notes: ["Note"] }]);
+  state = select(state, inWords(state.doc, 0));
+  state = press(state, "Enter");
+  assert.deepEqual(fromDoc(state.doc), [{ kind: "paragraph", text: "" }, { kind: "paragraph", text: "Words", notes: ["Note"] }]);
+});
+
+// --- tables -------------------------------------------------------------------------------------------
+
+test("Backspace and Delete at a cell's edges leave the table whole", () => {
+  let state = stateOf([TAX_TABLE]);
+  state = select(state, inBlock(state.doc, N.table_cell, 1));
+  state = press(state, "Backspace");
+  state = select(state, inBlock(state.doc, N.table_cell, 0, 4));
+  state = press(state, "Delete");
+  assert.deepEqual(fromDoc(state.doc), [TAX_TABLE]);
+});
+
+test("rows added below the header rows are body rows; inside them, header rows", () => {
+  let state = stateOf([TAX_TABLE]);
+  state = select(state, inBlock(state.doc, N.table_header, 2, 1)); // "From", the last header row
+  state = apply(state, commands.addRowAfter).state;
+  let table = fromDoc(state.doc)[0];
+  assert.equal(table.header_rows, 2);
+  assert.deepEqual(table.rows[2], ["", "", ""]);
+  state = apply(state, commands.addRowBefore).state;
+  table = fromDoc(state.doc)[0];
+  assert.equal(table.header_rows, 3);
+  assert.deepEqual(table.spans, [[0, 0, 1, 2], [0, 2, 3, 1]]);
+  assert.equal(state.doc.child(0).child(1).child(1).child(0).type, N.table_header);
+});
+
+test("deleting a header row lowers the header count; deleting every row deletes the table", () => {
+  let state = stateOf([TAX_TABLE, PAGE[4]]);
+  state = select(state, inBlock(state.doc, N.table_header, 2, 1));
+  state = apply(state, commands.deleteRow).state;
+  assert.equal(fromDoc(state.doc)[0].header_rows, 1);
+  const cells = state.doc.child(0).child(1);
+  const start = 1 + state.doc.child(0).child(0).nodeSize + 1;
+  const first = start + 1, last = start + cells.content.size - cells.lastChild.nodeSize + 1 + cells.lastChild.content.size - cells.lastChild.lastChild.nodeSize;
+  state = state.apply(state.tr.setSelection(CellSelection.create(state.doc, first, last)));
+  state = apply(state, commands.deleteRow).state;
+  assert.deepEqual(fromDoc(state.doc), [PAGE[4]]);
+});
+
+test("merging cells keeps every cell's words; splitting gives the positions back", () => {
+  let state = stateOf([{ kind: "table", caption: "Rates", header_rows: 0, rows: [["From", "To"], ["0", "360,000"]] }]);
+  const a = inBlock(state.doc, N.table_cell, 0) - 1, b = inBlock(state.doc, N.table_cell, 1) - 1;
+  state = state.apply(state.tr.setSelection(CellSelection.create(state.doc, a, b)));
+  state = apply(state, commands.mergeCells).state;
+  assert.deepEqual(fromDoc(state.doc)[0], { kind: "table", caption: "Rates", header_rows: 0, rows: [["From To", ""], ["0", "360,000"]], spans: [[0, 0, 1, 2]] });
+  state = apply(state, commands.splitCell).state;
+  assert.deepEqual(fromDoc(state.doc)[0].rows, [["From To", ""], ["0", "360,000"]]);
+  assert.equal(fromDoc(state.doc)[0].spans, undefined);
+});
+
+test("the header-row toggle moves the header boundary to the row under the cursor", () => {
+  let state = stateOf([TAX_TABLE]);
+  state = select(state, inBlock(state.doc, N.table_cell, 0, 1)); // first body row
+  state = apply(state, commands.toggleHeaderRow).state;
+  assert.equal(fromDoc(state.doc)[0].header_rows, 3);
+  state = select(state, inBlock(state.doc, N.table_header, 0, 1)); // first row
+  state = apply(state, commands.toggleHeaderRow).state;
+  assert.equal(fromDoc(state.doc)[0].header_rows, 0);
+  assert.equal(state.doc.child(0).child(1).child(0).child(0).type, N.table_cell);
+});
+
+test("Tab moves between cells and adds a row after the last one", () => {
+  let state = stateOf([{ kind: "table", caption: "", header_rows: 0, rows: [["a", "b"]] }]);
+  state = select(state, inBlock(state.doc, N.table_cell, 0, 1));
+  state = press(state, "Tab");
+  assert.equal(state.selection.$from.parent.textContent, "b");
+  state = press(state, "Tab");
+  assert.deepEqual(fromDoc(state.doc)[0].rows, [["a", "b"], ["", ""]]);
+  assert.equal(state.selection.$from.parent.type, N.table_cell);
+  state = press(state, "Shift-Tab");
+  assert.equal(state.selection.$from.parent.textContent, "b");
+});
+
+test("a column added and removed leaves the merges consistent", () => {
+  let state = stateOf([TAX_TABLE]);
+  state = select(state, inBlock(state.doc, N.table_cell, 0, 1)); // "0"
+  state = apply(state, commands.addColumnAfter).state;
+  let table = fromDoc(state.doc)[0];
+  assert.deepEqual(table.rows[0], ["Annual Taxable Income (RWF)", "", "", "Tax Rate"]);
+  assert.deepEqual(table.spans, [[0, 0, 1, 3], [0, 3, 2, 1]]);
+  state = select(state, inBlock(state.doc, N.table_cell, 1)); // the new, empty cell beside "0"
+  state = apply(state, commands.deleteColumn).state;
+  assert.deepEqual(fromDoc(state.doc)[0], TAX_TABLE);
+});
+
+test("a table inserted after the cursor has a header row and the cursor in its first cell", () => {
+  let state = stateOf([PAGE[4]]);
+  state = select(state, inWords(state.doc, 0, 3));
+  state = apply(state, commands.insertTable).state;
+  assert.deepEqual(fromDoc(state.doc)[1], { kind: "table", caption: "", header_rows: 1, rows: [["", ""], ["", ""]] });
+  assert.equal(state.selection.$from.parent.type, N.table_header);
+});
+
+// --- pasting ------------------------------------------------------------------------------------------
+
+test("plain text from a PDF: wrapped lines join; numbered lines and sentence ends start units", () => {
+  const text = "1. The Minister may make\nregulations for the pur-\npose of this Act.\n(a) prescribing fees;\n(b) generally.\n\nA new paragraph";
+  assert.deepEqual(unitsFromText(text, "list_item"), [
+    { kind: "list_item", text: "1. The Minister may make regulations for the pur-pose of this Act." },
+    { kind: "list_item", text: "(a) prescribing fees;" },
+    { kind: "list_item", text: "(b) generally." },
+    { kind: "list_item", text: "A new paragraph" },
+  ]);
+  assert.deepEqual(unitsFromText("CHAPTER ONE\nGENERAL PROVISIONS", "heading"), [{ kind: "heading", text: "CHAPTER ONE GENERAL PROVISIONS" }]);
+});
+
+test("several units pasted mid-unit: words before and after the cursor frame them, notes stay", () => {
+  let state = stateOf([{ kind: "paragraph", text: "Before after", notes: ["Note"] }]);
+  state = select(state, inWords(state.doc, 0, 7));
+  const blocks = [{ kind: "paragraph", text: "one", marks: [{ type: "bold", start: 0, end: 3 }] }, { kind: "heading", text: "two" }, { kind: "paragraph", text: "three " }].map((u) => unitNode(u));
+  state = state.apply(pasteUnits(state, blocks));
+  assert.deepEqual(fromDoc(state.doc), [
+    { kind: "paragraph", text: "Before one", marks: [{ type: "bold", start: 7, end: 10 }], notes: ["Note"] },
+    { kind: "heading", text: "two" },
+    { kind: "paragraph", text: "three after" },
+  ]);
+  assert.equal(state.selection.from, inWords(state.doc, 2, 6));
+});
+
+test("a table pasted at the start of an empty unit takes its place", () => {
+  let state = stateOf([{ kind: "paragraph", text: "" }, PAGE[4]]);
+  state = select(state, inWords(state.doc, 0));
+  state = state.apply(pasteUnits(state, [unitNode(TAX_TABLE)]));
+  assert.deepEqual(fromDoc(state.doc), [TAX_TABLE, PAGE[4]]);
+});
+
+// --- find and replace ---------------------------------------------------------------------------------
+
+test("find counts matches in words, notes and cells; replace keeps the formatting", () => {
+  let state = stateOf([
+    { kind: "paragraph", text: "The Tax is due; tax rates vary.", marks: [{ type: "bold", start: 4, end: 7 }], notes: ["Tax"] },
+    { kind: "table", caption: "", header_rows: 0, rows: [["Taxes", "tax"]] },
+  ]);
+  state = state.apply(state.tr.setMeta(findKey, { query: "tax", options: { wholeWord: true } }));
+  assert.equal(findKey.getState(state).matches.length, 4);
+  state = apply(state, commands.replaceAll("Levy")).state;
+  const [unit, table] = fromDoc(state.doc);
+  assert.equal(unit.text, "The Levy is due; Levy rates vary.");
+  assert.deepEqual(unit.marks, [{ type: "bold", start: 4, end: 8 }]);
+  assert.deepEqual(unit.notes, ["Levy"]);
+  assert.deepEqual(table.rows, [["Taxes", "Levy"]]);
+});
+
+test("a match never runs across a number chip", () => {
+  let state = stateOf([{ kind: "paragraph", text: "the", marker: "1." }]);
+  state = state.apply(state.tr.setMeta(findKey, { query: "1.the", options: {} }));
+  assert.equal(findKey.getState(state).matches.length, 0);
+});
+
+test("a node selection of a number chip has no formatting to apply", () => {
+  let state = stateOf([PAGE[1]]);
+  state = state.apply(state.tr.setSelection(NodeSelection.create(state.doc, inWords(state.doc, 0) - 1)));
+  assert.equal(apply(state, commands.mark("strong")).done, false);
+});
+
+test("words pasted straight after a full stop get a space", () => {
+  let state = stateOf([{ kind: "paragraph", text: "The end." }]);
+  state = select(state, inWords(state.doc, 0, 8));
+  state = state.apply(pasteUnits(state, [unitNode({ kind: "paragraph", text: "More words" })]));
+  assert.equal(fromDoc(state.doc)[0].text, "The end. More words");
+  state = select(state, inWords(state.doc, 0, 2));
+  state = state.apply(pasteUnits(state, [unitNode({ kind: "paragraph", text: "x" })]));
+  assert.equal(fromDoc(state.doc)[0].text, "Thxe end. More words");
+});
+
+test("a number chip pasted into words becomes words; at the start of an empty unit it stays a chip", () => {
+  let state = stateOf([{ kind: "paragraph", text: "fees;" }, { kind: "paragraph", text: "" }]);
+  state = select(state, inWords(state.doc, 0, 5));
+  state = state.apply(pasteUnits(state, [unitNode({ kind: "paragraph", text: "The Commission", marker: "6." })]));
+  assert.equal(fromDoc(state.doc)[0].text, "fees; 6. The Commission");
+  assert.equal(fromDoc(state.doc)[0].marker, undefined);
+  state = select(state, inWords(state.doc, 1));
+  state = state.apply(pasteUnits(state, [unitNode({ kind: "paragraph", text: "The Commission", marker: "6." })]));
+  assert.deepEqual(fromDoc(state.doc)[1], { kind: "paragraph", text: "The Commission", marker: "6." });
+});
