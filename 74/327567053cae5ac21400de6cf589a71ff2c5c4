@@ -1,0 +1,34 @@
+ingestion/fetch_job.py
+  s_d665c62e07d76f::t_1275ee5a10670f 14-19
+  s_d665c62e07d76f::t_e681426e1ccb87 124,217-223,239-245,272-285
+  s_d665c62e07d76f::t_864df864d28353 286
+tests/test_nigeria_catalogue.py
+  s_d665c62e07d76f::t_22865f6ea1c865 771
+  s_d665c62e07d76f::t_e515d0fd8f3855 802-946
+tests/test_fetch_job.py
+  s_d665c62e07d76f::t_480e128495e93c 225-285
+deployment/gcp/ingestion_jobs.sh
+  s_d665c62e07d76f::t_1275ee5a10670f 25-28
+ingestion/nigeria.py
+  s_d665c62e07d76f::t_1275ee5a10670f 5,9-11,30-35,174-177
+  s_d665c62e07d76f::t_ab52a21c769445 1419-1463,1477,1492-1495,1499-1500
+  s_d665c62e07d76f::t_efb2d1635e23c5 3212-3221,3242-3262,3264-3268,3278-3282
+  s_d665c62e07d76f::t_288e0cce173912 47,2793-2856,2860-2863,2916-2928,2946,2956-3046,3049-3051,3061-3062,3064,3066-3068,3121-3127
+  s_d665c62e07d76f::t_e681426e1ccb87 3110-3112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "74327567053cae5ac21400de6cf589a71ff2c5c4",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
