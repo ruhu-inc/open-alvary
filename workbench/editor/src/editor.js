@@ -13,7 +13,7 @@ import { keymap } from "prosemirror-keymap";
 import { baseKeymap, chainCommands } from "prosemirror-commands";
 import { history, undo, redo } from "prosemirror-history";
 import { tableEditing, isInTable, CellSelection } from "prosemirror-tables";
-import { schema, derivedDepth, unitLead, ALIGNMENTS, KINDS, MARK_NAMES, MARK_TYPES } from "./schema.js";
+import { schema, derivedDepth, unitLead, rankOf, isRank, ALIGNMENTS, KINDS, MARK_NAMES, MARK_TYPES } from "./schema.js";
 import * as tables from "./tables.js";
 import { unitsFromHTML, unitsFromText } from "./paste.js";
 import { findPlugin, findKey, findNext, findStatus, replaceOne, replaceAll } from "./find.js";
@@ -84,7 +84,8 @@ export function unitNode(unit, notes = []) {
   const noteNodes = (unit.notes || []).map((note) => N.note.create(null, text(note)));
   const align = ALIGNMENTS.includes(unit.align) ? unit.align : null;
   const kind = KINDS.includes(unit.kind) ? unit.kind : "paragraph";
-  return N.unit.create({ kind, level: Number.isInteger(unit.level) ? unit.level : null, align }, [N.body.create(null, inline), ...noteNodes]);
+  const attrs = { kind, level: Number.isInteger(unit.level) ? unit.level : null, align, rank: rankOf(kind, unit.rank) };
+  return N.unit.create(attrs, [N.body.create(null, inline), ...noteNodes]);
 }
 
 export function toDoc(units, notes = []) {
@@ -117,6 +118,8 @@ export function fromDoc(doc) {
     const lead = words.length - words.trimStart().length;
     const trimmed = words.trim();
     const unit = { kind: block.attrs.kind, text: trimmed };
+    const rank = rankOf(block.attrs.kind, block.attrs.rank);
+    if (rank) unit.rank = rank;
     const marks = ranges
       .map((r) => ({ type: r.type, start: Math.max(0, r.start - lead), end: Math.min(trimmed.length, r.end - lead) }))
       .filter((r) => r.start < r.end);
@@ -276,15 +279,16 @@ function unitAt($pos) {
 }
 
 // Enter in a unit's words: the rest of the words become a new unit of the same kind and level. At
-// the very start of the words, an empty unit opens above instead, so the margin notes stay put.
+// the very start of the words, an empty unit opens above instead (a heading of the same rank), so
+// the margin notes stay put.
 function splitUnit(state, dispatch) {
   const { $from, empty } = state.selection;
   if (!empty || $from.parent.type !== N.body) return false;
   const unit = unitAt($from);
   if (dispatch) {
-    const { kind, level } = unit.node.attrs;
+    const { kind, level, rank } = unit.node.attrs;
     if ($from.parentOffset === 0 && $from.parent.content.size) {
-      const tr = state.tr.insert(unit.pos, N.unit.create({ kind, level }, [N.body.create()]));
+      const tr = state.tr.insert(unit.pos, N.unit.create({ kind, level, rank }, [N.body.create()]));
       dispatch(tr.scrollIntoView());
       return true;
     }
@@ -613,9 +617,31 @@ function pasteText(view, words) {
 
 // --- commands ----------------------------------------------------------------------------------------
 
+// The ranks a reviewer chooses from (the toolbar's Heading menu, and Ctrl/Cmd+Alt+1 pressed again on
+// a heading); a reading may also give 5 or 6, which are kept and shown.
+export const RANKS = [1, 2, 3, 4];
+
+// Ctrl/Cmd+Alt+1 on headings: the next rank down (1, 2, 3, 4, then 1 again), the same for every
+// heading selected, from the first one's (an unranked heading becomes 1). Anything else selected
+// that is not a heading: it does not apply, and the key makes them headings.
+function stepRank(state, dispatch) {
+  const ranks = [];
+  state.doc.nodesBetween(state.selection.from, state.selection.to, (node) => {
+    if (node.type === N.unit) ranks.push(node.attrs.kind === "heading" ? rankOf("heading", node.attrs.rank) ?? 0 : -1);
+    return false;
+  });
+  if (!ranks.length || ranks.includes(-1)) return false;
+  const next = RANKS.find((rank) => rank > ranks[0]) ?? RANKS[0];
+  return commands.rank(next)(state, dispatch);
+}
+
 export const commands = {
   mark: (type) => toggleFormat(schema.marks[type]),
-  kind: (kind) => setUnitAttrs((attrs) => ({ ...attrs, kind })),
+  // Only a heading has a rank: one that becomes a paragraph or list item loses it.
+  kind: (kind) => setUnitAttrs((attrs) => ({ ...attrs, kind, rank: rankOf(kind, attrs.rank) })),
+  // A heading of rank 1 (the title) to 6, as printed: the units selected become headings of it.
+  rank: (rank) => (isRank(rank) ? setUnitAttrs((attrs) => ({ ...attrs, kind: "heading", rank })) : () => false),
+  stepRank,
   // Alignment as printed; choosing the kind's usual alignment clears the setting.
   align: (align) => setUnitAttrs((attrs) => ({ ...attrs, align: align === (attrs.kind === "heading" ? "center" : "left") ? null : align })),
   level: (delta) => setUnitAttrs((attrs, node) => {
@@ -688,7 +714,7 @@ export const keyCommands = {
   "Mod-z": undo,
   "Mod-y": redo,
   "Shift-Mod-z": redo,
-  "Mod-Alt-1": commands.kind("heading"),
+  "Mod-Alt-1": chainCommands(stepRank, commands.kind("heading")),
   "Mod-Alt-2": commands.kind("paragraph"),
   "Mod-Alt-3": commands.kind("list_item"),
   "Mod-Alt-n": commands.addNote,
@@ -796,15 +822,21 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
     status() {
       const st = view.state;
       const { $from } = st.selection;
-      const kinds = new Set(), aligns = new Set();
+      const kinds = new Set(), aligns = new Set(), ranks = new Set();
       st.doc.nodesBetween(st.selection.from, st.selection.to, (node) => {
-        if (node.type === N.unit) { kinds.add(node.attrs.kind); aligns.add(node.attrs.align || (node.attrs.kind === "heading" ? "center" : "left")); }
+        if (node.type === N.unit) {
+          kinds.add(node.attrs.kind);
+          aligns.add(node.attrs.align || (node.attrs.kind === "heading" ? "center" : "left"));
+          ranks.add(rankOf(node.attrs.kind, node.attrs.rank));
+        }
         return false;
       });
       const can = (command) => Boolean(editable && command(st));
       return {
         formats: formatState(st),
         kind: kinds.size === 1 ? [...kinds][0] : null,
+        // The rank of the headings selected when they all have the same one; null otherwise.
+        rank: ranks.size === 1 ? [...ranks][0] : null,
         align: aligns.size === 1 ? [...aligns][0] : null,
         inNote: $from.parent.type === N.note,
         inTable: isInTable(st) || st.selection instanceof CellSelection,

@@ -29,12 +29,19 @@ export const ALIGNMENTS = ["left", "center", "right", "justify"];
 // The stored table grid allows at most 100 rows of 100 cells (workbench.content.validate_units).
 const MAX_SPAN = 100;
 
+// A heading's rank as printed, 1 (the title) to 6; null for a heading no one ranked, shown as
+// rank 3. Only headings have one. It is not the indent level, and not in the published text.
+export const isRank = (value) => Number.isInteger(value) && value >= 1 && value <= 6;
+export const rankOf = (kind, value) => (kind === "heading" && isRank(value) ? value : null);
+
 function unitAttrs(dom) {
   const level = Number(dom.dataset.level);
+  const kind = KINDS.includes(dom.dataset.kind) ? dom.dataset.kind : "paragraph";
   return {
-    kind: KINDS.includes(dom.dataset.kind) ? dom.dataset.kind : "paragraph",
+    kind,
     level: dom.dataset.level && Number.isInteger(level) && level >= 0 && level <= 3 ? level : null,
     align: ALIGNMENTS.includes(dom.dataset.align) ? dom.dataset.align : null,
+    rank: dom.dataset.rank ? rankOf(kind, Number(dom.dataset.rank)) : null,
   };
 }
 
@@ -71,13 +78,15 @@ export const schema = new Schema({
     unit: {
       group: "block",
       content: "body note*",
-      attrs: { kind: { default: "paragraph" }, level: { default: null }, align: { default: null } },
+      attrs: { kind: { default: "paragraph" }, level: { default: null }, align: { default: null }, rank: { default: null } },
       parseDOM: [{ tag: "div.u", getAttrs: unitAttrs }],
       toDOM(node) {
         const { kind, level, align } = node.attrs;
+        const rank = rankOf(kind, node.attrs.rank);
         const shown = level ?? derivedDepth(unitLead(node));
-        const cls = ["u", kind, shown === null ? "" : `lvl${shown}`, align ? `align-${align}` : ""];
+        const cls = ["u", kind, rank ? `h${rank}` : "", shown === null ? "" : `lvl${shown}`, align ? `align-${align}` : ""];
         const attrs = { class: cls.join(" ").replace(/\s+/g, " ").trim(), "data-kind": kind };
+        if (rank) attrs["data-rank"] = String(rank);
         if (level !== null) attrs["data-level"] = String(level);
         if (align) attrs["data-align"] = align;
         return ["div", attrs, 0];

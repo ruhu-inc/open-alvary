@@ -591,7 +591,7 @@ function renderUnits(units) {
     }
     const level = unit.level ?? depthOfText(unit.marker || unit.text);
     const body = readParagraph(unit);
-    const css = [unit.kind === "heading" ? "h" : level !== null ? `d${level}` : "", unit.align ? `align-${unit.align}` : ""].join(" ").trim();
+    const css = [unit.kind === "heading" ? `h${unit.rank ? ` h${unit.rank}` : ""}` : level !== null ? `d${level}` : "", unit.align ? `align-${unit.align}` : ""].join(" ").trim();
     box.append(unit.notes && unit.notes.length
       ? el("div", { class: `unit ${css}` }, body, el("div", {}, unit.notes.map((n) => el("p", { class: "note", text: n }))))
       : el("div", { class: css }, body));
@@ -1941,6 +1941,7 @@ function updateToolbar(view) {
       button.setAttribute("aria-pressed", String(pressed));
     }
   }
+  view.headingTools.classList.toggle("on", status.kind === "heading");
   view.tableTools.classList.toggle("on", status.inTable);
   rove(view.toolbar);
   if (view.findBar && !view.findBar.hidden) showFindStatus(view, status.find);
@@ -2085,15 +2086,20 @@ function editTab(view) {
   const format = (type, label, name, keys) => t({ label, name, title: `${name} (${keys})`, cls: `mark-${type}`, command: C.mark(type), on: (s) => s.formats[type].on,
     can: (s) => s.formats[type].can });
   const group = (label, ...buttons) => el("div", { class: "tool-group", role: "group", "aria-label": label, title: label }, buttons);
-  // The table commands are a menu, so the toolbar keeps its size when the cursor enters a table.
-  const tableMenu = (...buttons) => {
-    const menu = el("details", { class: "tool-menu" }, el("summary", { class: "small", title: "Table commands: put the cursor in a table, or select cells by dragging across them", text: "Table ▾" }),
-      el("div", { role: "group", "aria-label": "Table" }, buttons));
+  // The heading ranks and the table commands are menus, so the toolbar keeps its size when the
+  // cursor enters a table.
+  const toolMenu = (name, title, ...buttons) => {
+    const menu = el("details", { class: "tool-menu" }, el("summary", { class: "small", title, text: `${name} ▾` }),
+      el("div", { role: "group", "aria-label": name }, buttons));
     menu.addEventListener("click", (event) => { if (event.target.closest("button")) menu.open = false; });
     menu.addEventListener("keydown", (event) => { if (event.key === "Escape" && menu.open) { event.stopPropagation(); menu.open = false; menu.querySelector("summary").focus(); } });
     return menu;
   };
-  view.tableTools = tableMenu(
+  const RANK_USE = { 1: "the title", 2: "a part or chapter", 3: "an article or section title; a heading with no rank is shown as this", 4: "a heading under those" };
+  view.headingTools = toolMenu("Heading", "Heading and its rank as printed (Ctrl/Cmd+Alt+1 makes a heading; pressed again on a heading, the next rank down)",
+    ...window.ReviewEditor.RANKS.map((rank) => t({ label: `Heading ${rank}`, cls: `rank-${rank}`, title: `Heading ${rank}: ${RANK_USE[rank]}`, command: C.rank(rank),
+      on: (s) => s.kind === "heading" && s.rank === rank })));
+  view.tableTools = toolMenu("Table", "Table commands: put the cursor in a table, or select cells by dragging across them",
     t({ label: "Insert row above", title: "Insert a row above", command: C.addRowBefore, can: (s) => s.can.addRowBefore }),
     t({ label: "Insert row below", title: "Insert a row below (Tab in the last cell)", command: C.addRowAfter, can: (s) => s.can.addRowAfter }),
     t({ label: "Insert column left", title: "Insert a column to the left", command: C.addColumnBefore, can: (s) => s.can.addColumnBefore }),
@@ -2107,7 +2113,7 @@ function editTab(view) {
   view.findBar = findBar(view);
   const toolbar = el("div", { class: "toolbar", role: "toolbar", "aria-label": "Editing" },
     group("Structure",
-      t({ label: "Heading", title: "Heading (Ctrl/Cmd+Alt+1)", command: C.kind("heading"), on: (s) => s.kind === "heading" }),
+      view.headingTools,
       t({ label: "Paragraph", title: "Paragraph (Ctrl/Cmd+Alt+2)", command: C.kind("paragraph"), on: (s) => s.kind === "paragraph" }),
       t({ label: "List item", title: "List item (Ctrl/Cmd+Alt+3)", command: C.kind("list_item"), on: (s) => s.kind === "list_item" }),
       t({ label: "⇤", name: "Outdent", title: "Outdent (Shift+Tab)", command: C.level(-1), can: (s) => Boolean(s.kind) }),
@@ -2139,6 +2145,7 @@ function editTab(view) {
     el("details", { class: "keys" }, el("summary", { text: "Keys" }),
       el("div", { class: "muted" },
         el("p", { text: "Type to correct words. Enter splits a paragraph (at its very start, it opens an empty one above); Backspace at its start joins it to the one above, Delete at its end joins the one below. Tab / Shift+Tab change the level. Ctrl/Cmd+Alt+L, E, R, J align left, centre, right or justify; with several paragraphs selected (or Ctrl/Cmd+A) they all change. Double-click a section number to change it." }),
+        el("p", { text: "Headings: Ctrl/Cmd+Alt+1 makes a heading; pressed again on a heading, it steps the rank down (Heading 1, 2, 3, 4, then 1 again). Heading ▾ sets the rank as printed: 1 the title, 2 a part or chapter, 3 an article or section title. Ctrl/Cmd+Alt+2 makes a paragraph and Ctrl/Cmd+Alt+3 a list item; neither has a rank." }),
         el("p", { text: "Bold, italic and the rest work as in a word processor: on a selection that is only partly bold, B makes all of it bold. They apply to a paragraph's words, not to section numbers, margin notes, captions or table cells (those hold plain text)." }),
         el("p", { text: "Tables: Tab / Shift+Tab move between cells (Tab in the last cell adds a row). Drag across cells, or Shift+arrow keys, to select several; then Table ▾ › Merge cells, or type to replace their words. The Table menu also adds and deletes rows and columns, splits merged cells and marks header rows." }),
         el("p", { text: "Paste: text from Word, a web page or a PDF becomes paragraphs, headings, list items and tables; bold, italic, underline, superscript and subscript are kept, fonts and colours are not." }),
