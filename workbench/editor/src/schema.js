@@ -1,5 +1,5 @@
 // The shapes a reviewed page can take: units (heading, paragraph, list item) with their words and
-// margin notes, section-number chips, and tables of text cells. Each node reads back from its own
+// margin notes, section-number chips, and tables of formatted cells. Each node reads back from its own
 // markup, so text copied and pasted within the page keeps its units, numbers and formatting.
 
 import { Schema } from "prosemirror-model";
@@ -50,12 +50,13 @@ function span(value) {
 }
 
 // A merged cell, as printed, keeps its extent in rows and columns; the cells it covers are not
-// there, as in an HTML table. Cells hold text only.
+// there, as in an HTML table. Cells hold words, with bold, italic and the rest (footnote markers,
+// m², 10⁶), on one line.
 function cellSpec(tag, role) {
   return {
     tableRole: role,
     content: "text*",
-    marks: "",
+    marks: "_",
     isolating: true,
     attrs: { colspan: { default: 1 }, rowspan: { default: 1 }, colwidth: { default: null } },
     parseDOM: [{ tag, getAttrs: (dom) => ({ colspan: span(dom.getAttribute("colspan")), rowspan: span(dom.getAttribute("rowspan")) }) }],
@@ -124,7 +125,7 @@ export const schema = new Schema({
       parseDOM: [{ tag: "div.tbl", getAttrs: (dom) => ({ header_rows: Math.max(0, parseInt(dom.dataset.headerRows, 10) || 0) }) }],
       toDOM: (node) => ["div", { class: "tbl", "data-header-rows": String(node.attrs.header_rows) }, 0],
     },
-    table_caption: { content: "text*", marks: "", isolating: true, parseDOM: [{ tag: "div.caption" }], toDOM: () => ["div", { class: "caption" }, 0] },
+    table_caption: { content: "text*", marks: "_", isolating: true, parseDOM: [{ tag: "div.caption" }], toDOM: () => ["div", { class: "caption" }, 0] },
     table: { tableRole: "table", content: "table_row+", isolating: true, parseDOM: [{ tag: "table" }], toDOM: () => ["table", ["tbody", 0]] },
     table_row: { tableRole: "row", content: "(table_cell | table_header)*", parseDOM: [{ tag: "tr" }], toDOM: () => ["tr", 0] },
     table_cell: cellSpec("td", "cell"),
@@ -151,3 +152,37 @@ export const schema = new Schema({
 // Stored names of the formatting marks, as the server and the exports know them.
 export const MARK_NAMES = { strong: "bold", em: "italic", underline: "underline", sup: "superscript", sub: "subscript" };
 export const MARK_TYPES = Object.fromEntries(Object.entries(MARK_NAMES).map(([type, name]) => [name, type]));
+
+// Stored words with formatting ranges -> text nodes carrying marks.
+export function formatted(value, ranges) {
+  const textValue = value || "";
+  if (!textValue) return [];
+  const valid = (ranges || []).filter((r) => MARK_TYPES[r.type] && r.start < r.end && r.end <= textValue.length);
+  const cuts = [...new Set([0, textValue.length, ...valid.flatMap((r) => [r.start, r.end])])].sort((a, b) => a - b);
+  const nodes = [];
+  for (let i = 0; i + 1 < cuts.length; i++) {
+    const [from, to] = [cuts[i], cuts[i + 1]];
+    const marks = valid.filter((r) => r.start <= from && r.end >= to).map((r) => schema.marks[MARK_TYPES[r.type]].create());
+    nodes.push(schema.text(textValue.slice(from, to), marks));
+  }
+  return nodes;
+}
+
+// A textblock's words and their formatting ranges, as stored: one range for a mark that runs on
+// across text nodes. Number chips are not words.
+export function wordsAndMarks(node) {
+  let words = "";
+  const ranges = [];
+  node.forEach((child) => {
+    if (!child.isText) return;
+    const start = words.length;
+    words += child.text;
+    for (const mark of child.marks) {
+      const name = MARK_NAMES[mark.type.name];
+      const last = ranges.findLast((r) => r.type === name && r.end === start);
+      if (last) last.end = words.length;
+      else ranges.push({ type: name, start, end: words.length });
+    }
+  });
+  return { words, ranges };
+}

@@ -1497,6 +1497,12 @@ main:focus {
   font-weight: 600;
   padding: 6px;
 }
+/* Header cells and captions are set bold; bold words in them are drawn heavier still, so the
+   mark can be seen. */
+.doc-text th strong,
+.doc-text caption strong {
+  -webkit-text-stroke: 0.045em currentColor;
+}
 .doc-aside {
   position: sticky;
   top: 16px;

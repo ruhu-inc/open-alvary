@@ -1182,6 +1182,75 @@ def test_only_a_heading_has_a_rank_and_only_1_to_6():
             content.validate_units([{**unit, "rank": 1}])
 
 
+def test_formatting_in_table_cells_and_captions_is_kept_moved_and_exported(world):
+    import xml.etree.ElementTree as ET
+
+    from workbench import akn, serialize
+
+    browser = signed_in(world, "reviewer@example.org")
+    table = {
+        "kind": "table",
+        "caption": "Table 1: Plot sizes",
+        "caption_marks": [{"type": "italic", "start": 0, "end": 7}],
+        "header_rows": 1,
+        "rows": [["Zone", "Area (m2)"], ["R1", "450 1"], ["Total", ""]],
+        "spans": [[2, 0, 1, 2]],
+        "cell_marks": {
+            "0,1": [{"type": "bold", "start": 0, "end": 4}, {"type": "superscript", "start": 7, "end": 8}],
+            "1,1": [{"type": "superscript", "start": 4, "end": 5}],
+        },
+    }
+    assert save(browser, units=[table]).status_code == 200
+    assert browser.get(f"/api/documents/{ACT}/pages/1").json()["latest"]["units"] == [table]
+    block = browser.get(f"/api/documents/{ACT}/public-preview").json()["pages"][0]["blocks"][0]
+    assert block["cell_marks"] == table["cell_marks"] and block["caption_marks"] == table["caption_marks"]
+
+    bold = [{"type": "bold", "start": 0, "end": 1}]
+    for wrong in (
+        {"cell_marks": {"0,2": bold}},  # no such cell
+        {"cell_marks": {"00,1": bold}},  # not how a cell is named
+        {"cell_marks": {"2,1": bold}},  # covered by the merged "Total"
+        {"cell_marks": {"1,0": [{"type": "bold", "start": 0, "end": 3}]}},  # past the words
+        {"cell_marks": {"1,0": [{"type": "font-size", "start": 0, "end": 1}]}},
+        {"cell_marks": [["1,0", bold]]},
+        {"caption_marks": [{"type": "bold", "start": 0, "end": 99}]},
+    ):
+        with pytest.raises(ValueError):
+            content.validate_units([{**table, **wrong}])
+    emptied = content.validate_units([{**table, "cell_marks": {"0,0": []}, "caption_marks": []}])[0]
+    assert "cell_marks" not in emptied and "caption_marks" not in emptied
+    # Formatting is not in the published text (TXP-02 rule 5).
+    plain = {k: v for k, v in table.items() if k not in ("cell_marks", "caption_marks")}
+    assert (
+        serialize.serialize([{"page": 1, "units": [table]}]).text
+        == serialize.serialize([{"page": 1, "units": [plain]}]).text
+    )
+
+    (moved,), count = content.replace_in([table], "Area", "Floor area", False, True)
+    assert count == 1 and moved["rows"][0][1] == "Floor area (m2)"
+    cell = moved["rows"][0][1]
+    assert [(m["type"], cell[m["start"] : m["end"]]) for m in moved["cell_marks"]["0,1"]] == [
+        ("bold", "Floor area"),
+        ("superscript", "2"),
+    ]
+    (moved,), count = content.replace_in([table], "1", "", False, True)  # the footnote marker goes
+    assert count == 2 and moved["caption"] == "Table : Plot sizes" and moved["rows"][1] == ["R1", "450 "]
+    assert "1,1" not in moved["cell_marks"] and moved["caption_marks"] == [
+        {"type": "italic", "start": 0, "end": 6}
+    ]
+    assert content.validate_units([moved]) == [moved]
+
+    element = akn.table(table)
+    ns = {"a": akn.NS}
+    caption = element.find("a:caption", ns)
+    assert "".join(caption.itertext()) == "Table 1: Plot sizes" and caption.find("a:i", ns).text == "Table 1"
+    header = element.findall("a:tr", ns)[0].findall("a:th", ns)[1].find("a:p", ns)
+    assert "".join(header.itertext()) == "Area (m2)"
+    assert header.find("a:b", ns).text == "Area" and header.find("a:sup", ns).text == "2"
+    assert element.findall("a:tr", ns)[1].findall("a:td", ns)[1].find("a:p/a:sup", ns).text == "1"
+    ET.tostring(element)  # well formed
+
+
 def test_a_collection_in_the_corpus_bucket_is_read_from_it_and_cached(tmp_path, monkeypatch):
     from ingestion import rw_gazette as RG
 

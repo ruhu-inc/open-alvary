@@ -154,8 +154,9 @@ pre.check { white-space: pre-wrap; font: 13px/1.5 ui-monospace, Menlo, monospace
 .surface .tbl .selectedCell::after { content: ""; position: absolute; inset: 0; background: color-mix(in srgb, var(--accent) 22%, transparent); pointer-events: none; }
 .surface .ProseMirror-hideselection *::selection { background: transparent; }
 .surface .ProseMirror-hideselection { caret-color: transparent; }
-/* A heading is set bold; bold words in it are drawn heavier still, so the mark can be seen. */
-.surface .u.heading strong { -webkit-text-stroke: .045em currentColor; }
+/* A heading, a header cell and a caption are set bold; bold words in them are drawn heavier still,
+   so the mark can be seen. */
+.surface .u.heading strong, .surface .tbl th strong, .surface .tbl .caption strong, .layout th strong, .layout caption strong { -webkit-text-stroke: .045em currentColor; }
 .surface .find-hit { background: var(--medium-bg); border-radius: 2px; }
 .surface .find-hit.current { background: var(--accent); color: var(--accent-ink); }
 .surface:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }

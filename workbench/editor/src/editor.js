@@ -6,35 +6,20 @@
 // these shapes, so editing can change words and structure but never produce something the
 // corpus cannot hold. Flags are highlights that stay attached to their words as the text changes.
 
-import { Fragment } from "prosemirror-model";
+import { Fragment, Slice } from "prosemirror-model";
 import { EditorState, Plugin, PluginKey, Selection, TextSelection } from "prosemirror-state";
 import { EditorView, Decoration, DecorationSet } from "prosemirror-view";
 import { keymap } from "prosemirror-keymap";
 import { baseKeymap, chainCommands } from "prosemirror-commands";
 import { history, undo, redo } from "prosemirror-history";
 import { tableEditing, isInTable, CellSelection } from "prosemirror-tables";
-import { schema, derivedDepth, unitLead, rankOf, isRank, ALIGNMENTS, KINDS, MARK_NAMES, MARK_TYPES } from "./schema.js";
+import { schema, derivedDepth, unitLead, rankOf, isRank, ALIGNMENTS, KINDS, formatted, wordsAndMarks } from "./schema.js";
 import * as tables from "./tables.js";
 import { unitsFromHTML, unitsFromText } from "./paste.js";
 import { findPlugin, findKey, findNext, findStatus, replaceOne, replaceAll } from "./find.js";
 
 export { schema };
 export { unitsFromHTML, unitsFromText } from "./paste.js";
-
-// Unit text with formatting ranges -> text nodes carrying marks.
-function formatted(value, ranges) {
-  const textValue = value || "";
-  if (!textValue) return [];
-  const valid = (ranges || []).filter((r) => MARK_TYPES[r.type] && r.start < r.end && r.end <= textValue.length);
-  const cuts = [...new Set([0, textValue.length, ...valid.flatMap((r) => [r.start, r.end])])].sort((a, b) => a - b);
-  const nodes = [];
-  for (let i = 0; i + 1 < cuts.length; i++) {
-    const [from, to] = [cuts[i], cuts[i + 1]];
-    const marks = valid.filter((r) => r.start <= from && r.end >= to).map((r) => schema.marks[MARK_TYPES[r.type]].create());
-    nodes.push(schema.text(textValue.slice(from, to), marks));
-  }
-  return nodes;
-}
 
 const N = schema.nodes;
 
@@ -102,19 +87,8 @@ export function fromDoc(doc) {
     }
     const body = block.firstChild;
     let marker = null;
-    let words = "";
-    const ranges = [];
-    body.forEach((child) => {
-      if (child.type === N.marker) { if (!marker) marker = child.attrs; return; }
-      const start = words.length;
-      words += child.text || "";
-      for (const mark of child.marks) {
-        const name = MARK_NAMES[mark.type.name];
-        const last = ranges.findLast((r) => r.type === name && r.end === start);
-        if (last) last.end = words.length;
-        else ranges.push({ type: name, start, end: words.length });
-      }
-    });
+    body.forEach((child) => { if (child.type === N.marker && !marker) marker = child.attrs; });
+    const { words, ranges } = wordsAndMarks(body);
     const lead = words.length - words.trimStart().length;
     const trimmed = words.trim();
     const unit = { kind: block.attrs.kind, text: trimmed };
@@ -455,8 +429,8 @@ function setUnitAttrs(change) {
 
 // --- formatting --------------------------------------------------------------------------------------
 
-// The runs of text in the selection a mark can go on: a unit's words, never a number chip, a margin
-// note, a caption or a table cell.
+// The runs of text in the selection a mark can go on: a unit's words, a caption or a table cell
+// (every cell of a cell selection), never a number chip or a margin note.
 function formattable(state, type) {
   const runs = [];
   for (const { $from, $to } of state.selection.ranges) {
@@ -572,14 +546,37 @@ export function pasteUnits(state, blocks, open = { start: true, end: true }) {
   return tr.setSelection(Selection.near(tr.doc.resolve(caret), -1));
 }
 
-const chipText = (node) => (node.type === N.marker ? node.attrs.value : "");
-const wordsOf = (node) => (node.isText ? node.text : node.isLeaf ? chipText(node) : node.textBetween(0, node.content.size, " ", chipText));
-const plain = (blocks) => blocks.map(wordsOf).join(" ").replace(/\s+/g, " ").trim();
+// Words pasted where units cannot go (a margin note, a caption, a cell): one line, a number chip as
+// words, and the formatting kept where `parent` holds it (a margin note holds plain text).
+export function pastedWords(blocks, parent) {
+  const runs = [];
+  const collect = (node) => {
+    if (node.isText) runs.push({ text: node.text, marks: node.marks });
+    else if (node.type === N.marker) runs.push({ text: `${node.attrs.value} `, marks: [] });
+    else {
+      if (node.isTextblock) runs.push({ text: " ", marks: [] });
+      node.forEach(collect);
+    }
+  };
+  blocks.forEach(collect);
+  const nodes = [];
+  for (const run of runs) {
+    let value = run.text.replace(/\s+/g, " ");
+    if (!nodes.length || nodes[nodes.length - 1].text.endsWith(" ")) value = value.replace(/^ /, "");
+    if (value) nodes.push(schema.text(value, run.marks.filter((mark) => parent.allowsMarkType(mark.type))));
+  }
+  const last = nodes[nodes.length - 1];
+  if (last && last.text.endsWith(" ")) {
+    nodes.pop();
+    if (last.text.length > 1) nodes.push(schema.text(last.text.slice(0, -1), last.marks));
+  }
+  return Fragment.from(nodes);
+}
 
 // Pasting: within one unit's words, copied words go in as they are (formatting and chips kept);
 // several units, or anything from outside the page, are cleaned into units (paste.js). A margin
-// note, a caption or a cell takes the words as plain text. Cells pasted into a table are placed by
-// the table plugin before this runs.
+// note, a caption or a cell takes the words on one line (pastedWords). Cells pasted into a table
+// are placed by the table plugin before this runs.
 const pastePlugin = new Plugin({
   props: {
     handlePaste(view, event, slice) {
@@ -591,7 +588,7 @@ const pastePlugin = new Plugin({
       if (/data-pm-slice/.test(html)) {
         blocks = [];
         slice.content.forEach((node) => blocks.push(node));
-        if (!blocks.every((node) => node.type === N.unit || node.type === N.table_unit)) return pasteText(view, plain(blocks));
+        if (!blocks.every((node) => node.type === N.unit || node.type === N.table_unit)) return pasteWords(view, blocks);
         const inline = blocks.length === 1 && blocks[0].type === N.unit && blocks[0].childCount === 1 && slice.openStart >= 2 && slice.openEnd >= 2;
         if (inline && $from.parent.type === N.body) return false;
         open = { start: slice.openStart >= 2, end: slice.openEnd >= 2 };
@@ -603,15 +600,17 @@ const pastePlugin = new Plugin({
       }
       if (!blocks.length) return true;
       const tr = $from.parent.type === N.body || !state.selection.empty ? pasteUnits(state, blocks, open) : null;
-      if (!tr) return pasteText(view, plain(blocks));
+      if (!tr) return pasteWords(view, blocks);
       view.dispatch(tr.scrollIntoView().setMeta("uiEvent", "paste"));
       return true;
     },
   },
 });
 
-function pasteText(view, words) {
-  if (words) view.dispatch(view.state.tr.insertText(words).scrollIntoView().setMeta("uiEvent", "paste"));
+function pasteWords(view, blocks) {
+  const { state } = view;
+  const words = pastedWords(blocks, state.selection.$from.parent.type);
+  if (words.size) view.dispatch(state.tr.replaceSelection(new Slice(words, 0, 0)).scrollIntoView().setMeta("uiEvent", "paste"));
   return true;
 }
 

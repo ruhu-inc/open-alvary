@@ -66,20 +66,41 @@ function unitFromRuns(kind, runs) {
   return kept.length ? { kind, text, marks: kept } : { kind, text };
 }
 
-const cellText = (cell) => cell.textContent.replace(/[\s ]+/g, " ").trim();
+// A cell's (or a caption's) words on one line, with their formatting: what the table, its row and
+// the cell add to the formatting `inherited` from around the table.
+function cellWords(cell, table, inherited) {
+  const around = [];
+  for (let node = cell.parentElement; node && node !== table; node = node.parentElement) around.unshift(node);
+  const runs = [];
+  const walk = (node, marks) => {
+    for (const child of node.childNodes) {
+      if (child.nodeType === 3) { runs.push({ text: child.data, marks }); continue; }
+      if (child.nodeType !== 1 || SKIPPED.has(child.localName) || hidden(child, styles(child))) continue;
+      const apart = child.localName === "br" || BLOCKS.has(child.localName);
+      if (apart) runs.push({ text: " ", marks: new Set() });
+      walk(child, marksOf(child, marks));
+      if (apart) runs.push({ text: " ", marks: new Set() });
+    }
+  };
+  walk(cell, [table, ...around, cell].reduce((marks, element) => marksOf(element, marks), inherited));
+  return unitFromRuns("paragraph", runs);
+}
+
 const span = (value) => Math.min(Math.max(parseInt(value, 10) || 1, 1), 100);
 
 // An HTML table -> a stored table: a full grid with merges listed, the leading rows of header
-// cells (or the table head) counted as header rows.
-function tableFrom(element) {
+// cells (or the table head) counted as header rows, and the formatting of each cell.
+function tableFrom(element, inherited) {
   const rows = [...element.rows];
-  const taken = new Set(), placed = new Map(), spans = [];
+  const taken = new Set(), placed = new Map(), spans = [], cellMarks = {};
   rows.forEach((row, r) => {
     let c = 0;
     for (const cell of row.cells) {
       while (taken.has(`${r},${c}`)) c++;
       const rs = Math.min(span(cell.getAttribute("rowspan")), rows.length - r), cs = span(cell.getAttribute("colspan"));
-      placed.set(`${r},${c}`, cellText(cell));
+      const words = cellWords(cell, element, inherited);
+      placed.set(`${r},${c}`, words.text);
+      if (words.marks) cellMarks[`${r},${c}`] = words.marks;
       for (let dr = 0; dr < rs; dr++) for (let dc = 0; dc < cs; dc++) taken.add(`${r + dr},${c + dc}`);
       if (rs > 1 || cs > 1) spans.push([r, c, rs, cs]);
       c += cs;
@@ -89,8 +110,11 @@ function tableFrom(element) {
   const grid = rows.map((_, r) => Array.from({ length: width }, (_, c) => placed.get(`${r},${c}`) || ""));
   let header = 0;
   while (header < rows.length && rows[header].cells.length && [...rows[header].cells].every((cell) => cell.localName === "th" || cell.parentElement.localName === "thead")) header++;
-  const unit = { kind: "table", caption: element.caption ? cellText(element.caption) : "", header_rows: header, rows: grid.length ? grid : [[""]] };
+  const caption = element.caption ? cellWords(element.caption, element, inherited) : { text: "" };
+  const unit = { kind: "table", caption: caption.text, header_rows: header, rows: grid.length ? grid : [[""]] };
+  if (caption.marks) unit.caption_marks = caption.marks;
   if (spans.length) unit.spans = spans;
+  if (Object.keys(cellMarks).length) unit.cell_marks = cellMarks;
   return unit;
 }
 
@@ -120,7 +144,7 @@ export function unitsFromHTML(html) {
         flush();
         // A one-cell table is a layout box, not a table: its words are read as paragraphs.
         if (child.rows.length === 1 && child.rows[0].cells.length === 1) walk(child.rows[0].cells[0], marks, kind);
-        else if (child.rows.length) units.push(tableFrom(child));
+        else if (child.rows.length) units.push(tableFrom(child, marks));
         flush();
         continue;
       }
