@@ -476,10 +476,47 @@ def search(
     return hits
 
 
+def _moved(position: int, edits: list[tuple[int, int, int, int]], closing: bool) -> int:
+    """Where an offset in the old text lands in the new one. `edits` are (start, end, new start, new
+    end) of each replaced match; an offset inside a match goes to the start of its replacement if it
+    opens a range, to its end if it closes one, so a range covering a match covers what replaced it."""
+    shift = 0
+    for start, end, new_start, new_end in edits:
+        if position <= start:
+            break
+        if position < end:
+            return new_end if closing else new_start
+        shift = new_end - end
+    return position + shift
+
+
+def _replace_text(
+    pattern: re.Pattern, text: str, replacement: str, marks: list[dict]
+) -> tuple[str, list[dict], int]:
+    """The text with every match replaced, and its formatting ranges moved to stay on the same words."""
+    pieces, edits, last = [], [], 0
+    for match in pattern.finditer(text):
+        start, end = match.span()
+        pieces.append(text[last:start])
+        new_start = len("".join(pieces))
+        pieces.append(replacement)
+        edits.append((start, end, new_start, new_start + len(replacement)))
+        last = end
+    if not edits:
+        return text, marks, 0
+    pieces.append(text[last:])
+    moved = [
+        {"type": m["type"], "start": _moved(m["start"], edits, False), "end": _moved(m["end"], edits, True)}
+        for m in marks
+    ]
+    return "".join(pieces), [m for m in moved if m["start"] < m["end"]], len(edits)
+
+
 def replace_in(
     units: list[dict], find: str, replacement: str, match_case: bool, whole_word: bool
 ) -> tuple[list[dict], int]:
-    """A copy of the units with every match replaced, and how many were replaced."""
+    """A copy of the units with every match replaced, and how many were replaced. Bold, italic and
+    the rest stay on the words they were on."""
     if len(replacement) > 200:
         raise ValueError("replace with at most 200 characters")
     pattern, total, out = _pattern(find, match_case, whole_word), 0, []
@@ -493,7 +530,13 @@ def replace_in(
                     row[c], count = pattern.subn(lambda _: replacement, cell)
                     total += count
         else:
-            unit["text"], count = pattern.subn(lambda _: replacement, unit.get("text", ""))
+            unit["text"], marks, count = _replace_text(
+                pattern, unit.get("text", ""), replacement, unit.get("marks") or []
+            )
+            if marks:
+                unit["marks"] = marks
+            else:
+                unit.pop("marks", None)
             total += count
             notes = []
             for note in unit.get("notes") or []:

@@ -717,6 +717,32 @@ def test_search_and_replace_across_pages_writes_attributed_revisions(world):
     assert stale["conflicts"] == [1]  # the preview was older than the page
 
 
+def test_replacing_across_the_act_keeps_formatting_on_the_same_words():
+    units = [
+        {
+            "kind": "paragraph",
+            "text": "The Tax is due; the tax rate is 3%.",
+            "marks": [
+                {"type": "bold", "start": 4, "end": 7},  # the match itself
+                {"type": "italic", "start": 16, "end": 28},  # "the tax rate", a match inside
+                {"type": "superscript", "start": 32, "end": 33},  # "3", after both matches
+            ],
+        },
+        {"kind": "paragraph", "text": "Untouched", "marks": [{"type": "bold", "start": 0, "end": 9}]},
+    ]
+    replaced, count = content.replace_in(units, "tax", "levy", False, True)
+    assert count == 2
+    assert replaced[0]["text"] == "The levy is due; the levy rate is 3%."
+    marked = {m["type"]: replaced[0]["text"][m["start"] : m["end"]] for m in replaced[0]["marks"]}
+    assert marked == {"bold": "levy", "italic": "the levy rate", "superscript": "3"}
+    assert replaced[1] == units[1] and units[0]["text"].startswith("The Tax")  # a copy; the rest as it was
+    removed, _ = content.replace_in(units, "Tax", "", True, True)
+    assert removed[0]["text"] == "The  is due; the tax rate is 3%." and all(
+        m["type"] != "bold" for m in removed[0]["marks"]
+    )
+    assert content.validate_units(removed) == removed
+
+
 def test_the_stream_returns_final_content_for_continuous_reading(world):
     browser = signed_in(world, "reviewer@example.org")
     stream = browser.get(f"/api/documents/{ACT}/stream", params={"start": 1, "count": 5}).json()
