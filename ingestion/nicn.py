@@ -66,7 +66,7 @@ SOURCE = "nicn-judgments"
 COURT = "National Industrial Court of Nigeria"
 PUBLICATION = "National Industrial Court of Nigeria: judgment portal"
 # The reader's version: a page prepared by an earlier one is prepared again (BucketCollection.done).
-READER = "nicn-html-2026-10-25.2"
+READER = "nicn-html-2026-10-26.1"
 WORDS_PER_PAGE = 700  # a review page: about one printed page of a judgment
 UNITS_PER_PAGE = 120  # well under the workbench's 400 units a page
 UNIT_CHARACTERS = 6000  # a unit longer than this is cut at a sentence end (the workbench takes 8192)
@@ -515,6 +515,11 @@ SPOKEN_DATE = re.compile(
     re.I,
 )
 EDITORIAL = re.compile(r"(?i)ratio\s+decidendi|head\s*notes?|summary\s+of\s+(?:facts|the\s+case)")
+# Where a report's summaries end: the judgment's own heading ("LEAD JUDGMENT", "(Delivered by …)").
+OPINION_START = re.compile(
+    r"(?i)^(?:(?:lead(?:ing)?|majority)\s+)?judge?ment\b|^\(?\s*deliver(?:ed|ing)\b|"
+    r"\bdelivering\s+the\s+(?:lead(?:ing)?\s+)?judge?ment\b"
+)
 CASE_NUMBER = re.compile(r"^[A-Z]{2,5}(?:/[A-Z0-9.]{1,10}){1,4}/(?:19|20)\d\d$")
 DIVISION = re.compile(
     r"^(?:IN\s+)?(?:THE\s+)?(?P<name>[A-Z][A-Za-z .'-]{1,40}?)\s+JUDICIAL\s+DIVISION\b", re.I
@@ -1122,6 +1127,13 @@ class Judgment:
     flags: list = field(default_factory=list)  # page-wide: [{"severity", "kind", "primary", "others"}]
     empty: str | None = None  # why there is no judgment to review
     court: str | None = None  # another court's name, as printed, when the portal posted its decision
+    # Why the page holds only part of the judgment: held back, never reviewed or published (owner,
+    # 2026-10-25), until the court supplies a complete copy.
+    partial: str | None = None
+    # Why its text cannot be published as it stands (words masked by a converter): its details are
+    # reviewed and published, its text held (owner, 2026-10-25).
+    text_held: str | None = None
+    editorial: list = field(default_factory=list)  # a law report's summaries, left out of the reading
 
     @property
     def header(self) -> list[Unit]:
@@ -1211,16 +1223,7 @@ def read(raw: bytes) -> Judgment:
                 "others": {"Printed": other[:200]},
             }
         )
-    editorial = next((u.text for u in judgment.units if EDITORIAL.fullmatch(u.text.strip())), None)
-    if editorial:
-        judgment.flags.append(
-            {
-                "severity": "medium",
-                "kind": "editorial_matter",
-                "primary": "A law report's editorial summaries are printed with the judgment: not the court's words",
-                "others": {"Printed": editorial},
-            }
-        )
+    _editorial(judgment)
     if not any(
         COURT_LINE.match(u.text) or OTHER_COURT.match(u.text) or BETWEEN.match(u.text)
         for u in judgment.header
@@ -1239,7 +1242,102 @@ def read(raw: bytes) -> Judgment:
         judgment.copied_pages = 1 + sum(1 for a, b in zip(tops, tops[1:], strict=False) if b < a)
     _incomplete(judgment)
     _images(judgment, page)
+    _partial(judgment)
+    masked = sum(
+        int(f["primary"].split()[0]) for u in judgment.units for f in u.flags if f["kind"] == "masked_words"
+    )
+    if masked:
+        judgment.text_held = (
+            f"{masked} word{'s' if masked > 1 else ''} masked with asterisks by the program used to make the "
+            "page: the text is held until the court supplies its copy; the details are reviewed"
+        )
     return judgment
+
+
+def _editorial(judgment: Judgment) -> None:
+    """A law report's summaries printed before the judgment (a decision posted as a report prints it)
+    left out of the reading, from their heading to the judgment's own heading, and kept beside it; the
+    words are not the court's (owner, 2026-10-25). Where the judgment's heading is not found, they are
+    flagged for the reviewer instead."""
+    units = judgment.units
+    start = next(
+        (
+            k
+            for k, u in enumerate(units)
+            if u.rows is None and EDITORIAL.fullmatch(u.text.strip().rstrip(":.-–— "))
+        ),
+        None,
+    )
+    if start is None:
+        return
+    end = next(
+        (
+            k
+            for k in range(start + 1, len(units))
+            if units[k].rows is None
+            and len(units[k].text) <= 200
+            and (OPINION_START.search(units[k].text) or DECISION.match(units[k].text))
+        ),
+        None,
+    )
+    printed = units[start].text
+    if end is None:
+        judgment.flags.append(
+            {
+                "severity": "medium",
+                "kind": "editorial_matter",
+                "primary": "A law report's editorial summaries are printed with the judgment: not the court's "
+                "words; delete them",
+                "others": {"Printed": printed},
+            }
+        )
+        return
+    judgment.editorial = [
+        " | ".join(c["text"] for row in u.rows for c in row)
+        if u.rows is not None
+        else f"{u.marker} {u.text}"
+        if u.marker
+        else u.text
+        for u in units[start:end]
+    ]
+    judgment.units = units[:start] + units[end:]
+    judgment.flags.append(
+        {
+            "severity": "low",
+            "kind": "editorial_left_out",
+            "primary": f'A law report\'s editorial summaries ({end - start} paragraphs, from "{printed[:60]}") '
+            "were left out: not the court's words; kept beside the reading",
+            "others": {},
+        }
+    )
+
+
+def _partial(judgment: Judgment) -> None:
+    """Whether the page holds only part of the judgment: its text stops mid-sentence, the PDF copied into
+    it counted at least two pages more than it holds the text of (one may be a signature page), or a
+    picture in its text (often a scanned page) was never published."""
+    reasons = []
+    if any(
+        f["kind"] == "text_incomplete" and f["severity"] == "high" for u in judgment.units for f in u.flags
+    ):
+        reasons.append("its text stops mid-sentence")
+    if judgment.viewer_pages and judgment.copied_pages and judgment.viewer_pages - judgment.copied_pages >= 2:
+        reasons.append(
+            f"the PDF copied into the page had {judgment.viewer_pages} pages; it holds the text of "
+            f"{judgment.copied_pages}"
+        )
+    pictures = sum(
+        1
+        for u in judgment.body
+        for f in u.flags
+        if f["kind"] == "image_not_published" and f["severity"] == "high"
+    )
+    if pictures:
+        reasons.append(
+            f"{pictures} picture{'s' if pictures > 1 else ''} in its text (often a scanned page) "
+            f"{'were' if pictures > 1 else 'was'} never published"
+        )
+    judgment.partial = "; ".join(reasons) or None
 
 
 def _incomplete(judgment: Judgment) -> None:
@@ -1950,6 +2048,24 @@ def new_manifest() -> dict:
 DETAILS = ("suggested", "suggested_evidence")
 
 
+HELD_KEYS = (
+    "id",
+    "title",
+    "type",
+    "year",
+    "court",
+    "suit_numbers",
+    "date",
+    "record_id",
+    "url",
+    "likely_duplicates",
+)
+HELD_NOTE = (
+    "Partial judgments: the court's portal holds only part of each. Not reviewed, approved or published "
+    "(owner, 2026-10-25) until the court supplies a complete copy."
+)
+
+
 def split_entry(document: dict) -> tuple[dict, dict]:
     entry = {k: v for k, v in document.items() if k not in DETAILS and k != "summary"}
     if document.get("summary"):
@@ -1959,8 +2075,9 @@ def split_entry(document: dict) -> tuple[dict, dict]:
 
 
 def prepare_page(item_id: str, record: dict, raw: bytes, sidecar: dict, doc_id: str, duplicates: list[str]):
-    """One stored record page as a review document: (manifest document, reading, provenance), or
-    (None, reason) when the page holds no judgment."""
+    """One stored record page as a review document: (manifest document, reading, provenance); (None,
+    reason) when the page holds no judgment; (None, held entry) when it holds only part of one, which
+    is never reviewed (owner, 2026-10-25): its details as the catalogue and page give them, and why."""
     sha = hashlib.sha256(raw).hexdigest()
     judgment = read(raw)
     if judgment.empty:
@@ -1986,6 +2103,7 @@ def prepare_page(item_id: str, record: dict, raw: bytes, sidecar: dict, doc_id: 
         "header_as_printed": (sidecar.get("listed_raw") or record.get("listed_raw") or {}).get("header_text"),
         "portal_summary": judgment.summary,
         "furniture_left_out": judgment.furniture,
+        **({"editorial_left_out": judgment.editorial} if judgment.editorial else {}),
     }
     read_out = reading(judgment, sha, record_id)
     page_of = {id(unit): number for number, units in enumerate(paginate(judgment.units), 1) for unit in units}
@@ -2007,9 +2125,17 @@ def prepare_page(item_id: str, record: dict, raw: bytes, sidecar: dict, doc_id: 
         "record_id": record_id,
         "shape": judgment.shape,
         **({"likely_duplicates": duplicates} if duplicates else {}),
+        **(
+            {"text_held": {"reason": "masked_words", "note": judgment.text_held}}
+            if judgment.text_held
+            else {}
+        ),
         "suggested": values,
         "suggested_evidence": evidence,
     }
+    if judgment.partial:
+        held = {k: document[k] for k in HELD_KEYS if document.get(k) not in (None, [])}
+        return None, {**held, "reason": judgment.partial}
     return (document, read_out, provenance), None
 
 
@@ -2021,6 +2147,7 @@ class FolderCollection:
         self.folder = Path(folder)
         self.folder.mkdir(parents=True, exist_ok=True)
         self.documents: dict[str, dict] = {}
+        self.held: list[dict] = []
 
     def done(self, sha: str) -> bool:
         return False
@@ -2038,11 +2165,18 @@ class FolderCollection:
         self.documents[document["id"]] = entry
         return entry
 
-    def finish(self, sha: str, entries: list[dict], skipped: str | None = None) -> None:
-        pass
+    def finish(
+        self, sha: str, entries: list[dict], skipped: str | None = None, held: list | None = None
+    ) -> None:
+        self.held += held or []
 
     def save_manifest(self) -> None:
-        manifest = {**new_manifest(), "documents": sorted(self.documents.values(), key=lambda d: d["id"])}
+        manifest = {
+            **new_manifest(),
+            "documents": sorted(self.documents.values(), key=lambda d: d["id"]),
+            "held": sorted(self.held, key=lambda d: d["id"]),
+            "held_note": HELD_NOTE,
+        }
         (self.folder / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1) + "\n")
 
 
@@ -2087,12 +2221,15 @@ class BucketCollection:
         skipped: str | None = None,
         source: str = SOURCE,
         readings: dict | None = None,
+        held: list | None = None,
     ) -> None:
         index = {"pipeline": self.pipeline, "source": source, "documents": entries}
         if readings:
             index["readings"] = readings
         if skipped:
             index["skipped"] = skipped
+        if held:
+            index["held"] = held
         self._put(f"{self.prefix}issues/{sha}.json", index)
 
     def save_manifest(self) -> None:
@@ -2100,10 +2237,13 @@ class BucketCollection:
         judgment's records, the earliest; of one law found in two files (a Gazette issue and an agency's
         copy), the first, the others named on it (other_sources)."""
         documents: dict[str, dict] = {}
+        partial: dict[str, dict] = {}
         skipped = 0
         for name in self.store.list(f"{self.prefix}issues/"):
             index = json.loads(self.store.get(name))
             skipped += bool(index.get("skipped"))
+            for entry in index.get("held", []):
+                partial[entry["id"]] = entry
             for document in index.get("documents", []):
                 held = documents.get(document["id"])
                 if held is None:
@@ -2118,6 +2258,9 @@ class BucketCollection:
             **new_manifest(),
             "documents": sorted(documents.values(), key=lambda d: d["id"]),
             "skipped_files": skipped,
+            # Never listed for review: the workbench and publishing read "documents" only.
+            "held": sorted((e for i, e in partial.items() if i not in documents), key=lambda d: d["id"]),
+            "held_note": HELD_NOTE,
         }
         self._put(f"{self.prefix}manifest.json", manifest)
 
@@ -2128,7 +2271,7 @@ def prepare_items(items: dict, chosen: list[str], fetch, collection, log=print) 
     sidecar. A page already prepared by this reader version is skipped; one that fails is noted and the
     rest go on."""
     ids = document_ids(items)
-    counts = {"prepared": 0, "skipped_done": 0, "empty": 0, "failed": 0}
+    counts = {"prepared": 0, "skipped_done": 0, "empty": 0, "held": 0, "text_held": 0, "failed": 0}
     for item_id in chosen:
         record = items[item_id]
         sha = record.get("sha256")
@@ -2144,6 +2287,10 @@ def prepare_items(items: dict, chosen: list[str], fetch, collection, log=print) 
                 - {ids[item_id]}
             )
             result, reason = prepare_page(item_id, record, raw, sidecar, ids[item_id], duplicates)
+            if result is None and isinstance(reason, dict):  # only part of a judgment: held back
+                collection.finish(sha, [], held=[reason])
+                counts["held"] += 1
+                continue
             if result is None:
                 collection.finish(sha, [], reason)
                 counts["empty"] += 1
@@ -2153,6 +2300,7 @@ def prepare_items(items: dict, chosen: list[str], fetch, collection, log=print) 
             entry = collection.write(document, reading_, provenance, sha)
             collection.finish(sha, [entry])
             counts["prepared"] += 1
+            counts["text_held"] += bool(document.get("text_held"))
         except Exception as error:  # noqa: BLE001 - noted and left for a later run
             counts["failed"] += 1
             log(f"failed {item_id}: {type(error).__name__}: {str(error)[:300]}")

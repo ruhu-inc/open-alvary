@@ -142,6 +142,19 @@ class Review:
                 and readiness["details"]["confirmed"]
                 and not built.errors
             )
+        held = document.get("text_held")
+        if held:
+            # Its text cannot be published as it stands (owner, 2026-10-25): its details are reviewed and
+            # approved alone, and no page waits for review.
+            readiness.update(
+                unchecked_pages=[],
+                open_high_flags=[],
+                stale_pages=[],
+                unresolved_flag_pages=[],
+                missing_checks=[],
+                text_held=held,
+                ready=readiness["details"]["confirmed"],
+            )
         return {
             "reading": reading,
             "latest": latest,

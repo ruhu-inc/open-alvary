@@ -726,6 +726,9 @@ def texts_from_workbench(review, library, store, jurisdiction: str) -> Texts:
             found.revoked.add((work, language))
         if not now["approved"]:
             continue
+        if act.get("text_held"):  # approved on its details alone (owner, 2026-10-25)
+            found.skipped[act["id"]] = f"its text is held: {act['text_held'].get('note', 'not publishable')}"
+            continue
         # Errors before the bound hashes, as approving again cannot cure them: a document approved
         # before its kind had to have structure rules says so, not "approve it again".
         if built.errors:

@@ -254,11 +254,14 @@ def create_app(
         approval = None
         if head and head["decision"] == "approved":
             approval = "approved" if now["approved"] else "out_of_date"
+        held = bool(document.get("text_held"))
         return with_status(
             {
                 **listed(document),
-                "pages": ready["pages"],
-                "checked": ready["pages"] - len({*ready["unchecked_pages"], *ready["unresolved_flag_pages"]}),
+                "pages": 0 if held else ready["pages"],
+                "checked": 0
+                if held
+                else ready["pages"] - len({*ready["unchecked_pages"], *ready["unresolved_flag_pages"]}),
                 "attention": sum(1 for r in latest.values() if r["status"] == "attention"),
                 "open_high": len(ready["open_high_flags"]),
                 "stale": len(ready["stale_pages"]),
@@ -280,6 +283,7 @@ def create_app(
             "year": document.get("year"),
             "jurisdiction": document.get("jurisdiction"),
             "language": document.get("language"),
+            **({"text_held": True} if document.get("text_held") else {}),
         }
 
     def recorded(approval: dict) -> dict:
@@ -305,13 +309,14 @@ def create_app(
         """A document nobody has worked on, from its manifest entry alone: its machine reading's page
         and flag counts, nothing checked (no reading is opened: there are tens of thousands)."""
         flags = document.get("flag_counts") or {}
+        held = bool(document.get("text_held"))
         return with_status(
             {
                 **listed(document),
-                "pages": document["page_count"],
+                "pages": 0 if held else document["page_count"],
                 "checked": 0,
                 "attention": 0,
-                "open_high": flags.get("high", 0),
+                "open_high": 0 if held else flags.get("high", 0),
                 "stale": 0,
                 "ready": False,
                 "approval": None,
@@ -439,7 +444,7 @@ def create_app(
         )
         counts = {
             name: sum(t["kind"] == name for t in tasks)
-            for name in ("review", "flags", "events", "instructions", "citations")
+            for name in ("review", "details", "flags", "events", "instructions", "citations")
         }
         chosen = queue.ordered([t for t in tasks if not kind or t["kind"] == kind])
         limit, offset, moment = max(1, min(limit, 500)), max(0, offset), datetime.now(UTC)
@@ -651,7 +656,8 @@ def create_app(
     @app.post("/api/documents/{act_id}/approval")
     def approve(request: Request, act_id: str, body: dict = JSON_BODY):
         who = auth.current(request, store, write=True, role="approver")
-        now = state(act_or_404(act_id), text=True)
+        act = act_or_404(act_id)
+        now = state(act, text=True)
         decision = body.get("decision")
         if decision not in {"approved", "revoked"}:
             raise HTTPException(422, "decision must be approved or revoked")
@@ -661,7 +667,7 @@ def create_app(
             ready = now["readiness"]
             if not ready["ready"]:
                 raise HTTPException(409, {"message": "Not ready for approval", "readiness": ready})
-            if set(materials) != set(content.MATERIALS) or not all(materials.values()):
+            if set(materials) != set(content.materials_for(act)) or not all(materials.values()):
                 raise HTTPException(422, "Confirm every verification check")
             if not basis:
                 raise HTTPException(422, "State the rights basis")
@@ -679,7 +685,7 @@ def create_app(
                 serialization_profile=now["text"].profile_id,
                 structure_rules=now["text"].rules_id,
                 rights_basis=basis,
-                materials={k: bool(v) for k, v in materials.items() if k in content.MATERIALS},
+                materials={k: bool(v) for k, v in materials.items() if k in content.materials_for(act)},
                 note=note,
                 routing=now["readiness"].get("routing") if decision == "approved" else None,
             )
