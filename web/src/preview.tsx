@@ -62,7 +62,8 @@ const DETAIL_STATUS: Record<string, string> = {
   confirmed: "details confirmed",
 };
 
-// This page's address in the preview, optionally at a section: "?section=4".
+// This page's address in the preview, optionally at a section or an article: "?section=4",
+// "?article=2".
 const linkTo = (query?: string) =>
   `${location.origin}${location.pathname}#/sources/${encodeURIComponent(documentId)}${query ? "?" + query : ""}`;
 
@@ -230,12 +231,19 @@ function Preview() {
   const onDocument = preview && pathname === "/sources/" + preview.source.id;
   const page = params.get("page");
   const section = params.get("section");
-  // Opened at a page (from the workbench) or a section (from a copied link): go there.
+  const article = params.get("article");
+  // Opened at a page (from the workbench), a section or an article (from a copied link): go there.
   useEffect(() => {
-    const target = page ? "page-" + page : section ? "section-" + section : "";
+    const target = page
+      ? "page-" + page
+      : section
+        ? "section-" + section
+        : article
+          ? "article-" + article
+          : "";
     if (onDocument && target)
       document.getElementById(target)?.scrollIntoView({ block: "start" });
-  }, [onDocument, page, section]);
+  }, [onDocument, page, section, article]);
   // What the public page will put in its head for search engines and link previews.
   const jsonLd = preview
     ? legislationJsonLd(
