@@ -476,6 +476,59 @@ def test_a_partial_judgment_is_held_back_and_a_masked_one_is_reviewed_for_its_de
     assert masked["text_held"]["note"].startswith("4 words masked")
 
 
+def portal(*paragraphs: str) -> bytes:
+    body = "".join(f"<p>{p}</p>" for p in paragraphs)
+    return f'<html><body><div class="light-background"><div class="col-12">{body}</div></div></body></html>'.encode()
+
+
+def test_a_finished_judgment_ending_without_a_full_stop_is_not_held_but_an_opening_alone_is():
+    reasoning = (
+        "The claimant was dismissed without the notice his contract required and is owed his salary. " * 8
+    )
+    for ending in (
+        ("Judgment is entered accordingly", "Hon. Justice A. B. Judge"),
+        ("This is the Court's Judgement and it is hereby entered accordingly",),
+        ("Appearances", "A. B. Counsel Esq. with C. D. Junior Esq. for the Claimant",
+         "No representation for the 1st, 2nd and 3rd Defendants/Respondents"),
+    ):  # fmt: skip
+        judgment = nicn.read(portal("JUDGMENT", reasoning, reasoning, *ending))
+        assert judgment.partial is None, ending
+    cut = nicn.read(
+        portal(
+            "JUDGMENT", reasoning, "The claimant's counsel argued that the defendant failed to pay him the"
+        )
+    )
+    assert cut.partial == "its text stops mid-sentence"
+    # An argument naming counsel is not an ending: "for the plaintiff or applicant to prove if" runs on.
+    argued = nicn.read(
+        portal(
+            "JUDGMENT",
+            reasoning,
+            "It means every fact necessary for the plaintiff or applicant to prove if traversed in",
+        )
+    )
+    assert argued.partial == "its text stops mid-sentence"
+    commenced = "This action was commenced by way of complaint filed on the 11th day of May 2015, wherein the claimant sought reliefs against the defendants jointly and severally."
+    opening = nicn.read(portal("RULING", commenced, "1. The sum of N5,453,000.00.", "By a Motion on Notice"))
+    assert opening.partial.startswith("it holds only an opening (") and opening.partial.endswith(
+        "and no ending"
+    )
+
+
+def test_a_judgment_whose_markup_the_portal_printed_as_text_is_read_as_the_page_it_describes():
+    import html as markup
+
+    inner = "".join(
+        f'<p style="text-align: justify;"><span style="font-size: 13.0pt;">{t}</span></p>'
+        for t in ("In The Court of Appeal of Nigeria", "JUDGMENT", "The appeal succeeds in part. " * 30, "Hon. Justice A. B. Judge, JCA")
+    )  # fmt: skip
+    judgment = nicn.read(portal(markup.escape(inner)))
+    assert [u.text for u in judgment.units][:2] == ["In The Court of Appeal of Nigeria", "JUDGMENT"]
+    assert not any("<span" in u.text or "</p>" in u.text for u in judgment.units)
+    assert [f["kind"] for f in judgment.flags if f["kind"] == "markup_as_text"] == ["markup_as_text"]
+    assert judgment.court == "In The Court of Appeal of Nigeria" and judgment.partial is None
+
+
 def test_a_law_reports_summaries_are_left_out_up_to_the_judgments_own_heading():
     filler = "The appellant was employed by the respondent and was dismissed without notice. " * 3
     summary = "<p>RATIO DECIDENDI</p><p>1. Employment - wrongful dismissal - remedy.</p><p>2. Notice.</p>"

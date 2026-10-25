@@ -66,7 +66,7 @@ SOURCE = "nicn-judgments"
 COURT = "National Industrial Court of Nigeria"
 PUBLICATION = "National Industrial Court of Nigeria: judgment portal"
 # The reader's version: a page prepared by an earlier one is prepared again (BucketCollection.done).
-READER = "nicn-html-2026-10-26.1"
+READER = "nicn-html-2026-10-26.2"
 WORDS_PER_PAGE = 700  # a review page: about one printed page of a judgment
 UNITS_PER_PAGE = 120  # well under the workbench's 400 units a page
 UNIT_CHARACTERS = 6000  # a unit longer than this is cut at a sentence end (the workbench takes 8192)
@@ -250,13 +250,19 @@ class Page:
         self.viewer_pages: int | None = None  # the page count a copied PDF viewer showed
         self.title = SPACE.sub(" ", self.soup.title.get_text(" ")).strip() if self.soup.title else ""
         self._chrome()
+        self.markup_as_text = False
         self.container = self._container()
         if self.container is not None:
             self._walk(self.container, {}, dict(left=0.0, quote=False, depth=0), root=True)
 
     def _container(self) -> Tag | None:
-        """The part of the page that holds the judgment: the portal's content column, else the body."""
-        return self.soup.select_one("div.light-background div.col-12") or self.soup.body or self.soup
+        """The part of the page that holds the judgment: the portal's content column, else the body. Where
+        the portal printed the judgment's own markup as text (escaped once), that text read as the page."""
+        container = self.soup.select_one("div.light-background div.col-12") or self.soup.body or self.soup
+        if container is not None and len(LITERAL_MARKUP.findall(container.get_text())) >= 5:
+            self.markup_as_text = True
+            return BeautifulSoup(container.get_text(), "html.parser")
+        return container
 
     def _chrome(self) -> None:
         """The portal's own words around the judgment (its buttons, its copyright line), kept as furniture
@@ -596,6 +602,26 @@ SENTENCE_END = re.compile(r"[.!?][\"'”’)\]]*\s+(?=[\"'“‘(\[]?[A-Z0-9])")
 CLOSING = re.compile(
     r"(?:\bJUDGE|\bPRESIDENT|\bJUSTICE\b[^.!?]{0,60}|\bJ\.?\s*P\.?|\(?SGD\.?\)?|[.…_]{3,}|\bPhD|\bOFR|\bCON)\W*$",
     re.I,
+)
+# How a finished judgment ends, without a full stop: the judge's signature, the appearances of counsel
+# ("… Esq. for the Defendant"), the order entering it. A short line only, but for the order: an
+# argument in the body names counsel too.
+SIGNED_OFF = re.compile(
+    r"\bHon(?:ourable)?\.?\s*(?:(?:Mr|Mrs|Ms|Dr)\.?\s*)?Justice\b|\bEsq\b|\b(?:no\s+)?representation\b|"
+    r"\bappearances?\b|\bfor\s+the\s+(?:\d\w*(?:\s*(?:&|and|,)\s*\d\w*)*\s+)?(?:claimant|defendant|respondent|applicant|"
+    r"appellant|petitioner|complainant|plaintiff|judge?ment\s+(?:debtor|creditor)|objector|intervener)s?"
+    r"(?:\s*/\s*[a-z]+(?:\s+[a-z]+)?)*\W*$",
+    re.I,
+)
+ENTERED = re.compile(
+    r"\bentered\s+accordingly\b|\bso\s+ordered\b|\bjudge?ment\s+is\s+(?:hereby\s+)?entered\b|"
+    r"\bthis\s+is\s+the\s+(?:court\W?s\s+)?(?:judge?ment|ruling)\b",
+    re.I,
+)
+TAG = re.compile(r"</?[a-z][^>]{0,200}>", re.I)  # markup some pages print as text
+OPENING_ONLY = 450  # words: a judgment shorter than this with no ending holds only its opening
+LITERAL_MARKUP = re.compile(
+    r"<(?:p|span|div|strong|b|i|em|u|br|table|tr|td|ol|ul|li|h[1-6])\b[^<>]{0,400}>", re.I
 )
 
 
@@ -1224,6 +1250,15 @@ def read(raw: bytes) -> Judgment:
             }
         )
     _editorial(judgment)
+    if page.markup_as_text:
+        judgment.flags.append(
+            {
+                "severity": "low",
+                "kind": "markup_as_text",
+                "primary": "The portal printed this judgment's markup as text: it was read as the page it describes",
+                "others": {},
+            }
+        )
     if not any(
         COURT_LINE.match(u.text) or OTHER_COURT.match(u.text) or BETWEEN.match(u.text)
         for u in judgment.header
@@ -1313,15 +1348,25 @@ def _editorial(judgment: Judgment) -> None:
 
 
 def _partial(judgment: Judgment) -> None:
-    """Whether the page holds only part of the judgment: its text stops mid-sentence, the PDF copied into
-    it counted at least two pages more than it holds the text of (one may be a signature page), or a
-    picture in its text (often a scanned page) was never published."""
+    """Whether the page holds only part of the judgment: its text stops mid-sentence or holds only an
+    opening (_incomplete), the PDF copied into it counted at least two pages more than it holds the
+    text of (one may be a signature page), or a picture in its text (often a scanned page) was never
+    published."""
     reasons = []
-    if any(
-        f["kind"] == "text_incomplete" and f["severity"] == "high" for u in judgment.units for f in u.flags
+    flagged = next(
+        (
+            f
+            for u in judgment.units
+            for f in u.flags
+            if f["kind"] == "text_incomplete" and f["severity"] == "high"
+        ),
+        None,
+    )
+    if flagged:  # its own reasons, the PDF's page count among them
+        reasons.append(flagged["primary"].split(": ", 1)[-1])
+    elif (
+        judgment.viewer_pages and judgment.copied_pages and judgment.viewer_pages - judgment.copied_pages >= 2
     ):
-        reasons.append("its text stops mid-sentence")
-    if judgment.viewer_pages and judgment.copied_pages and judgment.viewer_pages - judgment.copied_pages >= 2:
         reasons.append(
             f"the PDF copied into the page had {judgment.viewer_pages} pages; it holds the text of "
             f"{judgment.copied_pages}"
@@ -1341,8 +1386,9 @@ def _partial(judgment: Judgment) -> None:
 
 
 def _incomplete(judgment: Judgment) -> None:
-    """The text stops mid-sentence (high), or the copied PDF viewer counted more pages than the page
-    holds text of (high with it, medium alone: a page of the PDF may hold no text, a signature)."""
+    """The text stops mid-sentence, or holds only an opening (fewer than OPENING_ONLY words) with none
+    of a finished judgment's ending (high); or the copied PDF viewer counted more pages than the page
+    holds text of (high with either, medium alone: a page of the PDF may hold no text, a signature)."""
     texts = [u for u in judgment.body if u.rows is None and u.text]
     if not texts:
         return
@@ -1353,13 +1399,25 @@ def _incomplete(judgment: Judgment) -> None:
             f"the PDF viewer copied into the page counted {judgment.viewer_pages} pages; "
             f"the page holds the text of {judgment.copied_pages}"
         )
-    stops = (
-        len(last.text) >= 60
-        and not TERMINAL.search(last.text.rstrip())
-        and not CLOSING.search(last.text[-120:])
+    ending = TAG.sub(" ", last.text).rstrip()
+    signed_off = any(
+        ENTERED.search(TAG.sub(" ", u.text))
+        or (len(u.text) < 250 and SIGNED_OFF.search(TAG.sub(" ", u.text)))
+        for u in texts[max(len(texts) // 2, len(texts) - 12) :]  # the end, never the opening appearances
     )
+    stops = (
+        len(ending) >= 60
+        and not TERMINAL.search(ending)
+        and not CLOSING.search(ending[-120:])
+        and not signed_off
+    )
+    words = sum(len(u.text.split()) for u in texts)
+    opening_only = not stops and not signed_off and words < OPENING_ONLY and not CLOSING.search(ending[-120:])
     if stops:
         reasons.append("its text stops mid-sentence")
+    if opening_only:
+        reasons.append(f"it holds only an opening ({words} words) and no ending")
+    stops = stops or opening_only
     if reasons:
         last.flags.append(
             {
