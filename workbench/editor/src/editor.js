@@ -20,6 +20,7 @@ import { findPlugin, findKey, findNext, findStatus, replaceOne, replaceAll } fro
 
 export { schema };
 export { CELL_STATE_LABELS } from "./schema.js";
+export { tableLayout } from "./tables.js";
 export { unitsFromHTML, unitsFromText } from "./paste.js";
 
 const N = schema.nodes;

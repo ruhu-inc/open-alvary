@@ -20,9 +20,11 @@ const N = schema.nodes;
 
 // --- stored table <-> table node -------------------------------------------------------------------
 
-// A merge that overlaps another, or would cover words, is not applied: its cells stay apart, so
-// nothing typed in them is lost. `notes` hears about it.
-export function tableNode(unit, notes = []) {
+// A stored table as it is drawn, here and in the workbench's reading view: every row as wide as the
+// widest, the header rows, and each merged cell's extent ("row,column" → [rows, columns]) with the
+// positions it covers. A merge that overlaps another, or would cover words, is not applied: its
+// cells stay apart, so nothing typed in them is lost, and `undone` counts it.
+export function tableLayout(unit) {
   const grid = unit.rows && unit.rows.length ? unit.rows : [[""]];
   const width = Math.max(1, ...grid.map((row) => row.length));
   const rows = grid.map((row) => Array.from({ length: width }, (_, c) => (typeof row[c] === "string" ? row[c] : "")));
@@ -38,6 +40,12 @@ export function tableNode(unit, notes = []) {
     extent.set(places[0], [rs, cs]);
     places.slice(1).forEach((p) => covered.add(p));
   }
+  return { rows, header, extent, covered, undone };
+}
+
+// `notes` hears about any merge shown apart.
+export function tableNode(unit, notes = []) {
+  const { rows, header, extent, covered, undone } = tableLayout(unit);
   if (undone) notes.push(`${undone} merged cell${undone === 1 ? "" : "s"} shown apart: ${undone === 1 ? "it covered" : "they covered"} words or another merge`);
   const tableRows = rows.map((row, r) => N.table_row.create(null, row.flatMap((value, c) => {
     if (covered.has(`${r},${c}`)) return [];

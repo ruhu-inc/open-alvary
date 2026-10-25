@@ -584,10 +584,17 @@ function renderUnits(units) {
   const box = el("div", { class: "layout" });
   for (const unit of units) {
     if (unit.kind === "table") {
+      // Laid out as the editor draws it: a merged cell once, across its rows and columns, and the
+      // positions it covers left out.
+      const { rows, header, extent, covered } = window.ReviewEditor.tableLayout(unit);
       const cellMarks = unit.cell_marks || {}, cellStates = unit.cell_states || {};
-      const marked = (r, c) => { const state = cellStates[`${r},${c}`]; return state ? { "data-state": state, "data-label": window.ReviewEditor.CELL_STATE_LABELS[state] } : {}; };
+      const attributes = (key) => {
+        const [rowspan, colspan] = extent.get(key) || [1, 1], state = cellStates[key];
+        return { rowspan: rowspan > 1 && rowspan, colspan: colspan > 1 && colspan, "data-state": state, "data-label": state && window.ReviewEditor.CELL_STATE_LABELS[state] };
+      };
       const table = el("table", {}, unit.caption ? el("caption", {}, ...formattedText(unit.caption, unit.caption_marks)) : null,
-        unit.rows.map((row, r) => el("tr", {}, row.map((cell, c) => el(r < (unit.header_rows || 0) ? "th" : "td", marked(r, c), ...formattedText(cell, cellMarks[`${r},${c}`]))))));
+        rows.map((row, r) => el("tr", {}, row.flatMap((cell, c) => covered.has(`${r},${c}`) ? []
+          : [el(r < header ? "th" : "td", attributes(`${r},${c}`), ...formattedText(cell, cellMarks[`${r},${c}`]))]))));
       box.append(table);
       continue;
     }
