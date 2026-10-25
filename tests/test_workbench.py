@@ -1623,6 +1623,65 @@ def test_a_refused_page_break_join_blocks_approval(world):
     assert approve(approver).json() == {"revision": 1}
 
 
+FINES = {
+    "kind": "table",
+    "caption": "",
+    "header_rows": 1,
+    "rows": [["Offence", "Fine"], ["Hacking", ""]],
+    "cell_states": {"1,1": "illegible"},
+}
+
+
+def test_marked_table_cells_are_validated_and_shown(world):
+    from workbench import akn
+
+    assert content.validate_units([FINES]) == [FINES]
+    assert "cell_states" not in content.validate_units([{**FINES, "cell_states": {}}])[0]
+    for wrong in (
+        {"cell_states": {"1,2": "illegible"}},  # no such cell
+        {"cell_states": {"01,1": "illegible"}},  # not how a cell is named
+        {"cell_states": {"1,1": "blank"}},  # not a state
+        {"cell_states": [["1,1", "illegible"]]},
+        {"spans": [[1, 0, 1, 2]]},  # covered by the merged "Hacking"
+    ):
+        with pytest.raises(ValueError):
+            content.validate_units([{**FINES, **wrong}])
+    reviewer = signed_in(world, "reviewer@example.org")
+    assert save(reviewer, units=[FINES]).status_code == 200
+    assert reviewer.get(f"/api/documents/{ACT}/pages/1").json()["latest"]["units"] == [FINES]
+    block = reviewer.get(f"/api/documents/{ACT}/public-preview").json()["pages"][0]["blocks"][0]
+    assert block["cell_states"] == FINES["cell_states"]
+    assert "Offence\tFine\nHacking\t[illegible]\n" in reviewer.get(f"/api/documents/{ACT}/text").text
+    cell = akn.table(FINES).findall(f"{{{akn.NS}}}tr")[1].findall(f"{{{akn.NS}}}td")[1]
+    assert (cell.get("class"), cell.get("title"), "".join(cell.itertext())) == (
+        "illegible",
+        "Illegible in the original",
+        "",
+    )
+
+
+def test_a_marked_cell_in_an_operative_table_blocks_approval_until_it_is_filled(world):
+    approver = signed_in(world, "approver@example.org")
+    units = [{"kind": "paragraph", "text": "2. Fines."}, FINES]
+    save(approver, resolutions={flag_id(): {"decision": "use_check", "reader": "mineru"}})
+    assert save(approver, page=2, units=units).status_code == 200
+    check = approver.get(f"/api/documents/{ACT}").json()["text_check"]
+    assert check["profile"] == "oa-text-1/workbench-units-2"
+    assert [(e["code"], e["page"]) for e in check["errors"]] == [("incomplete_table", 2)]
+    confirm_details(approver)
+    refused = approve(approver)
+    assert refused.status_code == 409 and refused.json()["readiness"]["text"]["errors"] == 1
+    # Read from a better copy: the fine is filled in and the mark cleared.
+    filled = {k: v for k, v in FINES.items() if k != "cell_states"} | {
+        "rows": [["Offence", "Fine"], ["Hacking", "N5m"]]
+    }
+    save(approver, page=2, expected=1, units=[units[0], filled])
+    assert (
+        approver.get(f"/api/documents/{ACT}").json()["text_check"]["profile"] == "oa-text-1/workbench-units-1"
+    )
+    assert approve(approver).json() == {"revision": 1}
+
+
 def test_a_page_says_how_the_page_before_it_ends(world):
     reviewer = signed_in(world, "reviewer@example.org")
     assert reviewer.get(f"/api/documents/{ACT}/pages/1").json()["previous_end"] is None

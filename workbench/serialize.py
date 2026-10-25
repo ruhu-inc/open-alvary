@@ -1,10 +1,15 @@
-"""Reviewed pages to canonical text: profile oa-text-1/workbench-units-1 (TXP-02).
+"""Reviewed pages to canonical text: profiles oa-text-1/workbench-units-1 and -2 (TXP-02).
 
 The bytes a published text version holds, built from the units a reviewer approved: each unit with
 words is one leaf (its printed number, a space, its words), margin notes are leaves just before the
 unit they stand beside, a table is one block of TAB-separated cells, and leaves are separated by a
 blank line. The document ends with one line feed. Formatting, alignment and indent levels are not
 in the bytes. Nothing is reordered, repaired or joined unless the reviewer marked the join.
+
+A table cell the reviewer marked illegible or unsupported is an empty field, never placeholder
+text (OA-text-1); its mark goes with the table's leaf to the structure. A candidate with a marked
+cell is serialized under workbench-units-2, any other under workbench-units-1: without marks the
+two give the same bytes, so nothing approved before the marks existed has to be approved again.
 
 Offsets are UTF-8 bytes over the result (DAT-06). Which note is a section's heading, and which
 leaves belong to which provision, is the structure's business (workbench.structure).
@@ -16,6 +21,7 @@ import unicodedata
 from dataclasses import dataclass, field
 
 PROFILE_ID = "oa-text-1/workbench-units-1"
+CELL_STATES_PROFILE_ID = "oa-text-1/workbench-units-2"  # PROFILE_ID with table cell states
 SEPARATOR = "\n\n"
 _EDGE = " \t"  # outer horizontal whitespace is trimmed from every leaf; interior whitespace stays
 _NUMBERED = re.compile(r"^(?:\d{1,3}[A-Z]{0,2}\.|\(\w{1,5}\))(?=\s|$)")  # "23.", "(1)", "(a)", "(iv)"
@@ -43,6 +49,7 @@ class Leaf:
     note: int | None = None  # which of the unit's notes, for role "note"
     page_end: int | None = None  # the last page a joined paragraph reaches
     joined: list[tuple[int, int]] = field(default_factory=list)  # (page, unit) of continuations
+    cell_states: dict[str, str] = field(default_factory=dict)  # role "table": {"row,column": state}
     start: int = 0  # byte offsets of the leaf in the canonical text
     end: int = 0
 
@@ -81,10 +88,25 @@ def unit_words(unit: dict) -> str:
 
 def table_block(unit: dict, page: int, index: int, issues: list[Issue]) -> str:
     """Row-major cells, TAB between columns, LF between rows (OA-text-1). A merged cell's words are
-    written once, at its top-left position; the positions it covers are empty fields."""
+    written once, at its top-left position; the positions it covers are empty fields. So is a marked
+    cell: words left in it contradict the mark and stop approval."""
     rows = [[clean(cell) for cell in row] for row in unit.get("rows") or []]
     width = max((len(row) for row in rows), default=0)
     rows = [row + [""] * (width - len(row)) for row in rows]
+    for key, state in sorted(cell_states(unit).items(), key=lambda item: place(item[0])):
+        r, c = place(key)
+        if r < len(rows) and c < width and rows[r][c]:
+            issues.append(
+                Issue(
+                    "error",
+                    "cell_state_with_words",
+                    page,
+                    index,
+                    f"Row {r + 1}, column {c + 1} is marked {state} but has words: clear the words or "
+                    "the mark",
+                )
+            )
+            rows[r][c] = ""
     for r, c, height, span in unit.get("spans") or []:
         for dr in range(height):
             for dc in range(span):
@@ -100,9 +122,20 @@ def table_block(unit: dict, page: int, index: int, issues: list[Issue]) -> str:
                         )
                     )
                     rows[r + dr][c + dc] = ""
-    if not any(cell for row in rows for cell in row):
+    if not any(cell for row in rows for cell in row) and not cell_states(unit):
         issues.append(Issue("warning", "empty_table", page, index, "The table has no words"))
     return "\n".join("\t".join(row) for row in rows)
+
+
+def cell_states(unit: dict) -> dict[str, str]:
+    """A table unit's marked cells, {"row,column": "illegible" | "unsupported"}."""
+    return dict(unit.get("cell_states") or {})
+
+
+def place(key: str) -> tuple[int, int]:
+    """A cell's "row,column" key as numbers."""
+    row, column = key.split(",")
+    return int(row), int(column)
 
 
 def serialize(pages: list[dict]) -> Serialized:
@@ -117,7 +150,8 @@ def serialize(pages: list[dict]) -> Serialized:
                 caption = clean(unit.get("caption") or "")
                 if caption:
                     leaves.append(Leaf("caption", number, index, caption))
-                leaves.append(Leaf("table", number, index, table_block(unit, number, index, issues)))
+                block = table_block(unit, number, index, issues)
+                leaves.append(Leaf("table", number, index, block, cell_states=cell_states(unit)))
                 last_text = None
                 continue
             words = unit_words(unit)
@@ -150,7 +184,10 @@ def serialize(pages: list[dict]) -> Serialized:
         leaf.end = position
         text.append(leaf.text)
     body = SEPARATOR.join(text)
-    return Serialized(body + "\n" if leaves else "", leaves, issues)
+    marked = any(leaf.cell_states for leaf in leaves)
+    return Serialized(
+        body + "\n" if leaves else "", leaves, issues, CELL_STATES_PROFILE_ID if marked else PROFILE_ID
+    )
 
 
 def _join_problem(unit: dict, words: str, notes: list[str], previous: Leaf | None, page: int) -> str:

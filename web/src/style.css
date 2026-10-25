@@ -1354,6 +1354,9 @@ main:focus {
 .reader-noteref { vertical-align: super; font-size: 0.75em; }
 .reader-table { overflow-x: auto; margin: 0 0 1rem; }
 .reader-table:focus-visible { outline: 2px solid var(--primary); }
+/* A cell the reviewer could not transcribe, illegible or not text: hatched and labelled. */
+.reader-table [data-state] { background-image: repeating-linear-gradient(135deg, color-mix(in srgb, var(--muted) 22%, transparent) 0 2px, transparent 2px 7px); }
+.reader-table .cell-state { display: inline-block; padding: 0 0.3rem; border-radius: 3px; background: #fafafa; color: var(--muted); font-size: 0.8em; font-style: italic; }
 .reader table { border-collapse: collapse; }
 .reader th, .reader td { border: 1px solid var(--line); padding: 0.4rem 0.6rem; text-align: start; vertical-align: top; white-space: pre-wrap; }
 .reader-uncertain { font-style: italic; color: var(--muted); }

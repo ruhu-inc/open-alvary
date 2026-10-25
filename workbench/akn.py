@@ -87,6 +87,7 @@ class Container:
 
 
 INLINE = {"bold": "b", "italic": "i", "underline": "u", "superscript": "sup", "subscript": "sub"}
+CELL_STATE_TITLES = {"illegible": "Illegible in the original", "unsupported": "Not text: not transcribed"}
 
 
 def paragraph(text: str, marks: list | None = None, offset: int = 0, tag: str = "p") -> ET.Element:
@@ -123,11 +124,13 @@ def paragraph(text: str, marks: list | None = None, offset: int = 0, tag: str = 
 
 def table(unit: dict) -> ET.Element:
     """The table with its caption; each cell's words in a <p>, formatted as in the review. A merged
-    cell is written once with rowspan and colspan, as printed; the positions it covers are left out."""
+    cell is written once with rowspan and colspan, as printed; the positions it covers are left out.
+    A cell the reviewer marked illegible or unsupported says so in its class and title (TXP-02)."""
     element = ET.Element(q("table"))
     if unit.get("caption"):
         element.append(paragraph(unit["caption"], unit.get("caption_marks"), tag="caption"))
     cell_marks = unit.get("cell_marks") or {}
+    cell_states = unit.get("cell_states") or {}
     extent = {(r, c): (rows, columns) for r, c, rows, columns in unit.get("spans") or []}
     covered = {
         (r + dr, c + dc)
@@ -145,6 +148,9 @@ def table(unit: dict) -> ET.Element:
             attributes = {"rowspan": str(rows)} if rows > 1 else {}
             if columns > 1:
                 attributes["colspan"] = str(columns)
+            state = cell_states.get(f"{index},{column}")
+            if state:
+                attributes |= {"class": state, "title": CELL_STATE_TITLES[state]}
             ET.SubElement(tr, q("th" if index < unit.get("header_rows", 0) else "td"), attributes).append(
                 paragraph(cell, cell_marks.get(f"{index},{column}"))
             )

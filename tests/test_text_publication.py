@@ -84,6 +84,24 @@ def test_table_block_and_merged_cells():
     assert codes(text) == ["covered_cell_text"]
 
 
+def test_a_marked_cell_is_an_empty_field_under_workbench_units_2():
+    table = {"kind": "table", "caption": "", "header_rows": 1, "rows": [["Band", "Rate"], ["A", ""]]}
+    plain, _ = build([[table]])
+    marked, _ = build([[{**table, "cell_states": {"1,1": "illegible"}}]])
+    # No placeholder in the bytes (OA-text-1): the mark goes with the leaf, and the profile says so.
+    assert marked.text == plain.text == "Band\tRate\nA\t\n"
+    assert (plain.profile_id, marked.profile_id) == (serialize.PROFILE_ID, "oa-text-1/workbench-units-2")
+    assert marked.leaves[0].cell_states == {"1,1": "illegible"} and not plain.leaves[0].cell_states
+    worded, _ = build([[{**table, "cell_states": {"1,0": "unsupported"}}]])
+    assert worded.text == "Band\tRate\n\t\n"
+    assert [(i.code, i.message) for i in worded.errors] == [
+        (
+            "cell_state_with_words",
+            "Row 2, column 1 is marked unsupported but has words: clear the words or the mark",
+        )
+    ]
+
+
 def test_reviewed_join_across_a_page_break():
     text, result = build(
         [
@@ -265,6 +283,57 @@ def test_certificates_after_the_schedules_are_notices():
     assert nodes["notice_2__table_1"].kind == "table"
     assert nodes["notice_3"].page_start == 5
     assert not any(n.kind == "schedule" and n.page_start == 5 for n in result.nodes)
+
+
+def with_table(page: int, at: int, table: dict, replace: bool = True) -> list[list[dict]]:
+    pages = [list(units) for units in ACT]
+    pages[page - 1][at : at + replace] = [table]
+    return pages
+
+
+CERTIFICATE = {
+    "kind": "table",
+    "caption": "",
+    "header_rows": 1,
+    "rows": [["SHORT TITLE", "SUMMARY"], ["Example", ""]],
+}
+
+
+def test_a_marked_cell_in_a_notice_table_is_a_warning_and_on_the_node():
+    plain_text, plain = build(with_table(5, 1, CERTIFICATE))
+    text, result = build(with_table(5, 1, {**CERTIFICATE, "cell_states": {"1,1": "unsupported"}}))
+    table = by_locator(result)["notice_2__table_1"]
+    assert table.cell_states == {"1,1": "unsupported"}
+    warnings = [i for i in result.issues if i.level == "warning"]
+    assert not result.errors and [i.code for i in warnings] == ["running_head", "cell_state"]
+    assert warnings[1].message.startswith("Row 2, column 2 is marked unsupported, in a table that is not")
+    # The same bytes, but the mark is structure: the approval binds it and it is a new version.
+    assert text.text == plain_text.text and result.structure_hash != plain.structure_hash
+    [canonical] = [n for n in result.canonical() if n["locator"] == "notice_2__table_1"]
+    assert canonical["cell_states"] == {"1,1": "unsupported"}
+    assert not any("cell_states" in n for n in plain.canonical())
+
+
+def test_a_marked_cell_in_an_operative_table_blocks_approval():
+    marked = {**CERTIFICATE, "cell_states": {"1,1": "illegible", "0,0": "illegible"}}
+    _, result = build(with_table(4, 11, marked, replace=False))  # in the First Schedule's Part I
+    [error] = result.errors
+    assert error.code == "incomplete_table" and (error.page, error.unit) == (4, 11)
+    assert error.message == (
+        "Row 1, column 1 is marked illegible (and 1 more cell): an operative or schedule table must be "
+        "complete before the text is approved"
+    )
+    table = next(n for n in result.nodes if n.kind == "table" and n.cell_states)
+    assert table.parent.locator.startswith("sch_1__part_I")
+    assert table.cell_states == {"0,0": "illegible", "1,1": "illegible"}
+
+
+def test_a_marked_cell_without_a_table_node_blocks_approval():
+    # rw-law-1 holds a table in the article it is printed in, so a mark has no node to be kept on.
+    marked = {**CERTIFICATE, "cell_states": {"1,1": "illegible"}}
+    _, result = build([[*RWANDA[0], marked]], structure.RW_LAW, "en")
+    assert [i.code for i in result.errors] == ["incomplete_table"]
+    assert not any(n.cell_states for n in result.nodes)
 
 
 def test_every_leaf_held_once_and_spans_nest():
