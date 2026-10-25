@@ -90,6 +90,11 @@ def test_a_reader_keeps_earlier_pages_resumes_and_never_replaces_what_it_cannot_
     cloud_read.survey(store, "ng", ["sources/ng/nass/aaa.pdf"], log=lambda m: None)
     work = cloud_read.worklist(store, "ng", {"approved_by": "Owner", "max_pages": 10, "basis": "chat"})
     assert [(f["sha256"], f["pages"]) for f in work["files"]] == [("aaa", [1, 2, 3])] and work["pages"] == 3
+    copy = {"aaa": {"copy_of": "bbb", "reason": "the Gazette copy is read"}}
+    skipped = cloud_read.worklist(
+        store, "ng", {"approved_by": "Owner", "max_pages": 10, "basis": "chat"}, copy
+    )
+    assert skipped["files"] == [] and skipped["not_read"] == [{"sha256": "aaa", "pages": 3, **copy["aaa"]}]
     store.objects["readings/ng/docai/aaa.json"] = json.dumps(
         {"pages": [{"page": 2, "nodes": ["kept"]}]}
     ).encode()
