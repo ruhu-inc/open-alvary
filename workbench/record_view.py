@@ -267,6 +267,8 @@ def _profile_fields(family: str) -> list[FieldSpec]:
                     {"key": "name", "label": "Name as cited", "kind": "text"},
                     {"key": "role", "label": "Role", "kind": "choice", "choices": R.PARTY_ROLES},
                     {"key": "anonymised", "label": "Withheld", "kind": "choice", "choices": YES_NO},
+                    # Who appeared for the party, as the judgment's representation names them ("; " between).
+                    {"key": "represented_by", "label": "Counsel", "kind": "text"},
                 ),
             ),
             FieldSpec(
@@ -887,7 +889,14 @@ def _profile(family: str, v: dict):
             ),
             case_numbers=tuple(v.get("profile.case_numbers") or ()),
             parties=tuple(
-                R.Party(name=p["name"], role=p["role"], anonymised=_yes(p.get("anonymised")))
+                R.Party(
+                    name=p["name"],
+                    role=p["role"],
+                    anonymised=_yes(p.get("anonymised")),
+                    represented_by=tuple(
+                        n.strip() for n in str(p.get("represented_by") or "").split(";") if n.strip()
+                    ),
+                )
                 for p in v.get("profile.parties") or []
             ),
             bench=tuple(R.Judge(name=j["name"], role=j["role"]) for j in v.get("profile.bench") or []),
@@ -1230,7 +1239,13 @@ def suggestions(document: dict) -> dict:
     rather than read where it is printed for its field (a date printed once for several steps, a step that
     did not happen), with the words it rests on. Shown beside the empty fields for the reviewer to choose;
     never filled in."""
-    out = {**(document.get("suggested_inferred") or {}), **(document.get("suggested_legal") or {})}
+    out = {
+        # The details as printed, filled into the first draft, with the page and words each was read from
+        # (the National Industrial Court's reader gives them; shown beside the filled field).
+        **(document.get("suggested_evidence") or {}),
+        **(document.get("suggested_inferred") or {}),
+        **(document.get("suggested_legal") or {}),
+    }
     listing = out.get("status.legal") or {}
     listed = listing.get("value")
     said = [(out.get("status.note") or {}).get("value")]
@@ -1273,6 +1288,15 @@ def suggestions(document: dict) -> dict:
     elif note and "status.legal" in out:
         out["status.legal"] = {**out["status.legal"], "evidence": note}
     return out
+
+
+def reader_suggested(document: dict) -> bool:
+    """Whether the document's collection reader suggested its details in this view's keys (Rwanda's
+    gazette reader, the National Industrial Court's page reader): its first draft is drawn from those,
+    never from the DETAILS-1 suggestions written for Nigerian Acts."""
+    suggested = document.get("suggested") or {}
+    family = suggested.get("identity.family")
+    return family in R.FAMILIES and suggested.get("identity.type") in R.FAMILIES[family][1]
 
 
 def base_values(document: dict, manifest: dict) -> dict:

@@ -51,6 +51,16 @@ STATIC = Path(__file__).with_name("static")
 DECISIONS = {"keep", "use_check", "edited", "dismissed"}
 SENTENCE_END = re.compile(r"[.;:!?—–]['’”\")\]]*$")  # a page ending here finishes its paragraph
 JSON_BODY = Body(...)
+# In place of a page image for a document published as a web page (a National Industrial Court judgment),
+# which has none: the reviewer compares the text with the official page itself.
+WEB_PAGE_IMAGE = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="300" viewBox="0 0 1240 300">'
+    b'<rect width="1240" height="300" fill="#f4f4f4"/>'
+    b'<text x="620" y="130" font-family="sans-serif" font-size="34" text-anchor="middle" fill="#333">'
+    b"No page image: this document was published as a web page.</text>"
+    b'<text x="620" y="190" font-family="sans-serif" font-size="28" text-anchor="middle" fill="#555">'
+    b"Compare the text with the official source (its link is beside the document).</text></svg>"
+)
 SECURITY_HEADERS = {
     "Content-Security-Policy": (
         "default-src 'self'; img-src 'self'; script-src 'self'; style-src 'self'; "
@@ -584,6 +594,10 @@ def create_app(
         auth.current(request, store)
         act_or_404(act_id)
         reading_page(act_id, page)
+        if library.web_page(act_id):
+            return Response(
+                WEB_PAGE_IMAGE, media_type="image/svg+xml", headers={"Cache-Control": "private, max-age=3600"}
+            )
         try:
             image = library.image(act_id, page)
         except FileNotFoundError as error:
@@ -897,7 +911,7 @@ def create_app(
         # here, never in the first draft, until the reviewer chooses them.
         suggestions = (
             record_view.suggestions_view(details.suggest(reading, act, library.manifest_for(act_id)))
-            if view["place"].code == "ng"
+            if view["place"].code == "ng" and not record_view.reader_suggested(act)
             else record_view.suggestions(act)
         )
         links = act.get("relations") or []
