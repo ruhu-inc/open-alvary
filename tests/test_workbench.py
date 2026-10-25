@@ -1144,6 +1144,35 @@ def test_a_table_with_merged_cells_lines_up_and_keeps_its_merges():
         content.validate_units([{**unit, "spans": [[1, 2, 3, 1]]}])  # runs past the last row
 
 
+def test_a_merged_cell_is_exported_once_with_its_rowspan_and_colspan():
+    from workbench import akn
+
+    unit = {
+        "kind": "table",
+        "header_rows": 2,
+        "rows": [
+            ["Annual Taxable Income", "", "Tax Rate"],
+            ["From", "To", ""],
+            ["0", "360,000", "0%"],
+            ["360,001", "1,200,000", "20%"],
+        ],
+        "spans": [[0, 0, 1, 2], [0, 2, 2, 1]],
+        "cell_marks": {"0,2": [{"type": "bold", "start": 0, "end": 8}]},
+    }
+    ns = {"a": akn.NS}
+    rows = akn.table(unit).findall("a:tr", ns)
+    cells = [row.findall("*") for row in rows]
+    # The covered positions (0,1) and (1,2) are not written; each merged cell is written once.
+    assert [[("".join(c.itertext()), c.get("rowspan"), c.get("colspan")) for c in row] for row in cells] == [
+        [("Annual Taxable Income", None, "2"), ("Tax Rate", "2", None)],
+        [("From", None, None), ("To", None, None)],
+        [("0", None, None), ("360,000", None, None), ("0%", None, None)],
+        [("360,001", None, None), ("1,200,000", None, None), ("20%", None, None)],
+    ]
+    assert [c.tag for row in cells for c in row] == [akn.q("th")] * 4 + [akn.q("td")] * 6
+    assert cells[0][1].find("a:p/a:b", ns).text == "Tax Rate"  # a merged cell keeps its formatting
+
+
 def test_a_heading_keeps_the_rank_its_reading_gives_it():
     page = {
         "page": 3,
