@@ -259,6 +259,12 @@ def test_unit_shapes_and_flag_resolutions_are_validated(world):
 MATERIALS = dict.fromkeys(content.MATERIALS, True)
 
 
+def test_a_judgment_is_verified_in_its_own_words_under_the_same_keys():
+    worded = content.materials_for({"type": "ruling"})
+    assert set(worded) == set(content.MATERIALS) and "suit number" in worded["identity_citation"]
+    assert content.materials_for({"type": "law"}) is content.MATERIALS
+
+
 def approve(browser, expected=0, **overrides):
     body = {
         "expected_revision": expected,

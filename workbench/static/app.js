@@ -219,6 +219,7 @@ const TYPE_LABEL = {
   constitution: "Constitution", law: "Law", organic_law: "Organic law", decree_law: "Decree-law", ordinance: "Ordinance",
   decree: "Decree", royal_decree: "Royal decree", presidential_order: "Presidential Order", prime_ministers_order: "Prime Minister's Order",
   ministerial_order: "Ministerial Order", regulations: "Regulations", instructions: "Instructions", agreement: "Agreement", convention: "Convention",
+  ruling: "Ruling",
 };
 const ACTION_LABEL = { page_saved: "saved", details_saved: "saved the details of", act_approved: "approved", act_revoked: "revoked approval of", signed_in: "signed in", signed_out: "signed out", operator_saved: "updated operator", sign_in_refused: "was refused sign-in" };
 
@@ -256,6 +257,9 @@ function remember(key, value) {
 function readingDescription(data) {
   const primary = data.readers.primary;
   const checks = data.readers.checks || {};
+  if (primary.reader === "web-page") {
+    return `Read from the official web page, its text exactly as published (${primary.version.version}). No second reading checks it: review each page whole.`;
+  }
   if (primary.reader !== "text-layer") {
     return `Primary reading: Document AI ${primary.version.version}. Checks: ${Object.keys(checks).join(", ")}.`;
   }
@@ -415,7 +419,7 @@ async function actView(actId) {
       ready.routed ? el("p", { class: "muted", text: "Blue border: to review against the image. Dotted blue border: only its flags to resolve. Faded: nothing to review (the readings agree, or every flag is resolved)." }) : null,
       grid,
     ),
-    detailsSummary(actId, ready),
+    detailsSummary(actId, ready, act),
     editorialSummary(actId),
     act.type === "judgment" || act.type === "ruling" ? citationsSummary(actId) : null,
     textCheckCard(actId, data.text_check),
@@ -788,7 +792,7 @@ function approvalPanel(actId, data, current) {
     };
     panel.append(
       el("h4", { text: "Rights basis" }), basis,
-      el("h4", { text: "Verification (confirm each against the gazette)" }), el("div", { class: "materials" }, boxes.map((b) => b.row)),
+      el("h4", { text: `Verification (confirm each against ${data.act.type === "judgment" || data.act.type === "ruling" ? "the official source" : "the gazette"})` }), el("div", { class: "materials" }, boxes.map((b) => b.row)),
       note,
       el("p", {},
         el("button", { class: "primary", text: "Approve this document", disabled: !ready.ready, on: { click: () => send("approved") } }), " ",
@@ -816,14 +820,17 @@ function approvalPanel(actId, data, current) {
 
 const DETAIL_STATUS = { suggested: "Suggested from the document — not yet saved", draft: "Draft", confirmed: "Confirmed" };
 
-function detailsSummary(actId, ready) {
+function detailsSummary(actId, ready, act) {
+  const decision = act.type === "judgment" || act.type === "ruling";
   const d = ready.details;
   const state = !d.status ? pill("medium", "details not started")
     : d.confirmed ? pill("ok", "details confirmed")
     : pill("warn", d.missing && d.missing.length ? `details: ${d.missing.length} to give or account for` : "details in draft");
   return el("div", { class: "card" },
     el("h3", { text: "Document details" }),
-    el("p", { class: "muted", text: "Title, number, the dates it passed, was assented to and commenced, its gazette, the form of this text, its status and related laws, its language. Confirmed details are approved with the text and shown to the public beside it." }),
+    el("p", { class: "muted", text: decision
+      ? "Case name, court, division and seat, suit numbers, parties and their counsel, the bench, the date delivered, where it was published, its language. Confirmed details are approved with the text and shown to the public beside it."
+      : "Title, number, the dates it passed, was assented to and commenced, its gazette, the form of this text, its status and related laws, its language. Confirmed details are approved with the text and shown to the public beside it." }),
     el("p", {}, state, " ",
       el("a", { href: `#/doc/${encodeURIComponent(actId)}/details` }, el("button", { class: d.confirmed ? "" : "primary", text: d.confirmed ? "Review the details" : "Review and confirm the details" }))));
 }
@@ -1731,7 +1738,10 @@ function buildViewer(view) {
       el("button", { class: "small", title: "Zoom in (or Ctrl/Cmd + scroll)", text: "+", on: { click: () => setZoom(app.zoom * 1.25) } }),
       el("button", { class: "small", title: "Fit the page width", text: "Fit", on: { click: () => setZoom(1) } }),
       el("label", { class: "muted", title: "Keep the image on the text you are reading" }, follow, " follow text"),
-      el("span", { class: "muted hint", text: "Drag to move when zoomed. Click the page to find its text." })),
+      el("span", { class: "muted hint", text: "Drag to move when zoomed. Click the page to find its text." }),
+      view.detail.source.official_url
+        ? el("a", { href: view.detail.source.official_url, target: "_blank", rel: "noopener noreferrer", title: view.detail.source.official_url, text: "Official source ↗" })
+        : null),
     frame);
   viewer.addEventListener("wheel", (event) => {
     if (!event.ctrlKey && !event.metaKey) return;
