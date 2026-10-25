@@ -658,6 +658,97 @@ test("cells copied from the page, and words pasted over selected cells, still go
   assert.deepEqual(fromDoc(pasted.doc)[0].rows, [["x", "x"], ["c", "d"]]);
 });
 
+// Spaces where pasted words meet the words around them. The plain text is what the page's paste
+// reads; the clipboard parser's slice only matters in a cell (wordsForCell).
+const TAX = { kind: "paragraph", text: "Small enterprises must pay tax.", notes: ["Lump sum for enterprises"] };
+const pasteText = (state, text, slice = Slice.empty) => paste(state, slice, { "text/plain": text });
+
+test("words pasted mid-words keep the space the copied text had at either end, never two", () => {
+  const state = stateOf([TAX]);
+  const beforeTax = select(state, inWords(state.doc, 0, 27));
+  let pasted = pasteText(beforeTax, "a lumpsum ");
+  assert.equal(fromDoc(pasted.doc)[0].text, "Small enterprises must pay a lumpsum tax.");
+  assert.equal(pasted.selection.from, inWords(pasted.doc, 0, 37)); // before "tax."
+  pasted = pasteText(beforeTax, " a lumpsum\n"); // a line break at the end is a space too
+  assert.equal(fromDoc(pasted.doc)[0].text, "Small enterprises must pay a lumpsum tax.");
+  const afterPay = select(state, inWords(state.doc, 0, 26)); // after "pay", before the space
+  for (const copied of [" a lumpsum ", "a lumpsum "]) {
+    // Copied as whole words (a space at an end, as a double-click takes a word on Windows): they
+    // never run into "pay", wherever the space is.
+    pasted = pasteText(afterPay, copied);
+    assert.equal(fromDoc(pasted.doc)[0].text, "Small enterprises must pay a lumpsum tax.");
+  }
+  // Over selected words: "must pay" -> "shall pay"
+  pasted = pasteText(select(state, inWords(state.doc, 0, 18), inWords(state.doc, 0, 22)), " shall ");
+  assert.equal(fromDoc(pasted.doc)[0].text, "Small enterprises shall pay tax.");
+});
+
+test("words copied without a space at either end join the words they touch (a word cut short is completed); with one, never", () => {
+  let state = stateOf([{ kind: "paragraph", text: "Taxable Inc of enterprises" }]);
+  state = pasteText(select(state, inWords(state.doc, 0, 11)), "ome"); // after "Inc", before the space
+  state = pasteText(select(state, inWords(state.doc, 0, 17)), "small "); // after "of", before the space
+  assert.equal(fromDoc(state.doc)[0].text, "Taxable Income of small enterprises");
+});
+
+test("a space at the ends of pasted words never goes at the start or end of a unit's words", () => {
+  let state = stateOf([{ kind: "paragraph", text: "enterprises must pay tax" }, { kind: "paragraph", marker: "6.", text: "Commission shall have powers" }]);
+  state = pasteText(select(state, inWords(state.doc, 0)), " Small ");
+  state = pasteText(select(state, inWords(state.doc, 0, 30)), " in full. ");
+  assert.equal(state.doc.child(0).firstChild.textContent, "Small enterprises must pay tax in full.");
+  state = pasteText(select(state, inWords(state.doc, 1)), " The "); // after a number chip
+  assert.equal(state.doc.child(1).firstChild.textContent, "The Commission shall have powers");
+});
+
+test("lines pasted mid-words: the words after the cursor end the last one, with the space it had", () => {
+  const state = stateOf([{ kind: "paragraph", text: "Before after" }]);
+  let pasted = pasteText(select(state, inWords(state.doc, 0, 7)), "one.\nTwo ");
+  assert.deepEqual(fromDoc(pasted.doc).map((u) => u.text), ["Before one.", "Two after"]);
+  assert.equal(pasted.selection.from, inWords(pasted.doc, 1, 4)); // before "after"
+  pasted = pasteText(select(state, inWords(state.doc, 0, 6)), " one.\nTwo "); // before the space
+  assert.deepEqual(pasted.doc.content.content.map((u) => u.firstChild.textContent), ["Before one.", "Two after"]);
+});
+
+test("words pasted mid-words in a cell keep their spaces; none at the start or end of the cell", () => {
+  let state = stateOf([{ kind: "table", caption: "", header_rows: 1, rows: [["Band", "Rate"], ["Up to 360,000", "0%"]] }]);
+  state = pasteText(select(state, inBlock(state.doc, N.table_header, 1)), "New ", parsedInCell("New "));
+  state = pasteText(select(state, inBlock(state.doc, N.table_cell, 0, 6)), " RWF ", parsedInCell(" RWF ")); // before "360,000"
+  state = pasteText(select(state, inBlock(state.doc, N.table_header, 0, 4)), " of income ", parsedInCell(" of income "));
+  assert.deepEqual(fromDoc(state.doc)[0].rows, [["Band of income", "New Rate"], ["Up to RWF 360,000", "0%"]]);
+});
+
+test("words pasted mid-words in the caption and in a margin note keep their spaces", () => {
+  let state = stateOf([{ kind: "table", caption: "Rate of tax", header_rows: 0, rows: [["0%"]] }, TAX, { kind: "paragraph", text: "Words", notes: ["Powers of the Commis"] }]);
+  state = pasteText(select(state, inBlock(state.doc, N.table_caption)), "New ");
+  state = pasteText(select(state, inBlock(state.doc, N.table_caption, 0, 12)), "income "); // before "tax"
+  state = pasteText(select(state, inBlock(state.doc, N.note, 0, 13)), "small "); // before "enterprises"
+  state = pasteText(select(state, inBlock(state.doc, N.note, 0, 0)), " Tax: ");
+  state = pasteText(select(state, inBlock(state.doc, N.note, 0, 35)), " of 3% "); // at the end
+  state = pasteText(select(state, inBlock(state.doc, N.note, 1, 20)), "sion"); // a word cut short
+  state = pasteText(select(state, inBlock(state.doc, N.note, 1, 13)), "Electoral "); // after "the", before the space
+  const [table, , other] = fromDoc(state.doc);
+  assert.equal(table.caption, "New Rate of income tax");
+  assert.equal(state.doc.child(1).child(1).textContent, "Tax: Lump sum for small enterprises of 3%");
+  assert.deepEqual(other.notes, ["Powers of the Electoral Commission"]);
+});
+
+test("words copied from the page keep their spaces where they go in, never two; a space between underlined words is underlined", () => {
+  const state = stateOf([
+    { kind: "paragraph", text: "Small enterprises must pay tax." },
+    { kind: "paragraph", text: "They pay a lumpsum tax under the Revised Laws.", marks: [{ type: "underline", start: 33, end: 45 }] },
+    { kind: "paragraph", text: "the Income Tax Act applies", marks: [{ type: "underline", start: 4, end: 18 }] },
+  ]);
+  const copy = (index, from, to) => {
+    const content = TextSelection.create(state.doc, inWords(state.doc, index, from), inWords(state.doc, index, to)).content();
+    return { content, clipboard: { "text/html": '<div data-pm-slice="1 1 []"></div>', "text/plain": content.content.textBetween(0, content.content.size, "\n\n") } };
+  };
+  const lumpsum = copy(1, 10, 19); // " lumpsum "
+  let pasted = paste(select(state, inWords(state.doc, 0, 27)), lumpsum.content, lumpsum.clipboard);
+  assert.equal(fromDoc(pasted.doc)[0].text, "Small enterprises must pay lumpsum tax.");
+  const revised = copy(1, 33, 41); // "Revised " underlined
+  pasted = paste(select(state, inWords(state.doc, 2, 15)), revised.content, revised.clipboard); // before "Act"
+  assert.deepEqual(fromDoc(pasted.doc)[2], { kind: "paragraph", text: "the Income Tax Revised Act applies", marks: [{ type: "underline", start: 4, end: 26 }] });
+});
+
 // --- find and replace ---------------------------------------------------------------------------------
 
 test("find counts matches in words, notes and cells; replace keeps the formatting", () => {
