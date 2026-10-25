@@ -28,6 +28,18 @@ MATERIALS = {
     "cross_references": "Section and Act cross-references match",
     "identity_citation": "Title, number, year and citation match",
 }
+# The same checks worded for a court's decision, which has no gazette, sections or number of its own.
+JUDGMENT_MATERIALS = {
+    **MATERIALS,
+    "operative_tables": "Tables match the official text cell by cell; a cell that cannot be read is marked, not guessed",
+    "cross_references": "References to laws, cases and the judgment's own paragraphs match",
+    "identity_citation": "Case name, suit number, court and date match",
+}
+
+
+def materials_for(act: dict) -> dict:
+    """The checks an approver confirms, worded for the document's kind (the keys are always MATERIALS')."""
+    return JUDGMENT_MATERIALS if act.get("type") in {"judgment", "ruling"} else MATERIALS
 
 
 COLLECTION_ID = re.compile(r"[a-z]{2}-[a-z0-9-]{3,120}")

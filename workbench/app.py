@@ -59,7 +59,7 @@ WEB_PAGE_IMAGE = (
     b'<text x="620" y="130" font-family="sans-serif" font-size="34" text-anchor="middle" fill="#333">'
     b"No page image: this document was published as a web page.</text>"
     b'<text x="620" y="190" font-family="sans-serif" font-size="28" text-anchor="middle" fill="#555">'
-    b"Compare the text with the official source (its link is beside the document).</text></svg>"
+    b"Compare the text with the official source: its link is above.</text></svg>"
 )
 SECURITY_HEADERS = {
     "Content-Security-Policy": (
@@ -536,7 +536,7 @@ def create_app(
             "details_sha256": now["details_sha256"],
             "approved": now["approved"],
             "approvals": [recorded(a) for a in now["approvals"]],
-            "materials": content.MATERIALS,
+            "materials": content.materials_for(act),
         }
 
     @app.get("/api/documents/{act_id}/canonical")
