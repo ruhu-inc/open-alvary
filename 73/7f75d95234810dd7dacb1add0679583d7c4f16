@@ -1,0 +1,34 @@
+ingestion/nicn.py
+  s_d665c62e07d76f::t_79419637b1b4a7 987-988
+  s_d665c62e07d76f::t_8e978948c57ba4 985-986,989
+  s_d665c62e07d76f::t_f67a380bd73273 1790-1796
+  s_d665c62e07d76f::t_2cd1995d0f26f0 1457-1458
+  s_d665c62e07d76f::t_43aa368e6490c9 1815-1816
+  s_d665c62e07d76f::t_5fb9f5b7cb88b2 74-75
+  s_d665c62e07d76f::t_352c0d1340b3d2 76-83
+  s_3ead459dfea5fd::t_4eb2c9178822d1 301
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "737f75d95234810dd7dacb1add0679583d7c4f16",
+  "prompts": {},
+  "sessions": {
+    "s_3ead459dfea5fd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-a9b92e6a373298de1",
+        "model": "unknown"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    },
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
