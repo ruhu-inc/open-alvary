@@ -14,6 +14,8 @@ workbench/editor/test/editor.test.js
   s_02092ecabc9f45::t_9a42a890127f9c 674-680,727,731
   s_02092ecabc9f45::t_d97ad44e905f7a 686-690
   s_02092ecabc9f45::t_236c8d2a354fe5 725
+workbench/static/editor.js
+  s_02092ecabc9f45::t_3c841516821d87 1-6,8-10,12
 ---
 {
   "schema_version": "authorship/3.0.0",
