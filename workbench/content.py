@@ -928,6 +928,7 @@ READERS = {
     "mineru": "MinerU, an open-source reader run offline",
     "azure": "Azure AI Document Intelligence (layout)",
     "web-page": "the court's own web page of the judgment, its text exactly as published",
+    "docai-ocr": "Google Document AI OCR",
 }
 
 

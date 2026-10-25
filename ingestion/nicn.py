@@ -1922,7 +1922,8 @@ def new_manifest() -> dict:
     return {
         "collection": "ng",
         "jurisdiction": "ng",
-        "description": "Nigeria: judgments and rulings of the National Industrial Court, from its judgment portal",
+        "description": "Nigeria: official texts for review, from the official sources the owner approved on "
+        "2026-10-22 (the National Industrial Court's judgments and rulings first)",
         "rights_basis": RIGHTS_BASIS,
         "documents": [],
     }
@@ -2032,19 +2033,24 @@ class FolderCollection:
 class BucketCollection:
     """Review documents in the corpus bucket, under collections/ng/, in the layout of Rwanda's
     (ingestion.rwanda.BucketCollection): each stored file's documents under files/<sha256>/, an index of
-    them per file under issues/<sha256>.json (named as Rwanda's, a stored page being this source's
-    issue), and the manifest assembled from the indexes. No page is copied: a document names its
-    source object. A file whose index was written by this reader version is not prepared again."""
+    them per file under issues/<sha256>.json (named as Rwanda's, a stored file being this collection's
+    issue), and the manifest assembled from the indexes. No file is copied: a document names its source
+    object. A file whose index was written by this `pipeline` (the reader's version) with the readings
+    there are now is not prepared again; a PDF prepared before its OCR reading is (ingestion.ng_documents)."""
 
-    def __init__(self, store, prefix: str = f"collections/{COUNTRY}/"):
-        self.store, self.prefix = store, prefix
+    def __init__(self, store, prefix: str = f"collections/{COUNTRY}/", pipeline: str = READER):
+        self.store, self.prefix, self.pipeline = store, prefix, pipeline
 
-    def done(self, sha: str) -> bool:
+    def done(self, sha: str, readings: dict | None = None) -> bool:
         name = f"{self.prefix}issues/{sha}.json"
         if not self.store.exists(name):
             return False
         index = json.loads(self.store.get(name))
-        return isinstance(index, dict) and index.get("pipeline") == READER
+        return (
+            isinstance(index, dict)
+            and index.get("pipeline") == self.pipeline
+            and (index.get("readings") or {}) == (readings or {})
+        )
 
     def _put(self, name: str, data) -> None:
         self.store.put(name, json.dumps(data, ensure_ascii=False).encode(), "application/json", replace=True)
@@ -2058,14 +2064,25 @@ class BucketCollection:
         self._put(f"{folder}{document['id']}.document.json", details_)
         return entry
 
-    def finish(self, sha: str, entries: list[dict], skipped: str | None = None) -> None:
-        index = {"pipeline": READER, "source": SOURCE, "documents": entries}
+    def finish(
+        self,
+        sha: str,
+        entries: list[dict],
+        skipped: str | None = None,
+        source: str = SOURCE,
+        readings: dict | None = None,
+    ) -> None:
+        index = {"pipeline": self.pipeline, "source": source, "documents": entries}
+        if readings:
+            index["readings"] = readings
         if skipped:
             index["skipped"] = skipped
         self._put(f"{self.prefix}issues/{sha}.json", index)
 
     def save_manifest(self) -> None:
-        """The manifest from every index (any source of the collection), one document per id."""
+        """The manifest from every index (any source of the collection), one document per id: of one
+        judgment's records, the earliest; of one law found in two files (a Gazette issue and an agency's
+        copy), the first, the others named on it (other_sources)."""
         documents: dict[str, dict] = {}
         skipped = 0
         for name in self.store.list(f"{self.prefix}issues/"):
@@ -2073,8 +2090,14 @@ class BucketCollection:
             skipped += bool(index.get("skipped"))
             for document in index.get("documents", []):
                 held = documents.get(document["id"])
-                if held is None or (document.get("record_id") or 0) < (held.get("record_id") or 0):
+                if held is None:
                     documents[document["id"]] = document
+                elif document.get("record_id") and held.get("record_id"):
+                    if document["record_id"] < held["record_id"]:
+                        documents[document["id"]] = document
+                else:
+                    other = {k: document.get(k) for k in ("url", "source_object", "objects")}
+                    held.setdefault("other_sources", []).append(other)
         manifest = {
             **new_manifest(),
             "documents": sorted(documents.values(), key=lambda d: d["id"]),

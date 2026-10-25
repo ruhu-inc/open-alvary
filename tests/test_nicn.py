@@ -444,8 +444,8 @@ def test_the_cloud_job_prepares_nigerias_court_pages_in_its_share(monkeypatch):
     assert prepare_job.main() == 0
     issues = [n for n in store.objects if n.startswith("collections/ng/issues/")]
     assert len(issues) == 1  # the second of two tasks takes every second stored page
-    monkeypatch.setenv("PREPARE_SOURCES", "nicn-judgments,supreme-court")
-    with pytest.raises(SystemExit, match="no review-document reader yet for supreme-court"):
+    monkeypatch.setenv("PREPARE_SOURCES", "nicn-judgments,statehouse")
+    with pytest.raises(SystemExit, match="no review-document reader yet for statehouse"):
         prepare_job.main()
 
 

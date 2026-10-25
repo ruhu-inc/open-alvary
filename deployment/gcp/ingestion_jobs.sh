@@ -13,6 +13,9 @@
 #   deployment/gcp/ingestion_jobs.sh prepare 8       # prepare every stored file for review, in 8 tasks
 #   deployment/gcp/ingestion_jobs.sh prepare 8 ng    # Nigeria: the National Industrial Court's stored judgment
 #                                                    # pages into collections/ng/ (web pages: no OCR billed)
+#   deployment/gcp/ingestion_jobs.sh prepare 4 ng nass-acts,nln-repository,supreme-court
+#                                                    # Nigeria's PDFs once read (run layout, then ocr, with
+#                                                    # country ng); a file not yet read waits
 #   deployment/gcp/ingestion_jobs.sh fetch 4         # fetch the approved Nigerian work list, in 4 tasks
 #                                                    # (the list: python -m ingestion.nigeria fetch-worklist)
 #   deployment/gcp/ingestion_jobs.sh status
