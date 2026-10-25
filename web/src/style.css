@@ -1517,8 +1517,12 @@ main:focus {
   max-height: calc(100vh - 32px);
   overflow: auto;
 }
+/* The header's nav rules are for its row of links: the contents is a block, its title above
+   the list, its links plain text. */
 .doc-contents {
+  display: block;
   margin-bottom: 20px;
+  font-weight: 400;
 }
 .doc-contents ol {
   list-style: none;
@@ -1542,6 +1546,9 @@ main:focus {
 .doc-contents .doc-contents-part + .doc-contents-part {
   margin-top: 0;
 }
+.doc-contents a {
+  padding: 0;
+}
 .doc-contents a:hover {
   text-decoration: underline;
 }
@@ -1549,6 +1556,12 @@ main:focus {
   .doc-aside {
     position: static;
     max-height: none;
+  }
+}
+/* Phones show the aside after the whole text; the contents stays hidden there. */
+@media (max-width: 800px) {
+  .doc-contents {
+    display: none;
   }
 }
 @media (max-width: 480px) {
