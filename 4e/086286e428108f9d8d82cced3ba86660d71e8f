@@ -1,0 +1,29 @@
+web/src/style.css
+  s_8bed0cf344dd82::t_8a1b232b4080c4 1448-1451
+web/src/document.tsx
+  s_8bed0cf344dd82::t_1beb7fc28aa6df 377,384
+  s_8bed0cf344dd82::t_7e2ad6d73579ed 207
+  s_8bed0cf344dd82::t_64d8280672a4ae 392-393
+  s_8bed0cf344dd82::t_fd393e499ddabf 146-152
+  s_8bed0cf344dd82::t_35692547ded1dc 219
+workbench/static/public-preview/preview.css
+  s_8bed0cf344dd82::t_62692f02193455 1
+workbench/static/public-preview/preview.js
+  s_8bed0cf344dd82::t_62692f02193455 1,9,17,25,33,41,43-44,46,48-49,54,59,64,69,74,79,84,89,94,99,104,109,114,119,124,129,134,139
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4e086286e428108f9d8d82cced3ba86660d71e8f",
+  "prompts": {},
+  "sessions": {
+    "s_8bed0cf344dd82": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "28bddae8-a8fa-41ed-8c61-7b4ca17c5439",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
