@@ -1265,7 +1265,8 @@ def read(raw: bytes) -> Judgment:
 
 
 def _incomplete(judgment: Judgment) -> None:
-    """The text stops mid-sentence, or the copied PDF viewer counted more pages than the page holds."""
+    """The text stops mid-sentence (high), or the copied PDF viewer counted more pages than the page
+    holds text of (high with it, medium alone: a page of the PDF may hold no text, a signature)."""
     texts = [u for u in judgment.body if u.rows is None and u.text]
     if not texts:
         return
@@ -1276,16 +1277,17 @@ def _incomplete(judgment: Judgment) -> None:
             f"the PDF viewer copied into the page counted {judgment.viewer_pages} pages; "
             f"the page holds the text of {judgment.copied_pages}"
         )
-    if (
+    stops = (
         len(last.text) >= 60
         and not TERMINAL.search(last.text.rstrip())
         and not CLOSING.search(last.text[-120:])
-    ):
+    )
+    if stops:
         reasons.append("its text stops mid-sentence")
     if reasons:
         last.flags.append(
             {
-                "severity": "high",
+                "severity": "high" if stops else "medium",
                 "kind": "text_incomplete",
                 "primary": "The portal may hold only part of this judgment: " + "; ".join(reasons),
                 "others": {"Last words": " ".join(last.text.split()[-12:])},
