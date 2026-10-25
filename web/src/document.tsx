@@ -143,6 +143,13 @@ function split(block: Extract<DocumentBlock, { text: string }>) {
 
 type Entry = { id: string; label: string; heading: boolean };
 
+// A heading as printed: its number, if it has one ("Article One:"), then its words.
+function headingWords(block: Extract<DocumentBlock, { text: string }>) {
+  return [block.marker?.trim(), (block.text ?? "").trim()]
+    .filter(Boolean)
+    .join(" ");
+}
+
 // The document's blocks laid out with stable anchors, and its contents: Parts and the titled
 // sections under them. A heading with no titled section after it (as in an arrangement of
 // sections) is left out of the contents. "#section-4" belongs to section 4 itself, not to its
@@ -197,7 +204,7 @@ function layout(pages: DocumentPageContent[]) {
           section: null,
           titled: false,
         };
-      if (block.kind === "heading" && !(block.text ?? "").trim())
+      if (block.kind === "heading" && !headingWords(block))
         // An emptied heading has nothing to show or list, and never displaces the Part before it.
         return {
           key,
@@ -209,7 +216,7 @@ function layout(pages: DocumentPageContent[]) {
         };
       if (block.kind === "heading") {
         const id = anchor("part-" + key);
-        pendingHeading = { id, label: block.text ?? "", heading: true };
+        pendingHeading = { id, label: headingWords(block), heading: true };
         return { key, block, id, lead: null, section: null, titled: false };
       }
       const parts = split(block);
@@ -367,14 +374,14 @@ export function DocumentText({
                 </div>
               );
             const align = block.align ? " doc-align-" + block.align : "";
-            if (block.kind === "heading" && !(block.text ?? "").trim())
-              return null;
+            if (block.kind === "heading" && !headingWords(block)) return null;
             if (block.kind === "heading") {
               // Set by its rank as printed; a heading with no rank as rank 3.
               const rank =
                 block.rank && block.rank >= 1 && block.rank <= 6
                   ? " doc-rank-" + block.rank
                   : "";
+              const number = block.marker?.trim();
               return (
                 <h2
                   key={item.key}
@@ -382,6 +389,8 @@ export function DocumentText({
                   tabIndex={-1}
                   className={"doc-heading" + rank + align}
                 >
+                  {number ? <span className="doc-num">{number}</span> : null}
+                  {number && (block.text ?? "").trim() ? " " : null}
                   <Formatted text={block.text ?? ""} marks={block.marks} />
                 </h2>
               );
