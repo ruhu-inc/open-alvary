@@ -1,0 +1,19 @@
+ingestion/nicn.py
+  s_d665c62e07d76f::t_85e81675ef195e 1268-1269,1280,1284-1285,1290
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3e6a6c0cab290025dd3e5c83f2ef5a27acc0a387",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
