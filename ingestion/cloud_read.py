@@ -98,12 +98,16 @@ def summary(store, country: str) -> dict:
     }
 
 
-def worklist(store, country: str, approval: dict) -> dict:
-    """Every surveyed file's pages, largest first, for the readers, with the budget's approval."""
-    files = []
+def worklist(store, country: str, approval: dict, skip: dict[str, dict] | None = None) -> dict:
+    """Every surveyed file's pages, largest first, for the readers, with the budget's approval. A file
+    in `skip` (by sha256: another copy of a document read instead, with the copy read and the reason)
+    is left out and listed as not read, so one text is read once."""
+    files, not_read = [], []
     for name in store.list(f"work/{country}/survey/"):
         record = json.loads(store.get(name))
-        if record.get("pages"):
+        if record.get("pages") and record["sha256"] in (skip or {}):
+            not_read.append({"sha256": record["sha256"], "pages": record["pages"], **skip[record["sha256"]]})
+        elif record.get("pages"):
             files.append(
                 {
                     "sha256": record["sha256"],
@@ -117,6 +121,7 @@ def worklist(store, country: str, approval: dict) -> dict:
         "approval": approval,
         "pages": sum(len(f["pages"]) for f in files),
         "files": files,
+        "not_read": sorted(not_read, key=lambda f: f["sha256"]),
     }
 
 
@@ -238,6 +243,9 @@ def main(argv=None) -> int:
     parser.add_argument("--approved-by")
     parser.add_argument("--max-pages", type=int)
     parser.add_argument("--basis", help="where and when the budget was approved")
+    parser.add_argument(
+        "--skip", type=Path, help="JSON: copies not to read, by sha256, each with the copy read"
+    )
     args = parser.parse_args(argv)
     store = corpus_store.open_store()
     if args.command == "summary":
@@ -246,13 +254,19 @@ def main(argv=None) -> int:
     if not (args.approved_by and args.max_pages and args.basis):
         parser.error("a work list needs --approved-by, --max-pages and --basis")
     approval = {"approved_by": args.approved_by, "max_pages": args.max_pages, "basis": args.basis}
-    work = worklist(store, args.country, approval)
+    work = worklist(store, args.country, approval, json.loads(args.skip.read_text()) if args.skip else None)
     if work["pages"] > args.max_pages:
         parser.error(f"{work['pages']} pages exceed the approved {args.max_pages}")
     store.put(worklist_name(args.country), json.dumps(work).encode(), "application/json", replace=True)
     print(
         json.dumps(
-            {"files": len(work["files"]), "pages": work["pages"], "object": worklist_name(args.country)}
+            {
+                "files": len(work["files"]),
+                "pages": work["pages"],
+                "not_read": len(work["not_read"]),
+                "not_read_pages": sum(f["pages"] for f in work["not_read"]),
+                "object": worklist_name(args.country),
+            }
         )
     )
     return 0
