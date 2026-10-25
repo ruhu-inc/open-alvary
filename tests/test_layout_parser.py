@@ -166,6 +166,21 @@ def test_page_chunks_respect_online_limit():
     assert [len(PdfReader(BytesIO(raw)).pages) for _, raw in chunks] == [15, 15, 1]
 
 
+def test_page_chunks_halve_a_chunk_over_the_byte_limit():
+    writer = PdfWriter()
+    for _ in range(15):
+        writer.add_blank_page(width=72, height=72)
+    buffer = BytesIO()
+    writer.write(buffer)
+    four_pages = len(lp.page_chunks(buffer.getvalue(), size=4)[0][1])
+    chunks = lp.page_chunks(buffer.getvalue(), max_bytes=four_pages)
+    assert [len(PdfReader(BytesIO(raw)).pages) for _, raw in chunks] == [3, 4, 4, 4]
+    assert [first for first, _ in chunks] == [1, 4, 8, 12]
+    assert all(len(raw) <= four_pages for _, raw in chunks)
+    single = lp.page_chunks(buffer.getvalue(), size=2, max_bytes=1)  # a page over the limit is still sent
+    assert [first for first, _ in single] == list(range(1, 16))
+
+
 def test_config_requires_environment_and_validates(monkeypatch, tmp_path):
     monkeypatch.setattr("ingestion.settings.ENV_FILE", tmp_path / "absent.env")
     for key in ("ALVARY_DOCAI_PROJECT", "ALVARY_DOCAI_LOCATION", "ALVARY_DOCAI_PROCESSOR_ID"):

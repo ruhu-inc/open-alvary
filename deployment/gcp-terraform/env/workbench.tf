@@ -22,7 +22,7 @@ locals {
       ALVARY_REVIEW_BASE_URL      = "https://${local.workbench_host}"
       ALVARY_REVIEW_ALLOWED_HOSTS = local.workbench_host
       ALVARY_REVIEW_STAGING       = "/data/collection"
-      ALVARY_REVIEW_COLLECTIONS   = "gs://${local.corpus_bucket}/collections/rw/"
+      ALVARY_REVIEW_COLLECTIONS   = "gs://${local.corpus_bucket}/collections/rw/:gs://${local.corpus_bucket}/collections/ng/"
       ALVARY_REVIEW_CACHE         = "/tmp/review-cache"
       ALVARY_REVIEW_CACHE_MB      = "512" # /tmp is memory on Cloud Run: a quarter of the instance's 2 GiB
     },
