@@ -94,7 +94,9 @@ class CorpusStore:
         for wait in (*self.RETRY_WAITS, None):
             try:
                 response = self.session.request(method, url, **kwargs)
-                if response.status_code < 500 or wait is None:
+                # 429: more than one write a second to one object (tasks finishing together all
+                # write the manifest), or the bucket's own rate; Cloud Storage asks for a retry.
+                if (response.status_code < 500 and response.status_code != 429) or wait is None:
                     return response
                 reason = f"server error {response.status_code}"
             except (
