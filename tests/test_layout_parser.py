@@ -181,6 +181,39 @@ def test_page_chunks_halve_a_chunk_over_the_byte_limit():
     assert [first for first, _ in single] == list(range(1, 16))
 
 
+def test_a_chunk_of_late_pages_carries_only_the_pictures_its_pages_draw():
+    from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, NameObject, NumberObject
+
+    writer = PdfWriter()
+    drawn = {}
+    for n in range(6):  # each page's resources hold every earlier page's picture, as some producers write
+        form = DecodedStreamObject()
+        form.set_data(b"0 0 m %" + bytes([65 + n]) * 50_000)
+        form.update(
+            {
+                NameObject("/Type"): NameObject("/XObject"),
+                NameObject("/Subtype"): NameObject("/Form"),
+                NameObject("/BBox"): ArrayObject([NumberObject(0)] * 4),
+                NameObject("/Resources"): DictionaryObject(),
+            }
+        )
+        drawn[f"/Fm{n}"] = writer._add_object(form)
+        page = writer.add_blank_page(width=72, height=72)
+        page[NameObject("/Resources")] = DictionaryObject(
+            {NameObject("/XObject"): DictionaryObject({NameObject(k): v for k, v in drawn.items()})}
+        )
+        content = DecodedStreamObject()
+        content.set_data(f"q /Fm{n} Do Q".encode())
+        page[NameObject("/Contents")] = writer._add_object(content)
+    buffer = BytesIO()
+    writer.write(buffer)
+    chunks = lp.page_chunks(buffer.getvalue(), size=3, max_bytes=200_000)
+    assert [first for first, _ in chunks] == [1, 4]
+    late = PdfReader(BytesIO(chunks[1][1]))
+    assert [list(p["/Resources"]["/XObject"]) for p in late.pages] == [["/Fm3"], ["/Fm4"], ["/Fm5"]]
+    assert len(chunks[1][1]) < 200_000  # three pictures, not all six
+
+
 def test_config_requires_environment_and_validates(monkeypatch, tmp_path):
     monkeypatch.setattr("ingestion.settings.ENV_FILE", tmp_path / "absent.env")
     for key in ("ALVARY_DOCAI_PROJECT", "ALVARY_DOCAI_LOCATION", "ALVARY_DOCAI_PROCESSOR_ID"):
