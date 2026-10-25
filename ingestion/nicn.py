@@ -71,66 +71,16 @@ UNIT_CHARACTERS = 6000  # a unit longer than this is cut at a sentence end (the 
 
 # --- the page's text, block by block --------------------------------------------------------------
 
-SPACE = re.compile(r"[\s   -     　]+")
-INVISIBLE = re.compile(r"[­​‌‍⁠﻿]")  # soft hyphens, zero-width marks
-SKIPPED = {
-    "script",
-    "style",
-    "noscript",
-    "input",
-    "button",
-    "select",
-    "textarea",
-    "iframe",
-    "object",
-    "embed",
-    "svg",
-    "canvas",
-    "head",
-    "title",
-    "meta",
-    "link",
-    "map",
-}
-BLOCK_TAGS = {
-    "p",
-    "div",
-    "li",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "blockquote",
-    "pre",
-    "center",
-    "address",
-    "dd",
-    "dt",
-    "dl",
-    "section",
-    "article",
-    "header",
-    "footer",
-    "main",
-    "aside",
-    "nav",
-    "form",
-    "fieldset",
-    "figure",
-    "figcaption",
-    "hr",
-    "table",
-    "ol",
-    "ul",
-    "tr",
-    "td",
-    "th",
-    "tbody",
-    "thead",
-    "tfoot",
-}
+SPACE = re.compile(r"[\s\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+")
+INVISIBLE = re.compile(r"[\u00ad\u200b\u200c\u200d\u2060\ufeff]")  # soft hyphens, zero-width marks
+# Elements with no words of the judgment, and the elements that set their words apart as a block.
+SKIPPED = set(
+    "script style noscript input button select textarea iframe object embed svg canvas head title meta link map".split()
+)
+BLOCK_TAGS = set(
+    "p div li h1 h2 h3 h4 h5 h6 blockquote pre center address dd dt dl section article header footer main aside "
+    "nav form fieldset figure figcaption hr table ol ul tr td th tbody thead tfoot".split()
+)
 MARK_TAGS = {
     "b": "bold",
     "strong": "bold",
@@ -176,9 +126,7 @@ class Block:
     line: bool = False  # one printed line (a PDF viewer's copy, plain text lines, a <br>)
     top: float | None = None  # a PDF viewer line's place on its page
     rows: list | None = None  # a table: rows of {"text", "row_span", "col_span"}
-    struck: bool = False
     ordinal: int = 0  # its place among the page's blocks
-    last_line: str = ""  # of lines joined into this block, the last one
 
 
 def _length(value: str) -> float:
@@ -222,8 +170,6 @@ def _marks_of(tag: Tag, active: dict) -> dict:
     decoration = style.get("text-decoration", "") + style.get("text-decoration-line", "")
     if "underline" in decoration:
         marks["underline"] = True
-    if tag.name in ("s", "strike", "del") or "line-through" in decoration:
-        marks["struck"] = True
     vertical = style.get("vertical-align", "")
     if vertical in ("super", "sub"):
         marks["superscript" if vertical == "super" else "subscript"] = True
@@ -237,7 +183,6 @@ class Words:
     def __init__(self):
         self.text = ""
         self.ranges: list[tuple[int, int, str]] = []
-        self.struck = False
 
     def add(self, raw: str, marks: dict) -> None:
         piece = SPACE.sub(" ", INVISIBLE.sub("", raw))
@@ -255,8 +200,6 @@ class Words:
             for kind in ("bold", "italic", "underline", "superscript", "subscript"):
                 if marks.get(kind):
                     self.ranges.append((core_start, core_end, kind))
-            if marks.get("struck"):
-                self.struck = True
 
     def empty(self) -> bool:
         return not self.text.strip()
@@ -355,9 +298,7 @@ class Page:
         if CONVERTER.fullmatch(text):
             self.furniture.append(text)  # a converter's own line ("Created with WordToHTML.net trial.")
             return
-        self.blocks.append(
-            Block(text=text, marks=marks, struck=words.struck, ordinal=len(self.blocks), **{**base, **extra})
-        )
+        self.blocks.append(Block(text=text, marks=marks, ordinal=len(self.blocks), **{**base, **extra}))
 
     def _walk(self, node: Tag, marks: dict, context: dict, root: bool = False) -> None:
         """The blocks of a block element: its own words between its block children, and theirs. `context`
@@ -1041,7 +982,11 @@ def split_long(units: list[Unit]) -> list[Unit]:
 # --- what the page itself gets wrong: flagged for the reviewer ---------------------------------------
 
 NAIRA = re.compile(r"(?:(?<=\s)|(?<=\()|^)\?(?=\d)")
-MOJIBAKE = re.compile("[ÂÃâ][\u0080-¿ŒœŠšŸŽžƒˆ˜–—‘-„†-•…‰‹›€™]{1,2}")
+# Text encoded twice: UTF-8's bytes read as Windows-1252 ("â€™" for "’").
+MOJIBAKE = re.compile(
+    "[\u00c2\u00c3\u00e2][\u0080-\u00bf\u0152\u0153\u0160\u0161\u0178\u017d\u017e\u0192\u02c6\u02dc"
+    "\u2013\u2014\u2018-\u201e\u2020-\u2022\u2026\u2030\u2039\u203a\u20ac\u2122]{1,2}"
+)
 MASKED = re.compile(r"(?<![\w*])\*{2,}(?![\w*])")
 
 
@@ -1509,7 +1454,8 @@ def _date(text: str) -> str | None:
     )
     text = re.sub(r"\bday\s+of\s+|\bof\s+(?=[A-Za-z]{3,}\b)", "", text, flags=re.I)
     found = re.search(
-        r"\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,}\.?\s*,?\s*(?:19|20)\d\d|[A-Za-z]{3,}\.?\s+\d{1,2}(?:st|nd|rd|th)?\s*,?\s*(?:19|20)\d\d"
+        r"\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,}\.?\s*,?\s*(?:19|20)\d\d"
+        r"|[A-Za-z]{3,}\.?\s+\d{1,2}(?:st|nd|rd|th)?\s*,?\s*(?:19|20)\d\d"
         r"|\b\d{1,2}/\d{1,2}/(?:19|20)\d\d\b|\b(?:19|20)\d\d-\d\d-\d\d\b",
         text,
         re.I,
@@ -1841,11 +1787,13 @@ def details(
             if not sides or sides[-1][-1]["role"] != row["role"]:
                 sides.append([])
             sides[-1].append(row)
-        full = " v. ".join(
-            " and ".join(r["name"] for r in group)
-            + f" ({group[0]['role'].replace('_', ' ').capitalize()}{'s' if len(group) > 1 and group[0]['role'] != 'other' else ''})"
-            for group in sides
-        )
+
+        def side_of(group: list[dict]) -> str:
+            role = group[0]["role"].replace("_", " ").capitalize()
+            plural = "s" if len(group) > 1 and group[0]["role"] != "other" else ""
+            return " and ".join(r["name"] for r in group) + f" ({role}{plural})"
+
+        full = " v. ".join(side_of(group) for group in sides)
         given("identity.full_title", full[:3900], words, side)
     if lines:
         evidence["profile.representation"] = {
@@ -1864,7 +1812,8 @@ def details(
         )
 
     # Where and when it was published and fetched; the form of this text.
-    fetched = f"Fetched {provenance.get('retrieved_at') or 'on an unrecorded date'} from {url}; SHA-256 {provenance.get('sha256')}"
+    when = provenance.get("retrieved_at") or "on an unrecorded date"
+    fetched = f"Fetched {when} from {url}; SHA-256 {provenance.get('sha256')}"
     given("publication.kind", "official_website", f"The court's judgment portal: {url}")
     given("publication.name", PUBLICATION, f"The court's judgment portal: {url}")
     given(
