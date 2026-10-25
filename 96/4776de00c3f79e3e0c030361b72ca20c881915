@@ -1,0 +1,28 @@
+ingestion/nicn.py
+  s_d665c62e07d76f::t_4e6acbb44d5125 1532-1553,1557
+  s_d665c62e07d76f::t_069411929a25be 352-354
+  s_d665c62e07d76f::t_ab12bea6cd0815 615
+  s_d665c62e07d76f::t_386e91cdb8309c 582,1595
+  s_d665c62e07d76f::t_00b4a911e974f5 1502,1504,1508
+  s_d665c62e07d76f::t_668383565fd9f6 1505-1507
+  s_d665c62e07d76f::t_a609163709c2b3 613-614
+  s_d665c62e07d76f::t_01a9b43541c720 1491
+  s_d665c62e07d76f::t_13d4229c8ab723 841
+  s_d665c62e07d76f::t_d239d9c039b3aa 1787
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "964776de00c3f79e3e0c030361b72ca20c881915",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
