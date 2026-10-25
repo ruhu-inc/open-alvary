@@ -122,15 +122,30 @@ def paragraph(text: str, marks: list | None = None, offset: int = 0, tag: str = 
 
 
 def table(unit: dict) -> ET.Element:
-    """The table with its caption; each cell's words in a <p>, formatted as in the review."""
+    """The table with its caption; each cell's words in a <p>, formatted as in the review. A merged
+    cell is written once with rowspan and colspan, as printed; the positions it covers are left out."""
     element = ET.Element(q("table"))
     if unit.get("caption"):
         element.append(paragraph(unit["caption"], unit.get("caption_marks"), tag="caption"))
     cell_marks = unit.get("cell_marks") or {}
+    extent = {(r, c): (rows, columns) for r, c, rows, columns in unit.get("spans") or []}
+    covered = {
+        (r + dr, c + dc)
+        for (r, c), (rows, columns) in extent.items()
+        for dr in range(rows)
+        for dc in range(columns)
+        if dr or dc
+    }
     for index, row in enumerate(unit["rows"]):
         tr = ET.SubElement(element, q("tr"))
         for column, cell in enumerate(row):
-            ET.SubElement(tr, q("th" if index < unit.get("header_rows", 0) else "td")).append(
+            if (index, column) in covered:
+                continue
+            rows, columns = extent.get((index, column), (1, 1))
+            attributes = {"rowspan": str(rows)} if rows > 1 else {}
+            if columns > 1:
+                attributes["colspan"] = str(columns)
+            ET.SubElement(tr, q("th" if index < unit.get("header_rows", 0) else "td"), attributes).append(
                 paragraph(cell, cell_marks.get(f"{index},{column}"))
             )
     return element
