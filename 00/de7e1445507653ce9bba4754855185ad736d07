@@ -1,0 +1,43 @@
+deployment/gcp/ingestion_jobs.sh
+  s_d665c62e07d76f::t_35d97a702972ca 16-18
+ingestion/nicn.py
+  s_d665c62e07d76f::t_ca793f75d03458 2036-2039,2041-2042,2044,2049-2053
+  s_d665c62e07d76f::t_3f26b1e91418df 1925-1926
+  s_d665c62e07d76f::t_94b25f3b11eb4a 2067-2077,2083-2085,2093,2095-2100
+ingestion/ng_documents.py
+  s_d665c62e07d76f::t_b34d66d9afd623 30-32
+  s_d665c62e07d76f::t_d4d641c933803c 269-278,284-288,295,316-362,369-377,383-389
+  s_d665c62e07d76f::t_0a5b75302a38e8 66-68,143-145,148-150,215-217,229-234,238-240,247-249,279-283,363-368,378-382,425-429
+  s_d665c62e07d76f::t_c8d7a2eedd2910 289-294
+  s_d665c62e07d76f::t_0d79990ebe759a 390-424,430-468
+  s_d665c62e07d76f::t_288d10a85a43e1 36
+  s_d665c62e07d76f::t_e91f578377144c 1-29,33-35,37-65,69-142,146-147,151-173,176-189,194-214,218-228,235-237,241-246,250-268,296-315
+  s_d665c62e07d76f::t_3437b02ea895fd 174-175,190-193
+ingestion/prepare_job.py
+  s_d665c62e07d76f::t_18076da44614f0 11-15
+  s_d665c62e07d76f::t_7df27814c1806f 46-50,53,55
+  s_d665c62e07d76f::t_bd788cddc70588 65-79
+tests/test_nicn.py
+  s_d665c62e07d76f::t_d401c8c6cbddc3 447-448
+tests/test_ng_documents.py
+  s_d665c62e07d76f::t_0a5b75302a38e8 19-25,70-81,133-135,149-152,155-158,193-194,262-265
+  s_d665c62e07d76f::t_dfd04f6edbbaf6 1-18,26-69,82-132,136-148,153-154,159-192,195-261
+workbench/content.py
+  s_d665c62e07d76f::t_74f62a816313a7 931
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "00de7e1445507653ce9bba4754855185ad736d07",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
