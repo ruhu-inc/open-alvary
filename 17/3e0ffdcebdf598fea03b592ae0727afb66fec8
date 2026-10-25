@@ -1,0 +1,27 @@
+workbench/static/app.js
+  s_d665c62e07d76f::t_6ecf33dfad8032 28
+ingestion/nicn.py
+  s_d665c62e07d76f::t_701c3181afb0db 1035-1037
+  s_d665c62e07d76f::t_6746eef65292c5 1056-1062
+  s_d665c62e07d76f::t_07d39462254bdb 109-112,179-180,197-198,995,1026-1028,1030-1034,1038-1049
+  s_d665c62e07d76f::t_0e31f095c45517 1183-1184,1187,1193
+  s_d665c62e07d76f::t_6ecf33dfad8032 33-35,69
+tests/test_nicn.py
+  s_d665c62e07d76f::t_9075d7ac5bbcbd 121-144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "173e0ffdcebdf598fea03b592ae0727afb66fec8",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
