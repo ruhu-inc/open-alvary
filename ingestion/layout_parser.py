@@ -21,6 +21,7 @@ from io import BytesIO
 from pypdf import PdfReader, PdfWriter
 
 ONLINE_PAGE_LIMIT = 15  # synchronous Layout Parser requests accept at most 15 pages
+ONLINE_BYTE_LIMIT = 40 * 1024 * 1024  # and a document of at most 40 MiB
 # Running heads and folios; newer processor versions call them "header" and "footer".
 FURNITURE = {"page_header", "page_footer", "header", "footer"}
 # Section and paragraph markers the parser strips from ordered lists: 91.  12A.  (a)  (iv)  (2)
@@ -75,17 +76,27 @@ class DocAIConfig:
         )
 
 
-def page_chunks(raw: bytes, size: int = ONLINE_PAGE_LIMIT) -> list[tuple[int, bytes]]:
-    """Split a PDF into consecutive chunks of at most `size` pages: (first page number, bytes)."""
+def page_chunks(
+    raw: bytes, size: int = ONLINE_PAGE_LIMIT, max_bytes: int = ONLINE_BYTE_LIMIT
+) -> list[tuple[int, bytes]]:
+    """Split a PDF into consecutive chunks of at most `size` pages: (first page number, bytes). A
+    chunk over `max_bytes` (large page pictures) is halved until it fits or is a single page."""
     reader = PdfReader(BytesIO(raw))
-    chunks = []
-    for start in range(0, len(reader.pages), size):
+
+    def cut(start: int, count: int) -> list[tuple[int, bytes]]:
         writer = PdfWriter()
-        for page in reader.pages[start : start + size]:
+        for page in reader.pages[start : start + count]:
             writer.add_page(page)
         buffer = BytesIO()
         writer.write(buffer)
-        chunks.append((start + 1, buffer.getvalue()))
+        if buffer.tell() > max_bytes and count > 1:
+            half = count // 2
+            return cut(start, half) + cut(start + half, count - half)
+        return [(start + 1, buffer.getvalue())]
+
+    chunks = []
+    for start in range(0, len(reader.pages), size):
+        chunks.extend(cut(start, min(size, len(reader.pages) - start)))
     return chunks
 
 
