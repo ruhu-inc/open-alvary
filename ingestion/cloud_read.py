@@ -47,10 +47,13 @@ def survey_file(pdf: Path) -> dict:
     from pypdf import PdfReader
 
     pages = len(PdfReader(str(pdf)).pages)
-    layer = gazette_layout.text_layer(pdf)
+    found = {"pages": pages, "scanned_pages": sorted(ruled_tables.image_pages(pdf))}
+    try:
+        layer = gazette_layout.text_layer(pdf)
+    except Exception as error:  # noqa: BLE001 - its pages still count, and are read; only its layer is not
+        return {**found, "text_pages": [], "text_layer_error": f"{type(error).__name__}: {str(error)[:200]}"}
     return {
-        "pages": pages,
-        "scanned_pages": sorted(ruled_tables.image_pages(pdf)),
+        **found,
         "text_pages": [n for n, page in enumerate(layer, 1) if len(page["words"]) >= TEXT_PAGE_WORDS],
     }
 
@@ -60,8 +63,10 @@ def survey(store, country: str, names: list[str], log=print) -> dict:
     measured = failed = 0
     for name in names:
         sha = name.rsplit("/", 1)[-1][: -len(".pdf")]
-        if store.exists(survey_name(country, sha)):
-            continue
+        if store.exists(survey_name(country, sha)) and "pages" in json.loads(
+            store.get(survey_name(country, sha))
+        ):
+            continue  # measured; a file that failed before is measured again
         try:
             with tempfile.TemporaryDirectory() as scratch:
                 pdf = Path(scratch) / "file.pdf"
