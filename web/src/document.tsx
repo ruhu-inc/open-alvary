@@ -15,6 +15,7 @@ import {
   titleOf,
   type DetailsStatus,
   type Provenance,
+  type Provision,
   type ReviewRecord,
   type Step,
   type View,
@@ -150,10 +151,37 @@ function headingWords(block: Extract<DocumentBlock, { text: string }>) {
     .join(" ");
 }
 
+// An article's number as printed, in any of the languages read so far ("Article One:", "Article
+// premier :", "Ingingo ya mbere:", "Article 2:", "Ingingo ya 3:"), as the number it links by.
+const ARTICLE =
+  /^(?:article|ingingo)\s*(?:ya\s*)?(\d+|one|first|premier|premi[eè]re|mbere)\b/i;
+
+function articleOf(block: Extract<DocumentBlock, { text: string }>) {
+  const match = ARTICLE.exec(block.marker?.trim() ?? "");
+  if (!match) return null;
+  return /^\d+$/.test(match[1]) ? String(Number(match[1])) : "1";
+}
+
+// Whether the document's provisions are numbered headings ("Article 2:" over "Taxes covered by
+// this Law"), as Rwandan laws print them, rather than sections titled by margin notes.
+function byHeadings(pages: DocumentPageContent[]) {
+  const blocks = pages.flatMap((page) => page.blocks);
+  return (
+    !blocks.some(
+      (b) => b.kind !== "table" && b.notes?.length && sectionOf(b),
+    ) && blocks.some((b) => b.kind === "heading" && b.marker?.trim())
+  );
+}
+
 // The document's blocks laid out with stable anchors, and its contents: Parts and the titled
 // sections under them. A heading with no titled section after it (as in an arrangement of
 // sections) is left out of the contents. "#section-4" belongs to section 4 itself, not to its
 // line in an arrangement of sections, so titled sections claim their anchors first.
+//
+// Where the provisions are numbered headings, the contents is every numbered heading ("#article-2"
+// where the number reads as an article's) and every unnumbered heading below the title's rank
+// (titles, chapters, sections), in reading order. A heading printed as a number alone is listed
+// by its number: the words read after it are its title in some laws, its first sentence in others.
 function sectionOf(block: DocumentBlock) {
   if (block.kind === "table" || block.kind === "heading") return null;
   const { lead } = split(block);
@@ -189,6 +217,7 @@ function layout(pages: DocumentPageContent[]) {
     used.add(id);
     return id;
   };
+  const articles = byHeadings(pages);
   const contents: Entry[] = [];
   let pendingHeading: Entry | null = null;
   const laid = pages.map((page) => ({
@@ -203,6 +232,7 @@ function layout(pages: DocumentPageContent[]) {
           lead: null,
           section: null,
           titled: false,
+          article: null,
         };
       if (block.kind === "heading" && !headingWords(block))
         // An emptied heading has nothing to show or list, and never displaces the Part before it.
@@ -213,11 +243,39 @@ function layout(pages: DocumentPageContent[]) {
           lead: null,
           section: null,
           titled: false,
+          article: null,
         };
+      if (block.kind === "heading" && articles && block.marker?.trim()) {
+        const article = articleOf(block);
+        const id = anchor(article ? "article-" + article : "part-" + key);
+        const label = (block.text ?? "").trim()
+          ? headingWords(block)
+          : block.marker.trim().replace(/\s*[:.]$/, "");
+        contents.push({ id, label, heading: false });
+        return {
+          key,
+          block,
+          id,
+          lead: null,
+          section: null,
+          titled: false,
+          article,
+        };
+      }
       if (block.kind === "heading") {
         const id = anchor("part-" + key);
-        pendingHeading = { id, label: headingWords(block), heading: true };
-        return { key, block, id, lead: null, section: null, titled: false };
+        const entry = { id, label: headingWords(block), heading: true };
+        if (!articles) pendingHeading = entry;
+        else if (block.rank !== 1) contents.push(entry);
+        return {
+          key,
+          block,
+          id,
+          lead: null,
+          section: null,
+          titled: false,
+          article: null,
+        };
       }
       const parts = split(block);
       const section = sectionOf(block);
@@ -235,7 +293,7 @@ function layout(pages: DocumentPageContent[]) {
           heading: false,
         });
       }
-      return { key, block, id, lead: parts, section, titled };
+      return { key, block, id, lead: parts, section, titled, article: null };
     }),
   }));
   return { laid, contents };
@@ -293,12 +351,12 @@ export function DocumentText({
   pages,
   lang,
   markUnchecked = false,
-  onSectionLink,
+  onProvisionLink,
 }: {
   pages: DocumentPageContent[];
   lang?: string;
   markUnchecked?: boolean;
-  onSectionLink?: (section: string, anchor: string) => void;
+  onProvisionLink?: (provision: Provision, anchor: string) => void;
 }) {
   const { laid } = layout(pages);
   return (
@@ -392,6 +450,22 @@ export function DocumentText({
                   {number ? <span className="doc-num">{number}</span> : null}
                   {number && (block.text ?? "").trim() ? " " : null}
                   <Formatted text={block.text ?? ""} marks={block.marks} />
+                  {onProvisionLink && item.article && item.id ? (
+                    <button
+                      type="button"
+                      className="doc-permalink"
+                      aria-label={`Copy a link to article ${item.article}`}
+                      title="Copy a link to this article"
+                      onClick={() =>
+                        onProvisionLink(
+                          { kind: "article", number: item.article! },
+                          item.id!,
+                        )
+                      }
+                    >
+                      <Link2 size={15} />
+                    </button>
+                  ) : null}
                 </h2>
               );
             }
@@ -406,15 +480,18 @@ export function DocumentText({
                   <h3 id={item.id ?? undefined} tabIndex={-1}>
                     <span className="doc-num">{item.section}</span>
                     {title}
-                    {onSectionLink && item.id ? (
+                    {onProvisionLink && item.id ? (
                       <button
                         type="button"
                         className="doc-permalink"
                         aria-label={`Copy a link to section ${item.section}`}
                         title="Copy a link to this section"
                         onClick={() =>
-                          onSectionLink(
-                            item.section!.replace(/\.$/, ""),
+                          onProvisionLink(
+                            {
+                              kind: "section",
+                              number: item.section!.replace(/\.$/, ""),
+                            },
                             item.id!,
                           )
                         }
@@ -519,7 +596,7 @@ export function DocumentPage({
   review: ReviewRecord;
   downloads?: DownloadLink[];
   approved?: boolean;
-  linkTo: (query?: string) => string; // this page's address, optionally at a section
+  linkTo: (query?: string) => string; // this page's address, optionally at a section or article
   markUnchecked?: boolean;
   versions?: LanguageVersion[]; // the law's other language versions, each its own page
   versionHref?: (id: string) => string;
@@ -571,18 +648,20 @@ export function DocumentPage({
             pageUrl={linkTo()}
             downloads={downloads}
             textRoot={textRoot}
+            provisions={byHeadings(pages) ? "article" : "section"}
           />
           <DocumentText
             pages={pages}
             lang={s.language}
             markUnchecked={markUnchecked}
-            onSectionLink={async (section, anchor) => {
-              const url = linkTo("section=" + encodeURIComponent(section));
+            onProvisionLink={async (provision, anchor) => {
+              const { kind, number } = provision;
+              const url = linkTo(kind + "=" + encodeURIComponent(number));
               const copied = await copyText(url);
               setNotice(
                 copied
-                  ? `Copied a link to section ${section} (${citationFor(view, s, section)})`
-                  : `Link to section ${section}: ${url}`,
+                  ? `Copied a link to ${kind} ${number} (${citationFor(view, s, provision)})`
+                  : `Link to ${kind} ${number}: ${url}`,
               );
               document.getElementById(anchor)?.focus({ preventScroll: true });
             }}

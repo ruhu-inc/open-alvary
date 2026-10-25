@@ -165,11 +165,13 @@ export function DocumentTools({
   pageUrl,
   downloads,
   textRoot,
+  provisions = "section",
 }: {
   citation: string;
   pageUrl: string;
   downloads: DownloadLink[];
   textRoot: () => Element | null;
+  provisions?: "section" | "article"; // what the document is divided into, each with a link button
 }) {
   const [open, setOpen] = useState<"" | "cite" | "download">("");
   const panel = useRef<HTMLDivElement>(null);
@@ -205,7 +207,8 @@ export function DocumentTools({
           <CopyRow label="Citation" value={citation} />
           <CopyRow label="Link" value={pageUrl} />
           <p className="doc-tool-note">
-            To cite or link one section, use the link button beside its title.
+            To cite or link one {provisions}, use the link button beside its{" "}
+            {provisions === "article" ? "heading" : "title"}.
           </p>
         </div>
       ) : null}

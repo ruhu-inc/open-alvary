@@ -1535,6 +1535,10 @@ main:focus {
   text-transform: uppercase;
   color: var(--primary);
 }
+/* A section of a chapter, listed straight after it, stays with it. */
+.doc-contents .doc-contents-part + .doc-contents-part {
+  margin-top: 0;
+}
 .doc-contents a:hover {
   text-decoration: underline;
 }
@@ -1800,6 +1804,7 @@ main:focus {
   opacity: 0;
 }
 .doc-section h3:hover .doc-permalink,
+.doc-heading:hover .doc-permalink,
 .doc-permalink:focus-visible {
   opacity: 1;
 }

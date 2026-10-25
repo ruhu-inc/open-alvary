@@ -609,10 +609,15 @@ export const titleOf = (view: View, source: Source) =>
 export const summaryOf = (view: View) => text(view, "text.summary.text");
 export const kindOf = (view: View) => humanise(view.kind);
 
-// The citation a reader copies, for the whole document or one section.
-export function citationFor(view: View, source: Source, section?: string) {
+// A provision a reader can link to and cite: a section ("s. 4") or an article ("art. 2").
+export type Provision = { kind: "section" | "article"; number: string };
+
+// The citation a reader copies, for the whole document or one provision.
+export function citationFor(view: View, source: Source, provision?: Provision) {
   const base = text(view, "identity.citation") || titleOf(view, source);
-  return section ? `${base}, s. ${section}` : base;
+  if (!provision) return base;
+  const abbreviation = provision.kind === "article" ? "art." : "s.";
+  return `${base}, ${abbreviation} ${provision.number}`;
 }
 
 // schema.org for search engines: what the public page will carry in its head.
