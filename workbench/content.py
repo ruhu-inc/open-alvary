@@ -37,8 +37,18 @@ JUDGMENT_MATERIALS = {
 }
 
 
+# A document whose text is held (words masked in the source): its details alone are approved.
+DETAILS_ONLY_MATERIALS = {
+    "identity_citation": "Case name, suit number, court and date match the official source",
+    "text_held": "The text is not approved: it stays held until a complete copy is obtained",
+}
+
+
 def materials_for(act: dict) -> dict:
-    """The checks an approver confirms, worded for the document's kind (the keys are always MATERIALS')."""
+    """The checks an approver confirms, worded for the document's kind (the keys are always MATERIALS',
+    but for a document whose text is held, approved on its details alone)."""
+    if act.get("text_held"):
+        return DETAILS_ONLY_MATERIALS
     return JUDGMENT_MATERIALS if act.get("type") in {"judgment", "ruling"} else MATERIALS
 
 

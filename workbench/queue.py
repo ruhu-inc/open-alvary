@@ -65,7 +65,10 @@ def task(document: dict, kind: str, priority: str, count: int, since, **values) 
 def page_tasks(
     document: dict, readiness: dict, latest: dict[int, dict], began: datetime | None
 ) -> list[dict]:
-    """One document's pages still to do (workbench.review.to_do), a task per kind and priority."""
+    """One document's pages still to do (workbench.review.to_do), a task per kind and priority; for one
+    whose text is held, its details to confirm."""
+    if readiness.get("text_held"):
+        return [] if readiness["details"]["confirmed"] else [task(document, "details", "full", 1, began)]
     high = {flag["page"] for flag in readiness["open_high_flags"]}
     groups: dict[tuple[str, str], list[int]] = {}
     for page, kind in sorted(to_do(readiness).items()):
@@ -94,6 +97,8 @@ def not_started(document: dict) -> dict:
     """A document nobody has opened, from its manifest entry alone (a corpus collection lists tens of
     thousands; their readings are not opened): its pages, and where it comes by importance; of two
     alike, first the one whose reading has high flags."""
+    if document.get("text_held"):  # its details only: its text is held
+        return task(document, "details", "full", 1, None, started=False, importance=importance(document))
     priority = "high" if (document.get("flag_counts") or {}).get("high") else "full"
     return task(
         document,

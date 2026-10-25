@@ -37,6 +37,7 @@ const KIND_LABEL = {
   other_court: "the portal posted another court's decision: check its details and whether it belongs here",
   editorial_matter: "a law report's editorial summaries are printed with the judgment: not the court's words",
   long_paragraph_split: "a paragraph too long for one unit was cut at a sentence end: the parts are one paragraph",
+  editorial_left_out: "a law report's summaries printed before the judgment were left out: not the court's words (kept beside the reading)",
 };
 const DECISION_LABEL = { keep: "kept as read", use_check: "used check reading", edited: "edited by hand", dismissed: "dismissed" };
 // What a page still needs (/api/documents/{id} pages[].todo); audit pages are "review" pages too.
@@ -338,7 +339,7 @@ async function dashboard() {
         el("div", { class: "doc-meta" }, el("span", { class: "type", text: TYPE_LABEL[d.type] || d.type.replace(/_/g, " ") }), d.year ? el("span", { text: String(d.year) }) : null, d.language ? el("span", { text: d.language.toUpperCase() }) : null, d.jurisdiction ? el("span", { text: d.jurisdiction.toUpperCase() }) : null),
         el("strong", { class: "doc-title", text: d.title }),
         meter(pct),
-        el("div", { class: "doc-foot" }, el("span", { class: "muted", text: `${d.checked} / ${d.pages} pages checked` }), pill(STATUS_CLASS[d.status] || "medium", d.status), d.open_high ? pill("high", `${d.open_high} high`) : null),
+        el("div", { class: "doc-foot" }, el("span", { class: "muted", text: d.text_held ? "Details only: text held" : `${d.checked} / ${d.pages} pages checked` }), pill(STATUS_CLASS[d.status] || "medium", d.status), d.open_high ? pill("high", `${d.open_high} high`) : null),
         el("div", { class: "muted small", text: d.last ? `Last activity: ${operatorName(d.last.actor)}, ${ago(d.last.at)}` : "No review activity yet" }));
     }) : [el("p", { class: "muted", text: "No documents match." })]));
     const last = Math.min(page.offset + page.documents.length, page.total);
@@ -408,10 +409,13 @@ async function actView(actId) {
     el("div", { class: "card" },
       el("h2", { text: act.title }),
       el("p", { class: "muted", text: readingDescription(data) }),
+      act.text_held ? el("div", { class: "notice warn" },
+        el("strong", { text: "Text held: review the details only. " }),
+        el("span", { text: `${act.text_held.note}. Its pages need no review, and its text will not be published.` })) : null,
       standingPanel(data.standing),
       approvalChecklist(actId, data, current, head),
       el("p", {},
-        nextTodo ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${nextTodo.page}` }, el("button", { class: "primary", text: `Continue reviewing at page ${nextTodo.page}` })) : null, " ",
+        nextTodo && !act.text_held ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${nextTodo.page}` }, el("button", { class: "primary", text: `Continue reviewing at page ${nextTodo.page}` })) : null, " ",
         el("a", { href: `#/doc/${encodeURIComponent(actId)}/read` }, el("button", { text: "Read the whole document" })), " ",
         act.versions ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/languages` }, el("button", { text: "Compare the language versions" })) : null, " ",
         previewLink(actId)),
@@ -477,6 +481,15 @@ function approvalChecklist(actId, data, current, head) {
   const toText = (label) => el("button", { class: "small", text: label, on: { click: () => document.getElementById("text-check")?.scrollIntoView({ block: "start" }) } });
   const toReview = ready.unchecked_pages, toResolve = ready.unresolved_flag_pages;
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  if (ready.text_held) { // approved on its details alone: no page waits for review
+    return el("ol", { class: "checklist", "aria-label": "Steps to approval" },
+      step(true, "Text held: its pages need no review, and its text will not be published"),
+      step(ready.details.confirmed, ready.details.confirmed ? "Details confirmed" : ready.details.status ? "Details not yet confirmed" : "Details not yet reviewed",
+        ready.details.confirmed ? null : el("a", { href: `#/doc/${encodeURIComponent(actId)}/details`, text: "review the details" })),
+      current ? step(true, "Details approved", null)
+        : head && head.decision === "approved" ? step(false, "Approval out of date: the details changed after they were approved", toApproval, "warn")
+        : step(false, ready.ready ? "Ready to approve the details" : "Approval of the details", ready.ready ? toApproval : el("span", { text: "after the details are confirmed" })));
+  }
   const steps = [
     ready.routed
       ? step(!toReview.length, toReview.length ? `${plural(toReview.length, "page", "pages")} to review against the image` : "Every page to review is checked",
@@ -1098,13 +1111,14 @@ function rowsEditor(columns, rows, onChange, { suggested = {}, pageLink = null, 
 // --- the work queue (CPR-06) ------------------------------------------------------------------------
 
 const TASK_PRIORITY = { high: ["high", "high flags"], full: ["medium", "review"], flags: ["warn", "flags"], proposal: ["role", "proposal"] };
-const TASK_KINDS = [["", "All work"], ["review", "Pages to review"], ["flags", "Flags to resolve"], ["events", "Legal events"], ["instructions", "Amendment instructions"], ["citations", "Citations"]];
+const TASK_KINDS = [["", "All work"], ["review", "Pages to review"], ["details", "Details only (text held)"], ["flags", "Flags to resolve"], ["events", "Legal events"], ["instructions", "Amendment instructions"], ["citations", "Citations"]];
 
 // One task in words, with a link to where it is done. Pages to review are listed alike whatever the
 // reason (an audit page is one of them: CPR-01).
 function taskLine(t) {
   const id = encodeURIComponent(t.id);
   const s = t.count === 1 ? "" : "s";
+  if (t.kind === "details") return el("a", { href: `#/doc/${id}/details`, text: "Details to confirm: the text is held" });
   if (!t.started && !t.pages) return el("a", { href: `#/doc/${id}`, text: `Not started: ${t.count} page${s}` });
   if (t.kind === "review" || t.kind === "flags") {
     const what = t.kind === "review" ? `${t.count} page${s} to review against the image` : `Flags to resolve on ${t.count} page${s}`;

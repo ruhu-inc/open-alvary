@@ -418,7 +418,7 @@ def test_the_bucket_collection_prepares_each_page_once_per_reader_version_and_as
     counts = nicn.prepare_items(
         items, sorted(items), nicn.bucket_fetch(store), collection, log=lambda m: None
     )
-    assert counts == {"prepared": 1, "skipped_done": 0, "empty": 1, "failed": 0}
+    assert counts == {"prepared": 1, "skipped_done": 0, "empty": 1, "held": 0, "text_held": 0, "failed": 0}
     sha = items["nicn-judgments:9001"]["sha256"]
     folder = f"collections/ng/files/{sha}/"
     doc_id = "ng-nicn-la-123-2020-2026-01-08"
@@ -444,6 +444,57 @@ def test_the_bucket_collection_prepares_each_page_once_per_reader_version_and_as
     assert entry["id"] == doc_id and entry["type"] == "judgment" and entry["media_type"] == "text/html"
     assert "suggested" not in entry and entry["page_count"] >= 1 and entry["flag_counts"]["medium"] >= 1
     assert "rights review" in manifest["rights_basis"]
+
+
+def test_a_partial_judgment_is_held_back_and_a_masked_one_is_reviewed_for_its_details_only():
+    store = MemoryStore()
+    items = {
+        "nicn-judgments:9002": stored(store, page("pdf-lines"), 9002, suit_no="NICN/ABJ/7/2014"),
+        "nicn-judgments:9003": stored(store, page("one-block"), 9003, suit_no="NICN/LA/9/2015"),
+    }
+    collection = nicn.BucketCollection(store)
+    counts = nicn.prepare_items(
+        items, sorted(items), nicn.bucket_fetch(store), collection, log=lambda m: None
+    )
+    assert (counts["prepared"], counts["held"], counts["text_held"]) == (1, 1, 1)
+    partial_sha = items["nicn-judgments:9002"]["sha256"]
+    assert not any(name.startswith(f"collections/ng/files/{partial_sha}/") for name in store.objects)
+    collection.save_manifest()
+    manifest = json.loads(store.objects["collections/ng/manifest.json"])
+    (held,) = manifest["held"]
+    assert (
+        held["record_id"] == 9002
+        and held["url"].endswith("id=9002")
+        and "stops mid-sentence" in held["reason"]
+    )
+    assert (
+        held["id"] not in {d["id"] for d in manifest["documents"]}
+        and "owner, 2026-10-25" in manifest["held_note"]
+    )
+    (masked,) = manifest["documents"]
+    assert masked["record_id"] == 9003 and masked["text_held"]["reason"] == "masked_words"
+    assert masked["text_held"]["note"].startswith("4 words masked")
+
+
+def test_a_law_reports_summaries_are_left_out_up_to_the_judgments_own_heading():
+    filler = "The appellant was employed by the respondent and was dismissed without notice. " * 3
+    summary = "<p>RATIO DECIDENDI</p><p>1. Employment - wrongful dismissal - remedy.</p><p>2. Notice.</p>"
+    raw = (
+        '<html><body><div class="light-background"><div class="col-12">'
+        "<p>IN THE COURT OF APPEAL</p><p>HOLDEN AT LAGOS</p>"
+        f"{summary}<p>LEAD JUDGMENT (Delivered by A. B. Judge, JCA)</p><p>{filler}</p><p>{filler}</p>"
+        "</div></div></body></html>"
+    ).encode()
+    judgment = nicn.read(raw)
+    assert judgment.editorial == [
+        "RATIO DECIDENDI",
+        "1. Employment - wrongful dismissal - remedy.",
+        "2. Notice.",
+    ]
+    assert not any("RATIO" in u.text or "wrongful dismissal - remedy" in u.text for u in judgment.units)
+    assert any(u.text.startswith("LEAD JUDGMENT") for u in judgment.units)
+    assert [f["kind"] for f in judgment.flags if f["kind"].startswith("editorial")] == ["editorial_left_out"]
+    assert judgment.court == "IN THE COURT OF APPEAL"  # filed under the court that decided it
 
 
 def test_the_cloud_job_prepares_nigerias_court_pages_in_its_share(monkeypatch):
@@ -559,6 +610,59 @@ def test_the_workbench_lists_and_opens_the_ng_collection(tmp_path, monkeypatch):
         json={"expected_revision": 0, "units": units, "status": "edited", "resolutions": {}},
     )
     assert page_one.status_code == 200, page_one.text
+
+
+def test_a_judgment_whose_text_is_held_waits_for_its_details_alone(tmp_path, monkeypatch):
+    """Words masked in the source: no page waits for review, the queue asks for the details, the
+    approval confirms the details alone, and publishing never takes the text."""
+    from fastapi.testclient import TestClient
+
+    from operations import publish
+    from workbench import content
+    from workbench.app import create_app
+    from workbench.store import Store, connect
+
+    folder = tmp_path / "ng"
+    collection = nicn.FolderCollection(folder)
+    sha = hashlib.sha256(page("one-block")).hexdigest()
+    items = {"nicn-judgments:9003": record(9003, sha=sha, suit="NICN/LA/9/2015", date="2016-02-01")}
+
+    def fetch(found):
+        return page("one-block"), {
+            "url": found["url"],
+            "retrieved_at": "2026-10-23T00:28:42Z",
+            "listed": found["listed"],
+        }
+
+    assert nicn.prepare_items(items, list(items), fetch, collection)["text_held"] == 1
+    collection.save_manifest()
+    monkeypatch.setenv("ALVARY_REVIEW_COLLECTIONS", str(folder))
+    first = tmp_path / "first"
+    first.mkdir()
+    store = Store(connect(f"sqlite:///{tmp_path / 'workbench.db'}"))
+    store.add_operator("reviewer@example.org", "Rev", {"reviewer"})
+    library = content.Library(first)
+    browser = TestClient(create_app(store, library, None, dev_login=True), base_url="http://127.0.0.1")
+    assert browser.post("/auth/dev", json={"email": "reviewer@example.org"}).status_code == 200
+    doc_id = "ng-nicn-la-9-2015-2016-02-01"
+    (row,) = [d for d in browser.get("/api/documents?limit=200").json()["documents"] if d["id"] == doc_id]
+    assert row["text_held"] is True and (row["pages"], row["open_high"]) == (0, 0)
+    shown = browser.get(f"/api/documents/{doc_id}").json()
+    ready = shown["readiness"]
+    assert ready["text_held"]["reason"] == "masked_words" and ready["unchecked_pages"] == []
+    assert ready["open_high_flags"] == [] and ready["ready"] is False  # its details are not confirmed yet
+    assert set(shown["materials"]) == set(content.DETAILS_ONLY_MATERIALS)
+    (task,) = [t for t in browser.get("/api/queue").json()["tasks"] if t["id"] == doc_id]
+    assert task["kind"] == "details"
+    # Publishing never takes a held text, even once its details are approved.
+    act = library.act(doc_id)
+
+    class Approved:
+        def state(self, act, text=False):
+            return {"head": {"decision": "approved"}, "text": None, "approved": True}
+
+    texts = publish.texts_from_workbench(Approved(), library, store, "ng")
+    assert texts.approved == [] and texts.skipped[act["id"]].startswith("its text is held: 4 words masked")
 
 
 def test_a_judgment_from_the_bucket_never_fetches_the_web_page_as_its_original(tmp_path, monkeypatch):

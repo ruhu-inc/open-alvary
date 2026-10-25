@@ -33,7 +33,7 @@ def test_pages_with_high_flags_come_first_and_each_task_says_how_long_it_has_wai
     assert (left["kind"], left["priority"], left["pages"]) == ("flags", "high", [1])
     save(reviewer, page=1, expected=1, resolutions={flag_id(): {"decision": "use_check", "reader": "mineru"}})
     assert tasks(reviewer) == {"total": 0, "offset": 0, "limit": 100, "counts": dict.fromkeys(
-        ("review", "flags", "events", "instructions", "citations"), 0), "tasks": []}  # fmt: skip
+        ("review", "details", "flags", "events", "instructions", "citations"), 0), "tasks": []}  # fmt: skip
 
 
 def test_proposals_awaiting_review_or_a_second_review_are_listed_after_pages(world):  # noqa: F811
@@ -50,7 +50,9 @@ def test_proposals_awaiting_review_or_a_second_review_are_listed_after_pages(wor
     body["instruction"] = instruction
     assert reviewer.post(f"/api/documents/{ACT}/instructions", json=body).status_code == 200
     found = tasks(reviewer)
-    assert found["counts"] == {"review": 2, "flags": 0, "events": 1, "instructions": 1, "citations": 0}
+    assert found["counts"] == {
+        "review": 2, "details": 0, "flags": 0, "events": 1, "instructions": 1, "citations": 0
+    }  # fmt: skip
     assert [t["kind"] for t in found["tasks"]] == ["review", "review", "events", "instructions"]
     events, instructions = found["tasks"][2:]
     assert (events["priority"], events["step"], events["count"]) == ("proposal", "review", 2)
