@@ -1,0 +1,24 @@
+tests/test_layout_parser.py
+  s_d665c62e07d76f::t_b392aba50d354d 175-182
+  s_d665c62e07d76f::t_0c60cdc57bcbda 169-174,183
+deployment/gcp-terraform/env/workbench.tf
+  s_d665c62e07d76f::t_74e6c715864ea8 25
+ingestion/layout_parser.py
+  s_d665c62e07d76f::t_a402369ec899cc 24,79-83,85-86,88,92-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "4a230e39b82d8d7655a03ed503ae646652b221f4",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
