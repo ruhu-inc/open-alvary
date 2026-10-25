@@ -11,6 +11,11 @@
 #   deployment/gcp/ingestion_jobs.sh run survey 8 1 ng  # another collection (ingestion.cloud_read): survey, then
 #                                                    # layout and ocr from its reading work list
 #   deployment/gcp/ingestion_jobs.sh prepare 8       # prepare every stored file for review, in 8 tasks
+#   deployment/gcp/ingestion_jobs.sh prepare 8 ng    # Nigeria: the National Industrial Court's stored judgment
+#                                                    # pages into collections/ng/ (web pages: no OCR billed)
+#   deployment/gcp/ingestion_jobs.sh prepare 4 ng nass-acts,nln-repository,supreme-court
+#                                                    # Nigeria's PDFs once read (run layout, then ocr, with
+#                                                    # country ng); a file not yet read waits
 #   deployment/gcp/ingestion_jobs.sh fetch 4         # fetch the approved Nigerian work list, in 4 tasks
 #                                                    # (the list: python -m ingestion.nigeria fetch-worklist)
 #   deployment/gcp/ingestion_jobs.sh status
@@ -146,9 +151,11 @@ run() {
     --update-env-vars="SCAN_READER=$reader,SCAN_FILES_AT_ONCE=$files,SCAN_COUNTRY=$country"
 }
 
-prepare() {
-  local tasks="${1:-8}"
-  "${GC[@]}" run jobs execute "$PREPARE_JOB" --region="$REGION" --tasks="$tasks" --async
+prepare() {  # prepare [tasks] [country] [sources]: rw by default; ng prepares the National Industrial Court
+  local tasks="${1:-8}" country="${2:-rw}" sources="${3:-}"
+  local env="PREPARE_COUNTRY=$country"
+  if [[ "$country" == ng ]]; then env+=",PREPARE_SOURCES=${sources:-nicn-judgments}"; fi
+  "${GC[@]}" run jobs execute "$PREPARE_JOB" --region="$REGION" --tasks="$tasks" --async --update-env-vars="$env"
 }
 
 fetch() {  # more tasks than the work list has hosts only leaves some idle: each host is one task's
@@ -179,5 +186,5 @@ case "${1:-plan}" in
   prepare) shift; prepare "$@" ;;
   fetch) shift; fetch "$@" ;;
   status) status ;;
-  *) echo "usage: $0 plan|setup|deploy|run <ocr|layout> [tasks] [files-at-once]|prepare [tasks]|fetch [tasks] [country]|status" >&2; exit 2 ;;
+  *) echo "usage: $0 plan|setup|deploy|run <ocr|layout> [tasks] [files-at-once]|prepare [tasks] [rw|ng] [sources]|fetch [tasks] [country]|status" >&2; exit 2 ;;
 esac

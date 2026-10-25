@@ -7,6 +7,13 @@ documents to collections/<country>/ in the bucket, with an index per file. A fil
 by this version of the pipeline is skipped, so an execution that stops is simply run again; each
 task assembles the manifest from the indexes when it ends, the last to end seeing them all.
 
+PREPARE_COUNTRY chooses the collection: rw (the default) prepares Rwanda's Gazette and RLRC files;
+ng prepares Nigeria's stored files of the sources named in PREPARE_SOURCES into collections/ng/: by
+default the National Industrial Court's judgment pages (nicn-judgments, read by ingestion.nicn: web
+pages, no OCR); a PDF source's files (nass-acts, nln-repository, supreme-court …) once the scan-reader
+job has read them with the Layout Parser, checked by the OCR (ingestion.ng_documents), the rest
+waiting.
+
 The sync ledger and the catalogues come from the bucket (state/<country>/, written by mirror_state
 on the operator's machine). The PDF's text layer is read by pdftotext inside this container, which
 is the sandbox (ALVARY_TEXT_LAYER=direct); nothing here holds a key.
@@ -25,9 +32,9 @@ def share(items: list[str], task: int, tasks: int) -> list[str]:
     return [item for k, item in enumerate(items) if k % tasks == task]
 
 
-def fetch_state(store, staging: Path) -> None:
+def fetch_state(store, staging: Path, country: str = rwanda.COUNTRY) -> None:
     """The ledger and catalogues the pipeline reads, from the bucket into this task's folder."""
-    prefix = f"state/{rwanda.COUNTRY}/"
+    prefix = f"state/{country}/"
     for name in [f"{prefix}sync-ledger.json", *store.list(f"{prefix}catalogue/")]:
         if name.endswith(".json"):
             target = staging / name[len(prefix) :]
@@ -35,11 +42,51 @@ def fetch_state(store, staging: Path) -> None:
             target.write_bytes(store.get(name))
 
 
+def prepare_nigeria(store, task: int, tasks: int) -> dict:
+    """Nigeria's stored files of the chosen sources, each task its share, into collections/ng/: the
+    National Industrial Court's pages by their reader (ingestion.nicn); the PDF sources' files whose
+    Layout Parser reading has arrived (ingestion.ng_documents), the rest waiting. A source with no
+    reader here is refused."""
+    from ingestion import ng_documents, nicn
+
+    sources = [s for s in os.environ.get("PREPARE_SOURCES", nicn.SOURCE).split(",") if s]
+    unready = sorted(set(sources) - {nicn.SOURCE} - ng_documents.PDF_SOURCES)
+    if unready:
+        raise SystemExit(f"no review-document reader yet for {', '.join(unready)}")
+    items = json.loads(store.get("state/ng/sync-ledger.json"))["items"]
+    stored = sorted(i for i, r in items.items() if r.get("stored") and r.get("source") in sources)
+    mine = share(stored, task, tasks)
+    if os.environ.get("PREPARE_LIMIT"):  # a trial: the first few of this task's share
+        mine = mine[: int(os.environ["PREPARE_LIMIT"])]
+    print(
+        f"task {task + 1} of {tasks}: {len(mine)} of {len(stored)} stored files ({', '.join(sources)})",
+        flush=True,
+    )
+
+    def log(message: str) -> None:
+        print(message, flush=True)
+
+    pages = [i for i in mine if items[i]["source"] == nicn.SOURCE]
+    pdfs = [i for i in mine if items[i]["source"] != nicn.SOURCE]
+    counts: dict = {"files": len(mine)}
+    if pages:
+        collection = nicn.BucketCollection(store)
+        counts[nicn.SOURCE] = nicn.prepare_items(items, pages, nicn.bucket_fetch(store), collection, log=log)
+    if pdfs:
+        collection = nicn.BucketCollection(store, pipeline=ng_documents.PIPELINE)
+        counts["pdf"] = ng_documents.prepare_pdfs(store, items, pdfs, collection, log=log)
+    nicn.BucketCollection(store).save_manifest()
+    return counts
+
+
 def main() -> int:
     os.environ.setdefault("ALVARY_TEXT_LAYER", "direct")
     task = int(os.environ.get("CLOUD_RUN_TASK_INDEX", "0"))
     tasks = int(os.environ.get("CLOUD_RUN_TASK_COUNT", "1"))
     store = corpus_store.open_store()
+    if os.environ.get("PREPARE_COUNTRY", rwanda.COUNTRY) == "ng":
+        print(json.dumps(prepare_nigeria(store, task, tasks)), flush=True)
+        return 0
     with tempfile.TemporaryDirectory() as scratch:
         rwanda.STAGING = Path(scratch)
         fetch_state(store, rwanda.STAGING)
