@@ -81,6 +81,11 @@ where no level was set. Locators follow the Akoma Ntoso eId convention of the wo
 (sec_23__subsec_1__para_a): parts and chapters do not qualify the sections inside them, so a
 section keeps its locator if parts are renumbered. Spans are UTF-8 byte offsets over the canonical
 text, half-open, covering a node's own leaves and its descendants (DAT-06).
+
+A table with a cell the reviewer marked illegible or unsupported is incomplete, and its node carries
+the marks (TXP-02 workbench-units-2). An incomplete operative or schedule table withholds verified
+text (OA-text-1, REV-02), so a mark is an error, except in a table inside a notice or the contents,
+which is not operative text: there it is a warning.
 """
 
 import hashlib
@@ -88,7 +93,7 @@ import re
 import unicodedata
 from dataclasses import dataclass, field
 
-from workbench.serialize import Issue, Leaf, Serialized, clean
+from workbench.serialize import Issue, Leaf, Serialized, clean, place
 from workbench.store import canonical_json
 
 NG_FEDERAL_ACT = "ng-federal-act-1"
@@ -153,6 +158,7 @@ RULES = {
     **{("rw", kind): RW_LAW for kind in RW_INSTRUMENTS},
 }
 NO_RULES = "no_structure_rules"
+NOT_OPERATIVE = ("notice", "contents")  # a marked cell in a table inside one does not stop approval
 
 # --- Nigerian federal Acts ---------------------------------------------------------------------------
 
@@ -288,6 +294,7 @@ class Node:
     opens_at: int | None = None  # a byte offset where the node starts without holding the leaf there
     target: str | None = None  # contents entries: the locator the entry points to
     author: str = ""  # opinions: the judge who wrote it, when printed
+    cell_states: dict[str, str] = field(default_factory=dict)  # tables: {"row,column": state}
     order: int = 0
     start: int = 0
     end: int = 0
@@ -330,6 +337,7 @@ class Structure:
                 "page_end": n.page_end,
                 **({"target": n.target} if n.kind == "contents_entry" else {}),
                 **({"author": n.author} if n.kind == "opinion" else {}),
+                **({"cell_states": n.cell_states} if n.cell_states else {}),
             }
             for n in self.nodes
         ]
@@ -365,7 +373,9 @@ def for_document(document: dict, serialized: Serialized, pages: list[dict]) -> S
         f"No structure rules for {jurisdiction or '(no jurisdiction)'}/{kind or '(no type)'}: "
         "this layout is not supported yet"
     )
-    return Structure(root, [Issue("error", NO_RULES, None, None, message)], None)
+    issues = [Issue("error", NO_RULES, None, None, message)]
+    mark_cells(root, serialized.leaves, issues)
+    return Structure(root, issues, None)
 
 
 def derive(
@@ -386,7 +396,35 @@ def derive(
         raise ValueError(f"No structure rules {rules_id!r}")
     builder.build()
     finish(builder.root, serialized.leaves)
+    mark_cells(builder.root, serialized.leaves, builder.issues)
     return Structure(builder.root, builder.issues, rules_id)
+
+
+def mark_cells(root: Node, leaves: list[Leaf], issues: list[Issue]) -> None:
+    """The cells marked in each table onto the table's node, and what the marks mean for approval: an
+    error, unless the table is inside a notice or the contents. A table whose rules give it no node
+    of its own (rw-law-1) cannot carry its marks, so they are an error wherever it is."""
+    holders = {index: node for node in root.walk() for index in node.leaves}
+    for index, leaf in enumerate(leaves):
+        if not leaf.cell_states:
+            continue
+        cells = sorted(leaf.cell_states.items(), key=lambda item: place(item[0]))
+        (row, column), more = place(cells[0][0]), len(cells) - 1
+        where = f"Row {row + 1}, column {column + 1} is marked {cells[0][1]}"
+        if more:
+            where += f" (and {more} more cell{'s' if more > 1 else ''})"
+        node = holders.get(index)
+        if node is not None and node.kind == "table":
+            node.cell_states = dict(cells)
+            above, operative = node.parent, True
+            while above is not None and operative:
+                operative, above = above.kind not in NOT_OPERATIVE, above.parent
+            if not operative:
+                message = f"{where}, in a table that is not operative text: the text can be approved with it"
+                issues.append(Issue("warning", "cell_state", leaf.page, leaf.unit, message))
+                continue
+        message = f"{where}: an operative or schedule table must be complete before the text is approved"
+        issues.append(Issue("error", "incomplete_table", leaf.page, leaf.unit, message))
 
 
 # --- shared machinery --------------------------------------------------------------------------------

@@ -282,6 +282,9 @@ NodeKind = Literal[
 ]
 
 
+CellKey = Annotated[str, StringConstraints(pattern=r"^(0|[1-9][0-9]*),(0|[1-9][0-9]*)$")]
+
+
 class StructureNode(Model):
     id: ID
     source_id: ID
@@ -302,6 +305,9 @@ class StructureNode(Model):
     page_end: int | None = Field(default=None, ge=1)
     span_hash: Hash | None = None
     target_node_id: ID | None = None
+    # A table's cells the reviewer marked, keyed "row,column" in its grid (TXP-02 workbench-units-2):
+    # each is an empty field in the text, never placeholder words (OA-text-1).
+    cell_states: dict[CellKey, Literal["illegible", "unsupported"]] | None = None
 
     @model_validator(mode="after")
     def ordered(self):
@@ -309,6 +315,8 @@ class StructureNode(Model):
             raise ValueError("end_byte precedes start_byte")
         if self.page and self.page_end and self.page_end < self.page:
             raise ValueError("page_end precedes page")
+        if self.cell_states and self.kind != "table":
+            raise ValueError("only a table has cell states")
         return self
 
 

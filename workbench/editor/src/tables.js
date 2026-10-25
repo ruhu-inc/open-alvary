@@ -2,18 +2,19 @@
 // merged and split, rows and columns added and removed, header rows marked. What is stored
 // (workbench.content): a full grid of text, one string per position, merges listed as
 // [row, column, rows, columns] with the positions they cover left empty, how many leading rows are
-// headers, and the formatting of the caption and of each cell ({"row,column": ranges}), as a unit's
-// marks are kept. In the editor a merged cell spans its rows and columns and the covered positions
-// are not there, so no words, and no formatting, can hide in them.
+// headers, the formatting of the caption and of each cell ({"row,column": ranges}), as a unit's
+// marks are kept, and the cells marked illegible or unsupported ({"row,column": state}). In the
+// editor a merged cell spans its rows and columns and the covered positions are not there, so no
+// words, no formatting and no mark can hide in them.
 
 import { EditorState, Plugin, Selection, TextSelection } from "prosemirror-state";
 import {
   TableMap, CellSelection, isInTable, selectedRect, goToNextCell,
   addRowBefore as addRowBeforeCells, addRowAfter as addRowAfterCells, deleteRow as deleteRowCells,
   addColumnBefore, addColumnAfter, deleteColumn as deleteColumnCells,
-  mergeCells as mergeCellsKeepingText, splitCell,
+  mergeCells as mergeCellsKeepingText, splitCell, selectionCell,
 } from "prosemirror-tables";
-import { schema, formatted, wordsAndMarks } from "./schema.js";
+import { schema, formatted, wordsAndMarks, cellState } from "./schema.js";
 
 const N = schema.nodes;
 
@@ -42,7 +43,8 @@ export function tableNode(unit, notes = []) {
     if (covered.has(`${r},${c}`)) return [];
     const [rowspan, colspan] = extent.get(`${r},${c}`) || [1, 1];
     const marks = unit.cell_marks && unit.cell_marks[`${r},${c}`];
-    return [(r < header ? N.table_header : N.table_cell).create({ rowspan, colspan }, formatted(value, marks))];
+    const state = cellState(unit.cell_states && unit.cell_states[`${r},${c}`]);
+    return [(r < header ? N.table_header : N.table_cell).create({ rowspan, colspan, state }, formatted(value, marks))];
   })));
   const caption = N.table_caption.create(null, formatted(unit.caption || "", unit.caption_marks));
   return N.table_unit.create({ header_rows: header }, [caption, N.table.create(null, tableRows)]);
@@ -54,22 +56,25 @@ export function tableUnit(block) {
   const map = TableMap.get(table);
   const rows = Array.from({ length: map.height }, () => Array(map.width).fill(""));
   const spans = [];
-  const cellMarks = {};
+  const cellMarks = {}, cellStates = {};
   const seen = new Set();
   // Row by row, so a cell is met first at its top-left corner and the merges come in grid order.
   for (const pos of map.map) {
     if (seen.has(pos)) continue;
     seen.add(pos);
     const { top, left, bottom, right } = map.findCell(pos);
-    const { words, ranges } = wordsAndMarks(table.nodeAt(pos));
+    const cell = table.nodeAt(pos);
+    const { words, ranges } = wordsAndMarks(cell);
     rows[top][left] = words;
     if (ranges.length) cellMarks[`${top},${left}`] = ranges;
+    if (cellState(cell.attrs.state)) cellStates[`${top},${left}`] = cell.attrs.state;
     if (bottom - top > 1 || right - left > 1) spans.push([top, left, bottom - top, right - left]);
   }
   const unit = { kind: "table", caption: caption.words, header_rows: Math.min(block.attrs.header_rows, rows.length), rows };
   if (caption.ranges.length) unit.caption_marks = caption.ranges;
   if (spans.length) unit.spans = spans;
   if (Object.keys(cellMarks).length) unit.cell_marks = cellMarks;
+  if (Object.keys(cellStates).length) unit.cell_states = cellStates;
   return unit;
 }
 
@@ -209,8 +214,47 @@ export function mergeCells(state, dispatch) {
   mergeCellsKeepingText(emptied, (result) => { merged = result; });
   merged.steps.forEach((step) => tr.step(step));
   tr.setSelection(Selection.fromJSON(tr.doc, merged.selection.toJSON()));
+  // The merged cell keeps a mark only when every cell merged had that same one (TXP-02).
+  const states = new Set(cells.map((pos) => rect.table.nodeAt(pos).attrs.state));
+  const kept = states.size === 1 ? [...states][0] : null;
+  const at = tr.selection.$anchorCell.pos, cell = tr.doc.nodeAt(at);
+  if (cell.attrs.state !== kept) tr.setNodeMarkup(at, null, { ...cell.attrs, state: kept });
   dispatch(tr);
   return true;
+}
+
+// --- cells that cannot be transcribed ----------------------------------------------------------------
+
+function selectedCells(state) {
+  if (state.selection instanceof CellSelection) {
+    const cells = [];
+    state.selection.forEachCell((node, pos) => cells.push({ node, pos }));
+    return cells;
+  }
+  if (!isInTable(state)) return [];
+  const $cell = selectionCell(state);
+  return [{ node: $cell.nodeAfter, pos: $cell.pos }];
+}
+
+// Mark the selected cells (or the one holding the cursor) illegible or unsupported, or clear them
+// (null). Words left in a marked cell stay, and stop approval until one or the other goes.
+export function markCells(value) {
+  return (state, dispatch) => {
+    const changed = selectedCells(state).filter(({ node }) => node.attrs.state !== value);
+    if (!changed.length) return false;
+    if (dispatch) {
+      const tr = state.tr;
+      changed.forEach(({ node, pos }) => tr.setNodeMarkup(pos, null, { ...node.attrs, state: value }));
+      dispatch(tr);
+    }
+    return true;
+  };
+}
+
+// The mark the selected cells share, or null when they have none or different ones.
+export function cellStateAt(state) {
+  const states = new Set(selectedCells(state).map(({ node }) => node.attrs.state));
+  return states.size === 1 ? [...states][0] : null;
 }
 
 // Insert a table after the block holding the cursor: two columns, a header row and a row below it.

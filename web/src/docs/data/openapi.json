@@ -10790,6 +10790,27 @@
             ],
             "title": "Target Node Id",
             "description": "For a contents entry, the part of the text it lists, when found."
+          },
+          "cell_states": {
+            "anyOf": [
+              {
+                "patternProperties": {
+                  "^(0|[1-9][0-9]*),(0|[1-9][0-9]*)$": {
+                    "type": "string",
+                    "enum": [
+                      "illegible",
+                      "unsupported"
+                    ]
+                  }
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cell States",
+            "description": "For a table, the cells that could not be transcribed, keyed `row,column` from 0: `illegible` (printed words nobody can read on the page) or `unsupported` (not text, such as a figure or a seal). Each is an empty field in the text; only a table outside the operative text, in a notice or the contents, is published with one."
           }
         },
         "additionalProperties": false,

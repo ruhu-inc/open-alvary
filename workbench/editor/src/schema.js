@@ -49,25 +49,43 @@ function span(value) {
   return Math.min(Math.max(parseInt(value, 10) || 1, 1), MAX_SPAN);
 }
 
+// A cell the reviewer could not transcribe: printed words nobody can read on the page image
+// (illegible), or something that is not text, such as a figure, map, seal or signature
+// (unsupported). It is an empty field in the published text (TXP-02, workbench-units-2).
+export const CELL_STATES = ["illegible", "unsupported"];
+export const CELL_STATE_LABELS = { illegible: "Illegible", unsupported: "Unsupported" };
+const CELL_STATE_TITLES = {
+  illegible: "Marked illegible: the words cannot be read on the page",
+  unsupported: "Marked unsupported: what is printed here is not text",
+};
+export const cellState = (value) => (CELL_STATES.includes(value) ? value : null);
+
 // A merged cell, as printed, keeps its extent in rows and columns; the cells it covers are not
 // there, as in an HTML table. Cells hold words, with bold, italic and the rest (footnote markers,
-// m², 10⁶), on one line.
+// m², 10⁶), on one line, or a mark saying why they hold none.
 function cellSpec(tag, role) {
   return {
     tableRole: role,
     content: "text*",
     marks: "_",
     isolating: true,
-    attrs: { colspan: { default: 1 }, rowspan: { default: 1 }, colwidth: { default: null } },
-    parseDOM: [{ tag, getAttrs: (dom) => ({ colspan: span(dom.getAttribute("colspan")), rowspan: span(dom.getAttribute("rowspan")) }) }],
+    attrs: { colspan: { default: 1 }, rowspan: { default: 1 }, colwidth: { default: null }, state: { default: null } },
+    parseDOM: [{ tag, getAttrs: (dom) => ({ colspan: span(dom.getAttribute("colspan")), rowspan: span(dom.getAttribute("rowspan")), state: cellState(dom.dataset.state) }) }],
     toDOM(node) {
-      const { colspan, rowspan } = node.attrs;
+      const { colspan, rowspan, state } = node.attrs;
       const attrs = {};
+      const titles = [];
       if (colspan > 1) attrs.colspan = colspan;
       if (rowspan > 1) attrs.rowspan = rowspan;
       if (colspan > 1 || rowspan > 1) {
-        attrs.title = `Merged cell as printed: ${[rowspan > 1 ? `${rowspan} rows` : "", colspan > 1 ? `${colspan} columns` : ""].filter(Boolean).join(", ")}`;
+        titles.push(`Merged cell as printed: ${[rowspan > 1 ? `${rowspan} rows` : "", colspan > 1 ? `${colspan} columns` : ""].filter(Boolean).join(", ")}`);
       }
+      if (cellState(state)) {
+        attrs["data-state"] = state;
+        attrs["data-label"] = CELL_STATE_LABELS[state];
+        titles.push(CELL_STATE_TITLES[state]);
+      }
+      if (titles.length) attrs.title = titles.join(". ");
       return [tag, attrs, 0];
     },
   };

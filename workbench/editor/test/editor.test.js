@@ -6,9 +6,10 @@ import assert from "node:assert/strict";
 import { Fragment, Slice } from "prosemirror-model";
 import { EditorState, TextSelection, NodeSelection } from "prosemirror-state";
 import { baseKeymap } from "prosemirror-commands";
-import { CellSelection, handlePaste as tablePaste } from "prosemirror-tables";
+import { CellSelection, TableMap, handlePaste as tablePaste } from "prosemirror-tables";
 import { schema, toDoc, fromDoc, commands, keyCommands, plugins, pasteUnits, pastedWords, unitNode, unitsFromText } from "../src/editor.js";
 import { formatted } from "../src/schema.js";
+import { cellStateAt } from "../src/tables.js";
 import { findKey } from "../src/find.js";
 
 const N = schema.nodes;
@@ -192,7 +193,7 @@ test("a merged table keeps its grid, merges and header rows", () => {
   const table = doc.child(0).child(1);
   assert.equal(table.child(0).childCount, 2); // the covered position is not a cell
   assert.equal(table.child(0).child(0).type, N.table_header);
-  assert.deepEqual({ ...table.child(0).child(0).attrs }, { colspan: 2, rowspan: 1, colwidth: null });
+  assert.deepEqual({ ...table.child(0).child(0).attrs }, { colspan: 2, rowspan: 1, colwidth: null, state: null });
   assert.equal(table.child(2).child(0).type, N.table_cell);
   assert.deepEqual(fromDoc(doc), [TAX_TABLE]);
 });
@@ -401,6 +402,93 @@ test("deleting a header row lowers the header count; deleting every row deletes 
   state = state.apply(state.tr.setSelection(CellSelection.create(state.doc, first, last)));
   state = apply(state, commands.deleteRow).state;
   assert.deepEqual(fromDoc(state.doc), [PAGE[4]]);
+});
+
+// Cells the reviewer could not transcribe (TXP-02, workbench-units-2): a fine nobody can read, merged
+// across two columns, and a seal where the next one would be.
+const MARKED = {
+  kind: "table",
+  caption: "",
+  header_rows: 1,
+  rows: [["Offence", "Fine", "Seal"], ["Hacking", "", ""], ["Fraud", "", ""]],
+  spans: [[1, 1, 1, 2]],
+  cell_states: { "1,1": "illegible", "2,1": "illegible", "2,2": "unsupported" },
+};
+
+// The cell at a row and column of the first table, as an editor position (for CellSelection).
+function cellPos(doc, row, column) {
+  let found = null;
+  doc.descendants((node, pos) => {
+    if (found !== null || node.type !== N.table) return found === null;
+    const map = TableMap.get(node);
+    found = pos + 1 + map.map[row * map.width + column];
+    return false;
+  });
+  return found;
+}
+
+function cells(state, from, to = from) {
+  return state.apply(state.tr.setSelection(CellSelection.create(state.doc, cellPos(state.doc, ...from), cellPos(state.doc, ...to))));
+}
+
+test("marked cells come back from the document unchanged, and are drawn hatched with their label", () => {
+  assert.deepEqual(fromDoc(toDoc([MARKED])), [MARKED]);
+  const merged = toDoc([MARKED]).child(0).child(1).child(1).child(1);
+  assert.deepEqual(N.table_cell.spec.toDOM(merged), ["td", {
+    colspan: 2, "data-state": "illegible", "data-label": "Illegible",
+    title: "Merged cell as printed: 2 columns. Marked illegible: the words cannot be read on the page",
+  }, 0]);
+  const plain = toDoc([MARKED]).child(0).child(1).child(1).child(0);
+  assert.deepEqual(N.table_cell.spec.toDOM(plain), ["td", {}, 0]);
+  // A mark on a covered position, or not a mark, is not kept.
+  const covered = { kind: "table", caption: "", header_rows: 0, rows: [["abc", ""]], spans: [[0, 0, 1, 2]], cell_states: { "0,1": "illegible" } };
+  const { cell_states: _, ...unmarked } = covered;
+  assert.deepEqual(fromDoc(toDoc([covered])), [unmarked]);
+  assert.deepEqual(fromDoc(toDoc([{ ...unmarked, cell_states: { "0,0": "blank" } }])), [unmarked]);
+});
+
+test("cells are marked illegible or unsupported, at the cursor or across a selection, and cleared", () => {
+  let state = stateOf([MARKED]);
+  state = select(state, cellPos(state.doc, 2, 0) + 1); // "Fraud"
+  assert.equal(cellStateAt(state), null);
+  state = apply(state, commands.markIllegible).state;
+  assert.equal(fromDoc(state.doc)[0].cell_states["2,0"], "illegible");
+  assert.equal(cellStateAt(state), "illegible");
+  assert.equal(commands.markIllegible(state), false); // already so
+  assert.deepEqual(fromDoc(state.doc)[0].rows, MARKED.rows); // its words stay; approval says so
+  state = cells(state, [2, 1], [2, 2]);
+  assert.equal(cellStateAt(state), null); // illegible and unsupported
+  state = apply(state, commands.markUnsupported).state;
+  assert.deepEqual(fromDoc(state.doc)[0].cell_states, { "1,1": "illegible", "2,0": "illegible", "2,1": "unsupported", "2,2": "unsupported" });
+  state = apply(state, commands.clearCellState).state;
+  assert.deepEqual(fromDoc(state.doc)[0].cell_states, { "1,1": "illegible", "2,0": "illegible" });
+  assert.equal(commands.clearCellState(state), false);
+});
+
+test("merging keeps a mark only when every cell merged has it; splitting gives each cell the mark", () => {
+  let state = stateOf([{ kind: "table", caption: "", header_rows: 0, rows: [["a", ""], ["", ""]], cell_states: { "1,0": "illegible", "1,1": "illegible" } }]);
+  state = apply(cells(state, [1, 0], [1, 1]), commands.mergeCells).state;
+  assert.deepEqual(fromDoc(state.doc)[0].cell_states, { "1,0": "illegible" });
+  assert.deepEqual(fromDoc(state.doc)[0].spans, [[1, 0, 1, 2]]);
+  state = apply(state, commands.splitCell).state;
+  assert.deepEqual(fromDoc(state.doc)[0].cell_states, { "1,0": "illegible", "1,1": "illegible" });
+  state = apply(cells(state, [0, 1], [1, 1]), commands.mergeCells).state; // unmarked with marked
+  assert.equal(fromDoc(state.doc)[0].cell_states["0,1"], undefined);
+  state = apply(cells(stateOf([MARKED]), [2, 1], [2, 2]), commands.mergeCells).state; // two different marks
+  assert.deepEqual(fromDoc(state.doc)[0].cell_states, { "1,1": "illegible" });
+});
+
+test("added rows and columns are unmarked; a deleted cell's mark goes with it", () => {
+  let state = stateOf([MARKED]);
+  state = select(state, cellPos(state.doc, 2, 2) + 1);
+  state = apply(state, commands.addRowAfter).state;
+  state = apply(state, commands.addColumnAfter).state;
+  const table = fromDoc(state.doc)[0];
+  assert.deepEqual(table.rows.map((row) => row.length), [4, 4, 4, 4]);
+  assert.deepEqual(table.cell_states, MARKED.cell_states);
+  state = select(state, cellPos(state.doc, 2, 0) + 1);
+  state = apply(state, commands.deleteRow).state;
+  assert.deepEqual(fromDoc(state.doc)[0].cell_states, { "1,1": "illegible" });
 });
 
 test("merging cells keeps every cell's words; splitting gives the positions back", () => {

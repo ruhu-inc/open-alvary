@@ -806,6 +806,7 @@ def version_from(item: ApprovedText, source: Source, prior: SourceVersion | None
             heading=node.heading or None,
             span_hash=hashlib.sha256(raw[node.start : node.end]).hexdigest(),
             target_node_id=by_locator.get(node.target) if node.target else None,
+            cell_states=node.cell_states or None,
         )
         for node in nodes
     ]
@@ -915,7 +916,8 @@ def publish_texts(store, jurisdiction: str, texts: Texts, decision: dict, dry_ru
 
 def _canonical_nodes(text) -> list[tuple]:
     return [
-        (n.kind, n.locator, n.label or None, n.heading or None, n.start, n.end) for n in text.structure.nodes
+        (n.kind, n.locator, n.label or None, n.heading or None, n.start, n.end, n.cell_states or None)
+        for n in text.structure.nodes
     ]
 
 
@@ -930,7 +932,7 @@ def _structure_of(corpus: Corpus, version: SourceVersion) -> list[tuple]:
 
     roots = [n for n in rows if n.parent_id not in by_id]
     ordered = [n for root in sorted(roots, key=lambda n: n.order) for n in depth_first(root)]
-    return [(n.kind, n.locator, n.label, n.heading, n.start_byte, n.end_byte) for n in ordered]
+    return [(n.kind, n.locator, n.label, n.heading, n.start_byte, n.end_byte, n.cell_states) for n in ordered]
 
 
 def main(argv=None) -> int:

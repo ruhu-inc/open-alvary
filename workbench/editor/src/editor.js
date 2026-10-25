@@ -19,6 +19,7 @@ import { unitsFromHTML, unitsFromText } from "./paste.js";
 import { findPlugin, findKey, findNext, findStatus, replaceOne, replaceAll } from "./find.js";
 
 export { schema };
+export { CELL_STATE_LABELS } from "./schema.js";
 export { unitsFromHTML, unitsFromText } from "./paste.js";
 
 const N = schema.nodes;
@@ -709,6 +710,9 @@ export const commands = {
   mergeCells: tables.mergeCells,
   splitCell: tables.splitCell,
   toggleHeaderRow: tables.toggleHeaderRow,
+  markIllegible: tables.markCells("illegible"),
+  markUnsupported: tables.markCells("unsupported"),
+  clearCellState: tables.markCells(null),
   deleteTable: tables.deleteTable,
   // The names the toolbar used before: a row below, a column to the right.
   addRow: tables.addRowAfter,
@@ -858,7 +862,8 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
         inNote: $from.parent.type === N.note,
         inTable: isInTable(st) || st.selection instanceof CellSelection,
         headerRow: tables.inHeaderRow(st),
-        can: Object.fromEntries(["addRowBefore", "addRowAfter", "addColumnBefore", "addColumnAfter", "deleteRow", "deleteColumn", "mergeCells", "splitCell", "toggleHeaderRow", "deleteTable", "addNote", "insertTable"]
+        cellState: tables.cellStateAt(st),
+        can: Object.fromEntries(["addRowBefore", "addRowAfter", "addColumnBefore", "addColumnAfter", "deleteRow", "deleteColumn", "mergeCells", "splitCell", "toggleHeaderRow", "markIllegible", "markUnsupported", "clearCellState", "deleteTable", "addNote", "insertTable"]
           .map((name) => [name, can(commands[name])])),
         find: findStatus(st),
       };

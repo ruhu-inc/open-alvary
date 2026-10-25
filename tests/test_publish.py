@@ -447,7 +447,7 @@ def catalogue_with_record(store):
     )
 
 
-def approved_text(words="The Fund shall lend to students.", raw="7" * 64):
+def approved_text(words="The Fund shall lend to students.", raw="7" * 64, after=()):
     from workbench import publication
 
     pages = [
@@ -460,6 +460,7 @@ def approved_text(words="The Fund shall lend to students.", raw="7" * 64):
                 {"kind": "paragraph", "text": "ENACTED by the National Assembly —"},
                 {"kind": "paragraph", "text": f"1. (1) {words}", "notes": ["Loans"]},
                 {"kind": "paragraph", "text": "(2) Repayment starts after study."},
+                *after,
             ],
         }
     ]
@@ -515,6 +516,41 @@ def test_an_approved_text_is_published_with_its_structure_rights_and_lineage(dec
     assert revoked["withdrawn"] == ["ng-example-act-2023 (en)"]
     corpus = store.load()
     assert corpus.rights[0].approved_content_hashes == [] and public_corpus(corpus).versions == []
+
+
+CERTIFIED = {
+    "kind": "paragraph",
+    "text": "I, CERTIFY, IN ACCORDANCE WITH SECTION 2 (1) OF THE ACTS AUTHENTICATION ACT.",
+}
+CERTIFICATE = {
+    "kind": "table",
+    "caption": "",
+    "header_rows": 1,
+    "rows": [["SHORT TITLE", "SUMMARY"], ["Example", ""]],
+}
+
+
+def test_a_marked_cell_in_a_notice_is_published_on_its_tables_node(decisions, store):
+    catalogue_with_record(store)
+    decision = publish.decide_text("ng", "Ijidai Lassa", 12, EVIDENCE, **TEXT_DECISION)
+    marked = approved_text(after=[CERTIFIED, {**CERTIFICATE, "cell_states": {"1,1": "unsupported"}}])
+    assert not marked.text.errors and [w.code for w in marked.text.warnings] == ["cell_state"]
+    publish.publish_texts(store, "ng", publish.Texts(approved=[marked]), decision)
+    (version,) = store.load().versions
+    assert version.serialization_profile == "oa-text-1/workbench-units-2"
+    assert version.canonical_text.endswith("SHORT TITLE\tSUMMARY\nExample\t\n")  # no placeholder
+    tables = [n for n in store.load().structure if n.kind == "table"]
+    assert [(n.locator, n.cell_states) for n in tables] == [("notice_1__table_1", {"1,1": "unsupported"})]
+    again = publish.publish_texts(store, "ng", publish.Texts(approved=[marked]), decision)
+    assert again["unchanged"] == ["ng-example-act-2023"]
+    # The mark taken off, the cell left empty: the same bytes, but other structure, so a new version.
+    publish.publish_texts(
+        store, "ng", publish.Texts(approved=[approved_text(after=[CERTIFIED, CERTIFICATE])]), decision
+    )
+    unmarked = next(v for v in store.load().versions if v.id != version.id)
+    assert unmarked.content_hash == version.content_hash and unmarked.prior_version_id == version.id
+    assert unmarked.serialization_profile == "oa-text-1/workbench-units-1"
+    assert not any(n.cell_states for n in store.load().structure if n.version_id == unmarked.id)
 
 
 def test_texts_outside_the_decision_or_without_a_record_are_skipped(decisions, store):

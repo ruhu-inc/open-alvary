@@ -1564,6 +1564,10 @@ FIELDS: dict[str, dict[str, str]] = {
         "page_end": "The last page of the official file it reaches, when known.",
         "span_hash": "SHA-256 of its own bytes from `start_byte` to `end_byte`, to check an exact quotation.",
         "target_node_id": "For a contents entry, the part of the text it lists, when found.",
+        "cell_states": "For a table, the cells that could not be transcribed, keyed `row,column` from 0: "
+        "`illegible` (printed words nobody can read on the page) or `unsupported` (not text, such as a "
+        "figure or a seal). Each is an empty field in the text; only a table outside the operative text, "
+        "in a notice or the contents, is published with one.",
     },
     "RightsViewRecord": {
         "id": "The rights record's ID.",

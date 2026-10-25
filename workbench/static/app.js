@@ -584,9 +584,10 @@ function renderUnits(units) {
   const box = el("div", { class: "layout" });
   for (const unit of units) {
     if (unit.kind === "table") {
-      const cellMarks = unit.cell_marks || {};
+      const cellMarks = unit.cell_marks || {}, cellStates = unit.cell_states || {};
+      const marked = (r, c) => { const state = cellStates[`${r},${c}`]; return state ? { "data-state": state, "data-label": window.ReviewEditor.CELL_STATE_LABELS[state] } : {}; };
       const table = el("table", {}, unit.caption ? el("caption", {}, ...formattedText(unit.caption, unit.caption_marks)) : null,
-        unit.rows.map((row, r) => el("tr", {}, row.map((cell, c) => el(r < (unit.header_rows || 0) ? "th" : "td", {}, ...formattedText(cell, cellMarks[`${r},${c}`]))))));
+        unit.rows.map((row, r) => el("tr", {}, row.map((cell, c) => el(r < (unit.header_rows || 0) ? "th" : "td", marked(r, c), ...formattedText(cell, cellMarks[`${r},${c}`]))))));
       box.append(table);
       continue;
     }
@@ -2108,6 +2109,9 @@ function editTab(view) {
     t({ label: "Merge cells", title: "Merge the selected cells (drag across cells, or Shift+arrow keys, to select them); their words are kept", command: C.mergeCells, can: (s) => s.can.mergeCells }),
     t({ label: "Split cell", title: "Split a merged cell back into its rows and columns", command: C.splitCell, can: (s) => s.can.splitCell }),
     t({ label: "Header row", title: "Make this row (and those above it) header rows, or this row (and those below it) body rows", command: C.toggleHeaderRow, on: (s) => s.headerRow, can: (s) => s.can.toggleHeaderRow }),
+    t({ label: "Mark illegible", title: "Mark the selected cells illegible: words are printed there but cannot be read on the page. A marked cell is empty in the published text; in an operative or schedule table it stops approval until it is filled", command: C.markIllegible, on: (s) => s.cellState === "illegible", can: (s) => s.can.markIllegible }),
+    t({ label: "Mark unsupported", title: "Mark the selected cells unsupported: what is printed there is not text, such as a figure, map, seal or signature", command: C.markUnsupported, on: (s) => s.cellState === "unsupported", can: (s) => s.can.markUnsupported }),
+    t({ label: "Clear state", title: "Take the illegible or unsupported mark off the selected cells", command: C.clearCellState, can: (s) => s.can.clearCellState }),
     t({ label: "Delete row", title: "Delete the selected rows", command: C.deleteRow, cls: "danger-text", can: (s) => s.can.deleteRow }),
     t({ label: "Delete column", title: "Delete the selected columns", command: C.deleteColumn, cls: "danger-text", can: (s) => s.can.deleteColumn }),
     t({ label: "Delete table", title: "Delete this table", command: C.deleteTable, cls: "danger-text", can: (s) => s.can.deleteTable }));
@@ -2148,7 +2152,7 @@ function editTab(view) {
         el("p", { text: "Type to correct words. Enter splits a paragraph (at its very start, it opens an empty one above); Backspace at its start joins it to the one above, Delete at its end joins the one below. Tab / Shift+Tab change the level. Ctrl/Cmd+Alt+L, E, R, J align left, centre, right or justify; with several paragraphs selected (or Ctrl/Cmd+A) they all change. Double-click a section number to change it." }),
         el("p", { text: "Headings: Ctrl/Cmd+Alt+1 makes a heading; pressed again on a heading, it steps the rank down (Heading 1, 2, 3, 4, then 1 again). Heading ▾ sets the rank as printed: 1 the title, 2 a part or chapter, 3 an article or section title. Ctrl/Cmd+Alt+2 makes a paragraph and Ctrl/Cmd+Alt+3 a list item; neither has a rank." }),
         el("p", { text: "Bold, italic and the rest work as in a word processor: on a selection that is only partly bold, B makes all of it bold. They apply to words in paragraphs, table cells and captions (select several cells to format them all), not to section numbers or margin notes (those hold plain text)." }),
-        el("p", { text: "Tables: Tab / Shift+Tab move between cells (Tab in the last cell adds a row). Drag across cells, or Shift+arrow keys, to select several; then Table ▾ › Merge cells, or type to replace their words. The Table menu also adds and deletes rows and columns, splits merged cells and marks header rows." }),
+        el("p", { text: "Tables: Tab / Shift+Tab move between cells (Tab in the last cell adds a row). Drag across cells, or Shift+arrow keys, to select several; then Table ▾ › Merge cells, or type to replace their words. The Table menu also adds and deletes rows and columns, splits merged cells, marks header rows, and marks cells illegible or unsupported when they cannot be transcribed." }),
         el("p", { text: "Paste: text from Word, a web page or a PDF becomes paragraphs, headings, list items and tables; bold, italic, underline, superscript and subscript are kept, fonts and colours are not." }),
         el("p", { text: "Margin notes: click into a note, then Note ↑ / Note ↓ (Alt+Shift+↑ / ↓) moves it to the paragraph it belongs beside." }),
         el("p", { text: "Flags: Alt+N next, Alt+P previous; then Alt+1 / Alt+2 use that reading, Alt+K keep as read, Alt+E I corrected it, Alt+D dismiss. Alt+L keeps all punctuation-only differences." }),

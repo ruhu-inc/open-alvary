@@ -150,6 +150,9 @@ pre.check { white-space: pre-wrap; font: 13px/1.5 ui-monospace, Menlo, monospace
 .surface .tbl th { font-weight: 600; background: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
 /* A merged cell, as printed, spans its rows and columns; a faint inner line marks it. */
 .surface .tbl [colspan], .surface .tbl [rowspan] { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+/* A cell marked illegible or unsupported (TXP-02): hatched, its mark in the corner. */
+.surface .tbl [data-state], .layout [data-state] { background-image: repeating-linear-gradient(135deg, color-mix(in srgb, var(--muted) 24%, transparent) 0 2px, transparent 2px 7px); }
+.surface .tbl [data-state]::before, .layout [data-state]::before { content: attr(data-label); float: right; margin: 0 0 0 .4rem; padding: 0 .3rem; border-radius: 3px; background: var(--panel); color: var(--muted); font: 600 11px/1.5 system-ui, sans-serif; letter-spacing: .02em; pointer-events: none; user-select: none; }
 .surface .tbl .selectedCell { outline: 2px solid var(--accent); outline-offset: -2px; }
 .surface .tbl .selectedCell::after { content: ""; position: absolute; inset: 0; background: color-mix(in srgb, var(--accent) 22%, transparent); pointer-events: none; }
 .surface .ProseMirror-hideselection *::selection { background: transparent; }

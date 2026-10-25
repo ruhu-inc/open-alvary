@@ -19,8 +19,9 @@ from workbench.store import canonical_json
 
 KINDS = {"heading", "paragraph", "list_item", "table"}
 MARK_TYPES = {"bold", "italic", "underline", "superscript", "subscript"}
+CELL_STATES = {"illegible", "unsupported"}
 MATERIALS = {
-    "operative_tables": "Tables match the gazette cell by cell",
+    "operative_tables": "Tables match the gazette cell by cell; a cell that cannot be read is marked, not guessed",
     "amounts": "Amounts and figures match",
     "dates": "Dates match",
     "negations": "Negations (not, no, unless, except) are intact",
@@ -701,6 +702,25 @@ def _clean_cell_marks(cell_marks, rows: list[list[str]], spans: list[list[int]])
     return clean
 
 
+def _clean_cell_states(cell_states, rows: list[list[str]], spans: list[list[int]]) -> dict:
+    """Cells the reviewer marked, {"row,column": "illegible" | "unsupported"} (TXP-02 profile
+    workbench-units-2). A merged cell's mark is at its top-left position; a covered one has none."""
+    if not isinstance(cell_states, dict):
+        raise ValueError('cell_states must map "row,column" to illegible or unsupported')
+    covered = {(r + dr, c + dc) for r, c, rs, cs in spans for dr in range(rs) for dc in range(cs) if dr or dc}
+    width = max(len(row) for row in rows)
+    clean = {}
+    for key, state in cell_states.items():
+        place = re.fullmatch(r"(0|[1-9]\d*),(0|[1-9]\d*)", key) if isinstance(key, str) else None
+        r, c = (int(place[1]), int(place[2])) if place else (-1, -1)
+        if not (0 <= r < len(rows) and 0 <= c < width) or (r, c) in covered:
+            raise ValueError('cell_states must name cells of the table as "row,column"')
+        if state not in CELL_STATES:
+            raise ValueError("a cell's state must be illegible or unsupported")
+        clean[key] = state
+    return clean
+
+
 def validate_units(units) -> list[dict]:
     """Accept only the unit shapes the corpus can hold; bounded so a request cannot balloon."""
     if not isinstance(units, list) or len(units) > 400:
@@ -759,6 +779,9 @@ def validate_units(units) -> list[dict]:
             cell_marks = _clean_cell_marks(unit.get("cell_marks") or {}, rows, spans)
             if cell_marks:
                 table["cell_marks"] = cell_marks
+            cell_states = _clean_cell_states(unit.get("cell_states") or {}, rows, spans)
+            if cell_states:
+                table["cell_states"] = cell_states
             clean.append(table)
             continue
         text = unit.get("text", "")
@@ -830,14 +853,21 @@ def content_sha256(pages: list[dict]) -> str:
 
 
 def plain_text(pages: list[dict]) -> str:
-    """Readable text of the final content; margin notes follow their unit in brackets."""
+    """Readable text of the final content; margin notes follow their unit in brackets, and a marked
+    table cell says so in brackets ("[illegible]")."""
     lines = []
     for page in pages:
         for unit in page["units"]:
             if unit["kind"] == "table":
                 if unit.get("caption"):
                     lines.append(unit["caption"])
-                lines.extend("\t".join(row) for row in unit["rows"])
+                states = unit.get("cell_states") or {}
+                for r, row in enumerate(unit["rows"]):
+                    shown = [
+                        f"{cell} [{states[f'{r},{c}']}]".strip() if f"{r},{c}" in states else cell
+                        for c, cell in enumerate(row)
+                    ]
+                    lines.append("\t".join(shown))
                 continue
             text = f"{unit['marker']} {unit['text']}" if unit.get("marker") else unit["text"]
             lines.append(text)
@@ -848,7 +878,7 @@ def plain_text(pages: list[dict]) -> str:
 # What a page's units become on the public site: the reviewer's structure and formatting, without
 # where a restored number came from.
 PUBLIC_KEYS = ("kind", "rank", "text", "marker", "level", "align", "marks", "notes")
-TABLE_KEYS = ("kind", "caption", "caption_marks", "header_rows", "rows", "spans", "cell_marks")
+TABLE_KEYS = ("kind", "caption", "caption_marks", "header_rows", "rows", "spans", "cell_marks", "cell_states")
 
 
 def public_source(document: dict, manifest: dict) -> dict:

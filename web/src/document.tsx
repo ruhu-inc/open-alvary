@@ -56,6 +56,8 @@ export type DocumentBlock =
       rows: string[][];
       spans?: [number, number, number, number][]; // merged cells: [row, column, rows, columns]
       cell_marks?: Record<string, Mark[]>; // each cell's formatting, keyed "row,column"
+      // cells the reviewer could not transcribe, keyed "row,column": empty in the text
+      cell_states?: Record<string, "illegible" | "unsupported">;
     };
 
 export type DocumentPageContent = {
@@ -187,6 +189,12 @@ function sectionOf(block: DocumentBlock) {
   const { lead } = split(block);
   return lead !== null && depthOf(lead) === 0 ? lead : null;
 }
+
+// What a cell the reviewer could not transcribe says in place of its words.
+const CELL_STATES = {
+  illegible: "Illegible in the original",
+  unsupported: "Not text: not transcribed",
+};
 
 // A table's merged cells as printed: each one's extent, and the positions it covers.
 function merges(spans: [number, number, number, number][] = []) {
@@ -404,11 +412,19 @@ export function DocumentText({
                             const [rowSpan, colSpan] = extent.get(
                               `${r},${c}`,
                             ) ?? [1, 1];
+                            const state = block.cell_states?.[`${r},${c}`];
                             const words = (
-                              <Formatted
-                                text={cell}
-                                marks={block.cell_marks?.[`${r},${c}`]}
-                              />
+                              <>
+                                {state ? (
+                                  <span className="cell-state">
+                                    {CELL_STATES[state]}
+                                  </span>
+                                ) : null}
+                                <Formatted
+                                  text={cell}
+                                  marks={block.cell_marks?.[`${r},${c}`]}
+                                />
+                              </>
                             );
                             return r < block.header_rows ? (
                               <th
@@ -416,11 +432,17 @@ export function DocumentText({
                                 scope="col"
                                 rowSpan={rowSpan}
                                 colSpan={colSpan}
+                                data-state={state}
                               >
                                 {words}
                               </th>
                             ) : (
-                              <td key={c} rowSpan={rowSpan} colSpan={colSpan}>
+                              <td
+                                key={c}
+                                rowSpan={rowSpan}
+                                colSpan={colSpan}
+                                data-state={state}
+                              >
                                 {words}
                               </td>
                             );
