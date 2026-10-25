@@ -25,6 +25,7 @@ const KIND_LABEL = {
   check_unclear: "the image is too unclear here for Google's OCR to check the PDF's words: check them against the image",
   // A judgment published as a web page (the National Industrial Court's portal, ingestion/nicn.py).
   naira_sign_restored: "the page printed the naira sign as \"?\": restored as ₦; check the amount against the official source",
+  naira_sign_struck: "the page typed the naira sign as a struck-through \"N\" before the amount: given as ₦",
   encoding_fault: "the page's text was encoded twice here (\"â€™\" for \"’\"): left as published; correct it",
   invalid_bytes: "the page has bytes here that are not text: left as published; check the words against the official source",
   masked_words: "the page itself masks these words with asterisks: get them from the court's certified copy",
