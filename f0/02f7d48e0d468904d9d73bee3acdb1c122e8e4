@@ -1,0 +1,31 @@
+tests/test_nicn.py
+  s_d665c62e07d76f::t_e6dd8ab51db26a 513-515
+  s_d665c62e07d76f::t_e165bb9338fb9b 479-510,516-531
+  s_d665c62e07d76f::t_17425f2988750f 511-512
+workbench/static/app.js
+  s_d665c62e07d76f::t_6cdbced8432182 40
+ingestion/nicn.py
+  s_d665c62e07d76f::t_33e9fb6e515b87 611-613,1406
+  s_d665c62e07d76f::t_915b34ced50273 622,1389-1391,1414-1415,1418-1420
+  s_d665c62e07d76f::t_6cdbced8432182 253,259-265,623-625,1253-1261
+  s_d665c62e07d76f::t_524df586c0a672 1351-1354,1356,1363-1366
+  s_d665c62e07d76f::t_9c36cfcf1e4c1b 606-610,614-621,1402-1405,1407,1409-1412
+  s_d665c62e07d76f::t_53fc7cf03f1cc8 1357-1362,1367-1368
+  s_d665c62e07d76f::t_2e6be8fe641355 69
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "f002f7d48e0d468904d9d73bee3acdb1c122e8e4",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
