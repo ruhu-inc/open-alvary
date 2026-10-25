@@ -7,7 +7,7 @@ import { Fragment, Slice } from "prosemirror-model";
 import { EditorState, TextSelection, NodeSelection } from "prosemirror-state";
 import { baseKeymap } from "prosemirror-commands";
 import { CellSelection, TableMap, handlePaste as tablePaste } from "prosemirror-tables";
-import { schema, toDoc, fromDoc, commands, keyCommands, plugins, pasteUnits, pastedWords, unitNode, unitsFromText } from "../src/editor.js";
+import { schema, toDoc, fromDoc, commands, keyCommands, plugins, pasteUnits, pastedWords, unitNode, unitsFromText, tableLayout } from "../src/editor.js";
 import { formatted } from "../src/schema.js";
 import { cellStateAt } from "../src/tables.js";
 import { findKey } from "../src/find.js";
@@ -239,6 +239,18 @@ test("a merge that would hide words is shown apart, and said so", () => {
   assert.equal(notes.length, 1);
   assert.deepEqual(fromDoc(doc)[0].rows, unit.rows);
   assert.equal(fromDoc(doc)[0].spans, undefined);
+});
+
+test("the reading view lays a table out as the editor does: each merge once, its covered positions left out", () => {
+  const layout = tableLayout(TAX_TABLE);
+  assert.equal(layout.header, 2);
+  assert.deepEqual([...layout.extent], [["0,0", [1, 2]], ["0,2", [2, 1]]]);
+  assert.deepEqual([...layout.covered], ["0,1", "1,2"]);
+  assert.equal(layout.undone, 0);
+  const hiding = tableLayout({ kind: "table", rows: [["a", "hidden"], ["c"]], spans: [[0, 0, 1, 2]] });
+  assert.deepEqual(hiding.rows, [["a", "hidden"], ["c", ""]]);
+  assert.equal(hiding.covered.size, 0);
+  assert.equal(hiding.undone, 1);
 });
 
 // --- formatting ---------------------------------------------------------------------------------------
