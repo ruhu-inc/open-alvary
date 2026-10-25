@@ -359,12 +359,26 @@ KIND = {
     "heading_form": "article heading printed in an unusual form",
     "heading_long": "check where this heading ends",
     "borrowed_ocr": "the page is a picture; its text came from someone else's OCR",
-    "one_reading": "the page is a picture read by our OCR; no second reading has checked its words",
+    "one_reading": "read once: no second reading has checked this page's words (a picture read by our OCR, "
+    "or a web page's own text)",
     "title_from_listing": "no title in the text was recognised: the title is the source's file name",
     "unsure_words_dropped": "words the OCR was unsure of and the second reading did not see were left out",
     "number_differs": "the number is printed differently in two places",
     "reading_differs": "Document AI read words differently from the OCR layer",
     "accents_restored": "accents restored where the OCR layer dropped them",
+    # A judgment published as a web page (ingestion/nicn.py).
+    "naira_sign_restored": 'the naira sign printed as "?" restored as ₦',
+    "encoding_fault": "text encoded twice, left as published",
+    "invalid_bytes": "bytes that are not text, left as published",
+    "masked_words": "words the page itself masks with asterisks",
+    "text_incomplete": "the portal may hold only part of this judgment",
+    "image_not_published": "an image the page refers to was never published",
+    "paragraphs_not_marked": "paragraphs cut at sentence ends: the page marks none",
+    "lines_joined": "paragraphs joined from the page's lines",
+    "no_printed_header": "the page prints no header of its own",
+    "other_court": "another court's decision",
+    "editorial_matter": "a law report's editorial summaries",
+    "long_paragraph_split": "a long paragraph cut at a sentence end",
 }
 
 

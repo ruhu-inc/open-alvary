@@ -14,7 +14,7 @@ const KIND_LABEL = {
   heading_form: "article heading printed in an unusual form",
   heading_long: "check where this heading ends",
   borrowed_ocr: "the page is a picture; its text came from someone else's OCR: check it word by word",
-  one_reading: "the page is a picture read by our OCR; no second reading has checked its words",
+  one_reading: "read once: no second reading has checked this page's words (a picture read by our OCR, or a web page's own text): review it whole",
   title_from_listing: "no title in the text was recognised: the title is the source's file name; check it against the page",
   unsure_words_dropped: "words the OCR was unsure of and the second reading did not see (often the other side of the sheet showing through) were left out",
   number_differs: "the number is printed differently in two places",
@@ -23,6 +23,19 @@ const KIND_LABEL = {
   text_layer_differs: "the PDF's own text reads differently from the page image (Google's OCR); the PDF's words are kept: check them against the image",
   accents_missing: "the page prints accents the PDF's own text lacks: check them against the image",
   check_unclear: "the image is too unclear here for Google's OCR to check the PDF's words: check them against the image",
+  // A judgment published as a web page (the National Industrial Court's portal, ingestion/nicn.py).
+  naira_sign_restored: "the page printed the naira sign as \"?\": restored as ₦; check the amount against the official source",
+  encoding_fault: "the page's text was encoded twice here (\"â€™\" for \"’\"): left as published; correct it",
+  invalid_bytes: "the page has bytes here that are not text: left as published; check the words against the official source",
+  masked_words: "the page itself masks these words with asterisks: get them from the court's certified copy",
+  text_incomplete: "the portal may hold only part of this judgment: check against the court's certified copy",
+  image_not_published: "the page refers to an image the portal never published: its content is missing",
+  paragraphs_not_marked: "the page gives the judgment as one run of text: its paragraphs were cut at sentence ends; set them",
+  lines_joined: "the page gives the judgment line by line: paragraphs were joined from its lines; check where each begins and ends",
+  no_printed_header: "the page prints no header of its own: the details come from the portal's catalogue",
+  other_court: "the portal posted another court's decision: check its details and whether it belongs here",
+  editorial_matter: "a law report's editorial summaries are printed with the judgment: not the court's words",
+  long_paragraph_split: "a paragraph too long for one unit was cut at a sentence end: the parts are one paragraph",
 };
 const DECISION_LABEL = { keep: "kept as read", use_check: "used check reading", edited: "edited by hand", dismissed: "dismissed" };
 // What a page still needs (/api/documents/{id} pages[].todo); audit pages are "review" pages too.

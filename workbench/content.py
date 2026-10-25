@@ -248,11 +248,19 @@ class Library:
             return {}
         return json.loads(path.read_text()) if path.exists() else {}
 
+    def web_page(self, act_id: str) -> bool:
+        """Whether the document was published as a web page (a National Industrial Court judgment): it
+        has no PDF and no page images; the reviewer compares it with the official page itself."""
+        return self._index[act_id].get("media_type", "application/pdf") != "application/pdf"
+
     def has_original(self, act_id: str) -> bool:
         """Whether the original file can be served, without fetching it: a corpus collection's PDF is
         in the bucket by design; a collection in private staging has it only where it was kept
-        (its upload to a deployed workbench carries page images, not PDFs)."""
+        (its upload to a deployed workbench carries page images, not PDFs). A web page is never served
+        here: it carries the site's own scripts, and its address is given instead."""
         manifest, _ = self._where(act_id)
+        if self.web_page(act_id):
+            return False
         if manifest.get("_remote"):
             return True
         try:
@@ -262,6 +270,10 @@ class Library:
 
     def original(self, act_id: str) -> Path:
         self.act(act_id)
+        if self.web_page(act_id):
+            raise FileNotFoundError(
+                "This document was published as a web page: compare it with the official source"
+            )
         path = self._here(act_id, ".pdf")
         if not path.exists():
             raise FileNotFoundError(act_id)
@@ -626,6 +638,19 @@ def units_from(page: dict) -> list[dict]:
         rank = HEADING_RANK.fullmatch(str(node.get("level") or ""))
         if unit["kind"] == "heading" and rank:
             unit["rank"] = int(rank.group(1))
+        # A reading that knows how a unit is set (a web page's own markup: ingestion.nicn) gives its indent
+        # ("indent", the unit's level: 1 for a quotation or an item within a paragraph), its alignment and
+        # its formatting, in the units' own terms; other readings give none of these.
+        indent = node.get("indent")
+        if isinstance(indent, int) and not isinstance(indent, bool) and 0 <= indent <= 3:
+            unit["level"] = indent
+        if node.get("align") in {"left", "center", "right", "justify"}:
+            unit["align"] = node["align"]
+        if node.get("marks"):
+            try:
+                unit["marks"] = _clean_marks(node["marks"], unit["text"])
+            except ValueError:
+                pass  # formatting that does not fit the words is left out, never the words
         if node.get("marker"):
             unit["marker"] = node["marker"]
             unit["marker_source"] = node.get("marker_source")
@@ -902,6 +927,8 @@ READERS = {
     "docai": "Google Document AI Layout Parser",
     "mineru": "MinerU, an open-source reader run offline",
     "azure": "Azure AI Document Intelligence (layout)",
+    "web-page": "the court's own web page of the judgment, its text exactly as published",
+    "docai-ocr": "Google Document AI OCR",
 }
 
 
