@@ -90,6 +90,26 @@ def test_a_dropped_connection_is_retried_and_a_lasting_one_raised(monkeypatch):
         store.get("state/rw/x.json")
 
 
+def test_a_write_refused_for_its_rate_is_tried_again(monkeypatch):
+    monkeypatch.setattr(corpus_store.CorpusStore, "RETRY_WAITS", (0, 0))
+    session = Session()
+    store = corpus_store.CorpusStore("test-bucket", session=session)
+    refusals = {"left": 2}
+    real = session.request
+
+    def busy(method, url, **kwargs):
+        if refusals["left"]:
+            refusals["left"] -= 1
+            return Response(429)
+        return real(method, url, **kwargs)
+
+    session.request = busy
+    assert store.put("collections/ng/manifest.json", b"{}", "application/json", replace=True) is True
+    refusals["left"] = 10
+    with pytest.raises(RuntimeError, match="429"):
+        store.put("collections/ng/manifest.json", b"{}", "application/json", replace=True)
+
+
 def test_the_address_chooses_cloud_storage_or_an_azure_blob_container():
     session = Session()
     for address in ("test-bucket", "gs://test-bucket", "gs://test-bucket/"):
