@@ -82,6 +82,8 @@ def test_the_survey_counts_pages_free_and_the_summary_prices_the_reading(store):
         "layout": 0.03,
         "ocr": 0.0,
     }
+    store.objects["sources/ng/sc/bbb.pdf"] = pdf(2)  # failed before: measured again
+    assert cloud_read.survey(store, "ng", ["sources/ng/sc/bbb.pdf"], log=lambda m: None)["measured"] == 1
 
 
 def test_a_reader_keeps_earlier_pages_resumes_and_never_replaces_what_it_cannot_read(store):
@@ -105,3 +107,15 @@ def test_a_reader_keeps_earlier_pages_resumes_and_never_replaces_what_it_cannot_
     store.objects["readings/ng/ocr/aaa.json"] = None
     failed = cloud_read.read(store, "ng", "ocr", work["files"], 10, log=lambda m: None, reader=Reader())
     assert failed["failed"][0]["sha256"] == "aaa" and store.objects["readings/ng/ocr/aaa.json"] is None
+
+
+def test_a_file_whose_text_layer_cannot_be_read_still_has_its_pages_counted(store, monkeypatch):
+    def broken(path):
+        raise RuntimeError("pdftotext failed")
+
+    monkeypatch.setattr(cloud_read.gazette_layout, "text_layer", broken)
+    cloud_read.survey(store, "ng", ["sources/ng/nass/aaa.pdf"], log=lambda m: None)
+    measured = json.loads(store.objects["work/ng/survey/aaa.json"])
+    assert (measured["pages"], measured["text_pages"]) == (3, []) and "pdftotext" in measured[
+        "text_layer_error"
+    ]
