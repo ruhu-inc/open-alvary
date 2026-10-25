@@ -349,6 +349,9 @@ class Page:
         if re.fullmatch(r"[-_=*~.·•\s]{3,}", text) and len(text.replace(" ", "")) >= 5:
             self.furniture.append(text)  # a rule drawn with characters: no words
             return
+        if re.fullmatch(r"(?i)(?:page\s+)?\d{1,3}\s+of\s+\d{1,3}", text):
+            self.furniture.append(text)  # a page counter copied from the PDF ("1 of 17")
+            return
         if CONVERTER.fullmatch(text):
             self.furniture.append(text)  # a converter's own line ("Created with WordToHTML.net trial.")
             return
@@ -576,7 +579,7 @@ BEFORE = re.compile(
 DATED = re.compile(r"^(?:DATED?|DELIVERED(?:\s+ON)?)\b\s*(?:THIS\s+)?[:\-–—]?\s*(?P<rest>.*)$", re.I | re.S)
 SUIT_LABEL = re.compile(r"\b(?:SUIT|CASE|APPEAL|MOTION|PETITION)\s*(?:NOS?\.?|NUMBERS?)\s*[:.\-]?", re.I)
 SUIT_NUMBER = re.compile(
-    r"\b((?:NICN|NIC)\s*/\s*[A-Z]{1,10}\s*/\s*\d{1,6}[A-Z]{0,3}(?:\s*/\s*[A-Z0-9]{1,4})?\s*/\s*(?:19|20)\d\d)\b",
+    r"\b((?:NICN|NIC)\s*/\s*[A-Z]{1,10}\s*/\s*[A-Z]{0,3}\d{1,6}[A-Z]{0,3}(?:\s*/\s*[A-Z0-9]{1,4})?\s*/\s*(?:19|20)\d\d)\b",
     re.I,
 )
 BETWEEN = re.compile(r"^BETWEEN\s*[:.\-]?$", re.I)
@@ -607,7 +610,9 @@ ROLE_OF = {
 DECISION = re.compile(
     r"^(?:(?:FINAL|BENCH|CONSENT|DEFAULT|SUMMARY|INTERLOCUTORY|ENROLLED)\s+)?(?:JUDGE?MENT|RULING)"
     r"(?:\s*/\s*(?:JUDGE?MENT|RULING))?(?:\s+(?:ON|IN)\s+[A-Z][\w .,'’/-]{2,80})?"
-    r"(?:\s*\((?:DELIVERED|READ|WRITTEN)\b[^)]{2,80}\))?\s*[.:\-–—]?$",
+    r"(?:\s*\((?:DELIVERED|READ|WRITTEN)\b[^)]{2,80}\))?"
+    # set on one line with the first cross-heading ("RULING INTRODUCTION"), never a party's role
+    r"(?:\s+(?-i:(?!CREDITORS?\b|DEBTORS?\b)[A-Z][A-Z ]{2,40}))?\s*[.:\-–—]?$",
     re.I,
 )
 MARKER = re.compile(
@@ -833,7 +838,7 @@ def chunks(block: Block, size: int) -> list[Block]:
 HEADER_CUE = re.compile(
     r"\s+(?=(?i:IN\s+THE\s+(?:NATIONAL\s+INDUSTRIAL\s+COURT|[A-Z][A-Z .'-]{1,30}\s+JUDICIAL\s+DIVISION)|HOLDEN\s+AT\b|"
     r"BEFORE\s+(?:HIS|HER|THEIR)\s+LORDSHIP|DATED?\s*:|DATED?\s+(?:THE\s+)?\d|SUIT\s+NO|BETWEEN\b|"
-    r"REPRESENTATIONS?\b)|AND\s+[A-Z]{2})"
+    r"REPRESENTATIONS?\b)|AND\s+[A-Z])|(?<=\bBETWEEN:)\s*|(?<=\bBetween:)\s*"
 )
 BLOB_DECISION = re.compile(r"(?<![A-Za-z])(?:JUDGE?MENT|RULING)(?=\s+[A-Z][a-z])")
 
@@ -1483,7 +1488,7 @@ LEVELS = {  # Nigeria's courts as schema/jurisdictions.json lists them
     "federal high court": "superior",
 }
 COUNSEL = re.compile(
-    r"(?P<counsel>[^;]*?)\s*\bfor\s+the\s+(?P<which>(?:\d{1,2}\s*(?:st|nd|rd|th)\s*(?:(?:,|and|&)\s*)?)*)"
+    r"(?P<counsel>.*?)\s*\bfor\s+the\s+(?P<which>(?:\d{1,2}\s*(?:st|nd|rd|th)\s*(?:(?:,|and|&)\s*)?)*)"
     r"(?P<role>claimants?|defendants?|applicants?|respondents?|petitioners?|appellants?|complainants?|plaintiffs?|"
     r"objectors?|garnishees?|interveners?|judgment\s+(?:creditor|debtor)s?)\b",
     re.I,
@@ -1494,8 +1499,13 @@ ORDINAL = re.compile(r"(\d{1,2})\s*(?:st|nd|rd|th)", re.I)
 def _date(text: str) -> str | None:
     from ingestion.nigeria import to_date
 
+    # As typed: "17 TH APRIL", "19thJune", "23RDJUNE", "16TH DAY OFAPRIL", "29TH OF SEPTEMBER".
     text = re.sub(r"(\d)\s+(st|nd|rd|th)\b", r"\1\2", text, flags=re.I)
-    text = re.sub(r"\bday\s+of\s+|\bof\s+(?=[A-Za-z]{3,}\s)", "", text, flags=re.I)
+    text = re.sub(r"(\d)(st|nd|rd|th)(?=[A-Za-z])", r"\1\2 ", text, flags=re.I)
+    text = re.sub(
+        r"\bof(?=(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b)", "of ", text, flags=re.I
+    )
+    text = re.sub(r"\bday\s+of\s+|\bof\s+(?=[A-Za-z]{3,}\b)", "", text, flags=re.I)
     found = re.search(
         r"\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,}\.?\s*,?\s*(?:19|20)\d\d|[A-Za-z]{3,}\.?\s+\d{1,2}(?:st|nd|rd|th)?\s*,?\s*(?:19|20)\d\d"
         r"|\b\d{1,2}/\d{1,2}/(?:19|20)\d\d\b|\b(?:19|20)\d\d-\d\d-\d\d\b",
@@ -1519,10 +1529,32 @@ def _name(text: str) -> str:
     return re.sub(r"[\s.…·_=\-–—,]+$", "", text).strip()
 
 
+def party_start(units: list[Unit]) -> int | None:
+    """Where the header's list of parties begins: after "BETWEEN", else after the last line naming the
+    court, the judge, the date or the suit number before the first "AND"."""
+    start = next((k for k, u in enumerate(units) if BETWEEN.match(u.text)), None)
+    if start is not None:
+        return start
+    first_and = next((k for k, u in enumerate(units) if AND.match(u.text.strip())), None)
+    if first_and is None:
+        return None
+    before = [
+        k
+        for k, u in enumerate(units[:first_and])
+        if COURT_LINE.match(u.text)
+        or DIVISION.match(u.text)
+        or HOLDEN.match(u.text)
+        or re.match(r"(?i)before\b", u.text.strip())
+        or DATED.match(u.text.strip())
+        or SUIT_LABEL.search(u.text)
+    ]
+    return max(before) if before else None
+
+
 def parties(units: list[Unit]) -> list[dict]:
     """The parties as the header lists them between "BETWEEN" and the representation, each with the
     role printed beside it (a role printed once for several names covers each of them)."""
-    start = next((k for k, u in enumerate(units) if BETWEEN.match(u.text)), None)
+    start = party_start(units)
     if start is None:
         return []
     out, pending, last_role = [], [], None
@@ -1560,7 +1592,7 @@ def counsel(lines: list[str]) -> list[tuple[str, str, list[int]]]:
     parties by number, when printed: "for the 1st Respondent")."""
     out = []
     for line in lines:
-        for clause in re.split(r";|(?<=[a-z)])\.\s+(?=[A-Z])", line):
+        for clause in re.split(r";(?!\s*for\s+the\b)|(?<=[a-z)])\.\s+(?=[A-Z])", line):
             if re.match(r"\s*(?:no\s+representation|absent|parties\s+absent)", clause, re.I):
                 continue
             for found in COUNSEL.finditer(clause):
@@ -1752,7 +1784,7 @@ def details(
     # The parties and their counsel, the judges.
     rows, side = parties(header), None
     if rows:
-        side = [u for u in header if BETWEEN.match(u.text)][0]
+        side = header[party_start(header)]
         listed_lines = []
         for unit in header[header.index(side) + 1 :]:
             if REPRESENTATION.match(unit.text) or (
