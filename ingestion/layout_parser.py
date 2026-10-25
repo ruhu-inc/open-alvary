@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from io import BytesIO
 
 from pypdf import PdfReader, PdfWriter
+from pypdf.generic import DictionaryObject, NameObject
 
 ONLINE_PAGE_LIMIT = 15  # synchronous Layout Parser requests accept at most 15 pages
 ONLINE_BYTE_LIMIT = 40 * 1024 * 1024  # and a document of at most 40 MiB
@@ -76,23 +77,67 @@ class DocAIConfig:
         )
 
 
+DRAWN = re.compile(rb"/([^\s/\[\]()<>{}%]+)\s+Do\b")  # "/Im3 Do": the page draws picture or form Im3
+
+
+def drawn_only(page) -> bool:
+    """Keep in a page's resources only the pictures and forms its own content draws (True if any was
+    dropped). Some producers give each page the resources of every page before it, so a chunk of late
+    pages carried nearly the whole file. A form without resources of its own draws with the page's,
+    so then nothing is dropped; the page's resources are replaced, never changed, as pages share them."""
+    resources = page.get("/Resources")
+    xobjects = resources.get_object().get("/XObject") if resources is not None else None
+    if xobjects is None:
+        return False
+    xobjects = xobjects.get_object()
+    contents = page.get_contents()
+    # (A decoded content stream is an empty dictionary, so false: tested against None.)
+    used = {
+        name.decode("latin-1") for name in DRAWN.findall(contents.get_data() if contents is not None else b"")
+    }
+    kept = {key: value for key, value in xobjects.items() if key[1:] in used}
+    if len(kept) == len(xobjects):
+        return False
+    for value in kept.values():
+        drawn = value.get_object()
+        if drawn.get("/Subtype") == "/Form" and "/Resources" not in drawn:
+            return False
+    replaced = DictionaryObject(resources.get_object())
+    replaced[NameObject("/XObject")] = DictionaryObject(
+        {NameObject(key): value for key, value in kept.items()}
+    )
+    page[NameObject("/Resources")] = replaced
+    return True
+
+
 def page_chunks(
     raw: bytes, size: int = ONLINE_PAGE_LIMIT, max_bytes: int = ONLINE_BYTE_LIMIT
 ) -> list[tuple[int, bytes]]:
     """Split a PDF into consecutive chunks of at most `size` pages: (first page number, bytes). A
-    chunk over `max_bytes` (large page pictures) is halved until it fits or is a single page."""
+    chunk over `max_bytes` is written again with each page's resources cut to what it draws
+    (drawn_only), then halved until it fits or is a single page."""
     reader = PdfReader(BytesIO(raw))
 
-    def cut(start: int, count: int) -> list[tuple[int, bytes]]:
+    def write(start: int, count: int, prune: bool) -> bytes:
         writer = PdfWriter()
         for page in reader.pages[start : start + count]:
-            writer.add_page(page)
+            added = writer.add_page(page)
+            if prune:
+                drawn_only(added)
+        if prune:  # the pictures no page draws were copied with the page: dropped now
+            writer.compress_identical_objects(remove_duplicates=False, remove_unreferenced=True)
         buffer = BytesIO()
         writer.write(buffer)
-        if buffer.tell() > max_bytes and count > 1:
+        return buffer.getvalue()
+
+    def cut(start: int, count: int) -> list[tuple[int, bytes]]:
+        chunk = write(start, count, prune=False)
+        if len(chunk) > max_bytes:
+            chunk = write(start, count, prune=True)
+        if len(chunk) > max_bytes and count > 1:
             half = count // 2
             return cut(start, half) + cut(start + half, count - half)
-        return [(start + 1, buffer.getvalue())]
+        return [(start + 1, chunk)]
 
     chunks = []
     for start in range(0, len(reader.pages), size):
