@@ -289,6 +289,15 @@ function trimStart(fragment) {
   return fragment;
 }
 
+function trimEnd(fragment) {
+  const last = fragment.lastChild;
+  if (last && last.isText && /\s$/.test(last.text)) {
+    const trimmed = last.text.replace(/\s+$/, "");
+    return trimmed ? fragment.replaceChild(fragment.childCount - 1, schema.text(trimmed, last.marks)) : fragment.cut(0, fragment.size - last.nodeSize);
+  }
+  return fragment;
+}
+
 // Enter in a margin note: a new note for the same unit.
 function splitNote(state, dispatch) {
   const { $from, empty } = state.selection;
@@ -496,10 +505,40 @@ function formatState(state) {
 
 // --- pasting -----------------------------------------------------------------------------------------
 
+const NO_SPACES = { start: false, end: false };
+const ALNUM = /[\p{L}\p{N}]/u;
+
+// The character beside a position, "" at the start or end of the words (a number chip starts them).
+const charBefore = (node) => (node && node.isText ? node.text.at(-1) : "");
+const charAfter = (node) => (!node ? "" : node.isText ? node.text[0] : "￼");
+
+// Pasted words where they meet the words `before` and `after` them in a textblock (the nodes on
+// either side; null at the start or end of the words), as a word processor leaves them. Words copied
+// with a space (or a line break) at an end (`spaces`, or the words themselves) were copied as whole
+// words: they keep that space and never run into a word at either end, so "a lumpsum " pasted
+// against "pay" or against "tax." gives "pay a lumpsum tax.". Words copied without one join the
+// words they touch, so a word cut short can be completed ("Inc" and "ome"). After the end of a
+// sentence or clause (`clause`) they get a space. Never two spaces, none at the start or end of the
+// words, and a space between words that share formatting (an underlined title) has it too.
+function spacedWords(words, before, after, spaces, clause = false) {
+  const first = words.firstChild, last = words.lastChild;
+  const lead = spaces.start || Boolean(first && first.isText && /^\s/.test(first.text));
+  const trail = spaces.end || Boolean(last && last.isText && /\s$/.test(last.text));
+  let spaced = trimEnd(trimStart(words));
+  if (!spaced.size) return spaced;
+  const [b, a] = [charBefore(before), charAfter(after)];
+  const touch = (x, y) => (lead || trail) && ALNUM.test(x) && ALNUM.test(y);
+  const space = (node, edge) => schema.text(" ", node.marks.filter((mark) => mark.isInSet(edge.marks)));
+  if (b && !/\s/.test(b) && (lead || clause || touch(b, charAfter(spaced.firstChild)))) spaced = Fragment.from(space(before, spaced.firstChild)).append(spaced);
+  if (a && !/\s/.test(a) && (trail || touch(charBefore(spaced.lastChild), a))) spaced = spaced.append(Fragment.from(space(after, spaced.lastChild)));
+  return spaced;
+}
+
 // Units pasted into a unit's words: the first one's words join the words before the cursor, the
 // others follow as units of their own, and the words after the cursor end the last one. The margin
 // notes stay beside the unit they were beside, as with Enter. Returns null where units cannot go.
-export function pasteUnits(state, blocks, open = { start: true, end: true }) {
+// `spaces`: whether the copied text had a space at its start and at its end (spacedWords).
+export function pasteUnits(state, blocks, open = { start: true, end: true }, spaces = NO_SPACES) {
   const tr = state.tr;
   if (!tr.selection.empty) tr.deleteSelection();
   const $at = tr.selection.$from;
@@ -512,9 +551,12 @@ export function pasteUnits(state, blocks, open = { start: true, end: true }) {
   const last = open.end && list.length && list[list.length - 1].type === N.unit ? list.pop() : null;
   const tail = $at.parent.content.cut($at.parentOffset);
   const after = [...list];
-  const lastWords = last && last.firstChild.content;
-  if (last) after.push(N.unit.create(last.attrs, [N.body.create(null, lastWords.append(lastWords.size ? chipsAsWords(tail) : tail)), ...notesOf(last)]));
-  else if (after.length && tail.size) {
+  let lastWords = null;
+  if (last) {
+    lastWords = spacedWords(last.firstChild.content, null, tail.firstChild, spaces);
+    const moved = lastWords.size ? chipsAsWords(tail) : trimStart(tail);
+    after.push(N.unit.create(last.attrs, [N.body.create(null, lastWords.append(moved)), ...notesOf(last)]));
+  } else if (after.length && tail.size) {
     const kind = unit.attrs.kind === "heading" ? "paragraph" : unit.attrs.kind;
     after.push(N.unit.create({ kind, level: unit.attrs.level }, [N.body.create(null, trimStart(tail))]));
   }
@@ -523,9 +565,8 @@ export function pasteUnits(state, blocks, open = { start: true, end: true }) {
   if ($at.parentOffset > 0 || hasChip($at.parent.content)) words = chipsAsWords(words);
   // Words pasted straight after the end of a sentence or clause get a space, as in a word processor.
   const before = $at.nodeBefore, start = words.firstChild;
-  if (before && before.isText && /[.;:!?,)\]]$/.test(before.text) && start && start.isText && /^[\p{L}\p{N}("“]/u.test(start.text)) {
-    words = Fragment.from(schema.text(" ", start.marks)).append(words);
-  }
+  const clause = Boolean(before && before.isText && /[.;:!?,)\]]$/.test(before.text) && start && start.isText && /^[\p{L}\p{N}("“]/u.test(start.text));
+  words = spacedWords(words, before, after.length ? null : $at.nodeAfter, spaces, clause);
   tr.insert(cursor, words);
   let caret = cursor + words.size;
   if (first && notesOf(first).length) tr.insert(map(unitPos + unit.nodeSize) - 1, notesOf(first));
@@ -537,7 +578,7 @@ export function pasteUnits(state, blocks, open = { start: true, end: true }) {
     let start = end;
     for (const node of after.slice(0, pasted)) start += node.nodeSize;
     const node = after[pasted];
-    caret = last ? start + 2 + last.firstChild.content.size : node.type === N.unit ? start + node.firstChild.nodeSize : start + node.nodeSize - 1;
+    caret = last ? start + 2 + lastWords.size : node.type === N.unit ? start + node.firstChild.nodeSize : start + node.nodeSize - 1;
     const left = tr.doc.nodeAt(map(unitPos));
     if (isEmptyUnit(left)) {
       const steps = tr.steps.length;
@@ -595,42 +636,52 @@ function wordsForCell(slice, state) {
 // several units, or anything from outside the page, are cleaned into units (paste.js). A margin
 // note, a caption or a cell takes the words on one line (pastedWords). Cells pasted into a table
 // are placed by the table plugin before this runs (paragraphs pasted into a cell are not cells:
-// wordsForCell).
+// wordsForCell). Wherever words go in, the spaces where they meet the words around them follow the
+// copied text (spacedWords): the clipboard's plain text says whether it had a space (or a line
+// break) at either end, which the cleaned units no longer show.
 const pastePlugin = new Plugin({
   props: {
     transformPasted: (slice, view) => wordsForCell(slice, view.state),
     handlePaste(view, event, slice) {
       const data = event.clipboardData;
       const html = data ? data.getData("text/html") : "";
+      const plain = data ? data.getData("text/plain") : "";
+      const spaces = { start: /^\s/.test(plain), end: /\s$/.test(plain) };
       const { state } = view;
       const $from = state.selection.$from;
       let blocks, open = { start: true, end: true };
       if (/data-pm-slice/.test(html)) {
         blocks = [];
         slice.content.forEach((node) => blocks.push(node));
-        if (!blocks.every((node) => node.type === N.unit || node.type === N.table_unit)) return pasteWords(view, blocks);
+        if (!blocks.every((node) => node.type === N.unit || node.type === N.table_unit)) return pasteWords(view, (parent) => pastedWords(blocks, parent), spaces);
         const inline = blocks.length === 1 && blocks[0].type === N.unit && blocks[0].childCount === 1 && slice.openStart >= 2 && slice.openEnd >= 2;
-        if (inline && $from.parent.type === N.body) return false;
+        if (inline && $from.parent.type === N.body) return pasteWords(view, () => blocks[0].firstChild.content, spaces);
         open = { start: slice.openStart >= 2, end: slice.openEnd >= 2 };
       } else {
         const unit = $from.depth ? state.doc.child($from.index(0)) : null;
         const kind = unit && unit.type === N.unit ? unit.attrs.kind : "paragraph";
-        const units = html ? unitsFromHTML(html) : unitsFromText(data ? data.getData("text/plain") : "", kind);
+        const units = html ? unitsFromHTML(html) : unitsFromText(plain, kind);
         blocks = units.map((unit) => unitNode(unit));
       }
       if (!blocks.length) return true;
-      const tr = $from.parent.type === N.body || !state.selection.empty ? pasteUnits(state, blocks, open) : null;
-      if (!tr) return pasteWords(view, blocks);
+      const tr = $from.parent.type === N.body || !state.selection.empty ? pasteUnits(state, blocks, open, spaces) : null;
+      if (!tr) return pasteWords(view, (parent) => pastedWords(blocks, parent), spaces);
       view.dispatch(tr.scrollIntoView().setMeta("uiEvent", "paste"));
       return true;
     },
   },
 });
 
-function pasteWords(view, blocks) {
-  const { state } = view;
-  const words = pastedWords(blocks, state.selection.$from.parent.type);
-  if (words.size) view.dispatch(state.tr.replaceSelection(new Slice(words, 0, 0)).scrollIntoView().setMeta("uiEvent", "paste"));
+// Words put in over the selection: `words` gives them for the textblock they go into.
+function pasteWords(view, words, spaces) {
+  const tr = view.state.tr;
+  if (!tr.selection.empty) tr.deleteSelection();
+  const $at = tr.selection.$from;
+  const spaced = $at.parent.inlineContent ? spacedWords(words($at.parent.type), $at.nodeBefore, $at.nodeAfter, spaces) : Fragment.empty;
+  if (spaced.size) {
+    tr.insert($at.pos, spaced).setSelection(TextSelection.create(tr.doc, $at.pos + spaced.size));
+    view.dispatch(tr.scrollIntoView().setMeta("uiEvent", "paste"));
+  }
   return true;
 }
 
