@@ -3,10 +3,12 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { Fragment, Slice } from "prosemirror-model";
 import { EditorState, TextSelection, NodeSelection } from "prosemirror-state";
 import { baseKeymap } from "prosemirror-commands";
-import { CellSelection } from "prosemirror-tables";
+import { CellSelection, handlePaste as tablePaste } from "prosemirror-tables";
 import { schema, toDoc, fromDoc, commands, keyCommands, plugins, pasteUnits, pastedWords, unitNode, unitsFromText } from "../src/editor.js";
+import { formatted } from "../src/schema.js";
 import { findKey } from "../src/find.js";
 
 const N = schema.nodes;
@@ -44,6 +46,32 @@ function inWords(doc, index, offset = 0) {
 
 function select(state, from, to = from) {
   return state.apply(state.tr.setSelection(TextSelection.create(state.doc, from, to)));
+}
+
+// The slice ProseMirror's clipboard parser makes of paragraphs from outside the page (lines of
+// plain text, HTML <p> blocks) pasted into a cell: each one in the nearest textblock of the
+// context, which there is a cell. Each paragraph is a string or text nodes.
+function parsedInCell(...paragraphs) {
+  const cells = paragraphs.map((p) => N.table_cell.create(null, typeof p === "string" ? schema.text(p) : p));
+  return new Slice(Fragment.from(cells), 0, 0);
+}
+
+// The slice every plugin's transformPasted makes of what the clipboard parser made.
+function transformed(state, slice) {
+  const view = { state };
+  return state.plugins.reduce((s, plugin) => (plugin.props.transformPasted ? plugin.props.transformPasted.call(plugin, s, view, false) : s), slice);
+}
+
+// A paste as the view runs it once the clipboard is parsed: the slice transformed, then the first
+// plugin whose handlePaste takes it (the table plugin's comes before the page's own).
+function paste(state, slice, clipboard = {}) {
+  const view = { state, dispatch(tr) { view.state = view.state.apply(tr); } };
+  const event = { clipboardData: { getData: (type) => clipboard[type] || "" } };
+  const pasted = transformed(state, slice);
+  if (!state.plugins.some((plugin) => plugin.props.handlePaste && plugin.props.handlePaste.call(plugin, view, event, pasted))) {
+    view.dispatch(view.state.tr.replaceSelection(pasted));
+  }
+  return view.state;
 }
 
 // Start of the text of the n-th textblock of a kind (a note, a cell, a caption), in document order.
@@ -484,6 +512,50 @@ test("a table pasted at the start of an empty unit takes its place", () => {
   state = select(state, inWords(state.doc, 0));
   state = state.apply(pasteUnits(state, [unitNode(TAX_TABLE)]));
   assert.deepEqual(fromDoc(state.doc), [TAX_TABLE, PAGE[4]]);
+});
+
+// A header cell with a word cut short and bold on its first word; a body cell with a misread number.
+const INCOME = {
+  kind: "table",
+  caption: "Rates",
+  header_rows: 1,
+  rows: [["Annual Taxable Inc (RWF)", "Rate"], ["0 to 36O,OOO RWF", "0%"]],
+  cell_marks: { "0,0": [{ type: "bold", start: 0, end: 6 }] },
+};
+
+test("words pasted from outside at a cursor in a cell go in there; the rest of the cell and its formatting stay", () => {
+  let state = stateOf([INCOME]);
+  state = select(state, inBlock(state.doc, N.table_header, 0, 18)); // after "Inc"
+  state = paste(state, parsedInCell("ome"), { "text/plain": "ome" });
+  assert.deepEqual(fromDoc(state.doc), [{ ...INCOME, rows: [["Annual Taxable Income (RWF)", "Rate"], INCOME.rows[1]] }]);
+  assert.equal(state.selection.from, inBlock(state.doc, N.table_header, 0, 21));
+});
+
+test("lines pasted over words in a cell go in on one line, in that cell, not across the row", () => {
+  let state = stateOf([INCOME]);
+  state = select(state, inBlock(state.doc, N.table_cell, 0), inBlock(state.doc, N.table_cell, 0, 12)); // "0 to 36O,OOO"
+  state = paste(state, parsedInCell("0 to", "360,000"), { "text/plain": "0 to\n360,000" });
+  assert.deepEqual(fromDoc(state.doc), [{ ...INCOME, rows: [INCOME.rows[0], ["0 to 360,000 RWF", "0%"]] }]);
+});
+
+test("HTML paragraphs pasted into a cell are words with their formatting, which the table plugin leaves to the page's paste", () => {
+  let state = stateOf([INCOME]);
+  state = select(state, inBlock(state.doc, N.table_cell, 0, 12)); // before " RWF"
+  // <p><b>Annual</b> income</p><p>in m<sup>2</sup></p>, as the clipboard parser reads it into a cell.
+  // The page's paste then reads the words from the HTML itself (unitsFromHTML, which needs a browser).
+  const slice = transformed(state, parsedInCell(formatted("Annual income", [{ type: "bold", start: 0, end: 6 }]), formatted("in m2", [{ type: "superscript", start: 4, end: 5 }])));
+  assert.deepEqual(slice.content.content.map((n) => [n.text, n.marks.map((m) => m.type.name)]), [["Annual", ["strong"]], [" income in m", []], ["2", ["sup"]]]);
+  assert.equal(tablePaste({ state, dispatch: () => assert.fail("the table plugin pasted cells") }, null, slice), false);
+});
+
+test("cells copied from the page, and words pasted over selected cells, still go in as cells", () => {
+  const state = stateOf([{ kind: "table", caption: "", header_rows: 0, rows: [["a", "b"], ["c", "d"]] }]);
+  const a = inBlock(state.doc, N.table_cell, 0) - 1, b = inBlock(state.doc, N.table_cell, 1) - 1;
+  const copied = CellSelection.create(state.doc, a, b).content(); // a row of two cells, as the clipboard gives it back
+  let pasted = paste(select(state, inBlock(state.doc, N.table_cell, 2, 1)), copied); // cursor in "c"
+  assert.deepEqual(fromDoc(pasted.doc)[0].rows, [["a", "b"], ["a", "b"]]);
+  pasted = paste(state.apply(state.tr.setSelection(CellSelection.create(state.doc, a, b))), parsedInCell("x"), { "text/plain": "x" });
+  assert.deepEqual(fromDoc(pasted.doc)[0].rows, [["x", "x"], ["c", "d"]]);
 });
 
 // --- find and replace ---------------------------------------------------------------------------------

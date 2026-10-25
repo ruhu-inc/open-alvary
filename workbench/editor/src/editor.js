@@ -573,12 +573,30 @@ export function pastedWords(blocks, parent) {
   return Fragment.from(nodes);
 }
 
+const isCell = (node) => node.type === N.table_cell || node.type === N.table_header;
+
+// ProseMirror's clipboard parser puts each paragraph pasted from outside the page (a line of plain
+// text, an HTML <p>) in the nearest textblock of where it goes, which in a cell is a cell of its
+// own: the table plugin would then paste those cells over the cell under the cursor. At a cursor,
+// or words, in one cell they are words, so they go in where the cursor is. Cells copied from the
+// page come as rows, and a cell with a merge was not made by the parser: those go in as cells.
+function wordsForCell(slice, state) {
+  const { selection } = state, { $from, $to } = selection;
+  if (!(selection instanceof TextSelection) || !$from.sameParent($to) || !isCell($from.parent)) return slice;
+  const cells = [];
+  slice.content.forEach((node) => cells.push(node));
+  const parsed = cells.length && !slice.openStart && !slice.openEnd && cells.every((node) => isCell(node) && node.attrs.colspan === 1 && node.attrs.rowspan === 1);
+  return parsed ? new Slice(pastedWords(cells, $from.parent.type), 0, 0) : slice;
+}
+
 // Pasting: within one unit's words, copied words go in as they are (formatting and chips kept);
 // several units, or anything from outside the page, are cleaned into units (paste.js). A margin
 // note, a caption or a cell takes the words on one line (pastedWords). Cells pasted into a table
-// are placed by the table plugin before this runs.
+// are placed by the table plugin before this runs (paragraphs pasted into a cell are not cells:
+// wordsForCell).
 const pastePlugin = new Plugin({
   props: {
+    transformPasted: (slice, view) => wordsForCell(slice, view.state),
     handlePaste(view, event, slice) {
       const data = event.clipboardData;
       const html = data ? data.getData("text/html") : "";
