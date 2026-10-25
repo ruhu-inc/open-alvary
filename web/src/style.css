@@ -1445,6 +1445,10 @@ main:focus {
 .doc-num {
   font-weight: 600;
 }
+/* A heading's printed number ("Article One:") stays on one line. */
+.doc-heading .doc-num {
+  white-space: nowrap;
+}
 .doc-section h3 .doc-num,
 .doc-hang > .doc-num {
   display: inline-block;
