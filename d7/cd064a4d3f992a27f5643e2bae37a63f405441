@@ -1,0 +1,42 @@
+web/src/document.tsx
+  s_5cc2276f8a0ff5::t_8812c2ef2ab599 483,490-494
+  s_5cc2276f8a0ff5::t_b8b9b21d018edb 453-468
+  s_5cc2276f8a0ff5::t_9a09428e6fb9ec 220,235,246,248-254,264,267-278
+  s_5cc2276f8a0ff5::t_123186e67f274c 296
+  s_5cc2276f8a0ff5::t_e6ba6fe7075cdb 154-169,173-175,180-181
+  s_5cc2276f8a0ff5::t_a1f9f59a1b62d0 170-172,255-263
+  s_5cc2276f8a0ff5::t_55927c4e00b22a 182-184
+  s_5cc2276f8a0ff5::t_fac7e07103987b 18,599,651,657-659,663-664
+  s_5cc2276f8a0ff5::t_c97f571d112762 354,359
+web/src/details.tsx
+  s_5cc2276f8a0ff5::t_a1f9f59a1b62d0 616
+  s_5cc2276f8a0ff5::t_fac7e07103987b 612-615,618-620
+web/src/style.css
+  s_5cc2276f8a0ff5::t_f73692e850c0d7 1538-1541,1807
+web/src/tools.tsx
+  s_5cc2276f8a0ff5::t_65df848c425ba4 210-211
+  s_5cc2276f8a0ff5::t_c2f6962aa35e2e 168,174
+workbench/static/public-preview/preview.js
+  s_5cc2276f8a0ff5::t_55927c4e00b22a 139
+  s_5cc2276f8a0ff5::t_23813115d3728e 1,9,17,25,33,41,43,45-46,48-49,54,59,64,69,74,79,84,89,94,99,104,109,114,119,124,129,134
+web/src/preview.tsx
+  s_5cc2276f8a0ff5::t_fac7e07103987b 65-66,234-235,237-243,246
+workbench/static/public-preview/preview.css
+  s_5cc2276f8a0ff5::t_23813115d3728e 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d7cd064a4d3f992a27f5643e2bae37a63f405441",
+  "prompts": {},
+  "sessions": {
+    "s_5cc2276f8a0ff5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "04ef7892-8907-46d4-a8e6-e5a97a9402c1",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
