@@ -58,6 +58,10 @@ workbench/editor/test/editor.test.js
   s_09beca893ed317::t_cc9c548af811c4 9,12,196,407-422,424-492
   s_09beca893ed317::t_079da823ce5e92 423
   s_09beca893ed317::t_6f5d7bcf1a9827 493
+workbench/static/public-preview/preview.css
+  s_09beca893ed317::t_bb419f4f8e5544 1
+workbench/static/public-preview/preview.js
+  s_09beca893ed317::t_bb419f4f8e5544 17,25,33,41,48-49,64
 ---
 {
   "schema_version": "authorship/3.0.0",
