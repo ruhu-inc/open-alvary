@@ -30,7 +30,9 @@ them (workbench.structure, CPR-04). A judgment has no printed pages: the reading
 of the web page, of about WORDS_PER_PAGE words, cut between units.
 
 Nothing is corrected silently. The one encoding fault the survey found, the naira sign published as
-"?" before an amount, is restored as "₦" and flagged with the published form; other faults found
+"?" before an amount, is restored as "₦" and flagged with the published form. The sign typed as a
+struck-through "N" before an amount (Word's way of typing it) is given as "₦" with a low note (owner,
+2026-10-25); a struck "N" anywhere else stays "N", and struck words are kept as words. Other faults found
 (text encoded twice, such as "â€™" for "’", or bytes that are not UTF-8) are flagged and left as
 published; words the page itself masks with asterisks, text that stops mid-sentence (the portal
 holds only part of some judgments) and images the page refers to but never published are flagged
@@ -64,7 +66,7 @@ SOURCE = "nicn-judgments"
 COURT = "National Industrial Court of Nigeria"
 PUBLICATION = "National Industrial Court of Nigeria: judgment portal"
 # The reader's version: a page prepared by an earlier one is prepared again (BucketCollection.done).
-READER = "nicn-html-2026-10-25.1"
+READER = "nicn-html-2026-10-25.2"
 WORDS_PER_PAGE = 700  # a review page: about one printed page of a judgment
 UNITS_PER_PAGE = 120  # well under the workbench's 400 units a page
 UNIT_CHARACTERS = 6000  # a unit longer than this is cut at a sentence end (the workbench takes 8192)
@@ -104,6 +106,10 @@ CONVERTER = re.compile(
     r"(?:Converted|Created)\s+(?:by|with)\s+\S+\.(?:com|net|org)\b.{0,40})",
     re.I,
 )
+# A struck-through "N", Word's way of typing the naira sign, held as this character until check_text
+# gives it as "₦" before an amount and as "N" anywhere else.
+STRUCK_N = "\ue000"
+LONE_N = re.compile(r"(?<![A-Za-z])N(?![A-Za-z])")
 ADVERT_LINK = re.compile(r"utm_source=wth|signatureforemail\.com", re.I)
 POSITIONED = re.compile(r"(?<![-\w])top:\s*(-?[\d.]+)px", re.I)
 LEFT = re.compile(r"(?<![-\w])left:\s*(-?[\d.]+)px", re.I)
@@ -170,6 +176,8 @@ def _marks_of(tag: Tag, active: dict) -> dict:
     decoration = style.get("text-decoration", "") + style.get("text-decoration-line", "")
     if "underline" in decoration:
         marks["underline"] = True
+    if tag.name in ("s", "strike", "del") or "line-through" in decoration:
+        marks["struck"] = True  # not kept as formatting: only to find the naira sign typed this way
     vertical = style.get("vertical-align", "")
     if vertical in ("super", "sub"):
         marks["superscript" if vertical == "super" else "subscript"] = True
@@ -186,6 +194,8 @@ class Words:
 
     def add(self, raw: str, marks: dict) -> None:
         piece = SPACE.sub(" ", INVISIBLE.sub("", raw))
+        if marks.get("struck"):
+            piece = LONE_N.sub(STRUCK_N, piece)
         if not piece:
             return
         if piece.startswith(" ") and (not self.text or self.text.endswith(" ")):
@@ -982,6 +992,7 @@ def split_long(units: list[Unit]) -> list[Unit]:
 # --- what the page itself gets wrong: flagged for the reviewer ---------------------------------------
 
 NAIRA = re.compile(r"(?:(?<=\s)|(?<=\()|^)\?(?=\d)")
+STRUCK_NAIRA = re.compile(STRUCK_N + r"(?=\s?\d)")
 # Text encoded twice: UTF-8's bytes read as Windows-1252 ("â€™" for "’").
 MOJIBAKE = re.compile(
     "[\u00c2\u00c3\u00e2][\u0080-\u00bf\u0152\u0153\u0160\u0161\u0178\u017d\u017e\u0192\u02c6\u02dc"
@@ -1012,23 +1023,44 @@ def _repaired(found: str) -> str | None:
 
 
 def check_text(unit: Unit, why_masked: str | None = None) -> None:
-    """The naira sign published as "?" restored and flagged; text encoded twice, bytes that are not
-    UTF-8 and words the page masks flagged and left as published."""
+    """The naira sign typed as a struck-through "N" given as "₦" (owner, 2026-10-25) and noted; the
+    sign published as "?" restored and flagged; text encoded twice, bytes that are not UTF-8 and
+    words the page masks flagged and left as published."""
     texts = [unit.text] if unit.rows is None else [c["text"] for row in unit.rows for c in row]
+    struck = []
+    for k, text in enumerate(texts):
+        if STRUCK_N not in text:
+            continue
+        for found in STRUCK_NAIRA.finditer(text):
+            rest = text[found.end() :]
+            lead = len(rest) - len(rest.lstrip())
+            word_end = found.end() + lead + re.search(r"\s|$", rest[lead:]).start()
+            struck.append((found.start(), word_end, text[found.start() : word_end].replace(STRUCK_N, "₦")))
+        texts[k] = STRUCK_NAIRA.sub("₦", text).replace(STRUCK_N, "N")
+    if struck:
+        unit.flags.append(
+            {
+                "severity": "low",
+                "kind": "naira_sign_struck",
+                "primary": "; ".join(word for _, _, word in struck)[:400],
+                "others": {"As published": "a struck-through N before the amount"},
+                "span": (struck[0][0], struck[-1][1]) if unit.rows is None else None,
+            }
+        )
     restored = []
     for k, text in enumerate(texts):
         for found in NAIRA.finditer(text):
             word_end = re.search(r"\s|$", text[found.start() :]).start() + found.start()
             restored.append((found.start(), word_end, text[found.start() : word_end]))
         texts[k] = NAIRA.sub("₦", text)
+    if unit.rows is None:
+        unit.text = texts[0]
+    else:
+        flat = iter(texts)
+        for row in unit.rows:
+            for cell in row:
+                cell["text"] = next(flat)
     if restored:
-        if unit.rows is None:
-            unit.text = texts[0]
-        else:
-            flat = iter(texts)
-            for row in unit.rows:
-                for cell in row:
-                    cell["text"] = next(flat)
         unit.flags.append(
             {
                 "severity": "medium",
@@ -1148,16 +1180,17 @@ def read(raw: bytes) -> Judgment:
     blocks = [b for b in blocks if b.rows is not None or b.text.strip()]
     judgment = Judgment(
         units=[],
-        furniture=furniture,
+        # Kept beside the reading, never checked: a struck "N" there is given back as printed.
+        furniture=[text.replace(STRUCK_N, "N") for text in furniture],
         shape=shape,
         title=page.title,
-        summary=summary,
+        summary=summary.replace(STRUCK_N, "N") if summary else summary,
         flags=flags,
         viewer_pages=page.viewer_pages,
     )
     if sum(len(b.text) for b in blocks if b.rows is None) < 200 and not any(b.rows for b in blocks):
         judgment.empty = "the page holds no judgment text" + (
-            f" ({' '.join(b.text for b in blocks)[:80]!r})" if blocks else ""
+            f" ({' '.join(b.text for b in blocks).replace(STRUCK_N, 'N')[:80]!r})" if blocks else ""
         )
         return judgment
     header, body = split_header(blocks)

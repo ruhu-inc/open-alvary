@@ -118,6 +118,30 @@ def test_the_words_are_kept_exactly_and_the_naira_sign_restored_only_where_flagg
     assert question.flags == [] and "?" in question.text
 
 
+def test_a_struck_through_n_before_an_amount_is_given_as_the_naira_sign_and_noted():
+    filler = "The court considered the evidence of both parties and the submissions of counsel. " * 4
+    raw = (
+        '<html><body><div class="light-background"><div class="col-12">'
+        f"<p>{filler}</p>"
+        "<p>The claimant is awarded <s>N</s>4,620,000.00 and "
+        "<span style='text-decoration: line-through'>N</span> 65,000 as costs. "
+        "Counsel, Mr <s>N</s>. Okafor, and the clerk <s>struck these words</s> agreed.</p>"
+        f"<p>{filler}</p></div></div></body></html>"
+    ).encode()
+    judgment = nicn.read(raw)
+    unit = next(u for u in judgment.units if "awarded" in u.text)
+    assert unit.text == (
+        "The claimant is awarded ₦4,620,000.00 and ₦ 65,000 as costs. "
+        "Counsel, Mr N. Okafor, and the clerk struck these words agreed."
+    )
+    assert [(f["severity"], f["kind"], f["primary"]) for f in unit.flags] == [
+        ("low", "naira_sign_struck", "₦4,620,000.00; ₦ 65,000")
+    ]
+    assert unit.text[slice(*unit.flags[0]["span"])] == "₦4,620,000.00 and ₦ 65,000"
+    assert not any(m["type"] == "struck" for m in unit.marks)  # never kept as formatting
+    assert nicn.STRUCK_N not in json.dumps([u.text for u in judgment.units] + judgment.furniture)
+
+
 def test_a_pdf_viewers_copy_has_its_summary_left_out_its_lines_joined_and_its_faults_flagged():
     judgment = nicn.read(page("pdf-lines"))
     assert judgment.shape == "pdf-lines"
