@@ -37,6 +37,7 @@ const KIND_LABEL = {
   other_court: "the portal posted another court's decision: check its details and whether it belongs here",
   editorial_matter: "a law report's editorial summaries are printed with the judgment: not the court's words",
   long_paragraph_split: "a paragraph too long for one unit was cut at a sentence end: the parts are one paragraph",
+  markup_as_text: "the portal printed this judgment's web-page code as text: it was read as the page it describes",
   editorial_left_out: "a law report's summaries printed before the judgment were left out: not the court's words (kept beside the reading)",
 };
 const DECISION_LABEL = { keep: "kept as read", use_check: "used check reading", edited: "edited by hand", dismissed: "dismissed" };
