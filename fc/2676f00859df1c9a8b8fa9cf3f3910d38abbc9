@@ -1,0 +1,21 @@
+tests/test_corpus_store.py
+  s_d665c62e07d76f::t_aa92d11b1e4428 93-112
+ingestion/corpus_store.py
+  s_d665c62e07d76f::t_aa92d11b1e4428 97-99
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "fc2676f00859df1c9a8b8fa9cf3f3910d38abbc9",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
