@@ -297,8 +297,20 @@ def connect(url: str) -> Engine:
         try:
             provision_publisher(engine, make_url(publisher).password or "")
         except (SystemExit, Exception) as error:  # noqa: BLE001 - reviewing goes on; publishing waits
-            print(f"workbench: the publisher's login was not made: {error}", file=sys.stderr, flush=True)
+            print(
+                f"workbench: the publisher's login was not made: {said(error)}", file=sys.stderr, flush=True
+            )
     return engine
+
+
+def said(error: BaseException) -> str:
+    """What went wrong, without the statement: a database error carries the SQL it refused, and the
+    publisher's password is written into one."""
+    diag = getattr(getattr(error, "orig", None), "diag", None)
+    primary = getattr(diag, "message_primary", None)
+    if primary:
+        return f"{type(error.orig).__name__}: {primary}"
+    return type(error).__name__ if hasattr(error, "statement") else str(error)
 
 
 def provision_publisher(engine: Engine, password: str) -> None:
@@ -312,9 +324,13 @@ def provision_publisher(engine: Engine, password: str) -> None:
         raise SystemExit("The publisher's password must be generated: 20 or more letters and digits")
     with engine.begin() as db:
         exists = db.execute(text("SELECT 1 FROM pg_roles WHERE rolname = :name"), {"name": PUBLISHER}).first()
-        verb = "ALTER" if exists else "CREATE"
-        options = "LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT"
-        db.execute(text(f"{verb} ROLE {PUBLISHER} {options} PASSWORD '{password}'"))
+        # Made with no attribute beyond signing in (a role's defaults: no superuser, databases or roles);
+        # afterwards only its password is set again: naming the other attributes needs a superuser, which
+        # the workbench's own login on Cloud SQL is not.
+        if exists:
+            db.execute(text(f"ALTER ROLE {PUBLISHER} LOGIN PASSWORD '{password}'"))
+        else:
+            db.execute(text(f"CREATE ROLE {PUBLISHER} LOGIN NOINHERIT PASSWORD '{password}'"))
         database = db.execute(text("SELECT current_database()")).scalar()
         db.execute(text(f'GRANT CONNECT ON DATABASE "{database}" TO {PUBLISHER}'))
         db.execute(text(f"GRANT USAGE ON SCHEMA public TO {PUBLISHER}"))
