@@ -1,0 +1,27 @@
+tests/test_cloud_read.py
+  s_d665c62e07d76f::t_34ee8d9c6410e1 127-203
+ingestion/layout_parser.py
+  s_d665c62e07d76f::t_6792b1ec5dd499 113-139,349-355,376-378,387-388,454-460,476-478,487-488
+ingestion/readers.py
+  s_d665c62e07d76f::t_6792b1ec5dd499 69-74,111-112,164-165,174-175
+  s_d665c62e07d76f::t_95f53d5da98287 14,25
+  s_d665c62e07d76f::t_efe99f39035e00 26
+ingestion/cloud_read.py
+  s_d665c62e07d76f::t_ec24653a61c38f 20,30-32,132-143,158-166,169-182,186,193-194,196,198,210-219,221-251,274-290,292-309
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "c59d1de31dd3411c767bc35736b202b597cd471d",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
