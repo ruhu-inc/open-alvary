@@ -110,6 +110,33 @@ def drawn_only(page) -> bool:
     return True
 
 
+class Pace:
+    """At most `per_minute` pages a minute sent to the service, across the threads that share it: a
+    request waits its turn rather than being refused for the rate and retried (a file whose retries
+    run out fails, and its pages read so far are billed for nothing)."""
+
+    def __init__(self, per_minute: float, clock=None, sleep=None):
+        import threading
+        import time
+
+        self.interval = 60.0 / per_minute
+        self.clock, self.sleep = clock or time.monotonic, sleep or time.sleep
+        self.lock = threading.Lock()
+        self.next = 0.0
+
+    def wait(self, pages: int) -> None:
+        with self.lock:
+            now = self.clock()
+            start = max(now, self.next)
+            self.next = start + pages * self.interval
+        if start > now:
+            self.sleep(start - now)
+
+
+def _pages_in(chunk: bytes) -> int:
+    return len(PdfReader(BytesIO(chunk)).pages)
+
+
 def page_chunks(
     raw: bytes, size: int = ONLINE_PAGE_LIMIT, max_bytes: int = ONLINE_BYTE_LIMIT
 ) -> list[tuple[int, bytes]]:
@@ -319,7 +346,13 @@ def _retry_policy(retried: list[str]):
 
 
 def parse(
-    raw: bytes, config: DocAIConfig, client=None, workers: int = 1, pages_per_request: int = ONLINE_PAGE_LIMIT
+    raw: bytes,
+    config: DocAIConfig,
+    client=None,
+    workers: int = 1,
+    pages_per_request: int = ONLINE_PAGE_LIMIT,
+    pace: Pace | None = None,
+    billed=None,
 ) -> dict:
     """Run the Layout Parser chunk by chunk (online limit) and merge into one node list.
 
@@ -340,6 +373,9 @@ def parse(
 
     def read(item):
         first_page, chunk = item
+        pages = _pages_in(chunk)
+        if pace is not None:
+            pace.wait(pages)
         request = documentai.ProcessRequest(
             name=name,
             raw_document=documentai.RawDocument(content=chunk, mime_type="application/pdf"),
@@ -348,6 +384,8 @@ def parse(
             ),
         )
         document = client.process_document(request=request, retry=retry, timeout=900).document
+        if billed is not None:
+            billed(pages)  # the service bills a page it read, whatever becomes of the rest of the file
         return first_page, documentai.Document.to_dict(document).get("document_layout", {})
 
     with ThreadPoolExecutor(max_workers=max(workers, 1)) as pool:
@@ -413,7 +451,13 @@ def ocr_page(page, text: str, number: int) -> dict:
 
 
 def ocr(
-    raw: bytes, config: DocAIConfig, client=None, workers: int = 1, pages_per_request: int = ONLINE_PAGE_LIMIT
+    raw: bytes,
+    config: DocAIConfig,
+    client=None,
+    workers: int = 1,
+    pages_per_request: int = ONLINE_PAGE_LIMIT,
+    pace: Pace | None = None,
+    billed=None,
 ) -> dict:
     """Read a PDF with Enterprise Document OCR, chunk by chunk (the online limit is 15 pages):
     every page's words with their boxes, in page order. Retries as for the Layout Parser."""
@@ -429,6 +473,9 @@ def ocr(
 
     def read(item):
         first_page, chunk = item
+        pages = _pages_in(chunk)
+        if pace is not None:
+            pace.wait(pages)
         request = documentai.ProcessRequest(
             name=name,
             raw_document=documentai.RawDocument(content=chunk, mime_type="application/pdf"),
@@ -437,6 +484,8 @@ def ocr(
             field_mask=OCR_FIELDS,
         )
         document = client.process_document(request=request, retry=retry, timeout=900).document
+        if billed is not None:
+            billed(pages)
         return [ocr_page(page, document.text, first_page + k) for k, page in enumerate(document.pages)]
 
     with ThreadPoolExecutor(max_workers=max(workers, 1)) as pool:

@@ -11,6 +11,7 @@ import json
 import os
 import subprocess
 import tempfile
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,6 +21,8 @@ from pypdf import PdfReader
 
 from ingestion import layout_parser, settings
 from ingestion.compare import HtmlTables
+
+_BILLED = threading.Lock()  # a reader's requests run in threads that each count their pages
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -63,6 +66,12 @@ class DocAIReader:
         self.workers = int(os.environ.get("ALVARY_DOCAI_WORKERS") or 8)
         self.pages_per_request = int(os.environ.get("ALVARY_DOCAI_PAGES_PER_REQUEST") or 2)
         self._client = None
+        self.pace: layout_parser.Pace | None = None  # set by a job that paces its requests
+        self.billed = 0  # pages the service has read (and billed) through this reader
+
+    def _billed(self, pages: int) -> None:
+        with _BILLED:
+            self.billed += pages
 
     def client(self):
         """The one Document AI client every read shares (made by preflight, before any thread)."""
@@ -99,6 +108,8 @@ class DocAIReader:
             client=self.client(),
             workers=self.workers,
             pages_per_request=self.pages_per_request,
+            pace=self.pace,
+            billed=self._billed,
         )
         count = page_count(pdf)
         pages = layout_pages(result["nodes"], count)
@@ -150,6 +161,8 @@ class DocOCRReader(DocAIReader):
         self.workers = int(os.environ.get("ALVARY_DOCAI_OCR_WORKERS") or 4)
         self.pages_per_request = layout_parser.ONLINE_PAGE_LIMIT
         self._client = None
+        self.pace = None
+        self.billed = 0
 
     def read(self, pdf: Path) -> Reading:
         result = layout_parser.ocr(
@@ -158,6 +171,8 @@ class DocOCRReader(DocAIReader):
             client=self.client(),
             workers=self.workers,
             pages_per_request=self.pages_per_request,
+            pace=self.pace,
+            billed=self._billed,
         )
         pages = result["pages"]
         return Reading(self.name, self.version(), pages, len(pages), {"retries": result["retries"]})
