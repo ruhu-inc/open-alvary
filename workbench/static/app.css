@@ -440,3 +440,7 @@ table.queue td:first-child { white-space: nowrap; }
 .editor-actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
 .editor-history summary { cursor: pointer; color: var(--muted); font-size: 13px; }
 @media (max-width: 900px) { .editor-grid.wide { grid-template-columns: 1fr; } }
+.publication-line { margin: .6rem 0; }
+table.publishing { width: 100%; border-collapse: collapse; }
+table.publishing th, table.publishing td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.pill.low { background: var(--low-bg); color: var(--ink); }

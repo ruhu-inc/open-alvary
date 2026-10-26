@@ -40,7 +40,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, insert, select, update
 
 from api.search import normalize_citation
 from api.store import Store, engine_for
@@ -70,6 +70,7 @@ from schema.models import (
 from workbench.content import Library
 from workbench.review import Review
 from workbench.store import Store as ReviewStore
+from workbench.store import publication_run, publication_status
 
 DECISIONS = Path(__file__).resolve().parents[1] / "ingestion" / "decisions"
 DEFAULT_BASIS = (
@@ -212,13 +213,16 @@ class Approved:
     approved_at: datetime
 
 
-def from_workbench(review, library, store, jurisdiction: str) -> tuple[list[Approved], set[str]]:
+def from_workbench(review, library, store, jurisdiction: str, only=None) -> tuple[list[Approved], set[str]]:
     """Works with at least one approved language version (details confirmed and covered), and the
-    works present in the collection that are not approved."""
+    works present in the collection that are not approved; of the documents in `only` when given (a
+    run looks only at documents an approval names: a work never approved was never published)."""
     works: dict[str, list[dict]] = {}
     for listed in library.documents():
         if listed.get("jurisdiction") != jurisdiction or listed.get("part"):
             continue  # annexes follow their work, later
+        if only is not None and listed["id"] not in only:
+            continue
         works.setdefault(listed.get("work") or listed["id"], []).append(listed)
     approved, waiting = [], set()
     for work, documents in sorted(works.items()):
@@ -710,12 +714,15 @@ class Texts:
     skipped: dict[str, str] = field(default_factory=dict)
 
 
-def texts_from_workbench(review, library, store, jurisdiction: str) -> Texts:
+def texts_from_workbench(review, library, store, jurisdiction: str, only=None) -> Texts:
     """Each language version whose latest approval covers its current pages, details and text, built
-    again from those pages; refused when the text or structure differ from what the approval bound."""
+    again from those pages; refused when the text or structure differ from what the approval bound.
+    Of the documents in `only` when given."""
     found = Texts()
     for listed in library.documents():
         if listed.get("jurisdiction") != jurisdiction or listed.get("part"):
+            continue
+        if only is not None and listed["id"] not in only:
             continue
         act = library.act(listed["id"])
         now = review.state(act, text=True)
@@ -917,6 +924,184 @@ def publish_texts(store, jurisdiction: str, texts: Texts, decision: dict, dry_ru
     return report
 
 
+# ---------- a run: nightly, or asked for from the workbench (the publish job) ----------
+class PublicationLog:
+    """A run and where each document it looked at stands in public view, in the review database's
+    publishing tables (workbench.store), written with the publisher's own login, which can change
+    nothing else there."""
+
+    def __init__(self, engine):
+        self.engine = engine
+
+    def start(self) -> tuple[int, str, str | None]:
+        """Takes up the runs asked for from the workbench (the oldest is this run; those asked for
+        since are covered by it), else starts a scheduled one: (run, trigger, who asked)."""
+        now = datetime.now(UTC)
+        with self.engine.begin() as db:
+            asked = db.execute(
+                select(publication_run)
+                .where(publication_run.c.status == "requested")
+                .order_by(publication_run.c.id)
+            ).all()
+            if asked:
+                run = asked[0]
+                db.execute(
+                    update(publication_run)
+                    .where(publication_run.c.id == run.id)
+                    .values(status="running", started_at=now)
+                )
+                for other in asked[1:]:
+                    db.execute(
+                        update(publication_run)
+                        .where(publication_run.c.id == other.id)
+                        .values(
+                            status="covered", started_at=now, finished_at=now, summary={"covered_by": run.id}
+                        )
+                    )
+                return run.id, "manual", run.requested_by
+            run = db.execute(
+                insert(publication_run).values(
+                    requested_at=now, trigger="schedule", status="running", started_at=now, summary={}
+                )
+            ).inserted_primary_key[0]
+        return run, "schedule", None
+
+    def finish(self, run: int, status: str, summary: dict, error: str | None = None) -> None:
+        with self.engine.begin() as db:
+            db.execute(
+                update(publication_run)
+                .where(publication_run.c.id == run)
+                .values(status=status, finished_at=datetime.now(UTC), summary=summary, error=error)
+            )
+
+    def statuses(self) -> dict[str, dict]:
+        with self.engine.connect() as db:
+            return {row.document_id: dict(row._mapping) for row in db.execute(select(publication_status))}
+
+    def record(self, run: int, rows: list[dict], previous: dict[str, dict]) -> None:
+        """Each document's standing after this run, keeping when it first became public."""
+        now = datetime.now(UTC)
+        with self.engine.begin() as db:
+            for row in rows:
+                before = previous.get(row["document_id"]) or {}
+                values = {
+                    **row,
+                    "details_since": (before.get("details_since") or now)
+                    if row["details"] == "public"
+                    else None,
+                    "text_since": (before.get("text_since") or now) if row["text"] == "public" else None,
+                    "run_id": run,
+                    "updated_at": now,
+                }
+                done = db.execute(
+                    update(publication_status)
+                    .where(publication_status.c.document_id == row["document_id"])
+                    .values(**values)
+                )
+                if not done.rowcount:
+                    db.execute(insert(publication_status).values(**values))
+
+
+def _count(report: dict) -> dict:
+    return {
+        key: len(value) if isinstance(value, (list, dict, set)) else value for key, value in report.items()
+    }
+
+
+def publish_country(review, library, review_store, public_store, jurisdiction: str, ids: set[str]):
+    """One country's run: its details, then its texts, each under its decision; and where each of its
+    documents stands afterwards, in words a reviewer reads."""
+    works = {i: library.act(i).get("work") or i for i in ids}
+    rows = {
+        i: {
+            "document_id": i,
+            "work": works[i],
+            "jurisdiction": jurisdiction,
+            "details": "waiting",
+            "text": "waiting",
+            "reason": "",
+        }
+        for i in ids
+    }
+    try:
+        decision = current_decision(jurisdiction)
+    except Refused as refused:
+        for row in rows.values():
+            row.update(details="blocked", text="blocked", reason=str(refused))
+        return {"blocked": str(refused)}, list(rows.values())
+    approved, waiting = from_workbench(review, library, review_store, jurisdiction, only=ids)
+    records = publish_records(public_store, jurisdiction, approved, waiting, decision)
+    public = set(records["published"]) | set(records["updated"])
+    for i, row in rows.items():
+        work = works[i]
+        if work in public:
+            row["details"] = "public"
+        elif work in records["skipped"]:
+            row.update(details="blocked", reason=records["skipped"][work])
+        elif work in records["taken_down"]:
+            row.update(details="taken_down", reason="its approval lapsed or was revoked")
+        elif work in waiting:
+            row["reason"] = "its approval is not current: approve it again"
+    summary = {"decision_until": decision["expires_at"][:10], "records": _count(records)}
+    try:
+        text_decision = current_text_decision(jurisdiction)
+    except Refused as refused:
+        for i, row in rows.items():
+            if row["details"] == "public":
+                held = library.act(i).get("text_held")
+                row.update(text="held" if held else "no_decision", reason="" if held else str(refused))
+        summary["texts"] = {"blocked": str(refused)}
+        return summary, list(rows.values())
+    texts = texts_from_workbench(review, library, review_store, jurisdiction, only=ids)
+    report = publish_texts(public_store, jurisdiction, texts, text_decision)
+    published = {entry["document"] for entry in report["published"]} | set(report["unchanged"])
+    withdrawn = set(report["withdrawn"])
+    for i, row in rows.items():
+        act = library.act(i)
+        if i in published:
+            row["text"] = "public"
+        elif i in report["skipped"]:
+            why = report["skipped"][i]
+            kind = (
+                "held"
+                if why.startswith("its text is held")
+                else "not_covered"
+                if "does not cover" in why
+                else "blocked"
+            )
+            row["text"] = kind
+            row["reason"] = row["reason"] or why
+        elif f"{works[i]} ({act.get('language') or 'en'})" in withdrawn:
+            row["text"] = "withdrawn"
+    summary["text_decision_until"] = text_decision["expires_at"][:10]
+    summary["texts"] = _count(report)
+    return summary, list(rows.values())
+
+
+def run(review, library, review_store, public_store, log: PublicationLog) -> dict:
+    """A publishing run: every country with an approved document, its details then its texts, and
+    each document's standing recorded for the workbench. A failure is recorded and raised."""
+    number, trigger, by = log.start()
+    summary: dict = {"trigger": trigger, "requested_by": by, "countries": {}}
+    try:
+        named = review_store.approved_ids()
+        listed = {d["id"]: d for d in library.documents() if d["id"] in named and not d.get("part")}
+        previous = log.statuses()
+        rows: list[dict] = []
+        for country in sorted({d.get("jurisdiction") for d in listed.values() if d.get("jurisdiction")}):
+            ids = {i for i, d in listed.items() if d.get("jurisdiction") == country}
+            summary["countries"][country], found = publish_country(
+                review, library, review_store, public_store, country, ids
+            )
+            rows += found
+        log.record(number, rows, previous)
+    except Exception as error:
+        log.finish(number, "failed", summary, f"{type(error).__name__}: {error}"[:2000])
+        raise
+    log.finish(number, "succeeded", summary)
+    return {"run": number, **summary}
+
+
 def _canonical_nodes(text) -> list[tuple]:
     return [
         (n.kind, n.locator, n.label or None, n.heading or None, n.start, n.end, n.cell_states or None)
@@ -969,8 +1154,23 @@ def main(argv=None) -> int:
     texts_cmd = commands.add_parser("texts")
     texts_cmd.add_argument("--jurisdiction", required=True)
     texts_cmd.add_argument("--dry-run", action="store_true")
+    commands.add_parser("run", help="every country's details and texts, as the publish job runs them")
     args = parser.parse_args(argv)
     try:
+        if args.command == "run":
+            settings.load()
+            engine = create_engine(os.environ["ALVARY_REVIEW_DATABASE_URL"])  # the publisher's login
+            review_store = ReviewStore(engine)
+            library = Library()
+            summary = run(
+                Review(review_store, library, registry()),
+                library,
+                review_store,
+                Store(engine_for()),
+                PublicationLog(engine),
+            )
+            print(json.dumps(summary, indent=2, default=str))
+            return 0
         if args.command == "decide-text":
             decision = decide_text(
                 args.jurisdiction,

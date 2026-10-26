@@ -129,3 +129,59 @@ def test_a_link_its_records_no_longer_state_is_withdrawn_and_judicial_links_are_
         == []
     )
     assert len(effects()) == 4
+
+
+def test_a_run_publishes_what_the_workbench_approved_and_records_where_each_document_stands(
+    store, decisions, tmp_path, monkeypatch
+):
+    """The publish job's run, end to end: it looks at the documents an approval names, publishes their
+    details under the country's decision (no text decision: no text), records the run and each
+    document's standing for the workbench, takes up a run asked for there, and takes a document down
+    when its approval is revoked."""
+    from test_workbench import ACT, approve, confirm_details, flag_id, save, signed_in
+    from test_workbench import world as workbench_world  # noqa: F401
+
+    from schema.jurisdictions import registry
+    from workbench.review import Review
+
+    world = workbench_world.__wrapped__(tmp_path, monkeypatch)
+    review_store, library = world
+    review = Review(review_store, library, registry())
+    log = publish.PublicationLog(review_store.engine)
+    publish.decide("ng", "Ijidai Lassa", 12, [], "", "")
+    quiet = publish.run(review, library, review_store, store, log)  # nothing approved: nothing to do
+    assert quiet["trigger"] == "schedule" and quiet["countries"] == {}
+    approver = signed_in(world, "approver@example.org")
+    save(approver, resolutions={flag_id(): {"decision": "use_check", "reader": "mineru"}})
+    save(approver, page=2, units=[{"kind": "paragraph", "text": "2. Citation."}])
+    official = {
+        "publication.kind": "gazette",
+        "publication.name": "Federal Republic of Nigeria Official Gazette",
+        "publication.url": "https://placng.org/i/documents/cybercrimes-2024",
+    }
+    confirm_details(approver, **official)
+    assert approve(approver).status_code == 200
+    review_store.request_publication("approver@example.org")
+    summary = publish.run(review, library, review_store, store, log)
+    assert summary["trigger"] == "manual" and summary["requested_by"] == "approver@example.org"
+    assert summary["countries"]["ng"]["records"]["published"] == 1
+    assert "No text decision" in summary["countries"]["ng"]["texts"]["blocked"]
+    standing = review_store.publication_statuses()[ACT]
+    assert (standing["details"], standing["text"]) == ("public", "no_decision") and standing["details_since"]
+    assert [r["status"] for r in review_store.publication_runs()] == ["succeeded", "succeeded"]
+    client = TestClient(create_app(store=store))
+    assert client.get(f"/sources/{ACT}").status_code == 200
+    # The workbench says so, on the document and in the list.
+    shown = approver.get(f"/api/documents/{ACT}").json()["publication"]
+    assert shown["state"] == "public" and shown["text"].startswith("Text not published: No text decision")
+    listed = {d["id"]: d for d in approver.get("/api/documents?limit=200").json()["documents"]}
+    assert listed[ACT]["publication"] == "public"
+    page = approver.get("/api/publishing").json()
+    assert [d["id"] for d in page["countries"][0]["documents"]] == [ACT] and len(page["runs"]) == 2
+    # Revoked: the next run takes it down, and says so.
+    assert approve(approver, expected=1, decision="revoked").status_code == 200
+    assert approver.get(f"/api/documents/{ACT}").json()["publication"]["state"] == "taken_down_next"
+    after = publish.run(review, library, review_store, store, log)
+    assert after["countries"]["ng"]["records"]["taken_down"] == 1
+    assert review_store.publication_statuses()[ACT]["details"] == "taken_down"
+    assert client.get(f"/sources/{ACT}").status_code == 404

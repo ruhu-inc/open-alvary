@@ -125,6 +125,7 @@ async function loadMe() {
     el("a", { class: "nav-link", href: "#/queue", text: "Work queue" }),
     result.data.access ? el("a", { class: "nav-link", href: "#/access", text: "Access" }) : "",
     result.data.operators ? el("a", { class: "nav-link", href: "#/operators", text: "Operators" }) : "",
+    result.data.publishing ? el("a", { class: "nav-link", href: "#/publishing", text: "Publishing" }) : "",
     el("span", { class: "who-name", text: result.data.name, title: `${result.data.email} · ${result.data.roles.join(", ")}` }),
     el("button", { class: "small", text: "Sign out", on: { click: signOut } }),
   );
@@ -224,6 +225,8 @@ const TYPE_LABEL = {
   ministerial_order: "Ministerial Order", regulations: "Regulations", instructions: "Instructions", agreement: "Agreement", convention: "Convention",
   ruling: "Ruling",
 };
+// A document's place in public view, in the list (workbench/publishing.py: short).
+const PUBLICATION_PILL = { public: ["ok", "public"], next_run: ["medium", "public at next run"], blocked: ["warn", "not publishable"], taken_down_next: ["warn", "comes down at next run"] };
 const ACTION_LABEL = { page_saved: "saved", details_saved: "saved the details of", act_approved: "approved", act_revoked: "revoked approval of", signed_in: "signed in", signed_out: "signed out", operator_saved: "updated operator", sign_in_refused: "was refused sign-in" };
 
 const STATUS_CLASS = { "Approved": "ok", "Approval out of date": "warn", "Ready for approval": "ok", "Not started": "medium", "In review": "medium" };
@@ -340,7 +343,7 @@ async function dashboard() {
         el("div", { class: "doc-meta" }, el("span", { class: "type", text: TYPE_LABEL[d.type] || d.type.replace(/_/g, " ") }), d.year ? el("span", { text: String(d.year) }) : null, d.language ? el("span", { text: d.language.toUpperCase() }) : null, d.jurisdiction ? el("span", { text: d.jurisdiction.toUpperCase() }) : null),
         el("strong", { class: "doc-title", text: d.title }),
         meter(pct),
-        el("div", { class: "doc-foot" }, el("span", { class: "muted", text: d.text_held ? "Details only: text held" : `${d.checked} / ${d.pages} pages checked` }), pill(STATUS_CLASS[d.status] || "medium", d.status), d.open_high ? pill("high", `${d.open_high} high`) : null),
+        el("div", { class: "doc-foot" }, el("span", { class: "muted", text: d.text_held ? "Details only: text held" : `${d.checked} / ${d.pages} pages checked` }), pill(STATUS_CLASS[d.status] || "medium", d.status), d.open_high ? pill("high", `${d.open_high} high`) : null, d.publication ? pill(...PUBLICATION_PILL[d.publication]) : null),
         el("div", { class: "muted small", text: d.last ? `Last activity: ${operatorName(d.last.actor)}, ${ago(d.last.at)}` : "No review activity yet" }));
     }) : [el("p", { class: "muted", text: "No documents match." })]));
     const last = Math.min(page.offset + page.documents.length, page.total);
@@ -415,6 +418,7 @@ async function actView(actId) {
         el("span", { text: `${act.text_held.note}. Its pages need no review, and its text will not be published.` })) : null,
       standingPanel(data.standing),
       approvalChecklist(actId, data, current, head),
+      publicationLine(data.publication),
       el("p", {},
         nextTodo && !act.text_held ? el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${nextTodo.page}` }, el("button", { class: "primary", text: `Continue reviewing at page ${nextTodo.page}` })) : null, " ",
         el("a", { href: `#/doc/${encodeURIComponent(actId)}/read` }, el("button", { text: "Read the whole document" })), " ",
@@ -468,6 +472,17 @@ function standingPanel(standing) {
 }
 
 // The steps to approval, each done or with what is left and a link to it.
+// Where the document stands in public view: published, waiting for the next run, or why not.
+function publicationLine(where, { link = true } = {}) {
+  if (!where || where.state === "not_approved") return null;
+  const tone = { public: "ok", next_run: "medium", blocked: "warn", taken_down_next: "warn", taken_down: "warn" }[where.state] || "medium";
+  const label = { public: "Public", next_run: "Next run", blocked: "Not publishable", taken_down_next: "Comes down", taken_down: "Taken down" }[where.state] || where.state;
+  return el("div", { class: "publication-line" },
+    pill(tone, label), " ", el("span", { text: where.words }),
+    where.text ? el("div", { class: "muted small", text: where.text }) : null,
+    link && app.me && app.me.publishing ? el("div", { class: "small" }, el("a", { href: "#/publishing", text: "Publishing" })) : null);
+}
+
 function approvalChecklist(actId, data, current, head) {
   const ready = data.readiness;
   const page = (n) => el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${n}`, text: `page ${n}` });
@@ -2400,6 +2415,66 @@ async function auditView(actId) {
 // --- routing -------------------------------------------------------------------------------------
 
 let lastHash = location.hash;
+// --- publishing ----------------------------------------------------------------------------------
+
+const RUN_STATUS = { requested: ["medium", "waiting to start"], running: ["medium", "running"], succeeded: ["ok", "done"], failed: ["high", "failed"], covered: ["low", "covered by the next"] };
+
+function runWords(run) {
+  const parts = [];
+  for (const [code, country] of Object.entries((run.summary || {}).countries || {})) {
+    if (country.blocked) { parts.push(`${code.toUpperCase()}: not published (no country decision)`); continue; }
+    const r = country.records || {}, t = country.texts || {};
+    const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+    const bits = [`${n((r.published || 0) + (r.updated || 0), "document's details", "documents' details")} public`];
+    if (r.taken_down) bits.push(`${n(r.taken_down, "document", "documents")} taken down`);
+    if (t.published) bits.push(`${n(t.published, "text", "texts")} published`);
+    if (t.withdrawn) bits.push(`${n(t.withdrawn, "text", "texts")} withdrawn`);
+    if (t.blocked) bits.push("no text decision");
+    parts.push(`${code.toUpperCase()}: ${bits.join(", ")}`);
+  }
+  if (run.summary && run.summary.covered_by) parts.push(`included in run ${run.summary.covered_by}`);
+  if (run.error) parts.push(run.error);
+  return parts.join(" · ") || "—";
+}
+
+async function publishingView() {
+  setCrumbs("Publishing");
+  const { data } = await api("/api/publishing");
+  const load = () => publishingView();
+  const runButton = data.can_run && !data.waiting
+    ? el("button", { class: "primary", text: "Publish now", on: { click: async (event) => { event.target.disabled = true; await change("/api/publishing/run", {}, load); event.target.disabled = false; } } })
+    : null;
+  const head = el("div", { class: "card" },
+    el("h2", { text: "Publishing" }),
+    el("p", { text: `Approved documents go public at the nightly run (${data.schedule}), within your decisions for each country: details where you decided for the country, texts only where your text decision covers them.` }),
+    data.waiting ? el("p", {}, pill(...RUN_STATUS[data.waiting.status]), ` A run asked for ${ago(data.waiting.requested_at)}${data.waiting.requested_by_name ? ` by ${data.waiting.requested_by_name}` : ""}: its result appears below when it ends.`) : null,
+    runButton ? el("p", {}, runButton, el("span", { class: "muted", text: " Starts a run now, after a passkey check." })) : null,
+    !data.configured ? el("p", { class: "muted", text: "No publish job is set up for this workbench (a local trial): the deployment sets it." }) : null);
+  const countries = data.countries.map((country) => {
+    const d = country.decisions;
+    const decided = (found, what) => found.refused ? el("li", { class: "warn" }, `${what}: none. `, el("span", { class: "muted", text: found.refused })) : el("li", { text: `${what}: by ${found.by}, until ${found.until}${found.types ? ` (${found.types.join(", ")})` : ""}` });
+    const rows = country.documents.map((doc) => el("tr", {},
+      el("td", {}, el("a", { href: `#/doc/${encodeURIComponent(doc.id)}`, text: doc.title })),
+      el("td", {}, publicationLine(doc, { link: false }))));
+    return el("div", { class: "card" },
+      el("h3", { text: country.name }),
+      el("ul", {}, decided(d.catalogue, "Details decision"), decided(d.text, "Text decision")),
+      rows.length ? el("table", { class: "publishing" }, el("thead", {}, el("tr", {}, el("th", { text: "Approved document" }), el("th", { text: "In public view" }))), el("tbody", {}, rows))
+        : el("p", { class: "muted", text: "No approved documents yet." }));
+  });
+  const runs = el("div", { class: "card" },
+    el("h3", { text: "Runs" }),
+    data.runs.length ? el("table", { class: "publishing" },
+      el("thead", {}, el("tr", {}, el("th", { text: "Asked" }), el("th", { text: "By" }), el("th", { text: "Status" }), el("th", { text: "What it did" }))),
+      el("tbody", {}, data.runs.map((run) => el("tr", {},
+        el("td", { text: new Date(run.requested_at).toLocaleString(), title: run.requested_at }),
+        el("td", { text: run.trigger === "schedule" ? "nightly run" : run.requested_by_name || run.requested_by || "—" }),
+        el("td", {}, pill(...(RUN_STATUS[run.status] || ["medium", run.status]))),
+        el("td", { class: "small", text: runWords(run) })))))
+      : el("p", { class: "muted", text: "No run yet: the first nightly run will appear here." }));
+  main(head, ...countries, runs);
+}
+
 async function route() {
   if (app.dirty && location.hash !== lastHash && !confirm("You have unsaved changes on this page. Leave without saving?")) {
     history.replaceState(null, "", lastHash);
@@ -2426,6 +2501,7 @@ async function route() {
     if (parts[0] === "audit" && parts[1]) return await auditView(parts[1]);
     if (parts[0] === "access" && app.me.access) return await accessView(parts.slice(1));
     if (parts[0] === "operators" && app.me.operators) return await operatorsView();
+    if (parts[0] === "publishing" && app.me.publishing) return await publishingView();
     return await dashboard();
   } catch (error) {
     if (error.message !== "signed out") toast(error.message);

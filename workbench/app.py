@@ -44,6 +44,7 @@ from workbench import (
     serialize,
 )
 from workbench import operators as operators_section
+from workbench import publishing as publishing_section
 from workbench.review import Review, blind, to_do
 from workbench.store import Conflict, Store, engine_from_environment
 
@@ -205,6 +206,7 @@ def create_app(
             "csrf": who["csrf"],
             "access": access is not None and relying is not None and access_section.ROLE in person["roles"],
             "operators": relying is not None and operators_section.ROLE in person["roles"],
+            "publishing": bool(person["roles"] & publishing_section.READERS),
         }
 
     # --- review ----------------------------------------------------------------------------------
@@ -486,11 +488,27 @@ def create_app(
             rows.sort(key=SORTS[sort], reverse=sort == "recent")
         limit = max(1, min(limit, 200))
         offset = max(0, offset)
+        shown = rows[offset : offset + limit]
+        # Where each shown document stands in public view (the latest run, and whether it awaits the next).
+        statuses, decided = store.publication_statuses(), {}
+        for row in shown:
+            code = row.get("jurisdiction") or ""
+            if code not in decided:
+                decided[code] = publishing_section.decisions(code)
+        shown = [
+            {
+                **row,
+                "publication": publishing_section.short(
+                    row.get("approval"), statuses.get(row["id"]), decided[row.get("jurisdiction") or ""]
+                ),
+            }
+            for row in shown
+        ]
         return {
             "total": len(rows),
             "offset": offset,
             "limit": limit,
-            "documents": rows[offset : offset + limit],
+            "documents": shown,
         }
 
     @app.get("/api/documents/{act_id}")
@@ -542,6 +560,12 @@ def create_app(
             "approved": now["approved"],
             "approvals": [recorded(a) for a in now["approvals"]],
             "materials": content.materials_for(act),
+            "publication": publishing_section.standing(
+                act,
+                now,
+                store.publication_statuses().get(act_id),
+                publishing_section.decisions(act.get("jurisdiction") or ""),
+            ),
         }
 
     @app.get("/api/documents/{act_id}/canonical")
@@ -1129,6 +1153,7 @@ def create_app(
     privileged.install(app, store, relying)
     access_section.install(app, store, access, relying)
     operators_section.install(app, store, relying)
+    publishing_section.install(app, store, library, state, relying)
 
     @app.exception_handler(HTTPException)
     async def problems(request: Request, error: HTTPException):
