@@ -8,7 +8,9 @@ in production (ALVARY_REVIEW_DATABASE_URL); SQLite is accepted for a local trial
 import hashlib
 import json
 import os
+import re
 import secrets
+import sys
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import (
@@ -31,7 +33,7 @@ from sqlalchemy import (
     text,
     update,
 )
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import IntegrityError
 
 ROLES = {"reviewer", "approver", "admin", "access_admin"}
@@ -226,6 +228,43 @@ audit = Table(
 )
 
 
+# Publishing (operations.publish run): every run, asked for from the workbench or started by the nightly
+# schedule, and where each document considered stands in public view after the latest run. The
+# publisher's own login (PUBLISHER) writes these two tables and only reads the review tables it needs
+# (PUBLISHER_READS); the workbench asks for a run and reads them.
+publication_run = Table(
+    "publication_run",
+    metadata,
+    Column("id", Integer, primary_key=True, autoincrement=True),
+    Column("requested_at", DateTime(timezone=True), nullable=False),
+    Column("trigger", String(20), nullable=False),  # manual | schedule
+    Column("requested_by", String(320)),  # who asked, for a manual run
+    Column("status", String(20), nullable=False),  # requested | running | succeeded | failed
+    Column("started_at", DateTime(timezone=True)),
+    Column("finished_at", DateTime(timezone=True)),
+    Column("summary", JSON, nullable=False),  # per jurisdiction: decisions and what was done
+    Column("error", Text),
+)
+publication_status = Table(
+    "publication_status",
+    metadata,
+    Column("document_id", String(140), primary_key=True),
+    Column("work", String(140), nullable=False),
+    Column("jurisdiction", String(8), nullable=False),
+    Column("details", String(20), nullable=False),  # public | waiting | blocked | taken_down
+    # public | held | not_covered | no_decision | blocked | withdrawn | waiting
+    Column("text", String(20), nullable=False),
+    Column("reason", Text, nullable=False),
+    Column("details_since", DateTime(timezone=True)),
+    Column("text_since", DateTime(timezone=True)),
+    Column("run_id", Integer, nullable=False),
+    Column("updated_at", DateTime(timezone=True), nullable=False),
+)
+PUBLISHER = "review_publisher"
+PUBLISHER_READS = ("operator", "page_revision", "detail_revision", "approval")
+PUBLISHER_WRITES = ("publication_run", "publication_status")
+
+
 class Conflict(Exception):
     """Someone saved first: the client must reload and reapply."""
 
@@ -253,7 +292,36 @@ def connect(url: str) -> Engine:
     engine = create_engine(url, future=True, pool_pre_ping=True)
     metadata.create_all(engine)
     _upgrade(engine)
+    publisher = os.environ.get("ALVARY_REVIEW_PUBLISHER_DATABASE_URL")
+    if publisher and engine.dialect.name == "postgresql":
+        try:
+            provision_publisher(engine, make_url(publisher).password or "")
+        except (SystemExit, Exception) as error:  # noqa: BLE001 - reviewing goes on; publishing waits
+            print(f"workbench: the publisher's login was not made: {error}", file=sys.stderr, flush=True)
     return engine
+
+
+def provision_publisher(engine: Engine, password: str) -> None:
+    """The publisher's login (operations.publish run): it reads approvals, details, page revisions and
+    operators' names, and writes only the publishing tables; never sessions, passkeys or enrolment
+    codes, and never a review. Made or brought up to date each time the workbench starts, so a table
+    added later is granted with it."""
+    # Generated letters and digits only (Terraform's random_password): a role's password cannot be a bound
+    # parameter, so it is written into the statement, and nothing else can be written there with it.
+    if not re.fullmatch(r"[A-Za-z0-9]{20,}", password):
+        raise SystemExit("The publisher's password must be generated: 20 or more letters and digits")
+    with engine.begin() as db:
+        exists = db.execute(text("SELECT 1 FROM pg_roles WHERE rolname = :name"), {"name": PUBLISHER}).first()
+        verb = "ALTER" if exists else "CREATE"
+        options = "LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT"
+        db.execute(text(f"{verb} ROLE {PUBLISHER} {options} PASSWORD '{password}'"))
+        database = db.execute(text("SELECT current_database()")).scalar()
+        db.execute(text(f'GRANT CONNECT ON DATABASE "{database}" TO {PUBLISHER}'))
+        db.execute(text(f"GRANT USAGE ON SCHEMA public TO {PUBLISHER}"))
+        db.execute(text(f"REVOKE ALL ON ALL TABLES IN SCHEMA public FROM {PUBLISHER}"))
+        db.execute(text(f"GRANT SELECT ON {', '.join(PUBLISHER_READS)} TO {PUBLISHER}"))
+        db.execute(text(f"GRANT SELECT, INSERT, UPDATE ON {', '.join(PUBLISHER_WRITES)} TO {PUBLISHER}"))
+        db.execute(text(f"GRANT USAGE, SELECT ON SEQUENCE publication_run_id_seq TO {PUBLISHER}"))
 
 
 def _upgrade(engine: Engine) -> None:
@@ -367,6 +435,37 @@ class Store:
     def audit(self, actor: str, action: str, act_id=None, page=None, detail=None) -> None:
         with self.engine.begin() as db:
             self._audit(db, actor, action, act_id, page, detail)
+
+    # --- publishing ------------------------------------------------------------------------------
+
+    def request_publication(self, email: str) -> int:
+        """A run asked for now (the workbench then starts the publish job, which takes it up)."""
+        with self.engine.begin() as db:
+            run = db.execute(
+                insert(publication_run).values(
+                    requested_at=now(), trigger="manual", requested_by=email, status="requested", summary={}
+                )
+            ).inserted_primary_key[0]
+            self._audit(db, email, "publication_requested", detail={"run": run})
+        return run
+
+    def approved_ids(self) -> set[str]:
+        """Every document an approval (or its revocation) names: the only ones publishing looks at."""
+        with self.engine.connect() as db:
+            return {row.act_id for row in db.execute(select(approval.c.act_id).distinct())}
+
+    def publication_runs(self, limit: int = 10) -> list[dict]:
+        with self.engine.connect() as db:
+            rows = db.execute(
+                select(publication_run).order_by(publication_run.c.id.desc()).limit(limit)
+            ).all()
+        return [dict(row._mapping) for row in rows]
+
+    def publication_statuses(self) -> dict[str, dict]:
+        """Each document considered by a run, as the latest run left it."""
+        with self.engine.connect() as db:
+            rows = db.execute(select(publication_status)).all()
+        return {row.document_id: dict(row._mapping) for row in rows}
 
     def events(self, act_id: str | None = None, limit: int = 200) -> list[dict]:
         query = select(audit).order_by(audit.c.id.desc()).limit(limit)

@@ -26,6 +26,11 @@ locals {
       ALVARY_REVIEW_CACHE         = "/tmp/review-cache"
       ALVARY_REVIEW_CACHE_MB      = "512" # /tmp is memory on Cloud Run: a quarter of the instance's 2 GiB
     },
+    # The Publishing page: the job it starts, and when the nightly run is (publish.tf).
+    local.publish_enabled ? {
+      ALVARY_PUBLISH_JOB      = local.publish_job_id
+      ALVARY_PUBLISH_SCHEDULE = local.publish_words
+    } : {},
     var.workbench_settings,
   )
   workbench_secret_env = merge(
@@ -33,6 +38,8 @@ locals {
       ALVARY_REVIEW_DATABASE_URL       = "review-database-url"
       ALVARY_REVIEW_OIDC_CLIENT_SECRET = "review-oidc-client-secret"
     },
+    # The publisher's login, which the workbench makes or updates when it starts (publish.tf).
+    local.publish_enabled ? { ALVARY_REVIEW_PUBLISHER_DATABASE_URL = "review-publisher-database-url" } : {},
     var.accounts_enabled ? {
       ALVARY_ACCESS_DATABASE_URL = "access-database-url"
       RESEND_API_KEY             = "resend-api-key"
@@ -219,6 +226,8 @@ resource "google_cloud_run_v2_service" "workbench" {
     google_secret_manager_secret_iam_member.review_database_url,
     google_secret_manager_secret_version.review_database_url,
     google_storage_bucket_iam_member.collection_read,
+    google_secret_manager_secret_iam_member.review_publisher_database_url,
+    google_secret_manager_secret_version.review_publisher_database_url,
   ]
 }
 

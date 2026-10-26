@@ -166,23 +166,35 @@ and, once Resend's webhook exists, `RESEND_WEBHOOK_SECRET`:
 Turning activation B off again is a deploy without `ACCOUNTS=1`: the anonymous API reopens and the
 console, keys and connected apps stop answering; nothing is deleted.
 
-## Publishing approved works (catalogue records)
+## Publishing approved works
 
-`python -m operations.publish` takes works approved in the review workbench into the public
-catalogue as records only (title, number, year, citation, status, issuer, official link); never their
-text. Each run takes down records whose approval has lapsed. The change log records both.
+Approving a document in the workbench does not publish it. The publish job (`<prefix>-publish`,
+`python -m operations.publish run`, deployment/gcp-terraform/env/publish.tf) copies approved documents
+into the public catalogue every night at 01:30 UTC (02:30 in Lagos, 03:30 in Kigali), and whenever an
+administrator presses **Publish now** on the workbench's Publishing page (after a passkey check). Each
+run, for every country with an approved document:
 
-1. Once per jurisdiction, the owner records the collection decision, then commits the file:
-   `python -m operations.publish decide --jurisdiction rw --by "Full Name" --evidence <url>`
-   (`ingestion/decisions/rw-catalogue.json`, 12 months by default; run again to renew).
-2. With both databases reachable (for example two Cloud SQL Auth Proxy ports: the review database
-   in open-alvary-ingestion, the public one in open-alvary-prod) and read access to the collection:
-   `ALVARY_REVIEW_DATABASE_URL=… ALVARY_REVIEW_COLLECTIONS=gs://open-alvary-corpus/collections/rw/
-   DATABASE_URL=… python -m operations.publish records --jurisdiction rw --dry-run`, then without
-   `--dry-run`. The review database is only read.
+1. stops if the owner has no current catalogue decision for the country (`ingestion/decisions/<cc>-catalogue.json`);
+2. publishes the details of each approved document whose approval still covers its text and details,
+   and takes down those whose approval lapsed or was revoked;
+3. publishes texts only where the owner's text decision (`<cc>-text.json`) covers the document's kind,
+   exactly as approved, never a text held (words masked in the source);
+4. records the run and each document's standing in the review database, which the workbench shows on
+   each document, in the list and on the Publishing page. The change log records every change.
 
-Publishing text needs more first: the copyright check of official texts (Law N° 055/2024 for
-Rwanda), a rights decision verified against the law itself (POL-02) and the public reader (MAC-01).
+The job reads the review database with its own login, `review_publisher`, which the workbench makes
+or brings up to date when it starts (`workbench/store.py`, password in `review-publisher-database-url`):
+approvals, details, page revisions and operators' names, read only, and the publishing tables; never
+sessions, passkeys or enrolment codes, and never a review. Its account writes the public catalogue,
+reads the collections, and nothing else. The scheduler and the workbench's account may start the job.
+
+- **Publish now** needs the `admin` role and a passkey. A run asked for while the job cannot be
+  started stays asked for, and the next nightly run takes it up.
+- A run's log: `gcloud run jobs executions list --job <prefix>-publish --region europe-west1`.
+- The owner records a decision with `python -m operations.publish decide` (details) or `decide-text`
+  (texts), commits the file, and releases the workbench image: decisions travel with the code.
+- By hand, with both databases reachable: `python -m operations.publish records|texts --jurisdiction
+  rw --dry-run` shows one step without changing anything.
 
 ## Account deletion and retention
 
