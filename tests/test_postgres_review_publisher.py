@@ -32,16 +32,23 @@ FORBIDDEN = (
 )
 
 
-def test_the_publisher_reads_what_publishing_needs_and_writes_only_its_own_tables(monkeypatch):
+def test_the_publisher_reads_what_publishing_needs_and_writes_only_its_own_tables(monkeypatch, capsys):
+    """As on Cloud SQL: the review database belongs to the workbench's own login, which may create roles
+    but is no superuser; the publisher's login is made at one start and its password set at the next."""
     url = validated_test_url()
     name = "oa_" + uuid4().hex + "_test"
+    owner_role = "review_owner_" + uuid4().hex[:8]
     admin = create_engine(url, poolclass=NullPool, isolation_level="AUTOCOMMIT")
-    password = "".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
+    alphabet = string.ascii_letters + string.digits
+    password, owner_password = ("".join(secrets.choice(alphabet) for _ in range(32)) for _ in range(2))
     engines = []
     with admin.connect() as conn:
-        conn.execute(text(f'CREATE DATABASE "{name}"'))
+        conn.execute(text(f"CREATE ROLE {owner_role} LOGIN CREATEROLE CREATEDB PASSWORD '{owner_password}'"))
+        conn.execute(text(f'CREATE DATABASE "{name}" OWNER {owner_role}'))
     try:
-        owner_url = url.set(database=name).render_as_string(hide_password=False)
+        owner_url = url.set(database=name, username=owner_role, password=owner_password).render_as_string(
+            hide_password=False
+        )
         publisher_url = url.set(database=name, username=review.PUBLISHER, password=password)
         monkeypatch.setenv(
             "ALVARY_REVIEW_PUBLISHER_DATABASE_URL", publisher_url.render_as_string(hide_password=False)
@@ -75,16 +82,31 @@ def test_the_publisher_reads_what_publishing_needs_and_writes_only_its_own_table
         log.finish(run, "succeeded", {"countries": {}})
         assert trigger == "schedule" and store.publication_statuses()["rw-x"]["details"] == "public"
         assert [r["status"] for r in store.publication_runs()] == ["succeeded"]
-        # The workbench starting again brings the login up to date; a weak password is refused.
+        # The next start sets the password again (a new one after a rotation) without a superuser.
+        rotated = "".join(secrets.choice(alphabet) for _ in range(32))
+        monkeypatch.setenv(
+            "ALVARY_REVIEW_PUBLISHER_DATABASE_URL",
+            publisher_url.set(password=rotated).render_as_string(hide_password=False),
+        )
         engines.append(review.connect(owner_url))
-        with publisher.connect() as db:
+        assert "not made" not in capsys.readouterr().err
+        rotated_engine = create_engine(publisher_url.set(password=rotated), poolclass=NullPool)
+        engines.append(rotated_engine)
+        with rotated_engine.connect() as db:
             db.execute(text("SELECT 1 FROM approval LIMIT 1"))
         with pytest.raises(SystemExit, match="generated"):
             review.provision_publisher(owner, "short'; DROP TABLE approval; --")
+        # A refusal is logged without the statement, so the password never reaches the log.
+        with admin.connect() as conn:
+            conn.execute(text(f"ALTER ROLE {owner_role} NOCREATEROLE"))
+        engines.append(review.connect(owner_url))
+        err = capsys.readouterr().err
+        assert "the publisher's login was not made: InsufficientPrivilege" in err and rotated not in err
     finally:
         for engine in engines:
             engine.dispose()
         with admin.connect() as conn:
-            conn.execute(text(f'DROP DATABASE "{name}" WITH (FORCE)'))
+            conn.execute(text(f'DROP DATABASE "{name}" WITH (FORCE)'))  # its grants to the publisher with it
             conn.execute(text(f"DROP ROLE IF EXISTS {review.PUBLISHER}"))
+            conn.execute(text(f"DROP ROLE IF EXISTS {owner_role}"))
         admin.dispose()
