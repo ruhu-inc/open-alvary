@@ -124,3 +124,80 @@ def test_a_file_whose_text_layer_cannot_be_read_still_has_its_pages_counted(stor
     assert (measured["pages"], measured["text_pages"]) == (3, []) and "pdftotext" in measured[
         "text_layer_error"
     ]
+
+
+class Counting(Reader):
+    """A reader that counts the pages it bills, failing once on the requests listed in `fail_on`
+    (after billing them, as the service does when a later request of the file fails)."""
+
+    def __init__(self, fail_on=()):
+        self.billed, self.fail_on, self.calls = 0, list(fail_on), 0
+
+    def read(self, part):
+        self.calls += 1
+        count = len(PdfReader(str(part)).pages)
+        self.billed += count
+        if self.calls in self.fail_on:
+            self.fail_on.remove(self.calls)
+            raise RuntimeError("RetryError: the deadline for retries passed")
+        return super().read(part)
+
+
+def big_file(store, pages=120):
+    store.objects["sources/ng/nln/big.pdf"] = pdf(pages)
+    return {"sha256": "big", "source_object": "sources/ng/nln/big.pdf", "pages": list(range(1, pages + 1))}
+
+
+def test_a_file_is_saved_every_fifty_pages_and_one_that_fails_is_resumed_before_the_run_ends(store):
+    item = big_file(store)
+    reader = Counting(fail_on=[2])  # the second group of 50 fails once
+    result = cloud_read.read(store, "ng", "layout", [item], 1000, log=lambda m: None, reader=reader)
+    assert result["retried"] == ["big"] and result["failed"] == [] and result["pages"] == 120
+    kept = json.loads(store.objects["readings/ng/docai/big.json"])
+    assert [p["page"] for p in kept["pages"]] == list(range(1, 121))
+    assert [len(r["pages"]) for r in kept["runs"]] == [50, 50, 20]  # the first group was kept, not read again
+    assert result["billed_pages"] == 170  # the failed group was billed too, and counted
+
+
+def test_the_budget_counts_billed_pages_also_of_a_file_that_failed(store):
+    item = big_file(store)
+    reader = Counting(fail_on=[1, 2])  # the first group fails, and again on the second pass
+    result = cloud_read.read(store, "ng", "layout", [item], 60, log=lambda m: None, reader=reader)
+    assert result["billed_pages"] == 50 and result["stopped"] == "budget" and result["pages"] == 0
+    assert "readings/ng/docai/big.json" not in store.objects
+
+
+def test_requests_are_paced_to_the_allowance_across_threads():
+    from ingestion.layout_parser import Pace
+
+    moment, slept = [0.0], []
+
+    def sleep(seconds):
+        slept.append(seconds)
+        moment[0] += seconds
+
+    pace = Pace(30, clock=lambda: moment[0], sleep=sleep)  # two seconds a page
+    for _ in range(3):
+        pace.wait(15)
+    assert slept == [30.0, 30.0]  # the first goes at once; each next one 15 pages later
+
+
+def test_a_run_records_its_billed_pages_cost_and_approval(store, monkeypatch):
+    item = big_file(store, pages=10)
+    store.objects["work/ng/reading.json"] = json.dumps(
+        {"pages": 10, "approval": {"max_pages": 10, "basis": "Option 1"}, "files": [item]}
+    ).encode()
+    monkeypatch.setattr(cloud_read.corpus_store, "open_store", lambda: store)
+    monkeypatch.setattr(cloud_read, "PACE", {})
+    monkeypatch.setenv("SCAN_MAX_PAGES", "2500")
+    monkeypatch.setenv("SCAN_APPROVAL", "Owner in chat, 2026-10-26: re-read the failed files")
+    from ingestion import readers
+
+    monkeypatch.setattr(
+        readers, "DocAIReader", lambda: type("R", (Counting,), {"preflight": lambda self: None})()
+    )
+    assert cloud_read.run("layout", "ng", 0, 1, log=lambda m: None) == 0
+    (name,) = [n for n in store.objects if n.startswith("work/ng/runs/layout/")]
+    report = json.loads(store.objects[name])
+    assert (report["billed_pages"], report["budget_pages"], report["cost_usd"]) == (10, 2500, 0.1)
+    assert report["approval"].startswith("Owner in chat") and name.endswith("-task1-of-1.json")
