@@ -1,0 +1,57 @@
+deployment/gcp-terraform/env/workbench.tf
+  s_d665c62e07d76f::t_32e19c34545286 29-33,41-42,229-230
+operations/publish.py
+  s_d665c62e07d76f::t_95ed9c723f7e76 43,73,216,218-219,224-225,717,719-720,725-726,927-1104,1157,1160-1173
+tests/test_postgres_review_publisher.py
+  s_d665c62e07d76f::t_64ea1803110a3e 1-20,24-45,49-64,73-90
+  s_d665c62e07d76f::t_c14e057d78af00 46-48,65-72
+  s_d665c62e07d76f::t_114543e7a3741a 21-23
+workbench/static/app.css
+  s_d665c62e07d76f::t_2c758c2079c5f0 443-445
+  s_d665c62e07d76f::t_9d9ab5eed0c8fc 446
+tests/test_postgres_publish.py
+  s_d665c62e07d76f::t_bd83f98e4b3aa8 180
+  s_d665c62e07d76f::t_b8ac19d390e05c 132-156,163-179,181-187
+  s_d665c62e07d76f::t_4e899148233e7c 157-162
+workbench/app.py
+  s_d665c62e07d76f::t_cfdd43aaef8c0c 563-568
+  s_d665c62e07d76f::t_5dc5a8500b85f3 47,209,491-506,511,1156
+workbench/publishing.py
+  s_d665c62e07d76f::t_1ed85f8d67224e 167-168,242
+  s_d665c62e07d76f::t_f3073da4d31f89 1-54,60-64,68,70,72-88,94-95,101-102,104,110-112,114-117,119-159,163-166,169-200,208-230,234,240-241,243-245
+  s_d665c62e07d76f::t_d669f067e8ca5b 55-59,65-67,69,71,89-93,96-100,103,105-109,113,118,160-162,201-207,231-233,235-239
+workbench/static/app.js
+  s_d665c62e07d76f::t_f006d2e249d400 2427-2431
+  s_d665c62e07d76f::t_2c758c2079c5f0 128,228-229,346,421,475,477-482,484-485,2418-2426,2432-2457,2459-2477,2504
+  s_d665c62e07d76f::t_9d9ab5eed0c8fc 476,483,2458
+workbench/store.py
+  s_d665c62e07d76f::t_6913e4eb9dbdfe 36,231-267,295-296,304-308,313-315,318-326,439-451,457-468
+  s_d665c62e07d76f::t_95ed9c723f7e76 452-456
+  s_d665c62e07d76f::t_1fb7779c4098fb 309-312,316-317
+  s_d665c62e07d76f::t_402acb934be547 11
+  s_d665c62e07d76f::t_5edef82f37169c 13,297-300
+  s_d665c62e07d76f::t_aea7c1142a79af 469
+deployment/gcp-terraform/env/publish.tf
+  s_d665c62e07d76f::t_9d3e477224a9b4 1-217
+tests/test_workbench_publishing.py
+  s_d665c62e07d76f::t_05a22064e492ca 73-76,85-92,108-110
+  s_d665c62e07d76f::t_12d1cce014bff9 1-72,77-84,93-107,111-122
+deployment/runbook.md
+  s_d665c62e07d76f::t_d6ec7f4d32dd69 169-197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "d91bcdd9a359401d372d63cb650dcdb5a255cc21",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
