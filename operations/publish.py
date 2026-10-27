@@ -279,6 +279,44 @@ def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:60] or "body"
 
 
+# Names a reviewer withheld in a sensitive case (a child, a sexual offence: owner, 2026-10-27) are never
+# published: each is given as NAME_WITHHELD, and a record whose details would still name one is refused.
+NAME_WITHHELD = "[Withheld]"
+NAME_WORD = re.compile(r"[A-Za-z][A-Za-z'’-]{3,}")
+NOT_A_NAME = {
+    "limited", "company", "nigeria", "federal", "republic", "state", "government", "attorney", "general",
+    "bank", "council", "commission", "university", "others", "industrial", "court", "national", "ministry",
+}  # fmt: skip
+
+
+def withheld_names(record) -> list[str]:
+    """The party names a reviewer withheld: those marked Withheld, or every party when all names are."""
+    profile = getattr(record, "profile", None)
+    level = getattr(profile, "anonymisation", "none")
+    if level == "none":
+        return []
+    return [
+        p.name
+        for p in profile.parties
+        if (level == "full" or p.anonymised) and p.name.strip() not in ("", NAME_WITHHELD)
+    ]
+
+
+def withhold(text, names: list[str]):
+    """The text with each withheld name given as NAME_WITHHELD (any case)."""
+    if not text:
+        return text
+    for name in sorted(names, key=len, reverse=True):
+        text = re.sub(re.escape(name.strip()), NAME_WITHHELD, text, flags=re.I)
+    return text
+
+
+def still_named(texts, names: list[str]) -> bool:
+    """Whether a word of a withheld name is left in what would be published (a name cited differently)."""
+    words = {w.lower() for name in names for w in NAME_WORD.findall(name)} - NOT_A_NAME
+    return any(w.lower() in words for text in texts for w in NAME_WORD.findall(text or ""))
+
+
 def catalogue_entries(item: Approved, decision: dict) -> dict:
     """The legacy catalogue rows for one approved work: its source, rights record, citation and
     issuing authority. Raises Refused when the record lacks what a catalogue entry needs."""
@@ -297,13 +335,23 @@ def catalogue_entries(item: Approved, decision: dict) -> dict:
         official_url=official.get(kind, official.get("*", url)),
     )
     citation = record.identity.citations[0].text if record.identity.citations else record.identity.title
+    withheld = withheld_names(record)
+    title = withhold(record.identity.title, withheld)
+    citation = withhold(citation, withheld)
+    summary = withhold(record.text.summary.text if record.text.summary else None, withheld)
+    cited = aliases(item.work, citation, record.identity, withheld)
+    if withheld and still_named([title, citation, summary, *(c.value for c in cited)], withheld):
+        raise Refused(
+            f"{item.work}: names are withheld in this case, but its title, citations or summary would still "
+            "name a withheld party: edit them"
+        )
     languages = [e.language for e in record.expressions]
     names = ", ".join(LANGUAGES.get(code, code) for code in languages)
     source = Source(
         id=item.work,
         jurisdiction_id=place,
         authority_id=authority.id,
-        title=record.identity.title,
+        title=title,
         document_type=_document_type(record),
         canonical_url=url,
         url_kind="document",
@@ -311,7 +359,7 @@ def catalogue_entries(item: Approved, decision: dict) -> dict:
         language="en" if "en" in languages else languages[0],
         legal_status=LEGAL_STATUS.get(record.status.legal, "unknown"),
         catalogue_note=f"Official texts: {names}. " + decision["legal_note"],
-        summary=record.text.summary.text if record.text.summary else None,
+        summary=summary,
         year=record.identity.year,
         editions=editions(record),
         language_rule=language_rule(record),
@@ -332,7 +380,7 @@ def catalogue_entries(item: Approved, decision: dict) -> dict:
     return {
         "source": source,
         "rights": rights,
-        "citations": aliases(item.work, citation, record.identity),
+        "citations": cited,
         "authority": authority,
         "languages": languages,
     }
@@ -431,11 +479,13 @@ def treaty_status(record) -> TreatyStatus | None:
     )
 
 
-def aliases(work: str, citation: str, identity) -> list[Citation]:
+def aliases(work: str, citation: str, identity, withheld: list[str] | None = None) -> list[Citation]:
     """Every form a work is cited by in its reviewed details, each a citation alias (API-04): the
     citation the record shows first (with the ID it always had), then every other citation, such as
-    a popular one ("NDPA"), and every alternative title. One per form, compared as citations are."""
+    a popular one ("NDPA"), and every alternative title. One per form, compared as citations are; any
+    name withheld given as NAME_WITHHELD."""
     forms = [citation, *(c.text for c in identity.citations), *identity.alternative_titles]
+    forms = [withhold(form, withheld or []) for form in forms]
     found, seen = [], set()
     for form in forms:
         key = normalize_citation(form)
@@ -752,6 +802,14 @@ def texts_from_workbench(review, library, store, jurisdiction: str, only=None) -
             )
             continue
         record = review.built(act, now["view"])
+        if (
+            record is not None
+            and getattr(getattr(record, "profile", None), "anonymisation", "none") != "none"
+        ):
+            found.skipped[act["id"]] = (
+                "names are withheld in this case: its text is not published (names in a text are not yet masked)"
+            )
+            continue
         provenance = library.provenance(act["id"])
         if record is None or not provenance.get("sha256") or not provenance.get("retrieved_at"):
             found.skipped[act["id"]] = "no record of where and when its original file was retrieved"
