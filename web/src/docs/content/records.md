@@ -5,6 +5,8 @@ description: A record's details, its official source, and its full text once cle
 
 Every law in the catalogue is a **record**: its title, citation, type, legal status and official link. When the rights to its text are cleared, the record also has one or more **text versions** you can read in full.
 
+Open Alvary is not the publisher of these laws, regulations and judgments: the bodies that issue them publish them. A text version is a copy of the official text, checked against the official copy, and `canonical_url` links to the official copy at its publisher, which prevails where the two differ.
+
 ## Get a record
 
 ```curl
