@@ -116,6 +116,13 @@ def test_where_a_document_stands_is_said_in_words():
     assert judgment["text"] == "Text not published: the text decision covers act, constitution only."
     published = publishing.standing(act, state(), row(text="public", text_since=NOW), texts)
     assert published["text"] == "Text public since 2026-10-26."
+    skipped = row(details="blocked", reason="no official publication link in its details")
+    refused = publishing.standing(act, state(), skipped, DECIDED)
+    assert refused["state"] == "blocked" and "no official publication link" in refused["words"]
+    assert (
+        publishing.standing(act, state(at=NOW + timedelta(hours=2)), skipped, DECIDED)["state"] == "next_run"
+    )
+    assert publishing.short("approved", skipped, DECIDED) == "blocked"
     assert publishing.short("approved", row(), DECIDED) == "public"
     assert publishing.short("approved", None, DECIDED) == "next_run"
     assert publishing.short("out_of_date", row(), DECIDED) == "taken_down_next"

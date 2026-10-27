@@ -2427,6 +2427,8 @@ function runWords(run) {
     const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
     const bits = [`${n((r.published || 0) + (r.updated || 0), "document's details", "documents' details")} public`];
     if (r.taken_down) bits.push(`${n(r.taken_down, "document", "documents")} taken down`);
+    const skipped = Object.entries(country.records_skipped || {});
+    if (skipped.length) bits.push(`not published: ${skipped.map(([work, why]) => `${work} (${why})`).join("; ")}`);
     if (t.published) bits.push(`${n(t.published, "text", "texts")} published`);
     if (t.withdrawn) bits.push(`${n(t.withdrawn, "text", "texts")} withdrawn`);
     if (t.blocked) bits.push("no text decision");
