@@ -154,13 +154,22 @@ def test_a_run_publishes_what_the_workbench_approved_and_records_where_each_docu
     approver = signed_in(world, "approver@example.org")
     save(approver, resolutions={flag_id(): {"decision": "use_check", "reader": "mineru"}})
     save(approver, page=2, units=[{"kind": "paragraph", "text": "2. Citation."}])
+    # Approved without its official link: the run skips it, records why, and the workbench says so.
+    confirm_details(approver)
+    assert approve(approver).status_code == 200
+    skipped = publish.run(review, library, review_store, store, log)
+    assert "no official publication link" in skipped["countries"]["ng"]["records_skipped"][ACT]
+    assert review_store.publication_statuses()[ACT]["details"] == "blocked"
+    shown = approver.get(f"/api/documents/{ACT}").json()["publication"]
+    assert shown["state"] == "blocked" and "no official publication link" in shown["words"]
+    # Corrected and approved again: the next run publishes it.
     official = {
         "publication.kind": "gazette",
         "publication.name": "Federal Republic of Nigeria Official Gazette",
         "publication.url": "https://placng.org/i/documents/cybercrimes-2024",
     }
-    confirm_details(approver, **official)
-    assert approve(approver).status_code == 200
+    assert confirm_details(approver, expected=1, **official).status_code == 200
+    assert approve(approver, expected=1).status_code == 200
     review_store.request_publication("approver@example.org")
     summary = publish.run(review, library, review_store, store, log)
     assert summary["trigger"] == "manual" and summary["requested_by"] == "approver@example.org"
@@ -168,7 +177,7 @@ def test_a_run_publishes_what_the_workbench_approved_and_records_where_each_docu
     assert "No text decision" in summary["countries"]["ng"]["texts"]["blocked"]
     standing = review_store.publication_statuses()[ACT]
     assert (standing["details"], standing["text"]) == ("public", "no_decision") and standing["details_since"]
-    assert [r["status"] for r in review_store.publication_runs()] == ["succeeded", "succeeded"]
+    assert [r["status"] for r in review_store.publication_runs()] == ["succeeded"] * 3
     client = TestClient(create_app(store=store))
     assert client.get(f"/sources/{ACT}").status_code == 200
     # The workbench says so, on the document and in the list.
@@ -177,9 +186,9 @@ def test_a_run_publishes_what_the_workbench_approved_and_records_where_each_docu
     listed = {d["id"]: d for d in approver.get("/api/documents?limit=200").json()["documents"]}
     assert listed[ACT]["publication"] == "public"
     page = approver.get("/api/publishing").json()
-    assert [d["id"] for d in page["countries"][0]["documents"]] == [ACT] and len(page["runs"]) == 2
+    assert [d["id"] for d in page["countries"][0]["documents"]] == [ACT] and len(page["runs"]) == 3
     # Revoked: the next run takes it down, and says so.
-    assert approve(approver, expected=1, decision="revoked").status_code == 200
+    assert approve(approver, expected=2, decision="revoked").status_code == 200
     assert approver.get(f"/api/documents/{ACT}").json()["publication"]["state"] == "taken_down_next"
     after = publish.run(review, library, review_store, store, log)
     assert after["countries"]["ng"]["records"]["taken_down"] == 1

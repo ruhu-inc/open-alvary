@@ -1002,6 +1002,11 @@ class PublicationLog:
                     db.execute(insert(publication_status).values(**values))
 
 
+def _reasons(skipped: dict, most: int = 50) -> dict:
+    """Why each document was not published, for the run's report (the first `most`)."""
+    return {key: str(why)[:300] for key, why in list(skipped.items())[:most]}
+
+
 def _count(report: dict) -> dict:
     return {
         key: len(value) if isinstance(value, (list, dict, set)) else value for key, value in report.items()
@@ -1042,7 +1047,11 @@ def publish_country(review, library, review_store, public_store, jurisdiction: s
             row.update(details="taken_down", reason="its approval lapsed or was revoked")
         elif work in waiting:
             row["reason"] = "its approval is not current: approve it again"
-    summary = {"decision_until": decision["expires_at"][:10], "records": _count(records)}
+    summary = {
+        "decision_until": decision["expires_at"][:10],
+        "records": _count(records),
+        "records_skipped": _reasons(records["skipped"]),
+    }
     try:
         text_decision = current_text_decision(jurisdiction)
     except Refused as refused:
@@ -1075,6 +1084,7 @@ def publish_country(review, library, review_store, public_store, jurisdiction: s
             row["text"] = "withdrawn"
     summary["text_decision_until"] = text_decision["expires_at"][:10]
     summary["texts"] = _count(report)
+    summary["texts_skipped"] = _reasons(report["skipped"])
     return summary, list(rows.values())
 
 

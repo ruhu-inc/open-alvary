@@ -99,7 +99,16 @@ def standing(act: dict, now: dict, status: dict | None, decided: dict) -> dict:
             "text": None,
         }
     approved_at = head.get("created_at")
-    pending = not public or (approved_at and status and _after(approved_at, status["updated_at"]))
+    changed = bool(approved_at and status and _after(approved_at, status["updated_at"]))
+    if status and status["details"] == "blocked" and not changed:
+        # The latest run looked at this approval and could not publish it: say why, not "next run".
+        return {
+            "state": "blocked",
+            "words": f"Not published at the last run: {status.get('reason') or 'see the Publishing page'}. "
+            "Correct it and approve again.",
+            "text": None,
+        }
+    pending = not public or changed
     text = _text_words(act, kind_of(now), status, decided, pending)
     if pending:
         return {
@@ -129,7 +138,7 @@ def short(row_approval: str | None, status: dict | None, decided: dict) -> str |
     """A document's publication in one word for the list: public, next_run, blocked, taken_down_next."""
     public = bool(status and status["details"] == "public")
     if row_approval == "approved":
-        if "refused" in decided["catalogue"]:
+        if "refused" in decided["catalogue"] or (status and status["details"] == "blocked"):
             return "blocked"
         return "public" if public else "next_run"
     if public:
