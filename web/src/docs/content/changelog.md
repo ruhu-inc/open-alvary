@@ -5,6 +5,10 @@ description: Changes to the API, the MCP server and these docs.
 
 Changes that affect how you use the API and the MCP server, newest first. New fields, values and routes can come at any time; a breaking change comes only as a new version, announced here first. See [Compatibility](/docs/compatibility).
 
+## 27 October 2026
+
+- New version 2026-10-27 of the terms, the [acceptable use policy](/acceptable-use) and the [privacy notice](/privacy), accepted at your next sign-in. The terms now say that Open Alvary is not the publisher of the laws, regulations and judgments in the corpus: the bodies that issue them publish them, and Open Alvary makes copies of those official texts available, each checked against the official copy. Every record links to the official copy at its publisher, which prevails where a copy differs.
+
 ## 22 October 2026
 
 - A part of a text's structure can be of the new kind `quotation`: the words an amending provision inserts or substitutes, held by that provision (Cape Verde's amending laws). It has no pinpoint of its own. An annex's parts are cited after the annex's name, such as `Anexo I, art. 3`.

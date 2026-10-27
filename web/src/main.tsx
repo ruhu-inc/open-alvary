@@ -769,6 +769,16 @@ function Reader({ id }: { id: string }) {
               {s.has_full_text ? "Open full text" : "Metadata only"}
             </span>
           </div>
+          {versions.data && versions.data.items.length ? (
+            <p className="copy-note">
+              A copy of the official text, checked against the official copy. Open Alvary is not its
+              publisher: the{" "}
+              <a href={s.canonical_url} target="_blank" rel="noreferrer">
+                official copy
+              </a>{" "}
+              prevails where the two differ.
+            </p>
+          ) : null}
           {versions.data ? (
             versions.data.items.length ? (
               versions.data.items.map((v) => (

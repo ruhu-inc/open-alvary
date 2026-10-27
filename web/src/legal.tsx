@@ -5,14 +5,16 @@
 import React from "react";
 import { Link, PageTitle } from "./site";
 
-export const LEGAL_VERSION = "2026-10-22";
+export const LEGAL_VERSION = "2026-10-27";
 // Approved by the owner on 2026-10-16 (terms, acceptable use, privacy, and the security page's
 // disclosure terms); version 2026-10-18 (data a day in the terms, no request logs for the API and MCP
 // in the privacy notice) approved on 2026-10-18; version 2026-10-21 (no query strings in website request
 // logs and the Referrer-Policy in the privacy notice; keeping copies in the acceptable use policy)
 // approved on 2026-10-21; version 2026-10-22 (serving your own users, what you send us, notice of
 // changes to the terms and to limits, the scope of a suspension; searches in the acceptable use policy)
-// approved on 2026-10-22. A new version starts as a draft again: set this to false until it is approved.
+// approved on 2026-10-22; version 2026-10-27 (Open Alvary is not the publisher of the corpus: its copies,
+// each checked against the official copy, link to it, and the official copy prevails; the owner's own
+// words) approved on 2026-10-27. A new version starts as a draft again: set this to false until it is approved.
 const APPROVED = true;
 const TO_CONFIRM: string[] = [];
 const OPERATOR = "Ruhu, Inc.";
@@ -115,6 +117,13 @@ export function Terms() {
           reused and on what conditions; follow them, including attribution. Metadata is published under the
           licence stated on the Releases page. Nothing in these terms grants rights in documents published by
           others.
+        </p>
+        <p>
+          Open Alvary is not the publisher of the laws, regulations and judgments in the corpus. They are
+          published by the bodies that issue them, such as a country’s Official Gazette, its parliament or its
+          courts. Open Alvary makes copies of those official texts available, each checked against the
+          official copy, and every record links to the official copy at its publisher. Where a copy here
+          differs from the official copy, the official copy prevails.
         </p>
         <p>
           Open Alvary is a source of legal information, not legal advice. Coverage is incomplete, and a record
