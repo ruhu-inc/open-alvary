@@ -1,0 +1,25 @@
+{
+  "decision": "full-text-1",
+  "jurisdiction": "rw",
+  "operation": "publish_full_text",
+  "document_types": [
+    "act",
+    "constitution",
+    "regulation"
+  ],
+  "rights_holder": "Republic of Rwanda",
+  "licence": "Not protected by copyright: Law N° 055/2024 of 20/06/2024 on the protection of intellectual property, art. 282",
+  "licence_url": null,
+  "attribution_required": false,
+  "attribution_text": null,
+  "database_rights_notes": "No database right is claimed in the texts.",
+  "privacy_status": "cleared",
+  "basis": "Official texts of a legislative, administrative and judicial nature, and official translations of such texts, are excluded from copyright protection in Rwanda (Law N° 055/2024 of 20/06/2024 on the protection of intellectual property, art. 282; Official Gazette n° Special of 31/07/2024). Each text published is one official text read from the Official Gazette of the Republic of Rwanda. Names the Government publishes in these texts are public information.",
+  "evidence": [
+    "https://org.rdb.rw/wp-content/uploads/2024/09/official-gazette-IP-2024-1.pdf"
+  ],
+  "decided_by": "Ijidai Lassa",
+  "decided_at": "2026-10-27T18:27:09+00:00",
+  "expires_at": "2027-10-27T18:27:09+00:00",
+  "revision": 1
+}
