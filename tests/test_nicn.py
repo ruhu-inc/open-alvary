@@ -744,3 +744,66 @@ def test_a_judgment_from_the_bucket_never_fetches_the_web_page_as_its_original(t
     with pytest.raises(FileNotFoundError):
         library.image(doc_id, 1)
     assert not any(path.suffix == ".html" for path in (tmp_path / "cache").rglob("*") if path.is_file())
+
+
+def test_names_withheld_in_a_sensitive_case_are_never_published(tmp_path, monkeypatch):
+    """Owner, 2026-10-27: names are hidden only in a sensitive case a reviewer marks. The published title,
+    citations and summary give each withheld party as [Withheld]; a record that would still name one is
+    refused; and the case's text is never published."""
+    from datetime import UTC, datetime
+
+    from operations import publish
+    from schema.jurisdictions import registry
+    from workbench import content
+    from workbench.review import Review
+    from workbench.store import Store, connect
+
+    folder = tmp_path / "ng"
+    collection = nicn.FolderCollection(folder)
+    sha = hashlib.sha256(page("word")).hexdigest()
+    items = {"nicn-judgments:9001": record(9001, sha=sha, suit="NICN/LA/123/2020", date="2026-01-08")}
+
+    def fetch(found):
+        return page("word"), {
+            "url": found["url"],
+            "retrieved_at": "2026-10-23T00:28:42Z",
+            "listed": found["listed"],
+        }
+
+    nicn.prepare_items(items, list(items), fetch, collection)
+    collection.save_manifest()
+    monkeypatch.setenv("ALVARY_REVIEW_COLLECTIONS", str(folder))
+    (tmp_path / "first").mkdir()
+    library = content.Library(tmp_path / "first")
+    review = Review(Store(connect(f"sqlite:///{tmp_path / 'w.db'}")), library, registry())
+    act = library.act("ng-nicn-la-123-2020-2026-01-08")
+    view = review.described(act, None, library.reading(act["id"]))
+    values = {
+        **view["values"],
+        "identity.title": "AMINA BELLO -VS- EXAMPLE SERVICES LIMITED",
+        "profile.parties": [
+            {"name": "Amina Bello", "role": "claimant", "anonymised": "yes"},
+            {"name": "Example Services Limited", "role": "defendant", "anonymised": "no"},
+        ],
+        "profile.anonymisation": "partial",
+        "profile.anonymisation_reason": "child",
+    }
+    decision = {"basis": "b", "legal_note": "n", "expires_at": "2027-10-26T00:00:00+00:00", "evidence": []}
+
+    def entry(changes):
+        built = review.built(act, {**view, "values": {**values, **changes}})
+        return publish.catalogue_entries(
+            publish.Approved(act["id"], built, ["en"], "Owner", datetime.now(UTC)), decision
+        )
+
+    published = entry({})
+    assert published["source"].title == "[Withheld] -VS- EXAMPLE SERVICES LIMITED"
+    assert all("bello" not in c.value.lower() for c in published["citations"])
+    with pytest.raises(publish.Refused, match="would still name a withheld party"):
+        entry({"text.summary.text": "Bello was dismissed while on leave."})
+    assert (
+        publish.withheld_names(
+            review.built(act, {**view, "values": {**values, "profile.anonymisation": "none"}})
+        )
+        == []
+    )

@@ -290,7 +290,16 @@ def _profile_fields(family: str) -> list[FieldSpec]:
             FieldSpec("profile.outcome", "Outcome", g, "list", required=True, help=", ".join(R.OUTCOMES)),
             FieldSpec("profile.orders", "Orders", g, "list"),
             FieldSpec("profile.issues", "Issues", g, "list"),
-            FieldSpec("profile.anonymisation", "Names withheld", g, "choice", ("none", "partial", "full")),
+            FieldSpec(
+                "profile.anonymisation",
+                "Names withheld",
+                g,
+                "choice",
+                ("none", "partial", "full"),
+                help="In a sensitive case (a child, a sexual offence or harassment): partial withholds the "
+                "parties marked Withheld, full every party. Published details show [Withheld] in their place; "
+                "the text is not published.",
+            ),
             FieldSpec(
                 "profile.anonymisation_reason",
                 "Why withheld",
