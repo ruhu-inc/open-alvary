@@ -2487,7 +2487,7 @@ async function route() {
   if (!location.hash.includes("/page/") || !document.querySelector(".review")) main(el("div", { class: "loading" }, el("span", { class: "spinner" }), "Loading…"));
   const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
   for (const link of document.querySelectorAll("#who .nav-link")) {
-    const section = ["access", "operators", "queue"].includes(parts[0]) ? `#/${parts[0]}` : "#/";
+    const section = ["access", "operators", "queue", "publishing"].includes(parts[0]) ? `#/${parts[0]}` : "#/";
     link.classList.toggle("on", link.hash === section);
   }
   try {
