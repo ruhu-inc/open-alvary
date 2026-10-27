@@ -178,6 +178,12 @@ variable "inference_enabled" {
   default     = true
 }
 
+variable "inference_running" {
+  description = "Whether the GPU machine runs. false stops it and keeps its disk (no GPU or machine charges while stopped): the service then searches on the lexical arms without a reranker and says so in every pack. Starting it again is setting this to true and applying; Google may have no T4 free in the zone for a while (a stockout), and then the apply says so: try again later, or another zone (inference_zone)."
+  type        = bool
+  default     = true
+}
+
 variable "inference_gpu" {
   description = "The GPU: t4 (n1-standard-4 with one NVIDIA T4, Turing; the owner's choice, as on Azure) or l4 (g2-standard-4, one NVIDIA L4, Ada). The project needs quota for it in the region."
   type        = string
