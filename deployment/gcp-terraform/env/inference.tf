@@ -25,6 +25,7 @@ resource "google_compute_instance" "inference" {
   machine_type              = local.inference_vm_size
   tags                      = ["inference"]
   allow_stopping_for_update = true
+  desired_status            = var.inference_running ? "RUNNING" : "TERMINATED" # stopped, its disk kept
 
   boot_disk {
     initialize_params {
