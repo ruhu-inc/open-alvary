@@ -105,10 +105,10 @@
       {
         "year": 2026,
         "income": 0,
-        "expenses": 0,
+        "expenses": 1600,
         "taxes": 0,
         "currency": "USD",
-        "description": "Self-funded by Ruhu, Inc.; no grants received. Expenses figure to be updated with actual 2026 spend."
+        "description": "Self-funded by Ruhu, Inc.; no grants received. Expenses are cloud processing (OCR and layout analysis of official gazettes and court records) and hosting."
       }
     ]
   }
