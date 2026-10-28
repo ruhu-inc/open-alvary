@@ -1,13 +1,16 @@
 {
   "$schema": "https://fundingjson.org/schema/v1.1.0.json",
+  "version": "v1.1.0",
   "entity": {
     "type": "organisation",
     "role": "maintainer",
     "name": "Ruhu, Inc.",
     "email": "hello@ruhu.ai",
+    "phone": "",
     "description": "Ruhu, Inc. maintains Open Alvary, an open, rights-cleared, machine-readable corpus of African primary law (statutes, regulations, gazettes, judgments), published under MIT (code) and CC BY 4.0 (metadata) with per-record rights for legal text. The law governing 1.4 billion people is not machine-readable; Open Alvary makes it citable by machines, with provision-level anchors, immutable versions and a public change feed, so that no single company controls access to the law.",
     "webpageUrl": {
-      "url": "https://open.alvary.ai"
+      "url": "https://open.alvary.ai",
+      "wellKnown": ""
     }
   },
   "projects": [
@@ -16,10 +19,12 @@
       "name": "Open Alvary",
       "description": "Open African legal corpus and retrieval service: rights-gated text publication, Akoma Ntoso export, provision-level anchors, citation resolution, a change feed with legal effects, a keyed REST API and an MCP server.",
       "webpageUrl": {
-        "url": "https://open.alvary.ai"
+        "url": "https://open.alvary.ai",
+        "wellKnown": ""
       },
       "repositoryUrl": {
-        "url": "https://github.com/ruhu-inc/open-alvary"
+        "url": "https://github.com/ruhu-inc/open-alvary",
+        "wellKnown": "https://github.com/ruhu-inc/open-alvary/blob/main/.well-known/funding-manifest-urls"
       },
       "licenses": [
         "spdx:MIT",
