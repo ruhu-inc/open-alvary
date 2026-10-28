@@ -1,0 +1,110 @@
+{
+  "$schema": "https://fundingjson.org/schema/v1.1.0.json",
+  "entity": {
+    "type": "organisation",
+    "role": "maintainer",
+    "name": "Ruhu, Inc.",
+    "email": "hello@ruhu.ai",
+    "description": "Ruhu, Inc. maintains Open Alvary, an open, rights-cleared, machine-readable corpus of African primary law (statutes, regulations, gazettes, judgments), published under MIT (code) and CC BY 4.0 (metadata) with per-record rights for legal text. The law governing 1.4 billion people is not machine-readable; Open Alvary makes it citable by machines, with provision-level anchors, immutable versions and a public change feed, so that no single company controls access to the law.",
+    "webpageUrl": {
+      "url": "https://open.alvary.ai"
+    }
+  },
+  "projects": [
+    {
+      "guid": "open-alvary",
+      "name": "Open Alvary",
+      "description": "Open African legal corpus and retrieval service: rights-gated text publication, Akoma Ntoso export, provision-level anchors, citation resolution, a change feed with legal effects, a keyed REST API and an MCP server.",
+      "webpageUrl": {
+        "url": "https://open.alvary.ai"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/ruhu-inc/open-alvary"
+      },
+      "licenses": [
+        "spdx:MIT",
+        "spdx:CC-BY-4.0"
+      ],
+      "tags": [
+        "legal",
+        "open-data",
+        "africa",
+        "government",
+        "digital-public-goods",
+        "retrieval",
+        "ocr",
+        "api"
+      ]
+    }
+  ],
+  "funding": {
+    "channels": [
+      {
+        "guid": "bank",
+        "type": "bank",
+        "address": "Bank transfer to Ruhu, Inc. (Delaware); details on request from hello@ruhu.ai",
+        "description": "Receipts are published in the project's yearly history."
+      }
+    ],
+    "plans": [
+      {
+        "guid": "continent-year-one",
+        "status": "active",
+        "name": "Four jurisdictions in twelve months",
+        "description": "Rights clearance, three-reader digitisation, page-level review and open publication of four African jurisdictions' statutes and gazettes, with Akoma Ntoso export and the retrieval service covering them. The first year of a two-year plan to cover the continent.",
+        "amount": 100000,
+        "currency": "USD",
+        "frequency": "one-time",
+        "channels": [
+          "bank"
+        ]
+      },
+      {
+        "guid": "jurisdiction",
+        "status": "active",
+        "name": "Clear and digitise one jurisdiction",
+        "description": "Rights review, three-reader digitisation and page-level verification of one African jurisdiction's statutes and gazettes, published openly.",
+        "amount": 25000,
+        "currency": "USD",
+        "frequency": "one-time",
+        "channels": [
+          "bank"
+        ]
+      },
+      {
+        "guid": "review",
+        "status": "active",
+        "name": "Rights and content review",
+        "description": "Reviewer time to clear and verify texts already read.",
+        "amount": 10000,
+        "currency": "USD",
+        "frequency": "one-time",
+        "channels": [
+          "bank"
+        ]
+      },
+      {
+        "guid": "any",
+        "status": "active",
+        "name": "Any amount",
+        "description": "Any contribution towards corpus production and maintenance.",
+        "amount": 0,
+        "currency": "USD",
+        "frequency": "one-time",
+        "channels": [
+          "bank"
+        ]
+      }
+    ],
+    "history": [
+      {
+        "year": 2026,
+        "income": 0,
+        "expenses": 0,
+        "taxes": 0,
+        "currency": "USD",
+        "description": "Self-funded by Ruhu, Inc.; no grants received. Expenses figure to be updated with actual 2026 spend."
+      }
+    ]
+  }
+}
