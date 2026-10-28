@@ -1,0 +1,19 @@
+web/public/funding.json
+  s_4bf093a74442dc::t_ec2dc7f2d20266 1-110
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "831397e314e3227198397a406bcbfb153dbe57b9",
+  "prompts": {},
+  "sessions": {
+    "s_4bf093a74442dc": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c924d89c-0c92-4b94-b815-df2ffe6861da",
+        "model": "claude-fable-5-1"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
