@@ -287,7 +287,9 @@ def _profile_fields(family: str) -> list[FieldSpec]:
                     },
                 ),
             ),
-            FieldSpec("profile.outcome", "Outcome", g, "list", required=True, help=", ".join(R.OUTCOMES)),
+            # Optional for now (owner, 2026-10-29): a judgment is approved with its details and text, its
+            # outcome and summary added later.
+            FieldSpec("profile.outcome", "Outcome", g, "list", help=", ".join(R.OUTCOMES)),
             FieldSpec("profile.orders", "Orders", g, "list"),
             FieldSpec("profile.issues", "Issues", g, "list"),
             FieldSpec(
@@ -515,7 +517,7 @@ def fields(family: str, kind: str, profile: JurisdictionProfile | None) -> list[
             "choice",
             ("explanatory_memorandum", "headnote", "abstract", "editorial"),
         ),
-        FieldSpec("text.summary.text", "Summary", "text", "long", required=True),
+        FieldSpec("text.summary.text", "Summary", "text", "long", required=family != "judgment"),
         FieldSpec("text.summary.official", "Summary part of the official text", "text", "choice", YES_NO),
         FieldSpec("status.legal", "Legal status", "status", "choice", R.LEGAL_STATUS, required=True),
         FieldSpec("status.as_of", "Status checked on", "status", "date"),

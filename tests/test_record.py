@@ -576,3 +576,16 @@ def test_a_suggested_family_that_does_not_go_with_its_kind_is_put_right_not_drop
         V.usable_suggestions({"suggested": {"identity.family": "treaty", "identity.type": "agreement"}})[1]
         == []
     )
+
+
+def test_a_judgments_summary_and_outcome_are_optional_for_now():
+    """Owner, 2026-10-29: a judgment is approved with its details and text; its summary and outcome are
+    added later. Everything else keeps its summary required."""
+    from schema.jurisdictions import registry
+    from workbench import record_view as V
+
+    ng = registry()["ng"]
+    judgment = {s.key: s.required for s in V.fields("judgment", "judgment", ng)}
+    assert judgment["text.summary.text"] is False and judgment["profile.outcome"] is False
+    law = {s.key: s.required for s in V.fields("legislation", "act", ng)}
+    assert law["text.summary.text"] is True
