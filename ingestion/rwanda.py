@@ -24,7 +24,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import unquote
 
-from ingestion import accounting, corpus_store, filelist, gazette_layout, ruled_tables, rw_gazette
+from ingestion import (
+    accounting,
+    corpus_store,
+    filelist,
+    gazette_layout,
+    layout_parser,
+    ruled_tables,
+    rw_gazette,
+)
 from ingestion.pipeline import MAX_BYTES
 from ingestion.sync import Ledger, now, stamp
 
@@ -1203,6 +1211,8 @@ def prepare_selection(
         layout = stored_reading("docai", sha, store)
         if layout:
             readings = layout["pages"]
+            if isinstance(readings, dict):  # its inline maths read as words (layout_parser.plain_maths)
+                readings = {number: layout_parser.plain_maths_page(page) for number, page in readings.items()}
             split = [
                 rw_gazette.correct_page(page, readings[str(page["page"])])
                 if str(page["page"]) in readings

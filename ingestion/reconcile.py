@@ -12,8 +12,25 @@ from ingestion import layout_parser, structure
 from ingestion.compare import Flag, compare
 
 
+def check_text(reading: dict) -> str:
+    """A check reading's page as text: the text it carries, or, for Google's OCR as the scan reader
+    stores it (its words in reading order, each with its box, and no text), its words joined, a new
+    line wherever a word starts below the one before. Pipelines before 2026-10-29 read only "text", so
+    every Nigerian PDF with an OCR check failed to prepare."""
+    if "text" in reading:
+        return reading["text"]
+    lines, previous = [], None
+    for word in reading.get("words", []):
+        if previous is None or word["y0"] >= previous["y1"] - 0.25 * (previous["y1"] - previous["y0"]):
+            lines.append([])
+        lines[-1].append(word["text"])
+        previous = word
+    return "\n".join(" ".join(line) for line in lines)
+
+
 def reconcile_page(primary: dict, checks: dict[str, dict]) -> dict:
     page = primary["page"]
+    checks = {name: {**reading, "text": check_text(reading)} for name, reading in checks.items()}
     # Margin notes out of the body and merged units apart first: section numbers then line up.
     nodes = structure.restructure(copy.deepcopy(primary["nodes"]), checks)
     proposals = {}
