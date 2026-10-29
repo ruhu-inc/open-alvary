@@ -1,0 +1,19 @@
+architecture/open-alvary-architecture.html
+  s_d665c62e07d76f::t_e5648d9da16af5 207,315,369,371,374-375,497-616
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "74be242f11f427c1d04f5d55df50b66452daad31",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "unknown"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
