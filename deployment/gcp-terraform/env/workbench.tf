@@ -298,8 +298,9 @@ resource "google_cloud_run_v2_job" "operators" {
 
         resources {
           limits = {
-            cpu    = "1"
-            memory = "512Mi"
+            cpu = "1"
+            # 2 GiB: "impact" holds the collections' manifests twice, the live copy and a new one.
+            memory = "2Gi"
           }
         }
 

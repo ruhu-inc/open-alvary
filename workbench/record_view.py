@@ -1369,6 +1369,15 @@ def base_values(document: dict, manifest: dict) -> dict:
     return first_draft({k: v for k, v in values.items() if v}, {})[0]
 
 
+def first_absent(values: dict) -> dict:
+    """What a first draft accounts for without a value: a judgment that prints no neutral citation (the
+    National Industrial Court's portal prints none) says so, not stated in this copy, rather than each
+    of ten thousand waiting for a reviewer to say it (owner, 2026-10-30). The reviewer can still give one."""
+    if values.get("identity.family") == "judgment" and not values.get("identity.citation"):
+        return {"identity.citation": "not_in_source"}
+    return {}
+
+
 def place_for(document: dict, manifest: dict, profiles: dict) -> tuple[R.Place, JurisdictionProfile | None]:
     code = document.get("jurisdiction") or manifest.get("jurisdiction") or "ng"
     profile = profiles.get(code)

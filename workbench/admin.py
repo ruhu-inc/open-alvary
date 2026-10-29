@@ -32,6 +32,10 @@ def main(argv=None) -> int:
     enrol = sub.add_parser("enrol")
     enrol.add_argument("email")
     enrol.add_argument("--replace", action="store_true", help="Revoke the operator's passkeys first")
+    impact = sub.add_parser(
+        "impact", help="what a newly prepared copy of the collections would do to review work"
+    )
+    impact.add_argument("places", help="the new copy's collections, as ALVARY_REVIEW_COLLECTIONS names them")
     args = parser.parse_args(argv)
     settings.load()
     store = Store(engine_from_environment())
@@ -39,6 +43,18 @@ def main(argv=None) -> int:
         store.add_operator(args.email, args.name, {r.strip() for r in args.roles.split(",") if r.strip()})
     elif args.action == "deactivate":
         store.deactivate(args.email)
+    elif args.action == "impact":
+        import json
+
+        from schema.jurisdictions import registry
+        from workbench import impact
+
+        current, new = impact.libraries(args.places)
+        found = impact.report(store, current, new, registry())
+        print(json.dumps(found["summary"], ensure_ascii=False))
+        for key in ("documents_gone", "changed", "approvals_lapsing", "details_orphaned"):
+            for row in found[key]:
+                print(json.dumps({key: row}, ensure_ascii=False))
     elif args.action == "enrol":
         if args.replace:
             for key in store.passkeys(args.email.strip().lower()):

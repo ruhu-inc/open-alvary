@@ -47,7 +47,8 @@ class Review:
                 )
             )
         else:  # nothing marked absent by inference: suggested beside its field (record_view.suggestions)
-            values, absent = record_view.base_values(act, self.library.manifest_for(act["id"])), {}
+            values = record_view.base_values(act, self.library.manifest_for(act["id"]))
+            absent = record_view.first_absent(values)
         if act.get("language") and isinstance(values.get("expressions"), list):
             # One record for the work; each language version is "this text" on its own page.
             values = {
