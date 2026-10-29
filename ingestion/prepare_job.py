@@ -38,6 +38,16 @@ from pathlib import Path
 from ingestion import corpus_store, rwanda
 
 
+def collections() -> str:
+    """Where the collections are written: "collections" (the workbench's), or another place for a new
+    copy prepared beside them (PREPARE_COLLECTIONS, e.g. "collections-next"), compared before the
+    workbench is switched to it (workbench.impact)."""
+    place = os.environ.get("PREPARE_COLLECTIONS", "collections").strip("/")
+    if not place or "/" in place or not place.replace("-", "").isalnum():
+        raise SystemExit(f"PREPARE_COLLECTIONS must be a plain name, not {place!r}")
+    return place
+
+
 def share(items: list[str], task: int, tasks: int) -> list[str]:
     return [item for k, item in enumerate(items) if k % tasks == task]
 
@@ -79,13 +89,14 @@ def prepare_nigeria(store, task: int, tasks: int) -> dict:
     pages = [i for i in mine if items[i]["source"] == nicn.SOURCE]
     pdfs = [i for i in mine if items[i]["source"] != nicn.SOURCE]
     counts: dict = {"files": len(mine)}
+    prefix = f"{collections()}/ng/"
     if pages:
-        collection = nicn.BucketCollection(store)
+        collection = nicn.BucketCollection(store, prefix=prefix)
         counts[nicn.SOURCE] = nicn.prepare_items(items, pages, nicn.bucket_fetch(store), collection, log=log)
     if pdfs:
-        collection = nicn.BucketCollection(store, pipeline=ng_documents.PIPELINE)
+        collection = nicn.BucketCollection(store, prefix=prefix, pipeline=ng_documents.PIPELINE)
         counts["pdf"] = ng_documents.prepare_pdfs(store, items, pdfs, collection, log=log)
-    nicn.BucketCollection(store).save_manifest()
+    nicn.BucketCollection(store, prefix=prefix).save_manifest()
     return counts
 
 
@@ -221,7 +232,7 @@ def main() -> int:
                 )
             )
             return 0
-        collection = rwanda.BucketCollection(store)
+        collection = rwanda.BucketCollection(store, prefix=f"{collections()}/{rwanda.COUNTRY}/")
         failed, instruments = [], 0
         # File by file: a file that cannot be prepared is noted and the task goes on.
         for item in mine:

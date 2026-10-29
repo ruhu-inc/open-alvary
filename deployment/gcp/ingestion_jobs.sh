@@ -21,6 +21,9 @@
 #                                                    # work/<country>/audit/lines/<execution>/ (PREPARE_LIMIT=3
 #                                                    # in the environment: a trial of 3 files per task)
 #   deployment/gcp/ingestion_jobs.sh audit 4 ng nicn-judgments,nass-acts,nln-repository,supreme-court
+#   PREPARE_COLLECTIONS=collections-next deployment/gcp/ingestion_jobs.sh prepare 12
+#                                                    # a new copy beside the live collections, compared
+#                                                    # (python -m workbench.admin impact) before switching
 #   deployment/gcp/ingestion_jobs.sh fetch 4         # fetch the approved Nigerian work list, in 4 tasks
 #                                                    # (the list: python -m ingestion.nigeria fetch-worklist)
 #   deployment/gcp/ingestion_jobs.sh status
@@ -159,7 +162,7 @@ run() {
 # The variables are separated by ";" (gcloud's "^;^" form), as a list of sources holds commas.
 prepare() {  # prepare [tasks] [country] [sources]: rw by default; ng prepares the National Industrial Court
   local tasks="${1:-8}" country="${2:-rw}" sources="${3:-}"
-  local env="PREPARE_COUNTRY=$country;PREPARE_MODE=prepare"
+  local env="PREPARE_COUNTRY=$country;PREPARE_MODE=prepare;PREPARE_COLLECTIONS=${PREPARE_COLLECTIONS:-collections}"
   if [[ "$country" == ng ]]; then env+=";PREPARE_SOURCES=${sources:-nicn-judgments}"; fi
   "${GC[@]}" run jobs execute "$PREPARE_JOB" --region="$REGION" --tasks="$tasks" --async --update-env-vars="^;^$env"
 }

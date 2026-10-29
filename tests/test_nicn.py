@@ -647,7 +647,11 @@ def test_the_workbench_lists_and_opens_the_ng_collection(tmp_path, monkeypatch):
     assert draft["profile.court.name"] == "National Industrial Court of Nigeria"
     assert draft["profile.parties"][0]["represented_by"] == "A. B. Counsel Esq., with E. F. Junior Esq."
     assert draft["status.legal"] == "unknown" and "profile.outcome" not in draft
-    assert "profile.outcome" in details["missing"]
+    # A judgment's outcome and summary are optional for now, and a neutral citation the court prints none
+    # of is accounted for in the first draft (owner, 2026-10-29 and 2026-10-30).
+    assert "profile.outcome" not in details["missing"] and "text.summary.text" not in details["missing"]
+    assert "identity.citation" not in details["missing"]
+    assert details["record"]["absent"]["identity.citation"] == "not_in_source"
     assert details["suggestions"]["profile.court.division"]["evidence"] == "IN THE LAGOS JUDICIAL DIVISION"
     assert details["suggestions"]["identity.citation"]["absent"] == "not_in_source"
     columns = next(f for f in details["standard"]["fields"] if f["key"] == "profile.parties")["columns"]
