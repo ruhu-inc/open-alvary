@@ -2219,7 +2219,7 @@ function editTab(view) {
         el("p", { text: "Flags: Alt+N next, Alt+P previous; then Alt+1 / Alt+2 use that reading, Alt+K keep as read, Alt+E I corrected it, Alt+D dismiss. Alt+L keeps all punctuation-only differences." }),
         el("p", { text: "Ctrl/Cmd+F find and replace on this page (Ctrl/Cmd+G next match). Escape or Alt+F10 goes to the toolbar; there the arrow keys move along it and Escape returns to the text. Ctrl/Cmd+S save as checked; Ctrl/Cmd+Enter save as checked and go to the next page. Ctrl/Cmd + scroll zooms the page image." }))),
     // Far from the save buttons: it discards this page's corrections (after asking; nothing is saved).
-    canEdit ? el("button", { type: "button", class: "small danger restore", title: "Replace the text with the machine reading. Nothing is saved until you save.", text: "Restore machine reading…", on: { click: () => restoreMachineReading(view) } }) : null,
+    canEdit ? el("button", { type: "button", class: "small restore", title: "Puts back the machine reading of this page only, as it was before anyone edited it. Unsaved edits and flag decisions on this page are cleared. Nothing changes until you save, and earlier revisions stay in History.", text: "Restore original reading…", on: { click: () => restoreMachineReading(view) } }) : null,
     view.findBar);
   toolbar.addEventListener("keydown", (event) => toolbarKeys(view, event));
   view.toolbar = toolbar;
@@ -2357,7 +2357,7 @@ function changesView(view) {
 // --- saving -------------------------------------------------------------------------------------------
 
 function restoreMachineReading(view) {
-  if (!confirm("Replace this page's text with the machine reading? Your unsaved corrections and flag decisions on this page are discarded; nothing is saved until you save.")) return;
+  if (!confirm("Restore the original reading of this page? Your unsaved edits and flag decisions on this page are cleared. Other pages are not affected. Nothing changes until you save, and earlier revisions stay in History.")) return;
   view.units = structuredClone(view.machineUnits);
   view.resolutions = {};
   changed(view); view.showTab("edit");
