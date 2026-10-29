@@ -24,7 +24,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import unquote
 
-from ingestion import corpus_store, filelist, gazette_layout, ruled_tables, rw_gazette
+from ingestion import accounting, corpus_store, filelist, gazette_layout, ruled_tables, rw_gazette
 from ingestion.pipeline import MAX_BYTES
 from ingestion.sync import Ledger, now, stamp
 
@@ -1098,6 +1098,45 @@ class BucketCollection:
         )
 
 
+class AuditCollection:
+    """A collection that writes nothing: each prepared file's account of where its lines went
+    (ingestion.accounting), for the audit run (ingestion.prepare_job, PREPARE_MODE=audit)."""
+
+    def __init__(self):
+        self.reports: list[dict] = []
+
+    def manifest(self) -> dict:
+        return new_manifest()
+
+    def done(self, sha: str) -> bool:
+        return False
+
+    def remove(self, doc_id: str) -> None:
+        pass
+
+    def write(self, doc_id: str, reading: dict, provenance: dict, pdf: Path) -> None:
+        pass
+
+    def finish_issue(self, sha: str, documents: list[dict], readings: dict | None = None) -> None:
+        for report in self.reports:
+            if report["sha"] == sha:
+                report["documents"] = len(documents)
+
+    def save_manifest(self, manifest: dict) -> None:
+        pass
+
+    def account(self, sha: str, record: dict, report: dict) -> None:
+        self.reports.append(
+            {
+                "sha": sha,
+                "source": record["source"],
+                "name": record["listed"]["name"],
+                "url": record["url"],
+                **report,
+            }
+        )
+
+
 def new_manifest() -> dict:
     return {
         "collection": "rw",
@@ -1357,6 +1396,7 @@ def prepare_selection(
                     "aligned": check["aligned"],
                 }
             )
+        written_annexes: set[int] = set()
         for annex in rw_gazette.annexes(split, roles):
             parent = next(
                 (e for e in found if annex["refers_to"] and e["number"] == annex["refers_to"]), None
@@ -1371,6 +1411,7 @@ def prepare_selection(
             )
             if parent is None:
                 continue
+            written_annexes.add(annex["annex"])
             number = issue.get("date", "") if parent["number"] == "constitution" else parent["number"]
             work = assigned.get(id(parent)) or work_id(
                 parent["kind"], number, (parent.get("date") or issue.get("date") or "")[:4]
@@ -1406,6 +1447,12 @@ def prepare_selection(
                     "languages": list(annex["versions"]),
                     "pages": [annex["pages"][0], annex["pages"][-1]],
                 }
+            )
+        if hasattr(collection, "account"):  # an audit (AuditCollection): where every line went
+            collection.account(
+                sha,
+                record,
+                accounting.rwanda_issue(split, roles, found, written_annexes, page_count=len(words)),
             )
         collection.finish_issue(
             sha,
