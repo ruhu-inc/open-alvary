@@ -1026,8 +1026,40 @@ FAMILY_OF_TYPE = {
     "judgment": "judgment",
     "gazette": "gazette",
     "treaty": "treaty",
+    "protocol": "treaty",  # also a regional instrument's kind: a protocol is a treaty unless filed otherwise
     "other": "official_document",
 }
+
+
+def family_for(kind: str | None) -> str | None:
+    """The record's family for a kind: the one written for it, else the only family listing it."""
+    if not kind:
+        return None
+    if kind in FAMILY_OF_TYPE:
+        return FAMILY_OF_TYPE[kind]
+    listed = [family for family, (_, kinds) in R.FAMILIES.items() if kind in kinds]
+    return listed[0] if len(listed) == 1 else None
+
+
+def usable_suggestions(document: dict) -> tuple[dict, list[str]]:
+    """The details a collection's reader suggested, ready for the first draft, and what was put right
+    on the way, said to the reviewer. A family that does not go with the kind (Rwanda's reader filed
+    every agreement, regulation and ordinance as an executive instrument) is put right from the kind,
+    and the rest of the suggestions kept: until 2026-10-29 all of them were dropped, silently."""
+    suggested = {k: v for k, v in (document.get("suggested") or {}).items() if v not in (None, "", [])}
+    family, kind = suggested.get("identity.family"), suggested.get("identity.type")
+    if not suggested or (family in R.FAMILIES and kind in R.FAMILIES[family][1]):
+        return suggested, []
+    right = family_for(kind)
+    if right:
+        return {**suggested, "identity.family": right}, [
+            f"Suggested as {label_of(family or 'no family')}, which a {label_of(kind)} is not: "
+            f"filed as {label_of(right)}. Check the family and kind."
+        ]
+    rest = {k: v for k, v in suggested.items() if k not in ("identity.family", "identity.type")}
+    return rest, [
+        f'The suggested kind "{kind}" is not one of the record\'s kinds: choose the family and kind.'
+    ]
 
 
 def from_legacy(details: dict, absent: dict) -> tuple[dict, dict]:
@@ -1312,8 +1344,7 @@ def base_values(document: dict, manifest: dict) -> dict:
     """A first draft for a document from a jurisdiction we have no extractor for yet, with the details
     its collection's reader filled in, if any (Rwanda's gazette reader); never its legal facts."""
     kind = document.get("type", "act")
-    listed_in = [f for f, (_, kinds) in R.FAMILIES.items() if kind in kinds]
-    family = FAMILY_OF_TYPE.get(kind) or (listed_in[0] if len(listed_in) == 1 else "official_document")
+    family = family_for(kind) or "official_document"
     kinds = R.FAMILIES[family][1]
     values = {
         "identity.family": family,
@@ -1327,12 +1358,7 @@ def base_values(document: dict, manifest: dict) -> dict:
         values["identity.year"] = str(document["year"])
     # Details read from the document itself by its collection's extractor (Rwanda's gazette reader).
     # Its links to other laws and whether it is current are legal facts: suggestions(), not values.
-    suggested = {k: v for k, v in (document.get("suggested") or {}).items() if v not in (None, "", [])}
-    if (
-        suggested.get("identity.family") in R.FAMILIES
-        and suggested.get("identity.type") in R.FAMILIES[suggested["identity.family"]][1]
-    ):
-        values.update(suggested)
+    values.update(usable_suggestions(document)[0])
     if document.get("language") and isinstance(values.get("expressions"), list):
         values["expressions"] = [
             {**row, "this_text": "yes" if row.get("language") == document["language"] else "no"}

@@ -543,3 +543,36 @@ def test_a_repealing_laws_own_words_lead_the_status_suggestion_over_a_listing():
     assert suggested["status.note"]["value"].endswith(f"A secondary source agrees: {agreeing}")
     # Never filled in: the first draft leaves the status not yet checked.
     assert V.base_values(document, {})["status.legal"] == "unknown"
+
+
+def test_a_suggested_family_that_does_not_go_with_its_kind_is_put_right_not_dropped():
+    """Rwanda's reader filed agreements, regulations and ordinances as executive instruments; the first
+    draft kept none of their suggestions until 2026-10-29. Now the family is put right from the kind,
+    the rest kept, and the reviewer told."""
+    from workbench import record_view as V
+
+    treaty = {
+        "type": "agreement",
+        "title": "Treaty",
+        "suggested": {
+            "identity.family": "executive_instrument",
+            "identity.type": "agreement",
+            "identity.title": "Treaty of the African Medicines Agency (AMA)",
+            "publication.name": "Official Gazette of the Republic of Rwanda",
+        },
+    }
+    values = V.base_values(treaty, {})
+    assert values["identity.family"] == "treaty" and values["identity.type"] == "agreement"
+    assert values["identity.title"] == "Treaty of the African Medicines Agency (AMA)"
+    assert values["publication.name"] == "Official Gazette of the Republic of Rwanda"
+    used, notices = V.usable_suggestions(treaty)
+    assert used["identity.family"] == "treaty" and len(notices) == 1 and "Treaty" in notices[0]
+    unknown = {**treaty, "suggested": {**treaty["suggested"], "identity.type": "pamphlet"}}
+    used, notices = V.usable_suggestions(unknown)
+    assert (
+        "identity.type" not in used and used["identity.title"].startswith("Treaty") and "choose" in notices[0]
+    )
+    assert (
+        V.usable_suggestions({"suggested": {"identity.family": "treaty", "identity.type": "agreement"}})[1]
+        == []
+    )

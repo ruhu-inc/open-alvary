@@ -996,6 +996,7 @@ async function detailsView(actId) {
           el("h2", { text: `${title}: details` }),
           el("p", { class: "muted", text: "Each detail was read from the document where it is printed; the page and words are shown beside it. Check each against the original beside the form (a page number opens that page there), correct it, or say why it is not given. Legal facts (what each language version is worth as law, when it commences, whether it is current, the laws it affects) are only suggested: none is filled in until you use the suggestion or give it yourself, and an authority left empty is published as unknown. Confirmed details are approved with the text and shown to the public." }),
           el("p", {}, pill(record.status === "confirmed" ? "ok" : record.status === "draft" ? "warn" : "medium", DETAIL_STATUS[record.status] + (record.revision ? ` · revision ${record.revision} by ${record.author}` : "")), " ", counter),
+          ...(data.notices || []).map((notice) => el("div", { class: "hint", text: notice })),
           canEdit ? el("p", {}, el("button", { text: "Save draft", on: { click: () => save("draft") } }), " ", confirmButton, " ", previewLink(actId)) : el("p", { class: "muted", text: "Editing needs the reviewer role." }),
           canEdit ? comment : null),
         ...groups,
