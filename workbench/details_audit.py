@@ -101,7 +101,9 @@ def source_of(key: str, value, document: dict, used: dict) -> str:
 
 
 def _number(value) -> str:
-    return re.sub(r"\s+", "", str(value or "")).casefold().replace("°", "").replace("º", "")
+    # A file's name writes "57-2008" and "002-16.10-TC" for the printed "57/2008" and "002/16.10/TC".
+    text = re.sub(r"\s+", "", str(value or "")).casefold().replace("°", "").replace("º", "")
+    return re.sub(r"[-.]", "/", text)
 
 
 def _head(number: str) -> str:
@@ -128,6 +130,10 @@ def second_source(document: dict, used: dict) -> dict:
         # so the name is no second source for them.
         return {"heading": "not_found"}
     listed = parse_rlrc(name, unquote(url))
+    if listed.get("kind") != (used.get("identity.type") or document.get("type")) or not listed.get("number"):
+        # The name names another text (the law amended, the treaty an order ratifies): no second source.
+        return {"name": "names_another_text"}
+    listed = {**listed, "year": (listed.get("date") or "")[:4] or None}
     out = {}
     for field, text_value, name_value in (
         ("number", used.get("identity.number.value"), listed.get("number")),

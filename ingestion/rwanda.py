@@ -1392,18 +1392,19 @@ def prepare_selection(
                 # the reviewer is told (2026-10-29: 85 numbers and 37 years disagreed).
                 named = parse_rlrc(record["listed"]["name"], unquote(record["url"]))
                 differs = {}
-                if (
-                    named.get("number")
-                    and values.get("identity.number.value")
-                    and not rw_gazette.numbers_agree(values["identity.number.value"], named["number"])
-                ):
-                    differs["number in the file's name"] = named["number"]
-                if (
-                    named.get("year")
-                    and values.get("identity.year")
-                    and str(named["year"]) != values["identity.year"]
-                ):
-                    differs["year in the file's name"] = str(named["year"])
+                # Only where the name names this kind of instrument by its number: a name often names
+                # another text (the law amended, the treaty an order ratifies, the Gazette's date).
+                if named.get("kind") == entry["kind"] and named.get("number"):
+                    if values.get("identity.number.value") and not rw_gazette.numbers_agree(
+                        values["identity.number.value"], named["number"]
+                    ):
+                        differs["number in the file's name"] = named["number"]
+                    if (
+                        named.get("date")
+                        and values.get("identity.year")
+                        and named["date"][:4] != values["identity.year"]
+                    ):
+                        differs["year in the file's name"] = named["date"][:4]
                 if differs:
                     for nodes in versions.values():
                         if nodes:
