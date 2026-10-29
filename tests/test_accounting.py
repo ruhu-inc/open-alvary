@@ -159,3 +159,11 @@ def test_many_files_sum_to_one_summary():
     assert summary["reasons"]["no_language"]["files"] == 1
     assert summary["by_source"]["rlrc-laws"]["first_page_unplaced"] == 1
     assert summary["worst"][0]["file"] == "a.pdf"
+
+
+def test_a_gazette_notice_is_counted_as_a_notice_not_a_loss():
+    notice = page(3, [column("rw", "ICYEMEZO CYO GUHINDURA AMAZINA", "Uwitwa X")])
+    found = [{"number": "x", "kind": "law", "versions": versions()}]
+    notices = [{"kind": "name_change", "language": "rw", "start": 2, "end": 4}]
+    report = accounting.rwanda_issue([BODY, notice], {}, found, set(), page_count=2, notices=notices)
+    assert report["lines"]["notice"] == 2 and "after_last_instrument" not in report["unplaced"]

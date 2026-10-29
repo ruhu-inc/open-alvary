@@ -1130,3 +1130,106 @@ def test_a_long_title_is_read_whole_over_a_page_break_but_stops_at_a_heading_or_
     assert contents["title"].endswith("GRANT AGREEMENT BETWEEN")
     assert RG.shortened("UMUGEREKA W'ITEGEKO RYEMERA KWEMEZA", 20) == "UMUGEREKA W'ITEGEKO…"
     assert RG.shortened("Short", 20) == "Short"
+
+
+def _stream(language, texts, page=1):
+    return [{"text": t, "page": page} for t in texts]
+
+
+def test_a_heading_split_over_two_lines_is_recognised_in_every_language():
+    """Kinyarwanda and French print the kind on one line and the number on the next ("ITEKA RYA
+    MINISITIRI W'INTEBE" / "N°003/03 RYO KU WA 16/01/2015 …"); before 2026-10-29 only the English, on
+    one line, was found."""
+    rw = RG.openings(
+        _stream(
+            "rw",
+            ["ITEKA RYA MINISITIRI W’INTEBE", "N°003/03 RYO KU WA 16/01/2015 RIGENA", "UBURYO AMAHUGURWA"],
+        ),
+        "rw",
+    )
+    fr = RG.openings(
+        _stream("fr", ["ARRETE DU PREMIER MINISTRE", "N°003/03 DU 16/01/2015 PORTANT", "MODALITES"]), "fr"
+    )
+    assert [(o["kind"], o["number"], o["date"]) for o in rw] == [
+        ("prime_ministers_order", "003/03", "2015-01-16")
+    ]
+    assert [(o["kind"], o["number"]) for o in fr] == [("prime_ministers_order", "003/03")]
+    bnr = RG.openings(_stream("rw", ["AMABWIRIZA RUSANGE N° 67/2023 YO", "KU WA 14/06/2023 YEREKEYE"]), "rw")
+    assert [(o["kind"], o["number"]) for o in bnr] == [("regulations", "67/2023")]
+    pm = RG.openings(
+        _stream("rw", ["AMABWIRIZA YA MINISITIRI W’INTEBE", "N°003/03 YO KUWA 03/12/2013 AGENGA"]), "rw"
+    )
+    assert [(o["kind"], o["number"]) for o in pm] == [("instructions", "003/03")]
+    constitution = RG.openings(
+        _stream("en", ["THE CONSTITUTION OF THE", "REPUBLIC OF RWANDA OF 2003", "REVISED IN 2015"]), "en"
+    )
+    assert [o["kind"] for o in constitution] == ["constitution"]
+
+
+def test_orders_with_one_title_and_date_are_kept_apart_by_their_bodies():
+    """Each short order prints its title over its contents and again over its body; the body, known by
+    its enacting words or its signature's date, keeps one order from being merged into the next
+    (Gazette n° 14 of 04/04/2016 gave 9 of its 22 orders before 2026-10-29)."""
+    lines = []
+    for number in ("34/03", "35/03", "36/03"):
+        title = [f"PRIME MINISTER’S ORDER N°{number} OF", "22/03/2016 APPOINTING A DIRECTOR"]
+        lines += title + ["TABLE OF CONTENTS", "Article One : Appointment"]
+        lines += title + [
+            "The Prime Minister,",
+            "HEREBY ORDERS:",
+            "Article One: Appointment",
+            "Kigali, on 22/03/2016",
+        ]
+    found = RG.instruments({"rw": [], "en": _stream("en", lines), "fr": []})
+    assert [entry["number"] for entry in found] == ["34/03", "35/03", "36/03"]
+
+
+def test_notices_are_recorded_as_notices_and_an_issue_of_notices_by_its_name():
+    lines = _stream(
+        "rw",
+        [
+            "ITEKA RYA PEREZIDA N° 1/01 RYO KU WA 01/01/2020",
+            "Twebwe, KAGAME Paul,",
+            "ICYEMEZO CYO GUHINDURA AMAZINA",
+            "Uwitwa X",
+            "Uwitwa Y",
+        ],
+    )
+    found = RG.instruments({"rw": lines[:2], "en": [], "fr": []})
+    found[0]["versions"]["rw"]["end"] = 2
+    notices = RG.notices({"rw": lines, "en": [], "fr": []}, found)
+    assert [(n["kind"], n["start"], n["end"]) for n in notices] == [("name_change", 2, 5)]
+    journal = RG.notices(
+        {"rw": _stream("rw", ["Umwaka wa 65", "Company X Ltd"]), "en": [], "fr": []},
+        [],
+        "Igazeti ya Leta n° 01_Amazina + RDB Journal",
+    )
+    assert [(n["kind"], n["start"], n["end"]) for n in journal] == [("name_change", 0, 2)]
+
+
+def test_a_language_without_a_recognised_heading_is_found_by_the_pages_it_shares():
+    """The languages are printed side by side: an English text whose heading was not recognised is the
+    instrument whose other languages share its pages, marked found by its pages (2026-10-29)."""
+    body = [f"Article {k}: words of the order printed here in English for the reader" for k in range(1, 6)]
+    streams = {
+        "rw": _stream(
+            "rw", ["ITEKA RYA PEREZIDA N° 1/01 RYO KU WA 01/01/2020", "Twebwe, KAGAME Paul,"], page=2
+        ),
+        "en": _stream("en", ["PRESIDENTIAL ORDR No1/01 OF 01/01/2020", *body], page=2),
+        "fr": [],
+    }
+    found = RG.instruments(streams)
+    assert list(found[0]["versions"]) == ["rw"]
+    RG.fill_by_page(streams, found)
+    english = found[0]["versions"]["en"]
+    assert english["by_page"] and (english["start"], english["end"]) == (0, 6)
+
+
+def test_one_instrument_known_by_number_in_one_language_and_by_date_in_another_is_one():
+    streams = {
+        "rw": _stream("rw", ["ITEKA RYA PEREZIDA N° 1/01 RYO KU WA 01/01/2020"], page=2),
+        "en": [],
+        "fr": _stream("fr", ["ARRÊTÉ PRÉSIDENTIEL DU 01/01/2020"], page=2),
+    }
+    found = RG.instruments(streams)
+    assert len(found) == 1 and set(found[0]["versions"]) == {"rw", "fr"} and found[0]["number"] == "1/01"
