@@ -257,13 +257,35 @@ def ng_pdf(reading: dict, parts: list[dict], ocr_check_error: str | None = None)
 
 INVISIBLE = ("script", "style", "noscript", "template", "head")
 JUDGMENT_COLUMN = "div.light-background div.col-12"
+# Elements that break a line where a browser shows them; any other element runs on in its line, so
+# "28<sup>th</sup>" reads "28th", as the reader gives it, and not "28 th".
+BLOCKS = (
+    "p, div, br, li, ul, ol, table, tr, td, th, h1, h2, h3, h4, h5, h6, blockquote, section, article, "
+    "header, footer, pre, hr, dd, dt, dl"
+)
+TOKEN = re.compile(r"\d+|[^\W\d_]+")
 
 
-def _unplaced_run(tokens: list[str], left: Counter) -> tuple[int, str | None]:
-    """How many of `tokens` (in printed order) the placed words do not account for, and the first run
-    of them as evidence."""
+def tokens(text: str) -> list[str]:
+    """A court page's words for comparison: runs of figures and runs of letters apart ("28th" is 28 and
+    th either way), so a figure set apart from its letters on the page still matches the reading."""
+    # The reader writes the naira the page strikes through ("N̶298") as its sign ("₦298"): one word.
+    return TOKEN.findall((text or "").replace("₦", " n ").casefold())
+
+
+def visible_text(element) -> str:
+    """An element's text as a browser lays it out: lines broken at block elements only."""
+    for block in element.select(BLOCKS):
+        block.insert_before(" ")
+        block.insert_after(" ")
+    return element.get_text("")
+
+
+def _unplaced_run(printed: list[str], left: Counter) -> tuple[int, str | None]:
+    """How many of the `printed` words (in printed order) the placed words do not account for, and the
+    first run of them, with the words before and after it, as evidence."""
     missing, run, sample, before, context = 0, [], None, [], []
-    for token in tokens:
+    for token in printed:
         if left[token] > 0:
             left[token] -= 1
             if run and sample is None:
@@ -289,30 +311,30 @@ def nicn_page(raw: bytes, judgment) -> dict:
     soup = BeautifulSoup(raw.decode("utf-8", "replace"), "html.parser")
     for element in soup.select(",".join(INVISIBLE)):
         element.decompose()
+    everything = tokens(visible_text(soup))
     column = soup.select_one(JUDGMENT_COLUMN) or soup.body or soup
-    inside_text = column.get_text(" ")
+    inside_text = column.get_text("")
     if (
         getattr(judgment, "markup_as_text", False)
         or len(re.findall(r"</?(?:p|span|div)\b", inside_text)) >= 5
     ):
         # The portal printed the judgment's markup as text: its words are those of the text parsed again.
-        inside_text = BeautifulSoup(inside_text, "html.parser").get_text(" ")
-    inside = words(inside_text)
-    everything = words(soup.get_text(" "))
+        inside_text = visible_text(BeautifulSoup(inside_text, "html.parser"))
+    inside = tokens(inside_text)
     outside = sum((Counter(everything) - Counter(inside)).values())
     ledger = Ledger(1)
     document = [
         t
         for unit in judgment.units
-        for t in words(
+        for t in tokens(
             " ".join(filter(None, [unit.marker or ""] + texts(unit.text) + texts(unit.rows or [])))
         )
     ]
-    furniture = [t for item in judgment.furniture for t in words(" ".join(texts(item)))]
+    furniture = [t for item in judgment.furniture for t in tokens(" ".join(texts(item)))]
     set_aside = [
         t
         for item in [judgment.summary or "", *(judgment.editorial or [])]
-        for t in words(" ".join(texts(item)))
+        for t in tokens(" ".join(texts(item)))
     ]
     left = Counter(document) + Counter(furniture) + Counter(set_aside)
     missing, sample = _unplaced_run(inside, left)

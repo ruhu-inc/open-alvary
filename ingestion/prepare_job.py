@@ -14,6 +14,9 @@ pages, no OCR); a PDF source's files (nass-acts, nln-repository, supreme-court â
 job has read them with the Layout Parser, checked by the OCR (ingestion.ng_documents), the rest
 waiting.
 
+PREPARE_MODE=details writes no document either: each work's first draft of details is measured
+(workbench.details_audit) into work/<country>/audit/details/<execution>/.
+
 PREPARE_MODE=audit writes no document: each file is prepared as usual into a collection that keeps,
 instead, where every printed line went (ingestion.accounting), and each task writes its files'
 accounts to work/<country>/audit/lines/<execution>/task-NNN-of-NNN.json; `python -m
@@ -86,10 +89,11 @@ def prepare_nigeria(store, task: int, tasks: int) -> dict:
     return counts
 
 
-def write_audit(store, country: str, task: int, tasks: int, payload: dict) -> str:
-    """One task's accounts, in the bucket beside the country's other work."""
+def write_audit(store, country: str, task: int, tasks: int, payload: dict, kind: str = "lines") -> str:
+    """One task's accounts (kind "lines", or "details": workbench.details_audit), in the bucket beside
+    the country's other work."""
     run = os.environ.get("CLOUD_RUN_EXECUTION") or datetime.now(UTC).strftime("%Y-%m-%dT%H%M%SZ")
-    name = f"work/{country}/audit/lines/{run}/task-{task + 1:03d}-of-{tasks:03d}.json"
+    name = f"work/{country}/audit/{kind}/{run}/task-{task + 1:03d}-of-{tasks:03d}.json"
     store.put(name, json.dumps(payload, ensure_ascii=False).encode(), "application/json", replace=True)
     return name
 
@@ -175,6 +179,15 @@ def main() -> int:
     task = int(os.environ.get("CLOUD_RUN_TASK_INDEX", "0"))
     tasks = int(os.environ.get("CLOUD_RUN_TASK_COUNT", "1"))
     store = corpus_store.open_store()
+    if os.environ.get("PREPARE_MODE") == "details":  # each work's first draft of details, measured
+        from workbench import details_audit
+
+        country = os.environ.get("PREPARE_COUNTRY", rwanda.COUNTRY)
+        limit = int(os.environ["PREPARE_LIMIT"]) if os.environ.get("PREPARE_LIMIT") else None
+        payload = details_audit.audit_collection(store, country, task, tasks, limit)
+        name = write_audit(store, country, task, tasks, payload, kind="details")
+        print(json.dumps({"audit": name, "works": len(payload["reports"]), "failed": len(payload["failed"])}))
+        return 0
     audit = os.environ.get("PREPARE_MODE") == "audit"
     if os.environ.get("PREPARE_COUNTRY", rwanda.COUNTRY) == "ng":
         if audit:

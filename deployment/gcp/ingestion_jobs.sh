@@ -165,8 +165,9 @@ prepare() {  # prepare [tasks] [country] [sources]: rw by default; ng prepares t
 }
 
 audit() {  # audit [tasks] [country] [sources]: as prepare, writing no document; each line's account instead
+  # (AUDIT=details: each work's first draft of details measured instead, workbench.details_audit)
   local tasks="${1:-8}" country="${2:-rw}" sources="${3:-}"
-  local env="PREPARE_COUNTRY=$country;PREPARE_MODE=audit"
+  local env="PREPARE_COUNTRY=$country;PREPARE_MODE=${AUDIT:-audit}"
   if [[ "$country" == ng ]]; then env+=";PREPARE_SOURCES=${sources:-nicn-judgments}"; fi
   [[ -z "${PREPARE_LIMIT:-}" ]] || env+=";PREPARE_LIMIT=$PREPARE_LIMIT"
   "${GC[@]}" run jobs execute "$PREPARE_JOB" --region="$REGION" --tasks="$tasks" --async --update-env-vars="^;^$env"
