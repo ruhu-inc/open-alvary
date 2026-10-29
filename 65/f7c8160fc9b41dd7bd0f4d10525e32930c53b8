@@ -1,0 +1,21 @@
+tests/test_record.py
+  s_d665c62e07d76f::t_11782920b35c34 579-591
+workbench/record_view.py
+  s_d665c62e07d76f::t_11782920b35c34 290-292,520
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "65f7c8160fc9b41dd7bd0f4d10525e32930c53b8",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
