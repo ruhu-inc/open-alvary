@@ -27,7 +27,7 @@ from schema.jurisdictions import registry
 # issues prepared by an older version are prepared again (BucketCollection.done).
 # 2026-10-29.1: headings over two lines, more kinds, bodies known by their enacting words (orders with
 # one title kept apart), notices recorded, annexes without their instrument kept, treaties' family.
-PIPELINE = "2026-10-29.1"
+PIPELINE = "2026-10-30.1"  # 2026-10-30.1: a file name's "57-2008" agrees with the printed "57/2008"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -2047,7 +2047,9 @@ def numbers_agree(first, second) -> bool:
     """'055/2024' printed and '055' in a file's name are one number; so are '01' and '1'."""
 
     def plain(value) -> str:
-        return re.sub(r"\s+", "", str(value or "")).casefold().replace("°", "").replace("º", "")
+        # A file's name writes "57-2008" and "002-16.10-TC" for the printed "57/2008" and "002/16.10/TC".
+        text = re.sub(r"\s+", "", str(value or "")).casefold().replace("°", "").replace("º", "")
+        return re.sub(r"[-.]", "/", text)
 
     a, b = plain(first), plain(second)
     return a == b or (a.split("/")[0].lstrip("0") or "0") == (b.split("/")[0].lstrip("0") or "0")
