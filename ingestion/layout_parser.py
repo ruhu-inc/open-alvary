@@ -181,6 +181,69 @@ def _words(text: str) -> str:
     return ESCAPED_BREAK.sub("\n", text) if text else text
 
 
+# The Layout Parser writes a superscript or a subscript as inline maths: "31\(^{st}\)", "\(2^{nd}\)",
+# "H\(_{2}\)O". Read as printed: the words, with the raised or lowered letters marked.
+INLINE_MATHS = re.compile(r"\\\((.*?)\\\)", re.S)
+SCRIPT = re.compile(r"^\s*([^\\^_{}]*?)\s*([\^_])\s*\{([^{}\\]*)\}\s*$")
+
+
+def plain_maths(text: str) -> tuple[str, list[dict]]:
+    """Inline maths as plain words and superscript or subscript marks over them; anything else in the
+    maths (a fraction, a symbol) is left as the service gave it."""
+    if not text or "\\(" not in text:
+        return text, []
+    out, marks, at = [], [], 0
+    for match in INLINE_MATHS.finditer(text):
+        out.append(text[at : match.start()])
+        found = SCRIPT.match(match.group(1))
+        if found is None:
+            body = match.group(1).strip()
+            out.append(body if "\\" not in body and "{" not in body else match.group(0))
+        else:
+            base, sign, raised = found.groups()
+            out.append(base)
+            start = sum(len(part) for part in out)
+            out.append(raised)
+            if raised:
+                marks.append(
+                    {
+                        "type": "superscript" if sign == "^" else "subscript",
+                        "start": start,
+                        "end": start + len(raised),
+                    }
+                )
+        at = match.end()
+    out.append(text[at:])
+    return "".join(out), marks
+
+
+def plain_maths_page(page: dict) -> dict:
+    """A stored Layout Parser page with its inline maths read as words (plain_maths): each text
+    node's marks added, tables' cells and captions as plain words."""
+
+    def node(n: dict) -> dict:
+        n = dict(n)
+        if isinstance(n.get("text"), str):
+            text, marks = plain_maths(n["text"])
+            if marks and n.get("kind") not in ("furniture", "table"):
+                n["marks"] = [*n.get("marks", []), *marks]
+            n["text"] = text
+        if isinstance(n.get("caption"), str):
+            n["caption"] = plain_maths(n["caption"])[0]
+        for key in ("header_rows", "body_rows"):
+            if key in n:
+                n[key] = [
+                    [{**cell, "text": plain_maths(cell.get("text", ""))[0]} for cell in row] for row in n[key]
+                ]
+        return n
+
+    out = dict(page)
+    out["nodes"] = [node(n) for n in page.get("nodes", [])]
+    if isinstance(page.get("text"), str):
+        out["text"] = plain_maths(page["text"])[0]
+    return out
+
+
 def _text_of(blocks: list[dict]) -> str:
     """Verbatim text of nested blocks, in reading order, one block per line."""
     lines = []

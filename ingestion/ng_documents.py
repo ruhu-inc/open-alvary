@@ -36,7 +36,7 @@ import copy
 import json
 import re
 
-from ingestion import reconcile
+from ingestion import layout_parser, reconcile
 
 COUNTRY = "ng"
 # The kinds of instrument the stored files hold (ledger types) and the document type each is reviewed as.
@@ -90,7 +90,8 @@ def cloud_reading(docai: dict | None, ocr: dict | None) -> dict | None:
         "input_sha256": docai["sha256"],
         "reader": "docai",
         "version": docai["version"],
-        "pages": docai["pages"],
+        # Its inline maths read as words ("\\(2^{nd}\\)" is "2nd", the "nd" raised): layout_parser.
+        "pages": [layout_parser.plain_maths_page(page) for page in docai["pages"]],
     }
     checks = {"docai-ocr": {"version": ocr["version"], "pages": ocr["pages"]}} if ocr else {}
     reading = reconcile.reconcile(primary, checks)
@@ -391,8 +392,9 @@ def sc_details(listed: dict, kind: str, url: str) -> tuple[dict, dict]:
 
 # --- preparing the files whose readings have arrived -------------------------------------------------
 
-# The version of this preparation: a file prepared by an earlier one is prepared again.
-PIPELINE = "ng-pdf-2026-10-25.1"
+# The version of this preparation: a file prepared by an earlier one is prepared again. 2026-10-29.1: the
+# OCR check read as stored (words, no text), inline maths read as words.
+PIPELINE = "ng-pdf-2026-10-29.1"
 # The sources whose stored files are PDFs read by the scan-reader job (their other files, the Supreme
 # Court's data records and SEC's circular pages, have no reader here yet).
 PDF_SOURCES = {

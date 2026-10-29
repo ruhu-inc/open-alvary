@@ -163,6 +163,41 @@ def test_the_layout_parser_is_checked_by_the_ocr_and_a_missing_check_blocks_appr
     assert ng_documents.cloud_reading(None, ocr) is None  # waits for the Layout Parser
 
 
+def test_the_ocr_check_as_the_scan_reader_stores_it_words_and_boxes_only():
+    """Google's OCR is stored as words with their boxes and no text (layout_parser.ocr_page): the
+    check reads them as lines, so a file with its OCR check prepares (before 2026-10-29 it failed)."""
+    docai = gazette(TWO[:1])
+
+    def stored(text: str) -> list[dict]:
+        words = []
+        for row, line in enumerate(text.replace("Example Act.", "Exampel Act.").splitlines()):
+            for column, word in enumerate(line.split()):
+                y = 0.05 + row * 0.02
+                words.append(
+                    {
+                        "text": word,
+                        "x0": 0.1 + column * 0.05,
+                        "y0": y,
+                        "x1": 0.14 + column * 0.05,
+                        "y1": y + 0.015,
+                    }
+                )
+        return words
+
+    ocr = {
+        "version": {"processor": "ocr"},
+        "pages": [{"page": p["page"], "words": stored(p["text"])} for p in docai["pages"]],
+    }
+    checked = ng_documents.cloud_reading(docai, ocr)
+    assert checked["summary"]["missing_checks"] == []
+    flagged = [f for p in checked["pages"] for f in p["flags"]]
+    assert flagged and {"docai-ocr"} <= set(flagged[0]["checks"])
+    # Read as lines, as printed, not one run of words.
+    lines = {p["page"]: len([x for x in p["text"].splitlines() if x.split()]) for p in docai["pages"]}
+    assert {p["page"]: len(p["checks"]["docai-ocr"].splitlines()) for p in checked["pages"]} == lines
+    assert max(lines.values()) > 1
+
+
 def test_the_structure_rules_follow_the_type_and_regulations_wait_for_theirs():
     from workbench import content, publication
 

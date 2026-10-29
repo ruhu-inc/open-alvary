@@ -390,3 +390,35 @@ def test_an_ocr_page_gives_every_word_with_its_box_and_confidence():
         "confidence": 0.98,
     }
     assert read["languages"] == [{"code": "fr", "confidence": 0.97}]
+
+
+def test_inline_maths_is_read_as_words_with_raised_letters_marked():
+    from ingestion.layout_parser import plain_maths, plain_maths_page
+
+    text, marks = plain_maths("Dated this \\(31^{st}\\) day of May, 2006 and H\\(_{2}\\)O; \\(2^{nd}\\) time")
+    assert text == "Dated this 31st day of May, 2006 and H2O; 2nd time"
+    assert [(m["type"], text[m["start"] : m["end"]]) for m in marks] == [
+        ("superscript", "st"),
+        ("subscript", "2"),
+        ("superscript", "nd"),
+    ]
+    assert plain_maths("\\(\\frac{1}{2}\\) share") == ("\\(\\frac{1}{2}\\) share", [])  # left as given
+    page = plain_maths_page(
+        {
+            "page": 14,
+            "text": "the \\(5^{th}\\) day",
+            "nodes": [
+                {"kind": "paragraph", "text": "the \\(5^{th}\\) day", "page": 14},
+                {
+                    "kind": "table",
+                    "header_rows": [[{"text": "\\(1^{st}\\) schedule"}]],
+                    "body_rows": [],
+                    "page": 14,
+                },
+            ],
+        }
+    )
+    assert page["text"] == "the 5th day" and page["nodes"][0]["marks"] == [
+        {"type": "superscript", "start": 5, "end": 7}
+    ]
+    assert page["nodes"][1]["header_rows"][0][0]["text"] == "1st schedule"
