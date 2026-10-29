@@ -1140,6 +1140,16 @@ class AuditCollection:
             if report["sha"] == sha:
                 report["documents"] = len(documents)
                 report["notices"] = sorted({n["kind"] for n in notices or []})
+                # Each work's first draft of details, as the Details screen would build it from what was
+                # prepared (workbench.details_audit): measured with the lines, nothing written.
+                from schema.jurisdictions import registry
+                from workbench import details_audit
+
+                profiles = registry()
+                report["details"] = [
+                    details_audit.audit_work(document, {"jurisdiction": COUNTRY}, profiles)
+                    for document in details_audit.works(documents)
+                ]
 
     def save_manifest(self, manifest: dict) -> None:
         pass
@@ -1234,7 +1244,12 @@ def prepare_selection(
         one_reading = (ocr_pages & scanned) - read_pages
         scanned = scanned - read_pages - ocr_pages
         roles = rw_gazette.annex_pages(split)
-        streams = rw_gazette.streams(split, skip=set(roles))
+        cover_pages = {page["page"] for page in split if page["layout"] == "cover"}
+        # A Gazette issue's front page (its masthead and contents, shared by its instruments) is the issue's
+        # own front matter: recorded, and kept out of the instruments' text, where its contents would read
+        # as their headings. An RLRC file's cover is its one text's own (below).
+        front_pages = cover_pages if record["source"] == "minijust-gazette" else set()
+        streams = rw_gazette.streams(split, skip=set(roles) | front_pages)
         furniture = {page["page"]: [line["text"] for line in page["furniture"]] for page in split}
 
         def write_document(
@@ -1290,9 +1305,26 @@ def prepare_selection(
                 date=listed.get("date"),
                 title=listing_title(record["listed"]["name"]),
             )
+            for entry in found:  # a number made from the file's fingerprint names nothing printed
+                entry["number_made"] = not listed.get("number")
         if found:  # a language whose heading was not recognised, found by the pages it shares (flagged)
             rw_gazette.fill_by_page(streams, found)
-        issue_notices = rw_gazette.notices(streams, found, record["listed"]["name"])
+        if found and record["source"] == "rlrc-laws":
+            # An RLRC file is one text: its cover (the title in each language, where it was adopted, the
+            # order ratifying it, its Gazette) opens each language's version, marked as its cover page,
+            # which is published with it (owner, 2026-10-29).
+            for language in rw_gazette.LANGUAGES:
+                firsts = [e["versions"][language] for e in found if language in e["versions"]]
+                if firsts:
+                    first = min(firsts, key=lambda v: v["start"])
+                    before = streams[language][: first["start"]]
+                    if before and all(line["page"] in cover_pages for line in before):
+                        first["start"] = 0
+                        first["pages"][0] = before[0]["page"]
+        issue_notices = rw_gazette.notices(streams, found, record["listed"]["name"]) + [
+            {"kind": "front_matter", "language": None, "start": 0, "end": 0, "pages": [page, page]}
+            for page in sorted(front_pages)
+        ]
         rlrc, rlrc_checked = rlrc_index()
         # Born-digital pages Google's OCR has read as a check on their text layer (owner, 2026-10-22):
         # pages read from the layer itself, never those our OCR or the Layout Parser read.
@@ -1315,6 +1347,9 @@ def prepare_selection(
                 *(rw_gazette.check_text_layer(nodes, check_pages, sizes) for nodes in versions.values())
             )
             for language, nodes in versions.items():
+                for node in nodes:  # the cover page's text, marked so it is published as the cover
+                    if node.get("page") in cover_pages:
+                        node["cover"] = True
                 if entry["versions"][language].get("by_page") and nodes:
                     nodes[0].setdefault("flags", []).append(
                         {
@@ -1351,7 +1386,35 @@ def prepare_selection(
                                 "others": {"Printed over the contents": entry["also_printed_as"]},
                             }
                         )
-            values, legal, inferred = rw_gazette.suggest(lines, entry, issue)
+            values, legal, inferred, evidence = rw_gazette.suggest(lines, entry, issue)
+            if record["source"] == "rlrc-laws" and not entry.get("title_from_listing"):
+                # The file's name names the text it holds: where its number or year is not the text's,
+                # the reviewer is told (2026-10-29: 85 numbers and 37 years disagreed).
+                named = parse_rlrc(record["listed"]["name"], unquote(record["url"]))
+                differs = {}
+                if (
+                    named.get("number")
+                    and values.get("identity.number.value")
+                    and not rw_gazette.numbers_agree(values["identity.number.value"], named["number"])
+                ):
+                    differs["number in the file's name"] = named["number"]
+                if (
+                    named.get("year")
+                    and values.get("identity.year")
+                    and str(named["year"]) != values["identity.year"]
+                ):
+                    differs["year in the file's name"] = str(named["year"])
+                if differs:
+                    for nodes in versions.values():
+                        if nodes:
+                            nodes[0].setdefault("flags", []).append(
+                                {
+                                    "severity": "medium",
+                                    "kind": "file_name_disagrees",
+                                    "primary": f"{values.get('identity.number.value', '')} ({values.get('identity.year', '')})",
+                                    "others": differs,
+                                }
+                            )
             # The earlier instruments it repeals or amends; linked across the collection when the
             # manifest is assembled (link_works).
             cites = rw_gazette.cited(lines, entry)
@@ -1424,6 +1487,7 @@ def prepare_selection(
                         "publication.pages": "{}–{}".format(*entry["versions"][language]["pages"]),
                         "publication.url": record["url"],
                     },
+                    "suggested_evidence": evidence,
                     "alignment": check,
                 }
             summary.append(
@@ -1526,7 +1590,13 @@ def prepare_selection(
                 sha,
                 record,
                 accounting.rwanda_issue(
-                    split, roles, found, written_annexes, page_count=len(words), notices=issue_notices
+                    split,
+                    roles,
+                    found,
+                    written_annexes,
+                    page_count=len(words),
+                    notices=issue_notices,
+                    front_pages=front_pages,
                 ),
             )
         collection.finish_issue(

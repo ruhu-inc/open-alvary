@@ -449,7 +449,124 @@ def split_issue(pages: list[dict], tables: dict[int, list[dict]] | None = None) 
         )
         previous = ([(c["x0"], c["x1"]) for c in split["columns"]], sides) if distinct else None
         out.append(split)
+    # A page read as one column of no language whose next page prints the three languages side by side
+    # (an RLRC file's cover, a Gazette's front page): its title lines run across the page, so no gutter
+    # was measured. It is read again by the next page's columns, each line across them kept whole in
+    # its own language (before 2026-10-29 such a page reached no document).
+    for k, split in enumerate(out):
+        nxt = out[k + 1] if k + 1 < len(out) else None
+        if (
+            nxt is not None
+            and split["layout"] == "single"
+            and all(c["language"] is None for c in split["columns"])
+            and nxt["layout"] == "parallel"
+            and not (tables or {}).get(split["page"])
+        ):
+            out[k] = cover_page(pages[k], split, [(c["x0"], c["x1"]) for c in nxt["columns"]])
     return out
+
+
+def _rows(words: list[dict]) -> list[list[dict]]:
+    """Words in printed rows by their vertical centre (as lines_of), each row left to right."""
+    if not words:
+        return []
+    height = statistics.median(w["ymax"] - w["ymin"] for w in words) or 1.0
+    rows: list[list[dict]] = []
+    for word in sorted(words, key=lambda w: (w["ymin"] + w["ymax"]) / 2):
+        centre = (word["ymin"] + word["ymax"]) / 2
+        if (
+            rows
+            and abs(centre - statistics.mean((w["ymin"] + w["ymax"]) / 2 for w in rows[-1])) <= 0.45 * height
+        ):
+            rows[-1].append(word)
+        else:
+            rows.append([word])
+    return [sorted(row, key=lambda w: w["xmin"]) for row in rows]
+
+
+def _line(words: list[dict], **more) -> dict:
+    return {
+        "text": " ".join(w["text"] for w in words),
+        "x0": round(min(w["xmin"] for w in words), 1),
+        "y0": round(min(w["ymin"] for w in words), 1),
+        "x1": round(max(w["xmax"] for w in words), 1),
+        "y1": round(max(w["ymax"] for w in words), 1),
+        **more,
+    }
+
+
+def line_language(text: str) -> str | None:
+    """A single line's language by its marker words (gazette_layout.MARKERS), where one language has
+    more of them than the others; None where none or a tie."""
+    counts = gazette_layout.language([text])[1]
+    if not counts:
+        return None
+    ranked = sorted(counts.items(), key=lambda kv: -kv[1])
+    return ranked[0][0] if len(ranked) == 1 or ranked[0][1] > ranked[1][1] else None
+
+
+def cover_page(page: dict, split: dict, spans: list[tuple[float, float]]) -> dict:
+    """A cover or front page read by the next page's columns (split_issue): a row whose words cross a
+    gutter is one line across the page, given to the column of its own language (line_language), or to
+    every column where its language cannot be told (a date, a number); any other row's words go to the
+    columns they lie in. Each line is marked "cover"; the page keeps its furniture."""
+    gutters = [(spans[i][1], spans[i + 1][0]) for i in range(len(spans) - 1)]
+    columns: list[list[dict]] = [[] for _ in spans]
+    furniture_ids = {(line["y0"], line["text"]) for line in split["furniture"]}
+
+    def nearest(word: dict) -> int:
+        centre = (word["xmin"] + word["xmax"]) / 2
+        distance = [0 if a <= centre < b else min(abs(centre - a), abs(centre - b)) for a, b in spans]
+        return distance.index(min(distance))
+
+    rows = [
+        row for row in _rows(page["words"]) if (_line(row)["y0"], _line(row)["text"]) not in furniture_ids
+    ]
+    across = [any(w["xmin"] < g1 and w["xmax"] > g0 for w in row for g0, g1 in gutters) for row in rows]
+    # A run of exactly as many lines across the page as there are languages is the title in each, printed
+    # in the columns' order (Kinyarwanda, English, French), whatever their words.
+    by_order: dict[int, int] = {}
+    k = 0
+    while k < len(rows):
+        if not across[k]:
+            k += 1
+            continue
+        run = k
+        while k < len(rows) and across[k]:
+            k += 1
+        if k - run == len(spans):
+            by_order.update({row: n for n, row in enumerate(range(run, k))})
+    for k, row in enumerate(rows):
+        whole = _line(row)
+        if across[k]:
+            language = line_language(whole["text"])
+            if k in by_order:
+                targets = [by_order[k]]
+            elif language in LANGUAGES[: len(spans)]:
+                targets = [LANGUAGES.index(language)]
+            else:
+                targets = range(len(spans))
+            for target in targets:
+                columns[target].append({**whole, "cover": True, "across": True})
+            continue
+        parts: dict[int, list[dict]] = {}
+        for word in row:
+            parts.setdefault(nearest(word), []).append(word)
+        for index, words in parts.items():
+            columns[index].append(_line(words, cover=True))
+    return {
+        **split,
+        "layout": "cover",
+        "columns": [
+            {
+                "language": LANGUAGES[i] if i < len(LANGUAGES) else None,
+                "x0": round(a, 1),
+                "x1": round(b, 1),
+                "lines": sorted(lines, key=lambda line: line["y0"]),
+            }
+            for i, ((a, b), lines) in enumerate(zip(spans, columns, strict=True))
+        ],
+    }
 
 
 # An annex opens on a page headed "UMUGEREKA W'ITEKA … / ANNEX TO … / ANNEXE À …" and closes where its
@@ -522,6 +639,8 @@ NOTICE_HEADINGS = (
         re.compile(r"(?i)ibiciro\s+fatizo|reference\s+(?:land\s+)?prices?|prix\s+de\s+r[ée]f[ée]rence"),
     ),
     ("court_decision", re.compile(r"(?i)^urubanza\b|\bRS/INCONST\b|^(?:judgment|arr[êe]t)\s+(?:n|rs)\b")),
+    # The issue's own front matter: its contents ("Ibirimo/Summary/Sommaire").
+    ("front_matter", re.compile(r"(?i)^(?:ibirimo|summary|sommaire)\b")),
 )
 # The same, from the issue's name as the Gazette lists it ("… _Amazina + RDB_Journal").
 NOTICE_ISSUE = (
@@ -541,7 +660,12 @@ def notice_kind(text: str) -> str | None:
     return None
 
 
-def notices(issue_streams: dict[str, list[dict]], found: list[dict], issue_name: str = "") -> list[dict]:
+def notices(
+    issue_streams: dict[str, list[dict]],
+    found: list[dict],
+    issue_name: str = "",
+    front_pages: set[int] | frozenset = frozenset(),
+) -> list[dict]:
     """The notices of an issue (NOTICE_HEADINGS): in each language, the lines outside every instrument
     from a notice's heading to the next instrument or notice; in an issue with no instrument at all
     whose name or lines say it holds notices, all its lines. Each {kind, language, start, end, pages}."""
@@ -564,7 +688,7 @@ def notices(issue_streams: dict[str, list[dict]], found: list[dict], issue_name:
                     out.append(current)
                     current = None
                 continue
-            kind = notice_kind(line["text"])
+            kind = notice_kind(line["text"]) or ("front_matter" if line["page"] in front_pages else None)
             if kind and (current is None or kind != current["kind"]):
                 if current:
                     out.append(current)
@@ -1518,7 +1642,12 @@ def sentence_case(title: str) -> str:
         sentence,
         count=1,
     )
-    return re.sub(r"\b(rwanda|republic|république|repubulika)\b", lambda m: m.group(1).capitalize(), sentence)
+    sentence = re.sub(
+        r"\b(rwanda|republic|république|repubulika)\b", lambda m: m.group(1).capitalize(), sentence
+    )
+    # An acronym printed in brackets keeps its capitals: "(AMA)", "(RURA)", "(EAC)".
+    acronyms = {m.group(1).lower(): m.group(1) for m in re.finditer(r"\(([A-Z]{2,8})\)", title)}
+    return re.sub(r"\(([a-z]{2,8})\)", lambda m: f"({acronyms.get(m.group(1), m.group(1))})", sentence)
 
 
 # --- details read from the text ------------------------------------------------------------------------
@@ -1849,6 +1978,81 @@ def spoken_date(text: str) -> str | None:
     return f"{year}-{MONTHS[month.lower()]:02d}-{int(day):02d}"
 
 
+# "After consideration and approval by the Cabinet, in its session of 09/09/2015": the Cabinet's step.
+CABINET = re.compile(
+    r"approval by the Cabinet,?\s+in its (?:session|meeting) of\s+(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*((?:19|20)\d\d)",
+    re.I,
+)
+# An RLRC cover's facts, as its English prints them.
+COVER_ADOPTED = re.compile(r"Adopted (?:in|at) ([A-Z][\w’' -]+?),?\s+on\s+(.{4,40}?\d{4})", re.I)
+COVER_RATIFIED = re.compile(
+    r"Ratified by (?:the )?(Presidential Order|Prime Minister[’']s Order|Law|Ministerial Order)\s+n\s?[°ºo]\.?\s*(\S+)\s+of\s+(.{4,40}?\d{4})",
+    re.I,
+)
+COVER_GAZETTE = re.compile(
+    r"Official Gazette of the Republic of Rwanda\s+n\s?[°ºo]\.?\s*(special|\d+(?:\s*bis|\s*ter)?)\s+of\s+(.{4,40}?\d{4})",
+    re.I,
+)
+COVER_TRANSLATED = re.compile(
+    r"Translated into Kinyarwanda from (French|English)(?:\s+and\s+(French|English))?", re.I
+)
+
+
+def _ordinal_free(text: str) -> str:
+    """'12 th June 2019' and '6th November 2019' as '12 June 2019'."""
+    return re.sub(r"(\d)\s*(?:st|nd|rd|th)\b", r"\1", text)
+
+
+def signers(lines: list[dict]) -> list[dict]:
+    """Everyone who signed, in printed order, from the block after "Kigali, on …": each {name, role,
+    page}. Older laws print the office before the name, newer ones after."""
+    start = next((i for i, line in enumerate(lines) if KIGALI.search(line["text"])), None)
+    if start is None:
+        return []
+    block = [
+        line
+        for line in lines[start + 1 :]
+        if line["text"].strip()
+        and not SIGNED.match(line["text"].strip())
+        and not FURNITURE.match(line["text"].strip())
+        and not re.match(
+            r"^(Seen and sealed|Bibonywe kandi|Vu et scell)|^Republic:$", line["text"].strip(), re.I
+        )
+    ]
+    texts = [line["text"].strip() for line in block]
+    first_role = next((i for i, t in enumerate(texts) if ANY_ROLE.match(t)), None)
+    if first_role is None:
+        return []
+    name_first = any(NAME.search(t) for t in texts[:first_role])
+    out: list[dict] = []
+    for i, text in enumerate(texts):
+        if not ANY_ROLE.match(text):
+            continue
+        step_by = -1 if name_first else 1
+        j = i + step_by
+        while 0 <= j < len(texts) and not NAME.search(texts[j]) and abs(j - i) <= 3:
+            j += step_by
+        if 0 <= j < len(texts) and NAME.search(texts[j]):
+            person = {
+                "name": texts[j],
+                "role": re.sub(r"^The\s+", "", text, flags=re.I),
+                "page": block[i].get("page"),
+            }
+            if not any(p["name"] == person["name"] for p in out):
+                out.append(person)
+    return out
+
+
+def numbers_agree(first, second) -> bool:
+    """'055/2024' printed and '055' in a file's name are one number; so are '01' and '1'."""
+
+    def plain(value) -> str:
+        return re.sub(r"\s+", "", str(value or "")).casefold().replace("°", "").replace("º", "")
+
+    a, b = plain(first), plain(second)
+    return a == b or (a.split("/")[0].lstrip("0") or "0") == (b.split("/")[0].lstrip("0") or "0")
+
+
 def signatories(lines: list[str]) -> dict[str, str]:
     """Who signed, from the block after "Kigali, on …": the President, the Prime Minister and the
     Minister of Justice who seals. Older laws print the office before the name, newer ones after."""
@@ -1931,7 +2135,7 @@ FAMILY = {
 }
 
 
-def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[dict, dict, dict]:
+def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[dict, dict, dict, dict]:
     """Details of the record read from the instrument as printed: its title, number and dates, who
     adopted it and the sittings that did, who promulgated, countersigned and sealed it, the date it was
     promulgated, and where it was published; the reviewer confirms each against the page.
@@ -1950,12 +2154,30 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
         "identity.type": entry["kind"],
         "identity.family": FAMILY.get(entry["kind"], "executive_instrument"),
     }
-    title = entry["versions"].get("en", next(iter(entry["versions"].values())))["title"]
+    # The words and page each value is read from, shown beside it to the reviewer (2026-10-29: every
+    # value; before, only the legal facts carried theirs).
+    evidence: dict = {}
+
+    def said(key: str, value, page, words: str) -> None:
+        evidence[key] = {"value": value, "page": page, "evidence": " ".join(str(words).split())[:300]}
+
+    heading = entry["versions"].get("en", next(iter(entry["versions"].values())))
+    title = heading["title"]
+    heading_page = (heading.get("pages") or [None])[0]
+    cover = [line for line in versions.get("en", []) if line.get("cover")]
+    if entry.get("title_from_listing") and cover:
+        # The text's own title, from its cover, before the file's name (an RLRC treaty's cover prints it).
+        across = [line["text"] for line in cover if line.get("across")]
+        title = (across or [cover[0]["text"]])[0]
+        heading_page = cover[0].get("page")
     if title:
         values["identity.full_title"] = values["identity.title"] = sentence_case(title)
         values["identity.citation"] = values["identity.full_title"]
-    if entry["number"] != "constitution":
+        for key in ("identity.title", "identity.full_title", "identity.citation"):
+            said(key, values[key], heading_page, title)
+    if entry["number"] != "constitution" and not entry.get("number_made"):
         values["identity.number.value"] = entry["number"]
+        said("identity.number.value", entry["number"], heading_page, title)
         printed = {
             "law": "Law",
             "organic_law": "Organic Law",
@@ -1967,6 +2189,7 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
             values["identity.number.printed"] = f"{printed[entry['kind']]} n° {entry['number']}"
     if entry.get("date"):
         values["identity.year"] = entry["date"][:4]
+        said("identity.year", values["identity.year"], heading_page, title)
     adopted_by = ADOPTED_BY.search(text)
     if adopted_by and entry["kind"] in ("law", "organic_law", "constitution"):
         values["issued_by"] = adopted_by.group(1).title()  # "Parliament", "Transitional National Assembly"
@@ -1982,22 +2205,107 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
         if deputies:
             inferred["step:adopted:senate.date"] = {"absent": "not_applicable", **deputies}
     every = [line for lines in versions.values() for line in lines]
+    family = values["identity.family"]
+    order = family == "executive_instrument" and entry["kind"] not in ("instructions",)
+    by_events = family in ("subsidiary_legislation",) or entry["kind"] == "instructions"
     signed = next((line for line in every if KIGALI.search(line["text"])), None)
     if signed:
         found = KIGALI.search(signed["text"])
         when = f"{found.group(3)}-{int(found.group(2)):02d}-{int(found.group(1)):02d}"
-        values["step:promulgated.date"] = when  # the President signs under the date
+        # The one who signs first signs under the date: a law is promulgated, an order signed, an
+        # instruction or regulation signed or made (2026-10-29: an order's date was filed as promulgated).
+        key = (
+            "event:signed.date"
+            if entry["kind"] == "instructions"
+            else "event:made.date"
+            if by_events
+            else "step:signed.date"
+            if order
+            else "step:promulgated.date"
+        )
+        values[key] = when
+        said(key, when, signed.get("page"), found.group(0))
         kigali = {"value": when, "page": signed.get("page"), "evidence": found.group(0)}
-        for step in ("countersigned", "sealed"):  # the other two signatures carry no date of their own
-            inferred[f"step:{step}.date"] = dict(kigali)
-    for language in ("en", *[k for k in versions if k != "en"]):
-        people = signatories([line["text"] for line in versions.get(language, [])])
-        for step, person in people.items():
-            values.setdefault(f"step:{step}.person", person)
+        if not by_events:
+            for step in ("countersigned", "sealed"):  # the other signatures carry no date of their own
+                inferred[f"step:{step}.date"] = dict(kigali)
+    cabinet = next((line for line in versions.get("en", []) if re.search(r"\bCabinet\b", line["text"])), None)
+    joined_en = " ".join(" ".join(line["text"].split()) for line in versions.get("en", []))
+    cabinet_found = CABINET.search(joined_en)
+    if cabinet_found and order:
+        when = f"{cabinet_found.group(3)}-{int(cabinet_found.group(2)):02d}-{int(cabinet_found.group(1)):02d}"
+        values["step:approved:cabinet.date"] = when
+        said("step:approved:cabinet.date", when, (cabinet or {}).get("page"), cabinet_found.group(0))
+    people = signers(versions.get("en", [])) or next(
+        (found for found in (signers(versions.get(k, [])) for k in versions) if found), []
+    )
+    if order or by_events:
+        if people:
+            first = people[0]
+            values["profile.signed_by"] = first["name"]
+            said("profile.signed_by", first["name"], first["page"], f"{first['name']}, {first['role']}")
+            authority = (
+                "profile.maker" if by_events and entry["kind"] != "instructions" else "profile.authority"
+            )
+            values[authority] = first["role"]
+            values["issued_by"] = first["role"]
+            said(authority, first["role"], first["page"], first["role"])
+            said("issued_by", first["role"], first["page"], first["role"])
+            if order:
+                values["step:signed.person"] = f"{first['name']}, {first['role']}"
+                justice = [p for p in people[1:] if re.match(r"Minister of Justice", p["role"], re.I)]
+                others = [p for p in people[1:] if p not in justice]
+                if others:
+                    values["profile.countersigned_by"] = [f"{p['name']}, {p['role']}" for p in others]
+                    values["step:countersigned.person"] = values["profile.countersigned_by"][0]
+                if justice:
+                    values["step:sealed.person"] = f"{justice[0]['name']}, {justice[0]['role']}"
+    else:
+        for language in ("en", *[k for k in versions if k != "en"]):
+            for step, person in signatories([line["text"] for line in versions.get(language, [])]).items():
+                values.setdefault(f"step:{step}.person", person)
+    # An RLRC cover's own facts: where and when it was adopted, the order ratifying it, its Gazette, and
+    # which of its languages is a translation.
+    cover_text = " ".join(" ".join(line["text"].split()) for line in cover)
+    cover_page = cover[0].get("page") if cover else None
+    adopted_cover = COVER_ADOPTED.search(cover_text)
+    if adopted_cover:
+        place, when = adopted_cover.group(1).strip(), spoken_date(_ordinal_free(adopted_cover.group(2)))
+        values["profile.adopted_at"] = place
+        said("profile.adopted_at", place, cover_page, adopted_cover.group(0))
+        if when:
+            values["event:adopted.date"] = when
+            said("event:adopted.date", when, cover_page, adopted_cover.group(0))
+            values.setdefault("identity.year", when[:4])
+            said("identity.year", values["identity.year"], cover_page, adopted_cover.group(0))
+    ratified = COVER_RATIFIED.search(cover_text)
+    if ratified and family == "treaty":
+        when = spoken_date(_ordinal_free(ratified.group(3)))
+        row = {"party": "Rwanda", **({"ratified": when} if when else {})}
+        values["profile.parties"] = [row]
+        said("profile.parties", [row], cover_page, ratified.group(0))
+    gazette_cover = COVER_GAZETTE.search(cover_text)
+    if gazette_cover:
+        number = gazette_cover.group(1).strip().title()
+        when = spoken_date(_ordinal_free(gazette_cover.group(2)))
+        issue = {**issue, "number": number, **({"date": when} if when else {})}
+        said("publication.number", number, cover_page, gazette_cover.group(0))
+        if when:
+            said("publication.date", when, cover_page, gazette_cover.group(0))
+    translated = COVER_TRANSLATED.search(cover_text)
     legal: dict = {}
     if issue.get("date"):
-        values["step:published.date"] = issue["date"]
+        published = "event:published.date" if by_events else "step:published.date"
+        values[published] = issue["date"]
         values["publication.date"] = issue["date"]
+        if "publication.date" not in evidence:
+            said("publication.date", issue["date"], None, f"the issue: {issue.get('name') or ''}".strip())
+        said(
+            published,
+            issue["date"],
+            evidence["publication.date"]["page"],
+            evidence["publication.date"]["evidence"],
+        )
         in_force = stated(paragraphs, IN_FORCE_ON_PUBLICATION)
         if in_force:
             legal["step:commenced.date"] = {"value": issue["date"], **in_force}
@@ -2005,7 +2313,13 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
                 legal["profile.commencement"] = {"value": "on_publication", **in_force}
     values["publication.kind"] = "gazette"
     values["publication.name"] = GAZETTE
-    edition = "Special" if issue.get("special") else str(issue.get("number") or "")
+    edition = (
+        str(issue["number"])
+        if str(issue.get("number") or "").lower().startswith("special")
+        else "Special"
+        if issue.get("special")
+        else str(issue.get("number") or "")
+    )
     edition += " Bis" if issue.get("bis") else (" Ter" if issue.get("ter") else "")
     if edition.strip():
         values["publication.number"] = edition.strip()
@@ -2022,13 +2336,27 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
     authority = "rw" if adopted and adopted.group(1).lower() in ("ikinyarwanda", "kinyarwanda") else None
     if adopted and adopted.group(1).lower() == "english":
         authority = "en"
-    said = stated(paragraphs, ADOPTED_IN) if authority else None
-    if said:
+    stating = stated(paragraphs, ADOPTED_IN) if authority else None
+    if stating:
         legal["expressions"] = {
             "authority": {
                 row["language"]: {
                     "value": "authoritative" if row["language"] == authority else "official_translation",
-                    **said,
+                    **stating,
+                }
+                for row in values["expressions"]
+            }
+        }
+    elif translated:
+        # "Translated into Kinyarwanda from French and English": those are the texts adopted.
+        originals = {m.lower()[:2] for m in translated.groups() if m}
+        originals = {"fr" if o == "fr" else "en" for o in originals}
+        legal["expressions"] = {
+            "authority": {
+                row["language"]: {
+                    "value": "authoritative" if row["language"] in originals else "official_translation",
+                    "page": cover_page,
+                    "evidence": translated.group(0),
                 }
                 for row in values["expressions"]
             }
@@ -2039,7 +2367,11 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
     )
     if purpose:
         values["text.summary.text"] = purpose["text"]
-    return values, legal, inferred
+        said("text.summary.text", purpose["text"][:300], purpose.get("page"), purpose["text"])
+    for key in ("publication.name", "publication.kind", "publication.publisher", "text.form", "expressions"):
+        if key in values and key not in evidence:
+            said(key, values[key], None, f"the Official Gazette issue: {issue.get('name') or ''}".strip())
+    return values, legal, inferred, evidence
 
 
 def versions_nodes(lines: list[dict]) -> list[dict]:

@@ -983,7 +983,7 @@ def test_a_rwandan_laws_authority_is_suggested_with_its_words_and_stays_blank_un
     from schema.jurisdictions import registry
     from workbench.review import Review
 
-    values, legal, inferred = read_law()
+    values, legal, inferred, _ = read_law()
     folder = tmp_path / "rw"
     rwanda_collection(folder, monkeypatch)
     manifest = json.loads((folder / "manifest.json").read_text())

@@ -220,11 +220,43 @@ def instruments(reading: dict, listed_type: str, listed_title: str | None = None
                 "doubtful_pages": doubtful,
             }
         )
-    if out and len(out) == 1 and not out[0]["pages"]:
-        out[0]["pages"] = pages[1:] or pages  # one supplement, its pages unmapped: all but the cover
     if out and len(out) == 1:
-        out[0]["pages"] = sorted({pages[0], *out[0]["pages"]})  # the cover goes with its only supplement
+        # A file of one supplement: every page is its instrument's, the cover with it, and its schedules
+        # and explanatory memorandum printed past the range the front page lists (before 2026-10-29
+        # those were in no document: 18 Acts, 60 pages). The pages past the range are named.
+        mapped = set(out[0]["pages"])
+        out[0]["beyond_listed"] = (
+            [] if not mapped else [p for p in pages if p not in mapped and p != pages[0]]
+        )
+        out[0]["pages"] = pages
+        return out
+    if out and not any(entry["pages"] for entry in out):
+        out = []  # no listed range could be mapped: the whole file is one instrument, below, its pages doubtful
     if out:
+        # Several supplements: a page no range claims goes with the instrument printed before it (its
+        # schedules); the pages before the first, the issue's front page, are the issue's own record.
+        claimed = {p for entry in out for p in entry["pages"]}
+        first = min(claimed)
+        ordered = sorted((entry for entry in out if entry["pages"]), key=lambda e: e["pages"][0])
+        for p in pages:
+            if p in claimed or p < first:
+                continue
+            owner = [entry for entry in ordered if entry["pages"][0] < p][-1]
+            owner.setdefault("beyond_listed", []).append(p)
+            owner["pages"] = sorted({*owner["pages"], p})
+        front = [p for p in pages if p < first]
+        if front:
+            out.insert(
+                0,
+                {
+                    "kind": "gazette",
+                    "type": "gazette",
+                    "number": None,
+                    "title": "",
+                    "pages": front,
+                    "front": True,
+                },
+            )
         return out
     title = next(
         (
@@ -237,7 +269,15 @@ def instruments(reading: dict, listed_type: str, listed_title: str | None = None
     )
     kind = next((k for pattern, k in TITLE_KIND if pattern.search(title)), TYPES.get(listed_type, "other"))
     return [
-        {"kind": kind, "type": kind, "number": None, "title": title, "pages": pages, "doubtful_pages": False}
+        {
+            "kind": kind,
+            "type": kind,
+            "number": None,
+            "title": title,
+            "pages": pages,
+            # Listed by its front page, but no range could be mapped to the file's pages.
+            "doubtful_pages": bool(listed),
+        }
     ]
 
 
@@ -299,6 +339,31 @@ def documents(reading: dict, record: dict) -> list[tuple[dict, dict]]:
     for instrument in found:
         if not instrument["pages"]:
             continue
+        if instrument.get("front"):
+            # The issue's front page (its number, volume, date, notice and contents), shared by the
+            # supplements it publishes: the issue's own record, kept and reviewed as such.
+            number = "-".join(str(gazette.get(k) or "") for k in ("volume", "number")).strip("-")
+            year = (gazette.get("date") or "")[:4]
+            doc_id = (
+                f"ng-gazette-{_slug(number) or 'issue'}-{year}"
+                if year
+                else f"ng-gazette-{_slug(number) or 'issue'}"
+            )
+            title = "Federal Republic of Nigeria Official Gazette" + (
+                f" No. {gazette['number']}, Vol. {gazette['volume']}" if gazette.get("number") else ""
+            )
+            document = {
+                "id": doc_id,
+                "type": "gazette",
+                "title": title + (f" ({gazette['date']})" if gazette.get("date") else ""),
+                "jurisdiction": COUNTRY,
+                "language": "en",
+                "url": record.get("url"),
+                "pages": [instrument["pages"][0], instrument["pages"][-1]],
+                **({"issue": gazette} if gazette else {}),
+            }
+            out.append((document, part(reading, instrument["pages"])))
+            continue
         doc_id = document_id(instrument)
         document = {
             "id": doc_id,
@@ -312,7 +377,26 @@ def documents(reading: dict, record: dict) -> list[tuple[dict, dict]]:
             **({"printed_pages": instrument["printed"]} if instrument.get("printed") else {}),
             **({"pages_doubtful": True} if instrument.get("doubtful_pages") else {}),
         }
-        out.append((document, part(reading, instrument["pages"])))
+        portion = part(reading, instrument["pages"])
+        beyond = instrument.get("beyond_listed") or []
+        if beyond:
+            # Pages past the range the front page lists (a schedule, an explanatory memorandum): kept with
+            # the instrument, and named for the reviewer to confirm they are its own.
+            first = next(page for page in portion["pages"] if page["page"] == beyond[0])
+            first["flags"] = [
+                *first["flags"],
+                {
+                    "severity": "medium",
+                    "kind": "pages_beyond_listed_range",
+                    "primary": f"pages {beyond[0]}–{beyond[-1]}",
+                    "checks": {"front page": instrument.get("printed") or "not listed"},
+                    "tokens": [0, 0],
+                    "readers_disagreeing": [],
+                },
+            ]
+            portion["summary"]["flags"]["medium"] += 1
+            document["pages_beyond_listed"] = beyond
+        out.append((document, portion))
     return out
 
 
@@ -392,9 +476,10 @@ def sc_details(listed: dict, kind: str, url: str) -> tuple[dict, dict]:
 
 # --- preparing the files whose readings have arrived -------------------------------------------------
 
-# The version of this preparation: a file prepared by an earlier one is prepared again. 2026-10-29.1: the
-# OCR check read as stored (words, no text), inline maths read as words.
-PIPELINE = "ng-pdf-2026-10-29.1"
+# The version of this preparation: a file prepared by an earlier one is prepared again. 2026-10-29.2: the
+# OCR check read as stored (words, no text), inline maths read as words; every page in a document
+# (schedules past the listed range, the issue's front page as its own record, unmapped ranges whole).
+PIPELINE = "ng-pdf-2026-10-29.2"
 # The sources whose stored files are PDFs read by the scan-reader job (their other files, the Supreme
 # Court's data records and SEC's circular pages, have no reader here yet).
 PDF_SOURCES = {
