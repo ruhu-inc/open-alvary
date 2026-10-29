@@ -1,0 +1,36 @@
+tests/test_workbench_impact.py
+  s_d665c62e07d76f::t_206cef9db35e0e 1-52
+workbench/impact.py
+  s_d665c62e07d76f::t_f7ec420c478af1 82-84
+  s_d665c62e07d76f::t_3a53a6090a6fb1 1-81,85-119
+workbench/admin.py
+  s_d665c62e07d76f::t_f7ec420c478af1 35-38,46-57
+workbench/record_view.py
+  s_d665c62e07d76f::t_f7ec420c478af1 1372-1380
+deployment/gcp/ingestion_jobs.sh
+  s_d665c62e07d76f::t_f7ec420c478af1 24-26,165
+workbench/review.py
+  s_d665c62e07d76f::t_f7ec420c478af1 50-51
+deployment/gcp-terraform/env/workbench.tf
+  s_d665c62e07d76f::t_62d2baf53740b0 301-303
+ingestion/prepare_job.py
+  s_d665c62e07d76f::t_f7ec420c478af1 41-50,92,94,97,99,235
+tests/test_nicn.py
+  s_d665c62e07d76f::t_4fb9c2ea903df6 650-654
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "98ce008696d1ec454deaf034d72e7138549f3c24",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
