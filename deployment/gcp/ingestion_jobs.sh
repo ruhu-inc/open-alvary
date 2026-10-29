@@ -156,19 +156,20 @@ run() {
     --update-env-vars="SCAN_READER=$reader,SCAN_FILES_AT_ONCE=$files,SCAN_COUNTRY=$country"
 }
 
+# The variables are separated by ";" (gcloud's "^;^" form), as a list of sources holds commas.
 prepare() {  # prepare [tasks] [country] [sources]: rw by default; ng prepares the National Industrial Court
   local tasks="${1:-8}" country="${2:-rw}" sources="${3:-}"
-  local env="PREPARE_COUNTRY=$country"
-  if [[ "$country" == ng ]]; then env+=",PREPARE_SOURCES=${sources:-nicn-judgments}"; fi
-  "${GC[@]}" run jobs execute "$PREPARE_JOB" --region="$REGION" --tasks="$tasks" --async --update-env-vars="$env"
+  local env="PREPARE_COUNTRY=$country;PREPARE_MODE=prepare"
+  if [[ "$country" == ng ]]; then env+=";PREPARE_SOURCES=${sources:-nicn-judgments}"; fi
+  "${GC[@]}" run jobs execute "$PREPARE_JOB" --region="$REGION" --tasks="$tasks" --async --update-env-vars="^;^$env"
 }
 
 audit() {  # audit [tasks] [country] [sources]: as prepare, writing no document; each line's account instead
   local tasks="${1:-8}" country="${2:-rw}" sources="${3:-}"
-  local env="PREPARE_COUNTRY=$country,PREPARE_MODE=audit"
-  if [[ "$country" == ng ]]; then env+=",PREPARE_SOURCES=${sources:-nicn-judgments}"; fi
-  [[ -z "${PREPARE_LIMIT:-}" ]] || env+=",PREPARE_LIMIT=$PREPARE_LIMIT"
-  "${GC[@]}" run jobs execute "$PREPARE_JOB" --region="$REGION" --tasks="$tasks" --async --update-env-vars="$env"
+  local env="PREPARE_COUNTRY=$country;PREPARE_MODE=audit"
+  if [[ "$country" == ng ]]; then env+=";PREPARE_SOURCES=${sources:-nicn-judgments}"; fi
+  [[ -z "${PREPARE_LIMIT:-}" ]] || env+=";PREPARE_LIMIT=$PREPARE_LIMIT"
+  "${GC[@]}" run jobs execute "$PREPARE_JOB" --region="$REGION" --tasks="$tasks" --async --update-env-vars="^;^$env"
 }
 
 fetch() {  # more tasks than the work list has hosts only leaves some idle: each host is one task's
