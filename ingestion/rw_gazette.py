@@ -1648,6 +1648,25 @@ def gazette_publisher() -> str | None:
     return next((g.publisher for g in profile.gazettes if g.name == GAZETTE), None)
 
 
+# The record's family for each kind the reader names (schema.record.FAMILIES); the orders and decrees are
+# executive instruments. Before 2026-10-29 every kind but a law was filed as one.
+FAMILY = {
+    "constitution": "constitution",
+    "law": "legislation",
+    "organic_law": "legislation",
+    "decree_law": "legislation",
+    "ordinance": "legislation",
+    "regulations": "subsidiary_legislation",
+    "practice_direction": "subsidiary_legislation",
+    "agreement": "treaty",
+    "treaty": "treaty",
+    "convention": "treaty",
+    "protocol": "treaty",
+    "charter": "treaty",
+    "other": "official_document",
+}
+
+
 def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[dict, dict, dict]:
     """Details of the record read from the instrument as printed: its title, number and dates, who
     adopted it and the sittings that did, who promulgated, countersigned and sealed it, the date it was
@@ -1663,13 +1682,10 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
     english = [line["text"] for line in versions.get("en", [])]
     text = " ".join(english)
     paragraphs = [n for n in versions_nodes(versions.get("en", [])) if n["kind"] == "paragraph"]
-    values: dict = {"identity.type": entry["kind"]}
-    if entry["kind"] == "constitution":
-        values["identity.family"] = "constitution"
-    elif entry["kind"] in ("law", "organic_law", "decree_law"):
-        values["identity.family"] = "legislation"
-    else:
-        values["identity.family"] = "executive_instrument"
+    values: dict = {
+        "identity.type": entry["kind"],
+        "identity.family": FAMILY.get(entry["kind"], "executive_instrument"),
+    }
     title = entry["versions"].get("en", next(iter(entry["versions"].values())))["title"]
     if title:
         values["identity.full_title"] = values["identity.title"] = sentence_case(title)

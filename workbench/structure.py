@@ -117,9 +117,17 @@ CV_LAW = "cv-lei-1"
 JUDGMENT = "judgment-paragraphs-1"
 JUDGMENT_TYPES = {"judgment", "ruling"}
 # The kinds of instrument the Rwandan Gazette reader names from the heading that opens each one
-# (ingestion.rw_gazette.KIND, CONSTITUTION), whose article and division headings rw-law-1 reads. An
-# agreement, and a text whose kind was not recognised ("other"), are not among them.
+# (ingestion.rw_gazette.KIND, CONSTITUTION), and the treaties and practice directions printed the same
+# way, whose article and division headings rw-law-1 reads (30 of 30 sampled treaties, conventions,
+# protocols and agreements built without an error, 2026-10-29). A text whose kind was not recognised
+# ("other") is not among them: its reviewer gives its kind first.
 RW_INSTRUMENTS = (
+    "agreement",
+    "treaty",
+    "convention",
+    "protocol",
+    "charter",
+    "practice_direction",
     "constitution",
     "organic_law",
     "law",

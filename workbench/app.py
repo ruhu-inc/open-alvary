@@ -964,6 +964,7 @@ def create_app(
             "suggestions": suggestions,
             "related": related,
             "missing": view["missing"],
+            "notices": view.get("notices", []),
             "history": [
                 {
                     "revision": r["revision"],

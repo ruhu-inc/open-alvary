@@ -21,7 +21,7 @@ def rwanda(**more):
     }
 
 
-def test_a_treaty_named_from_its_file_starts_with_its_suggestions_dropped():
+def test_a_treaty_named_from_its_file_keeps_its_suggestions_its_family_put_right():
     treaty = rwanda(
         type="agreement",
         title="African medicine agency fn2",
@@ -35,10 +35,10 @@ def test_a_treaty_named_from_its_file_starts_with_its_suggestions_dropped():
         },
     )
     report = A.audit_work(treaty, MANIFEST, registry())
-    assert report["suggestions"] == 4 and not report["suggestions_used"]
+    assert report["suggestions"] == 4 and report["suggestions_used"] and report["suggestions_repaired"]
     assert report["family"] == "treaty" and "profile.depositary" in report["missing_required"]
     assert report["fields"]["identity.title"] == "file_name"
-    assert report["fields"]["identity.number.value"] == "missing"
+    assert report["fields"]["identity.number.value"] == "fingerprint"
     assert report["second_source"] == {"heading": "not_found"}
     assert A.from_fingerprint(treaty, SHA[:12]) and A.from_fingerprint(treaty, f"2019-{SHA[:6]}")
 
@@ -113,5 +113,6 @@ def test_one_document_per_work_and_a_summary():
     )
     summary = A.summarise([treaty, {"id": "ng-act", "drafted_from_reading": True}])
     assert summary["works"] == 1 and summary["drafted_from_reading"] == 1
-    assert summary["totals"]["suggestions_dropped"] == 1 and summary["totals"]["missing_any_required"] == 1
+    assert summary["totals"]["suggestions_dropped"] == 0 and summary["totals"]["suggestions_repaired"] == 1
+    assert summary["totals"]["missing_any_required"] == 1
     assert "rw/rlrc-laws/agreement" in summary["by_source_and_type"]

@@ -15,8 +15,8 @@ field by field, where each value came from:
   default     filled in by the Details screen itself (a family, a hierarchy, "unknown")
   missing     nothing
 
-It also says whether the reader's suggestions were used at all (they are dropped when the family and
-kind it suggests are not a valid pair: record_view.base_values), which required fields the reviewer
+It also says whether the reader's suggestions were used at all, and whether their family had to be
+put right from their kind (record_view.usable_suggestions), which required fields the reviewer
 starts without, and, where a second source states the same fact (an RLRC file's name gives the kind,
 number and year of the text inside it), whether the two agree. Nothing is written but the reports.
 """
@@ -154,15 +154,14 @@ def audit_work(document: dict, manifest: dict, profiles: dict) -> dict:
     """One work's first draft, field by field."""
     place, profile = record_view.place_for(document, manifest, profiles)
     suggested = {k: v for k, v in (document.get("suggested") or {}).items() if v not in (None, "", [])}
-    usable = record_view.reader_suggested(document)
-    if place.code == "ng" and not usable:
+    if place.code == "ng" and not record_view.reader_suggested(document):
         # A Nigerian Act is drafted from its reading (workbench.details): not measured here.
         return {"id": document["id"], "drafted_from_reading": True}
     values = record_view.base_values(document, manifest)
     family, kind = values["identity.family"], values["identity.type"]
     specs = record_view.fields(family, kind, profile)
     required = [spec.key for spec in specs if spec.required]
-    used = suggested if usable else {}
+    used, notices = record_view.usable_suggestions(document)
     return {
         "id": document["id"],
         "work": document.get("work") or document["id"],
@@ -173,7 +172,8 @@ def audit_work(document: dict, manifest: dict, profiles: dict) -> dict:
         "family": family,
         "kind": kind,
         "suggestions": len(suggested),
-        "suggestions_used": usable,
+        "suggestions_used": bool(used),
+        "suggestions_repaired": bool(notices),
         "required": len(required),
         "missing_required": record_view.missing(values, {}, specs),
         "fields": {
@@ -226,6 +226,7 @@ def summarise(reports: list[dict]) -> dict:
         counts = by_group[group]
         counts["works"] += 1
         counts["suggestions_dropped"] += report["suggestions"] > 0 and not report["suggestions_used"]
+        counts["suggestions_repaired"] += bool(report.get("suggestions_repaired"))
         counts["missing_any_required"] += bool(report["missing_required"])
         counts["title_from_file_name"] += report["fields"].get("identity.title") == "file_name"
         counts["number_from_fingerprint"] += report["fields"].get("identity.number.value") == "fingerprint"

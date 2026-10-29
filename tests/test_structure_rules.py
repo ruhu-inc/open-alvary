@@ -94,7 +94,8 @@ def test_rules_are_chosen_by_jurisdiction_and_type(document, rules):
         ({"id": "aa-ohada-auscgie-2014-fr", "jurisdiction": "aa-ohada", "type": "act"}, "aa-ohada/act"),
         ({"id": "ng-example-order-2024", "jurisdiction": "ng", "type": "order"}, "ng/order"),
         ({"id": "ng-example-2024", "jurisdiction": "ng"}, "ng/(no type)"),
-        ({"id": "rw-agreement-00553a47bc45-fr", "jurisdiction": "rw", "type": "agreement"}, "rw/agreement"),
+        # Rwanda's treaties are read by rw-law-1 (2026-10-29); a text of no recognised kind still has none.
+        ({"id": "rw-other-00553a47bc45-fr", "jurisdiction": "rw", "type": "other"}, "rw/other"),
         ({"id": "rw-other-00f8ef71645e-fr", "jurisdiction": "rw", "type": "other"}, "rw/other"),
         ({"id": "rw-sc-2020-1", "jurisdiction": "rw", "type": "judgment"}, "rw/judgment"),
         ({"id": "aa-au-afchpr-2026-9", "jurisdiction": "aa-au", "type": "judgment"}, "aa-au/judgment"),
