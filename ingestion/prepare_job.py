@@ -14,6 +14,12 @@ pages, no OCR); a PDF source's files (nass-acts, nln-repository, supreme-court â
 job has read them with the Layout Parser, checked by the OCR (ingestion.ng_documents), the rest
 waiting.
 
+PREPARE_MODE=audit writes no document: each file is prepared as usual into a collection that keeps,
+instead, where every printed line went (ingestion.accounting), and each task writes its files'
+accounts to work/<country>/audit/lines/<execution>/task-NNN-of-NNN.json; `python -m
+ingestion.accounting summary <folder>` sums them once downloaded (owner, 2026-10-29: measure before
+fixing).
+
 The sync ledger and the catalogues come from the bucket (state/<country>/, written by mirror_state
 on the operator's machine). The PDF's text layer is read by pdftotext inside this container, which
 is the sandbox (ALVARY_TEXT_LAYER=direct); nothing here holds a key.
@@ -23,6 +29,7 @@ import json
 import os
 import sys
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ingestion import corpus_store, rwanda
@@ -79,12 +86,106 @@ def prepare_nigeria(store, task: int, tasks: int) -> dict:
     return counts
 
 
+def write_audit(store, country: str, task: int, tasks: int, payload: dict) -> str:
+    """One task's accounts, in the bucket beside the country's other work."""
+    run = os.environ.get("CLOUD_RUN_EXECUTION") or datetime.now(UTC).strftime("%Y-%m-%dT%H%M%SZ")
+    name = f"work/{country}/audit/lines/{run}/task-{task + 1:03d}-of-{tasks:03d}.json"
+    store.put(name, json.dumps(payload, ensure_ascii=False).encode(), "application/json", replace=True)
+    return name
+
+
+def audit_nigeria(store, task: int, tasks: int) -> dict:
+    """Nigeria's stored files of the chosen sources, each task its share, accounted for and nothing
+    written: a court page by its words (ingestion.nicn), a PDF read by the Layout Parser by its pages
+    and lines (ingestion.ng_documents); a PDF not yet read is listed as waiting."""
+    from ingestion import accounting, ng_documents, nicn
+
+    sources = [s for s in os.environ.get("PREPARE_SOURCES", nicn.SOURCE).split(",") if s]
+    items = json.loads(store.get("state/ng/sync-ledger.json"))["items"]
+    stored = sorted(i for i, r in items.items() if r.get("stored") and r.get("source") in sources)
+    mine = share(stored, task, tasks)
+    if os.environ.get("PREPARE_LIMIT"):
+        mine = mine[: int(os.environ["PREPARE_LIMIT"])]
+    reports, failed, waiting = [], [], []
+    for item_id in mine:
+        record = items[item_id]
+        sha = record.get("sha256")
+        try:
+            if record["source"] == nicn.SOURCE:
+                raw = store.get(f"sources/ng/{nicn.SOURCE}/{sha}.html")
+                report = accounting.nicn_page(raw, nicn.read(raw))
+            else:
+                layout, check = f"readings/ng/docai/{sha}.json", f"readings/ng/ocr/{sha}.json"
+                if not str(record.get("stored", "")).endswith(".pdf") or not store.exists(layout):
+                    waiting.append(item_id)
+                    continue
+                docai = json.loads(store.get(layout))
+                ocr = json.loads(store.get(check)) if store.exists(check) else None
+                error = None
+                try:
+                    reading = ng_documents.cloud_reading(docai, ocr)
+                except Exception as problem:  # noqa: BLE001 - the check's failure is itself measured
+                    error = f"{type(problem).__name__}: {str(problem)[:200]}"
+                    reading = ng_documents.cloud_reading(docai, None)
+                parts = [part for _, part in ng_documents.documents(reading, record)]
+                report = accounting.ng_pdf(reading, parts, ocr_check_error=error)
+            reports.append(
+                {
+                    "sha": sha,
+                    "item": item_id,
+                    "source": record["source"],
+                    "name": (record.get("listed") or {}).get("title") or item_id,
+                    "url": record.get("url"),
+                    **report,
+                }
+            )
+        except Exception as error:  # noqa: BLE001 - noted, the rest go on
+            failed.append({"item": item_id, "error": f"{type(error).__name__}: {str(error)[:300]}"})
+    return {"country": "ng", "sources": sources, "reports": reports, "failed": failed, "waiting": waiting}
+
+
+def audit_rwanda(store, ledger: dict, mine: list[str]) -> dict:
+    """Rwanda's files, each prepared into an AuditCollection: nothing written, every line accounted
+    for. A file prepared without an account (a Word document, a file not in the bucket) is listed."""
+    collection = rwanda.AuditCollection()
+    failed = []
+    for item in mine:
+        try:
+            rwanda.prepare_selection(
+                {"items": [item]},
+                log=lambda message: None,
+                collection=collection,
+                store=store,
+                skip_done=False,
+                save=False,
+            )
+        except Exception as error:  # noqa: BLE001 - noted, the rest go on
+            failed.append({"item": item, "error": f"{type(error).__name__}: {str(error)[:300]}"})
+    reported = {report["sha"] for report in collection.reports}
+    unreported = [
+        {"item": item, "source": ledger[item].get("source"), "format": ledger[item].get("format", "pdf")}
+        for item in mine
+        if ledger[item].get("sha256") not in reported and item not in {f["item"] for f in failed}
+    ]
+    return {"country": "rw", "reports": collection.reports, "failed": failed, "not_reported": unreported}
+
+
 def main() -> int:
     os.environ.setdefault("ALVARY_TEXT_LAYER", "direct")
     task = int(os.environ.get("CLOUD_RUN_TASK_INDEX", "0"))
     tasks = int(os.environ.get("CLOUD_RUN_TASK_COUNT", "1"))
     store = corpus_store.open_store()
+    audit = os.environ.get("PREPARE_MODE") == "audit"
     if os.environ.get("PREPARE_COUNTRY", rwanda.COUNTRY) == "ng":
+        if audit:
+            payload = audit_nigeria(store, task, tasks)
+            name = write_audit(store, "ng", task, tasks, payload)
+            print(
+                json.dumps(
+                    {"audit": name, "files": len(payload["reports"]), "failed": len(payload["failed"])}
+                )
+            )
+            return 0
         print(json.dumps(prepare_nigeria(store, task, tasks)), flush=True)
         return 0
     with tempfile.TemporaryDirectory() as scratch:
@@ -98,6 +199,15 @@ def main() -> int:
         if os.environ.get("PREPARE_LIMIT"):  # a trial: the first few of this task's share
             mine = mine[: int(os.environ["PREPARE_LIMIT"])]
         print(f"task {task + 1} of {tasks}: {len(mine)} of {len(items)} stored files", flush=True)
+        if audit:
+            payload = audit_rwanda(store, ledger, mine)
+            name = write_audit(store, "rw", task, tasks, payload)
+            print(
+                json.dumps(
+                    {"audit": name, "files": len(payload["reports"]), "failed": len(payload["failed"])}
+                )
+            )
+            return 0
         collection = rwanda.BucketCollection(store)
         failed, instruments = [], 0
         # File by file: a file that cannot be prepared is noted and the task goes on.

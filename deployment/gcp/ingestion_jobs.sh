@@ -16,6 +16,11 @@
 #   deployment/gcp/ingestion_jobs.sh prepare 4 ng nass-acts,nln-repository,supreme-court
 #                                                    # Nigeria's PDFs once read (run layout, then ocr, with
 #                                                    # country ng); a file not yet read waits
+#   deployment/gcp/ingestion_jobs.sh audit 8         # write no document: account for every printed line of
+#                                                    # every stored file (ingestion.accounting), into
+#                                                    # work/<country>/audit/lines/<execution>/ (PREPARE_LIMIT=3
+#                                                    # in the environment: a trial of 3 files per task)
+#   deployment/gcp/ingestion_jobs.sh audit 4 ng nicn-judgments,nass-acts,nln-repository,supreme-court
 #   deployment/gcp/ingestion_jobs.sh fetch 4         # fetch the approved Nigerian work list, in 4 tasks
 #                                                    # (the list: python -m ingestion.nigeria fetch-worklist)
 #   deployment/gcp/ingestion_jobs.sh status
@@ -158,6 +163,14 @@ prepare() {  # prepare [tasks] [country] [sources]: rw by default; ng prepares t
   "${GC[@]}" run jobs execute "$PREPARE_JOB" --region="$REGION" --tasks="$tasks" --async --update-env-vars="$env"
 }
 
+audit() {  # audit [tasks] [country] [sources]: as prepare, writing no document; each line's account instead
+  local tasks="${1:-8}" country="${2:-rw}" sources="${3:-}"
+  local env="PREPARE_COUNTRY=$country,PREPARE_MODE=audit"
+  if [[ "$country" == ng ]]; then env+=",PREPARE_SOURCES=${sources:-nicn-judgments}"; fi
+  [[ -z "${PREPARE_LIMIT:-}" ]] || env+=",PREPARE_LIMIT=$PREPARE_LIMIT"
+  "${GC[@]}" run jobs execute "$PREPARE_JOB" --region="$REGION" --tasks="$tasks" --async --update-env-vars="$env"
+}
+
 fetch() {  # more tasks than the work list has hosts only leaves some idle: each host is one task's
   local tasks="${1:-4}" country="${2:-ng}"
   "${GC[@]}" run jobs execute "$FETCH_JOB" --region="$REGION" --tasks="$tasks" --async \
@@ -184,7 +197,8 @@ case "${1:-plan}" in
   deploy) deploy ;;
   run) shift; run "$@" ;;
   prepare) shift; prepare "$@" ;;
+  audit) shift; audit "$@" ;;
   fetch) shift; fetch "$@" ;;
   status) status ;;
-  *) echo "usage: $0 plan|setup|deploy|run <ocr|layout> [tasks] [files-at-once]|prepare [tasks] [rw|ng] [sources]|fetch [tasks] [country]|status" >&2; exit 2 ;;
+  *) echo "usage: $0 plan|setup|deploy|run <ocr|layout> [tasks] [files-at-once]|prepare [tasks] [rw|ng] [sources]|audit [tasks] [rw|ng] [sources]|fetch [tasks] [country]|status" >&2; exit 2 ;;
 esac
