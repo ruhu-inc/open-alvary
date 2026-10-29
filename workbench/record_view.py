@@ -1053,8 +1053,8 @@ def usable_suggestions(document: dict) -> tuple[dict, list[str]]:
     right = family_for(kind)
     if right:
         return {**suggested, "identity.family": right}, [
-            f"Suggested as {label_of(family or 'no family')}, which a {label_of(kind)} is not: "
-            f"filed as {label_of(right)}. Check the family and kind."
+            f"The reader filed this {label_of(kind).lower()} under {label_of(family or 'no family')}; "
+            f"it belongs under {label_of(right)} and is filed there. Check the family and kind."
         ]
     rest = {k: v for k, v in suggested.items() if k not in ("identity.family", "identity.type")}
     return rest, [
