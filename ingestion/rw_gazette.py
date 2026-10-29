@@ -25,7 +25,9 @@ from schema.jurisdictions import registry
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
 # issues prepared by an older version are prepared again (BucketCollection.done).
-PIPELINE = "2026-10-23.1"  # a title that runs on to the next page (openings), more contents words
+# 2026-10-29.1: headings over two lines, more kinds, bodies known by their enacting words (orders with
+# one title kept apart), notices recorded, annexes without their instrument kept, treaties' family.
+PIPELINE = "2026-10-29.1"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -55,30 +57,54 @@ CONTENTS_WORDS = re.compile(r"(?i)^(?:i?birimo|amashakiro|table\s+des\s+contents
 # number ("N° 11/2001"), or on older laws only its date ("LOI DU 19 FÉVRIER 1964", "ITEGEKO RYO KUWA
 # 19 GASHYANTARE 1964"). Older kinds: decree-laws, ordinances, decrees, royal orders. A number
 # printed "N° 001 BIS /2021" is the whole of it, not "001" (which is another law).
-_NUMBER = r"\s+N\s?[°ºO0]\.?\s*(\S+?(?:\s*(?i:BIS|TER)\b)?(?:\s*/\s*\S+)?)(?=\s|$)"
-OPENING = {
-    "rw": re.compile(
-        r"^(ITEGEKO NGENGA|ITEGEKO-TEKA|ITEGEKO|ITEKA RYA PEREZIDA|ITEKA RYA MINISITIRI W[’']INTEBE"
-        r"|ITEKA RYA MINISITIRI|ITEKA RYA MINISTRI|AMABWIRIZA)"
-        rf"(?:{_NUMBER}|\s+R?YO\s+KU\s?WA\s+(.*\d{{4}}))"
-    ),
-    "en": re.compile(
-        r"^(ORGANIC LAW|DECREE-LAW|LAW|PRESIDENTIAL ORDER|PRIME MINISTER[’']S ORDER|MINISTERIAL ORDER"
-        r"|REGULATIONS?|INSTRUCTIONS?|DECREE|ORDINANCE)"
-        rf"(?:{_NUMBER}|\s+OF\s+(.*\d{{4}}))"
-    ),
-    "fr": re.compile(
-        r"^(LOI ORGANIQUE|D[ÉE]CRET-LOI|ORDONNANCE-LOI|ORDONNANCE L[ÉE]GISLATIVE|LOI|ARR[ÊE]T[ÉE] PR[ÉE]SIDENTIEL"
-        r"|ARR[ÊE]T[ÉE] DU PREMIER MINISTRE|ARR[ÊE]T[ÉE] MINIST[ÉE]RIEL|ARR[ÊE]T[ÉE] ROYAL|R[ÈE]GLEMENTS?"
-        r"|INSTRUCTIONS?|ORDONNANCE|D[ÉE]CRET)"
-        rf"(?:{_NUMBER}|\s+DU\s+(.*\d{{4}}))"
-    ),
+# Some PDFs print the sign with a symbol font's private character (U+F0B0): "LAW N\uf0b042/2011".
+_NUMBER = r"\s+N\s?[°ºO0\uf0b0]\.?\s*(\S+?(?:\s*(?i:BIS|TER)\b)?(?:\s*/\s*\S+)?)(?=\s|$)"
+# The kinds' words in each language, longest first where one begins another. A general regulation of
+# the central bank is printed "AMABWIRIZA RUSANGE" and the Prime Minister's instructions "AMABWIRIZA YA
+# MINISITIRI W'INTEBE" (2026-10-29: neither was recognised).
+KIND_WORDS = {
+    "rw": r"ITEGEKO NGENGA|ITEGEKO-TEKA|ITEGEKO|ITEKA RYA PEREZIDA|ITEKA RYA MINISITIRI W[’']INTEBE"
+    r"|ITEKA RYA MINISITIRI|ITEKA RYA MINISTRI|AMABWIRIZA YA MINISITIRI W[’']INTEBE"
+    r"|AMABWIRIZA YA PEREZIDA W[’']URUKIKO RW[’']IKIRENGA|AMABWIRIZA YA MINISITIRI|AMABWIRIZA RUSANGE|AMABWIRIZA",
+    "en": r"ORGANIC LAW|DECREE-LAW|LAW|PRESIDENTIAL ORDER|PRIME MINISTER[’']S ORDER"
+    r"|PRIME MINISTER[’']S INSTRUCTIONS?|MINISTERIAL ORDER|MINISTERIAL INSTRUCTIONS?"
+    r"|PRACTICE DIRECTIONS? OF THE PRESIDENT OF THE SUPREME COURT"
+    r"|PRACTICE DIRECTIONS?|REGULATIONS?|INSTRUCTIONS?|DECREE|ORDINANCE",
+    "fr": r"LOI ORGANIQUE|D[ÉE]CRET-LOI|ORDONNANCE-LOI|ORDONNANCE L[ÉE]GISLATIVE|LOI|ARR[ÊE]T[ÉE] PR[ÉE]SIDENTIEL"
+    r"|ARR[ÊE]T[ÉE] DU PREMIER MINISTRE|ARR[ÊE]T[ÉE] MINIST[ÉE]RIEL|ARR[ÊE]T[ÉE] ROYAL"
+    r"|INSTRUCTIONS? DU PREMIER MINISTRE|INSTRUCTIONS? DU PR[ÉE]SIDENT DE LA COUR SUPR[ÊE]ME"
+    r"|DIRECTIVES? PRATIQUES?|R[ÈE]GLEMENTS?|INSTRUCTIONS?|ORDONNANCE|D[ÉE]CRET",
 }
-# A constitution is printed without a number.
+_DATED = {"rw": r"\s+R?YO\s+KU\s?WA\s+(.*\d{4})", "en": r"\s+OF\s+(.*\d{4})", "fr": r"\s+DU\s+(.*\d{4})"}
+# Kinyarwanda names whose instruction or regulation it is between the kind and its number ("AMABWIRIZA
+# Y'UMWANDITSI MUKURU N° 01/2010/ORG", "AMABWIRIZA YA MINISITIRI N° 001/2014").
+_QUALIFIER = {"rw": r"(?:\s+(?:YA|Y[’'])\s*[A-ZÀ-Ý’' -]{2,60}?)?", "en": "", "fr": ""}
+OPENING = {
+    language: re.compile(rf"^({words}){_QUALIFIER[language]}(?:{_NUMBER}|{_DATED[language]})")
+    for language, words in KIND_WORDS.items()
+}
+# A line that begins a kind's words, in capitals, with no number: the heading may go on over the next
+# line or two ("ARRETE" / "PRESIDENTIEL N°21/01 DU 12/7/2003 …").
+KIND_HEAD = re.compile(
+    r"^(?:ITEGEKO|ITEKA|AMABWIRIZA|ORGANIC|DECREE|LAW|PRESIDENTIAL|PRIME|MINISTERIAL|PRACTICE|REGULATIONS?|INSTRUCTIONS?"
+    r"|ORDINANCE|LOI|D[ÉE]CRET|ORDONNANCE|ARR[ÊE]T[ÉE]|R[ÈE]GLEMENTS?|THE CONSTITUTION|CONSTITUTION"
+    r"|LA CONSTITUTION)\b[A-ZÀ-Ý’' -]*$"
+)
+# A kind's words alone on their line, the number or date on the next ("ITEKA RYA MINISITIRI W'INTEBE",
+# then "N°003/03 RYO KU WA 16/01/2015 …"): read as one heading. Before 2026-10-29 such a heading was
+# not recognised, and the instrument was lost in that language.
+KIND_ALONE = {language: re.compile(rf"^(?:{words})\s*$") for language, words in KIND_WORDS.items()}
+# A constitution is printed without a number, its heading sometimes over two lines ("THE CONSTITUTION
+# OF THE" then "REPUBLIC OF RWANDA OF 2003 REVISED IN 2015").
 CONSTITUTION = {
     "rw": re.compile(r"^ITEGEKO NSHINGA\b"),
-    "en": re.compile(r"^CONSTITUTION OF THE REPUBLIC\b"),
-    "fr": re.compile(r"^CONSTITUTION DE LA R[ÉE]PUBLIQUE\b"),
+    "en": re.compile(r"^(?:THE\s+)?CONSTITUTION OF THE\s+REPUBLIC\b"),
+    "fr": re.compile(r"^(?:LA\s+)?CONSTITUTION DE LA\s+R[ÉE]PUBLIQUE\b"),
+}
+CONSTITUTION_BEGUN = {
+    "rw": re.compile(r"^ITEGEKO\s*$"),
+    "en": re.compile(r"^(?:THE\s+)?CONSTITUTION OF THE\s*$"),
+    "fr": re.compile(r"^(?:LA\s+)?CONSTITUTION DE LA\s*$"),
 }
 KIND = {
     "ITEGEKO NGENGA": "organic_law",
@@ -97,6 +123,24 @@ KIND = {
     "MINISTERIAL ORDER": "ministerial_order",
     "ARRÊTÉ MINISTÉRIEL": "ministerial_order",
     "AMABWIRIZA": "regulations",
+    "AMABWIRIZA RUSANGE": "regulations",
+    "AMABWIRIZA YA MINISITIRI W’INTEBE": "instructions",
+    "PRIME MINISTER’S INSTRUCTIONS": "instructions",
+    "PRIME MINISTER’S INSTRUCTION": "instructions",
+    "INSTRUCTIONS DU PREMIER MINISTRE": "instructions",
+    "INSTRUCTION DU PREMIER MINISTRE": "instructions",
+    "AMABWIRIZA YA PEREZIDA W’URUKIKO RW’IKIRENGA": "practice_direction",
+    "AMABWIRIZA YA MINISITIRI": "instructions",
+    "MINISTERIAL INSTRUCTIONS": "instructions",
+    "MINISTERIAL INSTRUCTION": "instructions",
+    "PRACTICE DIRECTIONS OF THE PRESIDENT OF THE SUPREME COURT": "practice_direction",
+    "PRACTICE DIRECTION OF THE PRESIDENT OF THE SUPREME COURT": "practice_direction",
+    "PRACTICE DIRECTIONS": "practice_direction",
+    "PRACTICE DIRECTION": "practice_direction",
+    "INSTRUCTIONS DU PRÉSIDENT DE LA COUR SUPRÊME": "practice_direction",
+    "INSTRUCTION DU PRÉSIDENT DE LA COUR SUPRÊME": "practice_direction",
+    "DIRECTIVES PRATIQUES": "practice_direction",
+    "DIRECTIVE PRATIQUE": "practice_direction",
     "REGULATION": "regulations",
     "REGULATIONS": "regulations",
     "RÈGLEMENT": "regulations",
@@ -125,6 +169,15 @@ PREAMBLE = re.compile(
     r"^(Twebwe|We|Nous)\s*,\s|^(The\s+(Prime\s+)?Minister|Minisitiri|Le\s+(Premier\s+)?Ministre|La\s+Ministre)\b.{0,120};$"
     # A treaty (RLRC's international instruments) heads its preamble.
     r"|^(PR[ÉE]AMBULE|PREAMBLE|IRANGASHINGIRO)\s*:?$",
+    re.I,
+)
+# Surer signs that a range holds an instrument's body, not only its title over a contents list: its
+# enacting words ("HEREBY ORDERS:", "ATEGETSE:", "ARRÊTE :") and its signature's place and date
+# ("Kigali, on 22/03/2016"). PREAMBLE alone missed "The Prime Minister," ended by a comma (2026-10-29).
+BODY = re.compile(
+    r"^(?:HEREBY\s+)?(?:ORDERS|ADOPTS|ENACTS|DECREES|PROMULGATES|DETERMINES)\s*:\s*$"
+    r"|^(?:ATEGETSE|YEMEJE|ITANGAJE|ARR[ÊE]TE|ADOPTE|D[ÉE]CR[ÈE]TE|PROMULGUE)\s*:\s*$"
+    r"|^(?:Kigali|Bikorewe\s+i\s+Kigali|Fait\s+[àa]\s+Kigali|Done\s+(?:in|at)\s+Kigali)\s*,?\s+(?:on|ku\s?wa|le)\b",
     re.I,
 )
 # A title never runs on to another page, nor past this length (the longest printed is about 300
@@ -439,6 +492,109 @@ def annex_pages(split: list[dict]) -> dict[int, int]:
     return roles
 
 
+# A Gazette also prints notices that are not legislation (owner, 2026-10-29: recorded as notices, not
+# prepared for review): changes of name, the statutes of associations, churches and cooperatives, the
+# Rwanda Development Board's journal of companies and industrial property, reference land prices, and
+# court decisions. Each by the heading that opens it, in any of the three languages.
+NOTICE_HEADINGS = (
+    (
+        "name_change",
+        re.compile(
+            r"(?i)^(?:icyemezo|itangazo)?\s*(?:cyo|ryo)?\s*guhindura\s+amazina\b|change\s+of\s+names?\b|changement\s+de\s+noms?\b"
+        ),
+    ),
+    (
+        "statutes",
+        re.compile(
+            r"(?i)^amategeko\s*[-–]?\s*shingiro\b|^statuts\b|^statutes\b"
+            r"|^(?:constitution|statuts)\s+(?:of|de|du|des)\s+(?!the\s+republic|la\s+r[ée]publique)"
+        ),
+    ),
+    ("cooperative", re.compile(r"(?i)^(?:[a-d]\.\s*)?(?:amakoperative|cooperatives?|coop[ée]ratives?)\b")),
+    (
+        "companies_and_industrial_property",
+        re.compile(
+            r"(?i)industrial\s+property|propri[ée]t[ée]\s+industrielle|journal\s+of\s+(?:the\s+)?rdb|\brdb\s+journal"
+        ),
+    ),
+    (
+        "land_prices",
+        re.compile(r"(?i)ibiciro\s+fatizo|reference\s+(?:land\s+)?prices?|prix\s+de\s+r[ée]f[ée]rence"),
+    ),
+    ("court_decision", re.compile(r"(?i)^urubanza\b|\bRS/INCONST\b|^(?:judgment|arr[êe]t)\s+(?:n|rs)\b")),
+)
+# The same, from the issue's name as the Gazette lists it ("… _Amazina + RDB_Journal").
+NOTICE_ISSUE = (
+    ("name_change", re.compile(r"(?i)amazina|names")),
+    ("companies_and_industrial_property", re.compile(r"(?i)\brdb\b|industrial[\s_]prop|journal")),
+    ("cooperative", re.compile(r"(?i)cooperative|amakoperative")),
+    ("land_prices", re.compile(r"(?i)ibiciro|fatizo")),
+    ("court_decision", re.compile(r"(?i)urubanza|imanza")),
+    ("statutes", re.compile(r"(?i)\bfbo\b|imiryango|amatorero|abahesha")),
+)
+
+
+def notice_kind(text: str) -> str | None:
+    for kind, pattern in NOTICE_HEADINGS:
+        if pattern.search(text.strip()):
+            return kind
+    return None
+
+
+def notices(issue_streams: dict[str, list[dict]], found: list[dict], issue_name: str = "") -> list[dict]:
+    """The notices of an issue (NOTICE_HEADINGS): in each language, the lines outside every instrument
+    from a notice's heading to the next instrument or notice; in an issue with no instrument at all
+    whose name or lines say it holds notices, all its lines. Each {kind, language, start, end, pages}."""
+    out = []
+    for language, lines in issue_streams.items():
+        spans = sorted(
+            (v["start"], v["end"])
+            for entry in found
+            for lang, v in entry["versions"].items()
+            if lang == language
+        )
+        inside = [False] * len(lines)
+        for start, end in spans:
+            for k in range(start, min(end, len(lines))):
+                inside[k] = True
+        current = None
+        for k, line in enumerate(lines):
+            if inside[k]:
+                if current:
+                    out.append(current)
+                    current = None
+                continue
+            kind = notice_kind(line["text"])
+            if kind and (current is None or kind != current["kind"]):
+                if current:
+                    out.append(current)
+                current = {
+                    "kind": kind,
+                    "language": language,
+                    "start": k,
+                    "end": k + 1,
+                    "pages": [line["page"]] * 2,
+                }
+            elif current:
+                current["end"] = k + 1
+                current["pages"][1] = line["page"]
+        if current:
+            out.append(current)
+        if not found and lines and not any(n["language"] == language for n in out):
+            kind = next((kind for kind, pattern in NOTICE_ISSUE if pattern.search(issue_name)), None)
+            if kind:
+                out.append(
+                    {
+                        "kind": kind,
+                        "language": language,
+                        "start": 0,
+                        "end": len(lines),
+                        "pages": [lines[0]["page"], lines[-1]["page"]],
+                    }
+                )
+    return out
+
+
 def annexes(split: list[dict], roles: dict[int, int]) -> list[dict]:
     """Each annex with its pages and its lines in every language it is printed in."""
     found: dict[int, dict] = {}
@@ -513,15 +669,31 @@ def openings(lines: list[dict], language: str) -> list[dict]:
     i = 0
     while i < len(lines):
         text = lines[i]["text"].strip()
-        if re.search(r"\bN\s?[°ºO0]\.?$", text) and i + 1 < len(lines):  # the number on the next line
-            text = f"{text} {lines[i + 1]['text'].strip()}"
+        joined = 1
         match = OPENING[language].match(text)
         constitution = CONSTITUTION[language].match(text)
+        if not (match or constitution) and (
+            re.search(r"\bN\s?[°ºO0\uf0b0]\.?$", text)  # the number on the next line
+            or KIND_ALONE[language].match(text)  # the kind alone, its number or date on the next line
+            or CONSTITUTION_BEGUN[language].match(text)
+            or KIND_HEAD.match(text)  # the kind's words begun, going on over the next line or two
+        ):
+            for more in (2, 3):
+                if i + more > len(lines) or any(
+                    line.get("page") != lines[i].get("page") for line in lines[i : i + more]
+                ):
+                    break
+                text = " ".join(line["text"].strip() for line in lines[i : i + more])
+                match = OPENING[language].match(text)
+                constitution = CONSTITUTION[language].match(text)
+                if match or constitution:
+                    joined = more
+                    break
         if not (match or constitution):
             i += 1
             continue
-        heading = [lines[i]["text"].strip()]
-        j = i + 1
+        heading = [line["text"].strip() for line in lines[i : i + joined]]
+        j = i + joined
         # The title runs on in capitals until the contents, the first non-capital line or a division or
         # article heading, and never past HEADING_MAX: a ratification law's title in a narrow column
         # takes a dozen lines, so no count of lines bounds it. A title begun at the foot of a page goes
@@ -556,6 +728,9 @@ def openings(lines: list[dict], language: str) -> list[dict]:
             .replace("REGLEMENT", "RÈGLEMENT")
             .replace("DECRET", "DÉCRET")
             .replace("LEGISLATIVE", "LÉGISLATIVE")
+            .replace("PRESIDENT DE", "PRÉSIDENT DE")
+            .replace("SUPREME", "SUPRÊME")
+            .replace("SUPRÊME COURT", "SUPREME COURT")
         )
         date = _plain_date(opening) or spoken_date(opening)
         number = _instrument_number(match.group(2) or "") if match else "constitution"
@@ -590,7 +765,8 @@ def instruments(issue_streams: dict[str, list[dict]]) -> list[dict]:
         for k, opening in enumerate(found):
             end = found[k + 1]["start"] if k + 1 < len(found) else len(lines)
             opening["has_body"] = any(
-                PREAMBLE.match(line["text"].strip()) for line in lines[opening["start"] : end]
+                PREAMBLE.match(line["text"].strip()) or BODY.match(line["text"].strip())
+                for line in lines[opening["start"] : end]
             )
         for k, opening in enumerate(found):
             end = found[k + 1]["start"] if k + 1 < len(found) else len(lines)
@@ -608,9 +784,16 @@ def instruments(issue_streams: dict[str, list[dict]]) -> list[dict]:
                 entry["kind"] = opening["kind"]
             entry["date"] = entry["date"] or opening["date"]
             if language in entry["versions"]:
-                # The title printed again (over the body, after the contents): the same instrument.
+                # The title printed again (over the body, after the contents): the same instrument, whose
+                # body is under this second title. Before 2026-10-29 the body was not noted, so a run of
+                # orders with one title and date ("… APPOINTING A DIRECTOR") was taken for one law printed
+                # with several numbers and merged (_same_title_other_number): Gazette n° 14 of 04/04/2016
+                # gave 9 of its 22 orders.
                 entry["versions"][language]["end"] = end
                 entry["versions"][language]["pages"][1] = lines[end - 1]["page"]
+                entry["versions"][language]["has_body"] = (
+                    entry["versions"][language]["has_body"] or opening["has_body"]
+                )
                 continue
             entry["versions"][language] = {
                 "title": opening["title"],
@@ -620,6 +803,7 @@ def instruments(issue_streams: dict[str, list[dict]]) -> list[dict]:
                 "pages": [lines[opening["start"]]["page"], lines[end - 1]["page"]],
             }
     found = [by_number[key] for key in order]
+    found = _join_dated(found)
     # A title over the contents and the same title over the body printed with another number ("LAW N°
     # 066/2024" then "LAW N° 064/2024", same date and words) are one instrument: kept as one, both
     # numbers recorded for the reviewer to settle.
@@ -636,6 +820,86 @@ def instruments(issue_streams: dict[str, list[dict]]) -> list[dict]:
         else:
             merged.append(entry)
     return merged
+
+
+def _pages_overlap(a: list[int], b: list[int]) -> int:
+    return max(0, min(a[1], b[1]) - max(a[0], b[0]) + 1)
+
+
+def _join_dated(found: list[dict]) -> list[dict]:
+    """An instrument one language printed without its number (known there by its date only) and the
+    same instrument in other languages by its number: one instrument, when the date is the same, their
+    languages differ and their pages overlap (2026-10-29: Practice Directions n° 002/2025 became two)."""
+    out = []
+    for entry in found:
+        if entry["number"] != entry.get("date"):
+            out.append(entry)
+            continue
+        pages = [
+            min(v["pages"][0] for v in entry["versions"].values()),
+            max(v["pages"][1] for v in entry["versions"].values()),
+        ]
+        twin = next(
+            (
+                other
+                for other in found
+                if other is not entry
+                and other["number"] != other.get("date")
+                and other.get("date") == entry["date"]
+                and not set(other["versions"]) & set(entry["versions"])
+                and any(_pages_overlap(v["pages"], pages) for v in other["versions"].values())
+            ),
+            None,
+        )
+        if twin is None:
+            out.append(entry)
+        else:
+            twin["versions"].update(entry["versions"])
+    return out
+
+
+def fill_by_page(issue_streams: dict[str, list[dict]], found: list[dict], min_words: int = 20) -> None:
+    """A language printed beside an instrument whose heading in that language was not recognised: the
+    run of its lines in no instrument, on the pages the instrument's other languages share, is that
+    language's version, marked found by its pages ("by_page") for the reviewer to check. The languages
+    of the Gazette are printed side by side, so their pages are the same."""
+    for language, lines in issue_streams.items():
+        taken = [False] * len(lines)
+        for entry in found:
+            version = entry["versions"].get(language)
+            if version:
+                for k in range(version["start"], min(version["end"], len(lines))):
+                    taken[k] = True
+        k = 0
+        while k < len(lines):
+            if taken[k]:
+                k += 1
+                continue
+            start = k
+            while k < len(lines) and not taken[k]:
+                k += 1
+            run = lines[start:k]
+            if sum(len(line["text"].split()) for line in run) < min_words:
+                continue
+            pages = [run[0]["page"], run[-1]["page"]]
+            candidates = [
+                (sum(_pages_overlap(v["pages"], pages) for v in entry["versions"].values()), n)
+                for n, entry in enumerate(found)
+                if language not in entry["versions"] and entry["versions"]
+            ]
+            best = max(candidates, default=(0, None))
+            if best[0] <= 0:
+                continue
+            heading = [line["text"].strip() for line in run[:6] if _capitals(line["text"])][:4]
+            found[best[1]]["versions"][language] = {
+                "title": " ".join(heading)
+                or found[best[1]]["versions"][next(iter(found[best[1]]["versions"]))]["title"],
+                "has_body": True,
+                "start": start,
+                "end": k,
+                "pages": pages,
+                "by_page": True,
+            }
 
 
 def whole_file(

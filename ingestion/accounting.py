@@ -10,6 +10,8 @@ before anything is fixed.
 
 The reasons a line can reach no document:
 
+  (notice                      not a loss: a Gazette notice, not legislation, recorded as such; owner,
+                              2026-10-29)
   no_language                 Rwanda: a column whose language was not recognised (a cover page whose
                               title lines span the page, an issue's front page): it is in no language's
                               text
@@ -129,6 +131,7 @@ def rwanda_issue(
     written_annexes: set[int],
     page_count: int,
     languages: tuple[str, ...] = ("rw", "en", "fr"),
+    notices: list[dict] | None = None,
 ) -> dict:
     """One Rwandan file's account. `split` is its pages as rw_gazette.split_issue gives them (columns
     with their language and lines, furniture apart), `roles` its annex pages (rw_gazette.annex_pages),
@@ -153,6 +156,10 @@ def rwanda_issue(
             ranges[language].append((version["start"], version["end"]))
             placed.update(position[language][version["start"] : version["end"]])
     index = {key: (language, k) for language, keys in position.items() for k, key in enumerate(keys)}
+    # Lines in a notice (rw_gazette.notices): recorded as the Gazette's notices, not legislation.
+    noticed: set[tuple[int, int, int]] = set()
+    for notice in notices or []:
+        noticed.update(position.get(notice["language"], [])[notice["start"] : notice["end"]])
     any_version = any(ranges.values())
 
     def why(key: tuple[int, int, int], column: dict) -> str:
@@ -184,6 +191,8 @@ def rwanda_issue(
                         ledger.add("unplaced", line, number, "annex_without_instrument")
                 elif key in placed:
                     ledger.add("document", line, number)
+                elif key in noticed:
+                    ledger.add("notice", line, number)
                 else:
                     ledger.add("unplaced", line, number, why(key, column))
     without_words = [

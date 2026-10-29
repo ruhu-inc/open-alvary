@@ -996,7 +996,9 @@ class LocalCollection:
             json.dumps(provenance, ensure_ascii=False, indent=1) + "\n"
         )
 
-    def finish_issue(self, sha: str, documents: list[dict], readings: dict | None = None) -> None:
+    def finish_issue(
+        self, sha: str, documents: list[dict], readings: dict | None = None, notices: list | None = None
+    ) -> None:
         pass
 
     def save_manifest(self, manifest: dict) -> None:
@@ -1061,7 +1063,9 @@ class BucketCollection:
             replace=True,
         )
 
-    def finish_issue(self, sha: str, documents: list[dict], readings: dict | None = None) -> None:
+    def finish_issue(
+        self, sha: str, documents: list[dict], readings: dict | None = None, notices: list | None = None
+    ) -> None:
         light = []
         for document in documents:
             entry, details = split_entry(document)
@@ -1074,6 +1078,8 @@ class BucketCollection:
             )
             light.append(entry)
         index = {"pipeline": rw_gazette.PIPELINE, "readings": readings or {}, "documents": light}
+        if notices:  # the Gazette's notices, recorded but not prepared for review (owner, 2026-10-29)
+            index["notices"] = notices
         self.store.put(
             f"{self.prefix}issues/{sha}.json",
             json.dumps(index, ensure_ascii=False).encode(),
@@ -1082,10 +1088,11 @@ class BucketCollection:
         )
 
     def save_manifest(self, manifest: dict) -> None:
-        documents = []
+        documents, notices = [], []
         for name in self.store.list(f"{self.prefix}issues/"):
             index = json.loads(self.store.get(name))
             documents += index["documents"] if isinstance(index, dict) else index  # older: a bare list
+            notices += index.get("notices", []) if isinstance(index, dict) else []
         documents, renamed = separate_instruments(documents)
         for document in documents:
             stored = renamed.get(document["id"])
@@ -1098,6 +1105,7 @@ class BucketCollection:
                 if self.store.exists(source) and not self.store.exists(target):
                     self.store.put(target, self.store.get(source), "application/json", replace=True)
         manifest["documents"] = link_works(one_per_id(documents))
+        manifest["notices"] = notices
         self.store.put(
             f"{self.prefix}manifest.json",
             json.dumps(manifest, ensure_ascii=False).encode(),
@@ -1125,10 +1133,13 @@ class AuditCollection:
     def write(self, doc_id: str, reading: dict, provenance: dict, pdf: Path) -> None:
         pass
 
-    def finish_issue(self, sha: str, documents: list[dict], readings: dict | None = None) -> None:
+    def finish_issue(
+        self, sha: str, documents: list[dict], readings: dict | None = None, notices: list | None = None
+    ) -> None:
         for report in self.reports:
             if report["sha"] == sha:
                 report["documents"] = len(documents)
+                report["notices"] = sorted({n["kind"] for n in notices or []})
 
     def save_manifest(self, manifest: dict) -> None:
         pass
@@ -1279,6 +1290,9 @@ def prepare_selection(
                 date=listed.get("date"),
                 title=listing_title(record["listed"]["name"]),
             )
+        if found:  # a language whose heading was not recognised, found by the pages it shares (flagged)
+            rw_gazette.fill_by_page(streams, found)
+        issue_notices = rw_gazette.notices(streams, found, record["listed"]["name"])
         rlrc, rlrc_checked = rlrc_index()
         # Born-digital pages Google's OCR has read as a check on their text layer (owner, 2026-10-22):
         # pages read from the layer itself, never those our OCR or the Layout Parser read.
@@ -1300,6 +1314,20 @@ def prepare_selection(
             text_checked = set().union(
                 *(rw_gazette.check_text_layer(nodes, check_pages, sizes) for nodes in versions.values())
             )
+            for language, nodes in versions.items():
+                if entry["versions"][language].get("by_page") and nodes:
+                    nodes[0].setdefault("flags", []).append(
+                        {
+                            "severity": "medium",
+                            "kind": "version_by_page",
+                            "primary": entry["versions"][language]["title"][:200],
+                            "others": {
+                                lang: v["title"][:120]
+                                for lang, v in entry["versions"].items()
+                                if lang != language
+                            },
+                        }
+                    )
             if entry.get("title_from_listing"):
                 for nodes in versions.values():
                     if nodes:
@@ -1420,6 +1448,41 @@ def prepare_selection(
                 None,
             )
             if parent is None:
+                # An annex whose instrument was not found: kept as its own document, flagged, so its
+                # words reach a reviewer (before 2026-10-29 it was dropped, unseen).
+                work = f"rw-annex-{sha[:12]}-{annex['annex']}"
+                written_annexes.add(annex["annex"])
+                for language, lines in annex["versions"].items():
+                    doc_id = f"{work}-{language}"
+                    nodes = rw_gazette.structure(lines, language, part="body")
+                    if nodes:
+                        nodes[0].setdefault("flags", []).append(
+                            {
+                                "severity": "high",
+                                "kind": "annex_without_instrument",
+                                "primary": rw_gazette.shortened(annex["title"], 200),
+                                "others": {"refers to": annex["refers_to"] or "not printed"},
+                            }
+                        )
+                    reading = rw_gazette.reading(
+                        nodes, furniture, sha, {"annex_of": None}, sizes, scanned, one_reading
+                    )
+                    write_document(doc_id, reading, [annex["pages"][0], annex["pages"][-1]])
+                    documents[doc_id] = {
+                        "id": doc_id,
+                        "summary": reading["summary"],
+                        "type": "other",
+                        "title": f"Annex: {rw_gazette.shortened(annex['title'], 200)}",
+                        "jurisdiction": "rw",
+                        "language": language,
+                        "work": work,
+                        "versions": {lang: f"{work}-{lang}" for lang in annex["versions"]},
+                        "url": record["url"],
+                        "source_object": source_object,
+                        "issue": {"name": record["listed"]["name"], **issue},
+                        "pages": [annex["pages"][0], annex["pages"][-1]],
+                        "scanned_pages": sorted(set(annex["pages"]) & scanned),
+                    }
                 continue
             written_annexes.add(annex["annex"])
             number = issue.get("date", "") if parent["number"] == "constitution" else parent["number"]
@@ -1462,12 +1525,25 @@ def prepare_selection(
             collection.account(
                 sha,
                 record,
-                accounting.rwanda_issue(split, roles, found, written_annexes, page_count=len(words)),
+                accounting.rwanda_issue(
+                    split, roles, found, written_annexes, page_count=len(words), notices=issue_notices
+                ),
             )
         collection.finish_issue(
             sha,
             [d for d in documents.values() if d.get("url") == record["url"]],
             {"ocr": bool(ocr), "docai": bool(layout), "ocr-check": check_fingerprint},
+            notices=[
+                {
+                    "kind": n["kind"],
+                    "language": n["language"],
+                    "pages": n["pages"],
+                    "issue": record["listed"]["name"],
+                    "url": record["url"],
+                    "source_object": source_object,
+                }
+                for n in issue_notices
+            ],
         )
         if pdf.parent == Path(scratch.name):
             pdf.unlink(missing_ok=True)
