@@ -1,0 +1,33 @@
+ingestion/reconcile.py
+  s_d665c62e07d76f::t_4176bab4da67a0 15-30,33
+ingestion/rwanda.py
+  s_d665c62e07d76f::t_3201fc09899b18 27-35,1214-1215
+tests/test_ng_documents.py
+  s_d665c62e07d76f::t_c13959e8786a04 195-198
+  s_d665c62e07d76f::t_4176bab4da67a0 166-194,199-200
+ingestion/layout_parser.py
+  s_d665c62e07d76f::t_560e7e4727145d 184-207,215-234,238-246
+  s_d665c62e07d76f::t_3201fc09899b18 208-214,235-237
+tests/test_layout_parser.py
+  s_d665c62e07d76f::t_3201fc09899b18 393-424
+ingestion/ng_documents.py
+  s_d665c62e07d76f::t_b3be3e4dc65bb5 395-397
+  s_d665c62e07d76f::t_560e7e4727145d 93-94
+  s_d665c62e07d76f::t_3201fc09899b18 39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "cf6cc65d77db34854c13b9303926c26cdfdb1320",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
