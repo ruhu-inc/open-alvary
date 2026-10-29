@@ -282,7 +282,9 @@ def main(argv: list[str] | None = None) -> int:
     reports, failed = [], []
     for path in sorted(args.folder.glob("task-*.json")):
         task = json.loads(path.read_text())
-        reports += task.get("reports", [])
+        for report in task.get("reports", []):
+            # A line audit's file reports carry their works' details (rwanda.AuditCollection).
+            reports += report["details"] if "details" in report else [report]
         failed += task.get("failed", [])
     print(json.dumps(summarise(reports) | {"failed": len(failed)}, ensure_ascii=False, indent=1))
     return 0

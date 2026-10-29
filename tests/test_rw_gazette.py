@@ -293,8 +293,15 @@ def read_law() -> tuple[dict, dict, dict]:
 
 
 def test_a_law_suggests_its_record_details_from_the_text_and_the_issue():
-    values, legal, inferred = read_law()
+    values, legal, inferred, evidence = read_law()
     assert values["identity.full_title"] == "Law n° 009/2026 of 12/03/2026 governing examples"
+    # Each value with the words and page it is read from (2026-10-29).
+    assert evidence["step:promulgated.date"] == {
+        "value": "2026-03-12",
+        "page": 2,
+        "evidence": "Kigali, 12/03/2026",
+    }
+    assert evidence["identity.number.value"]["evidence"].startswith("LAW N° 009/2026")
     assert values["identity.number.printed"] == "Law n° 009/2026" and values["identity.year"] == "2026"
     assert values["step:adopted:deputies.date"] == "2026-02-20"
     assert values["step:promulgated.date"] == "2026-03-12"  # the President signs under "Kigali, 12/03/2026"
@@ -330,7 +337,7 @@ def test_what_is_inferred_rather_than_printed_for_its_step_is_only_suggested_wit
     filled in, but the Prime Minister's countersignature and the Minister of Justice's seal carry no date
     of their own. A preamble that names only the Chamber of Deputies' sitting does not say the Senate did
     not sit. Each is suggested with the words it rests on and their page, never filled in."""
-    values, _, inferred = read_law()
+    values, _, inferred, _ = read_law()
     kigali = {"value": "2026-03-12", "page": 2, "evidence": "Kigali, 12/03/2026"}
     assert inferred["step:countersigned.date"] == inferred["step:sealed.date"] == kigali
     assert "step:countersigned.date" not in values and "step:sealed.date" not in values
@@ -1233,3 +1240,130 @@ def test_one_instrument_known_by_number_in_one_language_and_by_date_in_another_i
     }
     found = RG.instruments(streams)
     assert len(found) == 1 and set(found[0]["versions"]) == {"rw", "fr"} and found[0]["number"] == "1/01"
+
+
+def _word(text, x0, x1, y):
+    return {"text": text, "xmin": x0, "xmax": x1, "ymin": y, "ymax": y + 8}
+
+
+def test_a_cover_whose_title_lines_span_the_page_is_read_by_the_next_pages_columns():
+    """An RLRC cover: three title lines across the page (Kinyarwanda, English, French), then the three
+    languages side by side. Before 2026-10-29 the page had no gutter, no language, and reached no
+    document; now each line goes to its language, the title lines by their order."""
+    words = [
+        _word("AMASEZERANO", 10, 80, 10),
+        _word("MPUZAMAHANGA", 85, 160, 10),
+        _word("IMITI", 165, 200, 10),
+        _word("TREATY", 10, 60, 30),
+        _word("OF THE", 65, 120, 30),
+        _word("AGENCY", 125, 190, 30),
+        _word("TRAITÉ", 10, 60, 50),
+        _word("PORTANT", 65, 120, 50),
+        _word("CRÉATION", 125, 200, 50),
+        _word("Yemerejwe", 10, 80, 80),
+        _word("Adopted", 110, 180, 80),
+        _word("Adoptée", 210, 280, 80),
+    ]
+    split = {
+        "page": 1,
+        "width": 300,
+        "height": 400,
+        "layout": "single",
+        "columns": [{"language": None, "x0": 0, "x1": 290, "lines": []}],
+        "furniture": [],
+    }
+    page = RG.cover_page({"words": words}, split, [(0, 90), (100, 190), (200, 290)])
+    texts = {c["language"]: [line["text"] for line in c["lines"]] for c in page["columns"]}
+    assert page["layout"] == "cover"
+    assert texts["rw"] == ["AMASEZERANO MPUZAMAHANGA IMITI", "Yemerejwe"]
+    assert texts["en"] == ["TREATY OF THE AGENCY", "Adopted"]
+    assert texts["fr"] == ["TRAITÉ PORTANT CRÉATION", "Adoptée"]
+    assert all(line["cover"] for c in page["columns"] for line in c["lines"])
+
+
+def test_an_order_is_signed_not_promulgated_and_its_signatories_and_cabinet_are_read():
+    """A Prime Minister's order: the Prime Minister signs under the date, a minister countersigns, the
+    Minister of Justice seals; the Cabinet's approval is printed in the preamble (2026-10-29: an order's
+    date was filed as a law's promulgation, and who signed it was never read)."""
+    lines = [
+        "PRIME MINISTER’S ORDER N°34/03 OF 22/03/2016 APPOINTING A DIRECTOR",
+        "The Prime Minister,",
+        "After consideration and approval by the Cabinet, in its session of 09/09/2015;",
+        "HEREBY ORDERS:",
+        "Article One: Appointment",
+        "Kigali, on 22/03/2016",
+        "(sé)",
+        "MUREKEZI Anastase",
+        "Prime Minister",
+        "(sé)",
+        "UWIZEYE Judith",
+        "Minister of Public Service and Labour",
+        "Seen and sealed with the Seal of the",
+        "Republic:",
+        "(sé)",
+        "BUSINGYE Johnston",
+        "Minister of Justice/Attorney General",
+    ]
+    stream = [
+        {"text": t, "page": 6, "x0": 0, "x1": 200, "y0": 12 * k, "y1": 12 * k + 10}
+        for k, t in enumerate(lines)
+    ]
+    entry = {
+        "kind": "prime_ministers_order",
+        "number": "34/03",
+        "date": "2016-03-22",
+        "versions": {"en": {"title": lines[0], "pages": [6, 8]}},
+    }
+    values, _, inferred, evidence = RG.suggest({"en": stream}, entry, {"date": "2016-04-04"})
+    assert values["step:signed.date"] == "2016-03-22" and "step:promulgated.date" not in values
+    assert values["step:approved:cabinet.date"] == "2015-09-09"
+    assert (
+        values["profile.signed_by"] == "MUREKEZI Anastase" and values["profile.authority"] == "Prime Minister"
+    )
+    assert values["profile.countersigned_by"] == ["UWIZEYE Judith, Minister of Public Service and Labour"]
+    assert values["step:sealed.person"] == "BUSINGYE Johnston, Minister of Justice/Attorney General"
+    assert evidence["step:approved:cabinet.date"]["evidence"].startswith("approval by the Cabinet")
+    assert inferred["step:sealed.date"]["value"] == "2016-03-22"  # inferred, not filled in
+
+
+def test_an_rlrc_covers_facts_are_suggested_with_their_words():
+    cover = [
+        "TREATY OF THE AFRICAN MEDICINES AGENCY (AMA)",
+        "Translated into Kinyarwanda from French and English",
+        "Adopted in Addis Ababa, on 12 th June 2019",
+        "Ratified by the Presidential Order n° 119/01 of 6 th November 2019 ; Official",
+        "Gazette of the Republic of Rwanda n° special of 13 th November 2019",
+    ]
+    stream = [
+        {
+            "text": t,
+            "page": 1,
+            "cover": True,
+            "across": k == 0,
+            "x0": 0,
+            "x1": 200,
+            "y0": 12 * k,
+            "y1": 12 * k + 10,
+        }
+        for k, t in enumerate(cover)
+    ] + [{"text": "PREAMBLE", "page": 2, "x0": 0, "x1": 200, "y0": 0, "y1": 10}]
+    entry = {
+        "kind": "agreement",
+        "number": "473bb8c4b5a5",
+        "number_made": True,
+        "date": None,
+        "title_from_listing": True,
+        "versions": {
+            lang: {"title": "African medicine agency fn2", "pages": [1, 54]} for lang in ("rw", "en", "fr")
+        },
+    }
+    values, legal, _, evidence = RG.suggest({"en": stream, "rw": [], "fr": []}, entry, {})
+    assert values["identity.title"] == "Treaty of the african medicines agency (AMA)"  # sentence case
+    assert "identity.number.value" not in values  # the fingerprint names nothing printed
+    assert values["profile.adopted_at"] == "Addis Ababa" and values["event:adopted.date"] == "2019-06-12"
+    assert values["profile.parties"] == [{"party": "Rwanda", "ratified": "2019-11-06"}]
+    assert values["publication.number"] == "Special" and values["publication.date"] == "2019-11-13"
+    assert values["identity.year"] == "2019"
+    assert legal["expressions"]["authority"]["rw"]["value"] == "official_translation"
+    assert legal["expressions"]["authority"]["en"]["value"] == "authoritative"
+    assert evidence["event:adopted.date"]["page"] == 1

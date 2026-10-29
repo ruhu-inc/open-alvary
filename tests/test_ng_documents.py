@@ -107,11 +107,16 @@ def test_an_issue_is_split_into_its_instruments_each_under_the_issues_page_numbe
     reading = ng_documents.cloud_reading(gazette(TWO), None)
     record = {"source": "nln-repository", "type": "gazette", "url": "https://x/gazette.pdf", "listed": {}}
     found = ng_documents.documents(reading, record)
+    # The issue's front page is its own record (before 2026-10-29 it was in no document).
     assert [(d["id"], d["type"], d["pages"]) for d, _ in found] == [
+        ("ng-gazette-111-12-2024", "gazette", [1, 1]),
         ("ng-act-3-2024", "act", [2, 3]),
         ("ng-act-4-2024", "act", [4, 5]),
     ]
-    document, part = found[1]
+    assert (
+        found[0][0]["title"] == "Federal Republic of Nigeria Official Gazette No. 12, Vol. 111 (2024-03-03)"
+    )
+    document, part = found[2]
     assert [p["page"] for p in part["pages"]] == [4, 5] and part["summary"]["pages"] == 2
     assert document["issue"]["number"] == "12" and document["printed_pages"] == "A12-13"
     # With one supplement only, its cover goes with it.
@@ -203,7 +208,7 @@ def test_the_structure_rules_follow_the_type_and_regulations_wait_for_theirs():
 
     reading = ng_documents.cloud_reading(gazette(TWO), None)
     record = {"source": "nln-repository", "type": "gazette", "url": "u", "listed": {}}
-    document, part = ng_documents.documents(reading, record)[0]
+    document, part = ng_documents.documents(reading, record)[1]  # [0] is the issue's front page
     final = [{"page": p["page"], "units": content.units_from(p), "revision": 0} for p in part["pages"]]
     assert publication.build(document, final, part).rules_id == "ng-federal-act-1"
     regulation = {**document, "type": "regulation"}
@@ -282,7 +287,7 @@ def test_files_are_prepared_once_read_and_again_when_the_ocr_arrives():
     assert ng_documents.prepare_pdfs(store, items, list(items), collection)["waiting"] == 1
     store.objects[f"readings/ng/docai/{sha}.json"] = json.dumps(gazette(TWO)).encode()
     first = ng_documents.prepare_pdfs(store, items, list(items), collection)
-    assert (first["prepared"], first["documents"]) == (1, 2)
+    assert (first["prepared"], first["documents"]) == (1, 3)  # the issue's front page and its two Acts
     index = json.loads(store.objects[f"collections/ng/issues/{sha}.json"])
     assert index["readings"] == {"docai": True, "ocr": False} and index["source"] == "nln-repository"
     assert ng_documents.prepare_pdfs(store, items, list(items), collection)["skipped_done"] == 1
@@ -292,9 +297,35 @@ def test_files_are_prepared_once_read_and_again_when_the_ocr_arrives():
     assert ng_documents.prepare_pdfs(store, items, list(items), collection)["prepared"] == 1  # read again
     collection.save_manifest()
     manifest = json.loads(store.objects["collections/ng/manifest.json"])
-    assert [d["id"] for d in manifest["documents"]] == ["ng-act-3-2024", "ng-act-4-2024"]
+    assert [d["id"] for d in manifest["documents"]] == [
+        "ng-act-3-2024",
+        "ng-act-4-2024",
+        "ng-gazette-111-12-2024",
+    ]
     entry = manifest["documents"][0]
     assert (
         entry["source_object"] == f"sources/ng/nln-repository/{sha}.pdf"
         and entry["objects"] == f"files/{sha}/"
     )
+
+
+def test_every_page_of_a_file_reaches_a_document():
+    """A schedule printed past the range the front page lists stays with its Act, named for the reviewer;
+    a file whose listed ranges cannot be mapped is one instrument, its pages doubtful (before 2026-10-29
+    such pages, or whole files, reached no document)."""
+    reading = ng_documents.cloud_reading(gazette(TWO[:1]), None)
+    extra = {
+        **reading["pages"][-1],
+        "page": reading["pages"][-1]["page"] + 1,
+        "nodes": [{"kind": "heading", "text": "SCHEDULE", "page": 9}],
+        "flags": [],
+    }
+    reading = {**reading, "pages": [*reading["pages"], extra]}
+    record = {"source": "nass-acts", "type": "act", "url": "u", "listed": {}}
+    [(document, part)] = ng_documents.documents(reading, record)
+    assert document["pages"] == [1, extra["page"]] and document["pages_beyond_listed"] == [extra["page"]]
+    assert any(f["kind"] == "pages_beyond_listed_range" for p in part["pages"] for f in p["flags"])
+    unmapped = ng_documents.instruments(
+        {"pages": [{"page": 1, "nodes": []}, {"page": 2, "nodes": []}]}, "act"
+    )
+    assert unmapped[0]["pages"] == [1, 2]

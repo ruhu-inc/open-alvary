@@ -132,6 +132,7 @@ def rwanda_issue(
     page_count: int,
     languages: tuple[str, ...] = ("rw", "en", "fr"),
     notices: list[dict] | None = None,
+    front_pages: set[int] | frozenset = frozenset(),
 ) -> dict:
     """One Rwandan file's account. `split` is its pages as rw_gazette.split_issue gives them (columns
     with their language and lines, furniture apart), `roles` its annex pages (rw_gazette.annex_pages),
@@ -142,7 +143,7 @@ def rwanda_issue(
     # Each language's stream, position by position, as rw_gazette.streams builds it.
     position: dict[str, list[tuple[int, int, int]]] = {language: [] for language in languages}
     for page in split:
-        if page["page"] in roles:
+        if page["page"] in roles or page["page"] in front_pages:
             continue
         for c, column in enumerate(page["columns"]):
             if column["language"] in position:
@@ -184,7 +185,9 @@ def rwanda_issue(
         for c, column in enumerate(page["columns"]):
             for i, line in enumerate(column["lines"]):
                 key = (number, c, i)
-                if number in roles:
+                if number in front_pages:  # a Gazette issue's front page: its own front matter, recorded
+                    ledger.add("notice", line, number)
+                elif number in roles:
                     if roles[number] in written_annexes:
                         ledger.add("annex", line, number)
                     else:
