@@ -66,7 +66,7 @@ SOURCE = "nicn-judgments"
 COURT = "National Industrial Court of Nigeria"
 PUBLICATION = "National Industrial Court of Nigeria: judgment portal"
 # The reader's version: a page prepared by an earlier one is prepared again (BucketCollection.done).
-READER = "nicn-html-2026-10-26.2"
+READER = "nicn-html-2026-10-30.1"
 WORDS_PER_PAGE = 700  # a review page: about one printed page of a judgment
 UNITS_PER_PAGE = 120  # well under the workbench's 400 units a page
 UNIT_CHARACTERS = 6000  # a unit longer than this is cut at a sentence end (the workbench takes 8192)
@@ -515,7 +515,7 @@ OTHER_COURT = re.compile(
     re.I,
 )
 SPOKEN_DATE = re.compile(
-    r"^(?:ON\s+)?(?:(?:MON|TUES|WEDNES|THURS|FRI|SATUR|SUN)DAY\s*,?\s*)?(?:THE\s+)?\d{1,2}\s*(?:ST|ND|RD|TH)?\s+"
+    r"^(?:(?:ON|THIS)\s*,?\s+)?(?:(?:MON|TUES|WEDNES|THURS|FRI|SATUR|SUN)DAY\s*,?\s*)?(?:THE\s+)?\d{1,2}\s*(?:ST|ND|RD|TH)?\s+"
     r"(?:DAY\s+OF\s+)?(?:JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|OCTOBER|NOVEMBER|DECEMBER)"
     r"\s*,?\s*(?:19|20)\d\d\.?$",
     re.I,
@@ -526,7 +526,20 @@ OPINION_START = re.compile(
     r"(?i)^(?:(?:lead(?:ing)?|majority)\s+)?judge?ment\b|^\(?\s*deliver(?:ed|ing)\b|"
     r"\bdelivering\s+the\s+(?:lead(?:ing)?\s+)?judge?ment\b"
 )
-CASE_NUMBER = re.compile(r"^[A-Z]{2,5}(?:/[A-Z0-9.]{1,10}){1,4}/(?:19|20)\d\d$")
+# A case number printed on its own line: this court's ("NICN/LA/101/2024", "NIC/3/87") or another's
+# posted on the portal ("CA/I/195/06", "CA/A/311C/2014(R)", "SC.260/2013", "SC/CV/702/2024"); before
+# 2026-10-30 only a four-digit year after a slash was read, and a Court of Appeal header ended there.
+CASE_NUMBER = re.compile(
+    r"^[A-Z]{2,5}(?:\s?[./]\s?[A-Z0-9]{1,10}){1,4}\s?/\s?(?:(?:19|20)\d\d|\d\d)(?:\s?\([A-Z]\))?$"
+)
+# A date printed inside a heading: "In The Supreme Court of Nigeria On Friday, the 11th day of May, 2018".
+DAY_OF = re.compile(
+    r"\b\d{1,2}\s*(?:ST|ND|RD|TH)?\s+DAY\s+OF\s+(?:JANUARY|FEBRUARY|MARCH|APRIL|MAY|JUNE|JULY|AUGUST|SEPTEMBER|"
+    r"OCTOBER|NOVEMBER|DECEMBER)\s*,?\s*(?:19|20)\d\d\b",
+    re.I,
+)
+# The number after a suit's label, whichever court's: "Suit No: NIC/3/87", "SUIT NO. HT/33/2016".
+LABELLED_SUIT = re.compile(r"\s*([A-Z]{2,5}(?:\s?[./]\s?[A-Z0-9]{1,10}){1,4}\s?/\s?(?:(?:19|20)\d\d|\d\d))\b")
 DIVISION = re.compile(
     r"^(?:IN\s+)?(?:THE\s+)?(?P<name>[A-Z][A-Za-z .'-]{1,40}?)\s+JUDICIAL\s+DIVISION\b", re.I
 )
@@ -1865,6 +1878,11 @@ def details(
             if number not in suits:
                 suits.append(number)
                 suit_unit = suit_unit or unit
+        label = SUIT_LABEL.search(unit.text) if unit.rows is None and not suits else None
+        other = LABELLED_SUIT.match(unit.text[label.end() :]) if label else None
+        if other:  # another court's suit, or this court's older numbering
+            suits.append(re.sub(r"\s+", "", other.group(1)).upper())
+            suit_unit = suit_unit or unit
         if unit.rows is None and CASE_NUMBER.match(unit.text.strip()) and unit.text.strip() not in suits:
             suits.append(unit.text.strip())
             suit_unit = suit_unit or unit
@@ -1886,7 +1904,9 @@ def details(
     # The date delivered: the header's date, else the portal's.
     delivered, words, date_unit = None, None, None
     for unit in header:
-        if unit.rows is not None or (unit.kind == "heading" and not DATED.match(unit.text)):
+        if unit.rows is not None or (
+            unit.kind == "heading" and not (DATED.match(unit.text) or DAY_OF.search(unit.text))
+        ):
             continue
         text = unit.text.strip()
         labelled = DATED.match(text)

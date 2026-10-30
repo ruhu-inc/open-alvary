@@ -456,6 +456,12 @@ def sc_details(listed: dict, kind: str, url: str) -> tuple[dict, dict]:
     ]
     if parties:
         values["profile.parties"] = parties
+        # Its name as cases are cited, and in full with each side's role, where the catalogue gives no
+        # title (none of the 247 on 2026-10-30), as the National Industrial Court's are written.
+        values.setdefault("identity.title", " v. ".join(p["name"] for p in parties))
+        values["identity.full_title"] = " v. ".join(
+            f"{p['name']} ({p['role'].capitalize()})" for p in parties
+        )
     lead, dissenting = (listed.get("lead_judge") or "").lower(), (listed.get("dissenting") or "").lower()
     bench = [
         {
@@ -479,7 +485,7 @@ def sc_details(listed: dict, kind: str, url: str) -> tuple[dict, dict]:
 # The version of this preparation: a file prepared by an earlier one is prepared again. 2026-10-29.2: the
 # OCR check read as stored (words, no text), inline maths read as words; every page in a document
 # (schedules past the listed range, the issue's front page as its own record, unmapped ranges whole).
-PIPELINE = "ng-pdf-2026-10-29.2"
+PIPELINE = "ng-pdf-2026-10-30.1"
 # The sources whose stored files are PDFs read by the scan-reader job (their other files, the Supreme
 # Court's data records and SEC's circular pages, have no reader here yet).
 PDF_SOURCES = {

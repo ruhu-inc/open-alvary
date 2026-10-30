@@ -1476,3 +1476,52 @@ def test_the_cabinets_approval_is_read_in_each_language_and_spelled_out():
         ("Amaze kubona icyemezo cy‟Inama y‟Abaminisitiri yo kuwa 20 Werurwe 2002;", "2002-03-20"),
     ):
         assert RG.cabinet_date(RG.CABINET.search(printed)) == date, printed
+
+
+def test_a_text_titled_from_its_files_name_takes_its_printed_title():
+    """2026-10-30: 608 RLRC texts whose heading was not recognised kept their file's name as their title.
+    Their first heading's title is read past a masthead, a logo's words and the other languages'."""
+    for language, heading, title in (
+        (
+            "fr",
+            "N° 16 15 REPUBLIQUE RWANDAISE A. — LOIS. A. — AMATEGEKO. LOI N° 35/90 DU 22 JUIN 1990 PORTANT "
+            "ORGANISATION ADMINISTRATIVE DE LA VILLE DE KIGALI Nous, HABYARIMANA",
+            "LOI N° 35/90 DU 22 JUIN 1990 PORTANT ORGANISATION ADMINISTRATIVE DE LA VILLE DE KIGALI",
+        ),
+        (
+            "en",
+            "Kingdom of the Netherlands AIR SERVICES AGREEMENT BETWEEN THE REPUBLIC OF RWANDA AND THE KINGDOM "
+            "OF THE NETHERLANDS Alb",
+            "AIR SERVICES AGREEMENT BETWEEN THE REPUBLIC OF RWANDA AND THE KINGDOM OF THE NETHERLANDS",
+        ),
+        (
+            "en",
+            "AMASEZERANO MPUZAMAHANGA YEREKEYE IMITI CONVENTION ON PSYCHOTROPIC SUBSTANCES CONVENTION SUR LES",
+            "CONVENTION ON PSYCHOTROPIC SUBSTANCES",
+        ),
+        (
+            "fr",
+            "397 — GOUVERNEMENT GENERAL. Ordonnance n° 22/196 du 28 juin 1956. Ordonnantie nr. 22/196 van 28",
+            "Ordonnance n° 22/196 du 28 juin 1956",
+        ),
+    ):
+        assert RG.title_from_heading(heading, language) == title
+
+
+def test_who_issues_an_order_is_read_from_its_opening_in_each_language():
+    """2026-10-30: read only from the signatures, which 2,572 works' readers did not find."""
+    for language, opening, office in (
+        ("en", "The Minister of Health,", "Minister of Health"),
+        ("en", "We, KAGAME Paul, President of the Republic;", "President of the Republic"),
+        ("fr", "Le Premier Ministre,", "Premier Ministre"),
+        ("fr", "Nous, HABYARIMANA Juvénal, Président de la République,", "Président de la République"),
+        ("rw", "Minisitiri w’Ubuzima,", "Minisitiri w’Ubuzima"),
+        ("fr", "Le Gouverneur Général,", "Gouverneur Général"),
+    ):
+        lines = ["ORDER N° 1/2010", "PREAMBLE", opening, "HEREBY ORDERS:", "Article One"]
+        stream = [
+            {"text": t, "page": 3, "x0": 0, "x1": 200, "y0": 30 * k, "y1": 30 * k + 10}
+            for k, t in enumerate(lines)
+        ]
+        found = RG.issuer({language: stream})
+        assert found and found["value"] == office and found["page"] == 3, opening
