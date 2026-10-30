@@ -28,7 +28,7 @@ from schema.jurisdictions import registry
 # 2026-10-29.1: headings over two lines, more kinds, bodies known by their enacting words (orders with
 # one title kept apart), notices recorded, annexes without their instrument kept, treaties' family.
 # 2026-10-30.1: a file name's "57-2008" agrees with the printed "57/2008"; .2: evidence in the details file.
-PIPELINE = "2026-10-30.5"
+PIPELINE = "2026-10-31.1"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -2031,12 +2031,36 @@ def cited(versions: dict[str, list[dict]], entry: dict) -> list[dict]:
 
 
 ADOPTED_IN = re.compile(r"adopted in (Ikinyarwanda|Kinyarwanda|English|French)", re.I)
+# The offices under the signatures, in each language (2026-10-30: only English was read, so 1,084 French
+# and Kinyarwanda texts had no signers): the President, the Prime Minister, the Minister of Justice who
+# seals, any minister.
+PRESIDENT = r"President of the Republic|Pr[ée]sident de la R[ée]publique|Perezida wa Repubulika"
+PRIME = r"Prime Minister|Premier Ministre|Minisitiri w.\s?Intebe"
+JUSTICE = r"Minister of Justice|Ministre de la Justice|Minisitiri w.\s?Ubutabera"
+ARTICLE_OF = r"(?:(?:The|Le|La)\s+|L[’']\s*)"
 ROLES = (
-    ("promulgated", re.compile(r"^(?:The\s+)?President of the Republic$", re.I)),
-    ("countersigned", re.compile(r"^(?:The\s+)?Prime Minister$", re.I)),
-    ("sealed", re.compile(r"^(?:The\s+)?Minister of Justice\b.*$", re.I)),
+    ("promulgated", re.compile(rf"^{ARTICLE_OF}?(?:{PRESIDENT})$", re.I)),
+    ("countersigned", re.compile(rf"^{ARTICLE_OF}?(?:{PRIME})$", re.I)),
+    ("sealed", re.compile(rf"^{ARTICLE_OF}?(?:{JUSTICE})\b.*$", re.I)),
 )
-ANY_ROLE = re.compile(r"^(?:The\s+)?(President of the Republic|Prime Minister|Minister\b.*)$", re.I)
+ANY_ROLE = re.compile(rf"^{ARTICLE_OF}?({PRESIDENT}|{PRIME}|Minister\b.*|Ministre\b.*|Minisitiri\b.*)$", re.I)
+ENGLISH_ROLE = re.compile(r"^(?:The\s+)?(President of the Republic|Prime Minister|Minister\b.*)$", re.I)
+
+
+def one_office(block: list, text=lambda line: line):
+    """An office printed in each language one under another (newer laws: "Perezida wa Repubulika",
+    "President of the Republic", "Président de la République") read once, in English where printed."""
+    out, k = [], 0
+    while k < len(block):
+        run = [block[k]]
+        while ANY_ROLE.match(text(run[0])) and k + 1 < len(block) and ANY_ROLE.match(text(block[k + 1])):
+            k += 1
+            run.append(block[k])
+        out.append(next((line for line in run if ENGLISH_ROLE.match(text(line))), run[0]))
+        k += 1
+    return out
+
+
 SIGNED = re.compile(r"^\(s[ée]\)$", re.I)
 NAME = re.compile(r"\b[A-ZÀ-Ý][A-ZÀ-Ý’'-]{2,}\b(?!\s+(?:OF|DE|YA)\b)")  # a surname in capitals
 
@@ -2109,6 +2133,7 @@ def signers(lines: list[dict]) -> list[dict]:
             r"^(Seen and sealed|Bibonywe kandi|Vu et scell)|^Republic:$", line["text"].strip(), re.I
         )
     ]
+    block = one_office(block, lambda line: line["text"].strip())
     texts = [line["text"].strip() for line in block]
     first_role = next((i for i, t in enumerate(texts) if ANY_ROLE.match(t)), None)
     if first_role is None:
@@ -2125,7 +2150,7 @@ def signers(lines: list[dict]) -> list[dict]:
         if 0 <= j < len(texts) and NAME.search(texts[j]):
             person = {
                 "name": texts[j],
-                "role": re.sub(r"^The\s+", "", text, flags=re.I),
+                "role": re.sub(rf"^{ARTICLE_OF}", "", text, flags=re.I),
                 "page": block[i].get("page"),
             }
             if not any(p["name"] == person["name"] for p in out):
@@ -2159,6 +2184,7 @@ def signatories(lines: list[str]) -> dict[str, str]:
         and not FURNITURE.match(t.strip())
         and not re.match(r"^(Seen and sealed|Bibonywe kandi|Vu et scell)|^Republic:$", t.strip(), re.I)
     ]
+    block = one_office(block)
     first_role = next((i for i, t in enumerate(block) if ANY_ROLE.match(t)), None)
     if first_role is None:
         return {}
@@ -2174,7 +2200,7 @@ def signatories(lines: list[str]) -> dict[str, str]:
             j += step_by
         if not 0 <= j < len(block) or not NAME.search(block[j]) or ANY_ROLE.match(block[j]):
             continue
-        role = re.sub(r"^The\s+", "", text, flags=re.I)
+        role = re.sub(rf"^{ARTICLE_OF}", "", text, flags=re.I)
         for step, pattern in ROLES:
             if pattern.match(text) and step not in found:
                 found[step] = f"{block[j]}, {role}"
@@ -2414,6 +2440,15 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
     if entry.get("date"):
         values["identity.year"] = entry["date"][:4]
         said("identity.year", values["identity.year"], heading_page, title)
+    elif title:
+        # No date in its heading: the year its title or number prints ("Regulation n° 13/2011 on …",
+        # "Ordonnance … du 19 novembre 1954"; 978 works had none on 2026-10-30).
+        year = re.search(r"\b(1[89]\d\d|20\d\d)\b", title) or re.search(
+            r"/((?:19|20)\d\d)\b", str(entry.get("number") or "") if not entry.get("number_made") else ""
+        )
+        if year:
+            values["identity.year"] = year.group(1)
+            said("identity.year", year.group(1), heading_page, title)
     adopted_by = ADOPTED_BY.search(text)
     if adopted_by and entry["kind"] in ("law", "organic_law", "constitution"):
         values["issued_by"] = adopted_by.group(1).title()  # "Parliament", "Transitional National Assembly"
@@ -2482,7 +2517,7 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
             said("issued_by", first["role"], first["page"], first["role"])
             if order:
                 values["step:signed.person"] = f"{first['name']}, {first['role']}"
-                justice = [p for p in people[1:] if re.match(r"Minister of Justice", p["role"], re.I)]
+                justice = [p for p in people[1:] if re.match(JUSTICE, p["role"], re.I)]
                 others = [p for p in people[1:] if p not in justice]
                 if others:
                     values["profile.countersigned_by"] = [f"{p['name']}, {p['role']}" for p in others]

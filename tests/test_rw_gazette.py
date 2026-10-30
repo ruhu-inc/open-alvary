@@ -1525,3 +1525,39 @@ def test_who_issues_an_order_is_read_from_its_opening_in_each_language():
         ]
         found = RG.issuer({language: stream})
         assert found and found["value"] == office and found["page"] == 3, opening
+
+
+def test_signatures_are_read_in_french_and_kinyarwanda():
+    """2026-10-30: only English offices were known, so 1,084 French and Kinyarwanda texts had no signers."""
+
+    def lines(texts):
+        return [{"text": t, "page": 9} for t in texts]
+
+    french = ["Kigali, le 25/03/2010", "(sé)", "MAKUZA Bernard", "Premier Ministre", "(sé)", "KARUGARAMA Tharcisse",
+              "Ministre de la Justice/Garde des Sceaux"]  # fmt: skip
+    assert [(p["name"], p["role"]) for p in RG.signers(lines(french))] == [
+        ("MAKUZA Bernard", "Premier Ministre"),
+        ("KARUGARAMA Tharcisse", "Ministre de la Justice/Garde des Sceaux"),
+    ]
+    kinyarwanda = ["Kigali, kuwa 26/04/2007", "(sé)", "MUREKEZI Anastase", "Minisitiri w’Intebe",
+                   "Bibonywe kandi bishyirwaho Ikirango cya Repubulika:", "(sé)", "BUSINGYE Johnston",
+                   "Minisitiri w’Ubutabera/Intumwa Nkuru ya Leta"]  # fmt: skip
+    assert [p["role"] for p in RG.signers(lines(kinyarwanda))] == [
+        "Minisitiri w’Intebe",
+        "Minisitiri w’Ubutabera/Intumwa Nkuru ya Leta",
+    ]
+    law = ["Kigali, le 13/04/2018", "Le Président de la République", "(sé)", "KAGAME Paul"]
+    assert RG.signatories(law) == {"promulgated": "KAGAME Paul, Président de la République"}
+
+
+def test_a_heading_without_a_date_takes_the_year_its_title_prints():
+    """2026-10-30: 978 works had no year where their heading printed no date of its own."""
+    lines = ["REGULATION N° 13/2011 ON DISCOUNT HOUSE ACTIVITIES", "PREAMBLE", "Article One: Purpose"]
+    stream = [
+        {"text": t, "page": 2, "x0": 0, "x1": 200, "y0": 30 * k, "y1": 30 * k + 10}
+        for k, t in enumerate(lines)
+    ]
+    entry = {"kind": "regulations", "number": "13/2011", "date": None,
+             "versions": {"en": {"title": lines[0], "pages": [2, 4]}}}  # fmt: skip
+    values, _, _, evidence = RG.suggest({"en": stream}, entry, {})
+    assert values["identity.year"] == "2011" and evidence["identity.year"]["page"] == 2
