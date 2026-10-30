@@ -1396,3 +1396,83 @@ def test_a_cover_is_read_in_its_blocks_and_the_title_printed_again_after_it_is_t
         ("paragraph", "PREAMBLE"),
     ]
     assert [n["page"] for n in nodes] == [1, 1, 1, 1, 2, 2]
+
+
+def test_the_date_above_the_signatures_is_read_in_each_language_and_as_typeset():
+    """2026-10-30: only "Kigali, on …" was read, and 1,032 works had no signature date."""
+    for printed, date in (
+        ("Kigali, on 22/01/2007", ("22", "01", "2007")),
+        ("Kigali, le 13/04/2018", ("13", "04", "2018")),
+        ("Kigali, kuwa 26/04/2007", ("26", "04", "2007")),
+        ("Kigali ku wa 27/02/2015", ("27", "02", "2015")),
+        ("Kigali on 30/03/2009", ("30", "03", "2009")),
+        ("Kigali, on27/7/2015", ("27", "7", "2015")),
+    ):
+        assert RG.KIGALI.search(printed).groups() == date, printed
+    assert RG.KIGALI.search("the Agreement signed in Kigali on 12/05/2010 is ratified") is None
+
+
+def _order(lines, language="en"):
+    stream = [
+        {"text": t, "page": 6, "x0": 0, "x1": 200, "y0": 30 * k, "y1": 30 * k + 10}
+        for k, t in enumerate(lines)
+    ]
+    entry = {
+        "kind": "ministerial_order",
+        "number": "05/2018",
+        "date": "2018-04-13",
+        "versions": {language: {"title": lines[0], "pages": [6, 8]}},
+    }
+    return RG.suggest({language: stream}, entry, {"date": "2018-05-02"})
+
+
+def test_when_a_text_commences_is_suggested_in_french_and_kinyarwanda_and_on_its_signature():
+    """2026-10-30: only "comes into force on the date of its publication", in English, was read."""
+    french = [
+        "ARRETE MINISTERIEL N°05/2018 DU 13/04/2018",
+        "PREAMBULE",
+        "Article 3 : Entrée en vigueur",
+        "Le présent arrêté entre en vigueur le jour de sa publication au Journal Officiel.",
+        "Kigali, le 13/04/2018",
+    ]
+    _, legal, _, _ = _order(french, "fr")
+    assert legal["step:commenced.date"]["value"] == "2018-05-02"
+    assert legal["step:commenced.date"]["evidence"].startswith("Le présent arrêté entre en vigueur")
+    kinyarwanda = [
+        "ITEKA RYA MINISITIRI N°05/2018 RYO KU WA 13/04/2018",
+        "IRANGASHINGIRO",
+        "Ingingo ya 3: Igihe iteka ritangira gukurikizwa",
+        "Iri teka ritangira gukurikizwa umunsi ryatangarijweho mu Igazeti ya Leta.",
+        "Kigali, kuwa 13/04/2018",
+    ]
+    values, legal, _, _ = _order(kinyarwanda, "rw")
+    assert values["step:signed.date"] == "2018-04-13"
+    assert legal["step:commenced.date"]["value"] == "2018-05-02"
+    signature = [
+        "MINISTERIAL ORDER N°05/2018 OF 13/04/2018",
+        "PREAMBLE",
+        "Article 3: Commencement",
+        "This Order shall come into force on the date of its signature.",
+        "Kigali, on 13/04/2018",
+    ]
+    _, legal, _, _ = _order(signature)
+    assert legal["step:commenced.date"]["value"] == "2018-04-13"
+    assert "signature" in legal["step:commenced.date"]["evidence"]
+
+
+def test_the_cabinets_approval_is_read_in_each_language_and_spelled_out():
+    """2026-10-30: only "approval by the Cabinet, in its session of dd/mm/yyyy", in English, was read."""
+    for printed, date in (
+        ("After consideration and approval by the Cabinet, in its session of 09/09/2015;", "2015-09-09"),
+        (
+            "After consideration and approval by Cabinet, meeting in its session of 12 November 2003;",
+            "2003-11-12",
+        ),
+        ("Après examen et adoption par le Conseil des Ministres, en sa séance du 14/09/2018 ;", "2018-09-14"),
+        (
+            "Après examen et adoption par le Conseil des Ministres en sa séance du 26 Janvier 2005;",
+            "2005-01-26",
+        ),
+        ("Amaze kubona icyemezo cy‟Inama y‟Abaminisitiri yo kuwa 20 Werurwe 2002;", "2002-03-20"),
+    ):
+        assert RG.cabinet_date(RG.CABINET.search(printed)) == date, printed
