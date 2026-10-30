@@ -1,0 +1,34 @@
+tests/test_ng_documents.py
+  s_d665c62e07d76f::t_84448eb367fb32 254-259
+ingestion/rw_gazette.py
+  s_d665c62e07d76f::t_c155a0f90842e3 31,2230,2245-2251,2260,2264-2265,2267,2276,2278-2279,2281-2282,2289-2299,2303-2306,2311-2352,2392-2396,2496-2507
+  s_d665c62e07d76f::t_fccfda48ce33db 2231-2244,2252-2259,2261-2263,2266,2268-2275,2277,2280,2283-2288,2300-2302,2307-2310
+ingestion/ng_documents.py
+  s_d665c62e07d76f::t_fb35d07c23fdbc 459-464
+  s_d665c62e07d76f::t_0120bd3a8936db 488
+tests/test_nicn.py
+  s_d665c62e07d76f::t_614db4ec03e8f1 814-838,842-850,855-858
+  s_d665c62e07d76f::t_84448eb367fb32 839-841,851-854
+ingestion/nicn.py
+  s_d665c62e07d76f::t_fb35d07c23fdbc 518,529-542,1881-1885,1907-1909
+  s_d665c62e07d76f::t_0120bd3a8936db 69
+tests/test_rw_gazette.py
+  s_d665c62e07d76f::t_6e2ccf1b5cec96 1479-1512,1520,1522-1525,1527
+  s_d665c62e07d76f::t_6aa21fba91ad07 1513-1519,1521,1526
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "3fba4583ae292187eff82b703b6ed68a50fed7c6",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
