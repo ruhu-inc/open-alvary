@@ -50,3 +50,26 @@ def test_a_judgment_without_a_neutral_citation_says_so_in_its_first_draft():
     assert V.first_absent({"identity.family": "judgment"}) == {"identity.citation": "not_in_source"}
     assert V.first_absent({"identity.family": "judgment", "identity.citation": "[2026] NICN 1"}) == {}
     assert V.first_absent({"identity.family": "legislation"}) == {}
+
+
+def test_a_document_found_in_another_file_is_named_as_where_its_pages_are_now():
+    old = {"id": "rw-instructions-2012-b5acd9-en", "url": "https://example.org/rlrc.pdf", "language": "en"}
+
+    class Library:
+        def documents(self):
+            return [
+                {
+                    "id": "rw-instructions-002-03-2012-en",
+                    "url": "https://example.org/gazette.pdf",
+                    "language": "en",
+                    "pages": [66, 70],
+                    "other_sources": [{"url": "https://example.org/rlrc.pdf"}],
+                },
+                {
+                    "id": "rw-instructions-002-03-2012-fr",
+                    "url": "https://example.org/gazette.pdf",
+                    "language": "fr",
+                },
+            ]
+
+    assert impact.successors(old, Library(), {1, 2}) == ["rw-instructions-002-03-2012-en"]
