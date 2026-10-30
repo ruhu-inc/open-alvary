@@ -668,7 +668,17 @@ LISTED_STATUS = ("status.legal", "status.as_of", "status.note")
 # What the review list needs of a document stays in the manifest; what only its own page needs (the
 # details suggested from the text, the article check, the issue) goes in <id>.document.json, so the
 # manifest of tens of thousands of documents stays small enough to load at once.
-DETAILS = ("suggested", "suggested_legal", "suggested_inferred", "alignment", "issue", "also_printed_as")
+# The details each document keeps beside it (<id>.document.json), not in the manifest the workbench loads
+# whole: the words and page of each suggested value (2026-10-30) would have made it 120 MB, not 45.
+DETAILS = (
+    "suggested",
+    "suggested_legal",
+    "suggested_inferred",
+    "suggested_evidence",
+    "alignment",
+    "issue",
+    "also_printed_as",
+)
 
 
 def split_entry(document: dict) -> tuple[dict, dict]:
