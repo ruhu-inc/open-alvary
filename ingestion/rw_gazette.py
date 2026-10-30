@@ -28,7 +28,7 @@ from schema.jurisdictions import registry
 # 2026-10-29.1: headings over two lines, more kinds, bodies known by their enacting words (orders with
 # one title kept apart), notices recorded, annexes without their instrument kept, treaties' family.
 # 2026-10-30.1: a file name's "57-2008" agrees with the printed "57/2008"; .2: evidence in the details file.
-PIPELINE = "2026-10-30.4"
+PIPELINE = "2026-10-30.5"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -2227,6 +2227,129 @@ FAMILY = {
 }
 
 
+# The word a printed title opens with, in each language: where a file's first heading also carries a
+# masthead, a logo's words, the band above it or the other languages' titles ("N° 16 15 REPUBLIQUE
+# RWANDAISE A. — LOIS. … LOI N° 35/90 DU 22 JUIN 1990 PORTANT …", "Kingdom of the Netherlands AIR
+# SERVICES AGREEMENT BETWEEN …", "AMASEZERANO … CONVENTION ON PSYCHOTROPIC SUBSTANCES CONVENTION SUR …").
+TITLE_WORDS = {
+    "en": r"LAW|ORDINANCE|DECREE|ORDER|CONVENTION|AGREEMENT|PROTOCOL|TREATY|CHARTER|STATUTES|MEMORANDUM|"
+    r"INSTRUCTIONS?|REGULATIONS?",
+    "fr": r"LOI|ORDONNANCE|D[ÉE]CRET|ARR[ÊE]T[ÉE]|CONVENTION|ACCORD|PROTOCOLE|TRAIT[ÉE]|CHARTE|STATUTS|"
+    r"R[ÈE]GLEMENT|INSTRUCTIONS?",
+    "rw": r"ITEGEKO|ITEKA|AMASEZERANO|AMABWIRIZA|AMATEKA",
+}
+TITLE_WORD = {
+    language: re.compile(rf"(?:{words})", re.I)
+    for language, words in {**TITLE_WORDS, "any": "|".join(TITLE_WORDS.values())}.items()
+}
+
+
+def _capital_word(word: str) -> bool:
+    letters = [c for c in word if c.isalpha()]
+    return len(letters) <= 1 or sum(c.isupper() for c in letters) >= 0.8 * len(letters)
+
+
+def _kind_word(word: str, language: str = "any") -> bool:
+    return bool(TITLE_WORD[language].fullmatch(word.strip(".,:;—-'’")))
+
+
+def title_from_heading(text: str, language: str = "any") -> str | None:
+    """A title from a first heading: from the word it opens with in this language (and, where no other
+    title comes before it, the capitals before that word, as "AIR SERVICES AGREEMENT"), to where it
+    ends: the capitals running out, a full stop, or its kind word printed again in another language."""
+    words = " ".join(text.split()).split(" ")
+    start = next((k for k, w in enumerate(words) if _kind_word(w, language)), None)
+    if start is None and language != "any":
+        start = next((k for k, w in enumerate(words) if _kind_word(w)), None)
+    if start is None:
+        return None
+    kind = words[start].strip(".,:;—-'’").upper()
+    capitals = _capital_word(words[start])
+    if capitals and not any(_kind_word(w) for w in words[:start]):
+        while (
+            start > 0
+            and _capital_word(words[start - 1])
+            and any(c.isalpha() for c in words[start - 1])
+            and not words[start - 1].endswith((".", "—", ":"))
+        ):
+            start -= 1
+    out: list[str] = []
+    for word in words[start:]:
+        if out and capitals and not _capital_word(word):
+            break
+        if len(out) > 2 and word.strip(".,:;—-'’").upper() == kind:
+            break
+        out.append(word)
+        # A full stop ends it, but not a number's ("1.", "n°.") unless it is the year's.
+        if (
+            word.endswith(".")
+            and len(out) > 3
+            and not re.fullmatch(r"(?:\d{1,3}|n[°o]?|art|no)\.", word, re.I)
+        ):
+            break
+    title = " ".join(out).strip(" .,;:—-")
+    return title if len(title) >= 12 else None
+
+
+def printed_title(versions: dict[str, list[dict]]) -> tuple[str, int | None] | None:
+    """A text's own title, where its heading was not recognised (an RLRC copy of an older text, titled
+    from the file's name until 2026-10-30): its cover's title in English, else French, else
+    Kinyarwanda; else its first heading's, as title_from_heading reads it. With its page."""
+    for language in ("en", "fr", "rw"):
+        cover = [line for line in versions.get(language, []) if line.get("cover")]
+        title = (
+            next((n for n in structure(cover, language) if n["kind"] == "heading"), None) if cover else None
+        )
+        if title:
+            return title["text"], title["page"]
+    for language in ("en", "fr", "rw"):
+        lines = [line for line in versions.get(language, [])[:80] if not line.get("cover")]
+        first = (
+            next((n for n in structure(lines, language) if n["kind"] == "heading"), None) if lines else None
+        )
+        found = title_from_heading(first["text"], language) if first else None
+        if found:
+            return found, first["page"]
+    return None
+
+
+# Who issues an order, as its opening names the office: "The Minister of Health,", "The Prime Minister,",
+# "We, KAGAME Paul, President of the Republic;", "Le Ministre de la Justice,", "Nous, HABYARIMANA
+# Juvénal, Président de la République,", "Minisitiri w'Ubuzima,", "Le Gouverneur Général," (2026-10-30:
+# read only from the signatures, which 2,572 works' readers did not find).
+ISSUER = {
+    "en": re.compile(
+        r"^(?:We,\s+[^,;]{3,60},\s+)?(?:The\s+)?(President of the Republic|Prime Minister|"
+        r"Minister\s+(?:of|for|in)\s+[^,;:]{3,120}|Governor[- ]General)\s*[,;:]",
+        re.I,
+    ),
+    "fr": re.compile(
+        r"^(?:Nous,\s+[^,;]{3,60},\s+)?(?:Le\s+|La\s+)?(Pr[ée]sident de la R[ée]publique|Premier Ministre|"
+        r"Ministre\s+(?:de|des|du|d[’'])\s*[^,;:]{3,120}|(?:Vice-)?Gouverneur[- ]G[ée]n[ée]ral)\s*[,;:]",
+        re.I,
+    ),
+    "rw": re.compile(
+        r"^(?:Twebwe,\s+[^,;]{3,60},\s+)?(Perezida wa Repubulika|Minisitiri w.\s?Intebe|"
+        r"Minisitiri\s+w.\s?[^,;:]{3,120})\s*[,;:]",
+        re.I,
+    ),
+}
+
+
+def issuer(versions: dict[str, list[dict]]) -> dict | None:
+    """The office an order's opening names, in English, else French, else Kinyarwanda: {value, page,
+    words}, from the first paragraphs before its articles."""
+    for language in ("en", "fr", "rw"):
+        pattern = ISSUER[language]
+        for node in versions_nodes(versions.get(language, [])[:120], language)[:25]:
+            if node["kind"] != "paragraph":
+                continue
+            found = pattern.match(" ".join(node["text"].split()))
+            if found:
+                return {"value": found.group(1).strip(), "page": node["page"], "words": found.group(0)}
+    return None
+
+
 def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[dict, dict, dict, dict]:
     """Details of the record read from the instrument as printed: its title, number and dates, who
     adopted it and the sittings that did, who promulgated, countersigned and sealed it, the date it was
@@ -2266,11 +2389,11 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
     title = heading["title"]
     heading_page = (heading.get("pages") or [None])[0]
     cover = [line for line in versions.get("en", []) if line.get("cover")]
-    if entry.get("title_from_listing") and cover:
-        # The text's own title, from its cover, before the file's name (an RLRC treaty's cover prints it).
-        across = [line["text"] for line in cover if line.get("across")]
-        title = (across or [cover[0]["text"]])[0]
-        heading_page = cover[0].get("page")
+    if entry.get("title_from_listing"):
+        # The text's own title as printed, before the file's name: its cover's, else its first heading's.
+        found = printed_title(versions)
+        if found:
+            title, heading_page = found
     if title:
         values["identity.full_title"] = values["identity.title"] = sentence_case(title)
         values["identity.citation"] = values["identity.full_title"]
@@ -2370,6 +2493,18 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
         for language in ("en", *[k for k in versions if k != "en"]):
             for step, person in signatories([line["text"] for line in versions.get(language, [])]).items():
                 values.setdefault(f"step:{step}.person", person)
+    if "issued_by" not in values and entry["kind"] not in ("law", "organic_law", "constitution"):
+        # No signatures read: the office its opening names, as printed.
+        opening = issuer(versions)
+        if opening:
+            values["issued_by"] = opening["value"]
+            said("issued_by", opening["value"], opening["page"], opening["words"])
+            if order or by_events:
+                authority = (
+                    "profile.maker" if by_events and entry["kind"] != "instructions" else "profile.authority"
+                )
+                values.setdefault(authority, opening["value"])
+                said(authority, values[authority], opening["page"], opening["words"])
     # An RLRC cover's own facts: where and when it was adopted, the order ratifying it, its Gazette, and
     # which of its languages is a translation.
     cover_text = " ".join(" ".join(line["text"].split()) for line in cover)

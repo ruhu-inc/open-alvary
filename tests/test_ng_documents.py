@@ -251,6 +251,12 @@ def test_a_supreme_court_judgment_takes_its_details_from_the_courts_catalogue():
     )[0][0]
     assert concurring["id"] == "ng-sc-sc-123-2010-2019-05-03-d-justice-jsc"
     assert concurring["work"] == "ng-sc-sc-123-2010-2019-05-03"
+    assert values["identity.title"] == "A. EXAMPLE V. B. EXAMPLE LTD"  # the catalogue's, where it gives one
+    assert values["identity.full_title"] == "A. EXAMPLE (Petitioner) v. B. EXAMPLE LTD (Respondent)"
+    # 2026-10-30: none of the 247 in the catalogue gave a title; it is the parties', as cases are cited.
+    untitled = {k: v for k, v in listed.items() if k != "case_title"}
+    values = ng_documents.documents(reading, {**record, "listed": untitled})[0][0]["suggested"]
+    assert values["identity.title"] == "A. EXAMPLE v. B. EXAMPLE LTD"
 
 
 class MemoryStore:

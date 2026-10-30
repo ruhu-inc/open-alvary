@@ -811,3 +811,48 @@ def test_names_withheld_in_a_sensitive_case_are_never_published(tmp_path, monkey
         )
         == []
     )
+
+
+def test_a_court_of_appeal_judgment_on_the_portal_gives_its_case_number_date_and_bench():
+    """2026-10-30: "CA/I/195/06" was not read as a case number, which ended the header there, so the
+    Justices printed after it were never read either (822 judgments had no case number, 482 no bench)."""
+    reasoning = "The appellant was employed by the respondent and was dismissed without notice. " * 8
+    judgment = nicn.read(
+        portal(
+            "In The Court of Appeal of Nigeria",
+            "On Thursday, the 3rd day of May, 2012",
+            "CA/I/195/06",
+            "Before Their Lordships",
+            "STANLEY SHENKO ALAGOA Justice of the Court of Appeal of Nigeria",
+            "MODUPE FASANMI Justice of the Court of Appeal of Nigeria",
+            "Between",
+            "ADA EXAMPLE APPELLANT",
+            "And",
+            "EXAMPLE SERVICES LIMITED RESPONDENT",
+            "JUDGMENT",
+            reasoning,
+            "Appeal allowed.",
+        )
+    )
+    entry = {"listed": {"record_id": 2474, "title": "ADA EXAMPLE -VS- EXAMPLE SERVICES LIMITED"}}
+    page_of = {id(u): n for n, units in enumerate(nicn.paginate(judgment.units), 1) for u in units}
+    values, _ = nicn.details(
+        judgment, entry, "judgment", "https://nicnadr.gov.ng/x", {"sha256": "f" * 64}, page_of
+    )
+    assert values["profile.case_numbers"] == ["CA/I/195/06"]
+    assert values["event:decided.date"] == "2012-05-03"
+    assert [j["name"] for j in values["profile.bench"]] == ["STANLEY SHENKO ALAGOA", "MODUPE FASANMI"]
+
+
+def test_other_courts_and_older_case_numbers_and_dates_are_read():
+    for printed in ("CA/I/195/06", "CA/A/311C/2014(R)", "SC.260/2013", "SC/CV/702/2024", "NIC/3/87"):
+        assert nicn.CASE_NUMBER.match(printed), printed
+    assert not nicn.CASE_NUMBER.match("12/05/2010")
+    for labelled, number in (
+        ("Suit No: NIC/3/87 Petitioner: X", "NIC/3/87"),
+        ("SUIT NO. HT/33/2016.", "HT/33/2016"),
+    ):
+        label = nicn.SUIT_LABEL.search(labelled)
+        assert nicn.LABELLED_SUIT.match(labelled[label.end() :]).group(1) == number
+    assert nicn.headerish("THIS, TUESDAY, 27TH DAY OF JANUARY, 2025")
+    assert nicn.DAY_OF.search("In The Supreme Court of Nigeria On Friday, the 11th day of May, 2018")
