@@ -1,0 +1,29 @@
+tests/test_rw_gazette.py
+  s_d665c62e07d76f::t_f4bd270491688a 1370-1386,1388-1395,1397-1398
+  s_d665c62e07d76f::t_96a8ceb1a6b3c9 1387,1396
+ingestion/rw_gazette.py
+  s_d665c62e07d76f::t_6bd7d554d0a4d0 1117-1119,1122-1146,1149-1150
+  s_d665c62e07d76f::t_f4bd270491688a 31
+  s_d665c62e07d76f::t_80b80edca09fb0 1283-1287
+  s_d665c62e07d76f::t_67284049d3be61 1105,1120-1121,1147-1148,1270-1272,1276-1282,1288-1290
+tests/test_workbench_impact.py
+  s_d665c62e07d76f::t_aa1f854ff0886e 53-75
+workbench/impact.py
+  s_d665c62e07d76f::t_4795d1d5d5b098 36-38,41,43-47
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "887a54394afd671cae11ce1171c5bb8737d17aea",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
