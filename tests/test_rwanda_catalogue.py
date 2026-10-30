@@ -1273,3 +1273,20 @@ def test_different_instruments_with_one_number_are_kept_apart_and_one_instrument
     assert by_objects["files/aaa/"]["shares_number_with"] == ["rw-law-002-2024-2025-01-22"]
     alone, none = rwanda.separate_instruments([ratify, copy])
     assert none == {} and all("shares_number_with" not in d for d in alone)
+
+
+def test_a_documents_evidence_is_kept_beside_it_not_in_the_manifest():
+    """The manifest is loaded whole by the workbench: the words and page of each suggested value stay in
+    the document's own details file (2026-10-30: in the manifest they made it 120 MB, not 45)."""
+    from ingestion import rwanda
+
+    entry, details = rwanda.split_entry(
+        {
+            "id": "rw-law-1-2001-en",
+            "suggested": {"identity.title": "X"},
+            "suggested_evidence": {"identity.title": {"page": 2}},
+        }
+    )
+    assert "suggested_evidence" not in entry and details["suggested_evidence"] == {
+        "identity.title": {"page": 2}
+    }
