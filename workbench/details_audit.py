@@ -168,6 +168,11 @@ def audit_work(document: dict, manifest: dict, profiles: dict) -> dict:
     specs = record_view.fields(family, kind, profile)
     required = [spec.key for spec in specs if spec.required]
     used, notices = record_view.usable_suggestions(document)
+    absent = record_view.first_absent(values, {spec.key for spec in specs})
+    missing = record_view.missing(values, absent, specs)
+    # A legal fact or an inference the reader suggests beside its field, for the reviewer to choose
+    # (owner, 2026-10-21: never pre-filled), apart from a field with nothing to choose from.
+    beside = {*(document.get("suggested_legal") or {}), *(document.get("suggested_inferred") or {})}
     return {
         "id": document["id"],
         "work": document.get("work") or document["id"],
@@ -181,7 +186,9 @@ def audit_work(document: dict, manifest: dict, profiles: dict) -> dict:
         "suggestions_used": bool(used),
         "suggestions_repaired": bool(notices),
         "required": len(required),
-        "missing_required": record_view.missing(values, {}, specs),
+        "missing_required": missing,
+        "awaiting_choice": [key for key in missing if key in beside],
+        "accounted_absent": sorted(absent),
         "fields": {
             key: source_of(key, values.get(key), document, used) for key in sorted({*required, *KEY_FIELDS})
         },
@@ -201,9 +208,17 @@ def works(documents: list[dict]) -> list[dict]:
     return [chosen[key] for key in sorted(chosen)]
 
 
-def audit_collection(store, country: str, task: int = 0, tasks: int = 1, limit: int | None = None) -> dict:
-    """This task's share of a collection's works, each read with its .document.json."""
-    prefix = f"collections/{country}/"
+def audit_collection(
+    store,
+    country: str,
+    task: int = 0,
+    tasks: int = 1,
+    limit: int | None = None,
+    collections: str = "collections",
+) -> dict:
+    """This task's share of a collection's works, each read with its .document.json, from the collections
+    folder named (the one the workbench reads: collections-next since 2026-10-30)."""
+    prefix = f"{collections}/{country}/"
     manifest = json.loads(store.get(f"{prefix}manifest.json"))
     chosen = [w for k, w in enumerate(works(manifest["documents"])) if k % tasks == task]
     if limit:
@@ -225,6 +240,8 @@ def summarise(reports: list[dict]) -> dict:
     by_group: dict[str, Counter] = defaultdict(Counter)
     sources: dict[str, Counter] = defaultdict(Counter)
     missing = Counter()
+    awaiting = Counter()
+    accounted = Counter()
     second: dict[str, Counter] = defaultdict(Counter)
     disagreements = []
     for report in measured:
@@ -234,11 +251,18 @@ def summarise(reports: list[dict]) -> dict:
         counts["suggestions_dropped"] += report["suggestions"] > 0 and not report["suggestions_used"]
         counts["suggestions_repaired"] += bool(report.get("suggestions_repaired"))
         counts["missing_any_required"] += bool(report["missing_required"])
+        waiting = set(report.get("awaiting_choice", []))
+        unfound = [key for key in report["missing_required"] if key not in waiting]
+        counts["nothing_to_choose_for_any"] += bool(unfound)
+        counts["complete_but_for_choices"] += bool(report["missing_required"]) and not unfound
+        counts["complete"] += not report["missing_required"]
         counts["title_from_file_name"] += report["fields"].get("identity.title") == "file_name"
         counts["number_from_fingerprint"] += report["fields"].get("identity.number.value") == "fingerprint"
         for key, origin in report["fields"].items():
             sources[key][origin] += 1
         missing.update(report["missing_required"])
+        awaiting.update(report.get("awaiting_choice", []))
+        accounted.update(report.get("accounted_absent", []))
         for field, verdict in report["second_source"].items():
             second[field][verdict] += 1
             if verdict == "disagree" and len(disagreements) < 15:
@@ -257,6 +281,9 @@ def summarise(reports: list[dict]) -> dict:
             key: dict(counts.most_common()) for key, counts in sorted(sources.items())
         },
         "required_fields_missing": dict(missing.most_common(25)),
+        "required_fields_awaiting_choice": dict(awaiting.most_common(25)),
+        "required_fields_missing_nothing_to_choose": dict((missing - awaiting).most_common(25)),
+        "accounted_absent": dict(accounted.most_common()),
         "second_source": {field: dict(counts) for field, counts in second.items()},
         "disagreements": disagreements,
     }
