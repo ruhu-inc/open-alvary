@@ -28,7 +28,7 @@ from schema.jurisdictions import registry
 # 2026-10-29.1: headings over two lines, more kinds, bodies known by their enacting words (orders with
 # one title kept apart), notices recorded, annexes without their instrument kept, treaties' family.
 # 2026-10-30.1: a file name's "57-2008" agrees with the printed "57/2008"; .2: evidence in the details file.
-PIPELINE = "2026-10-30.3"
+PIPELINE = "2026-10-30.4"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -1739,12 +1739,33 @@ SITTING = {
     ),
     "senate": re.compile(r"\bSenate,?\s+in its (?:plenary )?(?:session|sitting) of\s+(.{6,40}?\d{4})", re.I),
 }
-KIGALI = re.compile(r"Kigali\s*,\s*(?:on\s+)?(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*((?:19|20)\d\d)", re.I)
+# The date printed above the signatures, in each language and as typeset: "Kigali, on 22/01/2007",
+# "Kigali, le 13/04/2018", "Kigali, kuwa 26/04/2007", "Kigali ku wa 27/02/2015", "Kigali on 30/03/2009",
+# "Kigali, on27/7/2015". Without its comma it opens its line, so a preamble's "signed in Kigali on
+# 12/05/2010" is never taken for it (2026-10-30: only "Kigali, on …" was read, 1,032 works unsigned).
+KIGALI = re.compile(
+    r"(?:Kigali\s*,\s*|^\s*Kigali\s+(?=on|le|ku))(?:on|le|kuwa|ku\s+wa)?\s*"
+    r"(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*((?:19|20)\d\d)",
+    re.I | re.M,
+)
 # Who adopted it, as the enacting words print it: "THE PARLIAMENT HAS ADOPTED AND WE SANCTION, PROMULGATE
 # …", "THE TRANSITIONAL NATIONAL ASSEMBLY HAD ADOPTED AND WE SANCTION …" (in capitals, as printed).
 ADOPTED_BY = re.compile(r"\b(?:THE\s+)?([A-Z]+(?:\s+[A-Z]+){0,4})\s+HA[SD]\s+ADOPTED\b")
+# When a text commences, in each language (2026-10-30: only "… on the date of its publication" was read):
+# "comes into force on the day of its publication", "entre en vigueur le jour de sa publication", "Iri
+# teka ritangira gukurikizwa umunsi ryatangarijweho mu Igazeti"; or of its signature, "… ku munsi
+# rishyiriweho umukono".
 IN_FORCE_ON_PUBLICATION = re.compile(
-    r"(?:comes|shall come|enters) into force on the date of its publication", re.I
+    r"(?:comes|shall come|enters|shall enter) into force on the (?:date|day) of its publication"
+    r"|entre(?:ra)? en vigueur (?:le jour|[àa] la date|au jour) de sa publication"
+    r"|gukurikizwa\s+(?:ku\s+)?u?munsi\s+r[iy]a?tangarij[wy]e(?:ho)?",
+    re.I,
+)
+IN_FORCE_ON_SIGNATURE = re.compile(
+    r"(?:comes|shall come|enters|shall enter) into force on the (?:date|day) of its signature"
+    r"|entre(?:ra)? en vigueur (?:le jour|[àa] la date|au jour) de sa signature"
+    r"|gukurikizwa\s+(?:ku\s+)?u?munsi\s+r[iy]a?shyiriweho\s+umukono",
+    re.I,
 )
 # --- what an instrument does to the earlier ones it names --------------------------------------------
 # "Law nº 028/2023 of 19/05/2023 on … is repealed" repeals that law. "Article 44 of Law n° 66/2018 of
@@ -2032,11 +2053,26 @@ def spoken_date(text: str) -> str | None:
     return f"{year}-{MONTHS[month.lower()]:02d}-{int(day):02d}"
 
 
-# "After consideration and approval by the Cabinet, in its session of 09/09/2015": the Cabinet's step.
+# The Cabinet's step, as each language prints it: "After consideration and approval by the Cabinet, in
+# its session of 09/09/2015", "… by Cabinet, meeting in its session of 12 November 2003", "Après examen
+# et adoption par le Conseil des Ministres, en sa séance du 14/09/2018", "Amaze kubona icyemezo cy'Inama
+# y'Abaminisitiri yo kuwa 20 Werurwe 2002" (2026-10-30: only the first, in English, was read).
 CABINET = re.compile(
-    r"approval by the Cabinet,?\s+in its (?:session|meeting) of\s+(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*((?:19|20)\d\d)",
+    r"(?:approval by (?:the )?Cabinet,?\s+(?:meeting\s+)?in its (?:session|meeting|sitting) of"
+    r"|adoption par le Conseil des Ministres,?\s+en sa s[ée]ance du"
+    r"|Inama\s+y.\s?Abaminisitiri,?\s+yo\s+ku\s*wa)"
+    r"\s+((\d{1,2})\s*/\s*(\d{1,2})\s*/\s*((?:19|20)\d\d)|\d{1,2}\s+\w+\s+(?:19|20)\d\d)",
     re.I,
 )
+CABINET_WORD = re.compile(r"\bCabinet\b|Conseil des Ministres|Abaminisitiri", re.I)
+
+
+def cabinet_date(found: re.Match) -> str | None:
+    if found.group(2):
+        return f"{found.group(4)}-{int(found.group(3)):02d}-{int(found.group(2)):02d}"
+    return spoken_date(found.group(1))
+
+
 # An RLRC cover's facts, as its English prints them.
 COVER_ADOPTED = re.compile(r"Adopted (?:in|at) ([A-Z][\w’' -]+?),?\s+on\s+(.{4,40}?\d{4})", re.I)
 COVER_RATIFIED = re.compile(
@@ -2206,6 +2242,15 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
     english = [line["text"] for line in versions.get("en", [])]
     text = " ".join(english)
     paragraphs = [n for n in versions_nodes(versions.get("en", [])) if n["kind"] == "paragraph"]
+    # Where it states when it commences: in English, else in French, else in Kinyarwanda (a text
+    # printed in one or two of them).
+    worded = paragraphs + [
+        n
+        for language in ("fr", "rw")
+        if language in versions
+        for n in versions_nodes(versions[language], language)
+        if n["kind"] == "paragraph"
+    ]
     values: dict = {
         "identity.type": entry["kind"],
         "identity.family": FAMILY.get(entry["kind"], "executive_instrument"),
@@ -2260,7 +2305,7 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
         deputies = stated(paragraphs, SITTING["deputies"], stops=(". ", "; "))
         if deputies:
             inferred["step:adopted:senate.date"] = {"absent": "not_applicable", **deputies}
-    every = [line for lines in versions.values() for line in lines]
+    every = [line for language in ("en", "fr", "rw") for line in versions.get(language, [])]
     family = values["identity.family"]
     order = family == "executive_instrument" and entry["kind"] not in ("instructions",)
     by_events = family in ("subsidiary_legislation",) or entry["kind"] == "instructions"
@@ -2285,11 +2330,16 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
         if not by_events:
             for step in ("countersigned", "sealed"):  # the other signatures carry no date of their own
                 inferred[f"step:{step}.date"] = dict(kigali)
-    cabinet = next((line for line in versions.get("en", []) if re.search(r"\bCabinet\b", line["text"])), None)
-    joined_en = " ".join(" ".join(line["text"].split()) for line in versions.get("en", []))
-    cabinet_found = CABINET.search(joined_en)
-    if cabinet_found and order:
-        when = f"{cabinet_found.group(3)}-{int(cabinet_found.group(2)):02d}-{int(cabinet_found.group(1)):02d}"
+    # The Cabinet's approval: in English, else in French, else in Kinyarwanda.
+    cabinet_found, cabinet = None, None
+    for language in ("en", "fr", "rw"):
+        joined = " ".join(" ".join(line["text"].split()) for line in versions.get(language, []))
+        cabinet_found = CABINET.search(joined)
+        if cabinet_found:
+            cabinet = next((line for line in versions[language] if CABINET_WORD.search(line["text"])), None)
+            break
+    when = cabinet_date(cabinet_found) if cabinet_found and order else None
+    if when:
         values["step:approved:cabinet.date"] = when
         said("step:approved:cabinet.date", when, (cabinet or {}).get("page"), cabinet_found.group(0))
     people = signers(versions.get("en", [])) or next(
@@ -2350,6 +2400,8 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
             said("publication.date", when, cover_page, gazette_cover.group(0))
     translated = COVER_TRANSLATED.search(cover_text)
     legal: dict = {}
+    # A text whose steps are events (a regulation made, an instruction signed) commences as an event.
+    commenced = "event:commenced.date" if by_events else "step:commenced.date"
     if issue.get("date"):
         published = "event:published.date" if by_events else "step:published.date"
         values[published] = issue["date"]
@@ -2362,11 +2414,23 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
             evidence["publication.date"]["page"],
             evidence["publication.date"]["evidence"],
         )
-        in_force = stated(paragraphs, IN_FORCE_ON_PUBLICATION)
+        in_force = stated(worded, IN_FORCE_ON_PUBLICATION)
         if in_force:
-            legal["step:commenced.date"] = {"value": issue["date"], **in_force}
+            legal[commenced] = {"value": issue["date"], **in_force}
             if values["identity.family"] in ("legislation", "constitution"):
                 legal["profile.commencement"] = {"value": "on_publication", **in_force}
+    # A text that comes into force on the day it is signed commences on the date above its signatures.
+    signed_on = next(
+        (
+            values[key]
+            for key in ("step:signed.date", "step:promulgated.date", "event:signed.date", "event:made.date")
+            if key in values
+        ),
+        None,
+    )
+    on_signature = stated(worded, IN_FORCE_ON_SIGNATURE) if signed_on else None
+    if on_signature and commenced not in legal:
+        legal[commenced] = {"value": signed_on, **on_signature}
     values["publication.kind"] = "gazette"
     values["publication.name"] = GAZETTE
     edition = (
@@ -2430,9 +2494,9 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
     return values, legal, inferred, evidence
 
 
-def versions_nodes(lines: list[dict]) -> list[dict]:
-    """The English body's paragraphs, each with the article it follows."""
-    nodes = structure(lines, "en") if lines else []
+def versions_nodes(lines: list[dict], language: str = "en") -> list[dict]:
+    """A version's paragraphs (the English one's, unless named), each with the article it follows."""
+    nodes = structure(lines, language) if lines else []
     current, purpose = None, False
     for node in nodes:
         if node.get("article") and node["kind"] == "heading":
