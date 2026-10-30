@@ -517,7 +517,9 @@ def fields(family: str, kind: str, profile: JurisdictionProfile | None) -> list[
             "choice",
             ("explanatory_memorandum", "headnote", "abstract", "editorial"),
         ),
-        FieldSpec("text.summary.text", "Summary", "text", "long", required=family != "judgment"),
+        # Optional for now (owner, 2026-10-29 for judgments, 2026-10-30 for every family): few texts print
+        # one, so a document is approved with its details and text and its summary added later.
+        FieldSpec("text.summary.text", "Summary", "text", "long"),
         FieldSpec("text.summary.official", "Summary part of the official text", "text", "choice", YES_NO),
         FieldSpec("status.legal", "Legal status", "status", "choice", R.LEGAL_STATUS, required=True),
         FieldSpec("status.as_of", "Status checked on", "status", "date"),
@@ -1369,13 +1371,22 @@ def base_values(document: dict, manifest: dict) -> dict:
     return first_draft({k: v for k, v in values.items() if v}, {})[0]
 
 
-def first_absent(values: dict) -> dict:
-    """What a first draft accounts for without a value: a judgment that prints no neutral citation (the
-    National Industrial Court's portal prints none) says so, not stated in this copy, rather than each
-    of ten thousand waiting for a reviewer to say it (owner, 2026-10-30). The reviewer can still give one."""
+def first_absent(values: dict, keys=()) -> dict:
+    """What a first draft accounts for without a value where its source is certain to print none, rather
+    than each of thousands waiting for a reviewer to say it (owner, 2026-10-30); the reviewer can still
+    give one. Of the fields shown (``keys``):
+    - a judgment that prints no neutral citation (the National Industrial Court's portal prints none);
+    - a law's bill, which its gazetted text never names, and its revised edition, which it is not in yet,
+      as Nigeria's Acts are drafted (workbench.details).
+    What a reader inferred stays a suggestion beside its field, never marked here (owner, 2026-10-21)."""
+    out = {}
     if values.get("identity.family") == "judgment" and not values.get("identity.citation"):
-        return {"identity.citation": "not_in_source"}
-    return {}
+        out["identity.citation"] = "not_in_source"
+    if "profile.bill" in keys and empty(values.get("profile.bill")):
+        out["profile.bill"] = "not_in_source"
+    if "profile.revised_edition" in keys and empty(values.get("profile.revised_edition")):
+        out["profile.revised_edition"] = "not_applicable"
+    return out
 
 
 def place_for(document: dict, manifest: dict, profiles: dict) -> tuple[R.Place, JurisdictionProfile | None]:

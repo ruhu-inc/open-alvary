@@ -578,14 +578,36 @@ def test_a_suggested_family_that_does_not_go_with_its_kind_is_put_right_not_drop
     )
 
 
-def test_a_judgments_summary_and_outcome_are_optional_for_now():
-    """Owner, 2026-10-29: a judgment is approved with its details and text; its summary and outcome are
-    added later. Everything else keeps its summary required."""
+def test_a_summary_and_a_judgments_outcome_are_optional_for_now():
+    """Owner, 2026-10-29: a judgment is approved with its details and text, its summary and outcome added
+    later; 2026-10-30: every family's summary likewise (few texts print one)."""
     from schema.jurisdictions import registry
     from workbench import record_view as V
 
-    ng = registry()["ng"]
+    ng, rw = registry()["ng"], registry()["rw"]
     judgment = {s.key: s.required for s in V.fields("judgment", "judgment", ng)}
     assert judgment["text.summary.text"] is False and judgment["profile.outcome"] is False
     law = {s.key: s.required for s in V.fields("legislation", "act", ng)}
-    assert law["text.summary.text"] is True
+    assert law["text.summary.text"] is False
+    order = {s.key: s.required for s in V.fields("executive_instrument", "presidential_order", rw)}
+    assert order["text.summary.text"] is False
+
+
+def test_a_first_draft_accounts_only_for_what_its_source_never_prints():
+    """Owner, 2026-10-30: a law's bill (its gazetted text never names it) and its revised edition (it is
+    in none yet) are accounted for, as Nigeria's Acts are; a value given is kept, a field not shown is
+    left alone, and an inference stays a suggestion (owner, 2026-10-21)."""
+    from workbench import record_view as V
+
+    law = {"identity.family": "legislation", "identity.type": "law"}
+    shown = {"profile.bill", "profile.revised_edition", "step:sealed.date"}
+    assert V.first_absent(law, shown) == {
+        "profile.bill": "not_in_source",
+        "profile.revised_edition": "not_applicable",
+    }
+    assert V.first_absent({**law, "profile.bill": "Bill 12"}, shown) == {
+        "profile.revised_edition": "not_applicable"
+    }
+    assert V.first_absent(law, set()) == {}
+    judgment = {"identity.family": "judgment", "identity.type": "judgment"}
+    assert V.first_absent(judgment) == {"identity.citation": "not_in_source"}

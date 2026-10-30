@@ -39,9 +39,9 @@ from ingestion import corpus_store, rwanda
 
 
 def collections() -> str:
-    """Where the collections are written: "collections" (the workbench's), or another place for a new
-    copy prepared beside them (PREPARE_COLLECTIONS, e.g. "collections-next"), compared before the
-    workbench is switched to it (workbench.impact)."""
+    """Where the collections are written or read (PREPARE_COLLECTIONS): the folder the workbench reads
+    ("collections-next" since 2026-10-30, as staging.tfvars names it), or another for a new copy prepared
+    beside it, compared before the workbench is switched to it (workbench.impact)."""
     place = os.environ.get("PREPARE_COLLECTIONS", "collections").strip("/")
     if not place or "/" in place or not place.replace("-", "").isalnum():
         raise SystemExit(f"PREPARE_COLLECTIONS must be a plain name, not {place!r}")
@@ -195,7 +195,7 @@ def main() -> int:
 
         country = os.environ.get("PREPARE_COUNTRY", rwanda.COUNTRY)
         limit = int(os.environ["PREPARE_LIMIT"]) if os.environ.get("PREPARE_LIMIT") else None
-        payload = details_audit.audit_collection(store, country, task, tasks, limit)
+        payload = details_audit.audit_collection(store, country, task, tasks, limit, collections())
         name = write_audit(store, country, task, tasks, payload, kind="details")
         print(json.dumps({"audit": name, "works": len(payload["reports"]), "failed": len(payload["failed"])}))
         return 0

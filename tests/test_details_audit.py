@@ -116,3 +116,30 @@ def test_one_document_per_work_and_a_summary():
     assert summary["totals"]["suggestions_dropped"] == 0 and summary["totals"]["suggestions_repaired"] == 1
     assert summary["totals"]["missing_any_required"] == 1
     assert "rw/rlrc-laws/agreement" in summary["by_source_and_type"]
+
+
+def test_a_suggestion_waiting_beside_a_field_is_told_apart_from_nothing_found():
+    """A commencement suggested from "comes into force on the date of its publication" waits for the
+    reviewer to choose it (a legal fact, never pre-filled: owner, 2026-10-21); the bill and revised
+    edition are accounted for (owner, 2026-10-30); a field nothing was found for is still missing."""
+    law = rwanda(
+        type="law",
+        title="Law n° 1/2020 of 1/1/2020",
+        suggested={
+            "identity.family": "legislation",
+            "identity.type": "law",
+            "identity.title": "Law n° 1/2020",
+        },
+        suggested_legal={
+            "step:commenced.date": {"value": "2020-01-02", "page": 9, "evidence": "comes into force"}
+        },
+    )
+    report = A.audit_work(law, MANIFEST, registry())
+    assert "step:commenced.date" in report["awaiting_choice"]
+    assert {"profile.bill", "profile.revised_edition"} <= set(report["accounted_absent"])
+    assert "profile.bill" not in report["missing_required"]
+    unfound = set(report["missing_required"]) - set(report["awaiting_choice"])
+    summary = A.summarise([report])
+    assert summary["required_fields_awaiting_choice"]["step:commenced.date"] == 1
+    assert summary["totals"]["nothing_to_choose_for_any"] == bool(unfound)
+    assert summary["accounted_absent"]["profile.bill"] == 1

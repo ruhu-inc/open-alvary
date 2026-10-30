@@ -162,7 +162,10 @@ run() {
 # The variables are separated by ";" (gcloud's "^;^" form), as a list of sources holds commas.
 prepare() {  # prepare [tasks] [country] [sources]: rw by default; ng prepares the National Industrial Court
   local tasks="${1:-8}" country="${2:-rw}" sources="${3:-}"
-  local env="PREPARE_COUNTRY=$country;PREPARE_MODE=prepare;PREPARE_COLLECTIONS=${PREPARE_COLLECTIONS:-collections}"
+  # Named every time: the workbench reads the folder staging.tfvars names (collections-next since
+  # 2026-10-30), and a run into any other is a copy prepared beside it, never the one under review.
+  local into="${PREPARE_COLLECTIONS:?Set PREPARE_COLLECTIONS: the collections folder to prepare into}"
+  local env="PREPARE_COUNTRY=$country;PREPARE_MODE=prepare;PREPARE_COLLECTIONS=$into"
   if [[ "$country" == ng ]]; then env+=";PREPARE_SOURCES=${sources:-nicn-judgments}"; fi
   "${GC[@]}" run jobs execute "$PREPARE_JOB" --region="$REGION" --tasks="$tasks" --async --update-env-vars="^;^$env"
 }
@@ -173,6 +176,9 @@ audit() {  # audit [tasks] [country] [sources]: as prepare, writing no document;
   local env="PREPARE_COUNTRY=$country;PREPARE_MODE=${AUDIT:-audit}"
   if [[ "$country" == ng ]]; then env+=";PREPARE_SOURCES=${sources:-nicn-judgments}"; fi
   [[ -z "${PREPARE_LIMIT:-}" ]] || env+=";PREPARE_LIMIT=$PREPARE_LIMIT"
+  if [[ "${AUDIT:-}" == details ]]; then  # the details read from a prepared collections folder, named
+    env+=";PREPARE_COLLECTIONS=${PREPARE_COLLECTIONS:?Set PREPARE_COLLECTIONS: the collections folder to measure}"
+  fi
   "${GC[@]}" run jobs execute "$PREPARE_JOB" --region="$REGION" --tasks="$tasks" --async --update-env-vars="^;^$env"
 }
 
