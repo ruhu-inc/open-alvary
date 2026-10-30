@@ -277,7 +277,7 @@ def test_the_details_are_suggested_from_the_header_each_with_its_words_and_page(
     assert values["profile.case_numbers"] == ["NICN/LA/123/2020"]
     assert values["identity.number.printed"] == "SUIT NO. NICN/LA/123/2020"
     assert (values["event:decided.date"], values["identity.year"]) == ("2026-01-08", "2026")
-    assert values["profile.bench"] == [{"name": "HON. JUSTICE C. D. EXAMPLE", "role": "sole"}]
+    assert values["profile.bench"] == [{"name": "C. D. EXAMPLE", "role": "sole"}]
     # The parties as printed, each with its role and the counsel the representation names for it.
     assert values["profile.parties"] == [
         {
@@ -334,7 +334,7 @@ def test_the_portals_catalogue_stands_in_where_the_page_prints_no_header():
     )
     assert evidence["event:decided.date"]["evidence"] == "The portal's summary: Date Delivered: 2013-07-25"
     assert [p["role"] for p in values["profile.parties"]] == ["claimant", "defendant"]
-    assert values["profile.bench"] == [{"name": "HON. JUSTICE C. D. EXAMPLE", "role": "sole"}]
+    assert values["profile.bench"] == [{"name": "C. D. EXAMPLE", "role": "sole"}]
     assert evidence["profile.court.division"]["absent"] == "not_in_source"
 
 
@@ -856,3 +856,11 @@ def test_other_courts_and_older_case_numbers_and_dates_are_read():
         assert nicn.LABELLED_SUIT.match(labelled[label.end() :]).group(1) == number
     assert nicn.headerish("THIS, TUESDAY, 27TH DAY OF JANUARY, 2025")
     assert nicn.DAY_OF.search("In The Supreme Court of Nigeria On Friday, the 11th day of May, 2018")
+
+
+def test_a_judges_name_is_read_without_the_honorific_or_the_office():
+    for printed, name in (
+        ("BEFORE HIS LORDSHIP, HONOURABLE JUSTICE S. A. YELWA…JUDGE", "S. A. YELWA"),
+        ("BEFORE HIS LORDSHIP HON. JUSTICE O. Y. ANUWE", "O. Y. ANUWE"),
+    ):
+        assert nicn.judges([nicn.Unit(kind="paragraph", text=printed)])[0] == [name]

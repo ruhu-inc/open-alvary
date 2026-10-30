@@ -66,7 +66,7 @@ SOURCE = "nicn-judgments"
 COURT = "National Industrial Court of Nigeria"
 PUBLICATION = "National Industrial Court of Nigeria: judgment portal"
 # The reader's version: a page prepared by an earlier one is prepared again (BucketCollection.done).
-READER = "nicn-html-2026-10-30.1"
+READER = "nicn-html-2026-10-31.1"
 WORDS_PER_PAGE = 700  # a review page: about one printed page of a judgment
 UNITS_PER_PAGE = 120  # well under the workbench's 400 units a page
 UNIT_CHARACTERS = 6000  # a unit longer than this is cut at a sentence end (the workbench takes 8192)
@@ -1759,6 +1759,15 @@ def counsel(lines: list[str]) -> list[tuple[str, str, list[int]]]:
     return out
 
 
+def judge_name(text: str) -> str:
+    """A judge's name alone: "HONOURABLE JUSTICE S. A. YELWA…JUDGE" was kept whole until 2026-10-30."""
+    text = re.sub(r"(?:…|\.{3}).*$", "", text)
+    text = re.sub(
+        r"^(?:HON(?:OU?RABLE)?\.?\s*)?(?:(?:MR|MRS|MS)\.?\s+)?JUSTICE\s+", "", text.strip(), flags=re.I
+    )
+    return text.strip(" ,.:-–—")
+
+
 def judges(units: list[Unit]) -> tuple[list[str], str, Unit | None]:
     """The judge or judges named after "BEFORE HIS LORDSHIP" (on its line or the lines after), the
     words they were read from, and the unit those words begin in."""
@@ -1781,6 +1790,7 @@ def judges(units: list[Unit]) -> tuple[list[str], str, Unit | None]:
                 part = re.sub(r"\s+Justices?\s+of\s+the\s+.*$", "", part.strip(" :-–—"), flags=re.I)
                 part = re.sub(r"\s*[-–—,]*\s*(?:\(?PRESIDING\s+)?JUDGE\)?\.?\s*$", "", part, flags=re.I)
                 part = re.sub(r"\s+(?:DATED?|ON)\b.*$", "", part, flags=re.I).strip(" ,.:-–—")
+                part = judge_name(part)
                 if part and re.search(r"[A-Za-z]{2}", part):
                     names.append(part)
         return names[:9], " / ".join(printed), unit
@@ -2017,7 +2027,7 @@ def details(
     elif card.get("judges") or listed.get("judge"):
         name = card.get("judges") or listed["judge"]
         given(
-            "profile.bench", [{"name": name.strip(" -"), "role": "sole"}], f"The portal's catalogue: {name}"
+            "profile.bench", [{"name": judge_name(name), "role": "sole"}], f"The portal's catalogue: {name}"
         )
 
     # Where and when it was published and fetched; the form of this text.
