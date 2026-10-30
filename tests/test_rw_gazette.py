@@ -1367,3 +1367,32 @@ def test_an_rlrc_covers_facts_are_suggested_with_their_words():
     assert legal["expressions"]["authority"]["rw"]["value"] == "official_translation"
     assert legal["expressions"]["authority"]["en"]["value"] == "authoritative"
     assert evidence["event:adopted.date"]["page"] == 1
+
+
+def test_a_cover_is_read_in_its_blocks_and_the_title_printed_again_after_it_is_the_heading():
+    """2026-10-30: an RLRC cover was read as one heading running on through the translation, adoption
+    and ratification lines; the title printed again on the next page was then read as the body."""
+
+    def line(text, page, y, **more):
+        return {"text": text, "page": page, "x0": 0, "x1": 200, "y0": y, "y1": y + 10, **more}
+
+    stream = [
+        line("CONVENTION ESTABLISHING THE COMMUNITY", 1, 0, cover=True, across=True),
+        line("CONVENTION ESTABLISHING", 1, 40, cover=True),
+        line("THE COMMUNITY", 1, 52, cover=True),
+        line("Translated into Kinyarwanda from", 1, 90, cover=True),
+        line("French and English", 1, 102, cover=True),
+        line("Adopted in Gisenyi, on 20 September 1976", 1, 140, cover=True),
+        line("CONVENTION ESTABLISHING THE COMMUNITY", 2, 0),
+        line("PREAMBLE", 2, 30),
+    ]
+    nodes = RG.structure(stream, "en")
+    assert [(n["kind"], n["text"]) for n in nodes] == [
+        ("heading", "CONVENTION ESTABLISHING THE COMMUNITY"),
+        ("paragraph", "CONVENTION ESTABLISHING THE COMMUNITY"),
+        ("paragraph", "Translated into Kinyarwanda from French and English"),
+        ("paragraph", "Adopted in Gisenyi, on 20 September 1976"),
+        ("heading", "CONVENTION ESTABLISHING THE COMMUNITY"),
+        ("paragraph", "PREAMBLE"),
+    ]
+    assert [n["page"] for n in nodes] == [1, 1, 1, 1, 2, 2]

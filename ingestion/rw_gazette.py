@@ -28,7 +28,7 @@ from schema.jurisdictions import registry
 # 2026-10-29.1: headings over two lines, more kinds, bodies known by their enacting words (orders with
 # one title kept apart), notices recorded, annexes without their instrument kept, treaties' family.
 # 2026-10-30.1: a file name's "57-2008" agrees with the printed "57/2008"; .2: evidence in the details file.
-PIPELINE = "2026-10-30.2"
+PIPELINE = "2026-10-30.3"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -1102,6 +1102,7 @@ def structure(lines: list[dict], language: str, part: str = "heading") -> list[d
     and their paragraphs (a paragraph ends where the line spacing opens up). An annex starts in its
     body (part="body"): it has no contents list or preamble of its own to wait for."""
     nodes: list[dict] = []
+    cover: list[dict] = []  # the blocks of a cover opening the version, one of which is its title
     previous = None
     for line in lines:
         if line.get("table"):
@@ -1112,6 +1113,40 @@ def structure(lines: list[dict], language: str, part: str = "heading") -> list[d
             continue
         text = line["text"].strip()
         if not text:
+            continue
+        if line.get("cover"):
+            # A cover (an RLRC file's: the title in each language, the languages it was translated
+            # from, where it was adopted, the order ratifying it, its Gazette) in its blocks as printed:
+            # one block is the title (cover_title), every other a paragraph. It never runs on into one
+            # heading, nor into the title printed again on the next page.
+            last = nodes[-1] if nodes else None
+            joins = (
+                last is not None
+                and previous is not None
+                and previous.get("cover")
+                and last.get("lines", [None])[-1] is previous
+                and previous["page"] == line["page"]
+                and previous.get("across") == line.get("across")
+                and line["y0"] - previous["y1"] < 0.7 * (line["y1"] - line["y0"])
+            )
+            if joins:
+                last["text"] += " " + text
+                last["lines"].append(line)
+                last.setdefault("differences", []).extend(line.get("differences", []))
+            else:
+                nodes.append(
+                    {
+                        "kind": "paragraph",
+                        "level": "paragraph",
+                        "text": text,
+                        "page": line["page"],
+                        "lines": [line],
+                        "differences": list(line.get("differences", [])),
+                    }
+                )
+                if part == "heading" and not any(n["kind"] == "heading" for n in nodes):
+                    cover.append(nodes[-1])
+            previous = line
             continue
         if part == "heading" and CONTENTS.match(text):
             part = "contents"
@@ -1232,7 +1267,25 @@ def structure(lines: list[dict], language: str, part: str = "heading") -> list[d
     for node in nodes:
         if node["kind"] != "table":
             node["text"] = re.sub(r"\s+", " ", node["text"]).strip()
+    title = cover_title(cover, language)
+    if title is not None:
+        title["kind"], title["level"] = "heading", "heading-1"
     return nodes
+
+
+def cover_title(blocks: list[dict], language: str) -> dict | None:
+    """A cover's title among its blocks: the first in capitals in the version's own language, else the
+    first in capitals whose language is not told (Kinyarwanda's marker words are rarer in a title), else
+    the first in capitals. A trilingual cover gives each version every language's title."""
+    capitals = [block for block in blocks if _capitals(block["text"])]
+    told = [line_language(block["text"]) for block in capitals]
+    return next(
+        (b for b, lang in zip(capitals, told, strict=True) if lang == language),
+        next(
+            (b for b, lang in zip(capitals, told, strict=True) if lang is None),
+            capitals[0] if capitals else None,
+        ),
+    )
 
 
 def table_cells(node: dict) -> list[str]:

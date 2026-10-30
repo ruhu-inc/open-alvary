@@ -33,13 +33,18 @@ def reviewed(store) -> dict[str, set[str]]:
 
 
 def successors(old: dict, new_library: content.Library, pages: set[int]) -> list[str]:
-    """The new copy's documents of the same source and language that hold any of these pages."""
+    """The new copy's documents of the same source and language that hold any of these pages, or of
+    the same language that list the old source among their other sources (the same instrument found in
+    another file, its pages numbered there)."""
     out = []
     for document in new_library.documents():
-        if document.get("url") != old.get("url") or document.get("language") != old.get("language"):
+        if document.get("language") != old.get("language"):
             continue
-        span = document.get("pages") or []
-        if len(span) == 2 and any(span[0] <= page <= span[1] for page in pages):
+        if document.get("url") == old.get("url"):
+            span = document.get("pages") or []
+            if len(span) == 2 and any(span[0] <= page <= span[1] for page in pages):
+                out.append(document["id"])
+        elif old.get("url") and any(s.get("url") == old["url"] for s in document.get("other_sources") or []):
             out.append(document["id"])
     return sorted(out)
 
