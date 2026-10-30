@@ -1,0 +1,29 @@
+tests/test_nicn.py
+  s_d665c62e07d76f::t_cc409d9cb57431 280,337
+  s_d665c62e07d76f::t_876dd58c28b599 859-866
+tests/test_rw_gazette.py
+  s_d665c62e07d76f::t_876dd58c28b599 1528-1563
+ingestion/nicn.py
+  s_d665c62e07d76f::t_e399133ab8bb23 1762-1770,1793,2030
+  s_d665c62e07d76f::t_0a88780db77218 69
+ingestion/rw_gazette.py
+  s_d665c62e07d76f::t_5d9ee7de0bc9f5 2040,2042-2044,2046,2153,2203
+  s_d665c62e07d76f::t_cc409d9cb57431 2047-2063,2136,2187
+  s_d665c62e07d76f::t_0a88780db77218 31,2034-2039,2443-2451,2520
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ac2b96e60bf12563142356ebd703b6396a96f2d4",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
