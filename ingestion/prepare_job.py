@@ -62,6 +62,20 @@ def fetch_state(store, staging: Path, country: str = rwanda.COUNTRY) -> None:
             target.write_bytes(store.get(name))
 
 
+def last_to_finish(store, country: str, task: int, tasks: int) -> bool:
+    """Whether every task of this run has finished preparing: each marks its end, and a task that finds
+    every mark builds the manifest from every file's index. Before 2026-10-31 each task built it at its
+    end, and one that began before the last indexes were written could write after the others, its
+    manifest missing them (154 Nigerian documents in corpus-preparer-z9tzn). A run whose task failed for
+    good builds none: run the job again with one task, which finds every file done and builds it."""
+    run = os.environ.get("CLOUD_RUN_EXECUTION")
+    if not run or tasks <= 1:
+        return True
+    prefix = f"work/{country}/runs/{run}/"
+    store.put(f"{prefix}task-{task + 1:03d}-of-{tasks:03d}.done", b"{}", "application/json", replace=True)
+    return len([name for name in store.list(prefix) if name.endswith(".done")]) >= tasks
+
+
 def prepare_nigeria(store, task: int, tasks: int) -> dict:
     """Nigeria's stored files of the chosen sources, each task its share, into collections/ng/: the
     National Industrial Court's pages by their reader (ingestion.nicn); the PDF sources' files whose
@@ -96,7 +110,8 @@ def prepare_nigeria(store, task: int, tasks: int) -> dict:
     if pdfs:
         collection = nicn.BucketCollection(store, prefix=prefix, pipeline=ng_documents.PIPELINE)
         counts["pdf"] = ng_documents.prepare_pdfs(store, items, pdfs, collection, log=log)
-    nicn.BucketCollection(store, prefix=prefix).save_manifest()
+    if last_to_finish(store, "ng", task, tasks):
+        nicn.BucketCollection(store, prefix=prefix).save_manifest()
     return counts
 
 
@@ -249,7 +264,8 @@ def main() -> int:
             except Exception as error:  # noqa: BLE001 - noted and left for a later run
                 failed.append(item)
                 print(f"failed {item}: {type(error).__name__}: {str(error)[:300]}", flush=True)
-        collection.save_manifest(rwanda.new_manifest())
+        if last_to_finish(store, rwanda.COUNTRY, task, tasks):
+            collection.save_manifest(rwanda.new_manifest())
     print(json.dumps({"files": len(mine), "instruments": instruments, "failed": len(failed)}), flush=True)
     return 0
 

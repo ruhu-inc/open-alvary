@@ -335,3 +335,16 @@ def test_every_page_of_a_file_reaches_a_document():
         {"pages": [{"page": 1, "nodes": []}, {"page": 2, "nodes": []}]}, "act"
     )
     assert unmapped[0]["pages"] == [1, 2]
+
+
+def test_only_a_task_that_finds_every_task_finished_builds_the_manifest(monkeypatch):
+    """2026-10-31: each task built the manifest at its end, and one that began before the last indexes
+    were written wrote after the others, its manifest missing 154 documents."""
+    from ingestion import prepare_job
+
+    store = MemoryStore()
+    monkeypatch.setenv("CLOUD_RUN_EXECUTION", "corpus-preparer-x")
+    assert [prepare_job.last_to_finish(store, "ng", task, 3) for task in (1, 0)] == [False, False]
+    assert prepare_job.last_to_finish(store, "ng", 2, 3)  # the last to finish, after every index
+    monkeypatch.delenv("CLOUD_RUN_EXECUTION")
+    assert prepare_job.last_to_finish(MemoryStore(), "ng", 0, 3)  # a run on the workstation
