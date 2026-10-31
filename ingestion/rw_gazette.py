@@ -2149,6 +2149,17 @@ def own_signatures(block: list[dict], language: str) -> list[dict]:
     return [line for line in block if office_language(line["text"]) in (None, language)]
 
 
+def signed_here(lines: list[dict], language: str) -> bool:
+    """Whether a version's own column carries its signatures: a "(sé)" among its last lines, or a
+    signer's name over an office in its language (article text opening "Minister in charge of …" is
+    neither)."""
+    tail = [line["text"].strip() for line in lines[-40:]]
+    return any(SIGNED.match(text) for text in tail) or any(
+        PERSON.match(name) and office_language(office) == language
+        for name, office in zip(tail, tail[1:], strict=False)
+    )
+
+
 def lend_signatures(lines: dict[str, list[dict]], spans: dict[str, list[int]]) -> None:
     """A signature block printed once for every language (2026-10-31: the whole last page went to the
     version whose column ran onto it, and the others ended before their signatures) goes to each
@@ -2166,8 +2177,8 @@ def lend_signatures(lines: dict[str, list[dict]], spans: dict[str, list[int]]) -
             lines[lang] = lines[lang][:at] + own_signatures(block, lang) + lines[lang][end:]
         elif (
             not any(KIGALI.match(line["text"].strip()) for line in lines[lang])
-            # A version with its own offices signed in its own column, its date printed once for all.
-            and not any(office_language(line["text"]) == lang for line in lines[lang][-40:])
+            # A version signed in its own column, its date printed once for all.
+            and not signed_here(lines[lang], lang)
             and block[0]["page"] <= spans[lang][-1] + 1
         ):
             lines[lang] = lines[lang] + own_signatures(block, lang)
