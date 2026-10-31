@@ -28,7 +28,7 @@ from schema.jurisdictions import registry
 # 2026-10-29.1: headings over two lines, more kinds, bodies known by their enacting words (orders with
 # one title kept apart), notices recorded, annexes without their instrument kept, treaties' family.
 # 2026-10-30.1: a file name's "57-2008" agrees with the printed "57/2008"; .2: evidence in the details file.
-PIPELINE = "2026-10-31.2"
+PIPELINE = "2026-10-31.3"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -2141,6 +2141,29 @@ def own_signatures(block: list[dict], language: str) -> list[dict]:
     """A shared signature block as one language's version prints it: the date, "(sé)" and the names,
     with this language's offices and sealing words."""
     return [line for line in block if signature_language(line["text"]) in (None, language)]
+
+
+def lend_signatures(lines: dict[str, list[dict]], spans: dict[str, list[int]]) -> None:
+    """A signature block printed once for every language (2026-10-31: the whole last page went to the
+    version whose column ran onto it, and the others ended before their signatures) goes to each
+    version with its own language's offices; the version it was read in keeps what follows it. A
+    version takes it only where it follows that version, on its last page or the next: one that ran on
+    past its own end (a French text over the next instruments) never lends another's signatures pages
+    away. `lines` and `spans` (each version's [first, last] page) are changed in place."""
+    shared = next(((lang, at) for lang in lines if (at := shared_signatures(lines[lang])) is not None), None)
+    if not shared:
+        return
+    source, (at, end) = shared
+    block = lines[source][at:end]
+    for lang in lines:
+        if lang == source:
+            lines[lang] = lines[lang][:at] + own_signatures(block, lang) + lines[lang][end:]
+        elif (
+            not any(KIGALI.match(line["text"].strip()) for line in lines[lang])
+            and block[0]["page"] <= spans[lang][-1] + 1
+        ):
+            lines[lang] = lines[lang] + own_signatures(block, lang)
+            spans[lang][-1] = max(spans[lang][-1], block[-1]["page"])
 
 
 def one_office(block: list, text=lambda line: line):

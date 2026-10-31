@@ -1607,3 +1607,29 @@ def test_a_signature_block_printed_once_for_every_language_goes_to_each_version_
         "en",
     )
     assert [n["text"] for n in nodes[-5:]] == printed[:5]
+
+
+def test_a_shared_signature_block_goes_only_to_versions_it_follows():
+    """2026-10-31: where a French text ran on over the next instruments, a block far past the English
+    and Kinyarwanda versions' ends was lent to them, which then ran on 100 pages and more."""
+
+    def line(text, page, k=0):
+        return {"text": text, "page": page, "x0": 300, "x1": 500, "y0": 20 * k, "y1": 20 * k + 10}
+
+    block = [
+        "Kigali, 19/04/2024",
+        "(sé)",
+        "KAGAME Paul",
+        "President of the Republic",
+        "Président de la République",
+    ]
+    english = [line("This Law comes into force on the date of its publication.", 6)]
+    for page, takes in ((7, True), (40, False)):
+        lines = {
+            "fr": [line("Article 3: Entrée en vigueur", 6), *(line(t, page, k) for k, t in enumerate(block))],
+            "en": list(english),
+        }
+        spans = {"fr": [2, page], "en": [2, 6]}
+        RG.lend_signatures(lines, spans)
+        assert (spans["en"] == [2, page]) is takes and (len(lines["en"]) > 1) is takes
+        assert "President of the Republic" not in [x["text"] for x in lines["fr"]]  # each its own offices
