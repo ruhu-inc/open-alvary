@@ -1633,3 +1633,20 @@ def test_a_shared_signature_block_goes_only_to_versions_it_follows():
         RG.lend_signatures(lines, spans)
         assert (spans["en"] == [2, page]) is takes and (len(lines["en"]) > 1) is takes
         assert "President of the Republic" not in [x["text"] for x in lines["fr"]]  # each its own offices
+
+
+def test_a_version_signed_in_its_own_column_keeps_its_signatures_when_the_date_is_printed_once():
+    """2026-10-31: Prime Minister's Order 77/03 of 2017 prints one line of three dates over three
+    columns of signatures; the English version, without a date line, took a garbled second copy."""
+
+    def line(text, page=17, k=0):
+        return {"text": text, "page": page, "x0": 300, "x1": 500, "y0": 20 * k, "y1": 20 * k + 10}
+
+    lines = {
+        "rw": [line("Kigali, ku wa 08/06/2017 Kigali, on 08/06/2017 Kigali, le 08/06/2017", 16),
+               line("(sé)"), line("MUREKEZI Anastase", k=1), line("Minisitiri w’Intebe", k=2)],
+        "en": [line("(sé)"), line("MUREKEZI Anastase", k=1), line("Prime Minister", k=2)],
+    }  # fmt: skip
+    before = {lang: list(v) for lang, v in lines.items()}
+    RG.lend_signatures(lines, {"rw": [14, 17], "en": [14, 17]})
+    assert lines == before  # no block is shared: each language signs in its own column

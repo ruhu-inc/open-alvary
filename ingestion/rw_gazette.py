@@ -28,7 +28,7 @@ from schema.jurisdictions import registry
 # 2026-10-29.1: headings over two lines, more kinds, bodies known by their enacting words (orders with
 # one title kept apart), notices recorded, annexes without their instrument kept, treaties' family.
 # 2026-10-30.1: a file name's "57-2008" agrees with the printed "57/2008"; .2: evidence in the details file.
-PIPELINE = "2026-10-31.3"
+PIPELINE = "2026-10-31.4"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -2091,6 +2091,12 @@ def signature_language(text: str) -> str | None:
     )
 
 
+def office_language(text: str) -> str | None:
+    """The language of an office or the sealing words; a date line, however worded, is every language's
+    (one line may print all three: "Kigali, ku wa 08/06/2017 Kigali, on 08/06/2017 Kigali, le …")."""
+    return None if KIGALI.match(text.strip()) else signature_language(text)
+
+
 # A signer's name as printed under "(sé)": "KAGAME Paul", "Dr NGIRENTE Edouard", "Prof. SHYAKA
 # Anastase", "Paul KAGAME", "MUREKEZI ANASTASE".
 PERSON = re.compile(
@@ -2133,14 +2139,14 @@ def shared_signatures(lines: list[dict]) -> tuple[int, int] | None:
         and signature_line(lines[end]["text"])
     ):
         end += 1
-    languages = {signature_language(line["text"]) for line in lines[start:end]} - {None}
+    languages = {office_language(line["text"]) for line in lines[start:end]} - {None}
     return (start, end) if len(languages) > 1 else None
 
 
 def own_signatures(block: list[dict], language: str) -> list[dict]:
     """A shared signature block as one language's version prints it: the date, "(sé)" and the names,
     with this language's offices and sealing words."""
-    return [line for line in block if signature_language(line["text"]) in (None, language)]
+    return [line for line in block if office_language(line["text"]) in (None, language)]
 
 
 def lend_signatures(lines: dict[str, list[dict]], spans: dict[str, list[int]]) -> None:
@@ -2160,6 +2166,8 @@ def lend_signatures(lines: dict[str, list[dict]], spans: dict[str, list[int]]) -
             lines[lang] = lines[lang][:at] + own_signatures(block, lang) + lines[lang][end:]
         elif (
             not any(KIGALI.match(line["text"].strip()) for line in lines[lang])
+            # A version with its own offices signed in its own column, its date printed once for all.
+            and not any(office_language(line["text"]) == lang for line in lines[lang][-40:])
             and block[0]["page"] <= spans[lang][-1] + 1
         ):
             lines[lang] = lines[lang] + own_signatures(block, lang)
