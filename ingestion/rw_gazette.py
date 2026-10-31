@@ -28,7 +28,7 @@ from schema.jurisdictions import registry
 # 2026-10-29.1: headings over two lines, more kinds, bodies known by their enacting words (orders with
 # one title kept apart), notices recorded, annexes without their instrument kept, treaties' family.
 # 2026-10-30.1: a file name's "57-2008" agrees with the printed "57/2008"; .2: evidence in the details file.
-PIPELINE = "2026-10-31.1"
+PIPELINE = "2026-10-31.2"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -1104,6 +1104,7 @@ def structure(lines: list[dict], language: str, part: str = "heading") -> list[d
     nodes: list[dict] = []
     cover: list[dict] = []  # the blocks of a cover opening the version, one of which is its title
     previous = None
+    signing = False  # from the date above the signatures, each line its own: "(sé)", a name, an office
     for line in lines:
         if line.get("table"):
             nodes.append(
@@ -1146,6 +1147,23 @@ def structure(lines: list[dict], language: str, part: str = "heading") -> list[d
                 )
                 if part == "heading" and not any(n["kind"] == "heading" for n in nodes):
                     cover.append(nodes[-1])
+            previous = line
+            continue
+        if part != "heading" and KIGALI.match(text):
+            signing = True
+        if signing and (ARTICLE[language].match(text) or any(p.match(text) for _, p in DIVISIONS[language])):
+            signing = False
+        if signing:
+            nodes.append(
+                {
+                    "kind": "paragraph",
+                    "level": "paragraph",
+                    "text": text,
+                    "page": line["page"],
+                    "lines": [line],
+                    "differences": list(line.get("differences", [])),
+                }
+            )
             previous = line
             continue
         if part == "heading" and CONTENTS.match(text):
@@ -2045,6 +2063,84 @@ ROLES = (
 )
 ANY_ROLE = re.compile(rf"^{ARTICLE_OF}?({PRESIDENT}|{PRIME}|Minister\b.*|Ministre\b.*|Minisitiri\b.*)$", re.I)
 ENGLISH_ROLE = re.compile(r"^(?:The\s+)?(President of the Republic|Prime Minister|Minister\b.*)$", re.I)
+
+
+# Which language a line of a signature block is in, where it says: an office, the sealing words, or the
+# date's own words ("Kigali, on …", "Kigali, le …", "Kigali, ku wa …"). The date alone, "(sé)" and the
+# names are every language's.
+SIGNATURE_LANGUAGE = {
+    "en": re.compile(
+        r"^(?:The\s+)?(?:President of the Republic|Prime Minister|Minister\b)|^Seen and sealed|^Republic:?$"
+        r"|^Kigali\s*,?\s*on\b",
+        re.I,
+    ),
+    "fr": re.compile(
+        r"^(?:(?:Le|La)\s+)?(?:Pr[ée]sident de la R[ée]publique|Premier Ministre|Ministre\b)|^Vu et scell"
+        r"|^Kigali\s*,\s*le\b",
+        re.I,
+    ),
+    "rw": re.compile(
+        r"^(?:Perezida wa Repubulika|Minisitiri\b)|^Bibonywe kandi|^Kigali\s*,?\s*ku\s*wa", re.I
+    ),
+}
+
+
+def signature_language(text: str) -> str | None:
+    return next(
+        (language for language, pattern in SIGNATURE_LANGUAGE.items() if pattern.match(text.strip())), None
+    )
+
+
+# A signer's name as printed under "(sé)": "KAGAME Paul", "Dr NGIRENTE Edouard", "Prof. SHYAKA
+# Anastase", "Paul KAGAME", "MUREKEZI ANASTASE".
+PERSON = re.compile(
+    r"^(?:(?:Dr|Prof|Amb|Hon|Gen|Maj|Col|Lt|Rtd|Eng|Mr|Mrs|Ms|Me)\.?\s+)*"
+    r"(?:(?:[A-ZÀ-Ý][A-ZÀ-Ý’'-]{1,}\s+){1,3}[A-ZÀ-Ý][a-zà-ÿ’'-]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ’'-]+)?"
+    r"|[A-ZÀ-Ý][a-zà-ÿ’'-]+\s+[A-ZÀ-Ý][A-ZÀ-Ý’'-]{2,}(?:\s+[A-ZÀ-Ý][A-ZÀ-Ý’'-]{2,})?"
+    r"|[A-ZÀ-Ý][A-ZÀ-Ý’'-]{2,}(?:\s+[A-ZÀ-Ý][A-ZÀ-Ý’'-]{2,}){1,3})$"
+)
+
+
+def signature_line(text: str) -> bool:
+    """A line of a signature block: the date, "(sé)", an office or the sealing words in any language, or
+    a signer's name; never a heading or the text printed after the signatures."""
+    text = text.strip()
+    return bool(
+        KIGALI.match(text)
+        or SIGNED.match(text)
+        or signature_language(text)
+        or (
+            len(text) <= 60
+            and PERSON.match(text)
+            and not TITLE_WORD["any"].match(text.split()[0].strip(".,:"))
+        )
+    )
+
+
+def shared_signatures(lines: list[dict]) -> tuple[int, int] | None:
+    """Where a version's lines take in a signature block printed once for every language (the last
+    page's "Kigali, 19/04/2024", then each office in the three languages): (start, end) of its lines,
+    from the date to the last signature line, on that page or the next; None where the block is this
+    language's own or there is none. Whatever is printed after it (an agreement an order ratifies) is
+    not the block's."""
+    start = next((i for i, line in enumerate(lines) if KIGALI.match(line["text"].strip())), None)
+    if start is None:
+        return None
+    end = start + 1
+    while (
+        end < len(lines)
+        and lines[end]["page"] <= lines[start]["page"] + 1
+        and signature_line(lines[end]["text"])
+    ):
+        end += 1
+    languages = {signature_language(line["text"]) for line in lines[start:end]} - {None}
+    return (start, end) if len(languages) > 1 else None
+
+
+def own_signatures(block: list[dict], language: str) -> list[dict]:
+    """A shared signature block as one language's version prints it: the date, "(sé)" and the names,
+    with this language's offices and sealing words."""
+    return [line for line in block if signature_language(line["text"]) in (None, language)]
 
 
 def one_office(block: list, text=lambda line: line):

@@ -1350,6 +1350,29 @@ def prepare_selection(
         assigned: dict[int, str] = {}  # each instrument's work, for its annexes
         for entry in found:
             lines = {lang: streams[lang][v["start"] : v["end"]] for lang, v in entry["versions"].items()}
+            # A signature block printed once for every language (2026-10-31: the whole last page went
+            # to the version whose column ran onto it, and the others ended before their signatures):
+            # each version takes it with its own language's offices.
+            shared = next(
+                (
+                    (lang, at)
+                    for lang in lines
+                    if (at := rw_gazette.shared_signatures(lines[lang])) is not None
+                ),
+                None,
+            )
+            if shared:
+                source, (at, end) = shared
+                block = lines[source][at:end]
+                for lang in lines:
+                    if lang == source:
+                        lines[lang] = (
+                            lines[lang][:at] + rw_gazette.own_signatures(block, lang) + lines[lang][end:]
+                        )
+                    elif not any(rw_gazette.KIGALI.match(line["text"].strip()) for line in lines[lang]):
+                        lines[lang] = lines[lang] + rw_gazette.own_signatures(block, lang)
+                        span = entry["versions"][lang]["pages"]
+                        span[-1] = max(span[-1], block[-1]["page"])
             versions = {lang: rw_gazette.structure(lines[lang], lang) for lang in lines}
             check = rw_gazette.alignment(versions)
             rw_gazette.flag_differences(versions)

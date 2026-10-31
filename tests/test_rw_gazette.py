@@ -1561,3 +1561,49 @@ def test_a_heading_without_a_date_takes_the_year_its_title_prints():
              "versions": {"en": {"title": lines[0], "pages": [2, 4]}}}  # fmt: skip
     values, _, _, evidence = RG.suggest({"en": stream}, entry, {})
     assert values["identity.year"] == "2011" and evidence["identity.year"]["page"] == 2
+
+
+def test_a_signature_block_printed_once_for_every_language_goes_to_each_version_with_its_offices():
+    """2026-10-31: Law 041/2024's signatures, printed once on its last page, went to the French version
+    only, the English and Kinyarwanda texts ending before them (a quarter of a 60-work sample)."""
+
+    def line(text, page=7, k=0):
+        return {"text": text, "page": page, "x0": 300, "x1": 500, "y0": 20 * k, "y1": 20 * k + 10}
+
+    printed = ["Kigali, 19/04/2024", "(sé)", "KAGAME Paul", "Perezida wa Repubulika", "President of the Republic",
+               "Président de la République", "Bibonywe kandi bishyizweho Ikirango cya Repubulika:",
+               "Seen and sealed with the Seal of the Republic:", "Vu et scellé du Sceau de la République:", "(sé)",
+               "Dr UGIRASHEBUJA Emmanuel", "Ministre de la Justice et Garde des Sceaux"]  # fmt: skip
+    french = [line("Article 3: Entrée en vigueur", 6), *(line(t, 7, k) for k, t in enumerate(printed))]
+    assert RG.shared_signatures(french) == (1, 13)
+    block = french[1:]
+    assert [x["text"] for x in RG.own_signatures(block, "en")] == [
+        "Kigali, 19/04/2024", "(sé)", "KAGAME Paul", "President of the Republic",
+        "Seen and sealed with the Seal of the Republic:", "(sé)", "Dr UGIRASHEBUJA Emmanuel",
+    ]  # fmt: skip
+    assert "Président de la République" in [x["text"] for x in RG.own_signatures(block, "fr")]
+    # The block ends with the signatures: an agreement printed after them is not copied with them.
+    ratified = [
+        *french,
+        line("ACCORD ENTRE LA REPUBLIQUE DU RWANDA ET LE MALAWI", 8),
+        line("Les Parties,", 8, 1),
+    ]
+    assert RG.shared_signatures(ratified) == (1, 13)
+    # A version's own block, in its own language only, is not shared.
+    own = [
+        line("Kigali, le 19/04/2024"),
+        line("(sé)", k=1),
+        line("KAGAME Paul", k=2),
+        line("Président de la République", k=3),
+    ]
+    assert RG.shared_signatures(own) is None
+    # Each line of a signature block is its own paragraph, never a name run into its office.
+    nodes = RG.structure(
+        [
+            line("PREAMBLE", 6),
+            line("Article 3: Entry into force", 6, 1),
+            *(line(t, 7, k) for k, t in enumerate(printed[:5])),
+        ],
+        "en",
+    )
+    assert [n["text"] for n in nodes[-5:]] == printed[:5]
