@@ -1650,3 +1650,84 @@ def test_a_version_signed_in_its_own_column_keeps_its_signatures_when_the_date_i
     before = {lang: list(v) for lang, v in lines.items()}
     RG.lend_signatures(lines, {"rw": [14, 17], "en": [14, 17]})
     assert lines == before  # no block is shared: each language signs in its own column
+
+
+def test_a_version_that_ran_on_over_the_next_instrument_ends_where_it_begins_in_the_other_languages():
+    """2026-10-31: "ARRÊTÉ PRÉSIDENTIAL Nº 094/01" (sic) was not recognised, so the French version of
+    order 093/01 ran on over it; it now ends where 094/01 begins in English, and the freed lines become
+    094/01's French version."""
+
+    def line(text, page, y):
+        return {"text": text, "page": page, "x0": 0, "x1": 200, "y0": y, "y1": y + 10}
+
+    words = "text of the order " * 6
+    streams = {
+        "rw": [line("ITEKA RYA PEREZIDA Nº 093/01", 10, 50), line(words, 10, 100),
+               line("ITEKA RYA PEREZIDA Nº 094/01", 11, 301), line(words, 11, 351)],
+        "en": [line("PRESIDENTIAL ORDER Nº 093/01", 10, 50), line(words, 10, 100),
+               line("PRESIDENTIAL ORDER Nº 094/01", 11, 300), line(words, 11, 350)],
+        "fr": [line("ARRÊTÉ PRÉSIDENTIEL Nº 093/01", 10, 50), line(words, 10, 100), line(words, 11, 120),
+               line("ARRÊTÉ PRÉSIDENTIAL Nº 094/01", 11, 302), line(words, 11, 352)],
+    }  # fmt: skip
+    found = [
+        {"number": "093/01", "versions": {"rw": {"start": 0, "end": 2, "pages": [10, 10], "title": "093"},
+                                          "en": {"start": 0, "end": 2, "pages": [10, 10], "title": "093"},
+                                          "fr": {"start": 0, "end": 5, "pages": [10, 11], "title": "093"}}},
+        {"number": "094/01", "versions": {"rw": {"start": 2, "end": 4, "pages": [11, 11], "title": "094"},
+                                          "en": {"start": 2, "end": 4, "pages": [11, 11], "title": "094"}}},
+    ]  # fmt: skip
+    RG.cut_runons(streams, found)
+    assert found[0]["versions"]["fr"] == {
+        "start": 0,
+        "end": 3,
+        "pages": [10, 11],
+        "title": "093",
+        "cut_by_page": True,
+    }
+    RG.fill_by_page(streams, found)
+    assert found[1]["versions"]["fr"]["start"] == 3 and found[1]["versions"]["fr"]["by_page"]
+
+
+def test_signatures_printed_after_the_annexes_go_to_every_version():
+    def line(text, page, k=0):
+        return {"text": text, "page": page, "x0": 300, "x1": 500, "y0": 20 * k, "y1": 20 * k + 10}
+
+    block = ["Kigali, 22/08/2024", "(sé)", "MURANGWA Yusuf", "Minister of Finance and Economic Planning",
+             "Ministre des Finances et de la Planification Économique"]  # fmt: skip
+    lines = {
+        "fr": [line("Article 5", 7), *(line(t, 136, k) for k, t in enumerate(block))],
+        "en": [line("Article 5", 7)],
+    }
+    spans = {"fr": [2, 136], "en": [2, 7]}
+    RG.lend_signatures(lines, spans, annexes=set(range(8, 136)))
+    assert spans["en"] == [2, 136] and lines["en"][-1]["text"] == "Minister of Finance and Economic Planning"
+
+
+def test_a_version_is_not_cut_for_the_same_text_read_again_or_one_found_in_a_single_language():
+    """2026-10-31: order 59/08.11 was read again in Kinyarwanda alone as "59/08/11"; its English and
+    French versions were cut at its first page, and order 66's lost theirs."""
+
+    def line(text, page, y):
+        return {"text": text, "page": page, "x0": 0, "x1": 200, "y0": y, "y1": y + 10}
+
+    streams = {
+        "rw": [
+            line("ITEKA Nº 59/08.11", 3, 50),
+            line("ITEKA Nº 59/08/11", 4, 50),
+            line("ITEKA Nº 70/08/11", 5, 50),
+        ],
+        "en": [line("ORDER Nº 59/08.11", 3, 50), line("text", 4, 60), line("text", 5, 60)],
+    }
+    found = [
+        {
+            "number": "59/08.11",
+            "versions": {
+                "rw": {"start": 0, "end": 1, "pages": [3, 3]},
+                "en": {"start": 0, "end": 3, "pages": [3, 5]},
+            },
+        },
+        {"number": "59/08/11", "versions": {"rw": {"start": 1, "end": 2, "pages": [4, 4]}}},
+        {"number": "70/08/11", "versions": {"rw": {"start": 2, "end": 3, "pages": [5, 5]}}},
+    ]
+    RG.cut_runons(streams, found)
+    assert found[0]["versions"]["en"]["end"] == 3 and "cut_by_page" not in found[0]["versions"]["en"]

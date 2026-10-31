@@ -1318,6 +1318,7 @@ def prepare_selection(
             for entry in found:  # a number made from the file's fingerprint names nothing printed
                 entry["number_made"] = not listed.get("number")
         if found:  # a language whose heading was not recognised, found by the pages it shares (flagged)
+            rw_gazette.cut_runons(streams, found)
             rw_gazette.fill_by_page(streams, found)
         if found and record["source"] == "rlrc-laws":
             # An RLRC file is one text: its cover (the title in each language, where it was adopted, the
@@ -1350,7 +1351,9 @@ def prepare_selection(
         assigned: dict[int, str] = {}  # each instrument's work, for its annexes
         for entry in found:
             lines = {lang: streams[lang][v["start"] : v["end"]] for lang, v in entry["versions"].items()}
-            rw_gazette.lend_signatures(lines, {lang: v["pages"] for lang, v in entry["versions"].items()})
+            rw_gazette.lend_signatures(
+                lines, {lang: v["pages"] for lang, v in entry["versions"].items()}, set(roles)
+            )
             versions = {lang: rw_gazette.structure(lines[lang], lang) for lang in lines}
             check = rw_gazette.alignment(versions)
             rw_gazette.flag_differences(versions)
@@ -1361,6 +1364,14 @@ def prepare_selection(
                 for node in nodes:  # the cover page's text, marked so it is published as the cover
                     if node.get("page") in cover_pages:
                         node["cover"] = True
+                if entry["versions"][language].get("cut_by_page") and nodes:
+                    nodes[-1].setdefault("flags", []).append(
+                        {
+                            "severity": "medium",
+                            "kind": "version_cut_by_page",
+                            "primary": "Ends where the next instrument begins in the other languages",
+                        }
+                    )
                 if entry["versions"][language].get("by_page") and nodes:
                     nodes[0].setdefault("flags", []).append(
                         {

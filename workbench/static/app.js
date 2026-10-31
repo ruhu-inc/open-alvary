@@ -16,6 +16,8 @@ const KIND_LABEL = {
   borrowed_ocr: "the page is a picture; its text came from someone else's OCR: check it word by word",
   one_reading: "read once: no second reading has checked this page's words (a picture read by our OCR, or a web page's own text): review it whole",
   title_from_listing: "no title in the text was recognised: the title is the source's file name; check it against the page",
+  version_by_page: "this language's heading was not recognised: its text was found by the pages the other languages share; check where it begins and ends",
+  version_cut_by_page: "this version ran on past its end: it was cut where the next text begins in the other languages; check its last page",
   unsure_words_dropped: "words the OCR was unsure of and the second reading did not see (often the other side of the sheet showing through) were left out",
   number_differs: "the number is printed differently in two places",
   reading_differs: "scanned page: Document AI read words differently from the OCR layer; Document AI's are shown",

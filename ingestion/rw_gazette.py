@@ -28,7 +28,7 @@ from schema.jurisdictions import registry
 # 2026-10-29.1: headings over two lines, more kinds, bodies known by their enacting words (orders with
 # one title kept apart), notices recorded, annexes without their instrument kept, treaties' family.
 # 2026-10-30.1: a file name's "57-2008" agrees with the printed "57/2008"; .2: evidence in the details file.
-PIPELINE = "2026-10-31.4"
+PIPELINE = "2026-10-31.5"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -981,6 +981,60 @@ def _join_dated(found: list[dict]) -> list[dict]:
         else:
             twin["versions"].update(entry["versions"])
     return out
+
+
+def cut_runons(issue_streams: dict[str, list[dict]], found: list[dict], slack: float = 12.0) -> None:
+    """A version that ran on over the next instrument, whose heading in its language was not recognised
+    ("ARRÊTÉ PRÉSIDENTIAL Nº 094/01", "ITEKA … N o 82/03"; 2026-10-31: about 250 works), ends where that
+    instrument begins in the other languages: on the same page, at the same height, the languages being
+    printed side by side. That instrument must be found in two other languages, and not be this one
+    read again with its number written otherwise. What it gave up is then that instrument's version in its language
+    (fill_by_page). Marked "cut_by_page" for the reviewer to check its end."""
+    for entry in found:
+        for language, version in entry["versions"].items():
+            lines = issue_streams.get(language, [])
+            if not lines or version["start"] >= len(lines):
+                continue
+            first = lines[version["start"]]
+            starts = []
+            for other in found:
+                # Only a text found in two other languages, and never the same text read twice with its
+                # number written otherwise ("59/08.11" and "59/08/11").
+                if (
+                    other is entry
+                    or language in other["versions"]
+                    or len(other["versions"]) < 2
+                    or numbers_agree(other.get("number"), entry.get("number"))
+                ):
+                    continue
+                for lang, v in other["versions"].items():
+                    head = (
+                        issue_streams.get(lang, [])[v["start"]]
+                        if v["start"] < len(issue_streams.get(lang, []))
+                        else None
+                    )
+                    if head is None:
+                        continue
+                    at = (head["page"], head.get("y0", 0.0))
+                    if (first["page"], first.get("y0", 0.0)) < at and head["page"] <= version["pages"][-1]:
+                        starts.append(at)
+            if not starts:
+                continue
+            page, y = min(starts)
+            cut = next(
+                (
+                    k
+                    for k in range(version["start"] + 1, min(version["end"], len(lines)))
+                    if lines[k]["page"] > page
+                    or (lines[k]["page"] == page and lines[k].get("y0", 0.0) >= y - slack)
+                ),
+                None,
+            )
+            if cut is None or cut <= version["start"]:
+                continue
+            version["end"] = cut
+            version["pages"] = [version["pages"][0], lines[cut - 1]["page"]]
+            version["cut_by_page"] = True
 
 
 def fill_by_page(issue_streams: dict[str, list[dict]], found: list[dict], min_words: int = 20) -> None:
@@ -2160,13 +2214,16 @@ def signed_here(lines: list[dict], language: str) -> bool:
     )
 
 
-def lend_signatures(lines: dict[str, list[dict]], spans: dict[str, list[int]]) -> None:
+def lend_signatures(
+    lines: dict[str, list[dict]], spans: dict[str, list[int]], annexes: set[int] | frozenset = frozenset()
+) -> None:
     """A signature block printed once for every language (2026-10-31: the whole last page went to the
     version whose column ran onto it, and the others ended before their signatures) goes to each
     version with its own language's offices; the version it was read in keeps what follows it. A
     version takes it only where it follows that version, on its last page or the next: one that ran on
     past its own end (a French text over the next instruments) never lends another's signatures pages
-    away. `lines` and `spans` (each version's [first, last] page) are changed in place."""
+    away; signatures printed after the instrument's annexes (`annexes`, their pages) are its own.
+    `lines` and `spans` (each version's [first, last] page) are changed in place."""
     shared = next(((lang, at) for lang in lines if (at := shared_signatures(lines[lang])) is not None), None)
     if not shared:
         return
@@ -2179,7 +2236,8 @@ def lend_signatures(lines: dict[str, list[dict]], spans: dict[str, list[int]]) -
             not any(KIGALI.match(line["text"].strip()) for line in lines[lang])
             # A version signed in its own column, its date printed once for all.
             and not signed_here(lines[lang], lang)
-            and block[0]["page"] <= spans[lang][-1] + 1
+            # Printed on its last page or the next, or after its annexes (`annexes`, their pages).
+            and all(page in annexes for page in range(spans[lang][-1] + 1, block[0]["page"]))
         ):
             lines[lang] = lines[lang] + own_signatures(block, lang)
             spans[lang][-1] = max(spans[lang][-1], block[-1]["page"])
