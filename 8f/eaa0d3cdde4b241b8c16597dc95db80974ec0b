@@ -1,0 +1,21 @@
+ingestion/prepare_job.py
+  s_d665c62e07d76f::t_09ed9d8067a118 65-78,113-114,267-268
+tests/test_ng_documents.py
+  s_d665c62e07d76f::t_048c48751486ae 338-350
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8feaa0d3cdde4b241b8c16597dc95db80974ec0b",
+  "prompts": {},
+  "sessions": {
+    "s_d665c62e07d76f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2779b40f-8b10-4bf7-ad8d-bcd2b0b52069",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Ijidai Lassa <ijidai@cued.app>"
+    }
+  }
+}
