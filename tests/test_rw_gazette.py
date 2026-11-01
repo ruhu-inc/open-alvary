@@ -1762,3 +1762,12 @@ def test_a_regulators_regulation_gives_its_number_issuer_date_enabling_laws_and_
     assert [c.split(" of ")[0] for c in values["profile.made_under"]] == ["Law Nº09/2013", "Law n°24/2016"]
     assert evidence["profile.made_under"]["page"] == 3
     assert legal["event:commenced.date"]["value"] == "2018-07-06"  # on its signature: suggested, never filled
+
+
+def test_a_title_in_sentence_case_keeps_a_word_beginning_with_no_and_a_bracketed_pair_of_acronyms():
+    """2026-11-01: "NORMALISATION" was written "n° RMALISATION", and "(ORAN/ARSO)" lost its capitals."""
+    assert (
+        RG.sentence_case("LA CONSTITUTION DE L'ORGANISATION AFRICAINE DE NORMALISATION (ORAN/ARSO)")
+        == "La constitution de l'organisation africaine de normalisation (ORAN/ARSO)"
+    )
+    assert RG.sentence_case("REGULATION NO 12/2020 ON FEES") == "Regulation n° 12/2020 on fees"

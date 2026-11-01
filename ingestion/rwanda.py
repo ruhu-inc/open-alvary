@@ -1480,7 +1480,15 @@ def prepare_selection(
                     "id": doc_id,
                     "summary": reading["summary"],
                     "type": entry["kind"],
-                    "title": rw_gazette.sentence_case(entry["versions"][language]["title"]),
+                    # A text titled from its file's name ("1977_0_1.PDF" as "0 1") takes the title it
+                    # prints in this language, as its details do (2026-11-01).
+                    "title": rw_gazette.sentence_case(
+                        (
+                            entry.get("title_from_listing")
+                            and (rw_gazette.printed_title(lines, (language,)) or [None])[0]
+                        )
+                        or entry["versions"][language]["title"]
+                    ),
                     "year": int(values["identity.year"]) if values.get("identity.year") else None,
                     "jurisdiction": "rw",
                     "language": language,

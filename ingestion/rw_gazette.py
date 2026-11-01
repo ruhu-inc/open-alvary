@@ -28,7 +28,7 @@ from schema.jurisdictions import registry
 # 2026-10-29.1: headings over two lines, more kinds, bodies known by their enacting words (orders with
 # one title kept apart), notices recorded, annexes without their instrument kept, treaties' family.
 # 2026-10-30.1: a file name's "57-2008" agrees with the printed "57/2008"; .2: evidence in the details file.
-PIPELINE = "2026-11-01.1"
+PIPELINE = "2026-11-01.2"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -1760,14 +1760,15 @@ def sentence_case(title: str) -> str:
     04/04/2018 establishing the Court of Appeal"; the number keeps its printed capitals."""
     if not title:
         return title
-    number = re.search(r"\bN\s?[°ºO]\.?\s*(\S+)", title)
+    # "N°", "Nº", "NO 12", "N o 82/03"; never the "NO" a word begins with ("NORMALISATION").
+    number = re.search(r"\bN\s?(?:[°º]|O(?![A-Za-z]))\.?\s*(\S+)", title)
     sentence = title[0] + title[1:].lower()
     for name in CITED_AS:
         if sentence.lower().startswith(name.lower() + " "):
             sentence = name + sentence[len(name) :]
             break
     sentence = re.sub(
-        r"\bn\s?[°ºo]\.?\s*(\S+)",
+        r"\bn\s?(?:[°º]|o(?![a-zà-ÿ]))\.?\s*(\S+)",
         lambda m: "n° " + (number.group(1) if number else m.group(1)),
         sentence,
         count=1,
@@ -1776,8 +1777,12 @@ def sentence_case(title: str) -> str:
         r"\b(rwanda|republic|république|repubulika)\b", lambda m: m.group(1).capitalize(), sentence
     )
     # An acronym printed in brackets keeps its capitals: "(AMA)", "(RURA)", "(EAC)".
-    acronyms = {m.group(1).lower(): m.group(1) for m in re.finditer(r"\(([A-Z]{2,8})\)", title)}
-    return re.sub(r"\(([a-z]{2,8})\)", lambda m: f"({acronyms.get(m.group(1), m.group(1))})", sentence)
+    acronyms = {
+        m.group(1).lower(): m.group(1) for m in re.finditer(r"\(([A-Z]{2,8}(?:/[A-Z]{2,8})*)\)", title)
+    }
+    return re.sub(
+        r"\(([a-z]{2,8}(?:/[a-z]{2,8})*)\)", lambda m: f"({acronyms.get(m.group(1), m.group(1))})", sentence
+    )
 
 
 # --- details read from the text ------------------------------------------------------------------------
@@ -2517,18 +2522,21 @@ def title_from_heading(text: str, language: str = "any") -> str | None:
     return title if len(title) >= 12 else None
 
 
-def printed_title(versions: dict[str, list[dict]]) -> tuple[str, int | None] | None:
+def printed_title(
+    versions: dict[str, list[dict]], languages: tuple[str, ...] = ("en", "fr", "rw")
+) -> tuple[str, int | None] | None:
     """A text's own title, where its heading was not recognised (an RLRC copy of an older text, titled
     from the file's name until 2026-10-30): its cover's title in English, else French, else
-    Kinyarwanda; else its first heading's, as title_from_heading reads it. With its page."""
-    for language in ("en", "fr", "rw"):
+    Kinyarwanda (or the `languages` given); else its first heading's, as title_from_heading reads it.
+    With its page."""
+    for language in languages:
         cover = [line for line in versions.get(language, []) if line.get("cover")]
         title = (
             next((n for n in structure(cover, language) if n["kind"] == "heading"), None) if cover else None
         )
         if title:
             return title["text"], title["page"]
-    for language in ("en", "fr", "rw"):
+    for language in languages:
         lines = [line for line in versions.get(language, [])[:80] if not line.get("cover")]
         first = (
             next((n for n in structure(lines, language) if n["kind"] == "heading"), None) if lines else None
