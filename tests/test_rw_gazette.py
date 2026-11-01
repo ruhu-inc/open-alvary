@@ -1771,3 +1771,15 @@ def test_a_title_in_sentence_case_keeps_a_word_beginning_with_no_and_a_bracketed
         == "La constitution de l'organisation africaine de normalisation (ORAN/ARSO)"
     )
     assert RG.sentence_case("REGULATION NO 12/2020 ON FEES") == "Regulation n° 12/2020 on fees"
+
+
+def test_a_title_never_takes_a_contents_lines_leaders_and_a_fragment_is_not_a_title():
+    """2026-11-01: Regulation 005/2009's French version was titled "(DUHAMIC – ADRI) » ………30", the tail
+    of a contents line, and a version found by its pages "- KOABISHI……43 - COOPEBAMU……44"."""
+    assert RG.clean_title("(DUHAMIC – ADRI) » ………………………………...30") == "(DUHAMIC – ADRI) »"
+    assert not RG.is_title(RG.clean_title("(DUHAMIC – ADRI) » ………30"))
+    assert not RG.is_title(RG.clean_title("- KOABISHI……………43 - COOPEBAMU……44"))
+    title = "REGLEMENT N° 005/2009 DU 10/12/2009 PORTANT ……… 12"
+    assert RG.clean_title(title) == "REGLEMENT N° 005/2009 DU 10/12/2009 PORTANT" and RG.is_title(
+        RG.clean_title(title)
+    )

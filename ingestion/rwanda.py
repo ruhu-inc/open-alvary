@@ -1480,15 +1480,7 @@ def prepare_selection(
                     "id": doc_id,
                     "summary": reading["summary"],
                     "type": entry["kind"],
-                    # A text titled from its file's name ("1977_0_1.PDF" as "0 1") takes the title it
-                    # prints in this language, as its details do (2026-11-01).
-                    "title": rw_gazette.sentence_case(
-                        (
-                            entry.get("title_from_listing")
-                            and (rw_gazette.printed_title(lines, (language,)) or [None])[0]
-                        )
-                        or entry["versions"][language]["title"]
-                    ),
+                    "title": document_title(entry, language, lines, values),
                     "year": int(values["identity.year"]) if values.get("identity.year") else None,
                     "jurisdiction": "rw",
                     "language": language,
@@ -1654,6 +1646,21 @@ def prepare_selection(
     if save:  # a cloud task prepares file by file and assembles the manifest once, at its end
         collection.save_manifest(manifest)
     return {"documents": len(manifest["documents"]), "instruments": summary}
+
+
+def document_title(entry: dict, language: str, lines: dict, values: dict) -> str:
+    """A document's title in its language: as its heading printed it, without a contents line's dot
+    leaders. A text titled from its file's name ("1977_0_1.PDF" as "0 1") or with a fragment for a
+    title ("(DUHAMIC – ADRI) » ……30", taken from a contents list) takes the title it prints in this
+    language, else its details' title (2026-11-01)."""
+    title = rw_gazette.clean_title(entry["versions"][language]["title"])
+    if entry.get("title_from_listing") or not rw_gazette.is_title(title):
+        printed = rw_gazette.printed_title(lines, (language,))
+        if printed and rw_gazette.is_title(rw_gazette.clean_title(printed[0])):
+            title = rw_gazette.clean_title(printed[0])
+        elif not rw_gazette.is_title(title) and values.get("identity.title"):
+            return values["identity.title"]
+    return rw_gazette.sentence_case(title)
 
 
 def listing_title(name: str) -> str:

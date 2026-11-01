@@ -9,17 +9,26 @@ but keeps every letter, digit and bracket.
 import difflib
 import re
 import unicodedata
+from collections import Counter
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
 
 TOKEN = re.compile(r"\S+")
 QUOTES = str.maketrans({"“": '"', "”": '"', "‘": "'", "’": "'", "–": "—", "―": "—"})
+# Greek and Cyrillic letters an OCR returns for the Latin ones they look like ("ΚΑΝΟ", "N480Μ"): read
+# as Latin for comparing, never in the text (2026-11-01: Nigeria's check reading flagged them).
+LOOK_ALIKES = str.maketrans(
+    "ΑΒΕΖΗΙΚΜΝΟΡΤΥΧοΑВЕКМНОРСТХаеорсух",
+    "ABEZHIKMNOPTYXoABEKMHOPCTXaeopcyx",
+)
 LEADERS = re.compile(r"\.{2,}|…+")
 NUMBERISH = re.compile(r"\d|^\(?[a-z]{1,2}\)$|^\(?[ivxl]{1,6}\)$")
 LOOSE = re.compile(r"[^0-9a-z]+")
 
 
 DASH = re.compile(r"^-{1,4}$")
+WORD_HYPHEN = re.compile(r"(?<=[^\W\d_])-(?=[^\W\d_])")  # a hyphen between letters
+LINE_END_HYPHEN = re.compile(r"(?<=[^\W\d_])-\s+(?=[^\W\d_])")  # "Commence- ment" broken over a line
 
 
 FILLER = re.compile(r"^[.…_·•]+$")  # dot leaders and blank fill-in lines: printed, never words
@@ -34,12 +43,15 @@ NEGATIONS = frozenset(
 
 def key(token: str) -> str:
     """Comparison key for one rendered token: typography folded, case kept; "" means ignore it."""
-    token = unicodedata.normalize("NFKC", token).translate(QUOTES).replace("₦", "N")  # Naira sign read as N
+    token = unicodedata.normalize("NFKC", token).translate(QUOTES).translate(LOOK_ALIKES)
+    token = token.replace("₦", "N").replace("₩", "N")  # the naira sign, read as "N" or by an OCR as "₩"
     if DASH.match(token):
         return "—"  # readers write a printed dash as -, -- or ---
     if FILLER.match(token):
         return ""
-    return LEADERS.sub("", token)
+    return WORD_HYPHEN.sub(
+        "", LEADERS.sub("", token)
+    )  # "Appropria-tion" as one reader keeps a line-end hyphen
 
 
 def loose(token: str) -> str:
@@ -93,12 +105,15 @@ def _contains(haystack: list[str], needle: list[str]) -> bool:
     return size > 0 and any(haystack[i : i + size] == needle for i in range(len(haystack) - size + 1))
 
 
-def compare(primary: str, checks: dict[str, str]) -> list[Flag]:
+def compare(primary: str, checks: dict[str, str], furniture: str = "") -> list[Flag]:
     """Flag primary tokens that the independent check readings do not support.
 
     A span is flagged when every check reading disagrees with it; when the checks split, the
-    span is flagged one level lower and names the readers that disagree.
+    span is flagged one level lower and names the readers that disagree. `furniture` is the page's
+    running heads and page numbers, which the primary sets apart from its text and a check reading
+    reads in it: words of it a check reading has are never missing from the primary.
     """
+    checks = {name: LINE_END_HYPHEN.sub("", text) for name, text in checks.items()}
     tokens = TOKEN.findall(primary)
     keys = [key(t).lower() for t in tokens]
     # Fillers (dot leaders, blank lines) take part in nothing: compare only real words.
@@ -123,6 +138,19 @@ def compare(primary: str, checks: dict[str, str]) -> list[Flag]:
                 replaced[name][at(i1)] = " ".join(other[j1:j2])
             elif tag == "insert":
                 missing[name][at(i1)] = " ".join(other[j1:j2])
+    # A word a reading has on the page as often as the other does is the same word placed elsewhere: a
+    # table one reader took by rows and the other by columns (2026-11-01: each such number was flagged
+    # high twice, once missing from one reading and once only in the other).
+    primary_count = Counter(keys[i] for i in real) + Counter(
+        k for k in (key(t).lower() for t in TOKEN.findall(furniture)) if k
+    )
+    check_count = {name: Counter(found) for name, found in other_keys.items()}
+
+    def placed_elsewhere(name: str, ours: list[str], theirs: str) -> bool:
+        return all(check_count[name][k] >= primary_count[k] for k in ours if k) and all(
+            primary_count[k] >= check_count[name][k] for k in (key(t).lower() for t in theirs.split()) if k
+        )
+
     flags, i, names = [], 0, list(checks)
     while i < len(tokens):
         if not disagree[i]:
@@ -134,6 +162,9 @@ def compare(primary: str, checks: dict[str, str]) -> list[Flag]:
         span = tokens[start:i]
         seen = {n: replaced[n].get(start, "") for n in names if n in who}
         kind = "differs" if any(seen.values()) else "only_in_primary"
+        if all(placed_elsewhere(n, keys[start:i], seen.get(n, "")) for n in who):
+            flags.append(Flag("low", "moved", " ".join(span), seen, (start, i), sorted(who)))
+            continue
         if (
             kind == "only_in_primary"
             and len(span) >= 2
@@ -152,6 +183,8 @@ def compare(primary: str, checks: dict[str, str]) -> list[Flag]:
         seen = {n: missing[n][position] for n in names if position in missing[n]}
         if len(seen) < len(names):
             continue  # only one check reading has extra words here: too weak to flag
+        if all(placed_elsewhere(n, [], v) for n, v in seen.items()):
+            continue  # the primary has these words as often, elsewhere on the page: moved
         if all(
             len(v.split()) >= 2 and _contains(keys, [key(t).lower() for t in v.split()])
             for v in seen.values()

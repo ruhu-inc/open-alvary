@@ -675,3 +675,33 @@ def test_a_note_goes_to_the_provision_with_the_same_numbers_when_openings_repeat
     assert owner["text"].startswith("4. (1)") and owner["notes"] == [
         "Periodic review of the National Integrated Electricity Policy"
     ]
+
+
+def test_a_word_both_readings_have_elsewhere_on_the_page_is_moved_not_missing_and_extra():
+    """2026-11-01: a Nigerian appropriation table read by rows in one reading and by columns in the other
+    gave each number two high flags, missing from one and only in the other (12,230 in one Act)."""
+    from ingestion.compare import compare
+
+    flags = compare(
+        "051000017180000 051000017190000 Solar boreholes",
+        {"ocr": "Solar boreholes 051000017190000 051000017180000"},
+    )
+    assert {f.severity for f in flags} <= {"low"} and all(f.kind == "moved" for f in flags)
+
+
+def test_look_alike_letters_line_end_hyphens_the_won_sign_and_page_furniture_are_not_disagreements():
+    from ingestion.compare import compare
+
+    # Greek capitals an OCR returns for Latin ones, and the naira sign read as the won sign.
+    assert compare("KWARA (N180M), KANO ₦1,327,550", {"ocr": "KWARA (N180Μ), ΚΑΝΟ ₩1,327,550"}) == []
+    # A word one reading breaks over the line with a hyphen.
+    assert compare("Commencement. Appropria-tion Act", {"ocr": "Commence- ment. Appropria- tion Act"}) == []
+    # The running head and page number the primary sets apart, which the check reading reads in.
+    text = "The appeal is allowed."
+    assert (
+        compare(text, {"ocr": "SC.CV.132.2026 The appeal is allowed. -1-"}, furniture="SC.CV.132.2026 -1-")
+        == []
+    )
+    # A number that truly differs is still flagged high.
+    (flag,) = compare("The sum of N1,500", {"ocr": "The sum of N1,800"})
+    assert flag.severity == "high" and flag.kind == "differs"

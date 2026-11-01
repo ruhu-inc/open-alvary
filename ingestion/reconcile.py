@@ -52,7 +52,8 @@ def reconcile_page(primary: dict, checks: dict[str, dict]) -> dict:
         elif seen:
             conflicts.append(Flag("high", "marker_conflict", node["text"][:120], seen, (0, 0), sorted(seen)))
     text = layout_parser.page_text(nodes, page)
-    flags = conflicts + compare(text, {name: reading["text"] for name, reading in checks.items()})
+    furniture = " ".join(f if isinstance(f, str) else f.get("text", "") for f in primary.get("furniture", []))
+    flags = conflicts + compare(text, {name: reading["text"] for name, reading in checks.items()}, furniture)
     return {
         "page": page,
         "nodes": nodes,

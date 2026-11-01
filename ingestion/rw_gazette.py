@@ -28,7 +28,7 @@ from schema.jurisdictions import registry
 # 2026-10-29.1: headings over two lines, more kinds, bodies known by their enacting words (orders with
 # one title kept apart), notices recorded, annexes without their instrument kept, treaties' family.
 # 2026-10-30.1: a file name's "57-2008" agrees with the printed "57/2008"; .2: evidence in the details file.
-PIPELINE = "2026-11-01.2"
+PIPELINE = "2026-11-01.3"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -1073,7 +1073,12 @@ def fill_by_page(issue_streams: dict[str, list[dict]], found: list[dict], min_wo
             best = max(candidates, default=(0, None))
             if best[0] <= 0:
                 continue
-            heading = [line["text"].strip() for line in run[:6] if _capitals(line["text"])][:4]
+            # Its title from its own capitals, never a contents line's ("- KOABISHI……43").
+            heading = [
+                line["text"].strip()
+                for line in run[:6]
+                if _capitals(line["text"]) and not LEADERS_TO_PAGE.search(line["text"])
+            ][:4]
             found[best[1]]["versions"][language] = {
                 "title": " ".join(heading)
                 or found[best[1]]["versions"][next(iter(found[best[1]]["versions"]))]["title"],
@@ -2520,6 +2525,20 @@ def title_from_heading(text: str, language: str = "any") -> str | None:
             break
     title = " ".join(out).strip(" .,;:—-")
     return title if len(title) >= 12 else None
+
+
+# A contents line's dot leaders and page number: "(DUHAMIC – ADRI) » ………………… 30".
+LEADERS_TO_PAGE = re.compile(r"\s*(?:…{2,}|\.{4,}|(?:\.\s){3,}).*$")
+
+
+def clean_title(text: str) -> str:
+    """A title without a contents line's dot leaders and what follows them."""
+    return LEADERS_TO_PAGE.sub("", " ".join((text or "").split())).strip(" -–—")
+
+
+def is_title(text: str) -> bool:
+    """Whether a title reads as one: it begins with a word, and is more than a fragment."""
+    return bool(re.match(r"^[^\W_]", text or "")) and len(text) >= 12
 
 
 def printed_title(
