@@ -248,6 +248,7 @@ def create_app(
     profiles = jurisdiction_registry()
     review = Review(store, library, profiles)
     details_key, described, built, state = review.details_key, review.described, review.built, review.state
+    shown_title = review.shown_title
 
     def document_summary(document: dict) -> dict:
         now = state(library.act(document["id"]))
@@ -260,6 +261,7 @@ def create_app(
         return with_status(
             {
                 **listed(document),
+                "title": shown_title(document),
                 "pages": 0 if held else ready["pages"],
                 "checked": 0
                 if held
@@ -543,7 +545,11 @@ def create_app(
             )
         provenance = library.provenance(act_id)
         return {
-            "act": {**act, "rights_basis": library.manifest_for(act_id).get("rights_basis", "")},
+            "act": {
+                **act,
+                "title": shown_title(act),
+                "rights_basis": library.manifest_for(act_id).get("rights_basis", ""),
+            },
             "standing": standing(act),
             "readers": {"primary": reading["primary"], "checks": reading["checks"]},
             "pages": pages,

@@ -1111,10 +1111,10 @@ function rowsEditor(columns, rows, onChange, { suggested = {}, pageLink = null, 
         ...columns.map((column) => {
           let cell;
           if (column.choices && column.choices.length) {
-            cell = el("select", { title: column.label, on: { change: () => { row[column.key] = cell.value; onChange(rows); if (suggested[column.key]) draw(); } } },
+            cell = el("select", { title: column.label, "data-key": column.key, on: { change: () => { row[column.key] = cell.value; onChange(rows); if (suggested[column.key]) draw(); } } },
               el("option", { value: "", text: column.label }), column.choices.map((c) => el("option", { value: c.value, text: c.label })));
           } else {
-            cell = el("input", { type: column.kind === "date" ? "date" : "text", placeholder: column.label, title: column.label,
+            cell = el("input", { type: column.kind === "date" ? "date" : "text", placeholder: column.label, title: column.label, "data-key": column.key,
               on: { input: () => { row[column.key] = cell.value; onChange(rows); } } });
           }
           cell.value = row[column.key] || "";

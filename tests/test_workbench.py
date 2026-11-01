@@ -1072,7 +1072,9 @@ def test_a_nigerian_first_draft_leaves_the_legal_facts_to_the_reviewer(world):
     reviewer = signed_in(world, "reviewer@example.org")
     shown = reviewer.get(f"/api/documents/{ACT}/details").json()
     draft, absent = shown["record"]["details"], shown["record"]["absent"]
-    assert draft["expressions"] == [{"language": "en", "direction": "ltr", "this_text": "yes"}]  # unknown
+    assert [{k: v for k, v in row.items() if k != "title"} for row in draft["expressions"]] == [
+        {"language": "en", "direction": "ltr", "this_text": "yes"}
+    ]  # its authority unknown; its title the one it was prepared with
     assert draft["status.legal"] == "unknown"  # not yet checked, which states nothing
     # The reader found no commencement date; it suggests "not stated in this copy" but does not say so for you.
     assert "step:commenced.date" not in draft and "step:commenced.date" not in absent
@@ -1744,3 +1746,20 @@ def test_the_first_collection_can_live_in_the_store_and_is_mirrored_whole(tmp_pa
     content.trim_cache()
     assert not other.exists()
     assert (library.staging / "review-images" / ACT / "page-1.jpg").is_file()
+
+
+def test_a_versions_title_is_given_in_the_details_and_heads_the_document(world):
+    """2026-11-01: a title the reader took from a file's name ("0 1") headed the document and could not
+    be put right. Each version's title is shown in the details, as prepared, and the one given there
+    heads its document and lists it."""
+    reviewer = signed_in(world, "reviewer@example.org")
+    current = reviewer.get(f"/api/documents/{ACT}/details").json()
+    prepared = reviewer.get(f"/api/documents/{ACT}").json()["act"]["title"]
+    (row,) = [r for r in current["record"]["details"]["expressions"] if r["language"] == "en"]
+    assert row["title"] == prepared  # shown as the document was prepared with it
+    titled = [{**row, "title": "The Data Protection Act, 2023"}]
+    assert confirm_details(reviewer, expressions=titled).json() == {"revision": 1}
+    assert reviewer.get(f"/api/documents/{ACT}").json()["act"]["title"] == "The Data Protection Act, 2023"
+    listed = reviewer.get("/api/documents", params={"q": ACT}).json()
+    rows = listed.get("documents") or listed.get("items") or listed.get("rows") or []
+    assert [d["title"] for d in rows if d["id"] == ACT] == ["The Data Protection Act, 2023"]

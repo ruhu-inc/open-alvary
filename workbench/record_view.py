@@ -533,6 +533,9 @@ def fields(family: str, kind: str, profile: JurisdictionProfile | None) -> list[
             required=True,
             columns=(
                 {"key": "language", "label": "Language (BCP 47)", "kind": "text"},
+                # The version's own title, as the workbench heads it (2026-11-01: a title the reader took
+                # from a file's name, "0 1", could not be put right).
+                {"key": "title", "label": "Title of this version", "kind": "text"},
                 {"key": "script", "label": "Script", "kind": "text"},
                 {"key": "direction", "label": "Direction", "kind": "choice", "choices": ("ltr", "rtl")},
                 {

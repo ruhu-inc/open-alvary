@@ -324,6 +324,8 @@ ul.plain li:first-child { border-top: 0; }
 }
 .rows-editor .row-line { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .35rem; }
 .rows-editor .row-line input, .rows-editor .row-line select { flex: 1 1 8rem; min-width: 0; }
+/* A language version's title is long: it heads its block on a line of its own. */
+.rows-editor .row-line [data-key="title"] { order: -1; flex-basis: 100%; }
 .rows-editor .row-suggestion { margin: -.1rem 0 .55rem; }
 
 /* A law's language versions side by side. */

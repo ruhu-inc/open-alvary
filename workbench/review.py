@@ -31,6 +31,27 @@ class Review:
         texts of one law), or the document itself."""
         return document.get("work") or document["id"]
 
+    def version_title(self, act: dict, language: str | None) -> str:
+        """The title a language version of this work was prepared with ("" where it has none here)."""
+        # A document that names no language and no other versions (a Nigerian Act) is its one version.
+        if language and (language == act.get("language") or not (act.get("language") or act.get("versions"))):
+            return act.get("title") or ""
+        other = (act.get("versions") or {}).get(language or "")
+        return self.library.listed(other).get("title", "") if other and self.library.has(other) else ""
+
+    def shown_title(self, act: dict) -> str:
+        """A document's title as the workbench heads and lists it: its version's title given in the
+        details, else the title it was prepared with."""
+        record = self.store.latest_details(self.details_key(act))
+        rows = [
+            r for r in ((record or {}).get("details") or {}).get("expressions") or [] if isinstance(r, dict)
+        ]
+        language = act.get("language") or (rows[0].get("language") if len(rows) == 1 else None)
+        given = next(
+            ((row.get("title") or "").strip() for row in rows if row.get("language") == language), ""
+        )
+        return given or act.get("title") or act["id"]
+
     def described(self, act: dict, record: dict | None, reading: dict) -> dict:
         """The document's details in the record view: values, what is accounted for, its fields."""
         place, profile = record_view.place_for(act, self.library.manifest_for(act["id"]), self.profiles)
@@ -50,6 +71,16 @@ class Review:
             values = record_view.base_values(act, self.library.manifest_for(act["id"]))
             shown = record_view.fields(values["identity.family"], values["identity.type"], profile)
             absent = record_view.first_absent(values, {spec.key for spec in shown})
+        if isinstance(values.get("expressions"), list):
+            # Each version's title, where none was given: the title its document was prepared with.
+            values = {
+                **values,
+                "expressions": [
+                    {**row, **({"title": title} if title else {})}
+                    for row in values["expressions"]
+                    for title in [row.get("title") or self.version_title(act, row.get("language"))]
+                ],
+            }
         if act.get("language") and isinstance(values.get("expressions"), list):
             # One record for the work; each language version is "this text" on its own page.
             values = {
