@@ -45,6 +45,15 @@ def main(argv=None) -> int:
     carry.add_argument(
         "--apply", action="store_true", help="write them; without it, only list what would carry"
     )
+    unchanged = sub.add_parser(
+        "carry-unchanged",
+        help="page checks kept where only a page's flags changed, its text the same and no medium or "
+        "high flag new",
+    )
+    unchanged.add_argument("previous", help="the copy the checks were made in: <place>[:<place>…]")
+    unchanged.add_argument(
+        "--apply", action="store_true", help="write them; without it, only list what would carry"
+    )
     args = parser.parse_args(argv)
     settings.load()
     store = Store(engine_from_environment())
@@ -71,6 +80,15 @@ def main(argv=None) -> int:
 
         found = impact.carry(store, content.Library(), args.old, args.new, apply=args.apply)
         print(json.dumps({"old": args.old, "new": args.new, "applied": args.apply, **found}))
+    elif args.action == "carry-unchanged":
+        import json
+
+        from workbench import impact
+
+        library, previous = impact.libraries(args.previous)
+        found = impact.carry_unchanged(store, previous, library, apply=args.apply)
+        counts = {kind: sum(map(len, pages.values())) for kind, pages in found.items()}
+        print(json.dumps({"previous": args.previous, "applied": args.apply, "pages": counts, **found}))
     elif args.action == "enrol":
         if args.replace:
             for key in store.passkeys(args.email.strip().lower()):

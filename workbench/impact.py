@@ -124,6 +124,51 @@ def libraries(places: str) -> tuple[content.Library, content.Library]:
             os.environ["ALVARY_REVIEW_COLLECTIONS"] = saved
 
 
+def carry_unchanged(store, previous: content.Library, library: content.Library, apply: bool = False) -> dict:
+    """Page checks kept where a newly prepared copy changed only a page's flags (owner, 2026-11-01: the
+    comparison of readings stopped flagging words both readings have elsewhere on the page, and 89
+    checked Nigerian pages whose text had not changed were to be checked again). A check is kept where
+    it was made on the page as the previous copy reads it, the page's text reads exactly the same now,
+    and none of its medium or high flags is new; its resolutions are kept for the flags it still has.
+    Nothing is written unless `apply`. Returns the pages, by document, carried and held (text changed,
+    a medium or high flag new, or checked on a reading older than the previous copy's)."""
+    out: dict = {"carried": {}, "text_changed": {}, "new_flags": {}, "not_as_checked": {}}
+    for act_id in sorted(reviewed(store)["pages"]):
+        if not library.has(act_id) or not previous.has(act_id):
+            continue  # a document gone or renamed: impact names it, carry moves its checks
+        now = {page["page"]: page for page in library.reading(act_id)["pages"]}
+        then = {page["page"]: page for page in previous.reading(act_id)["pages"]}
+        for number, revision in sorted(store.latest_pages(act_id).items()):
+            page, before = now.get(number), then.get(number)
+            if page is None or content.reading_sha256(page) == revision["reading_sha256"]:
+                continue  # no longer in the document, or its check stands
+            flags = content.page_flags(page)
+            if before is None or content.reading_sha256(before) != revision["reading_sha256"]:
+                kind = "not_as_checked"
+            elif content.canonical_json(page["nodes"]) != content.canonical_json(before["nodes"]):
+                kind = "text_changed"
+            else:
+                had = {flag["id"] for flag in content.page_flags(before)}
+                serious = [f for f in flags if f["severity"] in ("medium", "high") and f["id"] not in had]
+                kind = "new_flags" if serious else "carried"
+            out[kind].setdefault(act_id, []).append(number)
+            if kind == "carried" and apply:
+                kept = {flag["id"] for flag in flags}
+                note = f"Carried over: page {number} reads the same; only its flags changed."
+                store.save_page(
+                    act_id,
+                    number,
+                    revision["revision"],
+                    revision["author"],
+                    reading_sha256=content.reading_sha256(page),
+                    units=revision["units"],
+                    status=revision["status"],
+                    resolutions={k: v for k, v in revision["resolutions"].items() if k in kept},
+                    comment=" ".join(filter(None, [note, revision.get("comment")])),
+                )
+    return out
+
+
 def carry(store, library: content.Library, old: str, new: str, apply: bool = False) -> dict:
     """A document's page checks carried to the document that holds its pages now, renamed by a corrected
     reading (2026-11-01: RURA's Regulation 001/R/STD-CMR/RURA/018, its number read whole), where a page
