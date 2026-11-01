@@ -877,11 +877,16 @@ def _printing_dates(docs: list[dict]) -> set[str]:
 
 def _same_instrument(one: list[dict], other: list[dict]) -> bool:
     """Two printings of a work are one instrument unless their dates differ or their titles share
-    too few words (compared in a language both have, English first)."""
+    too few words (compared in a language both have, English first). The titles compared are those
+    that date them: printed titles of one form ("Ordonnance n° 441/77 … rendant exécutoire … modifiant
+    l'ordonnance n° 41/291 …", and n° 441/83 the same) made different instruments one (2026-11-01)."""
     first, second = _printing_dates(one), _printing_dates(other)
     if first and second and not first & second:
         return False
-    titles = [{d.get("language"): d.get("title") for d in docs if not d.get("part")} for docs in (one, other)]
+    titles = [
+        {d.get("language"): d.get("heading_title") or d.get("title") for d in docs if not d.get("part")}
+        for docs in (one, other)
+    ]
     common = [lang for lang in ("en", "fr", "rw") if lang in titles[0] and lang in titles[1]]
     if not common:
         return True  # nothing to compare: the number and year decide, as before

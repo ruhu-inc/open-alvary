@@ -1307,3 +1307,42 @@ def test_shared_number_instruments_keep_their_ids_when_their_printed_title_repla
     second = printing("b" * 64, "Ord. n0 111 du 30.6.1959 transports", "Ordonnance n° 111 du 30 juin 1959")
     out, _ = rwanda.separate_instruments([first, second])
     assert sorted(d["id"] for d in out) == ["rw-ordinance-111-1959-06-30-fr", "rw-ordinance-111-fr"]
+
+
+def test_shared_number_instruments_whose_printed_titles_read_alike_stay_apart():
+    """2026-11-01: ordinances n° 441/83 (hotels, 1959), 441/77 (hotels, 1960) and 441/206 (hides) each
+    print "rendant exécutoire au Ruanda-Urundi l'ordonnance n° 41/… modifiant l'ordonnance …": compared
+    by those titles they were taken for one instrument and two of them dropped from the manifest. Their
+    files' titles tell them apart, as before, and keep their ids."""
+
+    def printing(key, listed, printed):
+        return {"id": "rw-ordinance-441-fr", "work": "rw-ordinance-441", "objects": f"files/{key}/",
+                "title": printed, "heading_title": listed, "language": "fr"}  # fmt: skip
+
+    hotels = printing(
+        "a" * 64,
+        "Ordonnance n0 441 83 15 mai 1959 exploitation hotels restaurants-pensions familiales n0 10 31.5.1959",
+        "Ordonnance n° 441/83 du 15 mai 1959 rendant executoire au Ruanda-Urundi l'ordonnance n° 41/78 du "
+        "14 fevrier 1959 modifiant l'ordonnance n° 41/291 du 2 septembre 1955 relative a l'exploitation "
+        "des hotels, restaurants, pensions de famille et debits de boissons",
+    )
+    later = printing(
+        "b" * 64,
+        "Ordonnance n0 441 77 15 mars 1960 exploitation hotel restautents pension familiale debit boissons",
+        "Ordonnance n° 441/77 du 15 mars 1960 rendant executoire au Ruanda-Urundi l'ordonnance n° 41/613 du "
+        "10 decembre 1959 modifiant l'ordonnance n° 41/291 du 2 septembre 1955 relative l'exploitation "
+        "des hotels, restaurants, pensions de famille et debits de boissons",
+    )
+    hides = printing(
+        "c" * 64,
+        "Ordonnance n0 441 206 du 26 octobre 1959-exportation peaux de bovins b.o.r.u. n0 20 30.10.1959",
+        "Ordonnance n° 441/206 du 26 octobre 1959 rendant executoire au Ruanda-Urundi l'ordonnance n° 41/416 "
+        "du 21 aout 1959 modifiant l'ordonnance n° 119/A.E. du 18 aout 1938 sur l'exportation des peaux",
+    )
+    out, _ = rwanda.separate_instruments([later, hides, hotels])
+    assert sorted(d["id"] for d in out) == [
+        "rw-ordinance-441-1959-10-30-fr",
+        "rw-ordinance-441-bbbbbb-fr",
+        "rw-ordinance-441-fr",
+    ]
+    assert len(rwanda.one_per_id(out)) == 3
