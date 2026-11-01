@@ -28,7 +28,7 @@ from schema.jurisdictions import registry
 # 2026-10-29.1: headings over two lines, more kinds, bodies known by their enacting words (orders with
 # one title kept apart), notices recorded, annexes without their instrument kept, treaties' family.
 # 2026-10-30.1: a file name's "57-2008" agrees with the printed "57/2008"; .2: evidence in the details file.
-PIPELINE = "2026-10-31.5"
+PIPELINE = "2026-11-01.1"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -859,6 +859,10 @@ def openings(lines: list[dict], language: str) -> list[dict]:
         )
         date = _plain_date(opening) or spoken_date(opening)
         number = _instrument_number(match.group(2) or "") if match else "constitution"
+        if number.endswith("-"):  # broken over the line at its hyphen: "N°001/R/STD-" / "CMR/RURA/018 OF …"
+            more = re.search(re.escape(number) + r"\s+([A-Z0-9][\w./-]*)", title)
+            if more:
+                number += more.group(1).rstrip(".,;:")
         if not number:
             # An older law known by its date: the date is its key across the languages.
             if not date:
@@ -1816,7 +1820,7 @@ SITTING = {
 # "Kigali, on27/7/2015". Without its comma it opens its line, so a preamble's "signed in Kigali on
 # 12/05/2010" is never taken for it (2026-10-30: only "Kigali, on …" was read, 1,032 works unsigned).
 KIGALI = re.compile(
-    r"(?:Kigali\s*,\s*|^\s*Kigali\s+(?=on|le|ku))(?:on|le|kuwa|ku\s+wa)?\s*"
+    r"(?:Kigali\s*,\s*|^\s*(?:(?:Done\s+at|Fait\s+[àa]|Bikorewe\s+i)\s+)?Kigali\s+(?=on|le|ku))(?:on|le|kuwa|ku\s+wa)?\s*"
     r"(\d{1,2})\s*/\s*(\d{1,2})\s*/\s*((?:19|20)\d\d)",
     re.I | re.M,
 )
@@ -1828,15 +1832,15 @@ ADOPTED_BY = re.compile(r"\b(?:THE\s+)?([A-Z]+(?:\s+[A-Z]+){0,4})\s+HA[SD]\s+ADO
 # teka ritangira gukurikizwa umunsi ryatangarijweho mu Igazeti"; or of its signature, "… ku munsi
 # rishyiriweho umukono".
 IN_FORCE_ON_PUBLICATION = re.compile(
-    r"(?:comes|shall come|enters|shall enter) into force on the (?:date|day) of its publication"
+    r"(?:comes|come|shall come|enters|shall enter) into force on the (?:date|day) of (?:its|their) publication"
     r"|entre(?:ra)? en vigueur (?:le jour|[àa] la date|au jour) de sa publication"
-    r"|gukurikizwa\s+(?:ku\s+)?u?munsi\s+r[iy]a?tangarij[wy]e(?:ho)?",
+    r"|gukurikizwa\s+(?:ku\s+)?u?munsi\s+\w*tangarij[wy]e(?:ho)?",
     re.I,
 )
 IN_FORCE_ON_SIGNATURE = re.compile(
-    r"(?:comes|shall come|enters|shall enter) into force on the (?:date|day) of its signature"
+    r"(?:comes|come|shall come|enters|shall enter) into force on the (?:date|day) of (?:its|their) signature"
     r"|entre(?:ra)? en vigueur (?:le jour|[àa] la date|au jour) de sa signature"
-    r"|gukurikizwa\s+(?:ku\s+)?u?munsi\s+r[iy]a?shyiriweho\s+umukono",
+    r"|gukurikizwa\s+(?:ku\s+)?u?munsi\s+\w*shyiriweho\s+umukono",
     re.I,
 )
 # --- what an instrument does to the earlier ones it names --------------------------------------------
@@ -2558,15 +2562,34 @@ ISSUER = {
 }
 
 
+# A regulator, a board or a bank that issues its own instruments, its opening a line of its name alone:
+# "The Regulatory Board;" (RURA), "The National Bank of Rwanda,", "Le Conseil de Régulation ;", "Inama
+# Ngenzuramikorere;" (2026-11-01: none was read, and their regulations had no issuer or maker).
+BODY_ISSUER = {
+    "en": re.compile(
+        r"^(?:The\s+)?((?:[A-Z][\w’'-]*\s+){0,5}(?:Board|Council|Bank|Authority|Commission|Committee)"
+        r"(?:\s+of\s+[^,;:]{3,60})?)\s*[,;:]?$"
+    ),
+    "fr": re.compile(
+        r"^(?:Le|La|L[’'])\s*((?:Conseil|Banque|Autorit[ée]|Commission|Comit[ée])\b[^,;:]{0,70})\s*[,;:]?$"
+    ),
+    "rw": re.compile(r"^((?:Inama|Banki|Ikigo|Urwego|Komisiyo)\b[^,;:]{0,70})\s*[,;:]?$"),
+}
+
+
 def issuer(versions: dict[str, list[dict]]) -> dict | None:
     """The office an order's opening names, in English, else French, else Kinyarwanda: {value, page,
-    words}, from the first paragraphs before its articles."""
+    words}, from the paragraphs before its first article; or the body a regulation's opening names in a
+    paragraph of its own."""
     for language in ("en", "fr", "rw"):
         pattern = ISSUER[language]
-        for node in versions_nodes(versions.get(language, [])[:120], language)[:25]:
+        for node in versions_nodes(versions.get(language, [])[:600], language):
+            if node["kind"] == "heading" and node.get("article"):
+                break  # its opening is before its first article, however long its contents list
             if node["kind"] != "paragraph":
                 continue
-            found = pattern.match(" ".join(node["text"].split()))
+            words = " ".join(node["text"].split())
+            found = pattern.match(words) or (BODY_ISSUER[language].match(words) if len(words) <= 90 else None)
             if found:
                 return {"value": found.group(1).strip(), "page": node["page"], "words": found.group(0)}
     return None
@@ -2724,6 +2747,25 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
         for language in ("en", *[k for k in versions if k != "en"]):
             for step, person in signatories([line["text"] for line in versions.get(language, [])]).items():
                 values.setdefault(f"step:{step}.person", person)
+    if values["identity.family"] == "subsidiary_legislation":
+        # The law it is made under, as its preamble prints it ("Pursuant to Law Nº09/2013 of 01/03/2013
+        # establishing …"): a citation printed, filled in with its words (2026-11-01: 321 regulations
+        # had none), the link it makes kept apart as a suggestion (relations).
+        under, page, words = [], None, ""
+        for node in worded:
+            text = " ".join(node["text"].split())
+            for basis in MADE_UNDER.finditer(text):
+                cited = CITED.match(text, basis.end())
+                if cited:
+                    clause = shortened(text[cited.start() :].split(";")[0], 300)
+                    if clause not in under:
+                        under.append(clause)
+                        page, words = page or node["page"], words or text[basis.start() : basis.start() + 300]
+            if under and node["kind"] == "paragraph" and not MADE_UNDER.search(text):
+                break
+        if under:
+            values["profile.made_under"] = under[:5]
+            said("profile.made_under", values["profile.made_under"], page, words)
     if "issued_by" not in values and entry["kind"] not in ("law", "organic_law", "constitution"):
         # No signatures read: the office its opening names, as printed.
         opening = issuer(versions)

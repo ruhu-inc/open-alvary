@@ -1731,3 +1731,34 @@ def test_a_version_is_not_cut_for_the_same_text_read_again_or_one_found_in_a_sin
     ]
     RG.cut_runons(streams, found)
     assert found[0]["versions"]["en"]["end"] == 3 and "cut_by_page" not in found[0]["versions"]["en"]
+
+
+def test_a_regulators_regulation_gives_its_number_issuer_date_enabling_laws_and_commencement():
+    """2026-11-01: RURA's Regulation N°001/R/STD-CMR/RURA/018 had its number cut at the line break
+    after "STD-" (its French version, printed on one line, became another work), and no issuer, maker,
+    date made, enabling law or commencement read: each printed in a form not yet known."""
+
+    def line(text, page, k):
+        return {"text": text, "page": page, "x0": 0, "x1": 300, "y0": 30 * k, "y1": 30 * k + 10}
+
+    printed = [
+        "REGULATION N°001/R/STD-", "CMR/RURA/018 OF 06/07/2018", "GOVERNING UNSOLICITED", "COMMERCIAL COMMUNICATIONS",
+        "The Regulatory Board;",
+        "Pursuant to Law Nº09/2013 of 01/03/2013 establishing Rwanda Utilities Regulatory Authority (RURA);",
+        "Pursuant to Law n°24/2016 of 18/06/2016 governing information and communication technologies;",
+        "ADOPTS THE FOLLOWING REGULATION:", "Article One: Purpose of this regulation", "This regulation governs messages.",
+        "This regulation shall come into force on the date of their signature by the Chairperson of the Regulatory Board.",
+        "Done at Kigali on 06/07/2018",
+    ]  # fmt: skip
+    # The title on its page; the opening, after the contents list, on the next.
+    stream = [line(t, 2 if k < 4 else 3 if k < 9 else 24, k) for k, t in enumerate(printed)]
+    (entry,) = [
+        e for e in RG.instruments({"en": stream, "rw": [], "fr": []}) if e["number"].startswith("001")
+    ]
+    assert entry["number"] == "001/R/STD-CMR/RURA/018"
+    values, legal, _, evidence = RG.suggest({"en": stream}, entry, {"date": "2018-07-30"})
+    assert values["issued_by"] == values["profile.maker"] == "Regulatory Board"
+    assert values["event:made.date"] == "2018-07-06"
+    assert [c.split(" of ")[0] for c in values["profile.made_under"]] == ["Law Nº09/2013", "Law n°24/2016"]
+    assert evidence["profile.made_under"]["page"] == 3
+    assert legal["event:commenced.date"]["value"] == "2018-07-06"  # on its signature: suggested, never filled
