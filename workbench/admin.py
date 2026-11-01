@@ -36,6 +36,15 @@ def main(argv=None) -> int:
         "impact", help="what a newly prepared copy of the collections would do to review work"
     )
     impact.add_argument("places", help="the new copy's collections, as ALVARY_REVIEW_COLLECTIONS names them")
+    carry = sub.add_parser(
+        "carry",
+        help="a renamed document's page checks carried to its successor, where its pages read the same",
+    )
+    carry.add_argument("old", help="the document's id before it was renamed")
+    carry.add_argument("new", help="its id now, in the collections the workbench reads")
+    carry.add_argument(
+        "--apply", action="store_true", help="write them; without it, only list what would carry"
+    )
     args = parser.parse_args(argv)
     settings.load()
     store = Store(engine_from_environment())
@@ -55,6 +64,13 @@ def main(argv=None) -> int:
         for key in ("documents_gone", "changed", "approvals_lapsing", "details_orphaned"):
             for row in found[key]:
                 print(json.dumps({key: row}, ensure_ascii=False))
+    elif args.action == "carry":
+        import json
+
+        from workbench import content, impact
+
+        found = impact.carry(store, content.Library(), args.old, args.new, apply=args.apply)
+        print(json.dumps({"old": args.old, "new": args.new, "applied": args.apply, **found}))
     elif args.action == "enrol":
         if args.replace:
             for key in store.passkeys(args.email.strip().lower()):

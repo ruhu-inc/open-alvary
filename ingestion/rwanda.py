@@ -865,7 +865,9 @@ def _title_words(title: str) -> set[str]:
 def _printing_dates(docs: list[dict]) -> set[str]:
     found = set()
     for d in docs:
-        for match in rw_gazette.DATE.finditer(d.get("title") or ""):
+        # Dated by the title its heading or listing gave it (2026-11-01: a printed title, "… du 30 juin
+        # 1959", put in its place renamed shared-number ordinances by their files' fingerprints).
+        for match in rw_gazette.DATE.finditer(d.get("heading_title") or d.get("title") or ""):
             day, month = int(match.group(1)), int(match.group(2))
             if 1 <= day <= 31 and 1 <= month <= 12:
                 found.add(f"{match.group(3)}-{month:02d}-{day:02d}")
@@ -1481,6 +1483,9 @@ def prepare_selection(
                     "summary": reading["summary"],
                     "type": entry["kind"],
                     "title": document_title(entry, language, lines, values),
+                    # The title its heading or file's listing gave it, which dates it among instruments
+                    # sharing its number (separate_instruments), so its id stays as it was.
+                    "heading_title": rw_gazette.sentence_case(entry["versions"][language]["title"]),
                     "year": int(values["identity.year"]) if values.get("identity.year") else None,
                     "jurisdiction": "rw",
                     "language": language,

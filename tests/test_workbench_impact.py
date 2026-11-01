@@ -73,3 +73,26 @@ def test_a_document_found_in_another_file_is_named_as_where_its_pages_are_now():
             ]
 
     assert impact.successors(old, Library(), {1, 2}) == ["rw-instructions-002-03-2012-en"]
+
+
+def test_a_renamed_documents_checks_carry_over_only_where_its_pages_read_the_same(tmp_path):
+    """2026-11-01: RURA's regulation, its number read whole, took a new id; the 22 pages its reviewer had
+    checked under the old one were carried over where they read exactly the same."""
+    new = tmp_path / "new"
+    new.mkdir()
+    before = reading()
+    after = json.loads(json.dumps(before))
+    after["pages"][1]["nodes"][0]["text"] = "2. Short title."  # page 2 reads otherwise now
+    (new / f"{ACT}.reading.json").write_text(json.dumps(after))
+    store = Store(connect(f"sqlite:///{tmp_path / 'workbench.db'}"))
+    old = "ng-renamed-act"
+    for page in before["pages"]:
+        store.save_page(old, page["page"], 0, "rev@example.org", reading_sha256=content.reading_sha256(page),
+                        units=[], status="checked", resolutions={}, comment="")  # fmt: skip
+    listed = impact.carry(store, content.Library(new), old, ACT)
+    assert listed == {"carried": [1], "changed": [2], "not_in_document": [], "already_checked": []}
+    assert store.latest_pages(ACT) == {}  # nothing written without --apply
+    impact.carry(store, content.Library(new), old, ACT, apply=True)
+    (carried,) = store.latest_pages(ACT).values()
+    assert carried["page"] == 1 and carried["author"] == "rev@example.org" and old in carried["comment"]
+    assert impact.carry(store, content.Library(new), old, ACT)["already_checked"] == [1]

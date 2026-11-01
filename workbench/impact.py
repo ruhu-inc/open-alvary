@@ -122,3 +122,38 @@ def libraries(places: str) -> tuple[content.Library, content.Library]:
             os.environ.pop("ALVARY_REVIEW_COLLECTIONS", None)
         else:
             os.environ["ALVARY_REVIEW_COLLECTIONS"] = saved
+
+
+def carry(store, library: content.Library, old: str, new: str, apply: bool = False) -> dict:
+    """A document's page checks carried to the document that holds its pages now, renamed by a corrected
+    reading (2026-11-01: RURA's Regulation 001/R/STD-CMR/RURA/018, its number read whole), where a page
+    reads exactly as it did when it was checked; a page that reads otherwise is left to check again.
+    Nothing is written unless `apply`. Each carried revision keeps its author and says where it came
+    from. Returns the pages carried, changed, no longer in the document, and already checked there."""
+    pages = {page["page"]: page for page in library.reading(new)["pages"]}
+    there = store.latest_pages(new)
+    out: dict = {"carried": [], "changed": [], "not_in_document": [], "already_checked": []}
+    for number, revision in sorted(store.latest_pages(old).items()):
+        page = pages.get(number)
+        if page is None:
+            out["not_in_document"].append(number)
+        elif number in there:
+            out["already_checked"].append(number)
+        elif content.reading_sha256(page) != revision["reading_sha256"]:
+            out["changed"].append(number)
+        else:
+            out["carried"].append(number)
+            if apply:
+                note = f"Carried over from {old}, page {number}, which reads the same."
+                store.save_page(
+                    new,
+                    number,
+                    0,
+                    revision["author"],
+                    reading_sha256=revision["reading_sha256"],
+                    units=revision["units"],
+                    status=revision["status"],
+                    resolutions=revision["resolutions"],
+                    comment=" ".join(filter(None, [note, revision.get("comment")])),
+                )
+    return out

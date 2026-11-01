@@ -1290,3 +1290,20 @@ def test_a_documents_evidence_is_kept_beside_it_not_in_the_manifest():
     assert "suggested_evidence" not in entry and details["suggested_evidence"] == {
         "identity.title": {"page": 2}
     }
+
+
+def test_shared_number_instruments_keep_their_ids_when_their_printed_title_replaces_the_files_name():
+    """2026-11-01: two ordinances n° 111 from separate files were told apart by the dates in their titles,
+    their files' names ("…30.6.1959…"); given their printed titles ("… du 30 juin 1959 …") they were
+    renamed by their files' fingerprints. They are dated by the title their listing gave them."""
+
+    def printing(key, listed, printed):
+        return {"id": "rw-ordinance-111-fr", "work": "rw-ordinance-111", "objects": f"files/{key}/",
+                "title": printed, "heading_title": listed, "language": "fr"}  # fmt: skip
+
+    first = printing(
+        "a" * 64, "Ord. n0 111 du 19.06.1959 objets perissables", "Ordonnance n° 111 du 19 juin 1959"
+    )
+    second = printing("b" * 64, "Ord. n0 111 du 30.6.1959 transports", "Ordonnance n° 111 du 30 juin 1959")
+    out, _ = rwanda.separate_instruments([first, second])
+    assert sorted(d["id"] for d in out) == ["rw-ordinance-111-1959-06-30-fr", "rw-ordinance-111-fr"]
