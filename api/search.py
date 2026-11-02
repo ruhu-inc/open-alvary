@@ -23,6 +23,8 @@ FIELDS = ("title", "citation", "summary")
 
 
 def normalize_citation(value):
+    """catalogue_name_key (migration 0048) is this in SQL, and a change here needs a migration there too;
+    tests/test_postgres_citation_names.py holds them together."""
     return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
 
 
