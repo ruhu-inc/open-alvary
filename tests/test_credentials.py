@@ -14,7 +14,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.testclient import TestClient
 
 from accounts import keys
-from api.credentials import GRANT_CLAIM, CredentialGate, GateConfig, TokenVerifier, problem
+from api.credentials import GRANT_CLAIM, CredentialGate, FailedKeys, GateConfig, TokenVerifier, problem
 from rights.bytes import LedgerUnavailable, Reservation
 
 ISSUER = "https://login.example.test/"
@@ -68,6 +68,122 @@ def gate(check, verifier=None, usage=None, ledger=None, admission=None):
         ),
     )
     return TestClient(parent)
+
+
+WRONG = {"ok": False, "code": "invalid_credentials"}
+PROXY = "35.191.0.1"  # the load balancer's own entry, as trusted_proxies=2 reads X-Forwarded-For
+
+
+def behind_the_edge(check, failed_keys, verifier=None, jsonrpc=False):
+    parent = FastAPI()
+    parent.mount(
+        "/api/v1",
+        CredentialGate(
+            app(),
+            config=GateConfig(RESOURCE, "rest", "api", METADATA, trusted_proxies=2, jsonrpc=jsonrpc),
+            check=check,
+            record_usage=lambda e: None,
+            admission=None,
+            verifier=verifier,
+            key_pepper=PEPPER,
+            failed_keys=failed_keys,
+        ),
+    )
+    client = TestClient(parent)
+
+    def asks(secret, address="198.51.100.7", forged=""):
+        return client.get(
+            "/api/v1/sources",
+            headers={
+                "Authorization": f"Bearer {secret}",
+                "X-Forwarded-For": f"{forged}{address},{PROXY}",
+            },
+        )
+
+    return asks
+
+
+class Clock:
+    now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+
+def test_an_address_sending_wrong_keys_stops_reaching_the_database():
+    seen = []
+    asks = behind_the_edge(lambda asked: (seen.append(asked), WRONG)[1], FailedKeys(limit=3))
+    made_up = [keys.generate().secret for _ in range(4)]
+    assert [asks(secret).status_code for secret in made_up[:3]] == [401, 401, 401]
+    held = asks(made_up[3])
+    assert held.status_code == 429 and held.json()["code"] == "rate_limited"
+    assert 0 < int(held.headers["retry-after"]) <= 60
+    assert len(seen) == 3  # the fourth cost the database nothing
+    assert asks(made_up[3], address="198.51.100.8").status_code == 401  # another address is its own
+
+
+def test_forging_x_forwarded_for_does_not_get_round_the_count():
+    failed = FailedKeys(limit=2)
+    seen = []
+    asks = behind_the_edge(lambda asked: (seen.append(asked), WRONG)[1], failed)
+    answers = [asks(keys.generate().secret, forged=f"203.0.113.{i},").status_code for i in range(4)]
+    assert answers == [401, 401, 429, 429] and len(seen) == 2
+
+
+def test_the_hold_ends_with_the_minute():
+    clock = Clock()
+    asks = behind_the_edge(lambda asked: WRONG, FailedKeys(limit=1, clock=clock))
+    assert asks(keys.generate().secret).status_code == 401
+    assert asks(keys.generate().secret).status_code == 429
+    clock.now += 61
+    assert asks(keys.generate().secret).status_code == 401
+
+
+def test_a_right_key_counts_for_nothing_and_a_malformed_one_costs_the_database_nothing():
+    seen = []
+    asks = behind_the_edge(lambda asked: (seen.append(asked), OK)[1], FailedKeys(limit=1))
+    secret = keys.generate().secret
+    assert [asks(secret).status_code for _ in range(3)] == [200, 200, 200]
+    seen.clear()
+    assert asks("oa_live_short").status_code == 401
+    assert seen == []
+    assert asks(secret).status_code == 200  # the malformed one above was not counted against the address
+
+
+def test_other_refusals_are_not_wrong_keys():
+    inactive = {"ok": False, "code": "account_inactive"}
+    asks = behind_the_edge(lambda asked: inactive, FailedKeys(limit=1))
+    assert [asks(keys.generate().secret).status_code for _ in range(3)] == [403, 403, 403]
+
+
+def test_anthropics_shared_hosts_are_never_held_back():
+    asks = behind_the_edge(lambda asked: WRONG, FailedKeys(limit=1))
+    answers = [asks(keys.generate().secret, address="160.79.104.9").status_code for _ in range(3)]
+    assert answers == [401, 401, 401]
+
+
+def test_a_token_is_never_held_back_for_an_addresss_wrong_keys(signer):
+    asks = behind_the_edge(lambda asked: OK, FailedKeys(limit=0), verifier=verifier_for(signer))
+    assert asks(signer.token()).status_code == 200
+
+
+def test_memory_is_bounded_and_holds_no_address():
+    clock = Clock()
+    failed = FailedKeys(limit=5, max_addresses=10, clock=clock)
+    for i in range(50):
+        failed.failed(f"198.51.100.{i}")
+    assert len(failed._seen) == 10
+    assert "198.51.100" not in repr(failed._seen)
+    clock.now += 61
+    failed.failed("203.0.113.1")
+    assert len(failed._seen) == 1  # a finished minute is forgotten
+
+
+def test_mcp_is_told_in_its_own_form():
+    asks = behind_the_edge(lambda asked: WRONG, FailedKeys(limit=1), jsonrpc=True)
+    assert asks(keys.generate().secret).status_code == 401
+    held = asks(keys.generate().secret)
+    assert held.status_code == 429 and held.json()["error"]["code"] == 10003
 
 
 class Ledger:

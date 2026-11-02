@@ -3,15 +3,22 @@
 import hashlib
 import json
 import re
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from api import site
 from api.admission import GLOBAL_KEY, AdmissionMiddleware, pseudonym
+from api.repositories import LegacyRepository
 from api.service import SECURITY_HEADERS, create_service
 from exports.release import write_release
+from rights.policy import decide
+from schema.models import RightsStatus
 from tests.test_admission import SECRET, FakeStore, config
 
 SOURCE = "ng-foi-act-2011"
@@ -178,6 +185,95 @@ def test_service_refuses_to_start_without_the_site_class(monkeypatch, tmp_path, 
     monkeypatch.delenv("ALVARY_SITE_ADMISSION_CONFIG", raising=False)
     with pytest.raises(ValueError, match="ALVARY_SITE_ADMISSION_CONFIG"):
         create_service(store, tmp_path)
+
+
+def named_in_sitemap(client) -> set[str]:
+    answer = client.get("/sitemap.xml")
+    assert answer.status_code == 200
+    return set(re.findall(r"/sources/([^<]+)</loc>", answer.text))
+
+
+@pytest.fixture
+def no_rest(monkeypatch):
+    monkeypatch.setattr(site, "SITEMAP_REST_PER_WALK_SECOND", 0)
+
+
+def test_the_sitemap_names_exactly_the_records_the_policy_makes_public(catalogue, store, tmp_path, no_rest):
+    store.save(catalogue)
+    client = TestClient(create_service(store, tmp_path))
+    answer = client.get("/sitemap.xml")
+    assert answer.status_code == 200 and answer.headers["content-type"].startswith("application/xml")
+    assert answer.headers["cache-control"] == "no-store"  # it names records (F01)
+    assert "/about</loc>" in answer.text
+    assert named_in_sitemap(client) == {r.source_id for r in catalogue.rights if decide(r).metadata}
+
+
+@pytest.mark.parametrize("change", [{"metadata_public": False}, {"status": RightsStatus.RESTRICTED}])
+def test_a_record_withdrawn_from_view_is_gone_from_the_next_sitemap(
+    catalogue, store, tmp_path, change, no_rest
+):
+    store.save(catalogue)
+    client = TestClient(create_service(store, tmp_path))
+    assert SOURCE in named_in_sitemap(client)
+    catalogue.rights = [r.model_copy(update=change) if r.source_id == SOURCE else r for r in catalogue.rights]
+    store.save(catalogue)
+    assert SOURCE not in named_in_sitemap(client)
+    assert not decide(next(r for r in catalogue.rights if r.source_id == SOURCE)).metadata
+
+
+def test_the_sitemap_reads_no_records_body(catalogue, store, tmp_path, monkeypatch):
+    store.save(catalogue)
+    client = TestClient(create_service(store, tmp_path))
+
+    def never(row):
+        raise AssertionError("the sitemap needs only the IDs")
+
+    monkeypatch.setattr(LegacyRepository, "_pair", staticmethod(never))
+    assert SOURCE in named_in_sitemap(client)
+
+
+def test_an_instance_walks_the_records_for_the_sitemap_once_at_a_time(
+    catalogue, store, tmp_path, monkeypatch, no_rest
+):
+    store.save(catalogue)
+    client = TestClient(create_service(store, tmp_path))
+    started, finish = threading.Event(), threading.Event()
+    walk = LegacyRepository.public_source_ids
+
+    def slow(self, limit):
+        started.set()
+        assert finish.wait(10)
+        return walk(self, limit)
+
+    monkeypatch.setattr(LegacyRepository, "public_source_ids", slow)
+    with ThreadPoolExecutor(1) as pool:
+        first = pool.submit(client.get, "/sitemap.xml")
+        assert started.wait(10)
+        second = client.get("/sitemap.xml")  # answered at once, holding no thread
+        finish.set()
+        assert first.result().status_code == 200
+    assert second.status_code == 503 and second.json()["code"] == "temporarily_unavailable"
+    assert second.headers["retry-after"] == "5"
+    assert client.get("/sitemap.xml").status_code == 200  # and the next walk goes ahead
+
+
+def test_a_longer_walk_earns_a_longer_rest_and_nothing_is_kept_meanwhile(
+    catalogue, store, tmp_path, monkeypatch
+):
+    store.save(catalogue)
+    client = TestClient(create_service(store, tmp_path))
+    walk = LegacyRepository.public_source_ids
+
+    def takes_a_while(self, limit):
+        time.sleep(0.05)
+        return walk(self, limit)
+
+    monkeypatch.setattr(LegacyRepository, "public_source_ids", takes_a_while)
+    assert client.get("/sitemap.xml").status_code == 200
+    rested = client.get("/sitemap.xml")  # 0.05 seconds' walk: about 2.5 seconds' rest
+    assert rested.status_code == 503 and 2 <= int(rested.headers["retry-after"]) <= 4
+    assert "/sources/" not in rested.text
+    assert client.get("/site/v1/sources").status_code == 200  # the website goes on regardless
 
 
 def site_app(store):

@@ -4,15 +4,22 @@ NOTICE_DAYS before a new version takes effect (terms of service, "Changes"), wit
 python -m accounts.operator --operator <you> terms-notice VERSION --effective DATE --reason R."""
 
 CURRENT = {
-    "terms": "2026-10-27",
-    "acceptable_use": "2026-10-27",
-    "privacy": "2026-10-27",
+    "terms": "2026-11-02",
+    "acceptable_use": "2026-11-02",
+    "privacy": "2026-11-02",
 }
 PATHS = {"terms": "/terms", "acceptable_use": "/acceptable-use", "privacy": "/privacy"}
 NOTICE_DAYS = 30
 
 # What each version changes, as the owner approved it, for the notice emailed to owners.
 CHANGES = {
+    "2026-11-02": (
+        "- We count how the website is used as daily totals: pages opened, searches and whether they found"
+        " anything, records opened and files downloaded, by country, type of device and the website a visitor"
+        " came from. These totals hold no address, no searched words and nothing else about any one visit."
+        " We keep them, since they hold nothing about any one person.\n"
+        "- The terms of service themselves have not changed."
+    ),
     "2026-10-27": (
         "- Open Alvary is not the publisher of the laws, regulations and judgments in the corpus: the bodies"
         " that issue them publish them. Open Alvary makes copies of the official texts available, each"

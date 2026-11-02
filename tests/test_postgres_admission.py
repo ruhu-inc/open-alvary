@@ -243,6 +243,9 @@ def test_real_service_admits_the_website_in_its_own_class(pg_engine, tmp_path, m
     assert [client.get("/site/v1/sources").status_code for _ in range(3)] == [200, 200, 429]
     refused = client.get("/site/v1/sources")
     assert refused.json()["code"] == "rate_limited" and refused.headers["Retry-After"]
+    # The sitemap draws on the same allowance: it is the one page that reads across the records.
+    assert client.get("/sitemap.xml").status_code == 429
+    assert client.get("/sitemap.xml", headers={"X-Forwarded-For": "203.0.113.10"}).status_code == 200
     # The website's class spent its own allowance; the API's is untouched.
     assert client.get("/api/sources").status_code == 200
     with pg_engine.connect() as conn:

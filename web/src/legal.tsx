@@ -5,7 +5,7 @@
 import React from "react";
 import { Link, PageTitle } from "./site";
 
-export const LEGAL_VERSION = "2026-10-27";
+export const LEGAL_VERSION = "2026-11-02";
 // Approved by the owner on 2026-10-16 (terms, acceptable use, privacy, and the security page's
 // disclosure terms); version 2026-10-18 (data a day in the terms, no request logs for the API and MCP
 // in the privacy notice) approved on 2026-10-18; version 2026-10-21 (no query strings in website request
@@ -14,7 +14,9 @@ export const LEGAL_VERSION = "2026-10-27";
 // changes to the terms and to limits, the scope of a suspension; searches in the acceptable use policy)
 // approved on 2026-10-22; version 2026-10-27 (Open Alvary is not the publisher of the corpus: its copies,
 // each checked against the official copy, link to it, and the official copy prevails; the owner's own
-// words) approved on 2026-10-27. A new version starts as a draft again: set this to false until it is approved.
+// words) approved on 2026-10-27; version 2026-11-02 (the website's daily totals in the privacy notice and
+// the acceptable use policy) approved on 2026-11-02. A new version starts as a draft again: set this to
+// false until it is approved.
 const APPROVED = true;
 const TO_CONFIRM: string[] = [];
 const OPERATOR = "Ruhu, Inc.";
@@ -222,8 +224,9 @@ export function AcceptableUse() {
       <section>
         <h2>Searches and requests</h2>
         <p>
-          Searches and requests are used only to answer them and are not kept. Send only what a search needs,
-          and leave out names or other details that identify a client.
+          Searches and requests are used only to answer them and are not kept. We count that a search happened
+          and whether it found anything, never its words. Send only what a search needs, and leave out names or
+          other details that identify a client.
         </p>
       </section>
       <section>
@@ -280,8 +283,11 @@ export function Privacy() {
         <h2>Reading the website</h2>
         <p>
           Your browser requests pages, fonts and data from this site; search terms go to our server to find
-          matching records, only to answer that search. We set no cookies on the website and use no advertising
-          or analytics. Our hosting processes connection information such as IP addresses to deliver pages,
+          matching records, only to answer that search. We set no cookies on the website and use no advertising.
+          We count how the website is used as daily totals: pages opened, searches and whether they found
+          anything, records opened and files downloaded, by country, type of device and the website a visitor
+          came from. These totals hold no address, no searched words and nothing else about any one visit. Our
+          hosting processes connection information such as IP addresses to deliver pages,
           limit abuse and keep operational logs for up to 30 days. Those logs never hold what you search for:
           a request whose address carries a search, or anything else after a question mark, is left out of
           them. Our pages also ask your browser to tell other sites at most that you came from Open Alvary,
@@ -345,6 +351,7 @@ export function Privacy() {
             Monitors and their filters: while the monitor exists, removed at once when you delete it. Matches: 400
             days. Records of digests sent: 30 days.
           </li>
+          <li>Website totals: kept, since they hold nothing about any one person.</li>
           <li>Backups: 35 days.</li>
         </ul>
       </section>

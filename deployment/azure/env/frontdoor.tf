@@ -1,9 +1,10 @@
 # The one front door (D7, MAC-12), in place of the global load balancer and Cloud Armor: Front Door
 # Standard terminates TLS for the website's and the API's domains with managed certificates and sends
 # both to the public service, uncached (the service sets its own Cache-Control and ETags). The WAF
-# policy throttles each address on the website's own paths (D23, as Cloud Armor did: 600 a minute on
-# /site/ and /downloads/), answering 429 above it. The service refuses requests without this
-# profile's ID (ALVARY_FRONT_DOOR_ID), so its own address is no way around the edge.
+# policy throttles each address on every path (D23, as Cloud Armor does), answering 429 above it: 600 a
+# minute on /site/ and /downloads/, 1,200 on the pages and everything else, and 12,000 on the API's
+# paths, above the largest plan's own rate. The service refuses requests without this profile's ID
+# (ALVARY_FRONT_DOOR_ID), so its own address is no way around the edge.
 #
 # The edge keeps no request log. Front Door's access and WAF logs record each request's full address,
 # query string included, so they would keep what people search for (RSV-01, OA-A2). Azure collects them
@@ -113,6 +114,28 @@ resource "azurerm_cdn_frontdoor_firewall_policy" "edge" {
   custom_block_response_status_code = 429
   tags                              = local.common_tags
 
+  # Anthropic's hosts: neither the edge rules nor the provider may block them from the MCP address or
+  # its metadata (machine-access.md), and they carry many people's connections on few addresses.
+  custom_rule {
+    name     = "certifiedhosts"
+    type     = "MatchRule"
+    priority = 900
+    enabled  = true
+    action   = "Allow"
+
+    match_condition {
+      match_variable = "RemoteAddr"
+      operator       = "IPMatch"
+      match_values   = ["160.79.104.0/21"]
+    }
+
+    match_condition {
+      match_variable = "RequestUri"
+      operator       = "Contains"
+      match_values   = ["/mcp", "/.well-known/"]
+    }
+  }
+
   custom_rule {
     name                           = "websitethrottle"
     type                           = "RateLimitRule"
@@ -126,6 +149,42 @@ resource "azurerm_cdn_frontdoor_firewall_policy" "edge" {
       match_variable = "RequestUri"
       operator       = "Contains"
       match_values   = ["/site/", "/downloads/"]
+    }
+  }
+
+  # Never a challenge here: machine clients call these (D23). The ceiling stands above the largest
+  # plan's rate, which the credential gate enforces per organisation.
+  custom_rule {
+    name                           = "apithrottle"
+    type                           = "RateLimitRule"
+    priority                       = 1100
+    enabled                        = true
+    action                         = "Block"
+    rate_limit_duration_in_minutes = 1
+    rate_limit_threshold           = var.edge_api_requests_per_minute
+
+    match_condition {
+      match_variable = "RequestUri"
+      operator       = "Contains"
+      match_values   = ["/api/", "/mcp", "/.well-known/"]
+    }
+  }
+
+  # Pages, the sitemap, the console, the health check: one script must not fill the service's few
+  # replicas and shut real readers out. High, because a mobile network can put many people on one address.
+  custom_rule {
+    name                           = "everythingthrottle"
+    type                           = "RateLimitRule"
+    priority                       = 2000
+    enabled                        = true
+    action                         = "Block"
+    rate_limit_duration_in_minutes = 1
+    rate_limit_threshold           = var.edge_page_requests_per_minute
+
+    match_condition {
+      match_variable = "RequestUri"
+      operator       = "Any"
+      match_values   = []
     }
   }
 }

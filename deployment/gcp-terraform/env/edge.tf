@@ -1,9 +1,10 @@
 # The one front door (D7, MAC-12), in place of Azure's Front Door: a global external HTTPS load
 # balancer terminates TLS for the website's and the API's domains with Google-managed certificates
 # and sends both to the public service through a serverless endpoint group, uncached (the service sets
-# its own Cache-Control and ETags). Cloud Armor throttles each address on the website's own paths (D23,
-# as today: 600 a minute on /site/ and /downloads/), answering 429 above it. HTTP is redirected to
-# HTTPS. The service takes traffic from the load balancer only (cloud_run.tf), as today.
+# its own Cache-Control and ETags). Cloud Armor throttles each address on every path (D23), answering
+# 429 above it: 600 a minute on /site/ and /downloads/, 1,200 on the pages and everything else, and
+# 12,000 on the API's paths, above the largest plan's own rate. HTTP is redirected to HTTPS. The service
+# takes traffic from the load balancer only (cloud_run.tf), as today.
 #
 # The certificates are Certificate Manager's, authorised by DNS (a CNAME per domain, dns_records in
 # outputs.tf), so they are issued before the domains move: switchover is then an A record, with no
@@ -18,6 +19,10 @@ resource "google_compute_global_address" "edge" {
 
 locals {
   edge_domains = { site = var.public_domain, api = var.api_domain }
+  # Anthropic's hosts: neither the edge rules nor the provider may block them from the MCP address or
+  # its metadata (machine-access.md), and they carry many people's connections on few addresses.
+  never_limited_range = "160.79.104.0/21"
+  api_paths           = "request.path.startsWith('/api/') || request.path.startsWith('/mcp') || request.path.startsWith('/.well-known/')"
 }
 
 # Per-project records (_acme-challenge_<id>.<domain>), so a certificate for the same domain can be
@@ -59,9 +64,23 @@ resource "google_compute_security_policy" "edge" {
   name        = "${local.name_prefix}-edge"
   description = "Open Alvary edge rules (D23)"
 
-  # Website paths only, never the API's: a per-address throttle above any reader's pace; the origin's
-  # own site class does the fine-grained admission. (Cloud Armor's expressions take no regular
-  # expression groups, so the paths are two prefixes.)
+  # The first rule that matches decides, so each path is counted against one limit. Rule descriptions
+  # may be at most 64 characters.
+  rule {
+    priority    = 900
+    action      = "allow"
+    description = "Anthropic's hosts on the MCP address and its metadata"
+
+    match {
+      expr {
+        expression = "inIpRange(origin.ip, '${local.never_limited_range}') && (request.path.startsWith('/mcp') || request.path.startsWith('/.well-known/'))"
+      }
+    }
+  }
+
+  # A per-address throttle above any reader's pace; the origin's own site class does the fine-grained
+  # admission. (Cloud Armor's expressions take no regular expression groups, so the paths are two
+  # prefixes.)
   rule {
     priority    = 1000
     action      = "throttle"
@@ -79,6 +98,57 @@ resource "google_compute_security_policy" "edge" {
       enforce_on_key = "IP"
       rate_limit_threshold {
         count        = var.edge_requests_per_minute
+        interval_sec = 60
+      }
+    }
+  }
+
+  # Never a challenge here: machine clients call these (D23). The ceiling stands above the largest
+  # plan's rate, which the credential gate enforces per organisation; tests/test_edge_limits.py holds
+  # it there.
+  rule {
+    priority    = 1100
+    action      = "throttle"
+    description = "API paths: ${var.edge_api_requests_per_minute} requests a minute per address"
+
+    match {
+      expr {
+        expression = local.api_paths
+      }
+    }
+
+    rate_limit_options {
+      conform_action = "allow"
+      exceed_action  = "deny(429)"
+      enforce_on_key = "IP"
+      rate_limit_threshold {
+        count        = var.edge_api_requests_per_minute
+        interval_sec = 60
+      }
+    }
+  }
+
+  # Pages, the sitemap, the console, the health check: one script must not fill the service's few
+  # instances and shut real readers out. High, because a mobile network can put many people on one
+  # address.
+  rule {
+    priority    = 2000
+    action      = "throttle"
+    description = "Everything else: ${var.edge_page_requests_per_minute} requests a minute per address"
+
+    match {
+      versioned_expr = "SRC_IPS_V1"
+      config {
+        src_ip_ranges = ["*"]
+      }
+    }
+
+    rate_limit_options {
+      conform_action = "allow"
+      exceed_action  = "deny(429)"
+      enforce_on_key = "IP"
+      rate_limit_threshold {
+        count        = var.edge_page_requests_per_minute
         interval_sec = 60
       }
     }

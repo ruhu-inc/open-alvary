@@ -20,9 +20,11 @@ anyone through sign-in again for something sign-in cannot change (N09).
 """
 
 import base64
+import ipaddress
 import json
 import logging
 import math
+import secrets
 import time
 import uuid
 from collections.abc import Callable
@@ -37,11 +39,17 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from fastapi.responses import JSONResponse
 
 from accounts import keys
-from api.admission import AdmissionStore, AdmissionUnavailable
+from api.admission import AdmissionStore, AdmissionUnavailable, client_address, network_group, pseudonym
 from api.emission import MAX_SINGLE_RESPONSE_BYTES
 from api.reach import OutsidePlanLimited, Reach
 from rights.bytes import ByteLedger, LedgerConflict, LedgerUnavailable, Scope
 
+MAX_FAILED_KEYS = 120  # wrong keys an address may try in a minute on one instance
+MAX_FAILING_ADDRESSES = 10_000  # how many it remembers; about 2 MB at most
+FAILED_KEY_WINDOW_SECONDS = 60
+# Hosts that carry many people's connections on one address (machine-access.md, Anthropic's range):
+# one person's wrong key must not hold the rest back.
+NEVER_HELD_BACK = (ipaddress.ip_network("160.79.104.0/21"),)
 SCOPE = "corpus:read"
 GRANT_CLAIM = "https://open.alvary.ai/grant"
 STATUS = {
@@ -244,6 +252,52 @@ def _int(value: str) -> int:
     return int.from_bytes(_b64(value), "big")
 
 
+class FailedKeys:
+    """Wrong API keys by address, so a flood of made-up keys stops costing the database a check each.
+
+    Past the limit in a minute, that address's keys are refused unchecked until the minute is out, a
+    right key from the same address too. Only keys: a made-up token fails its signature without the
+    database. Per instance and in memory: a keyed hash of the network group, under a secret made at
+    start, gone once its minute is out. The gate calls this on its event loop only, so there is no lock.
+    """
+
+    def __init__(
+        self,
+        limit: int = MAX_FAILED_KEYS,
+        max_addresses: int = MAX_FAILING_ADDRESSES,
+        clock: Callable[[], float] = time.monotonic,
+    ):
+        self.limit, self.max_addresses, self.clock = limit, max_addresses, clock
+        self._secret = secrets.token_bytes(32)
+        self._seen: dict[str, tuple[float, int]] = {}  # oldest minute first
+
+    def _forget_finished(self, now: float) -> None:
+        while self._seen:
+            oldest = next(iter(self._seen))
+            if self._seen[oldest][0] + FAILED_KEY_WINDOW_SECONDS > now:
+                return
+            del self._seen[oldest]
+
+    def wait(self, group: str) -> int:
+        """Seconds until this address's keys are looked at again; 0 if they are now."""
+        now = self.clock()
+        self._forget_finished(now)
+        started, failures = self._seen.get(pseudonym(self._secret, group), (now, 0))
+        return math.ceil(started + FAILED_KEY_WINDOW_SECONDS - now) if failures >= self.limit else 0
+
+    def failed(self, group: str) -> None:
+        now = self.clock()
+        self._forget_finished(now)
+        name = pseudonym(self._secret, group)
+        if name in self._seen:
+            started, failures = self._seen[name]
+            self._seen[name] = (started, failures + 1)
+            return
+        if len(self._seen) >= self.max_addresses:
+            del self._seen[next(iter(self._seen))]
+        self._seen[name] = (now, 1)
+
+
 @dataclass(frozen=True)
 class GateConfig:
     resource: str  # exact resource URL, the token audience
@@ -260,6 +314,7 @@ class GateConfig:
     # Requests outside a plan's countries also draw on this, the Starter rate (api.reach).
     outside_per_minute: int = 60
     outside_burst: int = 30
+    trusted_proxies: int = 0  # as the admission class has it: which X-Forwarded-For entry is the caller
 
 
 class CredentialGate:
@@ -274,8 +329,10 @@ class CredentialGate:
         verifier: TokenVerifier | None,
         key_pepper: bytes | None = None,
         ledger: ByteLedger | None = None,
+        failed_keys: FailedKeys | None = None,
     ):
         self.app, self.config = app, config
+        self.failed_keys = failed_keys or FailedKeys()
         self.check, self.record_usage, self.admission, self.verifier = (
             check,
             record_usage,
@@ -319,6 +376,17 @@ class CredentialGate:
             "subject": str(claims.get("sub", "")),
         }
 
+    def _caller_group(self, scope) -> str | None:
+        """The network group wrong keys are counted against; None for an address never held back."""
+        peer = scope["client"][0] if scope.get("client") else None
+        address = client_address(scope.get("headers", []), peer, self.config.trusted_proxies)
+        try:
+            if address is None or any(ipaddress.ip_address(address) in net for net in NEVER_HELD_BACK):
+                return None
+            return network_group(address)
+        except ValueError:
+            return None
+
     async def __call__(self, scope, receive, send):
         path = scope.get("path", "")
         root = scope.get("root_path", "")
@@ -346,6 +414,9 @@ class CredentialGate:
         if len(authorization) > 1 or scheme.lower() != "bearer" or not token.strip():
             return await self._refuse("invalid_credentials", request_id)(scope, receive, send)
         token = token.strip()
+        caller = self._caller_group(scope) if token.startswith(keys.PREFIX) else None
+        if caller is not None and (wait := self.failed_keys.wait(caller)):
+            return await self._refuse("rate_limited", request_id, retry_after=wait)(scope, receive, send)
         try:
             asked = await to_thread.run_sync(self.credential_request, token)
             result = await to_thread.run_sync(self.check, asked)
@@ -357,6 +428,8 @@ class CredentialGate:
             logging.getLogger("open_alvary.credentials").exception("credential check failed")
             return await self._refuse("temporarily_unavailable", request_id)(scope, receive, send)
         if not result.get("ok"):
+            if caller is not None and result.get("code", "invalid_credentials") == "invalid_credentials":
+                self.failed_keys.failed(caller)
             return await self._refuse(result.get("code", "invalid_credentials"), request_id)(
                 scope, receive, send
             )
