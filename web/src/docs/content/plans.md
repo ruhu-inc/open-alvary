@@ -60,7 +60,7 @@ def get(url, **params):
             timeout=30,
         )
         if response.status_code in (429, 503):
-            time.sleep(int(response.headers.get("Retry-After", 2 ** attempt)))
+            time.sleep(int(response.headers.get("Retry-After", 2**attempt)))
             continue
         response.raise_for_status()
         return response.json()

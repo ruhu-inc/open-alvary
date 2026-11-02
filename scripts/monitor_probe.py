@@ -18,7 +18,7 @@ def probe(base_url: str, timeout: float, transport=None) -> tuple[bool, str]:
             home = client.get("/")
             if home.status_code != 200 or "Open Alvary" not in home.text:
                 return False, f"homepage status {home.status_code}"
-            ready = client.get("/api/healthz")
+            ready = client.get("/healthz")
             if ready.status_code != 200 or ready.json() != {"status": "ok"}:
                 return False, f"readiness status {ready.status_code}"
     except (httpx.HTTPError, ValueError) as error:

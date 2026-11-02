@@ -151,8 +151,12 @@ import requests
 
 pack = requests.get(
     "https://api.open.alvary.ai/api/v1/retrieve",
-    params={"q": "who may manage a commercial company", "jurisdiction": "sn", "scope": "applicable",
-            "as_of": "2026-01-01"},
+    params={
+        "q": "who may manage a commercial company",
+        "jurisdiction": "sn",
+        "scope": "applicable",
+        "as_of": "2026-01-01",
+    },
     headers={"Authorization": f"Bearer {os.environ['OPEN_ALVARY_KEY']}"},
     timeout=30,
 ).json()
@@ -215,7 +219,11 @@ import requests
 
 check = requests.post(
     "https://api.open.alvary.ai/api/v1/currentness",
-    json={"items": [{"anchor_id": unit["anchor_id"], "span_hash": unit["span_hash"]} for unit in pack["evidence"]]},
+    json={
+        "items": [
+            {"anchor_id": unit["anchor_id"], "span_hash": unit["span_hash"]} for unit in pack["evidence"]
+        ]
+    },
     headers={"Authorization": f"Bearer {os.environ['OPEN_ALVARY_KEY']}"},
     timeout=30,
 ).json()

@@ -10,7 +10,9 @@ def transport(home=200, body="<title>Open Alvary</title>", ready=(200, {"status"
     def handler(request):
         if request.url.path == "/":
             return httpx.Response(home, text=body)
-        return httpx.Response(ready[0], json=ready[1])
+        if request.url.path == "/healthz":
+            return httpx.Response(ready[0], json=ready[1])
+        return httpx.Response(410, json={"code": "gone"})  # the closed anonymous API, /api/healthz with it
 
     return httpx.MockTransport(handler)
 

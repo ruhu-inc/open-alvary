@@ -1,0 +1,12 @@
+# Findings of the secrets scan (.github/workflows/security.yml) that are not secrets, each by its fingerprint,
+# so the same words in a new commit or a new file are still reported.
+
+# The name of a vault entry, not its value.
+558e525a3e65b6657c92ec543d6f184fbc49451d:deployment/azure/env/jobs.tf:hashicorp-tf-password:15
+a708d087093ae97b86e7643f96664a2fe22690cd:deployment/gcp-terraform/env/jobs.tf:hashicorp-tf-password:17
+a708d087093ae97b86e7643f96664a2fe22690cd:deployment/gcp-terraform/env/transfer.tf:hashicorp-tf-password:49
+2af47eb8df0dee8dfb94a0f0934db5448f43f21e:deployment/azure/env/transfer.tf:hashicorp-tf-password:45
+
+# Made-up values: a feed's resume token in the conformance bodies, a profile's key in a test.
+69897b3e65a3c31a6f19ee25fba1dde826b087c3:clients/conformance/bodies.json:generic-api-key:65
+5ca2207ade2685445e51f7e76a5df52713d59b24:tests/test_postgres_assembly.py:generic-api-key:64
