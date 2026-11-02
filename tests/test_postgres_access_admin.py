@@ -200,6 +200,61 @@ def test_operators_find_organisations_by_name_email_or_id(world):
     assert admin.search("%") == [] and admin.search("zz-nothing") == []
 
 
+def test_operators_list_every_organisation_newest_first_a_page_at_a_time(world):
+    owner_store, admin, _, _ = world
+    amina, own = person(owner_store, "amina", "Kigali Law Clinic")
+    others = [person(owner_store, f"person{i}")[1] for i in range(4)]
+    company = owner_store.create_organisation(amina, "Abuja Chambers", "company", "ng")
+    first = admin.organisations(limit=3)
+    assert first["total"] == 6 and len(first["items"]) == 3 and first["next"]
+    assert first["items"][0]["id"] == company
+    second = admin.organisations(before=first["next"], limit=3)
+    assert not second["next"]
+    listed = [o["id"] for o in first["items"] + second["items"]]
+    assert listed == [company, *reversed(others), own]
+    newest = first["items"][0]
+    assert (newest["name"], newest["kind"], newest["country"], newest["state"]) == (
+        "Abuja Chambers",
+        "company",
+        "NG",
+        "active",
+    )
+    assert newest["owners"] == ["amina@example.org"] and newest["plan"] == "Starter"
+    # A search, a revoked plan and a deleted organisation.
+    assert [o["id"] for o in admin.organisations("kigali")["items"]] == [own]
+    assert {o["id"] for o in admin.organisations("amina@example.org")["items"]} == {own, company}
+    assert admin.organisations("a") == {"total": 0, "items": [], "next": None}
+    admin.revoke(act(), own)
+    assert admin.organisations("kigali")["items"][0]["plan"] is None
+    owner_store.delete_organisation(amina, company)
+    assert admin.organisations("abuja")["total"] == 0 and admin.organisations()["total"] == 5
+
+
+def test_operators_list_everyone_with_an_account_and_their_organisations(world):
+    owner_store, admin, _, _ = world
+    amina, own = person(owner_store, "amina", "Kigali Law Clinic")
+    grace, _ = person(owner_store, "grace", "Grace Org")
+    unfinished = owner_store.sign_in(
+        issuer=ISSUER, subject="google-oauth2|new", method="google", email="new@example.org", label="new"
+    )["id"]
+    everyone = admin.people()
+    assert everyone["total"] == 3 and [p["id"] for p in everyone["items"]] == [unfinished, grace, amina]
+    assert everyone["items"][0]["organisations"] == []  # signed in, never finished the welcome
+    assert everyone["items"][2]["organisations"] == [
+        {"id": own, "name": "Kigali Law Clinic", "role": "owner"}
+    ]
+    assert everyone["items"][2]["email"] == "amina@example.org"
+    assert everyone["items"][2]["display_name"] == "Amina"
+    first = admin.people(limit=2)
+    assert [p["id"] for p in admin.people(before=first["next"], limit=2)["items"]] == [amina]
+    assert [p["id"] for p in admin.people("AMINA@")["items"]] == [amina]
+    assert [p["id"] for p in admin.people("grace")["items"]] == [grace]
+    assert admin.people(amina)["items"][0]["id"] == amina
+    assert admin.people("100%")["total"] == 0  # the mark is searched for, not a wildcard
+    with pytest.raises(AccountError):
+        admin.people(before="not-a-place")
+
+
 def test_the_role_signs_in_with_its_password_and_refuses_an_unsafe_one(pg_engine):
     migrate(pg_engine)
     with pg_engine.connect() as conn:

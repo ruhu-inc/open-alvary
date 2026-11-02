@@ -492,7 +492,13 @@ class Accounts:
             )
 
     def welcome(self, person_id: str, display_name: str, organisation_name: str, context=None) -> str:
-        """First sign-in: name the person and make their own organisation (once, never recreated)."""
+        return self.first_organisation(person_id, display_name, organisation_name, context)[0]
+
+    def first_organisation(
+        self, person_id: str, display_name: str, organisation_name: str, context=None
+    ) -> tuple[str, bool]:
+        """First sign-in: name the person and make their own organisation (once, never recreated).
+        Gives the organisation and whether this call made it."""
         if self.person(person_id)["policies_pending"]:
             raise AccountError(
                 "policy_required", 409, "Accept the terms of service and privacy notice first."
@@ -504,10 +510,11 @@ class Accounts:
                 {"p": person_id},
             )
             if existing:
-                return existing
-            return self._create_organisation(
+                return existing, False
+            made = self._create_organisation(
                 conn, person_id, organisation_name, "individual", None, True, context
             )
+            return made, True
 
     def _create_organisation(self, conn, person_id, name, kind, country, personal, context) -> str:
         name = " ".join((name or "").split())

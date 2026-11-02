@@ -119,12 +119,27 @@ def test_a_wrong_passkey_or_a_replayed_challenge_is_refused_and_recorded(bench):
     assert {"passkey_added", "passkey_checked"} <= {e["action"] for e in store.events()}
 
 
+def test_only_access_admins_see_who_has_registered(bench):
+    owner_store, _, app, _ = bench
+    person(owner_store, "amina", "Kigali Law Clinic")
+    reviewer = browser(app, "reviewer@example.org")
+    assert reviewer.get("/api/access/organisations").status_code == 403
+    assert reviewer.get("/api/access/people").status_code == 403
+    ops = browser(app, "ops@example.org")
+    assert ops.get("/api/access/organisations").json()["total"] == 1  # looking needs no passkey
+    assert ops.get("/api/access/people").json()["total"] == 1
+    assert ops.get("/api/access/people?before=not-a-place").status_code == 400
+
+
 def test_the_organisation_view_and_search_show_no_secrets(bench):
     owner_store, store, app, _ = bench
     amina, own = person(owner_store, "amina", "Kigali Law Clinic")
     secret = owner_store.create_key(amina, own, kind="personal", name="laptop")["secret"]
     ops = browser(app, "ops@example.org")
-    assert [o["id"] for o in ops.get("/api/access/search?q=kigali").json()] == [own]
+    found = ops.get("/api/access/organisations?q=kigali")
+    assert [o["id"] for o in found.json()["items"]] == [own] and secret not in found.text
+    people = ops.get("/api/access/people?q=amina")
+    assert [p["id"] for p in people.json()["items"]] == [amina] and secret not in people.text
     view = ops.get(f"/api/access/organisations/{own}")
     assert view.status_code == 200 and secret not in view.text and "secret_hash" not in view.text
     assert {t["id"] for t in ops.get("/api/access/tiers").json()} >= {"starter", "pilot"}
