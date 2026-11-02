@@ -457,6 +457,26 @@ def test_the_walk_keeps_its_bounds(varied, pg_engine, monkeypatch):
             service.browse()
 
 
+def test_the_records_in_a_text_searchs_scope_are_those_the_policy_makes_public(varied, pg_engine):
+    with pg_engine.begin() as conn:
+        by_gates, by_payload = LegacyRepository(conn), LegacyRepository(conn)
+        by_payload._has_gates = False
+        assert by_gates._gated() and not by_payload._gated()
+        everything = conn.scalar(text("SELECT count(*) FROM sources"))
+        asked = (
+            {},
+            {"jurisdictions": ("ng",)},
+            {"types": ("act", "regulation")},
+            {"statuses": ("repealed",)},
+            {"language": "fr"},
+            {"years": (2000, 2015)},
+            {"jurisdictions": ("ng",), "works": (varied.sources[0].id,)},
+        )
+        for filters in asked:
+            assert by_gates.count_public(**filters) == by_payload.count_public(**filters), filters
+        assert 0 < by_gates.count_public() < everything  # some of the fixture is not public
+
+
 def test_a_text_is_searched_in_its_own_analysis_as_one_search_per_analysis_would(corpus, pg_engine):
     corpus.languages += [Language(id=tag, name=tag, tag=tag) for tag in ("pt", "es", "ar", "sw")]
     template = corpus.sources[0]
@@ -480,7 +500,8 @@ def test_a_text_is_searched_in_its_own_analysis_as_one_search_per_analysis_would
         add_record(corpus, template, version_changes=changes.items())
     save(pg_engine, corpus)
     queries = ["commissions", "commission", "commiss", "the", "les", "the les", "act", "shall meet", "minister", "ministre",
-               "ministro", "ley", "comissões", "قانون", "الوزير", "tume", "qzxv", "o'brien", "a & b | !c", "(x", "x:y", "12/2004"]  # fmt: skip
+               "ministro", "ley", "comissões", "قانون", "الوزير", "tume", "qzxv", "o'brien", "a & b | !c", "(x", "x:y", "12/2004",
+               "commissions -minister", "minister or qzxv", '"minister act"']  # fmt: skip
     every = " OR ".join(
         f"(u.config = '{config}' AND (u.document || u.context) @@ plainto_tsquery('{config}', :q))"
         for config in text_index.ANALYSES

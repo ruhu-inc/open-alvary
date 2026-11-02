@@ -900,7 +900,7 @@ class LegacyRepository:
         statement = (
             select(func.count())
             .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
-            .where(self._visible())
+            .where(self._public_gate())
         )
         if jurisdictions is not None:
             within = self._sources.c.jurisdiction_id.in_(sorted(jurisdictions))

@@ -3,8 +3,11 @@ catalogue, and the text search answers ranked passages with exact snippets, tell
 from a scope with no published text and from a search that could not run."""
 
 import json
+import math
+import random
 import re
 import time
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -19,6 +22,7 @@ from api.catalogue import TEXT_NOT_SEARCHED, LegacyCatalogue
 from api.store import Store
 from api.v1 import create_v1_app
 from changes.record import namespace
+from rights.database import provision_roles
 
 pytestmark = pytest.mark.postgres
 
@@ -368,3 +372,696 @@ def test_the_integration_acceptance_checks_pass_on_a_published_text(store, clien
     assert not report.failed and [r[1] for r in report.results].count("PASS") == 10
     missing = acceptance.run(client, "Example Act, 2023, s. 9", golden)
     assert missing.failed and missing.results[0][:2] == ("OA-S2 provision lookup", "FAIL")
+
+
+# --- the same hits in the same order as scoring every match ------------------------------------------
+
+# The search as it was before it read each reading once and left out units that cannot come first.
+THEN_MATCH = " OR ".join(
+    f"(u.config = '{c}' AND (u.document || u.context) @@ websearch_to_tsquery('{c}', :q))"
+    for c in text_index.ANALYSES
+)
+THEN_IN_FORCE = (
+    "CASE WHEN u.replaced OR u.legal_status IN ('repealed', 'superseded', 'historical') THEN 0.8 ELSE 1.0 END"
+)
+THEN_SCORE = (
+    "ts_rank_cd(CAST('{0.1, 0.2, 0.4, 1.0}' AS float4[]), u.document || u.context,"
+    f" websearch_to_tsquery(CAST(u.config AS regconfig), :q), 32) * {THEN_IN_FORCE}"
+)
+
+
+def then_weighted(conn, table, query):
+    """The any-term arm's match, score and parameters, as they were."""
+    total = conn.scalar(
+        text("SELECT greatest(reltuples, 0)::bigint FROM pg_class WHERE oid = to_regclass(:t)"), {"t": table}
+    )
+    if not total:
+        total = conn.scalar(text(f"SELECT count(*) FROM {table}")) or 0
+    matches, scores, params = [], [], {}
+    for config in text_index.ANALYSES:
+        if not conn.scalar(
+            text(f"SELECT EXISTS (SELECT 1 FROM {table} u WHERE u.config = :c)"), {"c": config}
+        ):
+            continue
+        lexemes = conn.scalars(
+            text("SELECT unnest(tsvector_to_array(to_tsvector(CAST(:c AS regconfig), :q)))"),
+            {"c": config, "q": query},
+        ).all()[:12]
+        if not lexemes:
+            continue
+        parts, keys = [], []
+        for n, lexeme in enumerate(sorted(lexemes)):
+            key = f"lx_{config}_{n}"
+            params[key] = "'" + lexeme.replace("'", "''") + "'"
+            keys.append(key)
+            df = conn.scalar(
+                text(
+                    f"SELECT count(*) FROM (SELECT 1 FROM {table} u WHERE u.config = :c"
+                    f" AND (u.document || u.context) @@ CAST(:lx AS tsquery) LIMIT 50000) AS d"
+                ),
+                {"c": config, "lx": params[key]},
+            )
+            idf = math.log(1 + (max(total, df) - df + 0.5) / (df + 0.5))
+            parts.append(
+                f"{idf:.6f} * ts_rank_cd(CAST('{{0.1, 0.2, 0.4, 1.0}}' AS float4[]), u.document || u.context,"
+                f" CAST(:{key} AS tsquery), 1)"
+            )
+        params[f"any_{config}"] = " | ".join(params[k] for k in keys)
+        matches.append(
+            f"(u.config = '{config}' AND (u.document || u.context) @@ CAST(:any_{config} AS tsquery))"
+        )
+        scores.append(f"WHEN '{config}' THEN {' + '.join(parts)}")
+    if not matches:
+        return None
+    score = f"(CASE u.config {' '.join(scores)} ELSE 0 END) * {THEN_IN_FORCE}"
+    return " OR ".join(matches), score, params
+
+
+def as_it_was(conn, query, filters, *, limit, offset, exclude=None, any_terms=False, bound=None):
+    """What the search answered when it scored every match: (rows, total, exact), or None with no terms."""
+    table, _ = text_index._tables(conn)
+    where, params = filters.where()
+    params |= {"q": query}
+    if exclude:
+        where += " AND NOT (u.version_id = :x_version AND u.start_byte = :x_start AND u.end_byte = :x_end)"
+        params |= dict(zip(("x_version", "x_start", "x_end"), exclude, strict=True))
+    match, score = THEN_MATCH, THEN_SCORE
+    if any_terms:
+        weighted = then_weighted(conn, table, query)
+        if weighted is None:
+            return None
+        match, score, extra = weighted
+        params |= extra
+    bound = bound or text_index.COUNT_BOUND
+    total = conn.scalar(
+        text(
+            f"SELECT count(*) FROM (SELECT 1 FROM {table} u WHERE ({match}) AND {where} LIMIT {bound + 1}) AS matched"
+        ),
+        params,
+    )
+    rows = conn.execute(
+        text(
+            f"SELECT {text_index._COLUMNS}, {score} AS score FROM {table} u WHERE ({match}) AND {where}"
+            " ORDER BY score DESC, u.version_id, u.start_byte LIMIT :limit OFFSET :offset"
+        ),
+        params | {"limit": limit, "offset": offset},
+    ).all()
+    return rows, min(total, bound), total <= bound
+
+
+FILLER = {
+    "en": "fund loan student office register notice officer tribunal appeal".split(),
+    "fr": "fonds prêt étudiant bureau registre avis tribunal appel".split(),
+    "pt": "fundo empréstimo estudante escritório registo aviso tribunal recurso".split(),
+    "es": "fondo préstamo estudiante oficina registro aviso tribunal recurso".split(),
+    "ar": "صندوق قرض طالب مكتب سجل إشعار محكمة".split(),
+    "sw": "mfuko mkopo mwanafunzi ofisi daftari taarifa mahakama".split(),
+}
+COMMON = {
+    "en": ("shall", "commission", "commissions", "minister", "act"),
+    "fr": ("commission", "commissions", "ministre", "loi", "shall"),
+    "pt": ("comissão", "comissões", "ministro", "lei", "act"),
+    "es": ("comisión", "comisiones", "ministro", "ley", "act"),
+    "ar": ("قانون", "الوزير", "commission"),
+    "sw": ("sheria", "waziri", "commission", "shall", "act"),
+}
+# Often none, sometimes enough for every band, and more places than a vector keeps for one word.
+TIMES = (0, 0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 4, 5, 6, 7, 8, 9, 12, 17, 33, 64, 300)
+PLACES = ("en", "en", "en", "en-NG", "fr", "fr", "pt", "es", "ar", "sw")
+STATUSES = ("current", "current", "unknown", "repealed", "superseded", "historical")
+
+
+def varied_units(conn, rng, *, texts=60):
+    """Units as the index writes them, varied in all a search can tell apart. A version's ID sorts apart from its
+    number (the order of ties), some of them in a text's different case."""
+    table, state = text_index._tables(conn)
+    documents = text_index._documents(conn)
+    versions, rows, document_rows = [], [], []
+    for at in range(texts):
+        language = rng.choice(PLACES)
+        base = language.split("-")[0]
+        work = f"{rng.choice('ngkerw')}-work-{at % (texts - 7)}"
+        version = rng.choice(("v-", "V-", "v_")) + format(rng.randrange(10**6), "06d") + f"-{at}"
+        common = COMMON[base]
+        facts = {
+            "work_id": work,
+            "language": language,
+            "config": text_index.config_for(language),
+            "analysis": text_index.config_for(language),
+            "jurisdiction_id": rng.choice(("ng", "ke", "rw")),
+            "document_type": rng.choice(("act", "regulation", "judgment")),
+            "legal_status": rng.choice(STATUSES),
+            "year": rng.choice((None, 1999, 2004, 2023)),
+            "effective_from": rng.choice((None, date(2000, 1, 1), date(2024, 1, 1))),
+            "effective_until": rng.choice((None, None, date(2025, 1, 1))),
+            "content_hash": "a" * 64,
+            "prior_version_id": None,
+            "work_hash": "b" * 64,
+            "version_id": version,
+        }
+        title = " ".join(rng.choices((*common, *FILLER[base]), k=rng.randint(1, 4)))
+        citation = f"{rng.choice(common)} {at}"
+        start = 0
+        for n in range(rng.choice((1, 2, 3, 8, 40))):
+            words = [rng.choice(FILLER[base]) for _ in range(rng.randint(1, 30))]
+            for word in common:
+                words += [word] * rng.choice(TIMES)
+            rng.shuffle(words)
+            words = " ".join(words)
+            end = start + len(words.encode())
+            heading = " ".join(rng.choices((*common, *FILLER[base]), k=rng.randint(0, 3)))
+            cited = f"s. {n}" if n % 3 else None
+            rows.append(
+                facts
+                | {
+                    "start_byte": start,
+                    "end_byte": end,
+                    "node_id": f"{version}-{n}",
+                    "kind": rng.choice(("section", "paragraph", "order")),
+                    "locator": f"sec_{n}",
+                    "pinpoint": cited,
+                    "heading": heading,
+                    "headings": heading,
+                    "words": words,
+                    "title": title,
+                    "identifiers": text_index.identifiers(citation, cited),
+                }
+            )
+            start = end + 1
+        versions.append(version)
+        document_rows.append(
+            facts
+            | {
+                "start_byte": 0,
+                "end_byte": 40,
+                "node_id": None,
+                "names": [title],
+                "truncated": False,
+                "title": title,
+                "words": " ".join(rng.choices((*common, *FILLER[base]), k=5)),
+                "outline": " ".join(rng.choices((*common, *FILLER[base]), k=8)),
+                "identifiers": citation,
+            }
+        )
+    conn.execute(text(text_index.INSERT.format(t=table)), rows)
+    conn.execute(text(text_index.DOCUMENT_INSERT.format(t=documents)), document_rows)
+    conn.execute(text(f"UPDATE {table} SET replaced = true WHERE version_id = ANY(:v)"), {"v": versions[::7]})
+    conn.execute(
+        text(f"UPDATE {documents} SET replaced = true WHERE version_id = ANY(:v)"), {"v": versions[::7]}
+    )
+    conn.execute(
+        text(f"UPDATE {state} SET built = true, analyzer = :a, built_at = statement_timestamp()"),
+        {"a": text_index.ANALYZER},
+    )
+    conn.execute(text(f"ANALYZE {table}"))
+    return versions, sorted({row["work_id"] for row in rows})
+
+
+@pytest.fixture
+def varied(pg_engine):
+    migrate(pg_engine)
+    with pg_engine.begin() as conn:
+        versions, works = varied_units(conn, random.Random(20261102))
+    return pg_engine, versions, works
+
+
+QUERIES = (
+    # One word: in each analysis alike, its readings apart, and in most units, in some, in none.
+    "shall", "act", "commission", "commissions", "minister", "ministre", "ministro", "قانون", "sheria", "SHALL",
+    "fund", "lagos", "qzxv", "s", "2023",
+    # Several, with the search syntax a reader may type.
+    "shall act", "shall act minister", "commission minister", '"shall act"', '"act shall"', "act or fund",
+    "act -shall", "-shall", "shall -shall", "o'brien", "data-protection", "a & b | !c", "(x", "x:y", "12/2004",
+    # Common words of some analyses and not others, and of all.
+    "the", "les", "the les", "the shall", "the and", "the -and", "!!",
+)  # fmt: skip
+
+
+def filters_for(versions, works):
+    return (
+        text_index.Filters(),
+        text_index.Filters(jurisdictions=("ng",)),
+        text_index.Filters(jurisdictions=("ng", "ke"), admitted=(works[0], works[-1])),
+        text_index.Filters(jurisdictions=()),
+        text_index.Filters(language="en"),
+        text_index.Filters(language="en-ng"),
+        text_index.Filters(types=("act", "judgment")),
+        text_index.Filters(statuses=("repealed", "historical")),
+        text_index.Filters(as_of=date(2024, 6, 1)),
+        text_index.Filters(year_from=2000, year_to=2023),
+        text_index.Filters(source_id=works[3]),
+        text_index.Filters(version_id=versions[5]),
+        text_index.Filters(kinds=("section", "order")),
+        text_index.Filters(jurisdictions=("ke",), types=("act",), statuses=("current",), year_from=2000),
+    )
+
+
+PAGES = ((25, 0), (5, 0), (1, 0), (0, 0), (5, 3), (3, 25), (100, 0), (100, 1000))
+
+
+def same_as_it_was(conn, query, filters, limit, offset, *, exclude=None, any_terms=False, bound=None):
+    found = text_index.search(
+        conn, query, filters, limit=limit, offset=offset, exclude=exclude, any_terms=any_terms
+    )
+    then = as_it_was(
+        conn, query, filters, limit=limit, offset=offset, exclude=exclude, any_terms=any_terms, bound=bound
+    )
+    asked = (query, filters, limit, offset, exclude, any_terms)
+    terms = dict(
+        conn.execute(
+            text(
+                "SELECT c, numnode(websearch_to_tsquery(CAST(c AS regconfig), :q)) > 0"
+                " FROM unnest(CAST(:configs AS text[])) AS c"
+            ),
+            {"q": query, "configs": list(text_index.ANALYSES)},
+        ).all()
+    )
+    assert found.common_only == tuple(c for c, read in sorted(terms.items()) if not read), asked
+    if then is None:
+        assert found.state == "no_terms", asked
+        return found
+    rows, total, exact = then
+    if found.state == "no_terms":  # every analysis read only common words: nothing can match
+        assert rows == [] and total == 0, asked
+        return found
+    assert found.state == "ok", asked
+    assert [dict(r._mapping) for r in found.rows] == [dict(r._mapping) for r in rows], asked
+    assert (found.total, found.exact) == (total, exact), asked
+    return found
+
+
+def test_the_same_hits_in_the_same_order_as_scoring_every_match(varied):
+    engine, versions, works = varied
+    answered = 0
+    with engine.begin() as conn:
+        for query in QUERIES:
+            for filters in filters_for(versions, works):
+                answered += len(same_as_it_was(conn, query, filters, 25, 0).rows)
+            for limit, offset in PAGES:
+                answered += len(same_as_it_was(conn, query, text_index.Filters(), limit, offset).rows)
+    assert answered > 3000  # the fixture does find things
+
+
+@pytest.mark.parametrize("bound", [10, 40, 200])
+def test_the_same_hits_when_most_units_are_left_unscored(varied, monkeypatch, bound):
+    # Past the count's bound a search for one word reads the units where it weighs most. A small bound puts every
+    # filter and page of this small fixture there, so each band gets to answer and each gets to fail.
+    engine, versions, works = varied
+    monkeypatch.setattr(text_index, "COUNT_BOUND", bound)
+    bands, every_match = [], 0
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        nonlocal every_match
+        if "unit_heavy_words" in statement:
+            bands.append(parameters["heavy_0"][-1].rsplit(" ", 1)[1])
+        elif "AS found ORDER BY score DESC" in statement:  # the search's own, not as_it_was's
+            every_match += 1
+
+    with engine.begin() as conn:
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            for query in (
+                "shall",
+                "act",
+                "commission",
+                "commissions",
+                "minister",
+                "ministre",
+                "قانون",
+                "fund",
+            ):
+                for filters in filters_for(versions, works):
+                    for limit, offset in PAGES:
+                        same_as_it_was(conn, query, filters, limit, offset, bound=bound)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
+    assert set(bands) == set(text_index.BANDS) and every_match
+
+
+def test_a_page_of_a_common_word_scores_only_the_units_it_could_come_from(varied, monkeypatch):
+    engine, _, _ = varied
+    monkeypatch.setattr(text_index, "COUNT_BOUND", 40)
+    statements = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        if "ORDER BY score DESC" in statement:
+            statements.append(statement)
+
+    with engine.begin() as conn:
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            found = text_index.search(conn, "shall", text_index.Filters(), limit=5, offset=0)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
+        assert len(found.rows) == 5 and statements and all("unit_heavy_words" in s for s in statements)
+        assert [
+            r.start_byte for r in same_as_it_was(conn, "shall", text_index.Filters(), 5, 0, bound=40).rows
+        ]
+        # What was scored is what could come first: a word's weight in the unit is all there is to its score.
+        table, _ = text_index._tables(conn)
+        rows = conn.execute(
+            text(
+                f"SELECT u.version_id, u.start_byte, ts_rank_cd(CAST('{text_index.WEIGHTS}' AS float4[]),"
+                f" u.document || u.context, CAST(:word AS tsquery), 32) AS rank,"
+                f" (SELECT sum(CASE p WHEN 'A' THEN 1.0 WHEN 'B' THEN 0.4 WHEN 'C' THEN 0.2 ELSE 0.1 END)"
+                f" FROM unnest(u.document || u.context) AS w(lexeme, positions, weights), unnest(w.weights) AS p"
+                f" WHERE w.lexeme = :lexeme) AS weight FROM {table} u"
+                f" WHERE (u.document || u.context) @@ CAST(:word AS tsquery)"
+            ),
+            {"word": "'shall'", "lexeme": "shall"},
+        ).all()
+        assert len(rows) > 40
+        for row in rows:
+            assert row.rank == pytest.approx(float(row.weight) / (float(row.weight) + 1), rel=1e-6), row
+
+
+def test_every_word_of_every_unit_is_listed_in_the_band_of_its_score(varied):
+    # The search leaves out a unit on this index's word alone, so it must hold for every word there is, in every
+    # analysis, with ts_rank_cd itself as the judge: at the bands' edges, and past what a vector keeps for one word.
+    engine, _, _ = varied
+    with engine.begin() as conn:
+        table, _ = text_index._tables(conn)
+        heavy = namespace(conn).qualified(conn, "changes", "unit_heavy_words")
+        rows = conn.execute(
+            text(
+                f"SELECT w.lexeme, ts_rank_cd(CAST('{text_index.WEIGHTS}' AS float4[]), u.document || u.context,"
+                f" CAST(quote_literal(w.lexeme) AS tsquery), 32) AS rank, {heavy}(u.document || u.context) AS listed"
+                f" FROM {table} u CROSS JOIN LATERAL unnest(u.document || u.context) AS w(lexeme, positions, weights)"
+                " WHERE u.ctid IN (SELECT ctid FROM (SELECT ctid, row_number() OVER () AS n"
+                f" FROM {table}) AS t WHERE n % 7 = 0)"
+            )
+        ).all()
+    assert len(rows) > 500
+    bands = {}
+    for row in rows:
+        listed = [t.rsplit(" ", 1)[1] for t in row.listed if t.rsplit(" ", 1)[0] == row.lexeme]
+        assert len(listed) <= 1, row
+        weight = row.rank / (1 - row.rank)  # the score is weight / (weight + 1)
+        expected = next((b for b in text_index.BANDS if weight >= float(b) * (1 - 1e-6)), None)
+        assert (listed[0] if listed else None) == expected, (row.lexeme, weight, listed)
+        bands[expected] = bands.get(expected, 0) + 1
+    assert set(bands) == {None, *text_index.BANDS}  # each band is there to be held
+
+
+def test_a_word_at_the_edge_of_each_band_is_listed_in_it(pg_engine):
+    # Every weight up to past the last band, in tenths, from every mix of places: ts_rank_cd itself says what the
+    # weight is, and the index must have it in the band that weight falls in, or none below the first.
+    migrate(pg_engine)
+    rng = random.Random(20261102)
+    worth = {"A": 10, "B": 4, "C": 2, "D": 1}  # in tenths
+    bands = [(int(float(band) * 10), band) for band in text_index.BANDS]
+    with pg_engine.begin() as conn:
+        heavy = namespace(conn).qualified(conn, "changes", "unit_heavy_words")
+        for tenths in range(1, 141):
+            for letters in ("D", "CD", "BD", "AD", "ABCD", "BC"):
+                places = {}
+                left = tenths
+                while left:  # as much as fits of each, in turn, down to the D or C that ends it exactly
+                    fits = [letter for letter in letters if worth[letter] <= left]
+                    if not fits:
+                        break
+                    letter = rng.choice(fits)
+                    places[letter] = places.get(letter, 0) + 1
+                    left -= worth[letter]
+                if left:
+                    continue
+                vector = " || ".join(
+                    f"setweight(to_tsvector('simple', repeat('word ', {n})), '{letter}')"
+                    for letter, n in sorted(places.items())
+                )
+                rank, listed = conn.execute(
+                    text(
+                        f"SELECT ts_rank_cd(CAST('{text_index.WEIGHTS}' AS float4[]), {vector}, 'word', 32),"
+                        f" {heavy}({vector})"
+                    )
+                ).one()
+                assert rank == pytest.approx(tenths / (tenths + 10), rel=1e-6), places
+                band = next((name for least, name in bands if tenths >= least), None)
+                assert listed == ([f"word {band}"] if band else []), (tenths, places, listed)
+
+
+@pytest.mark.parametrize(
+    "query", ["shall act", '"shall act"', "act or fund", "act -shall", "-shall", "fund -shall"]
+)
+def test_several_words_are_scored_at_every_match_and_never_from_the_heavy_words(varied, monkeypatch, query):
+    # How near the words are counts towards the score, and the index does not know that.
+    engine, _, _ = varied
+    monkeypatch.setattr(text_index, "COUNT_BOUND", 10)
+    statements = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    with engine.begin() as conn:
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            text_index.search(conn, query, text_index.Filters(), limit=3, offset=0)
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
+        assert not [s for s in statements if "unit_heavy_words" in s]
+        same_as_it_was(conn, query, text_index.Filters(), 3, 0, bound=10)
+
+
+def test_any_term_search_gives_the_same_hits_when_many_units_match(varied, monkeypatch):
+    engine, versions, works = varied
+    monkeypatch.setattr(text_index, "COUNT_BOUND", 10)
+    with engine.begin() as conn:
+        for query in ("shall act", "commission", "shall"):
+            for filters in filters_for(versions, works):
+                same_as_it_was(conn, query, filters, 5, 0, any_terms=True, bound=10)
+
+
+def test_any_term_search_gives_the_same_hits_in_the_same_order(varied):
+    engine, versions, works = varied
+    with engine.begin() as conn:
+        for query in (
+            "shall act",
+            "commission minister shall",
+            "shall",
+            "the shall",
+            "the",
+            "qzxv",
+            "what the act says",
+        ):
+            for filters in filters_for(versions, works):
+                same_as_it_was(conn, query, filters, 25, 0, any_terms=True)
+            for limit, offset in PAGES:
+                same_as_it_was(conn, query, text_index.Filters(), limit, offset, any_terms=True)
+
+
+def test_a_passage_set_aside_is_left_out_as_it_was(varied, monkeypatch):
+    engine, _, _ = varied
+    with engine.begin() as conn:
+        [first] = text_index.search(conn, "shall", text_index.Filters(), limit=1, offset=0).rows
+        exclude = (first.version_id, first.start_byte, first.end_byte)
+        for bound in (text_index.COUNT_BOUND, 40):
+            monkeypatch.setattr(text_index, "COUNT_BOUND", bound)
+            for limit, offset in PAGES:
+                found = same_as_it_was(
+                    conn, "shall", text_index.Filters(), limit, offset, exclude=exclude, bound=bound
+                )
+                assert (first.version_id, first.start_byte) not in {
+                    (r.version_id, r.start_byte) for r in found.rows
+                }
+
+
+def test_a_document_search_gives_the_same_documents_in_the_same_order(varied):
+    engine, versions, works = varied
+    with engine.begin() as conn:
+        table = text_index._documents(conn)
+        for query in ("shall", "commission", "shall act", '"shall act"', "act -shall", "the", "qzxv", "!!"):
+            for filters in filters_for(versions, works):
+                filters = replace(filters, kinds=())
+                where, params = filters.where()
+                then = conn.execute(
+                    text(
+                        f"SELECT {text_index._DOCUMENT_COLUMNS}, {THEN_SCORE} AS score FROM {table} u"
+                        f" WHERE ({THEN_MATCH}) AND {where} ORDER BY score DESC, u.version_id LIMIT 7"
+                    ),
+                    params | {"q": query},
+                ).all()
+                found = text_index.search_documents(conn, query, filters, limit=7)
+                assert found.state == "ok" and [dict(r._mapping) for r in found.rows] == [
+                    dict(r._mapping) for r in then
+                ], (query, filters)
+
+
+def test_the_scope_of_a_search_is_what_counting_every_unit_finds(varied):
+    engine, versions, works = varied
+    with engine.begin() as conn:
+        table, _ = text_index._tables(conn)
+        documents = text_index._documents(conn)
+        # A text with a document unit and no provisions is no text searched.
+        conn.execute(
+            text(
+                f"INSERT INTO {documents} (version_id, work_id, start_byte, end_byte, language, config, jurisdiction_id,"
+                " document_type, legal_status, content_hash, work_hash, names, document, context)"
+                " VALUES ('v-empty', 'ng-empty', 0, 0, 'sw', 'simple', 'ng', 'act', 'current', :h, :h, '{}', '', '')"
+            ),
+            {"h": "c" * 64},
+        )
+        for filters in filters_for(versions, works):
+            where, params = filters.where()
+            then = conn.execute(
+                text(
+                    "SELECT count(DISTINCT u.version_id) AS texts, count(DISTINCT u.work_id) AS records,"
+                    f" coalesce(array_agg(DISTINCT u.language), '{{}}') AS languages FROM {table} u WHERE {where}"
+                ),
+                params,
+            ).one()
+            scope = text_index.scope(conn, filters)
+            assert (scope.texts, scope.records, scope.languages) == (
+                then.texts, then.records, tuple(sorted(then.languages))
+            ), filters  # fmt: skip
+        assert text_index.scope(conn, text_index.Filters()).texts == len(versions)
+    # A text's document unit is read, not its thousands of provisions, unless the filter is about those.
+    statements = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        if "count(DISTINCT" in statement:
+            statements.append(statement)
+
+    with engine.begin() as conn:
+        event.listen(engine, "before_cursor_execute", capture)
+        try:
+            text_index.scope(conn, text_index.Filters(jurisdictions=("ng",)))
+            text_index.scope(conn, text_index.Filters(kinds=("section",)))
+        finally:
+            event.remove(engine, "before_cursor_execute", capture)
+    assert ['"document_unit" u' in s for s in statements] == [True, False]
+
+
+def test_a_search_is_planned_for_its_values_and_sets_nothing_aside_for_others(varied):
+    # psycopg prepares a statement on its sixth run, and PostgreSQL may keep a plan blind to its values after five
+    # more. Each run must answer alike, and what it set aside for its own statements must end with them.
+    engine, _, _ = varied
+    settings = ("statement_timeout", "enable_seqscan", "work_mem", "plan_cache_mode")
+    seen = {}
+
+    def capture(c, cursor, statement, parameters, context, executemany):
+        if "ORDER BY score DESC" in statement or "UNION ALL" in statement or "LIMIT 10001" in statement:
+            with c.connection.cursor() as probe:
+                for name in settings:
+                    probe.execute(f"SELECT current_setting('{name}')")
+                    seen[name] = probe.fetchone()[0]
+
+    with engine.connect() as conn:
+        for _ in range(13):
+            with conn.begin():
+                before = [conn.scalar(text(f"SELECT current_setting('{name}')")) for name in settings]
+                seen.clear()
+                event.listen(engine, "before_cursor_execute", capture)
+                try:
+                    found = text_index.search(conn, "shall", text_index.Filters(), limit=25, offset=0)
+                finally:
+                    event.remove(engine, "before_cursor_execute", capture)
+                assert found.rows == same_as_it_was(conn, "shall", text_index.Filters(), 25, 0).rows
+                assert found.rows and seen == {
+                    "statement_timeout": "10s",
+                    "enable_seqscan": "off",
+                    "work_mem": text_index.SEARCH_MEMORY,
+                    "plan_cache_mode": "force_custom_plan",
+                }
+                assert [conn.scalar(text(f"SELECT current_setting('{name}')")) for name in settings] == before
+
+
+@pytest.mark.parametrize("bound", [None, 40])
+def test_a_search_out_of_time_says_so_and_sets_nothing_aside(varied, monkeypatch, bound):
+    engine, _, _ = varied
+    monkeypatch.setattr(text_index, "TIMEOUT_MS", 20)
+    if bound:
+        monkeypatch.setattr(text_index, "COUNT_BOUND", bound)
+
+    def slowly(conn, cursor, statement, parameters, context, executemany):
+        if "ORDER BY score DESC" in statement:
+            return "SELECT pg_sleep(5)", {}
+        return statement, parameters
+
+    settings = ("statement_timeout", "enable_seqscan", "work_mem", "plan_cache_mode")
+    event.listen(engine, "before_cursor_execute", slowly, retval=True)
+    try:
+        with engine.begin() as conn:
+            before = [conn.scalar(text(f"SELECT current_setting('{name}')")) for name in settings]
+            assert (
+                text_index.search(conn, "shall", text_index.Filters(), limit=5, offset=0).state == "timeout"
+            )
+            assert (
+                text_index.search_documents(conn, "shall", text_index.Filters(), limit=5).state == "timeout"
+            )
+            assert [conn.scalar(text(f"SELECT current_setting('{name}')")) for name in settings] == before
+    finally:
+        event.remove(engine, "before_cursor_execute", slowly)
+
+
+def test_a_database_before_the_index_of_heavy_words_scores_every_match(varied, monkeypatch):
+    engine, _, _ = varied
+    monkeypatch.setattr(text_index, "COUNT_BOUND", 40)
+    with engine.begin() as conn:
+        ns = namespace(conn)
+        conn.execute(text(f"DROP INDEX {ns.qualified(conn, 'changes', 'text_unit_heavy_words')}"))
+        conn.execute(text(f"DROP FUNCTION {ns.qualified(conn, 'changes', 'unit_heavy_words')}"))
+        assert same_as_it_was(conn, "shall", text_index.Filters(), 5, 0, bound=40).rows
+
+
+def test_a_search_for_one_word_reads_the_index_written_for_it(varied, monkeypatch):
+    # The expression must be the index's to the letter, or each unit's vectors are read instead: the same
+    # answers, and the same timeouts as before.
+    engine, _, _ = varied
+    monkeypatch.setattr(text_index, "COUNT_BOUND", 40)
+    plans = []
+
+    def explain(conn, cursor, statement, parameters, context, executemany):
+        if "ORDER BY score DESC" in statement or " LIMIT 41" in statement:
+            with conn.connection.cursor() as probe:
+                probe.execute("EXPLAIN (COSTS OFF) " + statement, parameters)
+                plans.append("\n".join(row[0] for row in probe.fetchall()))
+
+    with engine.begin() as conn:
+        event.listen(engine, "before_cursor_execute", explain)
+        try:
+            text_index.search(conn, "shall", text_index.Filters(), limit=5, offset=0)
+            text_index.search(conn, "shall act", text_index.Filters(), limit=5, offset=0)
+        finally:
+            event.remove(engine, "before_cursor_execute", explain)
+    assert any("Bitmap Index Scan on text_unit_heavy_words" in plan for plan in plans)
+    assert all("Seq Scan" not in plan for plan in plans), plans
+
+
+def test_the_roles_that_search_and_publish_can_use_the_index_of_heavy_words(varied, monkeypatch):
+    engine, _, _ = varied
+    monkeypatch.setattr(text_index, "COUNT_BOUND", 40)
+    with engine.begin() as conn:
+        ns = namespace(conn)
+        roles = provision_roles(conn, ns)
+        quote = conn.dialect.identifier_preparer.quote_identifier
+        for role in roles.values():  # the disposable schema these tests run in stands for the service's own
+            conn.execute(text(f"GRANT USAGE ON SCHEMA {quote(ns.base)} TO {quote(role)}"))
+        expected = same_as_it_was(conn, "shall", text_index.Filters(), 5, 0, bound=40).rows
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(f"SET LOCAL ROLE {quote(roles['serving'])}"))
+            assert text_index.search(conn, "shall", text_index.Filters(), limit=5, offset=0).rows == expected
+            assert text_index.scope(conn, text_index.Filters()).texts > 0
+        with engine.begin() as conn:
+            conn.execute(text(f"SET LOCAL ROLE {quote(roles['release'])}"))
+            table, _ = text_index._tables(conn)
+            changed = conn.execute(
+                text(
+                    f"UPDATE {table} SET context = context || setweight(to_tsvector('simple', 'zebra zebra'), 'A')"
+                    " WHERE version_id = :v AND start_byte = :s"
+                ),
+                {"v": expected[-1].version_id, "s": expected[-1].start_byte},
+            )
+            assert changed.rowcount == 1
+            # Kept in the statement that changes the unit: the word of weight 2 is there to be read at once.
+            arms, params = text_index._every_term({"'zebra'": list(text_index.ANALYSES)})
+            with text_index._deadline(conn):
+                [first] = text_index._heaviest(conn, table, arms, "true", params, 1)
+            assert (first.version_id, first.start_byte) == (expected[-1].version_id, expected[-1].start_byte)
+    finally:
+        with engine.begin() as conn:
+            for kind in ("policy", "staging", "corpus"):
+                conn.execute(text(f"DROP SCHEMA {quote(ns.schema(kind))} CASCADE"))
+            for role in roles.values():
+                conn.execute(text(f"DROP OWNED BY {quote(role)}"))
+                conn.execute(text(f"DROP ROLE {quote(role)}"))

@@ -28,6 +28,7 @@ import json
 import math
 import re
 import unicodedata
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import date
 
@@ -50,7 +51,7 @@ MAX_UNIT_BYTES = 64 * 1024
 MAX_INDEXED_NODES = 200_000
 COUNT_BOUND = 10_000
 TIMEOUT_MS = 10_000  # RET-02: a retrieval answers within ten seconds or says it could not
-WORKS_MEMORY = "32MB"  # enough to tell apart the units of about 400,000 heap pages: 160,000 texts
+SEARCH_MEMORY = "32MB"  # enough to tell apart the units of about 400,000 heap pages: 160,000 texts
 START, STOP = "⟦", "⟧"  # highlight marks; never part of a snippet
 HEADLINE = f"StartSel={START}, StopSel={STOP}, MaxWords=40, MinWords=18, ShortWord=2, MaxFragments=1"
 # A provision of its own; a schedule's or an opinion's paragraph is one when it is not inside another
@@ -654,15 +655,145 @@ _COLUMNS = ", ".join(
 )  # fmt: skip
 
 
-_MATCH = " OR ".join(
-    f"(u.config = '{c}' AND (u.document || u.context) @@ websearch_to_tsquery('{c}', :q))" for c in ANALYSES
-)
-_SCORE = (
-    f"ts_rank_cd(CAST('{WEIGHTS}' AS float4[]), u.document || u.context,"
-    " websearch_to_tsquery(CAST(u.config AS regconfig), :q), 32)"
-    f" * CASE WHEN u.replaced OR u.legal_status IN ('repealed', 'superseded', 'historical') THEN {NOT_IN_FORCE}"
+_IN_FORCE = (
+    f"CASE WHEN u.replaced OR u.legal_status IN ('repealed', 'superseded', 'historical') THEN {NOT_IN_FORCE}"
     " ELSE 1.0 END"
 )
+
+
+@dataclass(frozen=True)
+class _Arm:
+    """One search among the units of some analyses: which units, which of them it finds, and a hit's score."""
+
+    among: str
+    match: str
+    score: str
+
+
+def _readings(conn: Connection, parser: str, query: str) -> dict[str, list[str]]:
+    """Each different reading of ``query`` among the analyses, with the analyses that read it so; none for an
+    analysis in which it has only common words. A unit has one analysis, so each reading is one search."""
+    readings: dict[str, list[str]] = {}
+    for config, reading in conn.execute(
+        text(
+            f"SELECT c, CAST({parser}(CAST(c AS regconfig), :q) AS text)"
+            " FROM unnest(CAST(:configs AS text[])) AS c"
+        ),
+        {"q": query, "configs": list(ANALYSES)},
+    ):
+        if reading:
+            readings.setdefault(reading, []).append(config)
+    return readings
+
+
+def _every_term(readings: dict[str, list[str]]) -> tuple[list[_Arm], dict]:
+    """A search for each reading (oa-rank-1), and their parameters."""
+    arms, params = [], {}
+    for n, (reading, configs) in enumerate(readings.items()):
+        params |= {f"reading_{n}": reading, f"configs_{n}": configs}
+        arms.append(
+            _Arm(
+                f"u.config = ANY(CAST(:configs_{n} AS text[]))",
+                f"(u.document || u.context) @@ CAST(:reading_{n} AS tsquery)",
+                f"ts_rank_cd(CAST('{WEIGHTS}' AS float4[]), u.document || u.context,"
+                f" CAST(:reading_{n} AS tsquery), 32) * {_IN_FORCE}",
+            )
+        )
+    return arms, params
+
+
+@contextmanager
+def _deadline(conn: Connection):
+    """The statements of one search: each within TIMEOUT_MS, and planned for its values to let the index say
+    which units match, with memory enough to name each unit and not just its page. Otherwise every unit's words
+    are read and matched again. What this sets aside ends with it."""
+    settings = {
+        "statement_timeout": str(TIMEOUT_MS),
+        "enable_seqscan": "off",
+        "work_mem": SEARCH_MEMORY,
+        "plan_cache_mode": "force_custom_plan",
+    }
+    before = dict(
+        conn.execute(
+            text("SELECT n, current_setting(n) FROM unnest(CAST(:names AS text[])) AS n"),
+            {"names": list(settings)},
+        ).all()
+    )
+    change = text(
+        "SELECT set_config(n, v, true) FROM unnest(CAST(:names AS text[]), CAST(:values AS text[])) AS t(n, v)"
+    )
+    with conn.begin_nested():
+        conn.execute(change, {"names": list(settings), "values": list(settings.values())})
+        yield
+        conn.execute(change, {"names": list(before), "values": list(before.values())})
+
+
+def _ranked(
+    conn: Connection,
+    table: str,
+    arms: list[_Arm],
+    found: list[str],
+    params: dict,
+    limit: int,
+    offset: int = 0,
+):
+    """A page of each arm's units where its ``found`` holds, best first: ties to the version, then the earlier
+    unit."""
+    scored = " UNION ALL ".join(
+        f"SELECT {_COLUMNS}, {arm.score} AS score FROM {table} u WHERE {arm.among} AND {where}"
+        for arm, where in zip(arms, found, strict=True)
+    )
+    return conn.execute(
+        text(
+            f"SELECT * FROM ({scored}) AS found"
+            " ORDER BY score DESC, version_id, start_byte LIMIT :limit OFFSET :offset"
+        ),
+        params | {"limit": limit, "offset": offset},
+    ).all()
+
+
+# A search for one word scores a unit by that word alone: each place it is found adds its weight, so the score
+# is weight / (weight + 1), whatever else the unit says. Migration 0047's index names each unit's words of weight
+# 1.2 or more, by band, which is about 10 of the unit's 130 words. So the first hits can be found by scoring only
+# the units where the word is heaviest, and shown to be the first: every other unit scores less than the band's
+# least, and the last of the hits scores at least that much. They are the hits and the order that scoring every
+# match gives, or there is no answer from here. Several words score by how near they are, which no index here
+# knows, so they are scored at every match.
+BANDS = ("12.8", "6.4", "3.2", "2.4", "1.6", "1.2")  # heaviest first, as migration 0047 writes them
+
+
+def _heaviest(
+    conn: Connection, table: str, arms: list[_Arm], where: str, params: dict, wanted: int
+) -> list | None:
+    """The first ``wanted`` hits of a search whose every reading is one word, from the units where it weighs
+    most; None when that cannot be shown, or the database has no such index (before migration 0047)."""
+    from changes.record import namespace
+
+    ns = namespace(conn)
+    index = ns.qualified(conn, "changes", "text_unit_heavy_words")
+    if conn.scalar(text("SELECT to_regclass(:i)"), {"i": index}) is None:
+        return None
+    words = conn.scalars(
+        text(
+            "SELECT CASE WHEN numnode(CAST(r AS tsquery)) = 1 THEN (tsvector_to_array(CAST(r AS tsvector)))[1] END"
+            " FROM unnest(CAST(:readings AS text[])) WITH ORDINALITY AS t(r, n) ORDER BY n"
+        ),
+        {"readings": [params[f"reading_{n}"] for n in range(len(arms))]},
+    ).all()
+    if None in words:
+        return None
+    heavy = ns.qualified(conn, "changes", "unit_heavy_words")
+    found = [
+        f"{heavy}(u.document || u.context) && CAST(:heavy_{n} AS text[]) AND {where}"
+        for n in range(len(arms))
+    ]
+    for at, band in enumerate(BANDS):
+        tokens = {f"heavy_{n}": [f"{word} {b}" for b in BANDS[: at + 1]] for n, word in enumerate(words)}
+        rows = _ranked(conn, table, arms, found, params | tokens, wanted)
+        if len(rows) == wanted and rows[-1].score >= float(band) / (float(band) + 1):
+            return rows
+    return None
+
 
 # The any-term arm (oa-any-1): each of the query's words, per analysis, weighted by how rare it is in
 # the index (an inverse document frequency from capped counts), so a provision with the rare words of
@@ -673,15 +804,15 @@ MAX_ANY_TERMS = 12
 DF_BOUND = 50_000
 
 
-def _weighted(conn: Connection, table: str, query: str) -> tuple[str, str, dict] | None:
-    """The any-term arm's match and score expressions and their parameters; None when the query has no
+def _weighted(conn: Connection, table: str, query: str) -> tuple[list[_Arm], dict]:
+    """A search for each analysis in the any-term arm, and their parameters; none when the query has no
     indexable word in any analysis."""
     total = conn.scalar(
         text("SELECT greatest(reltuples, 0)::bigint FROM pg_class WHERE oid = to_regclass(:t)"), {"t": table}
     )
     if not total:
         total = conn.scalar(text(f"SELECT count(*) FROM {table}")) or 0
-    matches, scores, params = [], [], {}
+    arms, params = [], {}
     for config in ANALYSES:
         present = conn.scalar(
             text(f"SELECT EXISTS (SELECT 1 FROM {table} u WHERE u.config = :c)"), {"c": config}
@@ -712,18 +843,14 @@ def _weighted(conn: Connection, table: str, query: str) -> tuple[str, str, dict]
                 f" CAST(:{key} AS tsquery), 1)"
             )
         params[f"any_{config}"] = " | ".join(params[k] for k in keys)
-        matches.append(
-            f"(u.config = '{config}' AND (u.document || u.context) @@ CAST(:any_{config} AS tsquery))"
+        arms.append(
+            _Arm(
+                f"u.config = '{config}'",
+                f"(u.document || u.context) @@ CAST(:any_{config} AS tsquery)",
+                f"({' + '.join(parts)}) * {_IN_FORCE}",
+            )
         )
-        scores.append(f"WHEN '{config}' THEN {' + '.join(parts)}")
-    if not matches:
-        return None
-    score = (
-        f"(CASE u.config {' '.join(scores)} ELSE 0 END)"
-        f" * CASE WHEN u.replaced OR u.legal_status IN ('repealed', 'superseded', 'historical')"
-        f" THEN {NOT_IN_FORCE} ELSE 1.0 END"
-    )
-    return " OR ".join(matches), score, params
+    return arms, params
 
 
 def query_terms(conn: Connection, query: str) -> dict[str, str]:
@@ -753,13 +880,20 @@ def built(conn: Connection):
 
 
 def scope(conn: Connection, filters: Filters) -> Scope:
-    """How many published texts and records the filters cover, and their languages."""
+    """How many published texts and records the filters cover, and their languages. A text has one document
+    unit with its facts, where it may have thousands of provisions, so those are read unless a filter asks about
+    a provision; a text with no provisions has one too, so each is asked whether it has any."""
     table, _ = _tables(conn)
+    documents = _documents(conn)
     where, params = filters.where()
+    units = f"{table} u WHERE {where}"
+    if documents is not None and not filters.kinds:
+        has_any = f"EXISTS (SELECT 1 FROM {table} t WHERE t.version_id = u.version_id)"
+        units = f"{documents} u WHERE {where} AND {has_any}"
     row = conn.execute(
         text(
             f"SELECT count(DISTINCT u.version_id) AS texts, count(DISTINCT u.work_id) AS records,"
-            f" coalesce(array_agg(DISTINCT u.language), '{{}}') AS languages FROM {table} u WHERE {where}"
+            f" coalesce(array_agg(DISTINCT u.language), '{{}}') AS languages FROM {units}"
         ),
         params,
     ).one()
@@ -783,49 +917,47 @@ def search(
     if built(conn) is None:
         return Found("building")
     table, _ = _tables(conn)
-    terms = dict(
-        conn.execute(
-            text(
-                "SELECT c, numnode(websearch_to_tsquery(CAST(c AS regconfig), :q)) > 0"
-                " FROM unnest(CAST(:configs AS text[])) AS c"
-            ),
-            {"q": query, "configs": list(ANALYSES)},
-        ).all()
-    )
-    common_only = tuple(c for c, found in sorted(terms.items()) if not found)
-    if not any(terms.values()):
+    readings = _readings(conn, "websearch_to_tsquery", query)
+    read = {config for configs in readings.values() for config in configs}
+    common_only = tuple(c for c in sorted(ANALYSES) if c not in read)
+    if not readings:
         return Found("no_terms", common_only=common_only)
     where, params = filters.where()
-    params |= {"q": query}
     if exclude:
         where += " AND NOT (u.version_id = :x_version AND u.start_byte = :x_start AND u.end_byte = :x_end)"
         params |= dict(zip(("x_version", "x_start", "x_end"), exclude, strict=True))
-    match, score = _MATCH, _SCORE
-    if any_terms:
-        weighted = _weighted(conn, table, query)
-        if weighted is None:
-            return Found("no_terms", common_only=common_only)
-        match, score, extra = weighted
-        params |= extra
-    old = conn.scalar(text("SELECT current_setting('statement_timeout')"))
     try:
-        with conn.begin_nested():
-            conn.execute(text("SELECT set_config('statement_timeout', :ms, true)"), {"ms": str(TIMEOUT_MS)})
-            total = conn.scalar(
-                text(
-                    f"SELECT count(*) FROM (SELECT 1 FROM {table} u WHERE ({match}) AND {where}"
-                    f" LIMIT {COUNT_BOUND + 1}) AS matched"
-                ),
-                params,
+        with _deadline(conn):
+            arms, extra = _weighted(conn, table, query) if any_terms else _every_term(readings)
+            if not arms:
+                return Found("no_terms", common_only=common_only)
+            params |= extra
+            matched = " UNION ALL ".join(
+                f"SELECT u.version_id, u.start_byte FROM {table} u"
+                f" WHERE {arm.among} AND {arm.match} AND {where}"
+                for arm in arms
             )
-            rows = conn.execute(
-                text(
-                    f"SELECT {_COLUMNS}, {score} AS score FROM {table} u WHERE ({match}) AND {where}"
-                    " ORDER BY score DESC, u.version_id, u.start_byte LIMIT :limit OFFSET :offset"
-                ),
-                params | {"limit": limit, "offset": offset},
-            ).all()
-            conn.execute(text("SELECT set_config('statement_timeout', :ms, true)"), {"ms": old})
+            keys = conn.execute(text(f"{matched} LIMIT {COUNT_BOUND + 1}"), params).all()
+            total = len(keys)
+            if total <= COUNT_BOUND:  # few enough to score, and their words need no second reading
+                named = (
+                    "(u.version_id, u.start_byte) IN"
+                    " (SELECT * FROM unnest(CAST(:key_versions AS text[]), CAST(:key_starts AS integer[])))"
+                )
+                params |= {
+                    "key_versions": [k.version_id for k in keys],
+                    "key_starts": [k.start_byte for k in keys],
+                }
+                rows = _ranked(conn, table, arms, [named] * len(arms), params, limit, offset)
+            else:
+                first = None
+                if limit > 0 and not any_terms:
+                    first = _heaviest(conn, table, arms, where, params, offset + limit)
+                if first is not None:
+                    rows = first[offset:]
+                else:
+                    every = [f"{arm.match} AND {where}" for arm in arms]
+                    rows = _ranked(conn, table, arms, every, params, limit, offset)
     except OperationalError as error:
         if getattr(error.orig, "sqlstate", None) == "57014":  # query_canceled: the deadline passed
             return Found("timeout")
@@ -846,16 +978,7 @@ def works(conn: Connection, query: str, filters: Filters, *, bound: int | None) 
         return Found("unavailable")
     if built(conn) is None:
         return Found("building")
-    readings: dict[str, list[str]] = {}
-    for config, reading in conn.execute(
-        text(
-            "SELECT c, CAST(plainto_tsquery(CAST(c AS regconfig), :q) AS text)"
-            " FROM unnest(CAST(:configs AS text[])) AS c"
-        ),
-        {"q": query, "configs": list(ANALYSES)},
-    ):
-        if reading:  # none where the query has only the analysis's common words
-            readings.setdefault(reading, []).append(config)
+    readings = _readings(conn, "plainto_tsquery", query)
     if not readings:
         return Found("ok", [], 0)
     where, params = replace(filters, kinds=()).where()
@@ -869,21 +992,10 @@ def works(conn: Connection, query: str, filters: Filters, *, bound: int | None) 
             for t in searched
         ]
     union = " UNION ".join(arms)
-    old = conn.scalar(text("SELECT current_setting('statement_timeout')"))
     try:
-        with conn.begin_nested():
-            conn.execute(text("SELECT set_config('statement_timeout', :ms, true)"), {"ms": str(TIMEOUT_MS)})
-            conn.execute(
-                text(
-                    "SELECT set_config('enable_seqscan', 'off', true), set_config('work_mem', :memory, true)"
-                ),
-                {"memory": WORKS_MEMORY},
-            )
+        with _deadline(conn):
             limit = "" if bound is None else f" LIMIT {bound + 1}"
             rows = conn.scalars(text(f"{union}{limit}"), params).all()
-            conn.execute(text("SELECT set_config('statement_timeout', :ms, true)"), {"ms": old})
-            conn.execute(text("RESET enable_seqscan"))
-            conn.execute(text("RESET work_mem"))
     except OperationalError as error:
         if getattr(error.orig, "sqlstate", None) == "57014":  # query_canceled: the deadline passed
             return Found("timeout")
@@ -956,16 +1068,21 @@ def search_documents(conn: Connection, query: str, filters: Filters, *, limit: i
         return Found("unavailable")
     if built(conn) is None:
         return Found("building")
+    readings = _readings(conn, "websearch_to_tsquery", query)
+    if not readings:
+        return Found("ok", [], 0)
     where, params = replace(filters, kinds=()).where()
-    params |= {"q": query, "limit": limit}
+    arms, extra = _every_term(readings)
+    params |= extra | {"limit": limit}
+    scored = " UNION ALL ".join(
+        f"SELECT {_DOCUMENT_COLUMNS}, {arm.score} AS score FROM {table} u"
+        f" WHERE {arm.among} AND {arm.match} AND {where}"
+        for arm in arms
+    )
     try:
-        with conn.begin_nested():
-            conn.execute(text("SELECT set_config('statement_timeout', :ms, true)"), {"ms": str(TIMEOUT_MS)})
+        with _deadline(conn):
             rows = conn.execute(
-                text(
-                    f"SELECT {_DOCUMENT_COLUMNS}, {_SCORE} AS score FROM {table} u WHERE ({_MATCH}) AND {where}"
-                    " ORDER BY score DESC, u.version_id LIMIT :limit"
-                ),
+                text(f"SELECT * FROM ({scored}) AS found ORDER BY score DESC, version_id LIMIT :limit"),
                 params,
             ).all()
     except OperationalError as error:
