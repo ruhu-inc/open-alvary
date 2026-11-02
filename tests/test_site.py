@@ -2,11 +2,14 @@
 
 import hashlib
 import json
+import math
 import re
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from urllib.parse import quote, urlsplit
+from xml.etree import ElementTree
 
 import pytest
 from fastapi import FastAPI
@@ -274,6 +277,130 @@ def test_a_longer_walk_earns_a_longer_rest_and_nothing_is_kept_meanwhile(
     assert rested.status_code == 503 and 2 <= int(rested.headers["retry-after"]) <= 4
     assert "/sources/" not in rested.text
     assert client.get("/site/v1/sources").status_code == 200  # the website goes on regardless
+
+
+SITEMAP = "{http://www.sitemaps.org/schemas/sitemap/0.9}"
+
+
+def listed_in(answer) -> tuple[str, list[str]]:
+    """What a sitemap answer is, and the addresses it gives; and that it is well formed, for search engines."""
+    assert answer.status_code == 200 and answer.headers["content-type"].startswith("application/xml")
+    assert answer.headers["cache-control"] == "no-store"  # it names records (F01)
+    root = ElementTree.fromstring(answer.text)
+    return root.tag.removeprefix(SITEMAP), [loc.text for loc in root.iter(f"{SITEMAP}loc")]
+
+
+def through_the_index(client) -> list[list[str]]:
+    kind, files = listed_in(client.get("/sitemap.xml"))
+    assert kind == "sitemapindex"
+    paths = [urlsplit(address).path for address in files]
+    # At the root: a sitemap may only list addresses below its own directory.
+    assert paths == [f"/sitemap-{n}.xml" for n in range(1, len(files) + 1)]
+    found = [listed_in(client.get(path)) for path in paths]
+    assert {kind for kind, _ in found} == {"urlset"}
+    return [addresses for _, addresses in found]
+
+
+@pytest.mark.parametrize("over", [1, 2, 3, 4, 40])
+def test_past_what_one_file_may_list_the_sitemap_is_an_index_of_numbered_files(
+    catalogue, store, tmp_path, monkeypatch, no_rest, over
+):
+    store.save(catalogue)
+    client = TestClient(create_service(store, tmp_path))
+    kind, everything = listed_in(client.get("/sitemap.xml"))
+    assert kind == "urlset"
+    limit = max(len(everything) - over, 1)
+    monkeypatch.setattr(site, "MAX_SITEMAP_URLS", limit)
+    files = through_the_index(client)
+    assert [address for addresses in files for address in addresses] == everything  # each once, in order
+    assert all(len(addresses) == limit for addresses in files[:-1]) and 1 <= len(files[-1]) <= limit
+    assert len(files) == math.ceil(len(everything) / limit)
+
+
+def test_a_catalogue_just_filling_one_file_keeps_the_one_file(
+    catalogue, store, tmp_path, monkeypatch, no_rest
+):
+    store.save(catalogue)
+    client = TestClient(create_service(store, tmp_path))
+    _, everything = listed_in(client.get("/sitemap.xml"))
+    monkeypatch.setattr(site, "MAX_SITEMAP_URLS", len(everything))
+    assert listed_in(client.get("/sitemap.xml")) == ("urlset", everything)
+    assert listed_in(client.get("/sitemap-1.xml")) == ("urlset", everything)
+    assert client.get("/sitemap-2.xml").status_code == 404
+
+
+def test_a_record_withdrawn_from_view_is_gone_from_its_numbered_file_at_once(
+    catalogue, store, tmp_path, monkeypatch, no_rest
+):
+    store.save(catalogue)
+    client = TestClient(create_service(store, tmp_path))
+    _, everything = listed_in(client.get("/sitemap.xml"))
+    monkeypatch.setattr(site, "MAX_SITEMAP_URLS", len(everything) - 2)
+    assert [address for addresses in through_the_index(client) for address in addresses] == everything
+    assert any(address.endswith(f"/sources/{SOURCE}") for address in everything)
+    catalogue.rights = [
+        r.model_copy(update={"metadata_public": False}) if r.source_id == SOURCE else r
+        for r in catalogue.rights
+    ]
+    store.save(catalogue)
+    left = [address for addresses in through_the_index(client) for address in addresses]
+    assert left == [address for address in everything if not address.endswith(f"/sources/{SOURCE}")]
+
+
+@pytest.mark.parametrize(
+    "number", ["0", "01", "-1", "x", "1x", "1.5", "50001", "99999", "100000", "9" * 5000]
+)
+def test_a_number_no_index_would_name_costs_no_walk(catalogue, store, tmp_path, monkeypatch, number):
+    store.save(catalogue)
+    client = TestClient(create_service(store, tmp_path))
+
+    def never(*_args, **_kwargs):
+        raise AssertionError("no walk for this")
+
+    monkeypatch.setattr(LegacyRepository, "public_source_ids", never)
+    answer = client.get(f"/sitemap-{number}.xml")
+    assert answer.status_code == 404 and answer.json()["code"] == "unavailable"
+    assert answer.headers["cache-control"] == "no-store"
+
+
+def test_a_file_past_the_last_is_not_found(catalogue, store, tmp_path, no_rest):
+    store.save(catalogue)
+    client = TestClient(create_service(store, tmp_path))
+    answer = client.get("/sitemap-2.xml")
+    assert answer.status_code == 404 and answer.json()["code"] == "unavailable"
+
+
+@pytest.mark.parametrize(
+    ("first", "then"), [("/sitemap.xml", "/sitemap-1.xml"), ("/sitemap-1.xml", "/sitemap.xml")]
+)
+def test_the_index_and_the_files_share_one_walk_at_a_time_and_its_rest(
+    catalogue, store, tmp_path, monkeypatch, first, then
+):
+    store.save(catalogue)
+    client = TestClient(create_service(store, tmp_path))
+    walk = LegacyRepository.public_source_ids
+
+    def takes_a_while(self, limit, offset=0):
+        time.sleep(0.05)
+        return walk(self, limit, offset)
+
+    monkeypatch.setattr(LegacyRepository, "public_source_ids", takes_a_while)
+    assert client.get(first).status_code == 200
+    rested = client.get(then)
+    assert rested.status_code == 503 and rested.json()["code"] == "temporarily_unavailable"
+    assert 2 <= int(rested.headers["retry-after"]) <= 4
+    assert "/sources/" not in rested.text
+
+
+def test_a_full_file_of_the_longest_addresses_stays_under_the_size_limit():
+    # The longest ID there may be, with each character after the first escaped, on the longest host name.
+    longest = "a" + ":" * 159
+    assert re.fullmatch(r"^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,159}$", longest)
+    base = "https://" + "h" * 253
+    body = site._sitemap(base, (), [longest] * site.MAX_SITEMAP_URLS).body
+    assert body.count(b"<url>") == 50_000
+    assert len(body) < 50 * 1024 * 1024  # sitemaps.org: 52,428,800 bytes, uncompressed
+    assert len(f"{base}/sources/{quote(longest)}") < 2048  # and each address under 2,048 characters
 
 
 def site_app(store):

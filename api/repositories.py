@@ -109,10 +109,11 @@ EDGE_ORDER = [
 # What rights.policy.decide lets anyone read, counted from the gates migration 0045 keeps, reading no
 # payload (tests/test_postgres_coverage.py holds it to decide's answers). The tests on the time of asking
 # and the approved hash stay outside the joins (OFFSET 0): the planner cannot tell they nearly always
-# pass, and would look up each record's source one at a time if it took them for rare.
+# pass, and would look up each record's source one at a time if it took them for rare. Telling IDs apart
+# needs no locale, and sorting them by one took two thirds of the time.
 PUBLISHED_COUNTS = text(
     """
-    SELECT count(DISTINCT source_id) AS sources, count(*) AS versions FROM (
+    SELECT count(DISTINCT source_id COLLATE "C") AS sources, count(*) AS versions FROM (
         SELECT v.source_id, v.gate_content_hash, v.gate_verified_at,
                r.gate_reviewed_at, r.gate_expires_at, r.gate_approved
         FROM versions v
@@ -124,7 +125,7 @@ PUBLISHED_COUNTS = text(
     WHERE gate_verified_at::timestamptz <= :now
       AND gate_reviewed_at::timestamptz <= :now
       AND (gate_expires_at IS NULL OR gate_expires_at::timestamptz > :now)
-      AND position('"' || gate_content_hash || '"' IN gate_approved) > 0
+      AND gate_approved::jsonb ? gate_content_hash
     """
 )
 # The columns of the case-law tables (migration 0042) that the relationship pages read.
@@ -243,15 +244,20 @@ class LegacyRepository:
                 return
             cursor = rows[-1].source["id"]
 
-    def public_source_ids(self, limit: int) -> list[str]:
+    def _public_gate(self):
+        """_visible, from its columns where the database keeps them (_gated), so no payload is parsed."""
+        return text("sources.gate_identity AND rights.gate_public") if self._gated() else self._visible()
+
+    def public_source_ids(self, limit: int, offset: int = 0) -> list[str]:
         """The public records' IDs, in ID order: the sitemap's walk. The database applies the gate
         _select_sources does and sends back the IDs alone, so no record's body is read into memory."""
         statement = (
             select(self._sources.c.id)
             .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
-            .where(self._visible())
+            .where(self._public_gate())
             .order_by(self._sources.c.id)
             .limit(limit)
+            .offset(offset)
         )
         return list(self.connection.scalars(statement))
 
@@ -344,11 +350,10 @@ class LegacyRepository:
 
     def public_counts(self) -> dict[str, int]:
         """How many public sources each jurisdiction has, in order of each one's first source id."""
-        visible = text("sources.gate_identity AND rights.gate_public") if self._gated() else self._visible()
         statement = (
             select(self._sources.c.jurisdiction_id, func.count())
             .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
-            .where(visible)
+            .where(self._public_gate())
             .group_by(self._sources.c.jurisdiction_id)
             .order_by(func.min(self._sources.c.id))
         )

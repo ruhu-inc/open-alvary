@@ -294,13 +294,10 @@ def create_service(
             headers={"Cache-Control": "max-age=3600"},
         )
 
-    service.router.routes.append(
-        Route(
-            "/sitemap.xml",
-            create_sitemap_app(store, (*STATIC_PAGES, *docs_pages(frontend)), _origin, site_admission),
-            methods=["GET"],
-        )
-    )
+    sitemaps = create_sitemap_app(store, (*STATIC_PAGES, *docs_pages(frontend)), _origin, site_admission)
+    service.router.routes += [
+        Route(path, sitemaps, methods=["GET"]) for path in ("/sitemap.xml", "/sitemap-{number}.xml")
+    ]
 
     if frontend is not None:
         website = WebsiteFiles(directory=frontend, html=True, check_dir=False, traffic=traffic)

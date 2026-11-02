@@ -28,7 +28,9 @@ down_revision = "0044"
 branch_labels = None
 depends_on = None
 
-CONDITIONAL = "payload ->> 'status' = 'OPEN_WITH_CONDITIONS' OR payload ->> 'redistribution_allowed' = 'conditional'"
+CONDITIONAL = (
+    "payload ->> 'status' = 'OPEN_WITH_CONDITIONS' OR payload ->> 'redistribution_allowed' = 'conditional'"
+)
 SOURCES = """
 ALTER TABLE {base}.sources
     ADD COLUMN gate_identity boolean GENERATED ALWAYS AS (

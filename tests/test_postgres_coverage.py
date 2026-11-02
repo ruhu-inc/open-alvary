@@ -29,7 +29,11 @@ RIGHTS_CHANGES = [
     *({"status": status} for status in ("LINK_ONLY", "RESTRICTED", "RIGHTS_UNDER_REVIEW")),
     {"status": "OPEN_WITH_CONDITIONS"},
     {"status": "OPEN_WITH_CONDITIONS", "conditions": ["Attribute the ministry"]},
-    {"status": "OPEN_WITH_CONDITIONS", "conditions": ["Attribute the ministry"], "conditions_satisfied": True},
+    {
+        "status": "OPEN_WITH_CONDITIONS",
+        "conditions": ["Attribute the ministry"],
+        "conditions_satisfied": True,
+    },
     {"redistribution_allowed": "conditional"},
     {"redistribution_allowed": "conditional", "conditions": ["Attribute"], "conditions_satisfied": True},
     {"redistribution_allowed": "conditional", "conditions_satisfied": True},
@@ -39,7 +43,10 @@ RIGHTS_CHANGES = [
     *({"redistribution_allowed": value} for value in ("no", "unknown")),
     *({"commercial_reuse_allowed": value} for value in ("no", "conditional", "unknown")),
     *({"derivatives_allowed": value} for value in ("no", "conditional", "unknown")),
-    *({name: None} for name in ("reviewer", "licence", "rights_holder", "legal_note", "database_rights_notes")),
+    *(
+        {name: None}
+        for name in ("reviewer", "licence", "rights_holder", "legal_note", "database_rights_notes")
+    ),
     *({name: ""} for name in ("licence", "rights_holder", "legal_note", "database_rights_notes")),
     {"reviewed_at": None},
     {"reviewed_at": LATER},
@@ -241,6 +248,36 @@ def test_withdrawing_a_record_or_its_review_expiring_takes_effect_on_the_next_an
     rights.metadata_public = False
     store.save(corpus)
     assert numbers(counted(pg_engine)) == (catalogued - 1, open_sources - 1, published - 1)
+
+
+def test_the_sitemaps_walk_names_the_same_records_by_the_gates_a_file_at_a_time(corpus, pg_engine):
+    template = corpus.sources[0]
+    for changes in RIGHTS_CHANGES:
+        add_record(corpus, template, changes.items())
+    Store(pg_engine).save(corpus)
+    statements = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    with pg_engine.begin() as conn:
+        repository = LegacyRepository(conn)
+        assert repository._gated()
+        event.listen(pg_engine, "before_cursor_execute", capture)
+        try:
+            walked = repository.public_source_ids(1000)
+            in_files = [
+                source_id
+                for start in range(0, len(walked) + 7, 7)
+                for source_id in repository.public_source_ids(7, offset=start)
+            ]
+        finally:
+            event.remove(pg_engine, "before_cursor_execute", capture)
+        repository._has_gates = False
+        assert repository.public_source_ids(1000) == walked
+    assert in_files == walked
+    assert set(walked) == {r.source_id for r in corpus.rights if decide(r).metadata}
+    assert statements and not any("payload" in statement for statement in statements)
 
 
 def test_the_answers_are_the_same_without_the_gates_and_after_they_return(corpus, pg_engine):

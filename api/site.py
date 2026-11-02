@@ -17,10 +17,11 @@ import os
 import re
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from contextlib import contextmanager
 from html import escape
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote
 from uuid import uuid4
 
@@ -43,7 +44,10 @@ from rights.bytes import ByteLedger, Scope
 from rights.database import PolicyNamespace
 
 PAGE_SIZE = 20
-MAX_SITEMAP_URLS = 50_000  # the most one sitemap file may list
+# What sitemaps.org allows one file to list and one index to name. Its other limit, 50 MB, is out of reach:
+# this many of the longest addresses the IDs and a host name allow come to 38.5 MB (tests/test_site.py).
+MAX_SITEMAP_URLS = 50_000
+MAX_SITEMAPS = 50_000
 SITEMAP_RETRY_SECONDS = 5
 SITEMAP_REST_PER_WALK_SECOND = 49  # so walks take at most 2% of an instance's time
 MAX_PAGES = 25
@@ -62,9 +66,9 @@ TITLES = {
 
 
 class SiteProblem(Exception):
-    def __init__(self, status: int, code: str, detail: str):
+    def __init__(self, status: int, code: str, detail: str, retry_after: int | None = None):
         super().__init__(detail)
-        self.status, self.code, self.detail = status, code, detail
+        self.status, self.code, self.detail, self.retry_after = status, code, detail, retry_after
 
 
 def problem(status: int, code: str, detail: str, request_id: str | None = None) -> JSONResponse:
@@ -158,7 +162,10 @@ def _base(admission: AdmissionConfig | None, store: Store) -> FastAPI:
 
     @app.exception_handler(SiteProblem)
     async def site_problem(request, exception):
-        return problem(exception.status, exception.code, exception.detail, request.state.request_id)
+        response = problem(exception.status, exception.code, exception.detail, request.state.request_id)
+        if exception.retry_after is not None:
+            response.headers["Retry-After"] = str(exception.retry_after)
+        return response
 
     @app.exception_handler(RequestValidationError)
     async def invalid(request, exception):
@@ -368,6 +375,17 @@ def create_site_app(
     return app
 
 
+def _sitemap_document(root: str, item: str, addresses: Iterable[str]) -> Response:
+    entries = "".join(f"<{item}><loc>{escape(address)}</loc></{item}>" for address in addresses)
+    body = f'<?xml version="1.0" encoding="UTF-8"?><{root} xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{entries}</{root}>'
+    return Response(body, media_type="application/xml")
+
+
+def _sitemap(base: str, pages: Iterable[str], source_ids: Iterable[str]) -> Response:
+    paths = (*pages, *(f"/sources/{quote(source_id)}" for source_id in source_ids))
+    return _sitemap_document("urlset", "url", (base + path for path in paths))
+
+
 def create_sitemap_app(
     store: Store,
     pages: Sequence[str],
@@ -375,45 +393,71 @@ def create_sitemap_app(
     admission: AdmissionConfig | None = None,
 ) -> FastAPI:
     """/sitemap.xml: every public page a reader can open, so search engines find each source's record.
+    Past what one file may list it is an index of /sitemap-1.xml, /sitemap-2.xml and so on, which stand at
+    the root because a sitemap may only list addresses below its own directory. Each is the pages and then
+    the records in ID order, cut into files, so a record's file can change as records come and go.
 
     It names records, so it is worked out for each request and kept nowhere (F01): a withdrawn record
     is gone from the next answer. What keeps that affordable however large the catalogue grows: the
     database sends back only the IDs; the request is admitted like the rest of the path; and an instance
-    walks the records one at a time, resting after each walk in proportion to its length, so walks take
-    a small share of its time whoever asks. Anyone asking meanwhile is told when to come back, which
-    search engines do, rather than held waiting on a thread."""
+    walks the records one at a time, the index and the files alike, resting after each walk in proportion
+    to its length, so walks take a small share of its time whoever asks. Anyone asking meanwhile is told
+    when to come back, which search engines do, rather than held waiting on a thread."""
     app = _base(admission, store)
     guard = threading.Lock()
     free_at = 0.0
 
-    @app.get("/sitemap.xml")
-    def sitemap(request: Request):
+    def walk(read: Callable[[LegacyRepository], Any]) -> Any:
         nonlocal free_at
         with guard:
             now = time.monotonic()
             if now < free_at:
                 wait = SITEMAP_RETRY_SECONDS if free_at == math.inf else math.ceil(free_at - now)
-                refused = problem(
-                    503, "temporarily_unavailable", "Try the sitemap again shortly", request.state.request_id
-                )
-                refused.headers["Retry-After"] = str(wait)
-                return refused
+                raise SiteProblem(503, "temporarily_unavailable", "Try the sitemap again shortly", wait)
             free_at = math.inf
         try:
             with store.engine.begin() as connection:
                 check_legacy_authority(connection, write=False)
-                ids = LegacyRepository(connection).public_source_ids(MAX_SITEMAP_URLS - len(pages))
+                return read(LegacyRepository(connection))
         finally:
             with guard:
                 ended = time.monotonic()
                 free_at = ended + (ended - now) * SITEMAP_REST_PER_WALK_SECOND
+
+    @app.get("/sitemap.xml")
+    def sitemap(request: Request):
+        room = max(MAX_SITEMAP_URLS - len(pages), 0)
+
+        def read(repository: LegacyRepository):
+            ids = repository.public_source_ids(room + 1)
+            if len(pages) + len(ids) <= MAX_SITEMAP_URLS:
+                return ids, None
+            return ids, sum(repository.public_counts().values())
+
+        ids, records = walk(read)
         base = origin(request)
-        urls = "".join(
-            f"<url><loc>{escape(base + path)}</loc></url>"
-            for path in (*pages, *(f"/sources/{quote(source_id)}" for source_id in ids))
+        if records is None:
+            return _sitemap(base, pages, ids)
+        files = math.ceil((len(pages) + records) / MAX_SITEMAP_URLS)
+        return _sitemap_document(
+            "sitemapindex", "sitemap", (f"{base}/sitemap-{n}.xml" for n in range(1, files + 1))
         )
-        body = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>'
-        return Response(body, media_type="application/xml")
+
+    @app.get("/sitemap-{number}.xml")
+    def sitemap_file(number: str, request: Request):
+        # What no index would name costs no walk.
+        if not re.fullmatch(r"[1-9][0-9]{0,4}", number) or int(number) > MAX_SITEMAPS:
+            raise SiteProblem(404, "unavailable", "No such sitemap")
+        first = (int(number) - 1) * MAX_SITEMAP_URLS
+        listed = pages[first : first + MAX_SITEMAP_URLS]
+        ids = walk(
+            lambda repository: repository.public_source_ids(
+                MAX_SITEMAP_URLS - len(listed), offset=max(first - len(pages), 0)
+            )
+        )
+        if not listed and not ids:
+            raise SiteProblem(404, "unavailable", "No such sitemap")
+        return _sitemap(origin(request), listed, ids)
 
     return app
 
