@@ -1348,6 +1348,27 @@
           ],
           "default": null,
           "title": "Target Node Id"
+        },
+        "cell_states": {
+          "anyOf": [
+            {
+              "patternProperties": {
+                "^(0|[1-9][0-9]*),(0|[1-9][0-9]*)$": {
+                  "enum": [
+                    "illegible",
+                    "unsupported"
+                  ],
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cell States"
         }
       },
       "required": [

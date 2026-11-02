@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: open_alvary
           POSTGRES_PASSWORD: test-only
@@ -28,7 +28,7 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - run: pip install -r requirements.lock && pip install --no-deps -e .
+      - run: pip install -r requirements.lock -r deployment/ingestion-jobs.requirements.lock && pip install --no-deps -e .
       - run: ruff check . && ruff format --check . && pytest -q --fast
       - name: PostgreSQL integration contracts
         run: pytest -q -m postgres
