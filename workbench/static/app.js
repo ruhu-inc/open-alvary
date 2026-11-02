@@ -3,7 +3,7 @@
 // Review workbench client. Everything is rendered with DOM APIs and textContent; the only HTML
 // inserted is the server-escaped machine reading. No inline handlers (strict CSP).
 
-const app = { me: null, csrf: "", dirty: false, view: null };
+const app = { me: null, csrf: "", dirty: false, view: null, turn: 0 };
 const KIND_LABEL = {
   differs: "reads differently",
   only_in_primary: "not seen by the check readings",
@@ -105,6 +105,10 @@ function setCrumbs(...parts) {
   document.title = [...names.reverse().slice(0, 2), "Open Alvary Review"].join(" · ");
 }
 
+// A view starts for one address, and its answers may arrive after the person has moved on. So every view
+// takes a turn as it starts (++app.turn), and after its last wait it stops if a later view has taken one,
+// before it touches the crumbs, the title, app.view, app.dirty or the page. A saved change draws its view
+// again only if the person is still on that address.
 function main(...children) {
   document.getElementById("main").replaceChildren(...children);
   window.scrollTo(0, 0);
@@ -186,6 +190,7 @@ function brandMark(size = 36) {
 }
 
 async function showSignIn(info) {
+  ++app.turn; // nothing still on its way draws over this page
   info = info || (await api("/api/me")).data || {};
   document.getElementById("who").replaceChildren();
   setCrumbs("");
@@ -310,9 +315,11 @@ function meter(share) {
 }
 
 async function dashboard() {
+  const turn = ++app.turn;
   setCrumbs("");
   document.title = "Documents · Open Alvary Review";
   const { data } = await api("/api/overview");
+  if (turn !== app.turn) return;
   const t = data.totals;
   const share = t.pages ? Math.round((100 * t.checked) / t.pages) : 0;
   const tiles = el("div", { class: "tiles" },
@@ -415,7 +422,9 @@ async function dashboard() {
 // --- one document: progress, pages, approval ------------------------------------------------------------
 
 async function actView(actId) {
+  const turn = ++app.turn;
   const { data } = await api(`/api/documents/${encodeURIComponent(actId)}`);
+  if (turn !== app.turn) return;
   const act = data.act;
   setCrumbs(el("a", { href: "#/", text: "Documents" }), act.title);
   const ready = data.readiness;
@@ -723,7 +732,9 @@ function depthOfText(lead) {
 const LANGUAGE_NAMES = { rw: "Ikinyarwanda", en: "English", fr: "Français", sw: "Kiswahili" };
 
 async function languagesView(actId) {
+  const turn = ++app.turn;
   const { ok, data } = await api(`/api/documents/${encodeURIComponent(actId)}/languages`);
+  if (turn !== app.turn) return;
   if (!ok) return main(el("p", { text: message({ ok, data }) }));
   const own = data.instrument[Object.keys(data.instrument).find((l) => data.instrument[l].id === actId)] || {};
   setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: own.title || actId }), "Language versions");
@@ -760,7 +771,9 @@ async function languagesView(actId) {
 }
 
 async function readView(actId) {
+  const turn = ++app.turn;
   const { data } = await api(`/api/documents/${encodeURIComponent(actId)}`);
+  if (turn !== app.turn) return;
   setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: data.act.title }), "Read");
   const list = el("div", { class: "reading" });
   const sentinel = el("p", { class: "muted", text: "Loading…" });
@@ -814,6 +827,7 @@ function previewLink(actId, page, cls) {
 }
 
 function approvalPanel(actId, data, current) {
+  const address = location.hash;
   const ready = data.readiness;
   const canApprove = app.me.roles.includes("approver");
   const panel = el("div", { class: "card", id: "approval" }, el("h3", { text: "Approval" }));
@@ -839,7 +853,7 @@ function approvalPanel(actId, data, current) {
       const result = await api(`/api/documents/${encodeURIComponent(actId)}/approval`, { method: "POST", body: { expected_revision: expected, decision, rights_basis: basis.value, materials, note: note.value } });
       if (!result.ok) return toast(message(result));
       toast(decision === "approved" ? "Approved and recorded" : "Approval revoked");
-      actView(actId);
+      if (location.hash === address) actView(actId);
     };
     panel.append(
       el("h4", { text: "Rights basis" }), basis,
@@ -887,8 +901,10 @@ function detailsSummary(actId, ready, act) {
 }
 
 async function detailsView(actId) {
+  const turn = ++app.turn, address = location.hash;
   const { data } = await api(`/api/documents/${encodeURIComponent(actId)}/details`);
   const doc = await api(`/api/documents/${encodeURIComponent(actId)}`);
+  if (turn !== app.turn) return;
   const title = doc.data.act.title;
   setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: title }), "Details");
   const { standard, record, suggestions, related = {} } = data;
@@ -999,8 +1015,9 @@ async function detailsView(actId) {
       if (result.data && result.data.missing) result.data.missing.forEach((key) => rows.get(key)?.classList.add("missing"));
       return toast(message(result));
     }
-    app.dirty = false;
     toast(status === "confirmed" ? "Details confirmed and recorded" : "Draft saved");
+    if (location.hash !== address) return;
+    app.dirty = false;
     detailsView(actId);
   };
   const confirmButton = el("button", { class: "primary", text: "Confirm details", on: { click: () => save("confirmed") } });
@@ -1168,6 +1185,7 @@ function taskLine(t) {
 }
 
 async function queueView() {
+  ++app.turn;
   setCrumbs("Work queue");
   const kind = el("select", {}, TASK_KINDS.map(([value, label]) => el("option", { value, text: label })));
   kind.value = remember("queue-kind") || "";
@@ -1265,7 +1283,9 @@ function provisionSelect(provisions, value) {
 
 async function eventsView(actId) {
   const id = encodeURIComponent(actId);
+  const turn = ++app.turn, address = location.hash;
   const [listing, doc] = await Promise.all([api(`/api/documents/${id}/events`), api(`/api/documents/${id}`)]);
+  if (turn !== app.turn) return;
   if (!listing.ok) return main(el("p", { text: message(listing) }));
   const data = listing.data;
   app.names = { ...(app.names || {}), ...data.names };
@@ -1315,8 +1335,9 @@ async function eventsView(actId) {
       if (item) body.event_id = item.event_id;
       const result = await api(`/api/documents/${id}/events`, { method: "POST", body });
       if (!result.ok) return toast(message(result));
-      app.dirty = false;
       toast(status === "reviewed" ? "Reviewed and recorded in your name" : status === "rejected" ? "Rejected" : "Saved");
+      if (location.hash !== address) return;
+      app.dirty = false;
       eventsView(actId);
     };
     drawScope();
@@ -1349,7 +1370,7 @@ async function eventsView(actId) {
     const result = await api(`/api/documents/${id}/events/proposals`, { method: "POST" });
     if (!result.ok) return toast(message(result));
     toast(result.data.added.length ? `${result.data.added.length} proposal${result.data.added.length === 1 ? "" : "s"} recorded from the text` : "No new proposals in the text");
-    eventsView(actId);
+    if (location.hash === address) eventsView(actId);
   };
   const reviewed = data.events.filter((e) => e.status === "reviewed").length;
   main(el("div", { class: "details-layout" },
@@ -1368,7 +1389,9 @@ async function eventsView(actId) {
 
 async function instructionsView(actId) {
   const id = encodeURIComponent(actId);
+  const turn = ++app.turn, address = location.hash;
   const [listing, doc] = await Promise.all([api(`/api/documents/${id}/instructions`), api(`/api/documents/${id}`)]);
+  if (turn !== app.turn) return;
   if (!listing.ok) return main(el("p", { text: message(listing) }));
   const data = listing.data;
   app.names = { ...(app.names || {}), ...data.names };
@@ -1435,8 +1458,9 @@ async function instructionsView(actId) {
       if (item) body.instruction_id = item.instruction_id;
       const result = await api(`/api/documents/${id}/instructions`, { method: "POST", body });
       if (!result.ok) return toast(message(result));
-      app.dirty = false;
       toast(status === "second_reviewed" ? "Second review recorded: it now exports" : status === "reviewed" ? "Reviewed: another editor confirms it next" : status === "rejected" ? "Rejected" : "Saved");
+      if (location.hash !== address) return;
+      app.dirty = false;
       instructionsView(actId);
     };
     show();
@@ -1505,7 +1529,9 @@ function citationsSummary(actId) {
 
 async function citationsView(actId) {
   const id = encodeURIComponent(actId);
+  const turn = ++app.turn, address = location.hash;
   const [listing, doc] = await Promise.all([api(`/api/documents/${id}/citations`), api(`/api/documents/${id}`)]);
+  if (turn !== app.turn) return;
   if (!listing.ok) return main(el("p", { text: message(listing) }));
   const data = listing.data;
   app.names = { ...(app.names || {}), ...data.names };
@@ -1525,7 +1551,7 @@ async function citationsView(actId) {
       const result = await api(`/api/documents/${id}/citations`, { method: "POST", body });
       if (!result.ok) return toast(message(result));
       toast(status === "confirmed" ? "Confirmed and recorded in your name" : status === "rejected" ? "Rejected" : "Withdrawn");
-      citationsView(actId);
+      if (location.hash === address) citationsView(actId);
     };
     const treatments = c.treatments || [];
     const live = treatments.find((t) => t.review_state === "reviewed");
@@ -1538,7 +1564,7 @@ async function citationsView(actId) {
         const result = await api(`/api/documents/${id}/citations/${encodeURIComponent(item.citation_id)}/treatment`, { method: "POST", body: { expected_revision: item.revision, ...body } });
         if (!result.ok) return toast(message(result));
         toast(body.action === "record" ? "Treatment recorded in your name" : "Treatment withdrawn");
-        citationsView(actId);
+        if (location.hash === address) citationsView(actId);
       };
       if (live) {
         return el("div", { class: "editor-field" },
@@ -1601,7 +1627,7 @@ async function citationsView(actId) {
     if (!result.ok) return toast(message(result));
     const { added, skipped } = result.data;
     toast(`${added.length} proposal${added.length === 1 ? "" : "s"} recorded${skipped.length ? `; ${skipped.length} left out (${unique(skipped.map((s) => s.reason)).join("; ")})` : ""}`);
-    citationsView(actId);
+    if (location.hash === address) citationsView(actId);
   };
   const exported = data.citations.filter((c) => c.status === "confirmed" || c.status === "withdrawn").length;
   main(el("div", { class: "details-layout" },
@@ -1631,16 +1657,18 @@ function unitText(unit) {
 }
 
 async function pageView(actId, pageNumber) {
+  const turn = ++app.turn, address = location.hash;
   const [actResult, pageResult] = await Promise.all([
     api(`/api/documents/${encodeURIComponent(actId)}`),
     api(`/api/documents/${encodeURIComponent(actId)}/pages/${pageNumber}`),
   ]);
+  if (turn !== app.turn) return;
   if (!pageResult.ok) return main(el("p", { text: message(pageResult) }));
   const detail = actResult.data;
   const page = pageResult.data;
   const latest = page.latest;
   const view = {
-    actId, pageNumber, detail, page,
+    actId, pageNumber, address, detail, page,
     machineUnits: page.machine_units,
     units: structuredClone(latest ? latest.units : page.machine_units),
     resolutions: structuredClone(latest ? latest.resolutions : {}),
@@ -2394,11 +2422,15 @@ function saveBar(view) {
       method: "POST",
       body: { expected_revision: view.expected, units: currentUnits(view), status, resolutions: view.resolutions, comment: view.comment },
     });
+    // The old page stays up while the next one loads, so the address may have moved on before this save was sent.
+    const left = location.hash !== view.address;
+    if (result.status === 409 && left) return toast(`Page ${view.pageNumber} was not saved: someone saved it first.`);
     if (result.status === 409) { toast("Someone saved this page first. Reloading their version."); app.dirty = false; return pageView(view.actId, view.pageNumber); }
     if (!result.ok) return toast(message(result));
-    app.dirty = false;
     clearDraft(view);
     toast(`Saved revision ${result.data.revision}`);
+    if (left) return;
+    app.dirty = false;
     const numbers = view.detail.pages.map((p) => p.page);
     const next = numbers[numbers.indexOf(view.pageNumber) + 1];
     if (thenNext && next) location.hash = `#/doc/${encodeURIComponent(view.actId)}/page/${next}`;
@@ -2426,7 +2458,9 @@ function saveBar(view) {
 // --- activity log ---------------------------------------------------------------------------------
 
 async function auditView(actId) {
+  const turn = ++app.turn;
   const { data } = await api(`/api/audit?act=${encodeURIComponent(actId)}`);
+  if (turn !== app.turn) return;
   setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: actId }), "Activity");
   main(el("div", { class: "card" }, el("h3", { text: "Activity log" }),
     el("table", { class: "list" }, el("tbody", {}, data.map((e) => el("tr", {},
@@ -2462,8 +2496,10 @@ function runWords(run) {
 }
 
 async function publishingView() {
+  const turn = ++app.turn;
   setCrumbs("Publishing");
   const { data } = await api("/api/publishing");
+  if (turn !== app.turn) return;
   const load = () => publishingView();
   const runButton = data.can_run && !data.waiting
     ? el("button", { class: "primary", text: "Publish now", on: { click: async (event) => { event.target.disabled = true; await change("/api/publishing/run", {}, load); event.target.disabled = false; } } })
@@ -2505,7 +2541,7 @@ async function route() {
     return;
   }
   app.dirty = false;
-  lastHash = location.hash;
+  const address = lastHash = location.hash;
   if (!location.hash.includes("/page/") || !document.querySelector(".review")) main(el("div", { class: "loading" }, el("span", { class: "spinner" }), "Loading…"));
   const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
   for (const link of document.querySelectorAll("#who .nav-link")) {
@@ -2529,7 +2565,7 @@ async function route() {
     if (parts[0] === "publishing" && app.me.publishing) return await publishingView();
     return await dashboard();
   } catch (error) {
-    if (error.message !== "signed out") toast(error.message);
+    if (error.message !== "signed out" && location.hash === address) toast(error.message);
   }
 }
 

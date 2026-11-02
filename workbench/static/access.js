@@ -70,6 +70,7 @@ async function accessView(parts) {
   setCrumbs(parts[0] ? el("a", { href: "#/access", text: "Access" }) : "Access", ...(parts[0] === "audit" ? ["Audit log"] : []));
   if (parts[0] === "org" && parts[1]) return organisationView(parts[1]);
   if (parts[0] === "audit") return accessAuditView();
+  const turn = ++app.turn;
   const [bar, requests, clients, organisations, people] = await Promise.all([
     passkeyBar(), api("/api/access/requests"), api("/api/access/clients"),
     accessList("Organisations", "/api/access/organisations", "Organisation name or ID, or a member's email",
@@ -77,6 +78,7 @@ async function accessView(parts) {
     accessList("People", "/api/access/people", "Name, email or ID",
       ["Name", "Email", "Organisations", "Joined", "Status"], accessPersonRow),
   ]);
+  if (turn !== app.turn) return;
   const credential = el("input", { type: "text", autocomplete: "off", placeholder: "The leaked key, its ID, or a grt_… app ID" });
   main(
     bar,
@@ -115,7 +117,9 @@ async function accessView(parts) {
 }
 
 async function organisationView(id) {
+  const turn = ++app.turn;
   const [bar, view, tiers] = await Promise.all([passkeyBar(), api(`/api/access/organisations/${encodeURIComponent(id)}`), api("/api/access/tiers")]);
+  if (turn !== app.turn) return;
   if (!view.ok) return main(el("p", { text: message(view) }));
   const o = view.data;
   const again = () => route();
@@ -190,6 +194,7 @@ function auditTable(entries) {
 }
 
 async function accessAuditView() {
+  ++app.turn;
   const query = new URLSearchParams(location.hash.split("?")[1] || "");
   const action = el("input", { type: "search", placeholder: "Action starts with, e.g. key. or entitlement.", value: query.get("action") || "" });
   const body = el("div");

@@ -107,8 +107,10 @@ function trafficList(title, rows, name = (label) => label, note) {
 }
 
 async function trafficView() {
+  const turn = ++app.turn;
   setCrumbs("Traffic");
   const result = await api(`/api/traffic?days=${trafficDays}`);
+  if (turn !== app.turn) return;
   if (!result.ok) return main(el("div", { class: "card" }, el("p", { text: message(result) })));
   const { daily, totals, lists, top_records: top, developers } = result.data;
   const anything = daily.some((row) => row.arrivals || row.searches || row.records || row.bots);

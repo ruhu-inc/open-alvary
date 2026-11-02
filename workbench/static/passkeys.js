@@ -71,6 +71,7 @@ async function passkeyRegister(name, code) {
 
 // A change: sent once, and again after a passkey check if the last one is older than 10 minutes.
 async function change(path, body, done) {
+  const address = location.hash;
   let result = await api(path, { method: "POST", body });
   if (result.status === 403 && result.data && result.data.code === "passkey_required") {
     try {
@@ -86,7 +87,7 @@ async function change(path, body, done) {
     return null;
   }
   toast("Done.");
-  if (done) await done(result.data);
+  if (done && location.hash === address) await done(result.data);
   return result.data;
 }
 
@@ -123,6 +124,8 @@ function form(title, fields, submit, onSend, { evidence = true, danger = false, 
 // --- the passkey bar ------------------------------------------------------------------------------
 
 async function passkeyBar() {
+  const address = location.hash;
+  const again = () => { if (location.hash === address) route(); };
   const { data } = await api("/api/passkeys/me");
   const box = el("div", { class: "card access-passkey" });
   if (data.needs_enrolment) {
@@ -133,7 +136,7 @@ async function passkeyBar() {
       el("p", { class: "muted", text: "Changes here need a passkey on this device or a security key. Enter the one-time code an administrator gave you." }),
       el("form", { class: "access-form", on: { submit: async (event) => {
         event.preventDefault();
-        try { await passkeyRegister(name.value.trim() || "Passkey", code.value); toast("Passkey registered."); route(); }
+        try { await passkeyRegister(name.value.trim() || "Passkey", code.value); toast("Passkey registered."); again(); }
         catch (error) { toast(error.name === "NotAllowedError" ? "Cancelled." : error.message); }
       } } },
       el("label", { class: "access-field" }, el("span", { text: "Code" }), code),
@@ -146,7 +149,7 @@ async function passkeyBar() {
     ? el("span", { text: `Passkey checked: changes allowed until ${moment(data.fresh_until).slice(11)} UTC.` })
     : el("span", { text: "Changes ask for your passkey (valid 10 minutes)." });
   const check = el("button", { class: "small", text: "Check passkey now", on: { click: async () => {
-    try { await passkeyCheck(); toast("Passkey checked."); route(); } catch (error) { toast(error.message); }
+    try { await passkeyCheck(); toast("Passkey checked."); again(); } catch (error) { toast(error.message); }
   } } });
   const keys = el("details", {}, el("summary", { text: `${data.passkeys.length} passkey${data.passkeys.length === 1 ? "" : "s"}` }),
     el("ul", { class: "plain" }, data.passkeys.map((k) => el("li", {}, `${k.name} · added ${day(k.created_at)}${k.last_used_at ? ` · used ${day(k.last_used_at)}` : ""} `,
@@ -154,10 +157,10 @@ async function passkeyBar() {
         if (!confirm(`Remove the passkey "${k.name}"?`)) return;
         let result = await api(`/api/passkeys/${encodeURIComponent(k.id)}`, { method: "DELETE" });
         if (result.status === 403) { await passkeyCheck(); result = await api(`/api/passkeys/${encodeURIComponent(k.id)}`, { method: "DELETE" }); }
-        toast(result.ok ? "Removed." : message(result)); route();
+        toast(result.ok ? "Removed." : message(result)); again();
       } } })))),
     el("button", { class: "small", text: "Add a passkey", on: { click: async () => {
-      try { await passkeyRegister(prompt("Name for this passkey", "Security key") || "Passkey", ""); toast("Passkey added."); route(); }
+      try { await passkeyRegister(prompt("Name for this passkey", "Security key") || "Passkey", ""); toast("Passkey added."); again(); }
       catch (error) { toast(error.message); }
     } } }));
   box.append(el("div", { class: "access-status" }, status, " ", check), keys);

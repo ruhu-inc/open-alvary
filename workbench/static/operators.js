@@ -24,8 +24,10 @@ function roleChoice(roles, chosen = []) {
 }
 
 async function operatorsView() {
+  const turn = ++app.turn;
   setCrumbs("Operators");
   const [bar, listed] = await Promise.all([passkeyBar(), api("/api/operators")]);
+  if (turn !== app.turn) return;
   if (!listed.ok) return main(el("p", { text: message(listed) }));
   const { operators, roles, iap_group: group } = listed.data;
   const again = () => route();
