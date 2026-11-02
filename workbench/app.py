@@ -45,6 +45,7 @@ from workbench import (
 )
 from workbench import operators as operators_section
 from workbench import publishing as publishing_section
+from workbench import traffic as traffic_section
 from workbench.review import Review, blind, to_do
 from workbench.store import Conflict, Store, engine_from_environment
 
@@ -205,6 +206,7 @@ def create_app(
             "roles": sorted(person["roles"]),
             "csrf": who["csrf"],
             "access": access is not None and relying is not None and access_section.ROLE in person["roles"],
+            "traffic": access is not None and traffic_section.ROLE in person["roles"],
             "operators": relying is not None and operators_section.ROLE in person["roles"],
             "publishing": bool(person["roles"] & publishing_section.READERS),
         }
@@ -1159,6 +1161,7 @@ def create_app(
     citations.install(app, store, library, review)
     privileged.install(app, store, relying)
     access_section.install(app, store, access, relying)
+    traffic_section.install(app, store, access)
     operators_section.install(app, store, relying)
     publishing_section.install(app, store, library, state, relying)
 

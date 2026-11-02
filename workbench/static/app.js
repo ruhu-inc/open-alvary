@@ -127,6 +127,7 @@ async function loadMe() {
     el("a", { class: "nav-link", href: "#/queue", text: "Work queue" }),
     result.data.access ? el("a", { class: "nav-link", href: "#/access", text: "Access" }) : "",
     result.data.operators ? el("a", { class: "nav-link", href: "#/operators", text: "Operators" }) : "",
+    result.data.traffic ? el("a", { class: "nav-link", href: "#/traffic", text: "Traffic" }) : "",
     result.data.publishing ? el("a", { class: "nav-link", href: "#/publishing", text: "Publishing" }) : "",
     el("span", { class: "who-name", text: result.data.name, title: `${result.data.email} · ${result.data.roles.join(", ")}` }),
     el("button", { class: "small", text: "Sign out", on: { click: signOut } }),
@@ -2490,7 +2491,7 @@ async function route() {
   if (!location.hash.includes("/page/") || !document.querySelector(".review")) main(el("div", { class: "loading" }, el("span", { class: "spinner" }), "Loading…"));
   const parts = location.hash.replace(/^#\/?/, "").split("/").map(decodeURIComponent);
   for (const link of document.querySelectorAll("#who .nav-link")) {
-    const section = ["access", "operators", "queue", "publishing"].includes(parts[0]) ? `#/${parts[0]}` : "#/";
+    const section = ["access", "operators", "traffic", "queue", "publishing"].includes(parts[0]) ? `#/${parts[0]}` : "#/";
     link.classList.toggle("on", link.hash === section);
   }
   try {
@@ -2506,6 +2507,7 @@ async function route() {
     if (parts[0] === "audit" && parts[1]) return await auditView(parts[1]);
     if (parts[0] === "access" && app.me.access) return await accessView(parts.slice(1));
     if (parts[0] === "operators" && app.me.operators) return await operatorsView();
+    if (parts[0] === "traffic" && app.me.traffic) return await trafficView();
     if (parts[0] === "publishing" && app.me.publishing) return await publishingView();
     return await dashboard();
   } catch (error) {

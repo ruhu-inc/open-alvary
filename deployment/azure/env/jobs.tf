@@ -47,7 +47,7 @@ locals {
         env     = {}
       }
       daily = {
-        command = ["sh", "-c", "python -m accounts.seals seal && python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge && python -m accounts.seals verify"]
+        command = ["sh", "-c", "python -m accounts.seals seal && python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge && python -m accounts.seals verify && python -m api.traffic maintain"]
         cron    = var.domain_live ? "15 3 * * *" : null
         timeout = 600
         secrets = {}

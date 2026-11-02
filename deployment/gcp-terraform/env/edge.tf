@@ -121,6 +121,10 @@ resource "google_compute_backend_service" "public" {
     group = google_compute_region_network_endpoint_group.public[0].id
   }
 
+  # The visitor's country, looked up here at the edge, for the website's daily totals (api.traffic,
+  # TRF-02). The service keeps these two letters as a count, and only when counting is switched on.
+  custom_request_headers = ["X-Client-Country:{client_region}"]
+
   # Requests are logged (Cloud Armor's decisions are in these logs); those for REST v1 and MCP, and
   # every one with a query string, are dropped before they are stored, so no query is ever kept
   # (monitoring.tf, OA-A2).

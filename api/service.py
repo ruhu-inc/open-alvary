@@ -13,6 +13,8 @@
     /               the built website, where a frontend directory is given (Vercel, Cloud Run with
                     ALVARY_FRONTEND, local)
 
+With ALVARY_TRAFFIC_COUNTS=1 the website and its data path add to the day's totals (api.traffic).
+
 Every response carries the website's security headers, which Vercel and nginx used to add, so the
 service can stand alone behind the load balancer (MAC-12). With ALVARY_FRONT_DOOR_ID set (Azure), a
 request without that Front Door profile's ID is refused (403 ``wrong_address``), /healthz aside.
@@ -24,11 +26,12 @@ configured too (``ALVARY_SITE_ADMISSION_CONFIG``), or the service refuses to sta
 import json
 import mimetypes
 import os
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from html import escape
 from pathlib import Path
 from urllib.parse import quote
 
+from anyio import to_thread
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -49,6 +52,7 @@ from api.repositories import LegacyRepository, PublicUnavailable
 from api.security_txt import security_txt
 from api.site import create_downloads_app, create_site_app
 from api.store import ROOT, Store, check_legacy_authority, engine_for
+from api.traffic import Traffic
 from api.v1 import CLASSES as V1_CLASSES
 from api.v1 import PUBLIC_PATHS as V1_PUBLIC
 from api.v1 import create_v1_app
@@ -81,7 +85,15 @@ def create_service(
         pool = max(c.instance_pool_size for c in (admission, site_admission) if c) if site_admission else None
         store = Store(engine_for(pool_size=pool))
     release_root = releases or ROOT / "releases"
-    service = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+    traffic = Traffic.from_environment(store.engine, site_admission)
+
+    @asynccontextmanager
+    async def lifespan(_):
+        yield
+        if traffic is not None:  # what has gathered since the last round, as the instance stops
+            await to_thread.run_sync(traffic.flush)
+
+    service = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
     # Behind Azure Front Door (deployment/azure), a request that did not come through its profile is
     # refused, so the service's own address is no way around the edge's rules. The platform's probes
@@ -129,8 +141,8 @@ def create_service(
             return JSONResponse(status_code=503, content={"status": "unavailable"})
         return JSONResponse({"status": "ok"}, headers={"Cache-Control": "no-store"})
 
-    service.mount("/site/v1", create_site_app(store, release_root, site_admission))
-    service.mount("/downloads", create_downloads_app(store, release_root, site_admission))
+    service.mount("/site/v1", create_site_app(store, release_root, site_admission, traffic))
+    service.mount("/downloads", create_downloads_app(store, release_root, site_admission, traffic))
     accounts_on = store.engine.dialect.name == "postgresql" and os.getenv("ALVARY_ACCOUNTS") == "1"
     api_origin = os.getenv("ALVARY_API_ORIGIN", "https://api.open.alvary.ai").rstrip("/")
     if accounts_on:
@@ -283,7 +295,8 @@ def create_service(
         return Response(body, media_type="application/xml", headers={"Cache-Control": "no-store"})
 
     if frontend is not None:
-        service.mount("/", WebsiteFiles(directory=frontend, html=True, check_dir=False), name="website")
+        website = WebsiteFiles(directory=frontend, html=True, check_dir=False, traffic=traffic)
+        service.mount("/", website, name="website")
     return service
 
 
@@ -366,6 +379,10 @@ class WebsiteFiles(StaticFiles):
     /sources/<id>) answers with the website's page, which reads the address itself. Fingerprinted
     files under /assets are cached for a year; the page itself is revalidated on every visit."""
 
+    def __init__(self, *, traffic: Traffic | None = None, **options):
+        super().__init__(**options)
+        self.traffic = traffic
+
     async def get_response(self, path: str, scope):
         page = "." not in path.rsplit("/", 1)[-1]
         try:
@@ -379,6 +396,8 @@ class WebsiteFiles(StaticFiles):
         response.headers["Cache-Control"] = (
             "public, max-age=31536000, immutable" if path.startswith("assets/") else "no-cache"
         )
+        if self.traffic is not None and (page or path == ".") and response.status_code in (200, 304):
+            self.traffic.arrival(scope, "" if path == "." else path)
         return response
 
 

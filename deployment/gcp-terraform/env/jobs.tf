@@ -49,7 +49,7 @@ locals {
         secrets = {}
       }
       daily = {
-        command = ["sh", "-c", "python -m accounts.seals seal && python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge && python -m accounts.seals verify"]
+        command = ["sh", "-c", "python -m accounts.seals seal && python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge && python -m accounts.seals verify && python -m api.traffic maintain"]
         args    = []
         cron    = "15 3 * * *"
         timeout = 600

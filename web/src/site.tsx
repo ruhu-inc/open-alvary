@@ -288,7 +288,7 @@ export function SourceRow({
   query?: string; // words to mark in the title
 }) {
   return (
-    <Link className="source-row" to={"/sources/" + s.id}>
+    <Link className="source-row" to={"/sources/" + s.id} data-result={query ? number : undefined}>
       <span className="source-number" aria-hidden="true">
         {String(number).padStart(2, "0")}
       </span>

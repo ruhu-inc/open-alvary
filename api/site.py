@@ -32,6 +32,7 @@ from api.project import project_info
 from api.release_adapter import BULK_ELSEWHERE, BulkRequired, LegacyReleases, ReleaseMissing, ReleaseWithdrawn
 from api.repositories import EDGE_ORDER, LegacyRepository, PublicUnavailable, ResultTooLarge
 from api.store import Store, check_legacy_authority
+from api.traffic import Traffic
 from changes.routes import create_router as create_changes_router
 from rights.bytes import ByteLedger, Scope
 from rights.database import PolicyNamespace
@@ -182,7 +183,12 @@ def _policy_schema() -> str:
     return os.getenv("ALVARY_POLICY_SCHEMA", "public")
 
 
-def create_site_app(store: Store, release_root: Path, admission: AdmissionConfig | None = None) -> FastAPI:
+def create_site_app(
+    store: Store,
+    release_root: Path,
+    admission: AdmissionConfig | None = None,
+    traffic: Traffic | None = None,
+) -> FastAPI:
     app = _base(admission, store)
     ledger = (
         ByteLedger(store.engine, PolicyNamespace(_policy_schema()))
@@ -251,7 +257,13 @@ def create_site_app(store: Store, release_root: Path, admission: AdmissionConfig
         q = request.query_params.get("q", "")
         if not 1 <= len(q) <= 200:
             raise SiteProblem(400, "invalid_input", "q must be 1 to 200 characters")
-        return _browse(request, q)
+        found = _browse(request, q)
+        if traffic is not None and found["page"] == 1:
+            # Whether it found anything and the country chosen, if that country is one offered: never the words.
+            chosen = request.query_params.get("jurisdiction")
+            offered = any(f["value"] == chosen for f in found["facets"].get("jurisdiction", ()))
+            traffic.searched(request.scope, chosen if offered else None, found["total"] > 0)
+        return found
 
     @app.get("/sources")
     def sources(request: Request):
@@ -267,6 +279,9 @@ def create_site_app(store: Store, release_root: Path, admission: AdmissionConfig
             authority = repository.rows("authorities", ids=[view.authority_id])
             jurisdiction = repository.rows("jurisdictions", ids=[view.jurisdiction_id])
             language = repository.rows("languages", ids=[view.language])
+        if traffic is not None:
+            result = request.headers.get("x-search-result", "")
+            traffic.record_opened(request.scope, view.id, view.jurisdiction_id, result)
         # Plain names beside the identifiers, for the record page.
         return {
             **view.model_dump(mode="json"),
@@ -293,6 +308,8 @@ def create_site_app(store: Store, release_root: Path, admission: AdmissionConfig
                 return False
             return served <= {(v.id, v.content_hash) for v in current.items}
 
+        if traffic is not None and page.items:
+            traffic.text_read(request.scope, source_id)
         limits = admission.byte_limits if admission is not None else None
         identity = getattr(request.state, "admission_identity", None)
         scopes = (
@@ -344,7 +361,10 @@ def create_site_app(store: Store, release_root: Path, admission: AdmissionConfig
 
 
 def create_downloads_app(
-    store: Store, release_root: Path, admission: AdmissionConfig | None = None
+    store: Store,
+    release_root: Path,
+    admission: AdmissionConfig | None = None,
+    traffic: Traffic | None = None,
 ) -> FastAPI:
     """Public release files (metadata releases stay public after activation B, D25)."""
     app = _base(admission, store)
@@ -370,6 +390,8 @@ def create_downloads_app(
                 return False
             return True
 
+        if traffic is not None:
+            traffic.downloaded(request.scope, jurisdiction, mode)
         return CheckedFileResponse(path, recheck, filename=filename)
 
     return app

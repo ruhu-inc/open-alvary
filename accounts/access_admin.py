@@ -591,6 +591,8 @@ READ = {
     "audit_event": None,
     "console_session": "person_id, revoked_at",
     "verified_client": None,
+    "traffic_day": None,
+    "traffic_top": None,
 }
 WRITE = (
     "INSERT ON {a}.audit_event, {a}.entitlement, {a}.entitlement_event",

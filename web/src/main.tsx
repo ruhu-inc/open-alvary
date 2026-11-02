@@ -61,6 +61,15 @@ type Manifest = {
   files: Record<string, { sha256: string; records?: number }>;
   coverage: Coverage;
 };
+// Which search result a person just opened, for the day's totals (api.traffic): in memory only, until
+// the record's own request carries it. Its position, never the words searched.
+let openedResult = "";
+function resultOpened(path: string): Record<string, string> | undefined {
+  if (!openedResult || !/^\/sources\/[^/]+$/.test(path)) return undefined;
+  const headers = { "X-Search-Result": openedResult };
+  openedResult = "";
+  return headers;
+}
 function useData<T>(path: string) {
   const [state, set] = useState<{ path: string; data?: T; error?: string }>({
     path: "",
@@ -69,7 +78,7 @@ function useData<T>(path: string) {
     const controller = new AbortController();
     set({ path });
     // The website's own data path (MAC-01): anonymous, bounded, never the developer API.
-    fetch("/site/v1" + path, { signal: controller.signal })
+    fetch("/site/v1" + path, { signal: controller.signal, headers: resultOpened(path) })
       .then((r) => {
         if (!r.ok) throw new Error(`Request failed (${r.status})`);
         return r.json();
@@ -182,6 +191,7 @@ function App() {
       )
         return;
       e.preventDefault();
+      openedResult = a.dataset.result ?? "";
       navigate(url.pathname + url.search);
     };
     window.addEventListener("popstate", change);

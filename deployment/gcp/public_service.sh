@@ -334,7 +334,7 @@ deploy() {
     "${GC[@]}" run jobs deploy "$DAILY_JOB" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
       --set-cloudsql-instances="$(connection)" --tasks=1 --max-retries=0 --task-timeout=600s \
       --set-env-vars="$env$keys_env" --set-secrets="$secrets" \
-      --command=sh --args=-c,"python -m accounts.seals seal && python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge && python -m accounts.seals verify"
+      --command=sh --args=-c,"python -m accounts.seals seal && python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge && python -m accounts.seals verify && python -m api.traffic maintain"
   fi
   echo "Deployed $IMAGE. Next: $0 edge (once), then $0 verify"
 }

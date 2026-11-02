@@ -446,3 +446,30 @@ table.queue td:first-child { white-space: nowrap; }
 table.publishing { width: 100%; border-collapse: collapse; }
 table.publishing th, table.publishing td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
 .pill.low { background: var(--low-bg); color: var(--ink); }
+
+/* The Traffic section: one hue for what is measured; numbers and labels stay in plain ink. */
+.traffic-ranges { display: flex; gap: .4rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.traffic-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: .75rem; margin-bottom: 1rem; }
+.traffic-tile { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: .75rem 1rem; }
+.traffic-value { font-size: 1.6rem; font-weight: 600; margin-top: .15rem; font-variant-numeric: tabular-nums; }
+.traffic-note { font-size: 13px; }
+.traffic-grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr)); gap: 1rem; }
+.traffic-chart, .traffic-list { --chart: var(--accent); margin-bottom: 0; }
+.traffic-grid-cards { margin-bottom: 1rem; }
+.traffic-chart h3, .traffic-list h3 { margin-top: 0; }
+.traffic-plot { position: relative; }
+.traffic-plot svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+.traffic-line { fill: none; stroke: var(--chart); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.traffic-grid { stroke: var(--line); stroke-width: 1; }
+.traffic-axis { fill: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.traffic-crosshair { stroke: var(--muted); stroke-width: 1; }
+.traffic-dot { fill: var(--chart); stroke: var(--panel); stroke-width: 2; }
+.traffic-readout { position: absolute; top: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: .15rem .45rem; font-size: 13px; white-space: nowrap; pointer-events: none; }
+.traffic-readout[hidden] { display: none; }
+.traffic-wide { overflow-x: auto; }
+.traffic-list td { padding: .3rem .4rem; }
+.traffic-label { width: 45%; overflow-wrap: anywhere; }
+.traffic-size { width: 40%; }
+.traffic-bar { height: 8px; min-width: 2px; background: var(--chart); border-radius: 0 4px 4px 0; }
+.traffic-count { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (prefers-color-scheme: dark) { .traffic-chart, .traffic-list { --chart: #4a8ae6; } }

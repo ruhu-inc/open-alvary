@@ -311,5 +311,14 @@
       "corpus.citation",
       "corpus.judicial_treatment"
     ]
+  },
+  {
+    "revision": "0044",
+    "anchor": "policy.record_traffic",
+    "file": "v0044.sql",
+    "requires": [
+      "policy.record_traffic",
+      "policy.traffic_salt"
+    ]
   }
 ]

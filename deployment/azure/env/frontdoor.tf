@@ -79,6 +79,29 @@ resource "azurerm_cdn_frontdoor_route" "public" {
   https_redirect_enabled          = true
   forwarding_protocol             = "HttpsOnly"
   link_to_default_domain          = true # the endpoint's own name, for checks before DNS moves
+  cdn_frontdoor_rule_set_ids      = [azurerm_cdn_frontdoor_rule_set.public.id]
+}
+
+# The visitor's country, looked up here at the edge, for the website's daily totals (api.traffic,
+# TRF-02). The service keeps these two letters as a count, and only when counting is switched on.
+resource "azurerm_cdn_frontdoor_rule_set" "public" {
+  name                     = "public"
+  cdn_frontdoor_profile_id = azurerm_cdn_frontdoor_profile.edge.id
+}
+
+resource "azurerm_cdn_frontdoor_rule" "country" {
+  name                      = "country"
+  cdn_frontdoor_rule_set_id = azurerm_cdn_frontdoor_rule_set.public.id
+  order                     = 1
+  behavior_on_match         = "Continue"
+
+  actions {
+    request_header_action {
+      header_action = "Overwrite"
+      header_name   = "X-Client-Country"
+      value         = "{geo_country}"
+    }
+  }
 }
 
 resource "azurerm_cdn_frontdoor_firewall_policy" "edge" {
