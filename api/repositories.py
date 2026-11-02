@@ -113,8 +113,8 @@ EDGE_ORDER = [
 # needs no locale, and sorting them by one took two thirds of the time.
 PUBLISHED_COUNTS = text(
     """
-    SELECT count(DISTINCT source_id COLLATE "C") AS sources, count(*) AS versions FROM (
-        SELECT v.source_id, v.gate_content_hash, v.gate_verified_at,
+    SELECT jurisdiction_id, count(DISTINCT source_id COLLATE "C") AS sources, count(*) AS versions FROM (
+        SELECT s.jurisdiction_id, v.source_id, v.gate_content_hash, v.gate_verified_at,
                r.gate_reviewed_at, r.gate_expires_at, r.gate_approved
         FROM versions v
         JOIN rights r ON r.source_id = v.source_id
@@ -126,6 +126,7 @@ PUBLISHED_COUNTS = text(
       AND gate_reviewed_at::timestamptz <= :now
       AND (gate_expires_at IS NULL OR gate_expires_at::timestamptz > :now)
       AND gate_approved::jsonb ? gate_content_hash
+    GROUP BY jurisdiction_id
     """
 )
 # The columns of the case-law tables (migration 0042) that the relationship pages read.
@@ -359,13 +360,14 @@ class LegacyRepository:
         )
         return dict(self.connection.execute(statement).all())
 
-    def published_counts(self, now) -> tuple[int, int] | None:
-        """How many public sources have a text that may be read at ``now``, and how many such texts there
-        are; None where the database keeps no gates (_gated), so the caller reads the records instead."""
+    def published_counts(self, now) -> dict[str, tuple[int, int]] | None:
+        """For each jurisdiction that has any, how many of its public sources have a text that may be read
+        at ``now``, and how many such texts there are; None where the database keeps no gates (_gated), so
+        the caller reads the records instead."""
         if not self._gated():
             return None
-        row = self.connection.execute(PUBLISHED_COUNTS, {"now": now}).one()
-        return row.sources, row.versions
+        rows = self.connection.execute(PUBLISHED_COUNTS, {"now": now})
+        return {row.jurisdiction_id: (row.sources, row.versions) for row in rows}
 
     def search_page(self, query, by_text, *, jurisdiction, limit, offset, access_where=None):
         """A page of the public sources whose title, citation and summary have every word of

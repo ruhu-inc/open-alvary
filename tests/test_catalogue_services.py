@@ -153,6 +153,13 @@ def test_public_dtos_are_deeply_immutable(cleared, store):
         counts.jurisdictions[0].count = 99
 
 
+def test_countries_count_the_records_and_those_with_a_text_without_the_databases_gates(cleared, store):
+    store.save(cleared)
+    with store.engine.begin() as conn:
+        found = LegacyCatalogue(LegacyRepository(conn)).countries()
+    assert found == [{"id": "ng", "name": "Nigeria", "sources": len(cleared.sources), "full_text": 1}]
+
+
 def test_corrupt_authority_returns_safe_503_without_fallback(catalogue, store, tmp_path):
     store.save(catalogue)
     with store.engine.begin() as conn:

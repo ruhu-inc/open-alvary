@@ -1419,29 +1419,36 @@ class LegacyCatalogue:
 
     def countries(self):
         """Each country with catalogued material, for choosing a plan's countries: its sources and how
-        many have open full text. Sub-national material counts under its country (api.reach)."""
+        many have open full text. Sub-national material counts under its country (api.reach). Counted by
+        the database, as coverage is, so asking costs the same however many texts there are."""
         names = {j.id: j.name for j in self.jurisdictions()}
+        published = self._published()
         found: dict[str, dict] = {}
-        for source, rights in self.repository.sources():
-            code = country(source.jurisdiction_id)
+        for jurisdiction, sources in self.repository.public_counts().items():
+            code = country(jurisdiction)
             if code is None:
                 continue
             entry = found.setdefault(
                 code, {"id": code, "name": names.get(code, code.upper()), "sources": 0, "full_text": 0}
             )
-            entry["sources"] += 1
-            entry["full_text"] += any(True for _ in self._approved(source, rights))
+            entry["sources"] += sources
+            entry["full_text"] += published.get(jurisdiction, (0, 0))[0]
         return sorted(found.values(), key=lambda c: c["name"])
 
-    def _published_by_reading(self):
-        """The repository's published_counts where the database keeps no gates: SQLite, or before
-        migration 0045."""
-        open_sources, published = 0, 0
+    def _published(self) -> dict[str, tuple[int, int]]:
+        """For each jurisdiction that has any, how many of its public sources have a cleared text and how
+        many such texts there are: from the database, or where it keeps no gates (SQLite, or before
+        migration 0045) by reading each source that may have one."""
+        counted = self.repository.published_counts(self.now)
+        if counted is not None:
+            return counted
+        found: dict[str, tuple[int, int]] = {}
         for source, rights in self.repository.sources(where=self.repository.potential_text()):
             versions = sum(1 for _ in self._approved(source, rights))
-            published += versions
-            open_sources += bool(versions)
-        return open_sources, published
+            if versions:
+                sources, texts = found.get(source.jurisdiction_id, (0, 0))
+                found[source.jurisdiction_id] = (sources + 1, texts + versions)
+        return found
 
     def coverage(self):
         """Counts of public sources by jurisdiction and of those with a cleared text and its versions, all
@@ -1449,12 +1456,13 @@ class LegacyCatalogue:
         asks for this, and it is worked out for each answer (F01)."""
         scopes = Counter(self.repository.public_counts())
         total = sum(scopes.values())
-        open_sources, published = self.repository.published_counts(self.now) or self._published_by_reading()
+        published = self._published().values()
+        open_sources = sum(sources for sources, _ in published)
         return CoverageView(
             catalogued_sources=total,
             open_full_text_sources=open_sources,
             metadata_only_sources=total - open_sources,
-            published_versions=published,
+            published_versions=sum(versions for _, versions in published),
             jurisdictions=dict(scopes),
             notice="Catalogue coverage only; not a claim of complete or current law.",
         )

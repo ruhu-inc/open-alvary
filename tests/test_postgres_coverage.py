@@ -14,6 +14,7 @@ from sqlalchemy import event, text
 from test_postgres import pg_engine as pg_engine
 
 from api.catalogue import LegacyCatalogue
+from api.reach import country
 from api.repositories import LegacyRepository
 from api.store import Store
 from rights.policy import decide
@@ -278,6 +279,93 @@ def test_the_sitemaps_walk_names_the_same_records_by_the_gates_a_file_at_a_time(
     assert in_files == walked
     assert set(walked) == {r.source_id for r in corpus.rights if decide(r).metadata}
     assert statements and not any("payload" in statement for statement in statements)
+
+
+def add_jurisdictions(corpus):
+    """A sub-national part of Nigeria, another country and a regional body, which belongs to no country."""
+    for identifier, name in (("ng-la", "Lagos"), ("rw", "Rwanda"), ("aa-ecowas", "ECOWAS")):
+        corpus.jurisdictions.append(
+            corpus.jurisdictions[0].model_copy(update={"id": identifier, "name": name})
+        )
+    return ("ng", "ng-la", "rw", "aa-ecowas")
+
+
+def countries_by_policy(corpus, now=ASKED) -> list[dict]:
+    names = {j.id: j.name for j in corpus.jurisdictions}
+    rights = {r.source_id: r for r in corpus.rights}
+    readable = {v.source_id for v in corpus.versions if decide(rights[v.source_id], v, now=now).full_text}
+    found = {}
+    for source in corpus.sources:
+        code = country(source.jurisdiction_id)
+        if code is None or not decide(rights[source.id], now=now).metadata:
+            continue
+        entry = found.setdefault(code, {"id": code, "name": names[code], "sources": 0, "full_text": 0})
+        entry["sources"] += 1
+        entry["full_text"] += source.id in readable
+    return sorted(found.values(), key=lambda c: c["name"])
+
+
+def countries_side_by_side(engine, now=ASKED) -> list[dict]:
+    with engine.begin() as conn:
+        repository = LegacyRepository(conn)
+        service = LegacyCatalogue(repository)
+        service.now = now
+        assert repository._gated()
+        counted_ = service.countries()
+        repository._has_gates = False
+        assert service.countries() == counted_
+    return counted_
+
+
+def test_countries_are_what_the_policy_allows_with_each_part_under_its_country(corpus, pg_engine):
+    places = add_jurisdictions(corpus)
+    template = corpus.sources[0]
+    changes = [*RIGHTS_CHANGES, *([{}] * 12)]
+    for index, change in enumerate(changes):
+        place = template.model_copy(update={"jurisdiction_id": places[index % len(places)]})
+        add_record(corpus, place, change.items(), extra_texts=index % 3)
+    for index, change in enumerate(VERSION_CHANGES):
+        place = template.model_copy(update={"jurisdiction_id": places[index % len(places)]})
+        add_record(corpus, place, (), change.items())
+    only_catalogued = template.model_copy(update={"jurisdiction_id": "rw"})
+    add_record(corpus, only_catalogued, approve=False)
+    Store(pg_engine).save(corpus)
+    for now in (ASKED, EARLIER, LATER, NOW - timedelta(days=1)):
+        assert countries_side_by_side(pg_engine, now) == countries_by_policy(corpus, now), now
+    found = {entry["id"]: entry for entry in countries_side_by_side(pg_engine)}
+    assert set(found) == {"ng", "rw"}  # Lagos under Nigeria; a regional body is no country
+    lagos = [s.id for s in corpus.sources if s.jurisdiction_id == "ng-la"]
+    assert lagos and found["ng"]["sources"] > len(lagos)
+    assert found["ng"]["full_text"] < found["ng"]["sources"]  # the fixture does tell them apart
+
+
+def test_a_country_with_several_texts_on_a_record_counts_the_record_once(corpus, pg_engine):
+    add_record(corpus, corpus.sources[0], extra_texts=3)
+    Store(pg_engine).save(corpus)
+    [nigeria] = countries_side_by_side(pg_engine)
+    assert nigeria["full_text"] == 2  # the fixture's own record and this one, of its four texts
+
+
+def test_countries_read_no_records_payload(corpus, pg_engine):
+    add_record(corpus, corpus.sources[0], extra_texts=1)
+    Store(pg_engine).save(corpus)
+    statements = []
+
+    def capture(conn, cursor, statement, parameters, context, executemany):
+        statements.append(statement)
+
+    event.listen(pg_engine, "before_cursor_execute", capture)
+    try:
+        with pg_engine.begin() as conn:
+            service = LegacyCatalogue(LegacyRepository(conn))
+            service.now = ASKED
+            assert service.countries()
+    finally:
+        event.remove(pg_engine, "before_cursor_execute", capture)
+    assert statements
+    for statement in statements:
+        for table in ("sources", "rights", "versions"):
+            assert f"{table}.payload" not in statement
 
 
 def test_the_answers_are_the_same_without_the_gates_and_after_they_return(corpus, pg_engine):
