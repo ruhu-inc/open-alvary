@@ -5,12 +5,13 @@ import json
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import text
+from sqlalchemy import event, text
 from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
 
-from accounts import policies
+from accounts import keys, policies
 from accounts.store import TIERS, Accounts
+from api.credentials import MAX_FAILED_KEYS
 from api.service import create_service
 from api.store import Store, seed
 from exports.release import write_release
@@ -195,6 +196,37 @@ def test_the_organisation_allowance_answers_429_with_retry_after(api):
 
 def rpc(method, params=None, id_=1):
     return {"jsonrpc": "2.0", "id": id_, "method": method, **({"params": params} if params else {})}
+
+
+def test_made_up_keys_stop_reaching_the_database_for_rest_and_mcp_alike(api, pg_engine):
+    client, accounts, person, organisation = api
+    grant(accounts, organisation)
+    right = key(accounts, person, organisation)
+    checks = []
+
+    def counted(connection, cursor, statement, *_):
+        if "check_credential" in statement:
+            checks.append(statement)
+
+    flooding = TestClient(client.app, client=("198.51.100.7", 5))
+    event.listen(pg_engine, "before_cursor_execute", counted)
+    try:
+        for _ in range(MAX_FAILED_KEYS):
+            made_up = {"Authorization": f"Bearer {keys.generate().secret}"}
+            assert flooding.get("/api/v1/sources", headers=made_up).status_code == 401
+        assert len(checks) == MAX_FAILED_KEYS
+        held = flooding.get("/api/v1/sources", headers=made_up)
+        assert held.status_code == 429 and held.json()["code"] == "rate_limited"
+        assert int(held.headers["retry-after"]) > 0
+        # One door: the same address is held back at MCP, a right key from it too, for the minute.
+        assert flooding.post("/mcp", headers=made_up, json={"jsonrpc": "2.0", "id": 1}).status_code == 429
+        assert flooding.get("/api/v1/sources", headers=right).status_code == 429
+        assert len(checks) == MAX_FAILED_KEYS
+        # Nobody else is.
+        reader = TestClient(client.app, client=("198.51.100.8", 5))
+        assert reader.get("/api/v1/sources", headers=right).status_code == 200
+    finally:
+        event.remove(pg_engine, "before_cursor_execute", counted)
 
 
 def test_mcp_needs_a_credential_and_answers_tools_within_the_access(api):

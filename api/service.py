@@ -27,13 +27,11 @@ import json
 import mimetypes
 import os
 from contextlib import asynccontextmanager, contextmanager
-from html import escape
 from pathlib import Path
-from urllib.parse import quote
 
 from anyio import to_thread
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse, Response
+from fastapi.responses import JSONResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from sqlalchemy import text
@@ -45,12 +43,12 @@ from accounts.store import TIERS, Accounts
 from api.admission import AdmissionConfig, AdmissionStore, AdmissionUnavailable
 from api.catalogue import LegacyCatalogue
 from api.console import ConsoleConfig, Provider, create_console_app
-from api.credentials import CredentialGate, GateConfig, TokenVerifier
+from api.credentials import CredentialGate, FailedKeys, GateConfig, TokenVerifier
 from api.main import create_app
 from api.mcp import create_router as create_mcp_router
 from api.repositories import LegacyRepository, PublicUnavailable
 from api.security_txt import security_txt
-from api.site import create_downloads_app, create_site_app
+from api.site import create_downloads_app, create_site_app, create_sitemap_app
 from api.store import ROOT, Store, check_legacy_authority, engine_for
 from api.traffic import Traffic
 from api.v1 import CLASSES as V1_CLASSES
@@ -58,7 +56,6 @@ from api.v1 import PUBLIC_PATHS as V1_PUBLIC
 from api.v1 import create_v1_app
 from rights.bytes import ByteLedger
 from rights.database import PolicyNamespace
-from rights.policy import decide
 
 SECURITY_HEADERS = {
     "Strict-Transport-Security": "max-age=31536000",
@@ -163,18 +160,29 @@ def create_service(
             "outside_per_minute": starter["requests_per_minute"],
             "outside_burst": starter.get("burst", starter["requests_per_minute"]),
         }
+        # REST and MCP are one door for wrong keys: an address held back at one is held back at the other.
+        failed_keys = FailedKeys()
+        trusted_proxies = site_admission.trusted_proxies if site_admission else 0
         service.mount(
             "/api/v1",
             CredentialGate(
                 v1,
                 config=GateConfig(
-                    resource, "rest", "api", metadata, public_paths=V1_PUBLIC, classes=V1_CLASSES, **outside
+                    resource,
+                    "rest",
+                    "api",
+                    metadata,
+                    public_paths=V1_PUBLIC,
+                    classes=V1_CLASSES,
+                    trusted_proxies=trusted_proxies,
+                    **outside,
                 ),
                 check=accounts.check_credential,
                 record_usage=accounts.record_usage,
                 admission=AdmissionStore(store.engine, namespace),
                 ledger=ByteLedger(store.engine, namespace),
                 verifier=TokenVerifier(config.issuer) if config else None,
+                failed_keys=failed_keys,
             ),
         )
 
@@ -203,12 +211,21 @@ def create_service(
                 "/mcp",
                 CredentialGate(
                     mcp,
-                    config=GateConfig(mcp_resource, "mcp", "mcp", mcp_metadata, jsonrpc=True, **outside),
+                    config=GateConfig(
+                        mcp_resource,
+                        "mcp",
+                        "mcp",
+                        mcp_metadata,
+                        jsonrpc=True,
+                        trusted_proxies=trusted_proxies,
+                        **outside,
+                    ),
                     check=accounts.check_credential,
                     record_usage=accounts.record_usage,
                     admission=AdmissionStore(store.engine, namespace),
                     ledger=ByteLedger(store.engine, namespace),
                     verifier=TokenVerifier(config.issuer) if config else None,
+                    failed_keys=failed_keys,
                 ),
                 methods=["GET", "POST", "DELETE"],
             )
@@ -277,22 +294,13 @@ def create_service(
             headers={"Cache-Control": "max-age=3600"},
         )
 
-    @service.get("/sitemap.xml", include_in_schema=False)
-    def sitemap(request: Request):
-        # Every public page a reader can open, so search engines find each source's record.
-        origin = _origin(request)
-        paths = list(STATIC_PAGES) + docs_pages(frontend)
-        with store.engine.begin() as connection:
-            check_legacy_authority(connection, write=False)
-            catalogue = LegacyCatalogue(LegacyRepository(connection))
-            for source, rights in catalogue.repository.sources():
-                if len(paths) >= 50000:
-                    break
-                if decide(rights, now=catalogue.now).metadata:
-                    paths.append(f"/sources/{quote(source.id)}")
-        urls = "".join(f"<url><loc>{escape(origin + path)}</loc></url>" for path in paths)
-        body = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>'
-        return Response(body, media_type="application/xml", headers={"Cache-Control": "no-store"})
+    service.router.routes.append(
+        Route(
+            "/sitemap.xml",
+            create_sitemap_app(store, (*STATIC_PAGES, *docs_pages(frontend)), _origin, site_admission),
+            methods=["GET"],
+        )
+    )
 
     if frontend is not None:
         website = WebsiteFiles(directory=frontend, html=True, check_dir=False, traffic=traffic)

@@ -207,6 +207,18 @@ class LegacyRepository:
                 return
             cursor = rows[-1].source["id"]
 
+    def public_source_ids(self, limit: int) -> list[str]:
+        """The public records' IDs, in ID order: the sitemap's walk. The database applies the gate
+        _select_sources does and sends back the IDs alone, so no record's body is read into memory."""
+        statement = (
+            select(self._sources.c.id)
+            .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
+            .where(self._visible())
+            .order_by(self._sources.c.id)
+            .limit(limit)
+        )
+        return list(self.connection.scalars(statement))
+
     def treaties(self) -> Iterator:
         """The public records that carry a treaty's status (schema.models.TreatyStatus), in ID order."""
         return self.sources(where=self._field(self._sources, "treaty").is_not(None))

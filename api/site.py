@@ -15,11 +15,16 @@ shows can be read by a program behaving like a browser.
 import math
 import os
 import re
+import threading
+import time
+from collections.abc import Callable, Sequence
 from contextlib import contextmanager
+from html import escape
 from pathlib import Path
+from urllib.parse import quote
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -38,6 +43,9 @@ from rights.bytes import ByteLedger, Scope
 from rights.database import PolicyNamespace
 
 PAGE_SIZE = 20
+MAX_SITEMAP_URLS = 50_000  # the most one sitemap file may list
+SITEMAP_RETRY_SECONDS = 5
+SITEMAP_REST_PER_WALK_SECOND = 49  # so walks take at most 2% of an instance's time
 MAX_PAGES = 25
 MAX_VERSIONS_BYTES = 2 * 1024 * 1024  # larger texts follow the public-reader specification
 ACCESS = {"all", "open", "metadata"}
@@ -356,6 +364,56 @@ def create_site_app(
         for manifest in listing:
             manifest["download_base"] = "/downloads" + manifest["download_base"].removeprefix("/releases")
         return listing
+
+    return app
+
+
+def create_sitemap_app(
+    store: Store,
+    pages: Sequence[str],
+    origin: Callable[[Request], str],
+    admission: AdmissionConfig | None = None,
+) -> FastAPI:
+    """/sitemap.xml: every public page a reader can open, so search engines find each source's record.
+
+    It names records, so it is worked out for each request and kept nowhere (F01): a withdrawn record
+    is gone from the next answer. What keeps that affordable however large the catalogue grows: the
+    database sends back only the IDs; the request is admitted like the rest of the path; and an instance
+    walks the records one at a time, resting after each walk in proportion to its length, so walks take
+    a small share of its time whoever asks. Anyone asking meanwhile is told when to come back, which
+    search engines do, rather than held waiting on a thread."""
+    app = _base(admission, store)
+    guard = threading.Lock()
+    free_at = 0.0
+
+    @app.get("/sitemap.xml")
+    def sitemap(request: Request):
+        nonlocal free_at
+        with guard:
+            now = time.monotonic()
+            if now < free_at:
+                wait = SITEMAP_RETRY_SECONDS if free_at == math.inf else math.ceil(free_at - now)
+                refused = problem(
+                    503, "temporarily_unavailable", "Try the sitemap again shortly", request.state.request_id
+                )
+                refused.headers["Retry-After"] = str(wait)
+                return refused
+            free_at = math.inf
+        try:
+            with store.engine.begin() as connection:
+                check_legacy_authority(connection, write=False)
+                ids = LegacyRepository(connection).public_source_ids(MAX_SITEMAP_URLS - len(pages))
+        finally:
+            with guard:
+                ended = time.monotonic()
+                free_at = ended + (ended - now) * SITEMAP_REST_PER_WALK_SECOND
+        base = origin(request)
+        urls = "".join(
+            f"<url><loc>{escape(base + path)}</loc></url>"
+            for path in (*pages, *(f"/sources/{quote(source_id)}" for source_id in ids))
+        )
+        body = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>'
+        return Response(body, media_type="application/xml")
 
     return app
 

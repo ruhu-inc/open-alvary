@@ -77,6 +77,46 @@ resource "azurerm_monitor_metric_alert" "site_down" {
   }
 }
 
+# Being attacked, or simply overrun: what Front Door answered, over five minutes, so the operator hears
+# before the site is down (deployment/runbook.md, Edge limits and attack alerts). These are metrics, which
+# carry no query; Front Door's request logs still go nowhere (frontdoor.tf).
+resource "azurerm_monitor_metric_alert" "edge" {
+  for_each = local.public_enabled && var.domain_live ? {
+    requests = { title = "unusually many requests", per_minute = var.alert_requests_per_minute, dimension = null, value = null }
+    refused  = { title = "many requests refused", per_minute = var.alert_refused_per_minute, dimension = "HttpStatus", value = "429" }
+    errors   = { title = "many server errors", per_minute = var.alert_errors_per_minute, dimension = "HttpStatusGroup", value = "5XX" }
+  } : {}
+  name                = "${local.name_prefix}-edge-${each.key}"
+  resource_group_name = azurerm_resource_group.main.name
+  scopes              = [azurerm_cdn_frontdoor_profile.edge.id]
+  description         = "Front Door: ${each.value.title}. See deployment/runbook.md, Edge limits and attack alerts."
+  severity            = 2
+  frequency           = "PT1M"
+  window_size         = "PT5M"
+  tags                = local.common_tags
+
+  criteria {
+    metric_namespace = "Microsoft.Cdn/profiles"
+    metric_name      = "RequestCount"
+    aggregation      = "Total"
+    operator         = "GreaterThan"
+    threshold        = each.value.per_minute * 5
+
+    dynamic "dimension" {
+      for_each = each.value.dimension == null ? [] : [each.value]
+      content {
+        name     = dimension.value.dimension
+        operator = "Include"
+        values   = [dimension.value.value]
+      }
+    }
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.operator.id
+  }
+}
+
 # A scheduled job failed (a broken audit seal fails the daily run), as on Google Cloud. The jobs'
 # Executions metric has a Failed state, but alerts on it are reported never to fire, so this reads
 # Container Apps' system log instead: an execution fails as BackoffLimitExceeded (its container

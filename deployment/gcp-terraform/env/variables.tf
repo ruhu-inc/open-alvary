@@ -141,6 +141,36 @@ variable "edge_requests_per_minute" {
   default     = 600
 }
 
+variable "edge_page_requests_per_minute" {
+  description = "Per-address limit at the edge on the pages and everything else that is neither the website's data paths nor the API's (D23). High, because a mobile network can put many people on one address."
+  type        = number
+  default     = 1200
+}
+
+variable "edge_api_requests_per_minute" {
+  description = "Per-address limit at the edge on the API's paths (D23). Above the largest plan's rate (accounts/tiers.json), which the credential gate enforces per organisation."
+  type        = number
+  default     = 12000
+}
+
+variable "alert_requests_per_minute" {
+  description = "Warn the operator when the edge sees more than this a minute, for five minutes. Raise it as real traffic grows."
+  type        = number
+  default     = 3000
+}
+
+variable "alert_refused_per_minute" {
+  description = "Warn the operator when more than this a minute are answered 429, for five minutes: a script being held back, or real readers refused."
+  type        = number
+  default     = 300
+}
+
+variable "alert_errors_per_minute" {
+  description = "Warn the operator when more than this a minute are answered with a server error, for five minutes."
+  type        = number
+  default     = 60
+}
+
 # --- retrieval: the engine and the models -----------------------------------------------------------
 
 variable "retrieval_enabled" {

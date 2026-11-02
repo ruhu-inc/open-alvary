@@ -163,6 +163,64 @@ resource "google_monitoring_alert_policy" "job_failed" {
   }
 }
 
+# Being attacked, or simply overrun: what the load balancer answered, each for five minutes running, so
+# the operator hears before the site is down (deployment/runbook.md, Edge limits and attack alerts).
+locals {
+  edge_alerts = local.public_enabled && var.domain_live ? {
+    requests = {
+      title     = "unusually many requests"
+      condition = "More than ${var.alert_requests_per_minute} requests a minute"
+      only      = ""
+      threshold = var.alert_requests_per_minute
+    }
+    refused = {
+      title     = "many requests refused"
+      condition = "More than ${var.alert_refused_per_minute} answers of 429 a minute"
+      only      = " AND metric.labels.response_code = 429"
+      threshold = var.alert_refused_per_minute
+    }
+    errors = {
+      title     = "many server errors"
+      condition = "More than ${var.alert_errors_per_minute} server errors a minute"
+      only      = " AND metric.labels.response_code_class = 500"
+      threshold = var.alert_errors_per_minute
+    }
+  } : {}
+}
+
+resource "google_monitoring_alert_policy" "edge" {
+  for_each     = local.edge_alerts
+  display_name = "Open Alvary: ${each.value.title} (${var.environment})"
+  combiner     = "OR"
+
+  conditions {
+    display_name = each.value.condition
+    condition_threshold {
+      filter          = "metric.type = \"loadbalancing.googleapis.com/https/request_count\" AND resource.type = \"https_lb_rule\" AND resource.labels.url_map_name = \"${local.name_prefix}-public\"${each.value.only}"
+      comparison      = "COMPARISON_GT"
+      threshold_value = each.value.threshold
+      duration        = "300s"
+      aggregations {
+        alignment_period     = "60s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+      }
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = [google_monitoring_notification_channel.operator.id]
+  alert_strategy {
+    auto_close = "86400s"
+  }
+  documentation {
+    mime_type = "text/markdown"
+    content   = "See deployment/runbook.md, Edge limits and attack alerts: how to tell an attack from growth, and what to do. The load balancer's logs show Cloud Armor's decisions."
+  }
+}
+
 # The budget covers this project's spend before credits, so it shows what the credits are
 # paying for (billing budgets work on credit-funded billing accounts; some Azure offers have no
 # Cost Management, which is why its budget is off).
