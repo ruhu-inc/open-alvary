@@ -65,6 +65,15 @@ locals {
         secrets = {}
         env     = {}
       }
+      # The workbench's database role and its grants (runbook, "Website traffic counts"), started by hand
+      # after a migration that adds something the Access or Traffic section reads. Grants only.
+      access-role = {
+        command = ["python", "-m", "accounts.access_admin", "provision-role", "open_alvary_access"]
+        cron    = null
+        timeout = 300
+        secrets = {}
+        env     = {}
+      }
     } : {},
   )
 }

@@ -4,15 +4,28 @@ NOTICE_DAYS before a new version takes effect (terms of service, "Changes"), wit
 python -m accounts.operator --operator <you> terms-notice VERSION --effective DATE --reason R."""
 
 CURRENT = {
-    "terms": "2026-11-02",
-    "acceptable_use": "2026-11-02",
-    "privacy": "2026-11-02",
+    "terms": "2026-11-03",
+    "acceptable_use": "2026-11-03",
+    "privacy": "2026-11-03",
 }
 PATHS = {"terms": "/terms", "acceptable_use": "/acceptable-use", "privacy": "/privacy"}
 NOTICE_DAYS = 30
 
 # What each version changes, as the owner approved it, for the notice emailed to owners.
 CHANGES = {
+    "2026-11-03": (
+        "- We set no cookies on the website and use no advertising. We count how the website is used as daily"
+        " totals: pages opened, searches and whether they found anything, records opened and files downloaded,"
+        " by country, type of device and the website a visitor came from. These totals hold no address, no"
+        " searched words and nothing else about any one visit.\n"
+        "- To estimate how many different people visit each day, we pass your network address and type of"
+        " browser through a one-way calculation with a code that changes every day. We don't keep the result"
+        " or the address, and we delete the code the next day, leaving only the day's number.\n"
+        "- The acceptable use policy now says that we count that a search happened and whether it found"
+        " anything, never its words.\n"
+        "- Counting began when we published this in the privacy notice, on 2 November 2026. The terms of"
+        " service themselves have not changed."
+    ),
     "2026-11-02": (
         "- We count how the website is used as daily totals: pages opened, searches and whether they found"
         " anything, records opened and files downloaded, by country, type of device and the website a visitor"

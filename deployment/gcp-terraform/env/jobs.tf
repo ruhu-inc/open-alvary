@@ -64,6 +64,16 @@ locals {
         timeout = 900
         secrets = {}
       }
+      # The workbench's database role and its grants (runbook, "Website traffic counts"), run by hand
+      # after a migration that adds something the Access or Traffic section reads. Grants only: it has
+      # no password to set, and the command is fixed.
+      access-role = {
+        command = ["python", "-m", "accounts.access_admin", "provision-role", "open_alvary_access"]
+        args    = []
+        cron    = null
+        timeout = 300
+        secrets = {}
+      }
     } : {},
   )
   scheduled_jobs = { for name, job in local.jobs : name => job if job.cron != null }
