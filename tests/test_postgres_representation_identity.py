@@ -295,6 +295,8 @@ def test_existing_guard_upgrade_works_with_nonsuperuser_native_migration_owner(r
         engine.dispose()
         with f.engine.begin() as conn:
             quote = conn.dialect.identifier_preparer.quote_identifier
+            # What it made stays: a column of a table it does not own may depend on a function it does.
+            conn.execute(text(f"REASSIGN OWNED BY {quote(role)} TO {quote(owner)}"))
             conn.execute(text("DROP OWNED BY " + quote(role)))
             conn.execute(text("DROP ROLE " + quote(role)))
 

@@ -34,7 +34,8 @@ from schema.models import Amendment, Source
 from schema.public import RightsViewRecord, VersionGate, VersionViewRecord
 
 BATCH_SIZE = 100
-# The website's catalogue reads at most this many public sources' compact rows in one request.
+# Where it reads them (LegacyCatalogue._walk), the website's catalogue reads at most this many public sources'
+# compact rows in one request.
 BROWSE_BOUND = 25000
 # A stored link (newer → older) as each side sees it, and the order a reader asks about them in.
 EDGE_KINDS = {
@@ -106,13 +107,19 @@ EDGE_ORDER = [
     "cited_by",
     "enables",
 ]
-# What rights.policy.decide lets anyone read, counted from the gates migration 0045 keeps, reading no
-# payload (tests/test_postgres_coverage.py holds it to decide's answers). The tests on the time of asking
-# and the approved hash stay outside the joins (OFFSET 0): the planner cannot tell they nearly always
-# pass, and would look up each record's source one at a time if it took them for rare. Telling IDs apart
-# needs no locale, and sorting them by one took two thirds of the time.
+# What rights.policy.decide lets anyone read, from the gates migration 0045 keeps, reading no payload
+# (tests/test_postgres_coverage.py holds it to decide's answers). The tests on the time of asking and the
+# approved hash stay outside the joins (OFFSET 0): the planner cannot tell they nearly always pass, and would
+# look up each record's source one at a time if it took them for rare. Telling IDs apart needs no locale, and
+# sorting them by one took two thirds of the time.
+READ_NOW = """
+        gate_verified_at::timestamptz <= :now
+        AND gate_reviewed_at::timestamptz <= :now
+        AND (gate_expires_at IS NULL OR gate_expires_at::timestamptz > :now)
+        AND gate_approved::jsonb ? gate_content_hash
+"""
 PUBLISHED_COUNTS = text(
-    """
+    f"""
     SELECT jurisdiction_id, count(DISTINCT source_id COLLATE "C") AS sources, count(*) AS versions FROM (
         SELECT s.jurisdiction_id, v.source_id, v.gate_content_hash, v.gate_verified_at,
                r.gate_reviewed_at, r.gate_expires_at, r.gate_approved
@@ -122,13 +129,76 @@ PUBLISHED_COUNTS = text(
         WHERE v.gate_text AND r.gate_text AND s.gate_identity
         OFFSET 0
     ) candidates
-    WHERE gate_verified_at::timestamptz <= :now
-      AND gate_reviewed_at::timestamptz <= :now
-      AND (gate_expires_at IS NULL OR gate_expires_at::timestamptz > :now)
-      AND gate_approved::jsonb ? gate_content_hash
+    WHERE {READ_NOW}
     GROUP BY jurisdiction_id
     """
 )
+# The same, for a query that already holds each record to its gates: the records with a text to read.
+READABLE = f"""
+    SELECT DISTINCT source_id COLLATE "C" AS source_id FROM (
+        SELECT v.source_id, v.gate_content_hash, v.gate_verified_at,
+               r.gate_reviewed_at, r.gate_expires_at, r.gate_approved
+        FROM versions v
+        JOIN rights r ON r.source_id = v.source_id
+        WHERE v.gate_text AND r.gate_text
+        OFFSET 0
+    ) candidates
+    WHERE {READ_NOW}
+"""
+# The website's catalogue from the columns migration 0046 keeps. The search's words are read as in matching.
+WANTED = "plainto_tsquery('simple', regexp_replace(normalize(CAST(:query AS text), NFKC), '[[:punct:]]+', ' ', 'g'))"
+RANK = f"CASE WHEN s.words_title @@ {WANTED} THEN 3 WHEN s.words_citation @@ {WANTED} THEN 2 ELSE 1 END"
+# Exactly str.casefold in the order of code points, with the index's prefix first so the index can serve it;
+# the sort is stable over IDs, in the database's order, which the walk reads them in.
+BY_TITLE = 'left(s.browse_title, 200) COLLATE "C"{0}, s.browse_title COLLATE "C"{0}'
+ORDERS = {
+    "title": f"{BY_TITLE.format('')}, s.id",
+    "relevance": f"{BY_TITLE.format('')}, s.id",
+    "oldest": f"s.browse_year IS NULL, s.browse_year, {BY_TITLE.format('')}, s.id",
+    "newest": (
+        "s.browse_year IS NULL, s.browse_year DESC,"
+        ' CASE WHEN s.browse_year IS NULL THEN s.browse_title END COLLATE "C",'
+        f" {BY_TITLE.format(' DESC')}, s.id"
+    ),
+}
+# The records a catalogue request looks among and the ones among them with a text to read. Where a search or a
+# filter narrows them, those are held and only their texts looked at, so finding few costs little and the
+# planner goes by how many it expects (the tests on the time of asking stay out of the joins, as in
+# PUBLISHED_COUNTS, or it expects few and looks each up in turn); else every text is looked at once.
+MATCHED = f"""
+    WITH matched AS {{held}} (
+        SELECT {{columns}} FROM sources s JOIN rights r ON r.source_id = s.id WHERE {{scope}}
+    ), readable AS (
+        SELECT DISTINCT source_id COLLATE "C" AS source_id FROM (
+            SELECT v.source_id, v.gate_content_hash, v.gate_verified_at,
+                   r.gate_reviewed_at, r.gate_expires_at, r.gate_approved
+            FROM {{texts}}
+            WHERE v.gate_text AND r.gate_text
+            OFFSET 0
+        ) candidates
+        WHERE {READ_NOW}
+    )
+"""
+EVERY_TEXT = {"held": "NOT MATERIALIZED", "texts": "versions v JOIN rights r ON r.source_id = v.source_id"}
+TEXTS_MATCHED = {
+    "held": "MATERIALIZED",
+    "texts": "matched m JOIN versions v ON v.source_id = m.id JOIN rights r ON r.source_id = m.id",
+}
+ACCESS = "CASE WHEN readable.source_id IS NULL THEN 'metadata' ELSE 'open' END"
+# Each of the catalogue's filters (api.catalogue.FACETS) but access, as a value of a record, as a filter names it.
+BROWSE_VALUES = {
+    "jurisdiction": "s.jurisdiction_id",
+    "type": "s.browse_type",
+    "language": "s.language",
+    "status": "s.browse_status",
+    "year": "s.browse_year::text",
+}
+BROWSE_FACETS = (*BROWSE_VALUES, "access")
+# What GROUPING says of each filter's row: a bit for each value not grouped by, the first filter's the highest.
+BROWSE_SETS = {
+    (1 << len(BROWSE_FACETS)) - 1 - (1 << (len(BROWSE_FACETS) - 1 - n)): name
+    for n, name in enumerate(BROWSE_FACETS)
+}
 # The columns of the case-law tables (migration 0042) that the relationship pages read.
 CITATION_COLUMNS = (
     "citation_id", "citing_work", "citing_locator", "citing_pinpoint", "citing_order", "cited_work",
@@ -162,6 +232,7 @@ class LegacyRepository:
         self._indexed_metadata = None
         self._case_law_tables = None
         self._has_gates = None
+        self._has_browse = None
 
     def _gated(self) -> bool:
         """Whether the database keeps the catalogue's gates in columns (migration 0045); not on SQLite,
@@ -170,12 +241,28 @@ class LegacyRepository:
             self._has_gates = self.connection.dialect.name == "postgresql" and bool(
                 self.connection.scalar(
                     text(
-                        "SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('versions')"
+                        "SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('rights')"
                         " AND attname = 'gate_text' AND NOT attisdropped"
                     )
                 )
             )
         return self._has_gates
+
+    def browsable(self) -> bool:
+        """Whether the database also keeps what the website's catalogue filters and sorts by in columns
+        (migration 0046); else the catalogue reads the records."""
+        if not self._gated():
+            return False
+        if self._has_browse is None:
+            self._has_browse = bool(
+                self.connection.scalar(
+                    text(
+                        "SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('sources')"
+                        " AND attname = 'browse_title' AND NOT attisdropped"
+                    )
+                )
+            )
+        return self._has_browse
 
     @staticmethod
     def _identity_matches(table):
@@ -198,7 +285,7 @@ class LegacyRepository:
         statement = (
             select(self._sources.c.payload.label("source"), self._rights.c.payload.label("rights"))
             .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
-            .where(self._visible())
+            .where(self._public_gate())
         )
         if jurisdiction is None:
             return statement
@@ -280,10 +367,42 @@ class LegacyRepository:
             return None
         return self._sources.c.id.in_(open_ids) if access == "open" else self._sources.c.id.not_in(open_ids)
 
+    def readable_predicate(self, access, now):
+        """The records with a text that may be read at ``now`` (or, for ``metadata``, those without), from the
+        gates: the same test as access_predicate over the IDs of a walk of the records. None where the database
+        keeps no gates (_gated)."""
+        if not self._gated():
+            return None
+        found = "" if access == "open" else "NOT "
+        return text(
+            f"{found}EXISTS (SELECT 1 FROM ({READABLE}) readable WHERE readable.source_id = sources.id)"
+        ).bindparams(now=now)
+
+    def readable_among(self, ids, now) -> set[str] | None:
+        """Which of these records have a text that may be read at ``now``; None where the database keeps no
+        gates (_gated). A page's worth costs one lookup, and no text is read."""
+        if not self._gated():
+            return None
+        return set(
+            self.connection.scalars(
+                text(
+                    f"""
+                    SELECT DISTINCT v.source_id FROM versions v
+                    JOIN rights r ON r.source_id = v.source_id
+                    JOIN sources s ON s.id = v.source_id
+                    WHERE v.source_id = ANY(CAST(:ids AS text[]))
+                      AND v.gate_text AND r.gate_text AND s.gate_identity AND {READ_NOW}
+                    """
+                ),
+                {"ids": list(ids), "now": now},
+            )
+        )
+
     def matching(self, query: str):
         """The catalogue search's word tests (api.search) as SQL: every word of ``query`` among a
         source's title, citation and summary together, in its title alone, in its citation alone. On
-        PostgreSQL the first is the expression migration 0038 indexes, so it is read from the index."""
+        PostgreSQL the first is read from an index: of the column migration 0046 keeps, or before it of
+        the expression migration 0038 indexes."""
         payload = self._sources.c.payload
         if self.connection.dialect.name == "postgresql":
             wanted = func.plainto_tsquery(
@@ -297,8 +416,12 @@ class LegacyRepository:
             )
 
             def has(*fields):
-                vector = literal_column(fields_vector(self._sources.name, fields))
-                return vector.op("@@", return_type=Boolean)(wanted)
+                vector = (
+                    f"{self._sources.name}.words_all"
+                    if fields == FIELDS and self.browsable()
+                    else fields_vector(self._sources.name, fields)
+                )
+                return literal_column(vector).op("@@", return_type=Boolean)(wanted)
         else:
 
             def has(*fields):
@@ -349,6 +472,88 @@ class LegacyRepository:
             raise ResultTooLarge("Pilot catalogue browsing exceeds declared bound")
         return rows
 
+    def plan_for_each_answer(self) -> None:
+        """Until the transaction ends, plan each statement for its values, as the catalogue's depend on them:
+        how many records a word finds, and a list of IDs it can hash only if it is known. A statement run ten
+        times on a connection otherwise gets a plan blind to them, which took five times as long."""
+        self.connection.execute(text("SELECT set_config('plan_cache_mode', 'force_custom_plan', true)"))
+
+    @staticmethod
+    def _browse_scope(query, by_text) -> tuple[str, dict]:
+        """The public records a catalogue request looks among: those a search matches, or every one. The IDs a
+        text search found go as one array, however many there are."""
+        scope = "s.gate_identity AND r.gate_public"
+        if query is None:
+            return scope, {}
+        if by_text:
+            found = f"(s.words_all @@ {WANTED} OR s.id = ANY(CAST(:works AS text[])))"
+            return f"{scope} AND {found}", {"query": query, "works": list(by_text)}
+        return f"{scope} AND s.words_all @@ {WANTED}", {"query": query}
+
+    def browse_counts(self, query, by_text, filters, now) -> tuple[int, dict[str, dict[str, int]]]:
+        """How many public records a catalogue request finds, and for each filter how many have each of its
+        values, applying every other selected filter, so choosing a value never hides the alternatives. One
+        pass over the records' columns, whatever the filters."""
+        scope, params = self._browse_scope(query, by_text)
+        params |= {f"f_{name}": value for name, value in filters.items()} | {"now": now}
+        columns = ", ".join(("s.id", *(f"{value} AS {name}" for name, value in BROWSE_VALUES.items())))
+        names = ", ".join(BROWSE_FACETS)
+
+        def counted(skip=None):
+            tests = [f"{name} = :f_{name}" for name in filters if name != skip]
+            return f"count(*) FILTER (WHERE {' AND '.join(tests)})" if tests else "count(*)"
+
+        rows = self.connection.execute(
+            text(
+                f"""
+                {MATCHED.format(columns=columns, scope=scope, **(EVERY_TEXT if query is None else TEXTS_MATCHED))}
+                SELECT GROUPING({names}) AS grouped, {names}, {counted()} AS counted
+                    {"".join(f", {counted(name)} AS {name}_counted" for name in filters)}
+                FROM (
+                    SELECT {", ".join(BROWSE_VALUES)}, {ACCESS} AS access
+                    FROM matched LEFT JOIN readable ON readable.source_id = matched.id
+                ) catalogue
+                GROUP BY GROUPING SETS ({", ".join(f"({name})" for name in BROWSE_FACETS)}, ())
+                """
+            ),
+            params,
+        ).mappings()
+        total, counts = 0, {name: {} for name in BROWSE_FACETS}
+        for row in rows:
+            name = BROWSE_SETS.get(row["grouped"])
+            if name is None:
+                total = row["counted"]
+                continue
+            count = row[f"{name}_counted" if name in filters else "counted"]
+            if row[name] and count:
+                counts[name][row[name]] = count
+        return total, counts
+
+    def browse_page(self, query, by_text, filters, sort, *, limit, offset, now) -> list[str]:
+        """The IDs of one page of a catalogue request, in the order sorting the records in Python gives: best
+        match first (RANK), by title (BY_TITLE), or by year with the undated last by title, and what ties
+        by ID."""
+        scope, params = self._browse_scope(query, by_text)
+        tests = [f"{BROWSE_VALUES[name]} = :f_{name}" for name in filters if name in BROWSE_VALUES]
+        scope = " AND ".join((scope, *tests))
+        params |= {f"f_{name}": value for name, value in filters.items()} | {"limit": limit, "offset": offset}
+        searching = sort == "relevance" and query is not None
+        order = f"{RANK} DESC, {ORDERS[sort]}" if searching else ORDERS[sort]
+        page = f"ORDER BY {order} LIMIT :limit OFFSET :offset"
+        if "access" not in filters:
+            statement = f"SELECT s.id FROM sources s JOIN rights r ON r.source_id = s.id WHERE {scope} {page}"
+        else:
+            columns = "s.id, s.browse_title, s.browse_year" + (
+                ", s.words_title, s.words_citation" if searching else ""
+            )
+            params["now"] = now
+            statement = f"""
+                {MATCHED.format(columns=columns, scope=scope, **(TEXTS_MATCHED if query or tests else EVERY_TEXT))}
+                SELECT s.id FROM matched s LEFT JOIN readable ON readable.source_id = s.id
+                WHERE {ACCESS} = :f_access {page}
+            """
+        return list(self.connection.scalars(text(statement), params))
+
     def public_counts(self) -> dict[str, int]:
         """How many public sources each jurisdiction has, in order of each one's first source id."""
         statement = (
@@ -373,7 +578,13 @@ class LegacyRepository:
         """A page of the public sources whose title, citation and summary have every word of
         ``query``, or that are among ``by_text`` (their published text matched)."""
         every, _, _ = self.matching(query)
-        predicate = or_(every, self._sources.c.id.in_(sorted(by_text))) if by_text else every
+        predicate = every
+        if by_text and self.browsable():
+            self.plan_for_each_answer()
+            found = text("sources.id = ANY(CAST(:works AS text[]))").bindparams(works=list(by_text))
+            predicate = or_(every, found)
+        elif by_text:
+            predicate = or_(every, self._sources.c.id.in_(sorted(by_text)))
         if access_where is not None:
             predicate = and_(predicate, access_where)
         return self.source_page(limit=limit, offset=offset, jurisdiction=jurisdiction, where=predicate)
@@ -689,7 +900,7 @@ class LegacyRepository:
         statement = (
             select(func.count())
             .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
-            .where(self._visible())
+            .where(self._public_gate())
         )
         if jurisdictions is not None:
             within = self._sources.c.jurisdiction_id.in_(sorted(jurisdictions))

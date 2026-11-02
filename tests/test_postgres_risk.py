@@ -121,13 +121,13 @@ def test_indexed_10000_metadata_workload_decodes_only_the_page(pg_engine, catalo
             f"fixture-{i:05d}" for i in range(9975, 10000)
         ]
         assert len(decoded) == 25
-        # Verify the real planner can use the exact expression index, not a different test query.
+        # Verify the real planner can use the words' own index, not a different test query.
         every, _, _ = repo.matching("cataloguebatch 09999")
         statement = repo._select_sources().where(every)
         conn.exec_driver_sql("SET LOCAL enable_seqscan=off")
         compiled = statement.compile(conn)
         plan = conn.exec_driver_sql("EXPLAIN (FORMAT JSON) " + str(compiled), compiled.params).scalar_one()
-        assert "sources_catalogue_words" in json.dumps(plan)
+        assert "sources_browse_words" in json.dumps(plan)
         print(f"S1 synthetic 10000-metadata page: {elapsed:.4f}s; decoded25; word index verified")
 
 
