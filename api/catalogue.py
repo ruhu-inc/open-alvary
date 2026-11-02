@@ -197,7 +197,8 @@ def _asserted(row: dict, readable: bool) -> dict:
 MAX_ANCHOR_BYTES = 900 * 1024
 # A text search serves its first 1,000 hits, 25 a page by default and 100 at most (API-03).
 MAX_HIT_OFFSET = 1000
-# A catalogue search finds at most this many records by their published text (else 413, as before).
+# Where the catalogue is read record by record (browse's _walk), a search finds at most this many records by
+# their published text (else 413, as before).
 MAX_TEXT_WORKS = 10_000
 NO_WORDS = "The search has no letters or digits to match. Search for words, such as a title or a citation."
 # Why a catalogue search found records by their details only (API-04: told apart from no result).
@@ -357,9 +358,10 @@ class LegacyCatalogue:
                     raise PublicUnavailable("Version policy changed during lookup")
                 yield version
 
-    def _view(self, pair):
+    def _view(self, pair, has_text=None):
         source, rights = pair
-        has_text = next(self._approved(source, rights), None) is not None
+        if has_text is None:
+            has_text = next(self._approved(source, rights), None) is not None
         return SourceView(
             **source.model_dump(mode="json", exclude={"treaty"}),
             treaty=applicable.treaty_view(source, self._acts),
@@ -367,6 +369,15 @@ class LegacyCatalogue:
             access_mode="open_full_text" if has_text else "metadata_link_only",
             rights_status=rights.status,
         )
+
+    def _views(self, pairs) -> tuple:
+        """A page's records, told open from metadata together, without reading a text, where the database
+        keeps the gates."""
+        approved = [source.id for source, rights in pairs if rights.approved_content_hashes]
+        opened = self.repository.readable_among(approved, self.now) if approved else set()
+        if opened is None:
+            return tuple(self._view(pair) for pair in pairs)
+        return tuple(self._view(pair, pair[0].id in opened) for pair in pairs)
 
     def source(self, source_id):
         return self._view(self._require(source_id))
@@ -376,6 +387,9 @@ class LegacyCatalogue:
             raise InvalidSearch("Invalid access filter")
         if access == "all":
             return None
+        readable = self.repository.readable_predicate(access, self.now)
+        if readable is not None:
+            return readable
         open_ids = []
         for source, rights in self.repository.sources(jurisdiction, where=self.repository.potential_text()):
             if any(
@@ -391,7 +405,7 @@ class LegacyCatalogue:
         total, pairs = self.repository.source_page(
             limit=limit, offset=offset, jurisdiction=jurisdiction, where=self._access(access, jurisdiction)
         )
-        return SourcePage(total=total, items=tuple(self._view(pair) for pair in pairs))
+        return SourcePage(total=total, items=self._views(pairs))
 
     def _public(self, ids) -> dict:
         return {
@@ -825,13 +839,14 @@ class LegacyCatalogue:
             if isinstance(jurisdiction, str)
             else tuple(sorted(jurisdiction))
         )
+        bound = None if self.repository.browsable() else MAX_TEXT_WORKS
         found = text_index.works(
-            self.repository.connection, query, text_index.Filters(jurisdictions=scope), bound=MAX_TEXT_WORKS
+            self.repository.connection, query, text_index.Filters(jurisdictions=scope), bound=bound
         )
         if found.state in TEXT_NOT_SEARCHED:
             # Nothing to say where no record has a text that may be published.
             return set(), (TEXT_NOT_SEARCHED[found.state],) if self.repository.any_potential_text() else ()
-        if len(found.rows) > MAX_TEXT_WORKS:
+        if bound is not None and len(found.rows) > bound:
             raise ResultTooLarge("Pilot full-text matching exceeds declared bound")
         return set(found.rows), ()
 
@@ -855,7 +870,7 @@ class LegacyCatalogue:
             offset=offset,
             access_where=access_where,
         )
-        return SearchPage(total=total, items=tuple(self._view(pair) for pair in pairs), notices=notices)
+        return SearchPage(total=total, items=self._views(pairs), notices=notices)
 
     def _open(self, pairs) -> set[str]:
         """Which of these sources have a text cleared for reuse now."""
@@ -867,22 +882,47 @@ class LegacyCatalogue:
         """The website's catalogue (MAC-01): an optional search, filters and sorting, with a count per
         filter value. Each count applies every other selected filter, so choosing a value never hides
         the alternatives. A search matches words as search does; the database ranks each match (every
-        word in the title 3, in the citation 2, otherwise 1) and returns a compact row for each; only
-        the page's sources are read in full. Bounded: at most BROWSE_BOUND public sources."""
+        word in the title 3, in the citation 2, otherwise 1). The database counts and sorts from columns
+        kept beside each record (migration 0046), so only the page's sources are read; nothing is cached,
+        and a withdrawn record is gone from the next answer (F01)."""
         filters = {k: v for k, v in (filters or {}).items() if v is not None}
         unknown = set(filters) - set(FACETS)
         if unknown or sort not in SORTS:
             raise InvalidSearch("Invalid filter or sort")
         if query is not None and not normalize_citation(query):
             raise InvalidSearch("Search term must not be blank")
-        rows, notices = [], ()
-        if query is None:
-            rows = self.repository.browse_rows(None)
-        elif words(query):
+        by_text, notices = set(), ()
+        if query is not None:
+            if not words(query):
+                return SearchPage(total=0, items=(), notices=(NO_WORDS,)), {name: {} for name in FACETS}
             by_text, notices = self._by_text(query, None)
-            rows = self.repository.browse_rows(query, by_text)
+        if self.repository.browsable():
+            self.repository.plan_for_each_answer()
+            total, counts = self.repository.browse_counts(query, by_text, filters, self.now)
+            page = []
+            if offset < total:
+                page = self.repository.browse_page(
+                    query, by_text, filters, sort, limit=limit, offset=offset, now=self.now
+                )
         else:
-            notices = (NO_WORDS,)
+            total, counts, page = self._walk(query, by_text, filters, sort, limit, offset)
+        pairs = self.repository.visible(page)
+        return (
+            # A source withdrawn since its row was read is left out of the page.
+            SearchPage(
+                total=total, items=self._views([pairs[i] for i in page if i in pairs]), notices=notices
+            ),
+            # The most common first; values with the same count in their own order, not by accident of IDs.
+            {
+                name: dict(sorted(values.items(), key=lambda item: (-item[1], item[0])))
+                for name, values in counts.items()
+            },
+        )
+
+    def _walk(self, query, by_text, filters, sort, limit, offset):
+        """browse with every public source's row read and sorted here: SQLite, or a database before migration
+        0046. At most BROWSE_BOUND sources."""
+        rows = self.repository.browse_rows(query, by_text)
         # The few sources that may have a cleared text are read in full to tell open from metadata.
         opened = self._open(self.repository.visible([row.id for row in rows if row.may_have_text]).values())
         candidates = []
@@ -901,7 +941,7 @@ class LegacyCatalogue:
             return all(values[k] == v for k, v in filters.items() if k != skip)
 
         results = [c for c in candidates if selected(c[2])]
-        facets = {
+        counts = {
             name: Counter(c[2][name] for c in candidates if selected(c[2], skip=name) and c[2][name])
             for name in FACETS
         }
@@ -915,17 +955,7 @@ class LegacyCatalogue:
             results = sorted(
                 dated, key=lambda c: (c[1].year, by_title(c)), reverse=sort == "newest"
             ) + sorted((c for c in results if not c[1].year), key=by_title)
-        page = [c[1].id for c in results[offset : offset + limit]]
-        pairs = self.repository.visible(page)
-        return (
-            # A source withdrawn since its row was read is left out of the page.
-            SearchPage(
-                total=len(results),
-                items=tuple(self._view(pairs[i]) for i in page if i in pairs),
-                notices=notices,
-            ),
-            {name: dict(counts.most_common()) for name, counts in facets.items()},
-        )
+        return len(results), counts, [c[1].id for c in results[offset : offset + limit]]
 
     def _named_by_form(self, value: str) -> list[tuple[tuple, None, None]]:
         """The public sources one of the search index's name forms names, whole: "Nigeria Data

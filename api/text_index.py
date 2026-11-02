@@ -50,6 +50,7 @@ MAX_UNIT_BYTES = 64 * 1024
 MAX_INDEXED_NODES = 200_000
 COUNT_BOUND = 10_000
 TIMEOUT_MS = 10_000  # RET-02: a retrieval answers within ten seconds or says it could not
+WORKS_MEMORY = "32MB"  # enough to tell apart the units of about 400,000 heap pages: 160,000 texts
 START, STOP = "⟦", "⟧"  # highlight marks; never part of a snippet
 HEADLINE = f"StartSel={START}, StopSel={STOP}, MaxWords=40, MinWords=18, ShortWord=2, MaxFragments=1"
 # A provision of its own; a schedule's or an opinion's paragraph is one when it is not inside another
@@ -832,26 +833,57 @@ def search(
     return Found("ok", list(rows), min(total, COUNT_BOUND), total <= COUNT_BOUND, common_only)
 
 
-def works(conn: Connection, query: str, filters: Filters, *, bound: int) -> Found:
+def works(conn: Connection, query: str, filters: Filters, *, bound: int | None) -> Found:
     """The works whose published text has every word of ``query`` (in that text's own analysis, with no
     query syntax) in one unit or in its document unit: the catalogue search's text arm
-    (api.catalogue.search). Their IDs in ``rows``, unordered, at most ``bound`` + 1."""
+    (api.catalogue.search). Their IDs in ``rows``, unordered, at most ``bound`` + 1 if there is a bound.
+
+    Only IDs are wanted, and the index says which units match, so a unit's words need never be read: one
+    search per different reading of the query among the analyses, and memory enough for the index to name
+    each unit, not just its page. Matching in the words of each unit, or for one reading in each analysis,
+    took 9 seconds for a word in half of 2 million units, where this takes half of one."""
     if not available(conn):
         return Found("unavailable")
     if built(conn) is None:
         return Found("building")
-    match = " OR ".join(
-        f"(u.config = '{c}' AND (u.document || u.context) @@ plainto_tsquery('{c}', :q))" for c in ANALYSES
-    )
+    readings: dict[str, list[str]] = {}
+    for config, reading in conn.execute(
+        text(
+            "SELECT c, CAST(plainto_tsquery(CAST(c AS regconfig), :q) AS text)"
+            " FROM unnest(CAST(:configs AS text[])) AS c"
+        ),
+        {"q": query, "configs": list(ANALYSES)},
+    ):
+        if reading:  # none where the query has only the analysis's common words
+            readings.setdefault(reading, []).append(config)
+    if not readings:
+        return Found("ok", [], 0)
     where, params = replace(filters, kinds=()).where()
     searched = [t for t in (_tables(conn)[0], _documents(conn)) if t is not None]
-    union = " UNION ".join(f"SELECT u.work_id FROM {t} u WHERE ({match}) AND {where}" for t in searched)
+    arms = []
+    for n, (reading, configs) in enumerate(readings.items()):
+        params |= {f"reading_{n}": reading, f"configs_{n}": configs}
+        arms += [
+            f"SELECT u.work_id FROM {t} u WHERE (u.document || u.context) @@ CAST(:reading_{n} AS tsquery)"
+            f" AND u.config = ANY(CAST(:configs_{n} AS text[])) AND {where}"
+            for t in searched
+        ]
+    union = " UNION ".join(arms)
     old = conn.scalar(text("SELECT current_setting('statement_timeout')"))
     try:
         with conn.begin_nested():
             conn.execute(text("SELECT set_config('statement_timeout', :ms, true)"), {"ms": str(TIMEOUT_MS)})
-            rows = conn.scalars(text(f"{union} LIMIT {bound + 1}"), params | {"q": query}).all()
+            conn.execute(
+                text(
+                    "SELECT set_config('enable_seqscan', 'off', true), set_config('work_mem', :memory, true)"
+                ),
+                {"memory": WORKS_MEMORY},
+            )
+            limit = "" if bound is None else f" LIMIT {bound + 1}"
+            rows = conn.scalars(text(f"{union}{limit}"), params).all()
             conn.execute(text("SELECT set_config('statement_timeout', :ms, true)"), {"ms": old})
+            conn.execute(text("RESET enable_seqscan"))
+            conn.execute(text("RESET work_mem"))
     except OperationalError as error:
         if getattr(error.orig, "sqlstate", None) == "57014":  # query_canceled: the deadline passed
             return Found("timeout")

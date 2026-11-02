@@ -1,7 +1,8 @@
 """The website's catalogue on PostgreSQL, read from the word index (G11), gives what reading every source
 in Python with the same word rule gives (api.search.has_every_word): the same matches, ranks, order,
 totals and filter counts, for titles with "nº", "ß", Greek and no year, and a source whose published
-text matches through the section index (api.catalogue.browse, api.repositories.browse_rows)."""
+text matches through the section index (api.catalogue.browse, api.repositories.browse_counts and browse_page).
+tests/test_postgres_catalogue.py holds the same answers to the rights policy."""
 
 from collections import Counter
 
