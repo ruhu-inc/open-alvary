@@ -111,6 +111,7 @@ function main(...children) {
 }
 
 const pill = (cls, text) => el("span", { class: `pill ${cls}`, text });
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 // An operator by display name where the workbench knows it (app.names, from /api/overview).
 const operatorName = (email) => (app.names || {})[email] || (email || "").split("@")[0];
 
@@ -140,6 +141,24 @@ async function signOut() {
   await api("/auth/logout", { method: "POST" });
   app.dirty = false;
   location.replace("/?signed_out=1");
+}
+
+// Sign-in leaves for Google and comes back to "/", without the #/… part of the address, which the server
+// never sees. This tab remembers it for the way back; a link opened afterwards keeps its own place.
+const SIGN_IN_PLACE = "signin-place";
+
+function rememberPlace() {
+  try {
+    if (location.hash.startsWith("#/") && location.hash.length > 2) sessionStorage.setItem(SIGN_IN_PLACE, location.hash);
+  } catch { /* no storage here: sign-in ends on the documents page */ }
+}
+
+function returnToPlace() {
+  try {
+    const place = sessionStorage.getItem(SIGN_IN_PLACE);
+    sessionStorage.removeItem(SIGN_IN_PLACE);
+    if (place && place.startsWith("#/") && !location.hash) history.replaceState(null, "", place);
+  } catch { /* as above */ }
 }
 
 // Why a sign-in ended back here (/auth/callback sends a code, never free text: a link cannot put
@@ -181,7 +200,7 @@ async function showSignIn(info) {
     !problem && query.has("signed_out") ? el("p", { class: "signin-notice", role: "status", text: "You are signed out." }) : null);
   if (query.has("signin") || query.has("signed_out")) history.replaceState(null, "", "/" + location.hash);
   if (info.oidc) {
-    panel.append(el("a", { class: "signin-button", href: "/auth/login" }, googleMark(), el("span", { text: "Sign in with Google" })));
+    panel.append(el("a", { class: "signin-button", href: "/auth/login", on: { click: rememberPlace } }, googleMark(), el("span", { text: "Sign in with Google" })));
   }
   if (info.dev_login) {
     const email = el("input", { type: "email", placeholder: "you@organisation.org", required: true, autocomplete: "username", "aria-label": "Operator email" });
@@ -312,9 +331,9 @@ async function dashboard() {
     : null;
 
   const reasons = (d) => [
-    d.open_high ? pill("high", `${d.open_high} high flags`) : null,
-    d.attention ? pill("warn", `${d.attention} pages need attention`) : null,
-    d.stale ? pill("warn", `${d.stale} pages to recheck`) : null,
+    d.open_high ? pill("high", plural(d.open_high, "high flag", "high flags")) : null,
+    d.attention ? pill("warn", plural(d.attention, "page needs attention", "pages need attention")) : null,
+    d.stale ? pill("warn", plural(d.stale, "page to recheck", "pages to recheck")) : null,
     d.approval === "out_of_date" ? pill("warn", "approval out of date") : null,
   ].filter(Boolean);
   const needs = data.attention.length
@@ -406,7 +425,7 @@ async function actView(actId) {
   const grid = el("div", { class: "pages" }, data.pages.map((page) => {
     const classes = [page.status || "", page.open_high ? "high" : "", page.stale ? "stale" : "", routed(page)].join(" ");
     const need = ready.routed ? (TODO_LABEL[page.todo] || (page.status === "checked" ? "" : "nothing to review")) : "";
-    const tip = `${page.status || "not reviewed"}${need ? `, ${need}` : ""}${page.open_high ? `, ${page.open_high} high flags open` : ""}${page.stale ? ", reading changed" : ""}`;
+    const tip = `${page.status || "not reviewed"}${need ? `, ${need}` : ""}${page.open_high ? `, ${plural(page.open_high, "high flag", "high flags")} open` : ""}${page.stale ? ", reading changed" : ""}`;
     return el("a", { class: classes, href: `#/doc/${encodeURIComponent(actId)}/page/${page.page}`, title: tip, text: String(page.page) });
   }));
   const nextTodo = data.pages.find((p) => p.todo);
@@ -499,7 +518,6 @@ function approvalChecklist(actId, data, current, head) {
   const text = data.text_check;
   const toText = (label) => el("button", { class: "small", text: label, on: { click: () => document.getElementById("text-check")?.scrollIntoView({ block: "start" }) } });
   const toReview = ready.unchecked_pages, toResolve = ready.unresolved_flag_pages;
-  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   if (ready.text_held) { // approved on its details alone: no page waits for review
     return el("ol", { class: "checklist", "aria-label": "Steps to approval" },
       step(true, "Text held: its pages need no review, and its text will not be published"),
@@ -769,7 +787,7 @@ async function readView(actId) {
 
 function readPage(actId, page, canEdit) {
   const status = page.status === "checked" ? pill("ok", "checked") : page.status ? pill("warn", page.status) : pill("medium", "not reviewed");
-  const flags = page.open_high ? pill("high", `${page.open_high} high flags open`) : page.open ? pill("medium", `${page.open} flags open`) : null;
+  const flags = page.open_high ? pill("high", `${plural(page.open_high, "high flag", "high flags")} open`) : page.open ? pill("medium", `${plural(page.open, "flag", "flags")} open`) : null;
   const mark = canEdit && page.status !== "checked" && !page.open_high
     ? el("button", { class: "small", text: "Mark checked", on: { click: async (event) => {
         const result = await api(`/api/documents/${encodeURIComponent(actId)}/pages/${page.page}`, { method: "POST", body: { expected_revision: page.revision, units: page.units, status: "checked", resolutions: page.resolutions || {}, comment: "Checked while reading the whole document" } });
@@ -2525,6 +2543,7 @@ document.addEventListener("keydown", (event) => {
 async function start() {
   const signedOut = await loadMe();
   if (signedOut) return showSignIn(signedOut);
+  returnToPlace();
   if (!start.listening) { window.addEventListener("hashchange", route); start.listening = true; }
   route();
 }

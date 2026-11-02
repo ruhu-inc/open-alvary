@@ -1,8 +1,67 @@
 "use strict";
 
-// The Access section (MAC-11): access requests, organisations, suspensions, leaked credentials and
-// the accounts audit log, for operators with the access_admin role. Passkeys and change helpers are
+// The Access section (MAC-11): access requests, who has registered, suspensions, leaked credentials
+// and the accounts audit log, for operators with the access_admin role. Passkeys and change helpers are
 // in passkeys.js; el, api, main, toast, setCrumbs, message and pill in app.js. No inline handlers.
+
+// --- the lists ------------------------------------------------------------------------------------
+
+const accessOrganisation = (o) => el("a", { href: `#/access/org/${encodeURIComponent(o.id)}`, text: o.name });
+
+const accessOrganisationRow = (o) => el("tr", {},
+  el("td", {}, accessOrganisation(o)),
+  el("td", { text: o.kind.replace(/_/g, " ") }),
+  el("td", { text: o.country ? trafficCountry(o.country) : "—" }),
+  el("td", { text: o.owners.join(", ") || "No active owner" }),
+  el("td", { text: day(o.created_at) }),
+  el("td", {}, pill(o.state === "active" ? "ok" : "warn", o.state)),
+  el("td", { text: o.plan || "No access" }));
+
+const accessPersonRow = (p) => el("tr", {},
+  el("td", { text: p.display_name || "—" }),
+  el("td", { text: p.email }),
+  el("td", {}, p.organisations.length
+    ? p.organisations.flatMap((o, i) => [i ? ", " : "", accessOrganisation(o), ` (${o.role})`])
+    : "None yet"),
+  el("td", { text: day(p.created_at) }),
+  el("td", {}, pill(p.state === "active" ? "ok" : "warn", p.state)));
+
+// A list, newest first, a page at a time. The box narrows it on the server, so it finds what is not on
+// the page; it asks only from two letters, and a slower earlier answer never replaces a later one.
+async function accessList(title, url, placeholder, headers, row) {
+  const heading = el("h3", { text: title });
+  const filter = el("input", { type: "search", placeholder, "aria-label": placeholder });
+  const rows = el("tbody");
+  const listing = el("table", { class: "list" }, el("thead", {}, el("tr", {}, headers.map((h) => el("th", { text: h })))), rows);
+  const note = el("p", { class: "muted", hidden: true });
+  const more = el("button", { class: "small", text: "Show more", hidden: true, on: { click: () => load(true).catch((error) => toast(error.message)) } });
+  let next = null, asked = 0;
+  async function load(adding) {
+    const words = filter.value.trim();
+    const ticket = ++asked;
+    const query = new URLSearchParams();
+    if (words.length >= 2) query.set("q", words);
+    if (adding) query.set("before", next);
+    const answer = await api(`${url}?${query}`);
+    if (ticket !== asked) return;
+    if (!answer.ok) {
+      note.textContent = message(answer);
+      note.hidden = false;
+      return;
+    }
+    next = answer.data.next;
+    if (!adding) rows.replaceChildren();
+    rows.append(...answer.data.items.map(row));
+    heading.textContent = `${title} (${answer.data.total.toLocaleString("en-GB")})`;
+    listing.hidden = !rows.children.length;
+    note.textContent = words.length >= 2 ? "Nothing found." : "None yet.";
+    note.hidden = Boolean(rows.children.length);
+    more.hidden = !next;
+  }
+  filter.addEventListener("input", () => load(false).catch((error) => toast(error.message)));
+  await load(false);
+  return el("div", { class: "card" }, heading, filter, listing, note, more);
+}
 
 // --- views ----------------------------------------------------------------------------------------
 
@@ -11,14 +70,13 @@ async function accessView(parts) {
   setCrumbs(parts[0] ? el("a", { href: "#/access", text: "Access" }) : "Access", ...(parts[0] === "audit" ? ["Audit log"] : []));
   if (parts[0] === "org" && parts[1]) return organisationView(parts[1]);
   if (parts[0] === "audit") return accessAuditView();
-  const [bar, requests, clients] = await Promise.all([passkeyBar(), api("/api/access/requests"), api("/api/access/clients")]);
-  const search = el("input", { type: "search", placeholder: "Organisation name or ID, or a member's email" });
-  const results = el("ul", { class: "plain" });
-  search.addEventListener("input", async () => {
-    if (search.value.trim().length < 2) return results.replaceChildren();
-    const { data } = await api(`/api/access/search?q=${encodeURIComponent(search.value.trim())}`);
-    results.replaceChildren(...(data.length ? data.map((o) => el("li", {}, el("a", { href: `#/access/org/${o.id}`, text: o.name }), ` · ${o.state} · ${o.id}`)) : [el("li", { class: "muted", text: "Nothing found." })]));
-  });
+  const [bar, requests, clients, organisations, people] = await Promise.all([
+    passkeyBar(), api("/api/access/requests"), api("/api/access/clients"),
+    accessList("Organisations", "/api/access/organisations", "Organisation name or ID, or a member's email",
+      ["Organisation", "Type", "Country", "Owner", "Registered", "Status", "Plan"], accessOrganisationRow),
+    accessList("People", "/api/access/people", "Name, email or ID",
+      ["Name", "Email", "Organisations", "Joined", "Status"], accessPersonRow),
+  ]);
   const credential = el("input", { type: "text", autocomplete: "off", placeholder: "The leaked key, its ID, or a grt_… app ID" });
   main(
     bar,
@@ -33,7 +91,8 @@ async function accessView(parts) {
             el("td", { text: `${r.contact_name} <${r.contact_email}>` }),
             el("td", { text: day(r.created_at) + (r.state === "needs_information" ? " · asked for more" : "") })))))
         : el("p", { class: "muted", text: "No open requests." })),
-    el("div", { class: "card" }, el("h3", { text: "Find an organisation" }), search, results),
+    organisations,
+    people,
     el("div", { class: "card" }, el("h3", { text: "Revoke a leaked key or connected app" }),
       el("p", { class: "muted", text: "A pasted key is read only for its ID; it is never stored or logged." }),
       form("", [["credential", "Key or ID", credential]], "Revoke", (v) => change("/api/access/credentials/revoke", v, async () => { credential.value = ""; }), { danger: true })),

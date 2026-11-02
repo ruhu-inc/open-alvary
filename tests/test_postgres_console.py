@@ -14,7 +14,7 @@ from sqlalchemy import text
 from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
 
-from accounts import keys, policies
+from accounts import keys, mail, policies
 from accounts.store import Accounts
 from api.console import ConsoleConfig, Provider, create_console_app
 from rights.database import PolicyNamespace
@@ -455,12 +455,60 @@ class RecordingMailer:
         return True
 
 
+def test_the_operator_hears_of_each_new_organisation_without_who_it_is(console):
+    accounts, fake, _ = console
+    mailer = RecordingMailer()
+    browser = client(create_console_app(accounts, app_provider(fake), mailer=mailer))
+    _, headers, _ = onboard(browser, fake)
+    [welcomed] = mailer.sent
+    assert welcomed.to == "hello@ruhu.ai" and welcomed.subject == "New Open Alvary registration"
+    assert "Type: individual" in welcomed.text and "Country: not given" in welcomed.text
+    assert "Amina" not in welcomed.text and "amina@example.org" not in welcomed.text
+    # Welcoming again makes nothing, so it tells nobody.
+    again = browser.post(
+        "/api/v1/me/welcome",
+        json={"display_name": "Amina Uwase", "organisation_name": "Amina Uwase"},
+        headers=headers,
+    )
+    assert again.status_code == 200 and len(mailer.sent) == 1
+    made = browser.post(
+        "/api/v1/organisations",
+        json={"name": "Kigali Law Clinic", "kind": "non_profit", "country": "rw"},
+        headers=headers,
+    )
+    assert made.status_code == 201
+    second = mailer.sent[1]
+    assert "Type: non profit" in second.text and "Country: RW" in second.text
+    assert "Kigali" not in second.text and "Kigali" not in second.subject
+
+
+def test_registration_emails_stop_at_the_hours_allowance(console, monkeypatch):
+    accounts, fake, _ = console
+    monkeypatch.setattr("api.console.REGISTRATION_EMAILS_AN_HOUR", 1)
+    mailer = RecordingMailer()
+    browser = client(create_console_app(accounts, app_provider(fake), mailer=mailer))
+    _, headers, _ = onboard(browser, fake)
+    made = browser.post("/api/v1/organisations", json={"name": "Second"}, headers=headers)
+    assert made.status_code == 201 and len(mailer.sent) == 1  # made all the same, and on the Access page
+
+
+def test_an_allowance_starts_again_each_hour():
+    now = [0.0]
+    allowance = mail.Allowance(2, clock=lambda: now[0])
+    assert [allowance.take() for _ in range(3)] == [True, True, False]
+    now[0] = 3599.0
+    assert allowance.take() is False
+    now[0] = 3600.0
+    assert allowance.take() is True
+
+
 def test_invitations_and_access_requests_send_mail_after_the_change(console):
     accounts, fake, _ = console
     mailer = RecordingMailer()
     app = create_console_app(accounts, app_provider(fake), mailer=mailer)
     browser = client(app)
     organisation, headers, _ = onboard(browser, fake)
+    mailer.sent.clear()
     invited = browser.post(
         f"/api/v1/organisations/{organisation}/invitations",
         headers=headers,
@@ -504,6 +552,7 @@ def test_a_plan_request_names_the_plan_in_the_mail_and_the_tiers_list_carries_li
     mailer = RecordingMailer()
     browser = client(create_console_app(accounts, app_provider(fake), mailer=mailer))
     organisation, headers, _ = onboard(browser, fake)
+    mailer.sent.clear()
     tiers = browser.get("/api/v1/tiers").json()["tiers"]
     assert "partner" not in {t["id"] for t in tiers}  # granted by agreement, never listed
     developer = next(t for t in tiers if t["id"] == "developer")

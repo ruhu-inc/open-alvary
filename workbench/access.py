@@ -63,10 +63,15 @@ def install(app: FastAPI, store: Store, admin: AccessAdmin | None, relying: Rely
             for t in admin.accounts.tiers(published_only=False)
         ]
 
-    @app.get("/api/access/search")
-    def search(request: Request, q: str = ""):
+    @app.get("/api/access/organisations")
+    def organisations(request: Request, q: str = "", before: str | None = None):
         operator(request)
-        return run(lambda: admin.search(q))
+        return run(lambda: admin.organisations(q, before))
+
+    @app.get("/api/access/people")
+    def people(request: Request, q: str = "", before: str | None = None):
+        operator(request)
+        return run(lambda: admin.people(q, before))
 
     @app.get("/api/access/organisations/{organisation_id}")
     def organisation(request: Request, organisation_id: str):

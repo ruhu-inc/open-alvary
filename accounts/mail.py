@@ -28,6 +28,21 @@ class Message:
     headers: tuple[tuple[str, str], ...] = ()  # for example List-Unsubscribe (RFC 8058)
 
 
+class Allowance:
+    """How many may go in an hour from this instance, so a burst of sign-ups cannot use up what the mail
+    service allows us for sign-in codes and notices. What it holds back is still on the Access page."""
+
+    def __init__(self, per_hour: int, clock=time.monotonic):
+        self.per_hour, self.clock = per_hour, clock
+        self.started, self.used = clock(), 0
+
+    def take(self) -> bool:
+        if self.clock() - self.started >= 3600:
+            self.started, self.used = self.clock(), 0
+        self.used += 1
+        return self.used <= self.per_hour
+
+
 class Mailer:
     def __init__(self, api_key: str | None, sender: str, reply_to: str, client: httpx.Client | None = None):
         self.api_key, self.sender, self.reply_to = api_key, sender, reply_to
@@ -114,6 +129,17 @@ def request_for_operator(
         f"New Open Alvary access request: {organisation}",
         f"{organisation} asked for {kind}. List open requests with:\n\n"
         "python -m accounts.operator --operator <you> requests\n\n" + SIGN_OFF,
+    )
+
+
+def registration_for_operator(to: str, kind: str, country: str | None) -> Message:
+    """Its type and country only, chosen from lists: no name or address goes through the mail service."""
+    return Message(
+        to,
+        "New Open Alvary registration",
+        f"A new organisation registered.\n\nType: {kind.replace('_', ' ')}\n"
+        f"Country: {country.upper() if country else 'not given'}\n\n"
+        "Who it is and who owns it are on the Access page of the review workbench.\n\n" + SIGN_OFF,
     )
 
 

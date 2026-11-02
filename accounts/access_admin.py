@@ -3,7 +3,7 @@
 An operator answers access requests (grant, decline, ask for information), grants, changes and
 revokes access, suspends and restores people and organisations, restores an owner to an
 organisation that has none, revokes a key or a connected app by its ID (leak reports), and reads
-usage and the whole audit log. Every change takes a reason, and where it rests on something checked
+who has registered, usage and the whole audit log. Every change takes a reason, and where it rests on something checked
 outside the service, an evidence reference; both go into the audit log under the operator's name.
 
 Operators never see secrets (keys are stored only as keyed hashes, and the database role leaves
@@ -28,6 +28,12 @@ from accounts.store import AccountError, Accounts, Context
 STATES = {"suspend": "suspended", "restore": "active"}
 KEY_ID = re.compile(r"^[0-9a-f]{32}$")
 GRANT_ID = re.compile(r"^grt_[0-9A-HJKMNP-TV-Z]{26}$")
+PAGE = 10
+
+
+def _contains(query: str) -> str:
+    """A LIKE pattern matching the words as typed, whatever marks they hold."""
+    return "%" + query.replace("\\", r"\\").replace("%", r"\%").replace("_", r"\_") + "%"
 
 
 @dataclass(frozen=True)
@@ -81,19 +87,92 @@ class AccessAdmin:
 
     def search(self, query: str) -> list[dict]:
         """Organisations by ID or name, and the organisations of a person found by email or ID."""
-        query = (query or "").strip()
-        if len(query) < 2:
+        if len((query or "").strip()) < 2:
             return []
+        return self.organisations(query, limit=25)["items"]
+
+    def _page(self, conn, table, where, columns, more, before, limit, params) -> dict:
+        """One page of a list, newest first: `more` is worked out only for the rows it shows, so the
+        cost of a page stays the same however long the list grows. `next` continues after its last row."""
+        after = ""
+        if before:
+            at, _, last = before.partition("|")
+            try:
+                datetime.fromisoformat(at)
+            except ValueError:
+                raise AccountError("invalid_input", 400, "That place in the list is not valid.") from None
+            after = " AND (x.created_at, x.id) < (CAST(:at AS timestamptz), :last)"
+            params = {**params, "at": at, "last": last}
+        rows = self._rows(
+            conn,
+            f"SELECT shown.*, {more} FROM (SELECT {columns} FROM {table} x WHERE {where}{after}"
+            " ORDER BY x.created_at DESC, x.id DESC LIMIT :n) shown"
+            " ORDER BY shown.created_at DESC, shown.id DESC",
+            n=limit + 1,
+            **params,
+        )
+        shown = rows[:limit]
+        return {
+            "total": conn.scalar(text(f"SELECT count(*) FROM {table} x WHERE {where}"), params),
+            "items": shown,
+            "next": f"{shown[-1]['created_at'].isoformat()}|{shown[-1]['id']}" if len(rows) > limit else None,
+        }
+
+    def organisations(self, query: str = "", before: str | None = None, limit: int = PAGE) -> dict:
+        """Every organisation that has registered, with its owners and plan. A query narrows them to the
+        one with that ID, those whose name holds the words, and those of the person with that email or ID."""
+        query = (query or "").strip()
+        if len(query) == 1:
+            return {"total": 0, "items": [], "next": None}
         with self.accounts.engine.connect() as conn:
-            return self._rows(
+            members, people = self._t(conn, "membership"), self._t(conn, "person")
+            where, params = "x.state <> 'deleted'", {}
+            if query:
+                where += (
+                    " AND (x.id = :q OR x.name ILIKE :like OR EXISTS (SELECT 1 FROM"
+                    f" {members} m JOIN {people} p ON p.id = m.person_id WHERE m.organisation_id = x.id"
+                    " AND (lower(p.email) = lower(:q) OR p.id = :q)))"
+                )
+                params = {"q": query, "like": _contains(query)}
+            access = f"{self.accounts._fn(conn, 'accounts_access')}(shown.id)"
+            return self._page(
                 conn,
-                f"SELECT DISTINCT o.id, o.name, o.state, o.created_at FROM {self._t(conn, 'organisation')} o"
-                f" LEFT JOIN {self._t(conn, 'membership')} m ON m.organisation_id = o.id"
-                f" LEFT JOIN {self._t(conn, 'person')} p ON p.id = m.person_id"
-                " WHERE o.state <> 'deleted' AND (o.id = :q OR o.name ILIKE :like OR lower(p.email) = lower(:q)"
-                " OR p.id = :q) ORDER BY o.created_at DESC LIMIT 25",
-                q=query,
-                like="%" + query.replace("%", r"\%").replace("_", r"\_") + "%",
+                self._t(conn, "organisation"),
+                where,
+                "x.id, x.name, x.kind, x.country, x.state, x.created_at",
+                f"ARRAY(SELECT p.email FROM {members} m JOIN {people} p ON p.id = m.person_id"
+                " WHERE m.organisation_id = shown.id AND m.role = 'owner' AND p.state = 'active'"
+                " ORDER BY m.joined_at) AS owners,"
+                f" (SELECT t.name FROM {self._t(conn, 'tier')} t WHERE t.id = {access}->'tier'->>'id'"
+                f" AND {access}->>'state' = 'active') AS plan",
+                before,
+                limit,
+                params,
+            )
+
+    def people(self, query: str = "", before: str | None = None, limit: int = PAGE) -> dict:
+        """Everyone with an account and the organisations they belong to. A query narrows them to the one
+        with that ID and those whose email or name holds the words."""
+        query = (query or "").strip()
+        if len(query) == 1:
+            return {"total": 0, "items": [], "next": None}
+        with self.accounts.engine.connect() as conn:
+            where, params = "TRUE", {}
+            if query:
+                where = "(x.id = :q OR x.email ILIKE :like OR x.display_name ILIKE :like)"
+                params = {"q": query, "like": _contains(query)}
+            return self._page(
+                conn,
+                self._t(conn, "person"),
+                where,
+                "x.id, x.email, x.display_name, x.state, x.created_at, x.closed_at",
+                "coalesce((SELECT jsonb_agg(jsonb_build_object('id', o.id, 'name', o.name, 'role', m.role)"
+                f" ORDER BY m.joined_at) FROM {self._t(conn, 'membership')} m"
+                f" JOIN {self._t(conn, 'organisation')} o ON o.id = m.organisation_id"
+                " WHERE m.person_id = shown.id AND o.state <> 'deleted'), '[]'::jsonb) AS organisations",
+                before,
+                limit,
+                params,
             )
 
     def organisation(self, organisation_id: str) -> dict:

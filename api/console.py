@@ -53,6 +53,7 @@ from changes.webhooks import Webhooks, svix_valid
 SESSION_COOKIE = "oa_console"
 FLOW_COOKIE = "oa_console_flow"
 FRESH = timedelta(minutes=10)
+REGISTRATION_EMAILS_AN_HOUR = 30
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 RETURN = re.compile(r"^/console(/[A-Za-z0-9/_?=&%.-]*)?$")
 EMAIL = re.compile(r"[^\s@<>\"']{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}")
@@ -239,6 +240,7 @@ def create_console_app(
     mailer = mailer or mail.Mailer.from_environment()
     site = base_url or "https://open.alvary.ai"
     operator_email = os.getenv("ALVARY_OPERATOR_EMAIL", "hello@ruhu.ai")
+    registrations = mail.Allowance(REGISTRATION_EMAILS_AN_HOUR)
 
     def later(response: Response, *messages: mail.Message) -> Response:
         """Send after the response: the change is committed, and nothing waits for the mail."""
@@ -247,6 +249,12 @@ def create_console_app(
             tasks.add_task(mailer.send, message)
         response.background = tasks
         return response
+
+    def registered(response: Response, kind: str, country: str | None) -> Response:
+        """Tell the operator that a new organisation has registered (within the hour's allowance)."""
+        if not registrations.take():
+            return response
+        return later(response, mail.registration_for_operator(operator_email, kind, country))
 
     def context(request: Request) -> Context:
         peer = request.client.host if request.client else None
@@ -548,13 +556,14 @@ def create_console_app(
     async def welcome(request: Request):
         session = guard(request, write=True)
         data = await body(request)
-        organisation = accounts.welcome(
+        organisation, made = accounts.first_organisation(
             session["person_id"],
             data.get("display_name", ""),
             data.get("organisation_name", ""),
             context(request),
         )
-        return {"organisation": organisation}
+        answer = JSONResponse({"organisation": organisation})
+        return registered(answer, "individual", None) if made else answer
 
     @app.get("/api/v1/me/identities")
     def identities(request: Request):
@@ -643,7 +652,8 @@ def create_console_app(
             data.get("country"),
             context(request),
         )
-        return JSONResponse({"id": organisation}, status_code=201)
+        answer = JSONResponse({"id": organisation}, status_code=201)
+        return registered(answer, data.get("kind", "other"), data.get("country"))
 
     @app.get("/api/v1/organisations/{organisation_id}")
     def organisation(request: Request, organisation_id: str):
