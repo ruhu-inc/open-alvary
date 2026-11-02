@@ -106,6 +106,27 @@ EDGE_ORDER = [
     "cited_by",
     "enables",
 ]
+# What rights.policy.decide lets anyone read, counted from the gates migration 0045 keeps, reading no
+# payload (tests/test_postgres_coverage.py holds it to decide's answers). The tests on the time of asking
+# and the approved hash stay outside the joins (OFFSET 0): the planner cannot tell they nearly always
+# pass, and would look up each record's source one at a time if it took them for rare.
+PUBLISHED_COUNTS = text(
+    """
+    SELECT count(DISTINCT source_id) AS sources, count(*) AS versions FROM (
+        SELECT v.source_id, v.gate_content_hash, v.gate_verified_at,
+               r.gate_reviewed_at, r.gate_expires_at, r.gate_approved
+        FROM versions v
+        JOIN rights r ON r.source_id = v.source_id
+        JOIN sources s ON s.id = v.source_id
+        WHERE v.gate_text AND r.gate_text AND s.gate_identity
+        OFFSET 0
+    ) candidates
+    WHERE gate_verified_at::timestamptz <= :now
+      AND gate_reviewed_at::timestamptz <= :now
+      AND (gate_expires_at IS NULL OR gate_expires_at::timestamptz > :now)
+      AND position('"' || gate_content_hash || '"' IN gate_approved) > 0
+    """
+)
 # The columns of the case-law tables (migration 0042) that the relationship pages read.
 CITATION_COLUMNS = (
     "citation_id", "citing_work", "citing_locator", "citing_pinpoint", "citing_order", "cited_work",
@@ -138,6 +159,21 @@ class LegacyRepository:
         self._rights = tables["rights"]
         self._indexed_metadata = None
         self._case_law_tables = None
+        self._has_gates = None
+
+    def _gated(self) -> bool:
+        """Whether the database keeps the catalogue's gates in columns (migration 0045); not on SQLite,
+        nor before that migration."""
+        if self._has_gates is None:
+            self._has_gates = self.connection.dialect.name == "postgresql" and bool(
+                self.connection.scalar(
+                    text(
+                        "SELECT 1 FROM pg_attribute WHERE attrelid = to_regclass('versions')"
+                        " AND attname = 'gate_text' AND NOT attisdropped"
+                    )
+                )
+            )
+        return self._has_gates
 
     @staticmethod
     def _identity_matches(table):
@@ -296,14 +332,23 @@ class LegacyRepository:
 
     def public_counts(self) -> dict[str, int]:
         """How many public sources each jurisdiction has, in order of each one's first source id."""
+        visible = text("sources.gate_identity AND rights.gate_public") if self._gated() else self._visible()
         statement = (
             select(self._sources.c.jurisdiction_id, func.count())
             .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
-            .where(self._visible())
+            .where(visible)
             .group_by(self._sources.c.jurisdiction_id)
             .order_by(func.min(self._sources.c.id))
         )
         return dict(self.connection.execute(statement).all())
+
+    def published_counts(self, now) -> tuple[int, int] | None:
+        """How many public sources have a text that may be read at ``now``, and how many such texts there
+        are; None where the database keeps no gates (_gated), so the caller reads the records instead."""
+        if not self._gated():
+            return None
+        row = self.connection.execute(PUBLISHED_COUNTS, {"now": now}).one()
+        return row.sources, row.versions
 
     def search_page(self, query, by_text, *, jurisdiction, limit, offset, access_where=None):
         """A page of the public sources whose title, citation and summary have every word of

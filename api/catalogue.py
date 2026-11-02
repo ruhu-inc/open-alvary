@@ -1433,16 +1433,23 @@ class LegacyCatalogue:
             entry["full_text"] += any(True for _ in self._approved(source, rights))
         return sorted(found.values(), key=lambda c: c["name"])
 
-    def coverage(self):
-        """Counts of public sources, by jurisdiction from the database, and of those with a cleared
-        text and its versions, from the few sources that have any approved."""
-        scopes = Counter(self.repository.public_counts())
-        total = sum(scopes.values())
+    def _published_by_reading(self):
+        """The repository's published_counts where the database keeps no gates: SQLite, or before
+        migration 0045."""
         open_sources, published = 0, 0
         for source, rights in self.repository.sources(where=self.repository.potential_text()):
             versions = sum(1 for _ in self._approved(source, rights))
             published += versions
             open_sources += bool(versions)
+        return open_sources, published
+
+    def coverage(self):
+        """Counts of public sources by jurisdiction and of those with a cleared text and its versions, all
+        from the database, so the cost of asking does not grow with the size of the texts. The website
+        asks for this, and it is worked out for each answer (F01)."""
+        scopes = Counter(self.repository.public_counts())
+        total = sum(scopes.values())
+        open_sources, published = self.repository.published_counts(self.now) or self._published_by_reading()
         return CoverageView(
             catalogued_sources=total,
             open_full_text_sources=open_sources,
