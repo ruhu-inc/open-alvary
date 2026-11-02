@@ -12,7 +12,7 @@ from api.main import create_app
 from api.repositories import LegacyRepository
 from exports.release import coverage
 from rights.policy import decide, public_corpus
-from schema.models import RightsRecord
+from schema.models import Citation, RightsRecord
 
 
 def source_view(corpus, source):
@@ -203,3 +203,20 @@ def test_private_node_alias_without_version_cannot_resolve(cleared, store, tmp_p
         )
     response = TestClient(create_app(store, tmp_path)).get("/citations/" + quote(cleared.sources[0].citation))
     assert response.status_code == 503
+
+
+def test_sqlite_hands_over_only_the_values_that_read_as_a_citation(cleared, store):
+    """Its comparison is Python's own (api.search), so a value that is not ASCII need not come back for every term."""
+    named = cleared.sources[1].model_copy(
+        update={"id": "named", "title": "Décret N° 5", "citation": "Citation"}
+    )
+    cleared.sources.append(named)
+    cleared.rights.append(cleared.rights[1].model_copy(update={"id": "rights-named", "source_id": named.id}))
+    cleared.citations.append(Citation(id="alias-named", source_id=named.id, value="Arrêté  Dix"))
+    store.save(cleared)
+    with store.engine.begin() as conn:
+        repository = LegacyRepository(conn)
+        assert repository.citation_candidates("qzxv") == []
+        assert repository.citation_candidates("décret n° 5") == [(named.id, None)]
+        [(owner, alias)] = repository.citation_candidates("arrêté dix")
+        assert owner == named.id and alias["value"] == "Arrêté  Dix"

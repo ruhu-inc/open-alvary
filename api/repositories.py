@@ -230,6 +230,7 @@ class LegacyRepository:
         self._sources = tables["sources"]
         self._rights = tables["rights"]
         self._indexed_metadata = None
+        self._named_by_key = None
         self._case_law_tables = None
         self._has_gates = None
         self._has_browse = None
@@ -857,34 +858,49 @@ class LegacyRepository:
     def citation_candidates(self, term: str) -> list[tuple[str, dict | None]]:
         """Every catalogued value that may read as ``term`` (normalize_citation's), as (source id, the
         alias, or None for the source's own citation or title). One query each for aliases and sources;
-        the caller confirms each value, so a value the database folds differently is never matched."""
+        the caller confirms each value, so a value the database folds differently is never matched. On
+        PostgreSQL the values are found by an index (migration 0048). Before it, each is compared, and
+        any that is not ASCII is handed over whatever it says, as the comparison only folds ASCII."""
         if self._indexed_metadata is None:
             self._indexed_metadata = self.connection.dialect.name != "postgresql" or bool(
                 self.connection.scalar(
                     text("SELECT to_regprocedure('legacy_metadata_normalize(text)') IS NOT NULL")
                 )
             )
+        if self._named_by_key is None:
+            self._named_by_key = self.connection.dialect.name == "postgresql" and bool(
+                self.connection.scalar(text("SELECT to_regprocedure('catalogue_name_key(text)') IS NOT NULL"))
+            )
         citations, sources = tables["citations"], self._sources
 
-        def may_be(value):
+        def may_be(table, name):
+            if self._named_by_key:
+                # Spelled as the index spells it: a bound name would be another expression to the planner.
+                return func.catalogue_name_key(literal_column(f"payload ->> '{name}'"), type_=Text) == term
             if not self._indexed_metadata:
                 # Preserve read compatibility while an older schema is upgrading.
                 return true()
+            value = self._field(table, name)
             normal = func.legacy_metadata_normalize(func.coalesce(value, "")) == term
             if self.connection.dialect.name != "postgresql":
                 return normal
             return or_(normal, func.octet_length(value) != func.length(value))
 
-        aliases = self.connection.execute(
+        named = (
             select(citations.c.source_id, citations.c.payload)
-            .where(self._identity_matches(citations), may_be(self._field(citations, "value")))
+            .where(self._identity_matches(citations), may_be(citations, "value"))
             .limit(MAX_UNPAGED_ROWS + 1)
-        ).all()
+        )
+        if self._named_by_key:
+            # The table's order, as a scan reads it: of two aliases of a source naming different parts, the
+            # caller takes the first, and an index walks a hash's entries in an order of its own.
+            named = named.order_by(literal_column("ctid"))
+        aliases = self.connection.execute(named).all()
         own = self.connection.execute(
             select(sources.c.id)
             .where(
                 self._identity_matches(sources),
-                or_(may_be(self._field(sources, "citation")), may_be(self._field(sources, "title"))),
+                or_(may_be(sources, "citation"), may_be(sources, "title")),
             )
             .limit(MAX_UNPAGED_ROWS + 1)
         ).all()
