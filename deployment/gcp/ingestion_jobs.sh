@@ -63,7 +63,7 @@ GC=(gcloud --project "$PROJECT" --quiet)
 setting() {  # a value from the environment or the git-ignored .env (never printed)
   local name="$1"
   if [[ -n "${!name:-}" ]]; then printf '%s' "${!name}"; return; fi
-  grep -E "^${name}=" .env 2>/dev/null | head -1 | cut -d= -f2-
+  { grep -E "^${name}=" .env 2>/dev/null || true; } | head -1 | cut -d= -f2-  # none found is not a failure
 }
 
 grant() {  # an IAM binding; a service account just created takes a moment to be known, so retry
@@ -142,13 +142,14 @@ deploy() {
   "${GC[@]}" run jobs deploy "$PREPARE_JOB" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
     --args=ingestion.prepare_job --tasks=1 --max-retries=1 --task-timeout=24h --cpu=2 --memory=4Gi \
     --set-env-vars="$env"
-  # The fetcher names itself to the sites it reads (OpenAlvaryBot), with a contact when one is set.
+  # The fetcher names itself to the sites it reads (OpenAlvaryBot), with a contact when one is set;
+  # a contact already on the job stays when none is named here.
   local fetch_env="ALVARY_CORPUS_BUCKET=$CORPUS_BUCKET,FETCH_COUNTRY=${FETCH_COUNTRY:-ng}" contact
   contact="$(setting ALVARY_CRAWLER_CONTACT)"
   [[ -z "$contact" ]] || fetch_env+=",ALVARY_CRAWLER_CONTACT=$contact"
   "${GC[@]}" run jobs deploy "$FETCH_JOB" --image="$IMAGE" --region="$REGION" --service-account="$RUNNER_EMAIL" \
     --args=ingestion.fetch_job --tasks=1 --max-retries=0 --task-timeout="${FETCH_TASK_TIMEOUT:-48h}" \
-    --cpu=1 --memory=2Gi --set-env-vars="$fetch_env"
+    --cpu=1 --memory=2Gi --update-env-vars="$fetch_env"
 }
 
 run() {
