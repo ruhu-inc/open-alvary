@@ -545,3 +545,50 @@ def test_only_a_task_that_finds_every_task_finished_builds_the_manifest(monkeypa
     assert prepare_job.last_to_finish(store, "ng", 2, 3)  # the last to finish, after every index
     monkeypatch.delenv("CLOUD_RUN_EXECUTION")
     assert prepare_job.last_to_finish(MemoryStore(), "ng", 0, 3)  # a run on the workstation
+
+
+def test_a_file_listed_twice_is_prepared_under_one_listing_however_tasks_are_shared(monkeypatch):
+    """A source lists some files twice, at times under two types. Each listing was prepared, and the task
+    that came first named the file's documents: two runs of one code over one set of readings differed in
+    the item, link and listing, and one document in its id (2026-11-03: 4 of the 10 such files)."""
+    from ingestion import prepare_job
+
+    monkeypatch.setenv("PREPARE_SOURCES", "naicom")
+    for name in ("PREPARE_COLLECTIONS", "PREPARE_LIMIT", "CLOUD_RUN_EXECUTION"):
+        monkeypatch.delenv(name, raising=False)
+    twice, once = "a" * 64, "b" * 64
+    smallest = "naicom:https://x/study-2.pdf"
+    listings = {
+        smallest: (twice, "circular"),
+        "naicom:https://x/study.pdf": (twice, "guideline"),
+        "naicom:https://x/tariff.pdf": (once, "circular"),
+    }
+
+    def prepared(tasks, order):
+        store = MemoryStore()
+        for sha, heading in ((twice, "Mandatory Completion of the Study"), (once, "Tariff Notice")):
+            store.objects[f"readings/ng/docai/{sha}.json"] = json.dumps(one_text(heading, LONG)).encode()
+        ledger = {
+            item: {
+                "source": "naicom",
+                "type": kind,
+                "sha256": sha,
+                "url": item.removeprefix("naicom:"),
+                "stored": f"gs://b/sources/ng/naicom/{sha}.pdf",
+                "listed": {"title": item},
+            }
+            for item, (sha, kind) in listings.items()
+        }
+        store.objects["state/ng/sync-ledger.json"] = json.dumps({"items": ledger}).encode()
+        for task in order:
+            prepare_job.prepare_nigeria(store, task, tasks)
+        manifest = json.loads(store.objects["collections/ng/manifest.json"])
+        files = {k: v for k, v in store.objects.items() if k.startswith("collections/ng/files/")}
+        return [d["id"] for d in manifest["documents"]], files
+
+    ids, files = prepared(1, [0])
+    assert ids == ["ng-circular-mandatory-completion-of-the-study", "ng-circular-tariff-notice"]
+    provenance = json.loads(files[f"collections/ng/files/{twice}/{ids[0]}.provenance.json"])
+    assert provenance["item"] == smallest and provenance["url"] == "https://x/study-2.pdf"
+    for tasks, order in ((2, [0, 1]), (2, [1, 0]), (3, [2, 1, 0]), (3, [1, 2, 0])):
+        assert prepared(tasks, order) == (ids, files)

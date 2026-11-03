@@ -491,7 +491,8 @@ def sc_details(listed: dict, kind: str, url: str) -> tuple[dict, dict]:
 # OCR check read as stored (words, no text), inline maths read as words; every page in a document
 # (schedules past the listed range, the issue's front page as its own record, unmapped ranges whole).
 # 2026-11-03.1: a file read only in part held; the listing's title kept, to tell apart texts of one id.
-PIPELINE = "ng-pdf-2026-11-03.1"
+# 2026-11-03.2: a file listed twice under one fixed listing (prepare_job.prepare_nigeria).
+PIPELINE = "ng-pdf-2026-11-03.2"
 # The sources whose stored files are PDFs read by the scan-reader job (their other files, the Supreme
 # Court's data records and SEC's circular pages, have no reader here yet).
 PDF_SOURCES = {

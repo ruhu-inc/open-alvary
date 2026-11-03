@@ -88,7 +88,12 @@ def prepare_nigeria(store, task: int, tasks: int) -> dict:
     if unready:
         raise SystemExit(f"no review-document reader yet for {', '.join(unready)}")
     items = json.loads(store.get("state/ng/sync-ledger.json"))["items"]
-    stored = sorted(i for i, r in items.items() if r.get("stored") and r.get("source") in sources)
+    # Each stored file once, before the files are shared out, the first by address (rwanda.one_per_file):
+    # a file listed twice took the link and listing of whichever a task reached first, and its id too where
+    # the two listings give different types (10 files on 2026-11-03, 4 differing between two runs).
+    stored = rwanda.one_per_file(
+        items, sorted(i for i, r in items.items() if r.get("stored") and r.get("source") in sources)
+    )
     mine = share(stored, task, tasks)
     if os.environ.get("PREPARE_LIMIT"):  # a trial: the first few of this task's share
         mine = mine[: int(os.environ["PREPARE_LIMIT"])]
