@@ -462,6 +462,18 @@ def test_a_known_volume_stays_held_when_it_is_read_through(monkeypatch):
     assert manifest["held"][0]["reason"] == "a bound volume of many laws"
 
 
+def test_a_file_prepared_before_it_was_known_to_be_a_volume_is_held_at_the_next_run(monkeypatch):
+    store = MemoryStore()
+    items = stored_files(
+        store, [("e", "Acts of 1964", "A FIRST ACT, 1964", "Short title.")], "nln-repository", "act"
+    )
+    _, manifest = prepared_manifest(store, items)
+    assert len(manifest["documents"]) == 1
+    monkeypatch.setitem(ng_documents.VOLUMES, "e" * 64, "a bound volume of many laws")
+    counts, manifest = prepared_manifest(store, items)
+    assert counts["held"] == 1 and manifest["documents"] == [] and len(manifest["held"]) == 1
+
+
 def test_a_title_shared_by_some_of_a_group_gives_way_to_the_listing_however_it_is_written():
     store = MemoryStore()
     items = stored_files(

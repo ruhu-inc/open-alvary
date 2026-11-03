@@ -514,6 +514,10 @@ PDF_SOURCES = {
 # as one document, they would stand under their first heading ("Interpretation Act, 1964").
 VOLUMES = {
     "3e19292041621f32f47cfb405dcca5c7e8a3037d171cc86b2ad9bda4b0ae8c65": "a bound volume of many laws (Acts of Nigeria 1964)",
+    "55ca52ff91245d7b40175674ff7f8961182930c819367b2df449460843ffb204": "a bound volume of many laws (the Western Region's legislation of 1957)",
+    "cd70e9193eaeacc3e0f3992e97aed36ba37e6986fb5d8a09cf47e6073acabaf5": "a bound volume of many laws (the Eastern Region's laws of 1954)",
+    "2f7401831ad459281cc1ff0c475e3bda15c850d9ac9f3c82f346178e1133ae2f": "a bound volume of many laws (the Colony of Southern Nigeria's regulations, 1908-1912)",
+    "e5bc7dbf787fac44a76d192b1eb45d24ca9a90edc5d06424d28dcf002925706e": "a bound volume of many laws (Northern Nigeria's Proclamations 1-9 of 1910)",
 }
 
 
@@ -537,7 +541,7 @@ def prepare_pdfs(store, items: dict, chosen: list[str], collection, log=print) -
             counts["waiting"] += 1
             continue
         used = {"docai": True, "ocr": store.exists(check)}
-        if collection.done(sha, used):
+        if sha not in VOLUMES and collection.done(sha, used):
             counts["skipped_done"] += 1
             continue
         try:
