@@ -315,6 +315,191 @@ def test_files_are_prepared_once_read_and_again_when_the_ocr_arrives():
     )
 
 
+def one_text(heading, body):
+    """A file's Layout Parser reading: one page, its heading and its text."""
+    return {
+        "sha256": "x",
+        "version": {},
+        "pages": [page(1, [node(1, heading, "heading"), node(1, body)])],
+    }
+
+
+def stored_files(store, files, source="nerc", kind="order"):
+    """Each (fingerprint letter, listing's title, heading, text) as a stored file, read, in the ledger."""
+    items = {}
+    for letter, title, heading, body in files:
+        sha = letter * 64
+        store.objects[f"readings/ng/docai/{sha}.json"] = json.dumps(one_text(heading, body)).encode()
+        items[f"{source}:{letter}"] = {
+            "source": source,
+            "type": kind,
+            "sha256": sha,
+            "url": f"https://x/{letter}.pdf",
+            "stored": f"gs://b/sources/ng/{source}/{sha}.pdf",
+            "listed": {"title": title},
+        }
+    return items
+
+
+def prepared_manifest(store, items):
+    collection = nicn.BucketCollection(store, pipeline=ng_documents.PIPELINE)
+    counts = ng_documents.prepare_pdfs(store, items, list(items), collection)
+    collection.save_manifest()
+    return counts, json.loads(store.objects["collections/ng/manifest.json"])
+
+
+LONG = " ".join(f"word{chr(97 + i % 26)}{chr(97 + i // 26)}" for i in range(200))
+
+
+def test_different_texts_under_one_heading_each_reach_the_review_queue():
+    """Orders printed under one heading came to one id, and the others were filed as its copies (before
+    2026-11-03: 548 documents, about 450 of them different texts)."""
+    store = MemoryStore()
+    heading = "BEFORE THE COMMISSION"
+    items = stored_files(
+        store,
+        [
+            ("a", "Order on January tariffs", heading, f"January {LONG}"),
+            ("b", "Order on meter prices", heading, f"Meters {LONG[:400]} payable in 30 days"),
+            ("c", "Order on January tariffs", heading, f"January {LONG}"),
+        ],
+    )
+    _, manifest = prepared_manifest(store, items)
+    first, second = "ng-order-before-the-commission", f"ng-order-before-the-commission-{'b' * 8}"
+    documents = {d["id"]: d for d in manifest["documents"]}
+    assert sorted(documents) == [first, second]
+    # The first file keeps the id, so what has been reviewed under it stands; a copy stays a copy.
+    assert documents[first]["source_object"] == f"sources/ng/nerc/{'a' * 64}.pdf"
+    assert [o["source_object"] for o in documents[first]["other_sources"]] == [
+        f"sources/ng/nerc/{'c' * 64}.pdf"
+    ]
+    assert "other_sources" not in documents[second]
+    # The heading says nothing about which order it is: the regulator's listing does.
+    assert documents[first]["title"] == "Order on January tariffs"
+    assert documents[second]["title"] == "Order on meter prices"
+    # The workbench reads a document by its id.
+    for suffix in (".reading.json", ".document.json", ".provenance.json"):
+        assert f"collections/ng/files/{'b' * 64}/{second}{suffix}" in store.objects
+    assert documents[second]["stored_as"] == first and documents[second]["shares_id_with"] == [first]
+    assert documents[first]["shares_id_with"] == [second]
+
+
+def test_a_number_that_differs_makes_a_different_text_and_a_misread_word_does_not():
+    store = MemoryStore()
+    heading = "AN ORDER OF THE COMMISSION"
+    items = stored_files(
+        store,
+        [
+            ("a", "One", heading, f"{LONG} the rate is 10 naira"),
+            ("b", "Two", heading, f"{LONG} the rate is 12 naira"),  # one number apart: never a copy
+            ("c", "Three", heading, f"{LONG} the ratc is 10 naira"),  # a scan of the first, one word misread
+        ],
+    )
+    _, manifest = prepared_manifest(store, items)
+    assert len(manifest["documents"]) == 2
+    first = next(d for d in manifest["documents"] if not d.get("stored_as"))
+    assert [o["source_object"] for o in first["other_sources"]] == [f"sources/ng/nerc/{'c' * 64}.pdf"]
+
+
+def test_a_title_that_tells_two_texts_apart_stays_as_printed():
+    store = MemoryStore()
+    items = stored_files(
+        store,
+        [
+            ("a", "Listing one", "Before the Commission: " + "x" * 90 + " January", "January tariffs"),
+            ("b", "Listing two", "Before the Commission: " + "x" * 90 + " February", "February tariffs"),
+        ],
+    )
+    _, manifest = prepared_manifest(store, items)
+    assert sorted(d["title"].rsplit(" ", 1)[1] for d in manifest["documents"]) == ["February", "January"]
+
+
+def test_a_file_read_only_in_part_is_held_not_filed_as_its_first_pages():
+    """A 1,283-page National Library volume, 700 pages of it read by the Layout Parser, was filed as one Act
+    of 700 pages under its first heading (before 2026-11-03)."""
+    store = MemoryStore()
+    sha = "d" * 64
+    items = stored_files(
+        store,
+        [("d", "Interpretation Act", "INTERPRETATION ACT, 1964", "Short title.")],
+        "nln-repository",
+        "act",
+    )
+    store.objects[f"readings/ng/ocr/{sha}.json"] = json.dumps(
+        {"version": {}, "pages": [{"page": n, "text": "words"} for n in range(1, 6)]}
+    ).encode()
+    counts, manifest = prepared_manifest(store, items)
+    assert counts["held"] == 1 and counts["prepared"] == 0
+    assert manifest["documents"] == []
+    held = manifest["held"][0]
+    assert (
+        held["title"] == "Interpretation Act" and held["type"] == "act" and held["url"] == "https://x/d.pdf"
+    )
+    assert "1 of its 5 pages" in held["reason"]
+    assert held["source_object"] == f"sources/ng/nln-repository/{sha}.pdf"
+    # Read through, it is prepared as any other file.
+    store.objects[f"readings/ng/docai/{sha}.json"] = json.dumps(
+        {
+            "sha256": sha,
+            "version": {},
+            "pages": [page(n, [node(n, "INTERPRETATION ACT, 1964", "heading")]) for n in range(1, 6)],
+        }
+    ).encode()
+    counts, manifest = prepared_manifest(store, items)
+    assert counts["prepared"] == 1 and [d["page_count"] for d in manifest["documents"]] == [5]
+    assert manifest["held"] == []
+
+
+def test_a_known_volume_stays_held_when_it_is_read_through(monkeypatch):
+    store = MemoryStore()
+    sha = "e" * 64
+    monkeypatch.setitem(ng_documents.VOLUMES, sha, "a bound volume of many laws")
+    items = stored_files(
+        store, [("e", "Acts of 1964", "A FIRST ACT, 1964", "Short title.")], "nln-repository", "act"
+    )
+    counts, manifest = prepared_manifest(store, items)
+    assert counts["held"] == 1 and manifest["documents"] == []
+    assert manifest["held"][0]["reason"] == "a bound volume of many laws"
+
+
+def test_a_title_shared_by_some_of_a_group_gives_way_to_the_listing_however_it_is_written():
+    store = MemoryStore()
+    items = stored_files(
+        store,
+        [
+            ("a", "BEDC tariff order", "TITLE", "Tariffs of one company"),
+            ("b", "Ikeja tariff order", "Title:", "Tariffs of another company entirely"),
+            ("c", "Meter prices", "TITLE ", "Prices of meters for all"),
+        ],
+    )
+    _, manifest = prepared_manifest(store, items)
+    assert sorted(d["title"] for d in manifest["documents"]) == [
+        "BEDC tariff order",
+        "Ikeja tariff order",
+        "Meter prices",
+    ]
+
+
+def test_two_files_of_one_catalogued_judgment_stay_one_document_however_they_read():
+    """The Supreme Court publishes each judgment as an original and a watermarked copy; the watermark shows
+    in the reading, and its catalogue says they are one."""
+    store = MemoryStore()
+    items = stored_files(
+        store,
+        [
+            ("a", "", "A v. B", "Judgment delivered by the court"),
+            ("b", "", "A v. B", "WATERMARK Judgment of the court 2026"),
+        ],
+        "supreme-court",
+        "judgment",
+    )
+    for item in items.values():
+        item["listed"] = {"suit_no": "SC.1/2020", "judgment_date": "2026-01-16", "case_title": "A v. B"}
+    _, manifest = prepared_manifest(store, items)
+    assert [d["id"] for d in manifest["documents"]] == ["ng-sc-sc-1-2020-2026-01-16"]
+    assert len(manifest["documents"][0]["other_sources"]) == 1
+
+
 def test_every_page_of_a_file_reaches_a_document():
     """A schedule printed past the range the front page lists stays with its Act, named for the reviewer;
     a file whose listed ranges cannot be mapped is one instrument, its pages doubtful (before 2026-10-29

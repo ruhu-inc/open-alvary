@@ -56,6 +56,7 @@ import hashlib
 import json
 import re
 import sys
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -2150,8 +2151,10 @@ HELD_KEYS = (
 )
 HELD_NOTE = (
     "Partial judgments: the court's portal holds only part of each. Not reviewed, approved or published "
-    "(owner, 2026-10-25) until the court supplies a complete copy."
+    "(owner, 2026-10-25) until the court supplies a complete copy. A PDF read only in part is held the same "
+    "way until it is read through; each entry gives its reason."
 )
+COPY_WORDS = 0.98  # the share of two readings' words that must be the same for them to be one text
 
 
 def split_entry(document: dict) -> tuple[dict, dict]:
@@ -2323,9 +2326,11 @@ class BucketCollection:
     def save_manifest(self) -> None:
         """The manifest from every index (any source of the collection), one document per id: of one
         judgment's records, the earliest; of one law found in two files (a Gazette issue and an agency's
-        copy), the first, the others named on it (other_sources)."""
+        copy), the first, the others named on it (other_sources). Different texts that came to one id
+        are kept apart (_keep_apart)."""
         documents: dict[str, dict] = {}
         partial: dict[str, dict] = {}
+        shared: dict[str, list[dict]] = {}
         skipped = 0
         for name in self.store.list(f"{self.prefix}issues/"):
             index = json.loads(self.store.get(name))
@@ -2340,8 +2345,9 @@ class BucketCollection:
                     if document["record_id"] < held["record_id"]:
                         documents[document["id"]] = document
                 else:
-                    other = {k: document.get(k) for k in ("url", "source_object", "objects")}
-                    held.setdefault("other_sources", []).append(other)
+                    shared.setdefault(document["id"], [held]).append(document)
+        for group in shared.values():
+            documents.update((document["id"], document) for document in self._keep_apart(group))
         manifest = {
             **new_manifest(),
             "documents": sorted(documents.values(), key=lambda d: d["id"]),
@@ -2351,6 +2357,66 @@ class BucketCollection:
             "held_note": HELD_NOTE,
         }
         self._put(f"{self.prefix}manifest.json", manifest)
+
+    def _words(self, document: dict) -> Counter:
+        from ingestion.layout_parser import page_text
+        from ingestion.native import words
+
+        reading = json.loads(
+            self.store.get(f"{self.prefix}{document['objects']}{document['id']}.reading.json")
+        )
+        return Counter(words(" ".join(page_text(page["nodes"], page["page"]) for page in reading["pages"])))
+
+    def _keep_apart(self, group: list[dict]) -> list[dict]:
+        """Documents of separate files that came to one id (orders printed under one heading, two
+        instruments printed with one number). One text stays one document, its other copies named on it;
+        each different text is a document of its own, or it never reaches the review queue. The first keeps
+        the id, so what was reviewed under it stands; each other takes its file's fingerprint after it, and
+        its files are copied to that name, the workbench reading a document by its id. A title several of
+        them have says nothing of which is which, so those take their listing's. A court's catalogue says
+        which judgment a file is: its two files of one (the original, a watermarked copy) stay one document,
+        however they read."""
+        texts: list[tuple[dict, Counter]] = []
+        for document in group:
+            words = Counter() if document.get("catalogued") else self._words(document)
+            home = next((found for found, theirs in texts if same_text(theirs, words)), None)
+            if home is None:
+                texts.append((document, words))
+            else:
+                other = {k: document.get(k) for k in ("url", "source_object", "objects")}
+                home.setdefault("other_sources", []).append(other)
+        kept = [document for document, _ in texts]
+        if len(kept) == 1:
+            return kept
+        stored = kept[0]["id"]
+        names = [stored, *(f"{stored}-{d['objects'].strip('/').rsplit('/', 1)[-1][:8]}" for d in kept[1:])]
+        titles = Counter(re.sub(r"\W+", "", (d.get("title") or "").lower()) for d in kept)
+        out = []
+        for name, document in zip(names, kept, strict=True):
+            if name != stored:
+                for suffix in (".reading.json", ".document.json", ".provenance.json"):
+                    source = f"{self.prefix}{document['objects']}{stored}{suffix}"
+                    if self.store.exists(source):
+                        target = f"{self.prefix}{document['objects']}{name}{suffix}"
+                        self.store.put(target, self.store.get(source), "application/json", replace=True)
+                document = {**document, "id": name, "stored_as": stored}
+            title = document.get("title") or ""
+            if titles[re.sub(r"\W+", "", title.lower())] > 1:
+                title = document.get("listed_title") or title
+            out.append({**document, "title": title, "shares_id_with": [n for n in names if n != name]})
+        return out
+
+
+def _numbers(words: Counter) -> dict[str, int]:
+    return {word: count for word, count in words.items() if any(c.isdigit() for c in word)}
+
+
+def same_text(one: Counter, other: Counter) -> bool:
+    """Whether two readings' words are one text: nearly all the same, as a scan may misread a word, and every
+    number. Orders of one regulator can differ only in a company's name and its figures, so a text in doubt
+    counts as different: a copy too many in the queue can be seen, a text filed as a copy cannot."""
+    shared = sum((one & other).values())
+    return _numbers(one) == _numbers(other) and shared >= COPY_WORDS * max(one.total(), other.total())
 
 
 def prepare_items(items: dict, chosen: list[str], fetch, collection, log=print) -> dict:

@@ -25,7 +25,10 @@ same layout:
   are written from real texts (TXP-03, DAT-05);
 - its id: an Act ng-act-<number>-<year> ("ng-act-8-2022"), a Statutory Instrument
   ng-si-<number>-<year>, a notice ng-gn-<number>-<year>; else the type and its title's slug; a
-  Supreme Court judgment ng-sc-<suit number>-<date delivered>.
+  Supreme Court judgment ng-sc-<suit number>-<date delivered>. Different texts that come to one id
+  are told apart when the manifest is built (nicn.BucketCollection._keep_apart);
+- a file the Layout Parser read only in part, or known to be a bound volume of many instruments (VOLUMES),
+  is held, not filed as one: its first heading says nothing of the rest.
 
 Nothing here reads a PDF or calls a paid service: it takes the stored readings, and a file not yet
 read waits (prepare_pdfs, run by the corpus-preparer job with PREPARE_COUNTRY=ng and the source in
@@ -317,6 +320,7 @@ def documents(reading: dict, record: dict) -> list[tuple[dict, dict]]:
             "jurisdiction": COUNTRY,
             "language": "en",
             "url": record.get("url"),
+            "catalogued": True,
             **(
                 {"work": sc_document_id({**listed, "opinion": "lead"})}
                 if listed.get("opinion") == "contribution"
@@ -373,6 +377,7 @@ def documents(reading: dict, record: dict) -> list[tuple[dict, dict]]:
             "language": "en",
             "url": record.get("url"),
             "pages": [instrument["pages"][0], instrument["pages"][-1]],
+            **({"listed_title": listed["title"]} if listed.get("title") and len(found) == 1 else {}),
             **({"issue": gazette} if gazette else {}),
             **({"printed_pages": instrument["printed"]} if instrument.get("printed") else {}),
             **({"pages_doubtful": True} if instrument.get("doubtful_pages") else {}),
@@ -485,7 +490,8 @@ def sc_details(listed: dict, kind: str, url: str) -> tuple[dict, dict]:
 # The version of this preparation: a file prepared by an earlier one is prepared again. 2026-10-29.2: the
 # OCR check read as stored (words, no text), inline maths read as words; every page in a document
 # (schedules past the listed range, the issue's front page as its own record, unmapped ranges whole).
-PIPELINE = "ng-pdf-2026-10-30.1"
+# 2026-11-03.1: a file read only in part held; the listing's title kept, to tell apart texts of one id.
+PIPELINE = "ng-pdf-2026-11-03.1"
 # The sources whose stored files are PDFs read by the scan-reader job (their other files, the Supreme
 # Court's data records and SEC's circular pages, have no reader here yet).
 PDF_SOURCES = {
@@ -504,14 +510,19 @@ PDF_SOURCES = {
     "naicom",
     "fhc-rules",
 }
+# Files that are bound volumes of many instruments, by fingerprint, held until each is cut from them: filed
+# as one document, they would stand under their first heading ("Interpretation Act, 1964").
+VOLUMES = {
+    "3e19292041621f32f47cfb405dcca5c7e8a3037d171cc86b2ad9bda4b0ae8c65": "a bound volume of many laws (Acts of Nigeria 1964)",
+}
 
 
 def prepare_pdfs(store, items: dict, chosen: list[str], collection, log=print) -> dict:
     """Each chosen stored PDF whose Layout Parser reading is in the bucket, into the collection
     (nicn.BucketCollection with this PIPELINE): its documents, an index naming the readings used, so a
-    file is prepared again once its OCR reading arrives. A file not yet read waits; one that fails is
-    noted and the rest go on."""
-    counts = {"prepared": 0, "documents": 0, "waiting": 0, "skipped_done": 0, "failed": 0}
+    file is prepared again once its OCR reading arrives. A file not yet read waits; one read only in part
+    is held; one that fails is noted and the rest go on."""
+    counts = {"prepared": 0, "documents": 0, "waiting": 0, "skipped_done": 0, "held": 0, "failed": 0}
     for item_id in chosen:
         record = items[item_id]
         sha = record.get("sha256")
@@ -530,10 +541,29 @@ def prepare_pdfs(store, items: dict, chosen: list[str], collection, log=print) -
             counts["skipped_done"] += 1
             continue
         try:
-            reading = cloud_reading(
-                json.loads(store.get(layout)), json.loads(store.get(check)) if used["ocr"] else None
-            )
+            docai = json.loads(store.get(layout))
+            ocr = json.loads(store.get(check)) if used["ocr"] else None
             source_object = f"sources/{COUNTRY}/{record['source']}/{sha}.pdf"
+            read, whole = len(docai["pages"]), len(ocr["pages"]) if ocr else 0
+            reason = VOLUMES.get(sha) or (
+                f"the Layout Parser read only {read} of its {whole} pages" if whole > read else None
+            )
+            if reason:
+                title = (record.get("listed") or {}).get("title") or ""
+                held = {
+                    "id": f"ng-{_slug(record.get('type') or 'file')}-{_slug(title or sha[:12])[:90]}",
+                    "title": title,
+                    "type": record.get("type"),
+                    "url": record.get("url"),
+                    "source_object": source_object,
+                    "reason": reason,
+                }
+                # Named with the pages read, so that the file is looked at again once it is read through.
+                readings = {**used, "docai_pages": read}
+                collection.finish(sha, [], source=record["source"], readings=readings, held=[held])
+                counts["held"] += 1
+                continue
+            reading = cloud_reading(docai, ocr)
             sidecar_name = source_object[: -len(".pdf")] + ".json"
             sidecar = json.loads(store.get(sidecar_name)) if store.exists(sidecar_name) else {}
             entries = []
