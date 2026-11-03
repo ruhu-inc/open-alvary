@@ -519,6 +519,7 @@ VOLUMES = {
     "cd70e9193eaeacc3e0f3992e97aed36ba37e6986fb5d8a09cf47e6073acabaf5": "a bound volume of many laws (the Eastern Region's laws of 1954)",
     "2f7401831ad459281cc1ff0c475e3bda15c850d9ac9f3c82f346178e1133ae2f": "a bound volume of many laws (the Colony of Southern Nigeria's regulations, 1908-1912)",
     "e5bc7dbf787fac44a76d192b1eb45d24ca9a90edc5d06424d28dcf002925706e": "a bound volume of many laws (Northern Nigeria's Proclamations 1-9 of 1910)",
+    "b026bbb2a4b9c8a52b46da083e361404b9639c21a80cd3ec6fb088ac7dfdb2d8": "a compendium of many declarations (Western State chieftaincy declarations, Akoko Division)",
 }
 
 
