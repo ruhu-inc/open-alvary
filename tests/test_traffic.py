@@ -6,6 +6,7 @@ tests/test_postgres_traffic.py runs them through the service against the databas
 
 import logging
 import random
+import re
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
@@ -13,7 +14,7 @@ from pathlib import Path
 from sqlalchemy.exc import IntegrityError, OperationalError
 
 from api import traffic as T
-from api.service import create_service
+from api.service import STATIC_PAGES, create_service
 from api.store import Store, engine_for
 from api.traffic import Traffic
 from rights.database import PolicyNamespace
@@ -124,6 +125,30 @@ def test_what_is_not_a_person_arriving_does_not_count_as_one():
     traffic.arrival(scope("curl/8.7.1"), "")
     traffic.arrival(scope("Mozilla/5.0 (compatible; GPTBot/1.2)"), "browse")
     assert held(traffic) == {("bots", "other"): 1, ("bots", "ai:gptbot"): 1}
+
+
+def test_an_address_the_website_has_no_page_for_is_not_a_person_arriving():
+    # The site answers any such address with its own page, so a scanner naming a browser gets this far.
+    guesses = (
+        ".git/config", ".aws/credentials", "env", "credentials", "phpinfo", "wp-admin", "actuator/env",
+        "about/.git/config", "privacy/old", "docs/.git/config", "sources", "sources/.git", "sources/a/b",
+    )  # fmt: skip
+    traffic = counter(visitors=True)
+    traffic._salt = (datetime.now(UTC).date(), b"s" * 32)
+    for guess in guesses:
+        traffic.arrival(scope(x_client_country="BE"), guess)
+    assert held(traffic) == {("bots", "other"): len(guesses)}
+    assert not any(map(any, traffic._sketches.values()))  # nor a visitor
+
+
+def test_every_page_of_the_website_counts_as_one():
+    router = (DEPLOYMENT.parent / "web/src/main.tsx").read_text()
+    pages = set(re.findall(r'pathname === "/([a-z-]*)"', router))
+    assert {"", "browse", "acceptable-use"} <= pages  # the router still reads this way
+    assert all(T.page_kind(page) for page in pages | {page.strip("/") for page in STATIC_PAGES})
+    assert T.page_kind("sources/ng-act-1") == "record"
+    assert T.page_kind("docs/api/mcp") == T.page_kind("docs") == "docs"
+    assert T.page_kind("/about/") == "about"
 
 
 def test_a_country_header_that_is_not_a_country_is_not_written():

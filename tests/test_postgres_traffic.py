@@ -312,9 +312,11 @@ def test_a_search_through_the_service_counts_and_its_words_reach_no_table(
         assert client.get("/", headers=document).status_code == 200
         assert client.get(f"/browse?q={MARKER}", headers=page).status_code == 200
         assert client.get("/app.js", headers=document).status_code == 200  # a file, not a page
+        assert client.get("/.git/config", headers=document).status_code == 200  # the site's page, at a guess
     assert total(pg_engine, namespace, "searches", "all") == 1
     assert total(pg_engine, namespace, "searches", "none_found") == 1
-    assert total(pg_engine, namespace, "bots", "other") == 1
+    assert total(pg_engine, namespace, "bots", "other") == 2
+    assert total(pg_engine, namespace, "arrivals", "other") == 0
     assert total(pg_engine, namespace, "records", "views") == 1
     assert total(pg_engine, namespace, "records", "texts") == 1
     assert total(pg_engine, namespace, "searches.opened", "1") == 1

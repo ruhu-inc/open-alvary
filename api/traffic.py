@@ -107,7 +107,8 @@ METRICS = {
     "records": "a person opening a record (views) or its text (texts)",
     "records.jurisdiction": "records opened, by the record's country",
     "downloads": "public release files, by country and kind",
-    "bots": "requests by automated clients: ai:<name>, search:<name>, monitor:<name> or other",
+    "bots": "requests by automated clients: ai:<name>, search:<name>, monitor:<name> or other; other also takes "
+    "a page load of an address the website has no page for",
     "visitors": "the day's estimate of different visitors (when switched on), written once the day is over",
     "lost": "counts dropped because the instance's bounded memory was full, or refused by the database",
 }
@@ -166,8 +167,16 @@ def position_label(value: str) -> str | None:
     return value if number <= 3 else "4-10" if number <= 10 else "11+"
 
 
-def page_kind(path: str) -> str:
-    return PAGES.get(path.strip("/").split("/", 1)[0], "other")
+def page_kind(path: str) -> str | None:
+    """The kind of page an address is, or None where the website has none (web/src/main.tsx): the site answers
+    any address with its own page, so a scanner's /.git/config gets as far as this."""
+    first, *below = path.strip("/").split("/")
+    if any(part.startswith(".") for part in below):
+        return None
+    kind = PAGES.get(first)
+    if kind == "record":
+        return kind if len(below) == 1 else None
+    return kind if not below or kind == "docs" else None
 
 
 def add_to_sketch(registers: list[int], salt: bytes, who: str) -> None:
@@ -234,13 +243,14 @@ class Traffic:
             return
         agent = _header(scope, b"user-agent")
         day = self._today()
-        bot = automated(agent)
+        kind = page_kind(path)
+        bot = automated(agent) or (None if kind else "other")
         if bot:
             return self._count(day, "bots", bot)
         origin = referrer(_header(scope, b"referer"), self.own_hosts)
         country = _header(scope, b"x-client-country")
         rows = [
-            ("arrivals", page_kind(path)),
+            ("arrivals", kind),
             ("people.country", country if COUNTRY.fullmatch(country) else "unknown"),
             ("people.device", device(agent)),
         ]
