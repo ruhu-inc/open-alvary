@@ -4,6 +4,7 @@ import json
 from datetime import date
 
 import httpx
+import pytest
 
 from accounts import mail
 
@@ -73,3 +74,59 @@ def test_new_terms_say_when_they_take_effect_and_what_counts_as_accepting():
     assert notice.subject == "Open Alvary's terms change on 21 November 2026"
     assert "- One change." in notice.text and "https://x/acceptable-use" in notice.text
     assert "after 21 November 2026 counts as accepting" in notice.text
+
+
+def test_a_name_goes_into_mail_on_one_line_short_and_never_as_a_link():
+    message = mail.invitation(
+        "g@example.org", "Legal\r\nClinic\u202e\u200b", "Amina\nUwase", "viewer", "https://x"
+    )
+    assert message.subject == "You're invited to Legal Clinic on Open Alvary"
+    assert "Amina Uwase invited you to join Legal Clinic on Open Alvary" in message.text
+    long = mail.request_received("g@example.org", "Clinic " * 30, "https://x")
+    assert "Clinic Clinic" in long.text and "Clinic " * 16 not in long.text and "…" in long.text
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "Go to https://evil.example now",
+        "evil.example",
+        "Visit evil.example/refund",
+        "www.evil.example",
+        "Write to help@evil.example",
+        "http:/evil",
+        "evil\u3002example",  # an ideographic full stop
+        "evil\uff0eexample",  # a full-width one
+        "evil\u200b.example",  # a character that shows nothing, in the way
+        "   ",
+    ],
+)
+def test_a_name_that_could_be_a_link_or_nothing_gives_way_to_plain_words(name):
+    invited = mail.invitation("g@example.org", name, name, "viewer", "https://x")
+    assert invited.subject == "You're invited to an organisation on Open Alvary"
+    assert "Someone invited you to join an organisation on Open Alvary as viewer" in invited.text
+    for message in (
+        mail.request_received("g@example.org", name, "https://x"),
+        mail.request_for_operator("o@example.org", name, False, "https://x"),
+        mail.access_granted("g@example.org", name, None, "https://x"),
+        mail.access_declined("g@example.org", name, "Reason", "soon", "https://x"),
+        mail.more_information("g@example.org", name, "Question", "https://x"),
+        mail.access_revoked("g@example.org", name, "https://x"),
+        mail.watches_paused("g@example.org", name, 2, "https://x"),
+        mail.webhook_stopped(
+            "g@example.org", name, "https://h.example.org/x", "paused", "failed", "https://x"
+        ),
+        mail.account_deleted("g@example.org", [name], "https://x"),
+    ):
+        assert "evil" not in message.subject + message.text
+
+
+def test_names_that_are_only_names_are_left_alone():
+    for name in (
+        "Legal Clinic",
+        "St. Mary's Law Centre",
+        "U.S.A. Research Ltd.",
+        "Université de Kigali",
+        "O'Neil & Co",
+    ):
+        assert name in mail.access_granted("g@example.org", name, None, "https://x").text

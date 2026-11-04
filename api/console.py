@@ -15,7 +15,9 @@ Sessions are random tokens kept hashed in the accounts schema; the cookie is Htt
 outside loopback, SameSite=Lax (the provider's redirect back is a cross-site navigation) and
 limited to /console. Every change needs the session's CSRF token and, when the browser sends one,
 our own Origin. Sensitive actions need a sign-in within the last 10 minutes, and owners and admins
-of an organisation with access also a second factor within the same window (MAC-08).
+of an organisation with access also a second factor within the same window (MAC-08). Those times
+come only from signing in with a method the person already had, by when the provider says it really
+happened. Adding a method is itself a sensitive action, and records nothing about the session (F08).
 
 A development sign-in exists for a local trial only: it must be switched on explicitly
 (ALVARY_CONSOLE_DEV_LOGIN=1) and answers only on a loopback address from a loopback client.
@@ -33,7 +35,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from html import escape
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
@@ -53,6 +55,8 @@ from changes.webhooks import Webhooks, svix_valid
 SESSION_COOKIE = "oa_console"
 FLOW_COOKIE = "oa_console_flow"
 FRESH = timedelta(minutes=10)
+PROVIDER_SESSION_SECONDS = 30 * 86400  # the longest the provider remembers a sign-in
+CLOCK_SKEW_SECONDS = 60
 REGISTRATION_EMAILS_AN_HOUR = 30
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 RETURN = re.compile(r"^/console(/[A-Za-z0-9/_?=&%.-]*)?$")
@@ -119,8 +123,11 @@ class Provider:
             query["connection"] = CONNECTIONS[method]
         if login_hint:
             query["login_hint"] = login_hint  # "Continue as …": the provider pre-fills the account
-        if purpose != "sign_in":
+        if purpose == "sign_in":
+            query["max_age"] = str(PROVIDER_SESSION_SECONDS)  # the ID token then says when it happened
+        else:
             query["prompt"] = "login"  # a fresh sign-in, never the provider's remembered session
+            query["max_age"] = "0"  # the same, in the form that makes the ID token say when it happened
         if purpose == "second_factor":
             query["acr_values"] = MFA_POLICY
         return f"{self.discovery()['authorization_endpoint']}?{urlencode(query)}"
@@ -150,7 +157,20 @@ class Provider:
             or not claims.get("sub")
         ):
             raise AccountError("sign_in_refused", 401, "The sign-in could not be verified. Try again.")
+        # The request above went to the provider through the browser, so what it asked is checked here:
+        # a flow that asked for a fresh sign-in comes back with one made since it began.
+        if (
+            flow["purpose"] != "sign_in"
+            and signed_in_at(claims) < flow["created_at"].timestamp() - CLOCK_SKEW_SECONDS
+        ):
+            raise AccountError("sign_in_refused", 401, "The sign-in could not be verified. Try again.")
         return claims
+
+
+def signed_in_at(claims: dict) -> float:
+    """When the person really signed in at the provider (auth_time), or 0 if the token doesn't say."""
+    moment = claims.get("auth_time")
+    return float(moment) if isinstance(moment, int | float) and not isinstance(moment, bool) else 0.0
 
 
 def _claims(token: str) -> dict:
@@ -294,7 +314,11 @@ def create_console_app(
 
     @app.exception_handler(AccountError)
     async def account_error(request: Request, exc: AccountError):
-        return error(request, exc.status, exc.code, exc.message)
+        if exc.retry_after is None:
+            return error(request, exc.status, exc.code, exc.message)
+        answer = error(request, exc.status, exc.code, exc.message, retry_after_seconds=exc.retry_after)
+        answer.headers["Retry-After"] = str(exc.retry_after)
+        return answer
 
     # ---------- sign-in ----------
     @app.get("/auth/start")
@@ -312,8 +336,13 @@ def create_console_app(
         if not RETURN.match(return_to) or len(return_to) > 500:
             return_to = "/console"
         session = request.cookies.get(SESSION_COOKIE)
-        if purpose != "sign_in" and not accounts.resume(session or ""):
-            return RedirectResponse("/console/sign-in?error=signed_out", status_code=303)
+        if purpose != "sign_in":
+            live = accounts.resume(session or "")
+            if not live:
+                return RedirectResponse("/console/sign-in?error=signed_out", status_code=303)
+            first = step_up_before_linking(live, method, return_to) if purpose == "link" else None
+            if first:
+                return RedirectResponse(first, status_code=303)
         if provider is None:
             if dev_login and is_loopback(request):
                 query = urlencode({"purpose": purpose, "return_to": return_to})
@@ -336,6 +365,19 @@ def create_console_app(
             samesite="lax",
         )
         return response
+
+    def step_up_before_linking(session: dict, method: str | None, return_to: str) -> str | None:
+        """F08: adding a sign-in method asks what a sensitive change asks, and a new method can answer
+        for every organisation of the person. Where to go first, which comes back to start the link."""
+        try:
+            fresh(session, second_factor=needs_second_factor_anywhere(session["person_id"]))
+        except AccountError as needed:
+            link = {"purpose": "link", **({"method": method} if method else {}), "return_to": return_to}
+            back = f"/console/auth/start?{urlencode(link)}"
+            purpose = "second_factor" if needed.code == "second_factor_required" else "reauthenticate"
+            query = {"purpose": purpose, "return_to": back if len(back) <= 500 else return_to}
+            return f"/console/auth/start?{urlencode(query)}"
+        return None
 
     @app.get("/auth/callback")
     def callback(request: Request, state: str = "", code: str = ""):
@@ -362,7 +404,14 @@ def create_console_app(
                 raise AccountError("method_not_supported", 403, "Sign in with Google or an email code.")
             mfa = "mfa" in (claims.get("amr") or [])
             return _complete(
-                request, flow, provider.config.issuer, claims["sub"], method, claims["email"], mfa
+                request,
+                flow,
+                provider.config.issuer,
+                claims["sub"],
+                method,
+                claims["email"],
+                mfa,
+                signed_in_at(claims),
             )
         except AccountError as refused:
             failed(request, flow, refused.code, claims.get("sub"), method)
@@ -372,7 +421,7 @@ def create_console_app(
         person = accounts.person_for_identity(provider.config.issuer, subject) if subject else None
         accounts.sign_in_failed(code, flow["purpose"], person, method, context(request))
 
-    def _complete(request, flow, issuer, subject, method, email, mfa) -> Response:
+    def _complete(request, flow, issuer, subject, method, email, mfa, signed_at) -> Response:
         ctx = context(request)
         notices: list[mail.Message] = []
         purpose = flow["purpose"]
@@ -380,9 +429,12 @@ def create_console_app(
             signed = accounts.sign_in(
                 issuer=issuer, subject=subject, method=method, email=email, label=email, context=ctx
             )
+            # A session is as fresh as the sign-in behind it. The provider may answer from a sign-in it
+            # remembers, which keeps its age here and, once older than the window, no second factor.
             token, _ = accounts.create_session(
                 signed["id"],
-                second_factor=mfa,
+                second_factor=mfa and time.time() - signed_at <= FRESH.total_seconds(),
+                authenticated_at=datetime.fromtimestamp(signed_at, UTC),
                 client_family=ctx.client_family,
                 network_prefix=ctx.network_prefix,
             )
@@ -402,24 +454,29 @@ def create_console_app(
             ):
                 raise AccountError("signed_out", 401, "Your session ended. Sign in again.")
             if purpose == "link":
-                accounts.link_identity(
+                # A method being added proves nothing about who holds this session: the session's
+                # times stay as they are.
+                if accounts.link_identity(
                     session["person_id"],
                     issuer=issuer,
                     subject=subject,
                     method=method,
                     label=email,
                     context=ctx,
-                )
-                notices.append(
-                    mail.sign_in_changed(accounts.person(session["person_id"])["email"], True, method, site)
-                )
-            elif accounts.person_for_identity(issuer, subject) != session["person_id"]:
-                raise AccountError(
-                    "wrong_account", 403, "That is a different account. Use the one you signed in with."
-                )
-            if purpose == "second_factor" and not mfa:
-                raise AccountError("second_factor_required", 403, "The second factor was not completed.")
-            accounts.refresh_session(token, second_factor=mfa)
+                ):
+                    notices.append(
+                        mail.sign_in_changed(
+                            accounts.person(session["person_id"])["email"], True, method, site
+                        )
+                    )
+            else:
+                if not accounts.linked_before(session["person_id"], issuer, subject, flow["created_at"]):
+                    raise AccountError(
+                        "wrong_account", 403, "That is a different account. Use the one you signed in with."
+                    )
+                if purpose == "second_factor" and not mfa:
+                    raise AccountError("second_factor_required", 403, "The second factor was not completed.")
+                accounts.refresh_session(token, second_factor=mfa)
             response = RedirectResponse(flow["return_to"], status_code=303)
         response.delete_cookie(FLOW_COOKIE, path="/console/auth")
         return later(response, *notices)
@@ -451,12 +508,15 @@ def create_console_app(
         flow = {
             "purpose": purpose if purpose in ("sign_in", "reauthenticate", "second_factor") else "sign_in",
             "return_to": return_to if RETURN.match(return_to) else "/console",
+            "created_at": datetime.now(UTC),
         }
         if flow["purpose"] != "sign_in":
             token = request.cookies.get(SESSION_COOKIE, "")
             flow["session_hash"] = hashlib.sha256(token.encode()).digest()
         try:
-            return _complete(request, flow, DEV_ISSUER, "dev|" + email.lower(), "email", email, bool(mfa))
+            return _complete(
+                request, flow, DEV_ISSUER, "dev|" + email.lower(), "email", email, bool(mfa), time.time()
+            )
         except AccountError as refused:
             return _back(request, refused.code)
 
@@ -495,16 +555,22 @@ def create_console_app(
         if recent and session["now"] - session["authenticated_at"] > FRESH:
             raise AccountError("reauthentication_required", 401, "Sign in again to confirm it's you.")
 
-    def needs_second_factor(person_id: str, organisation_id: str) -> bool:
+    def manages_paid_access(organisation: dict) -> bool:
         """Owners and admins of an organisation with approved or paid access (D22 revised): not the
         free starter tier, as at OpenAI and Anthropic."""
-        organisation = accounts.organisation(person_id, organisation_id)
         access = organisation["access"]
         return (
             organisation["role"] in roles.MANAGERS
             and access["state"] == "active"
             and not access.get("starter")
         )
+
+    def needs_second_factor(person_id: str, organisation_id: str) -> bool:
+        return manages_paid_access(accounts.organisation(person_id, organisation_id))
+
+    def needs_second_factor_anywhere(person_id: str) -> bool:
+        """For changes to the person, which reach every organisation they belong to."""
+        return any(manages_paid_access(o) for o in accounts.organisations(person_id))
 
     async def body(request: Request) -> dict:
         try:
@@ -572,7 +638,7 @@ def create_console_app(
     @app.delete("/api/v1/me/identities/{identity_id}")
     def unlink(request: Request, identity_id: str):
         session = guard(request, write=True)
-        fresh(session, second_factor=False)
+        fresh(session, second_factor=needs_second_factor_anywhere(session["person_id"]))
         method = next(
             (i["method"] for i in accounts.identities(session["person_id"]) if i["id"] == identity_id), ""
         )
@@ -619,7 +685,8 @@ def create_console_app(
     async def delete_me(request: Request):
         session = guard(request, write=True)
         data = await body(request)
-        fresh(session, second_factor=False)
+        # Closing an account also deletes the organisations where the person is the only member.
+        fresh(session, second_factor=needs_second_factor_anywhere(session["person_id"]))
         me = accounts.person(session["person_id"])
         if str(data.get("confirm", "")).strip().lower() != me["email"].lower():
             return error(request, 400, "invalid_input", "Type your email address to confirm.")
@@ -790,6 +857,9 @@ def create_console_app(
     async def invite(request: Request, organisation_id: str):
         session = guard(request, write=True)
         data = await body(request)
+        # Inviting an owner or admin grants what changing a member's role does, and asks the same.
+        if str(data.get("role", "")) in roles.MANAGERS:
+            fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id))
         invitation = accounts.invite(
             session["person_id"],
             organisation_id,
@@ -1069,7 +1139,11 @@ def create_console_app(
     async def update_webhook(request: Request, organisation_id: str, endpoint_id: str):
         session = guard(request, write=True)
         data = await body(request)
-        return hooks.update(session["person_id"], organisation_id, endpoint_id, data, context(request))
+        # A new address asks what creating an endpoint asks: deliveries go there from now on.
+        person = session["person_id"]
+        if "url" in data and data["url"] != hooks.get(person, organisation_id, endpoint_id)["url"]:
+            fresh(session, second_factor=needs_second_factor(person, organisation_id))
+        return hooks.update(person, organisation_id, endpoint_id, data, context(request))
 
     @app.delete(hook_path + "/{endpoint_id}")
     def delete_webhook(request: Request, organisation_id: str, endpoint_id: str):

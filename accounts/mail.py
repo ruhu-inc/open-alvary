@@ -10,7 +10,9 @@ delivery timing cannot reveal whether an address has an account (ACS-02).
 
 import logging
 import os
+import re
 import time
+import unicodedata
 from dataclasses import dataclass
 from html import escape
 
@@ -18,6 +20,8 @@ import httpx
 
 log = logging.getLogger("open_alvary.mail")
 RESEND = "https://api.resend.com/emails"
+NAME_SHOWN = 80
+LOOKS_LIKE_A_LINK = re.compile(r":/|www\.|@|\w\.\w{2,}", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -98,14 +102,26 @@ def html(text: str) -> str:
 SIGN_OFF = "Open Alvary\nOperated by Ruhu, Inc. · https://open.alvary.ai"
 
 
+def _name(value: str | None, otherwise: str) -> str:
+    """A name an account chose, as it may appear in mail: printable, on one line and short, or plain
+    words instead if it is empty or anything a mail program could turn into a link."""
+    line = " ".join("".join(c for c in value or "" if c.isprintable() or c.isspace()).split())
+    plain = unicodedata.normalize("NFKC", line).replace("。", ".")
+    if not line or LOOKS_LIKE_A_LINK.search(plain):
+        return otherwise
+    return line if len(line) <= NAME_SHOWN else line[: NAME_SHOWN - 1].rstrip() + "…"
+
+
 def invitation(to: str, organisation: str, inviter: str, role: str, base: str) -> Message:
+    organisation = _name(organisation, "an organisation")
     return Message(
         to,
         f"You're invited to {organisation} on Open Alvary",
-        f"{inviter} invited you to join {organisation} on Open Alvary as {role}.\n\n"
+        f"{_name(inviter, 'Someone')} invited you to join {organisation} on Open Alvary as {role}.\n\n"
         f"To accept, sign in at {base}/console with this email address ({to}). The invitation is on the "
         "overview page and expires in 7 days.\n\n"
-        "If you weren't expecting this, you can ignore it.\n\n" + SIGN_OFF,
+        "If you weren't expecting this, you can ignore it. Open Alvary doesn't check the names people give "
+        "themselves or their organisations.\n\n" + SIGN_OFF,
     )
 
 
@@ -114,9 +130,11 @@ def request_received(to: str, organisation: str, base: str, plan: str | None = N
     return Message(
         to,
         "We received your Open Alvary request",
-        f"Thank you. We received the request for {organisation} to move to {asked}.\n\n"
+        f"Thank you. We received the request for {_name(organisation, 'your organisation')} to move to "
+        f"{asked}.\n\n"
         f"We'll email you when it's decided, or if we need more information. You can follow it under Plan "
-        f"and limits at {base}/console/access.\n\n" + SIGN_OFF,
+        f"and limits at {base}/console/access.\n\n"
+        "If this wasn't you, you can ignore this email.\n\n" + SIGN_OFF,
     )
 
 
@@ -124,6 +142,7 @@ def request_for_operator(
     to: str, organisation: str, reduced: bool, base: str, plan: str | None = None
 ) -> Message:
     kind = (f"the {plan} plan" if plan else "more access") + (", free or reduced" if reduced else "")
+    organisation = _name(organisation, "An organisation")
     return Message(
         to,
         f"New Open Alvary access request: {organisation}",
@@ -147,14 +166,15 @@ def access_granted(to: str, organisation: str, until: str | None, base: str) -> 
     period = f" until {until}" if until else ""
     return Message(
         to,
-        f"Access granted for {organisation}",
-        f"{organisation} now has access to the Open Alvary API and MCP{period}.\n\n"
+        f"Access granted for {_name(organisation, 'your organisation')}",
+        f"{_name(organisation, 'Your organisation')} now has access to the Open Alvary API and MCP{period}.\n\n"
         f"Next: owners and admins set up a second factor, then create an API key or connect Claude, "
         f"ChatGPT or Codex at {base}/console.\n\n" + SIGN_OFF,
     )
 
 
 def access_declined(to: str, organisation: str, reason: str, renewable: str, base: str) -> Message:
+    organisation = _name(organisation, "your organisation")
     return Message(
         to,
         f"Your Open Alvary access request for {organisation}",
@@ -165,6 +185,7 @@ def access_declined(to: str, organisation: str, reason: str, renewable: str, bas
 
 
 def more_information(to: str, organisation: str, question: str, base: str) -> Message:
+    organisation = _name(organisation, "your organisation")
     return Message(
         to,
         f"We need more information: {organisation}",
@@ -176,8 +197,8 @@ def more_information(to: str, organisation: str, question: str, base: str) -> Me
 def access_revoked(to: str, organisation: str, base: str) -> Message:
     return Message(
         to,
-        f"Access ended for {organisation}",
-        f"{organisation}'s access to the Open Alvary API and MCP has ended. Keys and connected apps are "
+        f"Access ended for {_name(organisation, 'your organisation')}",
+        f"{_name(organisation, 'Your organisation')}'s access to the Open Alvary API and MCP has ended. Keys and connected apps are "
         f"kept, and work again if access is granted later.\n\nQuestions or an appeal: reply to this email. "
         f"Details at {base}/console/access.\n\n" + SIGN_OFF,
     )
@@ -260,16 +281,17 @@ def watches_paused(to: str, organisation: str, count: int, base: str) -> Message
     noun = "monitor was" if count == 1 else "monitors were"
     return Message(
         to,
-        f"{count} {noun} paused for {organisation}",
-        f"{organisation}'s plan includes fewer monitors than it has, so {count} {noun} paused, newest first. "
+        f"{count} {noun} paused for {_name(organisation, 'your organisation')}",
+        f"{_name(organisation, 'Your organisation')}'s plan includes fewer monitors than it has, so {count} {noun} paused, newest first. "
         f"Nothing was deleted. Resume them after removing others, or see Plan and limits at "
         f"{base}/console/access.\n\n" + SIGN_OFF,
     )
 
 
 def account_deleted(to: str, organisations: list[str], base: str) -> Message:
+    names = ", ".join(_name(o, "an organisation") for o in organisations)
     deleted = (
-        f" These organisations, where you were the only member, were deleted with it: {', '.join(organisations)}."
+        f" These organisations, where you were the only member, were deleted with it: {names}."
         if organisations
         else ""
     )
@@ -288,7 +310,7 @@ def webhook_stopped(to: str, organisation: str, url: str, state: str, why: str, 
     action = "disabled" if state == "disabled" else "paused"
     return Message(
         to,
-        f"A webhook endpoint was {action} for {organisation}",
+        f"A webhook endpoint was {action} for {_name(organisation, 'your organisation')}",
         f"The webhook endpoint {url} {why}, so Open Alvary {action} it. Matches are kept in the console "
         f"inbox. Fix the endpoint, then verify it again under Webhooks at {base}/console/webhooks.\n\n"
         + SIGN_OFF,

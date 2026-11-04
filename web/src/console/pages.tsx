@@ -2052,6 +2052,9 @@ export function Security({ me, refresh }: { me: Me; refresh: () => void }) {
           <a className="btn secondary" href="/console/auth/start?purpose=link&method=email&return_to=%2Fconsole%2Fsecurity">
             Add email code
           </a>
+          <span className="fine">
+            If your last sign-in was over 10 minutes ago, you'll first sign in the way you did before, then with the new method.
+          </span>
         </div>
       </div>
       <form

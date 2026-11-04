@@ -2,6 +2,7 @@
 
 import base64
 import json
+import threading
 import time
 from datetime import timedelta
 from urllib.parse import parse_qs, urlparse
@@ -14,9 +15,12 @@ from sqlalchemy import text
 from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
 
-from accounts import keys, mail, policies
-from accounts.store import Accounts
+from accounts import keys, mail, policies, store
+from accounts.store import TIERS, AccountError, Accounts
 from api.console import ConsoleConfig, Provider, create_console_app
+from api.store import Store, seed
+from changes.watches import Watches
+from changes.webhooks import Sealer, Sender, Webhooks
 from rights.database import PolicyNamespace
 
 pytestmark = pytest.mark.postgres
@@ -92,7 +96,9 @@ def sign_in(
     return_to="/console",
     amr=None,
     code="c",
+    ago=0,
 ):
+    """``ago``: how long since the person really signed in at the provider; None leaves the claim out."""
     start = browser.get(
         "/auth/start", params={"purpose": purpose, "method": "google", "return_to": return_to}
     )
@@ -109,6 +115,8 @@ def sign_in(
     }
     if amr:
         claims["amr"] = amr
+    if ago is not None:
+        claims["auth_time"] = time.time() - ago
     fake.codes[code] = claims
     return browser.get("/auth/callback", params={"state": query["state"][0], "code": code}), query
 
@@ -675,3 +683,574 @@ def test_owners_see_the_published_countries_and_change_their_plans_countries(con
     assert details["current"]["scope"] == {"jurisdictions": ["ng", "rw"]} and details["country_change_after"]
     again = browser.post(path, headers=headers, json={"jurisdictions": ["ke"]})
     assert again.status_code == 409 and again.json()["error"]["code"] == "change_too_soon"
+
+
+# ---------- step-up: what a session records, and when ----------
+def session_times(accounts):
+    with accounts.engine.connect() as conn:
+        return conn.execute(
+            text(f"SELECT authenticated_at, second_factor_at FROM {accounts._t(conn, 'console_session')}")
+        ).one()
+
+
+def age_session(accounts, minutes):
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(
+                f"UPDATE {accounts._t(conn, 'console_session')} SET authenticated_at = authenticated_at"
+                f" - interval '{minutes} minutes',"
+                f" second_factor_at = second_factor_at - interval '{minutes} minutes'"
+            )
+        )
+
+
+LINK = {"purpose": "link", "method": "google", "return_to": "/console/security"}
+LINK_START = "/console/auth/start?purpose=link&method=google&return_to=%2Fconsole%2Fsecurity"
+
+
+def test_linking_needs_a_fresh_sign_in_and_comes_back_after_it(console):
+    accounts, fake, app = console
+    browser = client(app)
+    onboard(browser, fake)
+    age_session(accounts, 11)
+    refused = browser.get("/auth/start", params=LINK)
+    target = urlparse(refused.headers["location"])
+    assert refused.status_code == 303 and target.path == "/console/auth/start"  # not the provider
+    query = parse_qs(target.query)
+    assert query["purpose"] == ["reauthenticate"] and query["return_to"] == [LINK_START]
+    assert "method" not in query  # any method already linked will do
+    with accounts.engine.connect() as conn:
+        assert not conn.scalar(text(f"SELECT count(*) FROM {accounts._t(conn, 'sign_in_flow')}"))
+    done, _ = sign_in(browser, fake, purpose="reauthenticate", return_to=LINK_START, code="r")
+    assert done.headers["location"] == LINK_START
+    next_step = browser.get(LINK_START.removeprefix("/console"))
+    assert next_step.headers["location"].startswith(ISSUER + "authorize")
+    assert parse_qs(urlparse(next_step.headers["location"]).query)["connection"] == ["google-oauth2"]
+
+
+def test_linking_needs_the_second_factor_when_any_organisation_of_the_person_does(console):
+    accounts, fake, app = console
+    browser = client(app)
+    organisation, _, _ = onboard(browser, fake)
+    accounts.grant_access(
+        "op", organisation, tier="pilot", scope={"all": True}, source="manual", ends_at=None, reason="Pilot"
+    )
+    refused = browser.get("/auth/start", params=LINK)
+    query = parse_qs(urlparse(refused.headers["location"]).query)
+    assert query["purpose"] == ["second_factor"] and query["return_to"] == [LINK_START]
+    sign_in(browser, fake, purpose="second_factor", amr=["mfa"], code="m")
+    assert browser.get("/auth/start", params=LINK).headers["location"].startswith(ISSUER + "authorize")
+
+
+def test_finishing_a_link_leaves_the_session_as_it_was_and_tells_the_person(console):
+    accounts, fake, _ = console
+    mailer = RecordingMailer()
+    browser = client(create_console_app(accounts, app_provider(fake), mailer=mailer))
+    onboard(browser, fake)
+    age_session(accounts, 5)
+    before = session_times(accounts)
+    assert before.second_factor_at is None
+    mailer.sent.clear()
+    done, _ = sign_in(
+        browser,
+        fake,
+        purpose="link",
+        sub="google-oauth2|second",
+        email="amina.second@example.org",
+        return_to="/console/security",
+        amr=["mfa"],
+        code="l",
+    )
+    assert done.headers["location"] == "/console/security"
+    assert session_times(accounts) == before
+    assert len(browser.get("/api/v1/me/identities").json()["identities"]) == 2
+    [notice] = mailer.sent
+    assert notice.to == "amina@example.org" and notice.subject == "A sign-in method was added"
+    # The window keeps running from the sign-in before the link.
+    age_session(accounts, 6)
+    headers = {"X-CSRF-Token": browser.get("/api/v1/me").json()["csrf"]}
+    stale = browser.post("/api/v1/me/export", headers=headers)
+    assert stale.status_code == 401 and stale.json()["error"]["code"] == "reauthentication_required"
+
+
+def test_linking_a_method_already_linked_records_nothing_and_sends_nothing(console):
+    accounts, fake, _ = console
+    mailer = RecordingMailer()
+    browser = client(create_console_app(accounts, app_provider(fake), mailer=mailer))
+    onboard(browser, fake)
+    age_session(accounts, 5)
+    before = session_times(accounts)
+    mailer.sent.clear()
+    sign_in(browser, fake, purpose="link", amr=["mfa"], code="l")
+    assert session_times(accounts) == before and mailer.sent == []
+
+
+def test_a_real_sign_in_with_a_linked_method_refreshes_the_session(console):
+    accounts, fake, app = console
+    browser = client(app)
+    onboard(browser, fake)
+    sign_in(browser, fake, purpose="link", sub="google-oauth2|second", email="a2@example.org", code="l")
+    age_session(accounts, 11)
+    headers = {"X-CSRF-Token": browser.get("/api/v1/me").json()["csrf"]}
+    assert browser.post("/api/v1/me/export", headers=headers).status_code == 401
+    before = session_times(accounts)
+    done, query = sign_in(browser, fake, purpose="reauthenticate", code="r")
+    assert query["prompt"] == ["login"] and query["max_age"] == ["0"] and "acr_values" not in query
+    assert done.headers["location"] == "/console"
+    after = session_times(accounts)
+    assert after.authenticated_at > before.authenticated_at and after.second_factor_at is None
+    assert browser.post("/api/v1/me/export", headers=headers).status_code == 200
+    # A method linked in an earlier flow is a sign-in method like any other, with what it proved.
+    age_session(accounts, 11)
+    sign_in(
+        browser,
+        fake,
+        purpose="reauthenticate",
+        sub="google-oauth2|second",
+        email="a2@example.org",
+        amr=["mfa"],
+        code="s",
+    )
+    assert session_times(accounts).second_factor_at is not None
+
+
+def test_a_method_linked_after_a_step_up_began_cannot_finish_it(console):
+    accounts, fake, app = console
+    browser = client(app)
+    onboard(browser, fake)
+    started = browser.get("/auth/start", params={"purpose": "reauthenticate"})
+    query = parse_qs(urlparse(started.headers["location"]).query)
+    held = browser.cookies.get("oa_console_flow", path="/console/auth")
+    sign_in(browser, fake, purpose="link", sub="google-oauth2|second", email="a2@example.org", code="l")
+    age_session(accounts, 11)
+    before = session_times(accounts)
+    browser.cookies.set("oa_console_flow", held, path="/console/auth")
+    fake.codes["late"] = {
+        "iss": ISSUER,
+        "aud": "console",
+        "exp": time.time() + 60,
+        "nonce": query["nonce"][0],
+        "sub": "google-oauth2|second",
+        "email": "a2@example.org",
+        "email_verified": True,
+        "auth_time": time.time(),
+    }
+    done = browser.get("/auth/callback", params={"state": query["state"][0], "code": "late"})
+    assert done.headers["location"] == "/console/sign-in?error=wrong_account"
+    assert session_times(accounts) == before
+
+
+@pytest.mark.parametrize("ago", [3600, None], ids=["provider-session-kept", "no-sign-in-time"])
+@pytest.mark.parametrize("purpose", ["reauthenticate", "second_factor"])
+def test_a_step_up_needs_a_sign_in_made_since_it_began(console, purpose, ago):
+    """The redirect to the provider passes through the browser, so what it asked for is checked on the way
+    back: the sign-in the provider reports must be newer than the flow."""
+    accounts, fake, app = console
+    browser = client(app)
+    onboard(browser, fake)
+    age_session(accounts, 11)
+    before = session_times(accounts)
+    done, _ = sign_in(browser, fake, purpose=purpose, amr=["mfa"], ago=ago, code="s")
+    assert done.headers["location"] == "/console/sign-in?error=sign_in_refused"
+    assert session_times(accounts) == before
+
+
+def test_parameters_a_browser_adds_to_the_start_change_nothing_asked_of_the_provider(console):
+    accounts, fake, app = console
+    browser = client(app)
+    onboard(browser, fake)
+    started = browser.get(
+        "/auth/start",
+        params=LINK
+        | {"acr_values": "anything", "prompt": "none", "max_age": "999999", "scope": "openid admin"},
+    )
+    query = parse_qs(urlparse(started.headers["location"]).query)
+    assert "acr_values" not in query and query["prompt"] == ["login"] and query["max_age"] == ["0"]
+    assert query["scope"] == ["openid email profile"]
+
+
+def test_a_sign_in_counts_as_fresh_only_from_when_the_person_really_signed_in(console):
+    accounts, fake, app = console
+    onboard(client(app), fake)
+    with accounts.engine.begin() as conn:
+        conn.execute(text(f"DELETE FROM {accounts._t(conn, 'console_session')}"))
+    # A sign-in the provider answers from its own earlier session, whatever that session proved.
+    browser = client(app)
+    done, query = sign_in(browser, fake, amr=["mfa"], ago=3600, code="k")
+    assert done.headers["location"] == "/console" and "max_age" in query and "prompt" not in query
+    assert session_times(accounts).second_factor_at is None
+    headers = {"X-CSRF-Token": browser.get("/api/v1/me").json()["csrf"]}
+    assert browser.post("/api/v1/me/export", headers=headers).status_code == 401
+    assert browser.get("/auth/start", params=LINK).headers["location"].startswith("/console/auth/start")
+    # No time reported: the session works, and sensitive changes ask for a sign-in first.
+    browser = client(app)
+    sign_in(browser, fake, ago=None, code="n")
+    me = browser.get("/api/v1/me")
+    assert me.status_code == 200
+    headers = {"X-CSRF-Token": me.json()["csrf"]}
+    assert browser.post("/api/v1/me/export", headers=headers).status_code == 401
+    # A sign-in just made counts, with its second factor.
+    browser = client(app)
+    sign_in(browser, fake, amr=["mfa"], code="f")
+    me = browser.get("/api/v1/me").json()
+    assert me["second_factor_until"] is not None
+    headers = {"X-CSRF-Token": me["csrf"]}
+    assert browser.post("/api/v1/me/export", headers=headers).status_code == 200
+
+
+def stepped_world(accounts, fake, app):
+    """An owner of a paid organisation, stepped up, with a second sign-in method, a second member and a
+    webhook endpoint, ready for each sensitive change."""
+    accounts.set_tiers(json.loads(TIERS.read_text()))
+    browser = client(app)
+    organisation, headers, _ = onboard(browser, fake)
+    accounts.grant_access(
+        "op",
+        organisation,
+        tier="developer",
+        scope={"jurisdictions": ["ng"]},
+        source="manual",
+        ends_at=None,
+        reason="Test",
+    )
+    sign_in(browser, fake, purpose="second_factor", amr=["mfa"], code="m")
+    sign_in(browser, fake, purpose="link", sub="google-oauth2|second", email="a2@example.org", code="l")
+    identities = browser.get("/api/v1/me/identities").json()["identities"]
+    identity = next(i["id"] for i in identities if i["label"] == "a2@example.org")
+    invited = browser.post(
+        f"/api/v1/organisations/{organisation}/invitations",
+        headers=headers,
+        json={"email": "d@example.org", "role": "developer"},
+    )
+    other = client(app)
+    sign_in(other, fake, sub="google-oauth2|dev", email="d@example.org", code="d")
+    other.post(
+        f"/api/v1/invitations/{invited.json()['id']}/accept",
+        headers={"X-CSRF-Token": other.get("/api/v1/me").json()["csrf"]},
+    )
+    with accounts.engine.begin() as conn:  # the other person's session is not the one under test
+        conn.execute(
+            text(
+                f"DELETE FROM {accounts._t(conn, 'console_session')} WHERE person_id ="
+                f" (SELECT person_id FROM {accounts._t(conn, 'identity')} WHERE subject = 'google-oauth2|dev')"
+            )
+        )
+    listed = browser.get(f"/api/v1/organisations/{organisation}/members").json()["members"]
+    member = next(m["id"] for m in listed if m["email"] == "d@example.org")
+    person = browser.get("/api/v1/me").json()["person"]["id"]
+    seed(Store(accounts.engine))
+    watch = Watches(accounts).create(person, organisation, {"name": "N", "filters": {"jurisdiction": ["ng"]}})
+    hooks = Webhooks(
+        accounts,
+        Sender(resolver=lambda host: ["93.184.216.34"], transport=lambda *a: (200, {}, b"{}")),
+        Sealer({"k": b"k" * 32}, "k"),
+    )
+    endpoint = hooks.create(
+        person, organisation, {"url": "https://hooks.example.org/in", "watch_ids": [watch["id"]]}
+    )
+    return browser, organisation, headers, identity, member, endpoint["endpoint"]["id"]
+
+
+def sensitive(browser, organisation, headers, identity, member, endpoint):
+    org = f"/api/v1/organisations/{organisation}"
+    return {
+        "unlink": lambda: browser.delete(f"/api/v1/me/identities/{identity}", headers=headers),
+        "close account": lambda: browser.post(
+            "/api/v1/me/delete", headers=headers, json={"confirm": "amina@example.org"}
+        ),
+        "delete organisation": lambda: browser.delete(org, headers=headers),
+        "transfer ownership": lambda: browser.post(
+            f"{org}/transfer-ownership", headers=headers, json={"member_id": member, "keep_owner": True}
+        ),
+        "invite an owner": lambda: browser.post(
+            f"{org}/invitations", headers=headers, json={"email": "o@example.org", "role": "owner"}
+        ),
+        "invite an admin": lambda: browser.post(
+            f"{org}/invitations", headers=headers, json={"email": "a@example.org", "role": "admin"}
+        ),
+        "repoint a webhook": lambda: browser.patch(
+            f"{org}/webhooks/{endpoint}", headers=headers, json={"url": "https://other.example.org/in"}
+        ),
+    }
+
+
+SENSITIVE = (
+    "unlink",
+    "close account",
+    "delete organisation",
+    "transfer ownership",
+    "invite an owner",
+    "invite an admin",
+    "repoint a webhook",
+)
+
+
+@pytest.mark.parametrize("action", SENSITIVE)
+def test_sensitive_changes_need_a_fresh_sign_in(console, action):
+    accounts, fake, app = console
+    browser, *rest = stepped_world(accounts, fake, app)
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(
+                f"UPDATE {accounts._t(conn, 'console_session')} SET second_factor_at = statement_timestamp(),"
+                " authenticated_at = statement_timestamp() - interval '11 minutes'"
+            )
+        )
+    answer = sensitive(browser, *rest)[action]()
+    assert answer.status_code == 401 and answer.json()["error"]["code"] == "reauthentication_required"
+
+
+@pytest.mark.parametrize("action", SENSITIVE)
+def test_sensitive_changes_need_the_second_factor_where_the_role_needs_one(console, action):
+    accounts, fake, app = console
+    browser, *rest = stepped_world(accounts, fake, app)
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(
+                f"UPDATE {accounts._t(conn, 'console_session')} SET authenticated_at = statement_timestamp(),"
+                " second_factor_at = statement_timestamp() - interval '11 minutes'"
+            )
+        )
+    answer = sensitive(browser, *rest)[action]()
+    assert answer.status_code == 403 and answer.json()["error"]["code"] == "second_factor_required"
+
+
+def test_changes_that_are_not_sensitive_stay_free_of_a_step_up(console, monkeypatch):
+    accounts, fake, app = console
+    browser, organisation, headers, _, _, endpoint = stepped_world(accounts, fake, app)
+    org = f"/api/v1/organisations/{organisation}"
+    age_session(accounts, 11)
+    invited = browser.post(
+        f"{org}/invitations", headers=headers, json={"email": "v@example.org", "role": "viewer"}
+    )
+    assert invited.status_code == 201
+    same_url = browser.patch(
+        f"{org}/webhooks/{endpoint}",
+        headers=headers,
+        json={"url": "https://hooks.example.org/in", "description": "Ours"},
+    )
+    assert same_url.status_code == 200 and same_url.json()["description"] == "Ours"
+    # With a fresh sign-in and second factor, a webhook can be repointed.
+    sign_in(browser, fake, purpose="second_factor", amr=["mfa"], code="again")
+    monkeypatch.setattr(Webhooks, "verify", lambda self, p, o, e: {"endpoint": {"id": e}})
+    moved = browser.patch(
+        f"{org}/webhooks/{endpoint}", headers=headers, json={"url": "https://other.example.org/in"}
+    )
+    assert moved.status_code == 200
+
+
+# ---------- mail a request can cause ----------
+ASK = {"purpose": "Research", "expected_volume": "Some", "contact_name": "A"}
+
+
+def mailing(console):
+    accounts, fake, _ = console
+    mailer = RecordingMailer()
+    app = create_console_app(accounts, app_provider(fake), mailer=mailer)
+    browser = client(app)
+    organisation, headers, _ = onboard(browser, fake)
+    mailer.sent.clear()
+    return accounts, fake, app, mailer, browser, organisation, headers
+
+
+def invite_and_revoke(browser, organisation, headers, email):
+    path = f"/api/v1/organisations/{organisation}/invitations"
+    made = browser.post(path, headers=headers, json={"email": email, "role": "developer"})
+    if made.status_code == 201:
+        assert browser.delete(f"{path}/{made.json()['id']}", headers=headers).status_code == 204
+    return made
+
+
+def request_and_withdraw(browser, organisation, headers, email):
+    path = f"/api/v1/organisations/{organisation}/access-requests"
+    made = browser.post(path, headers=headers, json=ASK | {"contact_email": email})
+    if made.status_code == 201:
+        assert browser.post(f"{path}/{made.json()['id']}/withdraw", headers=headers).status_code == 204
+    return made
+
+
+def assert_limited(answer):
+    assert answer.status_code == 429
+    error = answer.json()["error"]
+    assert error["code"] == "rate_limited" and error["message"] and error["request_id"]
+    wait = int(answer.headers["retry-after"])
+    assert error["retry_after_seconds"] == wait and 0 < wait <= 86400
+    assert answer.headers["cache-control"] == "no-store"
+    return wait
+
+
+def test_one_address_gets_a_limited_number_of_invitations_however_it_is_written_or_revoked(console):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    for _ in range(store.MAILS_PER_ADDRESS):
+        assert invite_and_revoke(browser, organisation, headers, "guest@gmail.com").status_code == 201
+    sent = len(mailer.sent)
+    assert sent == store.MAILS_PER_ADDRESS
+    for same in ("guest@gmail.com", "GUEST@gmail.com", "guest+x@gmail.com", "g.u.e.s.t@googlemail.com"):
+        assert_limited(invite_and_revoke(browser, organisation, headers, same))
+    assert len(mailer.sent) == sent
+    # Another organisation shares the same allowance for that address.
+    second = browser.post("/api/v1/organisations", headers=headers, json={"name": "Second"}).json()["id"]
+    assert_limited(invite_and_revoke(browser, second, headers, "guest@gmail.com"))
+    with accounts.engine.connect() as conn:
+        rows = conn.scalar(text(f"SELECT count(*) FROM {accounts._t(conn, 'invitation')}"))
+    assert rows == store.MAILS_PER_ADDRESS
+    assert invite_and_revoke(browser, organisation, headers, "someone.else@gmail.com").status_code == 201
+
+
+def test_invitations_and_requests_to_one_address_count_together(console):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    for _ in range(store.REQUESTS_PER_ORGANISATION):
+        assert request_and_withdraw(browser, organisation, headers, "c@example.org").status_code == 201
+    while invite_and_revoke(browser, organisation, headers, "c@example.org").status_code == 201:
+        pass
+    with accounts.engine.connect() as conn:
+        invited = conn.scalar(text(f"SELECT count(*) FROM {accounts._t(conn, 'invitation')}"))
+    assert invited + store.REQUESTS_PER_ORGANISATION == store.MAILS_PER_ADDRESS
+
+
+def test_the_limits_roll_with_the_day_and_retry_after_says_when_room_returns(console, monkeypatch):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    monkeypatch.setattr(store, "INVITATIONS_PER_ORGANISATION", 2)
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(f"UPDATE {accounts._t(conn, 'organisation')} SET invitation_limit = 1 WHERE id = :o"),
+            {"o": organisation},
+        )
+    assert invite_and_revoke(browser, organisation, headers, "a@example.org").status_code == 201
+    assert invite_and_revoke(browser, organisation, headers, "b@example.org").status_code == 201
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(
+                f"UPDATE {accounts._t(conn, 'invitation')} SET created_at = created_at - interval '23 hours'"
+                " WHERE email = 'a@example.org'"
+            )
+        )
+    wait = assert_limited(invite_and_revoke(browser, organisation, headers, "c@example.org"))
+    assert 3500 < wait <= 3600
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(
+                f"UPDATE {accounts._t(conn, 'invitation')} SET created_at = created_at - interval '2 hours'"
+                " WHERE email = 'a@example.org'"
+            )
+        )
+    assert invite_and_revoke(browser, organisation, headers, "c@example.org").status_code == 201
+
+
+def test_withdrawing_a_request_does_not_give_its_mail_back(console):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    for number in range(store.REQUESTS_PER_ORGANISATION):
+        made = request_and_withdraw(browser, organisation, headers, f"contact{number}@example.org")
+        assert made.status_code == 201
+    sent = len(mailer.sent)
+    assert sent == 2 * store.REQUESTS_PER_ORGANISATION  # the contact and the operator
+    assert_limited(request_and_withdraw(browser, organisation, headers, "another@example.org"))
+    assert len(mailer.sent) == sent
+    with accounts.engine.connect() as conn:
+        requests = conn.scalar(text(f"SELECT count(*) FROM {accounts._t(conn, 'access_request')}"))
+    assert requests == store.REQUESTS_PER_ORGANISATION
+
+
+def test_a_new_organisation_does_not_start_a_persons_mail_again(console):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    for number in range(store.MAILS_PER_CREATOR):
+        made = browser.post("/api/v1/organisations", headers=headers, json={"name": f"Org {number}"}).json()
+        assert invite_and_revoke(browser, made["id"], headers, f"a{number}@example.org").status_code == 201
+        assert browser.delete(f"/api/v1/organisations/{made['id']}", headers=headers).status_code == 204
+    made = browser.post("/api/v1/organisations", headers=headers, json={"name": "Last"}).json()
+    assert_limited(invite_and_revoke(browser, made["id"], headers, "last@example.org"))
+
+
+def test_an_organisation_the_operator_gave_more_invitations_keeps_them(console, monkeypatch):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    monkeypatch.setattr(store, "INVITATIONS_PER_ORGANISATION", 1)
+    monkeypatch.setattr(store, "MAILS_PER_CREATOR", 1)
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(f"UPDATE {accounts._t(conn, 'organisation')} SET invitation_limit = 2 WHERE id = :o"),
+            {"o": organisation},
+        )
+    assert invite_and_revoke(browser, organisation, headers, "a@example.org").status_code == 201
+    assert invite_and_revoke(browser, organisation, headers, "b@example.org").status_code == 201
+    assert_limited(invite_and_revoke(browser, organisation, headers, "c@example.org"))
+
+
+def test_the_limits_hold_when_requests_arrive_together(console, monkeypatch):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    monkeypatch.setattr(store, "MAILS_PER_ADDRESS", 1)
+    person = browser.get("/api/v1/me").json()["person"]["id"]
+    organisations = [
+        browser.post("/api/v1/organisations", headers=headers, json={"name": f"Org {n}"}).json()["id"]
+        for n in range(4)
+    ]
+    outcomes = []
+
+    def attempt(organisation_id):
+        try:
+            accounts.invite(person, organisation_id, "same@example.org", "developer")
+            outcomes.append("sent")
+        except AccountError as refused:
+            outcomes.append(refused.code)
+
+    threads = [threading.Thread(target=attempt, args=(o,)) for o in organisations]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert sorted(outcomes) == ["rate_limited"] * 3 + ["sent"]
+
+
+def test_an_organisation_name_that_looks_like_a_link_stays_out_of_mail_to_others(console):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    revision = browser.get(f"/api/v1/organisations/{organisation}").json()["revision"]
+    renamed = browser.patch(
+        f"/api/v1/organisations/{organisation}",
+        headers=headers,
+        json={"revision": revision, "name": "Claim your refund at refund-now.example today"},
+    )
+    assert renamed.status_code == 204
+    named = browser.patch("/api/v1/me", headers=headers, json={"display_name": "See www.x.example"})
+    assert named.status_code == 204
+    invited = browser.post(
+        f"/api/v1/organisations/{organisation}/invitations",
+        headers=headers,
+        json={"email": "guest@example.org", "role": "developer"},
+    )
+    assert invited.status_code == 201
+    asked = browser.post(
+        f"/api/v1/organisations/{organisation}/access-requests",
+        headers=headers,
+        json=ASK | {"contact_email": "contact@example.org"},
+    )
+    assert asked.status_code == 201
+    invitation, received, operator = mailer.sent
+    for message in (invitation, received, operator):
+        assert "refund-now" not in message.subject + message.text and "www.x" not in message.text
+    assert "Someone invited you to join an organisation on Open Alvary" in invitation.text
+    assert "the request for your organisation" in received.text
+    assert browser.get(f"/api/v1/organisations/{organisation}").json()["name"].startswith("Claim")
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "a@b@example.org",
+        "two words@example.org",
+        "a@example.org, b@example.org",
+        "x\ny@example.org",
+        "<a>@example.org",
+    ],
+)
+def test_an_invitation_or_request_goes_to_one_plain_address(console, address):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    invited = browser.post(
+        f"/api/v1/organisations/{organisation}/invitations",
+        headers=headers,
+        json={"email": address, "role": "developer"},
+    )
+    asked = browser.post(
+        f"/api/v1/organisations/{organisation}/access-requests",
+        headers=headers,
+        json=ASK | {"contact_email": address},
+    )
+    assert invited.status_code == 400 and asked.status_code == 400 and mailer.sent == []
