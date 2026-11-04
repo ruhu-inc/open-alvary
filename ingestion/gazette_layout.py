@@ -15,6 +15,8 @@ from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
 
+from ingestion.tools import run_tool
+
 SANDBOX_IMAGE = "open-alvary-ocr"
 
 # Words that mark a language in legislative text (lower-case, whole words).
@@ -259,14 +261,14 @@ def text_layer(pdf: Path) -> list[dict]:
     container (no network, read-only input). In a cloud job, whose own container is the sandbox
     (ALVARY_TEXT_LAYER=direct), pdftotext is run there directly."""
     if os.environ.get("ALVARY_TEXT_LAYER") == "direct":
-        completed = subprocess.run(
+        completed = run_tool(
             ["pdftotext", "-bbox-layout", "-enc", "UTF-8", str(pdf), "-"],
             capture_output=True,
             text=True,
             timeout=600,
             check=True,
         )
-        info = subprocess.run(  # a damaged file's pdfinfo may fail: its pages are then read unturned
+        info = run_tool(  # a damaged file's pdfinfo may fail: its pages are then read unturned
             ["pdfinfo", "-f", "1", "-l", "99999", str(pdf)], capture_output=True, text=True, timeout=600
         )
         return words(completed.stdout, rotations(info.stdout))
