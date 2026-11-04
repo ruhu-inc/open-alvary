@@ -1,9 +1,8 @@
-# Open Alvary's Terraform state: a state storage account,
-# in a container of its own, one file per environment.
+# Open Alvary's Terraform state: a container of its own in a state storage account, one file per environment.
 # Run once, by the owner, before env/:
 #
 #   cd deployment/azure/bootstrap
-#   terraform init && terraform apply -var subscription_id=<<subscription> id>
+#   terraform init && terraform apply -var subscription_id=<subscription id>
 #
 # State holds the database passwords and resource IDs, never the application's secrets: those are
 # copied into Key Vault by deployment/azure/secrets.sh and only referenced by name.
@@ -26,13 +25,11 @@ variable "subscription_id" {
 }
 
 variable "state_resource_group" {
-  type    = string
-  default = "<state resource group>"
+  type = string
 }
 
 variable "state_account" {
-  type    = string
-  default = "<state storage account>"
+  type = string
 }
 
 data "azurerm_storage_account" "state" {
@@ -47,7 +44,7 @@ resource "azurerm_storage_container" "state" {
 }
 
 output "backend" {
-  description = "Write these to deployment/azure/backend.hcl (see deployment/azure/README.md)."
+  description = "Write these to deployment/azure/backend.hcl (see docs/deployment/azure-readme.md)."
   value = {
     resource_group_name  = var.state_resource_group
     storage_account_name = var.state_account

@@ -1,5 +1,5 @@
 # The ingestion jobs (phase 5), created when ingestion_image is set: reading scanned pages and
-# preparing them for review, run by hand (deployment/gcp-terraform/README.md), as
+# preparing them for review, run by hand (docs/deployment/gcp-terraform-readme.md), as
 # deployment/gcp/ingestion_jobs.sh deploys them today. Reading is Google's Document AI, reached natively
 # as the ingestion account (identity.tf): no key and no federation, unlike Azure's google-wif-config.
 #

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Restore the database to a point in time into a NEW volume (the live volume is untouched).
 #   deployment/pitr_restore.sh "2026-10-08 14:30:00+00"   (omit the time for the latest state)
-# Then follow deployment/runbook.md: verify, recover the journal, and promote the volume.
+# Then follow docs/deployment/runbook.md: verify, recover the journal, and promote the volume.
 set -eu
 umask 077
 target=${1:-}

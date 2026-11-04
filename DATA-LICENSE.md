@@ -16,4 +16,4 @@ This metadata licence never widens the permissions recorded for a source documen
 No rights are asserted over facts not subject to copyright or similar rights.
 
 Software and project documentation are covered separately by LICENSE (MIT).
-Maintainer: Ruhu, Inc.. Contact: hello@ruhu.ai.
+Maintainer: Ruhu, Inc. Contact: hello@ruhu.ai.

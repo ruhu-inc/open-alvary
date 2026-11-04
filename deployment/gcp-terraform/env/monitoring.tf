@@ -124,7 +124,7 @@ resource "google_monitoring_alert_policy" "site_down" {
   }
   documentation {
     mime_type = "text/markdown"
-    content   = "https://${var.public_domain}/healthz has failed for ten minutes from two or more regions. See deployment/runbook.md, Monitoring and alerts: check the service's revisions and logs, then the database."
+    content   = "https://${var.public_domain}/healthz has failed for ten minutes from two or more regions. See docs/deployment/runbook.md, Monitoring and alerts: check the service's revisions and logs, then the database."
   }
 }
 
@@ -159,12 +159,12 @@ resource "google_monitoring_alert_policy" "job_failed" {
   }
   documentation {
     mime_type = "text/markdown"
-    content   = "A scheduled job failed. For the daily job, look first for an ERROR line 'audit seal check' (deployment/runbook.md, Audit log seals); for the worker, see Monitors and webhooks."
+    content   = "A scheduled job failed. For the daily job, look first for an ERROR line 'audit seal check' (docs/deployment/runbook.md, Audit log seals); for the worker, see Monitors and webhooks."
   }
 }
 
 # Being attacked, or simply overrun: what the load balancer answered, each for five minutes running, so
-# the operator hears before the site is down (deployment/runbook.md, Edge limits and attack alerts).
+# the operator hears before the site is down (docs/deployment/runbook.md, Edge limits and attack alerts).
 locals {
   edge_alerts = local.public_enabled && var.domain_live ? {
     requests = {
@@ -217,7 +217,7 @@ resource "google_monitoring_alert_policy" "edge" {
   }
   documentation {
     mime_type = "text/markdown"
-    content   = "See deployment/runbook.md, Edge limits and attack alerts: how to tell an attack from growth, and what to do. The load balancer's logs show Cloud Armor's decisions."
+    content   = "See docs/deployment/runbook.md, Edge limits and attack alerts: how to tell an attack from growth, and what to do. The load balancer's logs show Cloud Armor's decisions."
   }
 }
 

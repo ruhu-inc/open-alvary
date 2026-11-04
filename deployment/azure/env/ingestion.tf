@@ -1,5 +1,5 @@
 # The ingestion jobs (phase 5), created when ingestion_image is set: reading scanned pages and
-# preparing them for review, run by hand (deployment/azure/README.md). Reading stays on Google's
+# preparing them for review, run by hand (docs/deployment/azure-readme.md). Reading stays on Google's
 # Document AI for now (the owner's choice): the jobs reach it with a workload identity federation
 # credential (google-wif-config), so no Google key is stored anywhere.
 

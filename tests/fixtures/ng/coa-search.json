@@ -1,0 +1,7 @@
+{"data": [
+ {"id": 3, "file_no": "CA/ABJ/CR/901/2020", "parties": "A. APPELLANT VS. FEDERAL REPUBLIC OF NIGERIA\n",
+  "justice": "J. THREE, J. FOUR, J. FIVE", "date": "2022-01-10", "subject_matter": "",
+  "substantial_issue": null, "division": "Abuja", "download_link": "https://drive.google.com/file/d/1ExampleExampleExampleExample0000/view?usp=share_link"},
+ {"id": 4, "file_no": "CA/AK/902/2022", "parties": "B. APPELLANT VS. EXAMPLE PARTY", "justice": "J. ONE, J. TWO",
+  "date": "2022-02-14", "subject_matter": null, "substantial_issue": null, "division": "Akure ", "download_link": null}
+], "total": 2}

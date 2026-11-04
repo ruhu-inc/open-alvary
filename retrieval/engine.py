@@ -37,7 +37,7 @@ LEXICAL = "1.0 * bm25(headings) + 0.4 * bm25(words) + 0.2 * bm25(title) + 0.1 * 
 FIELDS = ("headings", "words", "title", "identifiers")
 # BM25's length normalisation (b, default 0.75) is weakened for words and headings: a part's own unit
 # is its heading alone, and at 0.75 it outranks the sections under it. Measured on the NDPA development
-# set through the whole pack (nDCG@10 0.746 to 0.783; experiments/embeddings/screen-2026-10-19.md).
+# set through the whole pack (nDCG@10 0.746 to 0.783; docs/experiments/embeddings-screen-2026-10-19.md).
 LENGTH_NORMALISATION = {"words": 0.3, "headings": 0.3}
 # The language the engine's linguistics (OpenNLP) split and stem each analysis in: French, Portuguese,
 # Spanish and Arabic with Snowball's stemmers, as PostgreSQL's configurations of these names; English

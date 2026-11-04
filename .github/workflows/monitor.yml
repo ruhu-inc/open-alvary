@@ -37,7 +37,7 @@ jobs:
           if [ -z "$open" ]; then
             gh issue create --label outage --assignee "${{ github.repository_owner }}" \
               --title "Outage: $SITE failed two consecutive checks" \
-              --body "The scheduled probe failed twice, one minute apart. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. See deployment/runbook.md." \
+              --body "The scheduled probe failed twice, one minute apart. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}. See docs/deployment/runbook.md." \
               || gh issue create --label outage --title "Outage: $SITE failed two consecutive checks" --body "See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
           else
             gh issue comment "$open" --body "Still failing: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

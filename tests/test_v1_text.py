@@ -88,7 +88,7 @@ def publish_act(
         "privacy_status": "cleared",
         "basis": "Official legislative texts are not eligible for copyright in Nigeria.",
         "evidence": ["https://www.copyright.gov.ng/copyright-act-2022"],
-        "decided_by": "Ijidai Lassa",
+        "decided_by": "Ada Reviewer",
         "decided_at": (now - timedelta(minutes=1)).isoformat(),
         "expires_at": (now + timedelta(days=365)).isoformat(),
     }
@@ -97,7 +97,7 @@ def publish_act(
     )
     item = publish.ApprovedText(
         document_id=work, work=work, language=language, document_type="act", text=text,
-        approver="Ijidai Lassa", approved_at=now - timedelta(minutes=5), effective_from=effective_from,
+        approver="Ada Reviewer", approved_at=now - timedelta(minutes=5), effective_from=effective_from,
         provenance={
             "url": "https://www.nass.gov.ng/example-act.pdf",
             "retrieved_at": "2026-10-09T06:41:17+00:00",
@@ -180,7 +180,7 @@ def publish_record(store, record, work=WORK):
         "expires_at": (now + timedelta(days=365)).isoformat(),
     }
     languages = [e.language for e in record.expressions]
-    item = publish.Approved(work, record, languages, "Ijidai Lassa", now - timedelta(minutes=10))
+    item = publish.Approved(work, record, languages, "Ada Reviewer", now - timedelta(minutes=10))
     report = publish.publish_records(store, "ng", [item], set(), decision)
     assert not report["skipped"], report
 

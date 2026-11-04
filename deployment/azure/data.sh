@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The data from Google Cloud to Azure (deployment/azure/README.md, phase 5), rehearsed on staging
+# The data from Google Cloud to Azure (docs/deployment/azure-readme.md, phase 5), rehearsed on staging
 # first. The databases go by dump and restore; the buckets are copied inside Azure, object by object
 # (operations/transfer.py). Every step checks itself: the restore compares each table's rows with
 # the source's, and verify compares every object's MD5.

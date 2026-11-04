@@ -1,6 +1,6 @@
 """Rwanda's Official Gazette split into languages, instruments and articles, and checked across the
-three languages. The pages are built here, word by word, in the layout the Gazette prints; the law
-and its numbers are invented."""
+three languages. The pages are built here, word by word, in the layout the Gazette prints; some law
+numbers, titles and signing officials are as the Gazette prints them."""
 
 from ingestion import rw_gazette as RG
 from schema.jurisdictions import registry

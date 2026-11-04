@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The application's secrets, from Google Cloud's Secret Manager to the environment's Key Vault
-# (deployment/azure/README.md, phase 2), value for value: API keys, feed tokens and webhook secrets
+# (docs/deployment/azure-readme.md, phase 2), value for value: API keys, feed tokens and webhook secrets
 # made on Google Cloud keep working only with the same key pepper and feed and webhook keys.
 #
 #   deployment/azure/secrets.sh plan staging    # what would be copied, and what is missing; copies nothing

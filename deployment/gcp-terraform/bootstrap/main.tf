@@ -70,7 +70,7 @@ resource "google_storage_bucket" "state" {
 }
 
 output "backend" {
-  description = "Write each to deployment/gcp-terraform/<env>.backend.hcl (see deployment/gcp-terraform/README.md)."
+  description = "Write each to deployment/gcp-terraform/<env>.backend.hcl (see docs/deployment/gcp-terraform-readme.md)."
   value = {
     for env, bucket in google_storage_bucket.state : env => {
       bucket = bucket.name

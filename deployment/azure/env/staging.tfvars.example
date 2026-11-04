@@ -1,5 +1,5 @@
-# Copy to staging.tfvars (ignored by git) and fill in. Apply with deployment/azure/README.md.
-subscription_id      = "<<subscription> subscription id>"
+# Copy to staging.tfvars (ignored by git) and fill in. Apply with docs/deployment/azure-readme.md.
+subscription_id      = "<subscription id>"
 environment          = "staging"
 location             = "swedencentral"
 operator_email       = "hello@ruhu.ai"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The application's secrets, into the environment's Secret Manager (deployment/gcp-terraform/README.md,
+# The application's secrets, into the environment's Secret Manager (docs/deployment/gcp-terraform-readme.md,
 # phase 2), value for value, from today's Secret Manager or from Azure's Key Vault (the names are the
 # same in all three): API keys, feed tokens and webhook secrets keep working only with the same key
 # pepper and feed and webhook keys.

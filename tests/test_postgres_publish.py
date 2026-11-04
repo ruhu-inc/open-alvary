@@ -38,8 +38,8 @@ def events(store):
 
 
 def test_an_approved_work_is_published_as_a_record_and_taken_down_when_approval_lapses(store, decisions):
-    decision = publish.decide("rw", "Ijidai Lassa", 12, [], "", "")
-    approved = [publish.Approved(WORK, rwanda_law(), ["en", "fr", "rw"], "Ijidai Lassa", datetime.now(UTC))]
+    decision = publish.decide("rw", "Ada Reviewer", 12, [], "", "")
+    approved = [publish.Approved(WORK, rwanda_law(), ["en", "fr", "rw"], "Ada Reviewer", datetime.now(UTC))]
     dry = publish.publish_records(store, "rw", approved, set(), decision, dry_run=True)
     assert dry["published"] == [WORK] and events(store) == []
     report = publish.publish_records(store, "rw", approved, set(), decision)
@@ -92,7 +92,7 @@ def test_a_link_its_records_no_longer_state_is_withdrawn_and_judicial_links_are_
 
     def item(work, *relations):
         return publish.Approved(
-            work, rwanda_law(relations=relations), ["en"], "Ijidai Lassa", datetime.now(UTC)
+            work, rwanda_law(relations=relations), ["en"], "Ada Reviewer", datetime.now(UTC)
         )
 
     def link(kind, work):
@@ -110,7 +110,7 @@ def test_a_link_its_records_no_longer_state_is_withdrawn_and_judicial_links_are_
                 )
             ]
 
-    decision = publish.decide("rw", "Ijidai Lassa", 12, [], "", "")
+    decision = publish.decide("rw", "Ada Reviewer", 12, [], "", "")
     law, treaty = "rw-law-domesticating", "rw-treaty-synthetic"
     approved = [item(law, link("domesticates", treaty), link("follows", "rw-judgment")), item(treaty)]
     report = publish.publish_records(store, "rw", approved, set(), decision)
@@ -148,7 +148,7 @@ def test_a_run_publishes_what_the_workbench_approved_and_records_where_each_docu
     review_store, library = world
     review = Review(review_store, library, registry())
     log = publish.PublicationLog(review_store.engine)
-    publish.decide("ng", "Ijidai Lassa", 12, [], "", "")
+    publish.decide("ng", "Ada Reviewer", 12, [], "", "")
     quiet = publish.run(review, library, review_store, store, log)  # nothing approved: nothing to do
     assert quiet["trigger"] == "schedule" and quiet["countries"] == {}
     approver = signed_in(world, "approver@example.org")

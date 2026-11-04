@@ -2,11 +2,11 @@
 # so the same words in a new commit or a new file are still reported.
 
 # The name of a vault entry, not its value.
-56295746139a04af07be7736255f6d3e823d250d:deployment/azure/env/jobs.tf:hashicorp-tf-password:15
-d76da0f9c450b82b6d403027b5e7e40439808d20:deployment/gcp-terraform/env/jobs.tf:hashicorp-tf-password:17
-d76da0f9c450b82b6d403027b5e7e40439808d20:deployment/gcp-terraform/env/transfer.tf:hashicorp-tf-password:49
-de1d6ec2c0537ffd110505d1a8a0fffebd7caed4:deployment/azure/env/transfer.tf:hashicorp-tf-password:45
+5ecf6b14b596990e701cf4980bdf606f8cea65b6:deployment/azure/env/jobs.tf:hashicorp-tf-password:15
+acaa41cd74a923ff1dbcb5f551c313d07cae4ade:deployment/gcp-terraform/env/jobs.tf:hashicorp-tf-password:17
+acaa41cd74a923ff1dbcb5f551c313d07cae4ade:deployment/gcp-terraform/env/transfer.tf:hashicorp-tf-password:49
+869b32473383255422d991fe31deb94f486dcf94:deployment/azure/env/transfer.tf:hashicorp-tf-password:45
 
 # Made-up values: a feed's resume token in the conformance bodies, a profile's key in a test.
-432c2630d63ad11c10db4745be375f6f162edd02:clients/conformance/bodies.json:generic-api-key:65
-eaebce8d032e6abfca2d43caea719d03b07b14b8:tests/test_postgres_assembly.py:generic-api-key:64
+3dc32a0326f284f06c10531fd7612b8c4ac52b81:clients/conformance/bodies.json:generic-api-key:65
+d829440c27d0e7baed1f998c3456ed9a3f651cfa:tests/test_postgres_assembly.py:generic-api-key:64

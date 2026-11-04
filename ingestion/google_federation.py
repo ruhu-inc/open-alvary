@@ -6,7 +6,7 @@ credentials), because Container Apps has no instance metadata service for google
 source.
 
 The credential configuration (the secret google-wif-config, made once by the owner:
-deployment/azure/README.md) names the command
+docs/deployment/azure-readme.md) names the command
 
     python -m ingestion.google_federation token
 

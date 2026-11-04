@@ -1,4 +1,4 @@
-# Copy to prod.tfvars (ignored by git) and fill in. Apply with deployment/gcp-terraform/README.md.
+# Copy to prod.tfvars (ignored by git) and fill in. Apply with docs/deployment/gcp-terraform-readme.md.
 # Not built yet: staging serves the public until there are paying users. Production then takes over
 # the public domains from staging, in a fresh project: never today's open-alvary-prod, which
 # deployment/gcp/*.sh built (README).

@@ -1,13 +1,11 @@
 # Security reporting
 
-Do not post credentials, private legal material, personal data or exploit details
-in a public issue. Use the published maintainer contact on the site's About page
-or GitHub private vulnerability reporting when enabled for the published repository.
+Please report a vulnerability privately to hello@ruhu.ai, or through GitHub's private vulnerability reporting
+where it is switched on. Do not post credentials, private legal material, personal data or exploit details in a
+public issue.
 
-The v0.1 pilot has no public write endpoints, accounts or upload facility. Report
-rights-gate bypasses, unintended text disclosure, unsafe file serving and deployment
-issues privately. Include affected route/version, minimal reproduction and impact.
-Do not access other people's data to demonstrate a finding.
+Please include the affected address or route, a minimal way to reproduce it, and the impact. Reports we most want:
+a way past the rights gate, disclosure of unpublished text, access to another organisation's data or keys, and
+unsafe file handling. Do not access other people's data to demonstrate a finding.
 
-A response-time SLA and formal supported-version policy are not established yet.
-Publication must wait until a maintainer and monitored reporting channel are named.
+See also https://open.alvary.ai/security.

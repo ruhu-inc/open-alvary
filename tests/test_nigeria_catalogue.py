@@ -242,7 +242,7 @@ def test_the_supreme_court_one_item_per_judgment_its_opinions_linked_and_the_old
     assert lead["listed"]["suit_no"] == "SC/CV/499/2026" and lead["listed"]["opinion"] == "lead"
     assert lead["listed"]["justices"] == [
         "HON. JUSTICE ADAMU JAURO",
-        "HON. JUSTICE J. THREE",
+        "HON. JUSTICE HARUNA SIMON TSAMMANI",
         "HON. JUSTICE JOSEPH OLUBUNMI KAYODE OYEWOLE",
     ]
     assert lead["record_url"] == "https://supremecourt.gov.ng/judgment-delivered/521"

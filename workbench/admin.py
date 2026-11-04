@@ -1,6 +1,6 @@
 """Manage workbench operators (run on the server; there is no web route that adds operators).
 
-python -m workbench.admin add hello@ruhu.ai --name "Ijidai Lassa" --roles reviewer,approver
+python -m workbench.admin add reviewer@example.org --name "Ada Reviewer" --roles reviewer,approver
 python -m workbench.admin deactivate someone@example.org
 python -m workbench.admin list
 python -m workbench.admin enrol someone@example.org   a one-time code (24 hours) to register a passkey

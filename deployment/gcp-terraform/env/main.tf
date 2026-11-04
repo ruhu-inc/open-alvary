@@ -1,5 +1,5 @@
 # Open Alvary on Google Cloud: one project per environment holds everything the environment runs
-# (deployment/gcp-terraform/README.md), as a resource group does on Azure. Nothing here is shared with
+# (docs/deployment/gcp-terraform-readme.md), as a resource group does on Azure. Nothing here is shared with
 # any other product: its own network, registry, secrets, logs, databases, buckets and budget.
 #
 # The project is made by the owner before the first apply (README, "Before the first apply"), so

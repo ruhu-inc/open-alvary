@@ -412,7 +412,7 @@ MONTHS = "january february march april may june july august september october no
 
 def to_date(text) -> str | None:
     """'11/08/2023' (day first), 'Wednesday, August 9, 2023', 'Oct. 10, 2026', '12 TH OCTOBER 2026',
-    '2023-05' or '2015-03-11' -> an ISO date (or year-month); None when the text is not a date."""
+    '2023-05' or '2015-05-27' -> an ISO date (or year-month); None when the text is not a date."""
     if not text:
         return None
     t = " ".join(str(text).replace(",", " ").split())

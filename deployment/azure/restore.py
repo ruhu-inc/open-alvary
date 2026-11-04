@@ -1,4 +1,4 @@
-"""The database restore job (deployment/azure/README.md, phase 5; deployment/gcp-terraform/README.md,
+"""The database restore job (docs/deployment/azure-readme.md, phase 5; docs/deployment/gcp-terraform-readme.md,
 phase 5), run inside the cloud's network because the new servers have no public address. Standard
 library only, on postgres:16-alpine. The same job serves Azure and Google Cloud: only where the
 transfer files are kept differs.

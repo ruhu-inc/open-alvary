@@ -80,17 +80,17 @@ def test_nothing_is_published_without_a_current_decision_from_a_named_person(dec
         publish.current_decision("rw")
     with pytest.raises(publish.Refused, match="a name, not an email"):
         publish.decide("rw", "owner@example.org", 12, [], "", "")
-    first = publish.decide("rw", "Ijidai Lassa", 12, ["https://www.minijust.gov.rw/official-gazette"], "", "")
+    first = publish.decide("rw", "Ada Reviewer", 12, ["https://www.minijust.gov.rw/official-gazette"], "", "")
     assert first["revision"] == 1 and first["text"] == "not_included" and "055/2024" in first["legal_note"]
-    assert publish.current_decision("rw")["decided_by"] == "Ijidai Lassa"
-    assert publish.decide("rw", "Ijidai Lassa", 12, [], "", "")["revision"] == 2
+    assert publish.current_decision("rw")["decided_by"] == "Ada Reviewer"
+    assert publish.decide("rw", "Ada Reviewer", 12, [], "", "")["revision"] == 2
     with pytest.raises(publish.Refused, match="expired"):
         publish.current_decision("rw", now=datetime.now(UTC) + timedelta(days=400))
 
 
 def test_a_validated_record_maps_to_a_catalogue_entry_and_never_to_text(decisions):
-    decision = publish.decide("rw", "Ijidai Lassa", 12, [], "", "")
-    item = publish.Approved("rw-law-055-2024", rwanda_law(), ["en", "rw"], "Ijidai Lassa", datetime.now(UTC))
+    decision = publish.decide("rw", "Ada Reviewer", 12, [], "", "")
+    item = publish.Approved("rw-law-055-2024", rwanda_law(), ["en", "rw"], "Ada Reviewer", datetime.now(UTC))
     entry = publish.catalogue_entries(item, decision)
     source, rights = entry["source"], entry["rights"]
     assert (
@@ -103,7 +103,7 @@ def test_a_validated_record_maps_to_a_catalogue_entry_and_never_to_text(decision
         and str(entry["authority"].official_url) == "https://www.parliament.gov.rw/"
     )
     assert (
-        rights.metadata_public and rights.approved_content_hashes == [] and rights.reviewer == "Ijidai Lassa"
+        rights.metadata_public and rights.approved_content_hashes == [] and rights.reviewer == "Ada Reviewer"
     )
     assert rights.expires_at == datetime.fromisoformat(decision["expires_at"])
     without_link = publish.Approved("rw-x", rwanda_law(publications=()), ["rw"], "A", datetime.now(UTC))
@@ -114,7 +114,7 @@ def test_a_validated_record_maps_to_a_catalogue_entry_and_never_to_text(decision
 def test_each_family_has_its_catalogue_document_type(decisions):
     # Every family named is one a record has: a misspelt one would catalogue its records as "other".
     assert set(publish.DOCUMENT_TYPES) <= set(FAMILIES)
-    decision = publish.decide("rw", "Ijidai Lassa", 12, [], "", "")
+    decision = publish.decide("rw", "Ada Reviewer", 12, [], "", "")
     order = rwanda_law(
         identity=Identity(
             family="executive_instrument", type="presidential_order", work_uri="/akn/rw/act/2026/9",
@@ -122,12 +122,12 @@ def test_each_family_has_its_catalogue_document_type(decisions):
         ),
         profile=ExecutiveProfile(family="executive_instrument", authority=Body(name="President", kind="head_of_state")),
     )  # fmt: skip
-    item = publish.Approved("rw-example-order", order, ["rw"], "Ijidai Lassa", datetime.now(UTC))
+    item = publish.Approved("rw-example-order", order, ["rw"], "Ada Reviewer", datetime.now(UTC))
     assert publish.catalogue_entries(item, decision)["source"].document_type == "regulation"
 
 
 def test_every_form_a_work_is_cited_by_becomes_an_alias(decisions):
-    decision = publish.decide("rw", "Ijidai Lassa", 12, [], "", "")
+    decision = publish.decide("rw", "Ada Reviewer", 12, [], "", "")
     identity = rwanda_law().identity.model_copy(
         update={
             "citations": (
@@ -148,11 +148,11 @@ def test_every_form_a_work_is_cited_by_becomes_an_alias(decisions):
 
 
 def test_reviewed_links_between_published_works_become_checked_catalogue_links(decisions):
-    decision = publish.decide("rw", "Ijidai Lassa", 12, [], "", "")
+    decision = publish.decide("rw", "Ada Reviewer", 12, [], "", "")
 
     def item(work, *relations):
         return publish.Approved(
-            work, rwanda_law(relations=relations), ["en"], "Ijidai Lassa", datetime.now(UTC)
+            work, rwanda_law(relations=relations), ["en"], "Ada Reviewer", datetime.now(UTC)
         )
 
     def link(kind, work):
@@ -184,7 +184,7 @@ def example_law(**changes) -> DocumentRecord:
 
 
 def test_each_versions_recorded_authority_and_the_language_rule_reach_the_catalogue(decisions):
-    decision = publish.decide("rw", "Ijidai Lassa", 12, [], "", "")
+    decision = publish.decide("rw", "Ada Reviewer", 12, [], "", "")
     stated = Evidence(
         source="document", page=2, quote="This Law was drafted in English and adopted in Ikinyarwanda."
     )
@@ -203,7 +203,7 @@ def test_each_versions_recorded_authority_and_the_language_rule_reach_the_catalo
     )
 
     def source(record):
-        item = publish.Approved("rw-example-law", record, ["rw"], "Ijidai Lassa", datetime.now(UTC))
+        item = publish.Approved("rw-example-law", record, ["rw"], "Ada Reviewer", datetime.now(UTC))
         return publish.catalogue_entries(item, decision)["source"]
 
     entry = source(record)
@@ -231,11 +231,11 @@ def test_each_versions_recorded_authority_and_the_language_rule_reach_the_catalo
 
 
 def test_reviewed_vocabulary_links_are_published_from_either_end_and_judicial_ones_reported(decisions):
-    decision = publish.decide("ng", "Ijidai Lassa", 12, [], "", "")
+    decision = publish.decide("ng", "Ada Reviewer", 12, [], "", "")
 
     def item(work, *relations):
         return publish.Approved(
-            work, rwanda_law(relations=relations), ["en"], "Ijidai Lassa", datetime.now(UTC)
+            work, rwanda_law(relations=relations), ["en"], "Ada Reviewer", datetime.now(UTC)
         )
 
     def link(kind, work):
@@ -285,10 +285,10 @@ def regional_record(family, type_, place, uri, profile, events=()) -> DocumentRe
 
 
 def test_a_regional_instruments_effect_and_a_treatys_parties_reach_the_catalogue(decisions):
-    decision = publish.decide("rw", "Ijidai Lassa", 12, [], "", "")
+    decision = publish.decide("rw", "Ada Reviewer", 12, [], "", "")
 
     def source(work, record):
-        item = publish.Approved(work, record, ["en"], "Ijidai Lassa", datetime.now(UTC))
+        item = publish.Approved(work, record, ["en"], "Ada Reviewer", datetime.now(UTC))
         return publish.catalogue_entries(item, decision)["source"]
 
     directive = regional_record(
@@ -373,16 +373,16 @@ def test_no_text_is_published_without_a_complete_current_text_decision(decisions
     with pytest.raises(publish.Refused, match="a name, not an email"):
         publish.decide_text("ng", "owner@example.org", 12, EVIDENCE, **TEXT_DECISION)
     with pytest.raises(publish.Refused, match="--evidence"):
-        publish.decide_text("ng", "Ijidai Lassa", 12, [], **TEXT_DECISION)
+        publish.decide_text("ng", "Ada Reviewer", 12, [], **TEXT_DECISION)
     with pytest.raises(publish.Refused, match="personal data"):
         publish.decide_text(
-            "ng", "Ijidai Lassa", 12, EVIDENCE, **(TEXT_DECISION | {"privacy_checked": False})
+            "ng", "Ada Reviewer", 12, EVIDENCE, **(TEXT_DECISION | {"privacy_checked": False})
         )
     with pytest.raises(publish.Refused, match="kinds of document"):
-        publish.decide_text("ng", "Ijidai Lassa", 12, EVIDENCE, **(TEXT_DECISION | {"types": ["novel"]}))
-    decision = publish.decide_text("ng", "Ijidai Lassa", 12, EVIDENCE, **TEXT_DECISION)
+        publish.decide_text("ng", "Ada Reviewer", 12, EVIDENCE, **(TEXT_DECISION | {"types": ["novel"]}))
+    decision = publish.decide_text("ng", "Ada Reviewer", 12, EVIDENCE, **TEXT_DECISION)
     assert decision["operation"] == "publish_full_text" and decision["document_types"] == ["act"]
-    assert publish.current_text_decision("ng")["decided_by"] == "Ijidai Lassa"
+    assert publish.current_text_decision("ng")["decided_by"] == "Ada Reviewer"
     with pytest.raises(publish.Refused, match="expired"):
         publish.current_text_decision("ng", now=datetime.now(UTC) + timedelta(days=400))
 
@@ -392,15 +392,15 @@ def test_a_decision_with_placeholders_is_refused_when_recorded_and_when_read(dec
         publish.decide_text("ng", "Your Full Name", 12, EVIDENCE, **TEXT_DECISION)
     for link in ("https://LINK-TO-THE-COPYRIGHT-ACT", "https://example.org/act", "http://www.gov.ng/act"):
         with pytest.raises(publish.Refused, match="real https address"):
-            publish.decide_text("ng", "Ijidai Lassa", 12, [link], **TEXT_DECISION)
+            publish.decide_text("ng", "Ada Reviewer", 12, [link], **TEXT_DECISION)
     with pytest.raises(publish.Refused, match="--licence"):
-        publish.decide_text("ng", "Ijidai Lassa", 12, EVIDENCE, **(TEXT_DECISION | {"licence": "<licence>"}))
+        publish.decide_text("ng", "Ada Reviewer", 12, EVIDENCE, **(TEXT_DECISION | {"licence": "<licence>"}))
     with pytest.raises(publish.Refused, match="placeholder"):
         publish.decide("ng", "Full Name", 12, [], "", "")
     # A decision written before these checks, or edited by hand, is refused when publishing reads it.
-    publish.decide_text("ng", "Ijidai Lassa", 12, EVIDENCE, **TEXT_DECISION)
+    publish.decide_text("ng", "Ada Reviewer", 12, EVIDENCE, **TEXT_DECISION)
     path = publish.text_decision_path("ng")
-    path.write_text(path.read_text().replace("Ijidai Lassa", "Your Full Name"))
+    path.write_text(path.read_text().replace("Ada Reviewer", "Your Full Name"))
     with pytest.raises(publish.Refused, match="not a usable decision"):
         publish.current_text_decision("ng")
 
@@ -439,7 +439,7 @@ def catalogue_with_record(store):
                     source_id="ng-example-act-2023",
                     metadata_public=True,
                     metadata_basis="Independently authored catalogue entry",
-                    reviewer="Ijidai Lassa",
+                    reviewer="Ada Reviewer",
                     reviewed_at=datetime.now(UTC) - timedelta(days=1),
                 )
             ],
@@ -471,7 +471,7 @@ def approved_text(words="The Fund shall lend to students.", raw="7" * 64, after=
         language="en",
         document_type="act",
         text=built,
-        approver="Ijidai Lassa",
+        approver="Ada Reviewer",
         approved_at=datetime.now(UTC) - timedelta(minutes=5),
         provenance={
             "url": "https://example.org/example-act.pdf",
@@ -485,13 +485,13 @@ def test_an_approved_text_is_published_with_its_structure_rights_and_lineage(dec
     from rights.policy import decide, public_corpus
 
     catalogue_with_record(store)
-    decision = publish.decide_text("ng", "Ijidai Lassa", 12, EVIDENCE, **TEXT_DECISION)
+    decision = publish.decide_text("ng", "Ada Reviewer", 12, EVIDENCE, **TEXT_DECISION)
     first = publish.publish_texts(store, "ng", publish.Texts(approved=[approved_text()]), decision)
     assert [entry["document"] for entry in first["published"]] == ["ng-example-act-2023"]
     corpus = store.load()
     (version,) = corpus.versions
     assert version.serialization_profile == "oa-text-1/workbench-units-1" and version.prior_version_id is None
-    assert version.raw_hash == "7" * 64 and version.content_verifier == "Ijidai Lassa"
+    assert version.raw_hash == "7" * 64 and version.content_verifier == "Ada Reviewer"
     rights = corpus.rights[0]
     assert decide(rights, version).full_text and rights.approved_content_hashes == [version.content_hash]
     assert public_corpus(corpus).versions == [version]
@@ -532,7 +532,7 @@ CERTIFICATE = {
 
 def test_a_marked_cell_in_a_notice_is_published_on_its_tables_node(decisions, store):
     catalogue_with_record(store)
-    decision = publish.decide_text("ng", "Ijidai Lassa", 12, EVIDENCE, **TEXT_DECISION)
+    decision = publish.decide_text("ng", "Ada Reviewer", 12, EVIDENCE, **TEXT_DECISION)
     marked = approved_text(after=[CERTIFIED, {**CERTIFICATE, "cell_states": {"1,1": "unsupported"}}])
     assert not marked.text.errors and [w.code for w in marked.text.warnings] == ["cell_state"]
     publish.publish_texts(store, "ng", publish.Texts(approved=[marked]), decision)
@@ -554,7 +554,7 @@ def test_a_marked_cell_in_a_notice_is_published_on_its_tables_node(decisions, st
 
 
 def test_texts_outside_the_decision_or_without_a_record_are_skipped(decisions, store):
-    decision = publish.decide_text("ng", "Ijidai Lassa", 12, EVIDENCE, **TEXT_DECISION)
+    decision = publish.decide_text("ng", "Ada Reviewer", 12, EVIDENCE, **TEXT_DECISION)
     no_record = publish.publish_texts(store, "ng", publish.Texts(approved=[approved_text()]), decision)
     assert "run `records` first" in no_record["skipped"]["ng-example-act-2023"]
     catalogue_with_record(store)

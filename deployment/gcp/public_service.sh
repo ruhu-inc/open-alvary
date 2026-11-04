@@ -506,7 +506,7 @@ alerts() {  # once: email whoever answers when a scheduled job fails (a broken a
   "alertStrategy": {"autoClose": "86400s"},
   "documentation": {
     "mimeType": "text/markdown",
-    "content": "A scheduled job failed. For $DAILY_JOB, look first for an ERROR line 'audit seal check' (deployment/runbook.md, Audit log seals); for $WORKER_JOB, see Monitors and webhooks."
+    "content": "A scheduled job failed. For $DAILY_JOB, look first for an ERROR line 'audit seal check' (docs/deployment/runbook.md, Audit log seals); for $WORKER_JOB, see Monitors and webhooks."
   }
 }
 POLICY
@@ -547,7 +547,7 @@ uptime_alert() {  # the website itself (CAT.4): /healthz every 5 minutes; an ema
   "alertStrategy": {"autoClose": "86400s"},
   "documentation": {
     "mimeType": "text/markdown",
-    "content": "https://$DOMAIN/healthz has failed for ten minutes from two or more regions. See deployment/runbook.md, Monitoring and alerts: check the service's revisions and logs, then the database."
+    "content": "https://$DOMAIN/healthz has failed for ten minutes from two or more regions. See docs/deployment/runbook.md, Monitoring and alerts: check the service's revisions and logs, then the database."
   }
 }
 POLICY

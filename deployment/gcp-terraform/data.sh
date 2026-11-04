@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The data into the Google Cloud environment (deployment/gcp-terraform/README.md, phase 5), rehearsed
+# The data into the Google Cloud environment (docs/deployment/gcp-terraform-readme.md, phase 5), rehearsed
 # first where possible. The databases go by dump and restore; the buckets are used in place or copied
 # object by object (operations/transfer.py). Every step checks itself: the restore compares each
 # table's rows with the source's, and verify compares every object's MD5.

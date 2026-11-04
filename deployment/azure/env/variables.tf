@@ -32,7 +32,7 @@ variable "operator_ip_ranges" {
 }
 
 variable "budget_enabled" {
-  description = "Cost Management budgets: only where the subscription supports them ."
+  description = "Cost Management budgets: only where the subscription supports them."
   type        = bool
   default     = false
 }

@@ -12,7 +12,7 @@ if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
     sys.exit("Invalid GITHUB_ALERT_REPOSITORY")
 body = {
     "title": f"Open Alvary alert: {event} ({stage})",
-    "body": f"Automated alert from the deployment host. Event: {event}; stage: {stage}. See deployment/runbook.md.",
+    "body": f"Automated alert from the deployment host. Event: {event}; stage: {stage}. See docs/deployment/runbook.md.",
     "labels": ["operations-alert"],
 }
 request = urllib.request.Request(

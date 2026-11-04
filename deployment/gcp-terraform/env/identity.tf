@@ -79,7 +79,7 @@ resource "google_project_iam_member" "machines" {
 
 # Moving back from Azure (README): Google's token service exchanges the Azure ingestion identity's
 # Entra token for this project's ingestion account, so Azure's copy job writes the buckets with no
-# key, the reverse of deployment/azure/README.md's "Google from Azure". Only that one principal is
+# key, the reverse of docs/deployment/azure-readme.md's "Google from Azure". Only that one principal is
 # admitted; the whole is removed by setting azure_federation back to null.
 resource "google_iam_workload_identity_pool" "azure" {
   count                     = var.azure_federation == null ? 0 : 1

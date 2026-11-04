@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A release from the commit (deployment/gcp-terraform/README.md, phase 3): the image is built by Cloud
+# A release from the commit (docs/deployment/gcp-terraform-readme.md, phase 3): the image is built by Cloud
 # Build in the environment's project from `git archive HEAD`, so nothing untracked or private enters
 # it, as deployment/gcp/public_service.sh deploy does today. For the public service, the migrations job
 # then runs on the new image and must succeed before Terraform gives the image to the service and its

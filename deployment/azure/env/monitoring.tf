@@ -78,7 +78,7 @@ resource "azurerm_monitor_metric_alert" "site_down" {
 }
 
 # Being attacked, or simply overrun: what Front Door answered, over five minutes, so the operator hears
-# before the site is down (deployment/runbook.md, Edge limits and attack alerts). These are metrics, which
+# before the site is down (docs/deployment/runbook.md, Edge limits and attack alerts). These are metrics, which
 # carry no query; Front Door's request logs still go nowhere (frontdoor.tf).
 resource "azurerm_monitor_metric_alert" "edge" {
   for_each = local.public_enabled && var.domain_live ? {
@@ -89,7 +89,7 @@ resource "azurerm_monitor_metric_alert" "edge" {
   name                = "${local.name_prefix}-edge-${each.key}"
   resource_group_name = azurerm_resource_group.main.name
   scopes              = [azurerm_cdn_frontdoor_profile.edge.id]
-  description         = "Front Door: ${each.value.title}. See deployment/runbook.md, Edge limits and attack alerts."
+  description         = "Front Door: ${each.value.title}. See docs/deployment/runbook.md, Edge limits and attack alerts."
   severity            = 2
   frequency           = "PT1M"
   window_size         = "PT5M"
@@ -130,7 +130,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "job_failed" {
   location                = azurerm_resource_group.main.location
   resource_group_name     = azurerm_resource_group.main.name
   scopes                  = [azurerm_log_analytics_workspace.main.id]
-  description             = "A run of the daily or worker job failed. For the daily job, look first for an ERROR line 'audit seal check' (deployment/runbook.md, Audit log seals); for the worker, see Monitors and webhooks."
+  description             = "A run of the daily or worker job failed. For the daily job, look first for an ERROR line 'audit seal check' (docs/deployment/runbook.md, Audit log seals); for the worker, see Monitors and webhooks."
   severity                = 1
   evaluation_frequency    = "PT5M"
   window_duration         = "PT15M" # wider than the frequency, so a late log line is still seen
@@ -169,8 +169,7 @@ resource "azurerm_monitor_scheduled_query_rules_alert_v2" "job_failed" {
 }
 
 # The budget covers everything in the environment's resource group. Cost Management, which budgets
-# need, does not report on every kind of subscription, so
-# the budget is off unless the subscription supports it.
+# need, does not report on every kind of subscription, so the budget is off unless the subscription supports it.
 resource "azurerm_consumption_budget_resource_group" "main" {
   count             = var.budget_enabled ? 1 : 0
   name              = "${local.name_prefix}-budget"

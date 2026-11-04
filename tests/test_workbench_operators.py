@@ -53,7 +53,9 @@ def test_only_administrators_see_and_change_operators(bench):
     assert {o["email"] for o in listed["operators"]} == {"boss@example.org", "rev@example.org"}
     assert "access_admin" in listed["roles"]
     # A change without a passkey check is refused.
-    added = boss.post("/api/operators", json={"email": "new@gmail.com", "name": "New", "roles": ["reviewer"]})
+    added = boss.post(
+        "/api/operators", json={"email": "new@example.org", "name": "New", "roles": ["reviewer"]}
+    )
     assert added.status_code == 403 and added.json()["code"] == "passkey_required"
 
 
@@ -62,24 +64,26 @@ def test_an_administrator_adds_a_person_issues_their_code_and_deactivates_them(b
     boss = with_passkey(app, store, "boss@example.org")
     added = boss.post(
         "/api/operators",
-        json={"email": " John@Gmail.com ", "name": "John  Doe", "roles": ["reviewer", "approver"]},
+        json={"email": " John@Example.org ", "name": "John  Doe", "roles": ["reviewer", "approver"]},
     )
     assert added.status_code == 200 and added.json()["added"] is True
-    john = next(o for o in boss.get("/api/operators").json()["operators"] if o["email"] == "john@gmail.com")
+    john = next(o for o in boss.get("/api/operators").json()["operators"] if o["email"] == "john@example.org")
     assert john["name"] == "John Doe" and john["roles"] == ["approver", "reviewer"] and john["passkeys"] == 0
     # A reviewer has no use for a passkey; an access administrator gets a code, once.
-    assert boss.post("/api/operators/john@gmail.com/enrolment", json={}).json()["code"] == "no_passkey_needed"
+    assert (
+        boss.post("/api/operators/john@example.org/enrolment", json={}).json()["code"] == "no_passkey_needed"
+    )
     boss.post(
         "/api/operators",
-        json={"email": "john@gmail.com", "name": "John Doe", "roles": ["reviewer", "access_admin"]},
+        json={"email": "john@example.org", "name": "John Doe", "roles": ["reviewer", "access_admin"]},
     )
-    code = boss.post("/api/operators/john@gmail.com/enrolment", json={}).json()["code"]
-    assert store.take_enrolment("john@gmail.com", code)
-    assert boss.post("/api/operators/john@gmail.com/active", json={"active": False}).status_code == 200
-    assert store.operator("john@gmail.com") is None
-    assert boss.post("/api/operators/john@gmail.com/enrolment", json={}).json()["code"] == "inactive"
-    assert boss.post("/api/operators/john@gmail.com/active", json={"active": True}).status_code == 200
-    assert store.operator("john@gmail.com")["roles"] == {"reviewer", "access_admin"}
+    code = boss.post("/api/operators/john@example.org/enrolment", json={}).json()["code"]
+    assert store.take_enrolment("john@example.org", code)
+    assert boss.post("/api/operators/john@example.org/active", json={"active": False}).status_code == 200
+    assert store.operator("john@example.org") is None
+    assert boss.post("/api/operators/john@example.org/enrolment", json={}).json()["code"] == "inactive"
+    assert boss.post("/api/operators/john@example.org/active", json={"active": True}).status_code == 200
+    assert store.operator("john@example.org")["roles"] == {"reviewer", "access_admin"}
     actions = [e["action"] for e in store.events()]
     assert {
         "operator_saved",
@@ -90,7 +94,7 @@ def test_an_administrator_adds_a_person_issues_their_code_and_deactivates_them(b
     # Ten minutes on, a change needs the passkey again.
     later = workbench_store.now() + timedelta(minutes=11)
     monkeypatch.setattr("workbench.privileged.now", lambda: later)
-    stale = boss.post("/api/operators/john@gmail.com/active", json={"active": False})
+    stale = boss.post("/api/operators/john@example.org/active", json={"active": False})
     assert stale.status_code == 403 and stale.json()["code"] == "passkey_required"
 
 

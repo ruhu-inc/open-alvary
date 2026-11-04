@@ -1,7 +1,7 @@
 """The open evaluation runner (EVAL-05, RSV-12): runs a benchmark's cases through the retrieval service,
 scores them and records an immutable run; compares two runs under a gate profile.
 
-    python -m evaluations run --benchmark benchmarks/retrieval/ng-legislation-dev-1 --database URL
+    python -m evaluations run --benchmark benchmarks/retrieval/synthetic-smoke-1 --database URL
     python -m evaluations run --benchmark ... --base https://api.open.alvary.ai/api/v1   (OPEN_ALVARY_KEY)
     python -m evaluations compare --benchmark ... BASELINE.json CANDIDATE.json
 

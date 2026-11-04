@@ -1,4 +1,4 @@
-# Copy to staging.tfvars (ignored by git) and fill in. Apply with deployment/gcp-terraform/README.md.
+# Copy to staging.tfvars (ignored by git) and fill in. Apply with docs/deployment/gcp-terraform-readme.md.
 # Staging is the live environment until there are paying users (the owner, 2026-10-19): it serves the
 # public domains, with today's buckets used in place, and there is no production yet.
 project_id      = "open-alvary-staging"
@@ -8,7 +8,7 @@ zone            = "europe-west1-b"
 operator_email  = "hello@ruhu.ai"
 budget_enabled  = true
 billing_account = "<the billing account open-alvary-staging is linked to>"
-monthly_budget  = 1200
+monthly_budget  = 100 # yours
 public_domain   = "open.alvary.ai"
 api_domain      = "api.open.alvary.ai"
 
@@ -49,7 +49,7 @@ vector_profile = ""
 
 # Phase 4: the workbench, behind Identity-Aware Proxy at its run.app address.
 # workbench_image       = ""
-# workbench_iap_members = ["group:workbench-operators@ruhu.ai"]
+# workbench_iap_members = ["group:workbench-operators@example.org"]
 # workbench_settings = {
 #   ALVARY_REVIEW_OIDC_CLIENT_ID = "<the workbench's sign-in client ID, as today>"
 # }

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A release from the commit (deployment/azure/README.md, phase 3): the image is built in the
+# A release from the commit (docs/deployment/azure-readme.md, phase 3): the image is built in the
 # environment's registry from `git archive HEAD`, so nothing untracked or private enters it, as Cloud
 # Build did. For the public service, the migrations job then runs on the new image and must succeed
 # before Terraform gives the image to the service and its other jobs.

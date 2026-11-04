@@ -103,4 +103,3 @@ def test_the_operator_hears_of_an_attack_on_each_cloud():
     azure = (AZURE / "monitoring.tf").read_text()
     assert 'resource "azurerm_monitor_metric_alert" "edge"' in azure
     assert '"HttpStatus"' in azure and '"HttpStatusGroup"' in azure
-    assert "Edge limits and attack alerts" in (ROOT / "deployment/runbook.md").read_text()

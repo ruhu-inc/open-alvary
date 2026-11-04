@@ -1,6 +1,6 @@
 # Point-in-time recovery overlay: add -f deployment/pitr.yaml after compose.yaml.
 # Every WAL segment is archived (at least once a minute) to an encrypted pgBackRest repository in
-# Cloudflare R2. Values come from deployment/.env; see deployment/runbook.md.
+# Cloudflare R2. Values come from deployment/.env; see docs/deployment/runbook.md.
 x-pgbackrest: &pgbackrest
   PGBACKREST_STANZA: main
   PGBACKREST_PG1_PATH: /var/lib/postgresql/data
@@ -26,7 +26,7 @@ services:
     image: open-alvary-db:16
     command: [postgres, -c, wal_level=replica, -c, archive_mode=on, -c, "archive_command=pgbackrest --stanza=main archive-push %p", -c, archive_timeout=60, -c, max_wal_senders=3]
     environment: *pgbackrest
-    # Set CORPUS_DB_VOLUME to a restored volume to promote it (deployment/runbook.md).
+    # Set CORPUS_DB_VOLUME to a restored volume to promote it (docs/deployment/runbook.md).
     volumes: ["pgdata:/var/lib/postgresql/data"]
   db-restore:
     image: open-alvary-db:16
