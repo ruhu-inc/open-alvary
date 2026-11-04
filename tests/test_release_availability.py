@@ -19,7 +19,7 @@ from api.store import Store
 from exports import verify
 from exports.release import write_release
 from exports.verify import release_available
-from rights.policy import public_corpus
+from rights.policy import public_corpus, told_rights
 from schema.models import Corpus, RightsRecord, SourceVersion
 
 METADATA = "/downloads/2026-10-05/ng/metadata/sources.jsonl"
@@ -34,11 +34,15 @@ def whole_corpus_answer(directory, corpus):
     public = public_corpus(corpus)
     sources = {s.id for s in public.sources}
     versions = {(v.id, v.content_hash) for v in public.versions}
-    rights = {r.source_id: r for r in public.rights}
+    rights = {r.source_id: told_rights(r) for r in public.rights}
     return (
         all(s["id"] in sources for s in rows["sources"])
         and all((v["id"], v["content_hash"]) in versions for v in rows["versions"])
-        and all(RightsRecord.model_validate(r) == rights.get(r["source_id"]) for r in rows["rights"])
+        and all(
+            RightsRecord.model_validate(r).model_dump(mode="json", exclude={"privacy_status"})
+            == rights.get(r["source_id"])
+            for r in rows["rights"]
+        )
     )
 
 
