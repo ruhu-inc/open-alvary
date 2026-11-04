@@ -29,7 +29,6 @@ from sqlalchemy.engine import Connection
 
 from changes.record import (
     DISCLOSED_REASONS,
-    RIGHTS_FIELDS,
     WITH_RIGHTS_REVISION,
     current,
     digest,
@@ -493,8 +492,14 @@ class Feed:
         payload = row["payload"]
         kind = row["event_type"]
         work = visible.work(row["work_id"]) if kind not in PLACE_EVENTS else None
-        # A text withdrawn for a confidential reason is never named, though its record is public.
-        named = work is not None and not _confidential(row)
+        # A text withdrawn for a confidential reason is never named, though its record is public; nor is
+        # anything announced before a record's last confidential withdrawal told again if it returns: what
+        # was announced then may say what it no longer says, a name since withheld.
+        named = (
+            work is not None
+            and not _confidential(row)
+            and row["publication_revision"] > visible.withheld(row["work_id"])
+        )
         membership = suspension = None
         if kind in BODY_EVENTS:
             # A reviewed membership or suspension is a public fact about two jurisdictions; their names are
@@ -516,8 +521,11 @@ class Feed:
             for role in ("by", "of"):
                 if role not in told:
                     continue
-                other = visible.work((told.get(role) or {}).get("id"))
-                if other is None:  # the other record is not public: say nothing of it
+                other_id = (told.get(role) or {}).get("id")
+                other = visible.work(other_id)
+                # The other record is not public, or this was announced before it was withdrawn in
+                # confidence: say nothing of it.
+                if other is None or row["publication_revision"] <= visible.withheld(other_id):
                     return None
                 shown[role] = {
                     "id": told[role]["id"],
@@ -532,7 +540,7 @@ class Feed:
         if kind == "rights_changed":
             # Where a record's privacy review stands is told to no one. Events recorded before they stopped
             # saying it are read without it, and one that said nothing else is not told at all.
-            told_fields = [f for f in changed_fields if f in RIGHTS_FIELDS]
+            told_fields = [f for f in changed_fields if f != "privacy_status"]
             if changed_fields and not told_fields:
                 return None
             if told_fields != changed_fields and summary and "changed (" in summary:
@@ -808,6 +816,12 @@ class _Visibility:
         if self._withdrawals is None:
             self._withdrawals = Withdrawals(self.conn)
         return self._withdrawals.told(row)
+
+    def withheld(self, work_id: str) -> int:
+        """The publication revision of a record's last confidential withdrawal; 0 when it has none."""
+        if self._withdrawals is None:
+            self._withdrawals = Withdrawals(self.conn)
+        return self._withdrawals._withheld(work_id)
 
     def work(self, work_id):
         if work_id not in self.works:
