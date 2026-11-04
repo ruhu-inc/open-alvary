@@ -4,7 +4,7 @@ import json
 from hashlib import sha256
 from pathlib import Path
 
-from rights.policy import public_corpus
+from rights.policy import public_corpus, told_rights
 from schema.models import Corpus
 
 
@@ -39,10 +39,13 @@ def release_available(directory: Path, current: Corpus) -> bool:
             return False
         if any((v.id, v.content_hash) not in versions for v in released.versions):
             return False
-        # Review corrections invalidate bundles containing stale rights assertions.
-        rights = {r.source_id: r for r in public.rights}
-        if any(r != rights.get(r.source_id) for r in released.rights):
-            return False
+        # Review corrections invalidate bundles containing stale rights assertions: what a release tells
+        # of each rights record, against what would be told of it now. (A release made before privacy
+        # reviews stopped being released still has that field; it is not what is compared.)
+        rights = {r.source_id: told_rights(r) for r in public.rights}
+        for r in released.rights:
+            if r.model_dump(mode="json", exclude={"privacy_status"}) != rights.get(r.source_id):
+                return False
         return True
     except (OSError, ValueError, KeyError, TypeError):
         return False

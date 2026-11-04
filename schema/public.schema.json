@@ -2068,17 +2068,6 @@
           "default": null,
           "title": "Database Rights Notes"
         },
-        "privacy_status": {
-          "default": "pending",
-          "enum": [
-            "pending",
-            "cleared",
-            "redacted",
-            "blocked"
-          ],
-          "title": "Privacy Status",
-          "type": "string"
-        },
         "reviewer": {
           "anyOf": [
             {

@@ -24,10 +24,10 @@ from api.repositories import (
 from api.search import normalize_citation as normalize_citation
 from api.search import words
 from changes.record import namespace
-from rights.policy import decide
+from rights.policy import decide, told_decision
 from schema.dates import within
 from schema.jurisdictions import catalogue_entry, registry
-from schema.models import Citation, Corpus
+from schema.models import PRIVACY_CLEARED, Citation, Corpus
 from schema.policy import MetadataPage, PublicMetadata
 from schema.public import (
     AnchorView,
@@ -594,7 +594,8 @@ class LegacyCatalogue:
                 dict(
                     sources=[source.model_dump(mode="json")],
                     rights=[rights.model_dump(mode="json")],
-                    versions=[v.model_dump(mode="json") for v in versions],
+                    # The text a later one replaces may be outside this answer, or no longer public.
+                    versions=[v.model_dump(mode="json") | {"prior_version_id": None} for v in versions],
                     structure=[n.model_dump(mode="json") for n in nodes],
                     jurisdictions=jurisdictions,
                     authorities=self.repository.rows("authorities", ids=[source.authority_id]),
@@ -623,7 +624,7 @@ class LegacyCatalogue:
                 )
             versions = labelled
         return VersionPage(
-            items=tuple(versions), rights=rights, structure=nodes, notice=notice, selection=selection
+            items=tuple(versions), rights=rights.told(), structure=nodes, notice=notice, selection=selection
         )
 
     def expressions(self, source_id) -> ExpressionPage:
@@ -780,19 +781,27 @@ class LegacyCatalogue:
     def rights(self, source_id):
         source, rights = self._require(source_id)
         version = next(self._approved(source, rights), None)
-        decision = decide(rights, version, now=self.now)
+        decision = told_decision(decide(rights, version, now=self.now))
         latest = self._rights_revisions(source_id, limit=1)
         return RightsView(
-            record=rights,
+            record=rights.told(),
             decision=DecisionView.model_validate(decision.model_dump(mode="json")),
             revision=latest[0]["revision"] if latest else None,
         )
 
     def rights_history(self, source_id) -> RightsHistory:
         """Every revision of a public record's rights record, newest first (OA-R1). A hidden record
-        and one that does not exist are the same answer: unavailable."""
-        self._require(source_id)
+        and one that does not exist are the same answer: unavailable. While the record's privacy review
+        does not clear its texts no revision names them, or the answer would say what the current one
+        does not."""
+        _, rights = self._require(source_id)
         rows = self._rights_revisions(source_id, limit=MAX_UNPAGED_ROWS)
+        cleared = rights.privacy_status in PRIVACY_CLEARED
+
+        def told(row):
+            record = RightsViewRecord.model_validate(row["record"]).told()
+            return record if cleared else record.model_copy(update={"approved_content_hashes": ()})
+
         return RightsHistory(
             source_id=source_id,
             revisions=tuple(
@@ -800,7 +809,7 @@ class LegacyCatalogue:
                     revision=row["revision"],
                     recorded_at=row["committed_at"],
                     publication_revision=row["publication_revision"],
-                    record=RightsViewRecord.model_validate(row["record"]),
+                    record=told(row),
                 )
                 for row in rows
             ),

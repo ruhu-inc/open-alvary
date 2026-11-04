@@ -1499,7 +1499,8 @@ FIELDS: dict[str, dict[str, str]] = {
         "content_verified_at": "When it was checked.",
         "serialization_profile": "How the text was built from the reviewed pages, such as "
         "`oa-text-1/workbench-units-1`, when recorded.",
-        "prior_version_id": "The earlier version of the same record this one corrects or replaces, if any.",
+        "prior_version_id": "The earlier version of the same record this one corrects or replaces, if any. A "
+        "text read again from the same official file replaces the one it corrects, which is no longer public.",
         "expression_id": "The language edition the text belongs to: `{source_id}:{language}`.",
         "expression_authority": "What that edition is worth as law, as the record states it: `authoritative`, "
         "`equally_authentic`, `official_translation`, `unofficial_translation`, `machine_translation`, or "
@@ -1583,7 +1584,6 @@ FIELDS: dict[str, dict[str, str]] = {
         "attribution_required": "Whether reuse must credit the source.",
         "attribution_text": "The credit to give, when one is required.",
         "database_rights_notes": "Notes on database rights, when relevant.",
-        "privacy_status": "Whether personal data was checked: `pending`, `cleared`, `redacted` or `blocked`.",
         "reviewer": "Who reviewed the rights.",
         "reviewed_at": "When.",
         "expires_at": "When the decision must be reviewed again, if it lapses.",

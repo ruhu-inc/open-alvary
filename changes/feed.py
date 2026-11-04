@@ -27,7 +27,16 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from sqlalchemy import select, text
 from sqlalchemy.engine import Connection
 
-from changes.record import DISCLOSED_REASONS, WITH_RIGHTS_REVISION, current, digest, namespace
+from changes.record import (
+    DISCLOSED_REASONS,
+    RIGHTS_FIELDS,
+    WITH_RIGHTS_REVISION,
+    current,
+    digest,
+    namespace,
+    rights_summary,
+)
+from rights.policy import PRIVACY_REASON
 from schema.models import Source
 
 TYPES = (
@@ -519,6 +528,19 @@ class Feed:
         if kind == "text_version_published" and (not named or row["version_id"] not in work["versions"]):
             return None
         summary = payload.get("summary")
+        changed_fields, rights = payload.get("changed_fields", []), None
+        if kind == "rights_changed":
+            # Where a record's privacy review stands is told to no one. Events recorded before they stopped
+            # saying it are read without it, and one that said nothing else is not told at all.
+            told_fields = [f for f in changed_fields if f in RIGHTS_FIELDS]
+            if changed_fields and not told_fields:
+                return None
+            if told_fields != changed_fields and summary and "changed (" in summary:
+                summary = rights_summary(payload.get("title"), told_fields)
+            changed_fields, rights = told_fields, payload.get("rights")
+            if rights and rights.get("decision"):
+                reasons = [r for r in rights["decision"].get("reasons", []) if r != PRIVACY_REASON]
+                rights = rights | {"decision": rights["decision"] | {"reasons": reasons}}
         withdrawal = None
         # A withdrawal from a record no longer public, told to a keyed caller by IDs only (Withdrawals).
         by_id = kind == "withdrawal" and not named and self.keyed and visible.told(row) is not None
@@ -575,7 +597,7 @@ class Feed:
             "rights_revision": payload.get("rights_revision")
             if named and kind in WITH_RIGHTS_REVISION
             else None,
-            "changed_fields": payload.get("changed_fields", []) if named or kind in BODY_EVENTS else [],
+            "changed_fields": changed_fields if named or kind in BODY_EVENTS else [],
             "change_reason": row["change_reason"],
             "supersedes": {
                 "event_id": str(row["supersedes_event_id"]),
@@ -596,7 +618,7 @@ class Feed:
             "previous": payload.get("previous", {}) if named and kind == "metadata_corrected" else {},
             "version_diff": payload.get("version_diff") if kind == "text_version_published" else None,
             # A new revision of the record's rights record: {revision, decision} (G15).
-            "rights": payload.get("rights") if kind == "rights_changed" else None,
+            "rights": rights,
         }
 
     @staticmethod

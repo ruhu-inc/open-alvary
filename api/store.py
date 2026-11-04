@@ -2,6 +2,7 @@
 
 import logging
 import os
+from collections.abc import Iterable
 from pathlib import Path
 
 from sqlalchemy import JSON, Column, ForeignKey, MetaData, String, Table, create_engine, event, select, text
@@ -117,7 +118,10 @@ class Store:
                 }
             )
 
-    def save(self, corpus: Corpus) -> None:
+    def save(self, corpus: Corpus, confidential: Iterable[str] = ()) -> None:
+        """Write the corpus and, in the same transaction, what it changed in the public change log. A work
+        in ``confidential`` that this write takes out of public view is withdrawn for a reason that must not
+        be told (changes.record.publish)."""
         corpus = Corpus.model_validate(corpus.model_dump(mode="json"))
         with self.engine.begin() as conn:
             check_legacy_authority(conn, write=True)
@@ -154,7 +158,7 @@ class Store:
             from changes.record import publish
 
             affected = {s.id for s in corpus.sources} | {r.source_id for r in corpus.rights}
-            publish(conn, affected | {v.source_id for v in corpus.versions})
+            publish(conn, affected | {v.source_id for v in corpus.versions}, confidential=confidential)
 
 
 # What the catalogue says to readers about a source; its file stays the authority for these.

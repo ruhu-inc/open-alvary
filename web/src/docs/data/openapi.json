@@ -11749,18 +11749,6 @@
             "title": "Database Rights Notes",
             "description": "Notes on database rights, when relevant."
           },
-          "privacy_status": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "cleared",
-              "redacted",
-              "blocked"
-            ],
-            "title": "Privacy Status",
-            "default": "pending",
-            "description": "Whether personal data was checked: `pending`, `cleared`, `redacted` or `blocked`."
-          },
           "reviewer": {
             "anyOf": [
               {
@@ -13360,7 +13348,7 @@
               }
             ],
             "title": "Prior Version Id",
-            "description": "The earlier version of the same record this one corrects or replaces, if any."
+            "description": "The earlier version of the same record this one corrects or replaces, if any. A text read again from the same official file replaces the one it corrects, which is no longer public."
           },
           "expression_id": {
             "anyOf": [

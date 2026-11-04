@@ -1,8 +1,11 @@
 """SUB C1: the public change log records what each catalogue write changed, in LIF-02 order, and
 serves it as a replayable feed, Atom/RSS windows, coverage and MCP tools (changes-contracts.md)."""
 
+import json
+import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
+from urllib.parse import quote
 
 import pytest
 from fastapi.testclient import TestClient
@@ -15,6 +18,7 @@ from api.store import Store, seed
 from changes import admin
 from changes.record import namespace, sweep
 from rights.database import PolicyNamespace, provision_roles
+from schema.models import Amendment
 
 pytestmark = pytest.mark.postgres
 
@@ -512,6 +516,10 @@ def test_a_text_withdrawn_for_privacy_names_nothing_to_anyone_though_its_record_
     [stored] = [e for e in events(store) if e["event_type"] == "withdrawal"]
     assert stored["version_id"] == "test-version"
     assert stored["payload"]["withdrawal"] == {"action": "stop_serving", "reason_code": "privacy"}
+    # Nothing else in that write names the record: the withdrawal is alone in its publication revision.
+    assert [
+        e["event_type"] for e in events(store) if e["publication_revision"] == stored["publication_revision"]
+    ] == ["withdrawal"]
 
     def unnamed(event):
         assert event["withdrawal"] == UNNAMED and event["summary"].startswith("A previously public record")
@@ -1235,3 +1243,284 @@ def test_roles_provisioned_after_migrating_get_exactly_the_later_change_log_gran
             for role in roles.values():
                 conn.execute(text(f"DROP OWNED BY {quote(role)}"))
                 conn.execute(text(f"DROP ROLE {quote(role)}"))
+
+
+# --- a confidential withdrawal discloses nothing further -----------------------------------------------
+
+# A privacy field, under any name, or a sentence saying where a privacy review stands.
+PRIVATE = re.compile(
+    r'"[a-z_]*privacy[a-z_]*"\s*:|privacy[ _]status|privacy review|"reason_code":\s*"privacy"', re.I
+)
+VERSION, ANCHOR = "test-version", "test-node"
+
+
+def every_public_answer(store, client, headers, work, citation) -> dict[str, str]:
+    """The body of every public answer that could name a record or a text or say why one left, keyed and
+    not, by what was asked: the website's routes, the anonymous API, REST, MCP, the feeds, and each event as
+    a keyed organisation's inbox, digests and webhooks read it (they all read through Feed.project)."""
+    from changes.feed import Feed, _Visibility
+
+    record = (
+        f"/sources/{work}",
+        f"/sources/{work}/versions",
+        f"/sources/{work}/relationships",
+        f"/rights/{work}",
+    )
+    feeds = (
+        "/changes?limit=100",
+        "/changes/recent",
+        "/changes/feed.atom",
+        "/changes/feed.rss",
+        "/change-coverage",
+    )
+    lists = ("/sources?limit=100", "/search?q=act", "/coverage", "/releases")
+    plain = [
+        *(f"/site/v1{path}" for path in (*record, *feeds, *lists, "/project")),
+        *(f"/api{path}" for path in (*record, *feeds, *lists, "/project")),
+        "/sitemap.xml",
+    ]
+    keyed = [
+        f"/api/v1{path}"
+        for path in (
+            *record, *feeds, *lists, f"/rights/{work}/history", f"/sources/{work}/expressions",
+            f"/versions/{VERSION}/text", f"/versions/{VERSION}/structure", f"/anchors/{ANCHOR}",
+            f"/citations/{quote(citation)}", "/search/text?q=Synthetic", "/retrieve?q=Synthetic",
+            "/jurisdictions",
+        )
+    ]  # fmt: skip
+    found = {path: client.get(path).text for path in plain}
+    found |= {path: client.get(path, headers=headers).text for path in keyed}
+    check = {"items": [{"anchor_id": ANCHOR}]}  # asked by version, the answer repeats what was asked
+    found["POST /api/v1/currentness"] = client.post("/api/v1/currentness", json=check, headers=headers).text
+    stored = events(store)
+    for event in stored:
+        found[f"/site/v1/changes/{event['event_id']}"] = client.get(
+            f"/site/v1/changes/{event['event_id']}"
+        ).text
+        found[f"/api/v1/changes/{event['event_id']}"] = client.get(
+            f"/api/v1/changes/{event['event_id']}", headers=headers
+        ).text
+    calls = [
+        ("list_changes", {}), ("get_source", {"source_id": work}), ("get_relationships", {"source_id": work}),
+        ("list_expressions", {"source_id": work}), ("get_anchor", {"anchor_id": ANCHOR}),
+        ("search_catalogue", {"query": "act"}), ("search_text", {"query": "Synthetic"}),
+        ("retrieve_evidence", {"query": "Synthetic"}), ("resolve_citation", {"citation": citation}),
+        ("check_currentness", check), ("get_coverage", {}),
+        *(("get_change", {"event_id": str(event["event_id"])}) for event in stored),
+    ]  # fmt: skip
+    anonymous = TestClient(create_app(store=store))
+    for number, (tool, arguments) in enumerate(calls):
+        call = {
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": tool, "arguments": arguments},
+        }  # fmt: skip
+        found[f"MCP keyed {number} {tool}"] = client.post("/mcp", json=call, headers=headers).text
+        found[f"MCP {number} {tool}"] = anonymous.post("/mcp", json=call).text
+    with store.engine.connect() as conn:
+        for name, keyed_reader in (("keyed", True), ("unkeyed", False)):
+            reader, visible = Feed(conn, None, keyed=keyed_reader), _Visibility(conn)
+            for event in stored:
+                found[f"projected {name} {event['event_id']}"] = json.dumps(
+                    reader.project(dict(event), visible)
+                )
+    return found
+
+
+def released(store, root, name) -> dict[str, str]:
+    """Every file of a metadata release and a full release made now, by path."""
+    from exports.release import write_release
+
+    corpus = store.load()
+    folders = (
+        write_release(corpus, root, name, "ng", metadata_only=True),
+        write_release(corpus, root, name, "ng"),
+    )
+    return {str(path): path.read_text() for folder in folders for path in folder.iterdir()}
+
+
+def said_of(answers: dict[str, str], *words: str) -> dict[str, list[str]]:
+    return {word: [path for path, body in answers.items() if word in body] for word in words}
+
+
+def withdrawing(store, cleared, tmp_path):
+    """The record with its text, public; a link from it to another record, public; and a release that holds
+    them; what a confidential withdrawal must then leave nothing of."""
+    work = cleared.sources[0].id
+    other = cleared.sources[1].id
+    digest_ = next(v.content_hash for v in cleared.versions if v.id == VERSION)
+    cleared.amendments.append(
+        Amendment(
+            id="link-under-test", source_id=work, target_source_id=other, kind="repeals",
+            evidence_url="https://example.org/link", verified=True,
+        )
+    )  # fmt: skip
+    store.save(cleared)
+    return work, other, digest_
+
+
+def test_a_record_withdrawn_in_confidence_is_named_nowhere_public(surfaces, cleared, tmp_path, monkeypatch):
+    store, client, headers = surfaces
+    work, other, digest_ = withdrawing(store, cleared, tmp_path)
+    citation = cleared.sources[0].citation
+    title = cleared.sources[0].title
+    root = tmp_path / "releases"
+    from api.release_adapter import LegacyReleases
+
+    before = every_public_answer(store, client, headers, work, citation)
+    made = released(store, root, "2026-11-01")
+    reach = said_of(before | made, work, title, VERSION, digest_)
+    assert all(reach.values()), reach  # the walk reaches every one of them while they are public
+    assert LegacyReleases(store, root, bulk_text=True).listing()
+    # The legal effect on the other record names it, while it is public.
+    shown = client.get("/site/v1/changes", params={"limit": 100}).json()["events"]
+    assert any(e["event_type"] == "legal_effect_recorded" and work in json.dumps(e) for e in shown)
+
+    monkeypatch.setattr(admin, "engine_for", lambda: store.engine)
+    assert admin.main(["withdraw-confidentially", "--work", work]) == 0
+
+    after = every_public_answer(store, client, headers, work, citation)
+    assert LegacyReleases(store, root, bulk_text=True).listing() == []  # what was released names it
+    after |= released(store, root, "2026-11-02")
+    found = said_of(after, work, title, citation, VERSION, digest_)
+    assert not any(found.values()), found
+    assert not [path for path, body in after.items() if PRIVATE.search(body)]
+    # The record it was linked to stays, and says nothing of it.
+    assert client.get(f"/site/v1/sources/{other}").status_code == 200
+    [withdrawal] = [e for e in events(store) if e["event_type"] == "withdrawal"]
+    assert "withdrawal" not in withdrawal["payload"]
+
+
+def test_a_text_withdrawn_in_confidence_is_named_nowhere_public_though_its_record_is(
+    surfaces, cleared, tmp_path
+):
+    store, client, headers = surfaces
+    work, _, digest_ = withdrawing(store, cleared, tmp_path)
+    citation = cleared.sources[0].citation
+    root = tmp_path / "releases"
+    from api.release_adapter import LegacyReleases
+
+    before = every_public_answer(store, client, headers, work, citation)
+    made = released(store, root, "2026-11-01")
+    reach = said_of(before | made, VERSION, digest_)
+    assert all(reach.values()), reach
+    history = client.get(f"/api/v1/rights/{work}/history", headers=headers).json()["revisions"]
+    told_revision = client.get(f"/api/v1/rights/{work}", headers=headers).json()["revision"]
+    assert history[0]["record"]["approved_content_hashes"] == [digest_]
+    had = {str(e["event_id"]) for e in events(store)}
+
+    edit(store, lambda c: setattr(rights_of(c, work), "privacy_status", "blocked"))
+
+    after = every_public_answer(store, client, headers, work, citation)
+    assert LegacyReleases(store, root, bulk_text=True).listing() == []  # those bundles held the text
+    after |= released(store, root, "2026-11-02")
+    found = said_of(after, VERSION, digest_)
+    assert not any(found.values()), found
+    assert not [path for path, body in after.items() if PRIVATE.search(body)]
+    # Its one new event names nothing, in every answer; nothing else names the record since.
+    [new] = [e for e in events(store) if str(e["event_id"]) not in had]
+    assert new["event_type"] == "withdrawal"
+    for path, kwargs in (("/site/v1/changes", {}), ("/api/v1/changes", {"headers": headers})):
+        shown = client.get(path, params={"limit": 100}, **kwargs).json()["events"]
+        since = [e for e in shown if e["publication_revision"] >= new["publication_revision"]]
+        assert [e["work"] for e in since] == [None]
+    # The answers read as those of any other text not served: no revision came of it, no hash, no reason.
+    assert client.get(f"/api/v1/rights/{work}/history", headers=headers).json()["revisions"] == [
+        {**r, "record": r["record"] | {"approved_content_hashes": []}} for r in history
+    ]
+    rights = client.get(f"/site/v1/rights/{work}").json()
+    assert rights["revision"] == told_revision and rights["record"]["approved_content_hashes"] == []
+    assert rights["decision"] == {"metadata": True, "full_text": False, "reasons": ["No matching version"]}
+    # Cleared again: the same text, the same rights revision, and the text back in the feed.
+    edit(store, lambda c: setattr(rights_of(c, work), "privacy_status", "cleared"))
+    assert client.get(f"/site/v1/rights/{work}").json()["revision"] == told_revision
+    assert client.get(f"/api/v1/versions/{VERSION}/text", headers=headers).status_code == 200
+
+
+def test_a_withdrawal_for_a_reason_that_may_be_told_is_still_named_to_keyed_callers(surfaces, cleared):
+    """The owner's ruling, 2026-10-22, beside what the tests above take away."""
+    store, client, headers = surfaces
+    store.save(cleared)
+    work = cleared.sources[0].id
+    edit(store, lambda c: setattr(rights_of(c, work), "metadata_public", False))
+    [keyed] = feed_withdrawals(client, "/api/v1/changes", headers=headers)
+    assert keyed["work"] == by_ids(work) and keyed["withdrawal"]["reason_code"] == "rights_changed"
+    assert client.get(f"/api/v1/sources/{work}", headers=headers).json()["code"] == "withdrawn"
+    [plain] = feed_withdrawals(client, "/site/v1/changes")
+    assert plain["work"] is None
+
+
+def test_the_privacy_review_is_in_no_rights_view_or_event(feed, cleared, tmp_path):
+    from api.v1 import create_v1_app
+
+    store, client = feed
+    v1 = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    work = cleared.sources[0].id
+    store.save(cleared)
+    [opened] = of_type(client, "rights_changed")
+    assert "privacy_status" not in opened["changed_fields"]
+    for path in (f"/rights/{work}", f"/rights/{work}/history", f"/sources/{work}/versions"):
+        assert not PRIVATE.search(v1.get(path).text), path
+    # A record no text was ever cleared for: its decision says why, without saying that.
+    other = cleared.sources[1].id
+    reasons = v1.get(f"/rights/{other}").json()["decision"]["reasons"]
+    assert reasons and not any("rivacy" in reason for reason in reasons)
+    # A change to its privacy review alone is no change anyone is told of: no event, no revision.
+    revision = v1.get(f"/rights/{other}").json()["revision"]
+    count = len(events(store))
+    edit(store, lambda c: setattr(rights_of(c, other), "privacy_status", "blocked"))
+    assert len(events(store)) == count and v1.get(f"/rights/{other}").json()["revision"] == revision
+    # And a change to something else in the record says only that.
+    edit(store, lambda c: setattr(rights_of(c, other), "licence", "A later licence"))
+    latest = of_type(client, "rights_changed")[-1]
+    assert latest["changed_fields"] == ["licence"]
+    assert not PRIVATE.search(json.dumps(latest))
+
+
+def test_what_else_a_confidential_write_changed_waits_for_the_records_next_comparison(feed, cleared):
+    store, client = feed
+    work = cleared.sources[0].id
+    store.save(cleared)
+    before = len(events(store))
+
+    def blocked_with_more(corpus):
+        record = rights_of(corpus, work)
+        record.privacy_status = "blocked"
+        record.reviewer = "A later reviewer"
+        next(s for s in corpus.sources if s.id == work).summary = "A later summary."
+
+    edit(store, blocked_with_more)
+    assert [e["event_type"] for e in events(store)[before:]] == ["withdrawal"]
+    with store.engine.begin() as conn:
+        sweep(conn)
+    later = events(store)[before + 1 :]
+    assert sorted(e["event_type"] for e in later) == ["metadata_corrected", "rights_changed"]
+    rights = next(e for e in later if e["event_type"] == "rights_changed")
+    assert rights["payload"]["changed_fields"] == ["reviewer"]
+    assert rights["publication_revision"] > events(store)[before]["publication_revision"]
+
+
+def test_events_recorded_before_are_read_without_the_privacy_review(feed, cleared):
+    from changes.record import _insert, _Recorder, current
+
+    store, client = feed
+    work = cleared.sources[0].id
+    store.save(cleared)
+
+    def recorded(key, changed):
+        with store.engine.begin() as conn:
+            rec = _Recorder(conn)
+            title = current(conn, [work])[work]["projection"]["title"]
+            rec.add(
+                "rights_changed", f"{work}:rights:{key}", work, current(conn, [work])[work], changed=changed,
+                summary=f"The rights record for {title} changed ({', '.join(f.replace('_', ' ') for f in changed)}).",
+                extra={"rights": {"revision": key, "decision": {"metadata": True, "full_text": False,
+                                                                "reasons": ["Privacy review is incomplete"]}}},
+            )  # fmt: skip
+            epoch = conn.scalar(text(f"SELECT epoch FROM {rec.t['feed_state']}"))
+            _insert(rec, conn.scalar(text(f"SELECT {rec.allocate}")), epoch)
+        return of_type(client, "rights_changed")
+
+    alone = recorded(90, ["privacy_status"])
+    assert not any(e["rights"]["revision"] == 90 for e in alone)  # it said nothing else: not told at all
+    mixed = recorded(91, ["licence", "privacy_status"])[-1]
+    assert mixed["changed_fields"] == ["licence"] and mixed["rights"]["decision"]["reasons"] == []
+    assert not PRIVATE.search(json.dumps(mixed)) and mixed["summary"].endswith("changed (licence).")

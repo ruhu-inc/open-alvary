@@ -3,7 +3,9 @@
 from datetime import UTC, datetime
 from typing import Protocol
 
-from schema.models import Corpus, Model, Permission, RightsRecord, RightsStatus
+from schema.models import PRIVACY_CLEARED, Corpus, Model, Permission, RightsRecord, RightsStatus
+
+PRIVACY_REASON = "Privacy review is incomplete"
 
 
 class PublicationVersion(Protocol):
@@ -53,8 +55,8 @@ def decide(
         reasons.append("Review date is in the future")
     if record.expires_at and record.expires_at <= now:
         reasons.append("Rights review has expired")
-    if record.privacy_status not in {"cleared", "redacted"}:
-        reasons.append("Privacy review is incomplete")
+    if record.privacy_status not in PRIVACY_CLEARED:
+        reasons.append(PRIVACY_REASON)
     if record.attribution_required is None or (record.attribution_required and not record.attribution_text):
         reasons.append("Attribution obligations are unresolved")
     conditional = (
@@ -80,6 +82,22 @@ def decide(
     return Decision(metadata=metadata, full_text=not reasons, reasons=reasons)
 
 
+def told_decision(decision: Decision) -> Decision:
+    """A decision as anyone is told it. Where a record's privacy review stands is never said: a text
+    withdrawn for privacy names nothing (changes.record), so it must read as any other text not served."""
+    return decision.model_copy(update={"reasons": [r for r in decision.reasons if r != PRIVACY_REASON]})
+
+
+def told_rights(record: RightsRecord) -> dict:
+    """A rights record as anyone outside Open Alvary is told it, in releases as in the API
+    (schema.public.RightsViewRecord): never its privacy review, and the texts it covers only while that
+    review clears them."""
+    row = record.model_dump(mode="json", exclude={"privacy_status"})
+    if record.privacy_status not in PRIVACY_CLEARED:
+        row["approved_content_hashes"] = []
+    return row
+
+
 def public_corpus(corpus: Corpus, *, metadata_only: bool = False) -> Corpus:
     # Revalidate mutable inputs before crossing a publication boundary.
     corpus = Corpus.model_validate(corpus.model_dump(mode="json"))
@@ -91,6 +109,11 @@ def public_corpus(corpus: Corpus, *, metadata_only: bool = False) -> Corpus:
         if not metadata_only and v.source_id in source_ids and decide(rights.get(v.source_id), v).full_text
     ]
     version_ids = {v.id for v in versions}
+    # A text whose earlier version is no longer public names none here, so what is released stands alone.
+    versions = [
+        v.model_copy(update={"prior_version_id": None}) if v.prior_version_id not in version_ids else v
+        for v in versions
+    ]
     nodes = [n for n in corpus.structure if n.version_id in version_ids]
     node_ids = {n.id for n in nodes}
     sources = [s for s in corpus.sources if s.id in source_ids]

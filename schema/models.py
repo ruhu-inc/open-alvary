@@ -63,6 +63,10 @@ class Language(Model):
     tag: Nonempty  # BCP 47, e.g. en, fr, sw, ha-Latn
 
 
+# The privacy review's states under which a text may be public.
+PRIVACY_CLEARED = ("cleared", "redacted")
+
+
 class RightsRecord(Model):
     id: ID
     source_id: ID

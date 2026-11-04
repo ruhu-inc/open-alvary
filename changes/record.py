@@ -20,6 +20,13 @@ decision, 2026-10-22): ``rights_changed`` when the same write changed its rights
 longer public; nothing otherwise, a confidential withdrawal that is never named (the operator marked it
 confidential, its privacy review is blocked, or nothing recorded says why). changes.feed names the first
 by its IDs to keyed callers; the second stays as every whole-record withdrawal was before.
+
+A confidential withdrawal discloses nothing further. A record's privacy review is in no event and no
+rights revision: a change to it alone is not a revision, and while it does not clear a record's texts
+neither are the texts its rights record covers. A write that withdraws a text for a confidential reason,
+its record staying public, announces nothing else of that record: what else the write changed waits for
+the record's next comparison (``_withdrawn_in_confidence``), and so never shares a publication revision
+with the withdrawal that names nothing.
 """
 
 import hashlib
@@ -34,7 +41,7 @@ from sqlalchemy.engine import Connection
 from api.repositories import LegacyRepository
 from api.store import tables
 from rights.database import PolicyNamespace
-from rights.policy import decide
+from rights.policy import PRIVACY_CLEARED, decide, told_decision
 from schema.dates import UncertainDate
 from schema.public import RightsViewRecord
 
@@ -59,7 +66,8 @@ PUBLIC_FIELDS = (
 # within a version, and consumers ignore what they do not know (SUB-02).
 SCHEMA_VERSION = "change-event-1"
 # A rights record's fields, as GET /rights/{id} serves them: what a rights_changed event names as changed.
-RIGHTS_FIELDS = tuple(RightsViewRecord.model_fields)
+RIGHTS_FIELDS = tuple(name for name, spec in RightsViewRecord.model_fields.items() if not spec.exclude)
+TEXTS_COVERED = "approved_content_hashes"
 # The events about a record that carry the revision of its rights record in force after the change they
 # announce (OA-R1), as rights_revision. Recorded on catalogue_added, metadata_corrected and rights_changed
 # from G15 on; events recorded before then carry it only on text_version_published and withdrawal.
@@ -72,8 +80,6 @@ WITH_RIGHTS_REVISION = (
 # its record's privacy review is recorded with the reason `privacy` and is confidential even while the
 # record stays public (owner decision, 2026-10-22).
 DISCLOSED_REASONS = ("rights_changed", "correction")
-# The privacy review's states under which a text may be public (rights.policy.decide).
-PRIVACY_CLEARED = ("cleared", "redacted")
 # A correction may show a field's previous value only where it can never have been withheld (SUB C1).
 SAFE_PREVIOUS = ("legal_status", "rights_status", "document_type", "year")
 # Checked links between works that change what law applies (legal_effect_recorded): the effect, and
@@ -196,6 +202,8 @@ class _Recorder:
         self.events: list[dict] = []
         self.rights_revision: dict[str, int] = {}  # work -> the rights revision in force after this write
         self.revised: set[str] = set()  # works whose rights record this write changed (a new revision)
+        # Works that stay public with a text withdrawn in confidence by this write.
+        self.hushed: set[str] = set()
 
     def next_revision(self, event_type, key):
         planned = sum(
@@ -313,6 +321,7 @@ def publish(
         ).mappings()
     }
     scope = set(now) | set(previous) if work_ids is None else set(work_ids)
+    rec.hushed = _withdrawn_in_confidence(rec, now, previous)
     revisions = _rights_revisions(rec, scope)
     if state["baselined"]:
         for work_id in sorted(scope):
@@ -427,9 +436,39 @@ def withhold(conn: Connection, work_id: str) -> int:
     return 1
 
 
+def _withdrawn_in_confidence(rec: _Recorder, now: dict, previous: dict) -> set[str]:
+    """The works that stay public while this write withdraws a text of theirs for a reason that must not
+    be told: the operator's, or a privacy review that no longer clears it (_withdrawn_because)."""
+    rights = tables["rights"]
+    found = set()
+    for work_id, facts in now.items():
+        before = previous.get(work_id)
+        if (
+            before is None
+            or not before["visible"]
+            or not set(before["readable_versions"]) - set(facts["versions"])
+        ):
+            continue
+        record = rec.conn.scalar(select(rights.c.payload).where(rights.c.source_id == work_id)) or {}
+        if work_id in rec.confidential or record.get("privacy_status") not in PRIVACY_CLEARED:
+            found.add(work_id)
+    return found
+
+
+def _rights_changes(record: dict, before: dict | None) -> list[str]:
+    """The fields anyone may be told changed between two forms of a rights record (all, for its first):
+    never its privacy review, nor, while that does not clear its texts, the texts it covers."""
+    fields = [
+        f for f in RIGHTS_FIELDS if f != TEXTS_COVERED or record.get("privacy_status") in PRIVACY_CLEARED
+    ]
+    return [f for f in fields if before is None or record.get(f) != before.get(f)]
+
+
 def _rights_revisions(rec: _Recorder, scope) -> list[dict]:
-    """The works whose rights record differs from its last recorded revision, each with its next
-    revision; and, in rec.rights_revision, the revision in force for every work in scope (OA-R1)."""
+    """The works whose rights record differs, in what anyone may be told of it, from its last recorded
+    revision, each with its next revision; and, in rec.rights_revision, the revision in force for every
+    work in scope (OA-R1). A record with a text withdrawn in confidence by this write has no new revision
+    now: its next comparison finds what else changed."""
     table = rec.t["rights_revision"]
     if not scope or rec.conn.scalar(text("SELECT to_regclass(:t)"), {"t": table}) is None:
         return []  # a database before migration 0029 keeps no rights history
@@ -451,7 +490,11 @@ def _rights_revisions(rec: _Recorder, scope) -> list[dict]:
     ):
         record_hash = digest(row.payload)
         number, held, before = latest.get(row.source_id, (0, None, None))
-        if held == record_hash:
+        if (
+            held == record_hash
+            or row.source_id in rec.hushed
+            or (before is not None and not _rights_changes(row.payload, before))
+        ):
             rec.rights_revision[row.source_id] = number
             continue
         rec.rights_revision[row.source_id] = number + 1
@@ -492,7 +535,7 @@ def _rights_changed(rec: _Recorder, item: dict, now: dict | None) -> None:
     if now is None:
         return
     work_id, record, before = item["work_id"], item["record"], item["previous"]
-    changed = [f for f in RIGHTS_FIELDS if before is None or record.get(f) != before.get(f)]
+    changed = _rights_changes(record, before)
     title = now["projection"].get("title")
     rec.add(
         "rights_changed",
@@ -500,11 +543,15 @@ def _rights_changed(rec: _Recorder, item: dict, now: dict | None) -> None:
         work_id,
         now,
         changed=changed,
-        summary=f"The rights record for {title} changed ({', '.join(f.replace('_', ' ') for f in changed)})."
+        summary=rights_summary(title, changed)
         if before is not None
         else f"The rights record for {title} was recorded.",
         extra={"rights": {"revision": item["revision"], "decision": _decision(rec.conn, work_id)}},
     )
+
+
+def rights_summary(title, changed: list[str]) -> str:
+    return f"The rights record for {title} changed ({', '.join(f.replace('_', ' ') for f in changed)})."
 
 
 def _decision(conn: Connection, work_id: str) -> dict:
@@ -514,7 +561,7 @@ def _decision(conn: Connection, work_id: str) -> dict:
     source, rights = repository.source(work_id)
     gates = repository.version_gates(source.id, rights.approved_content_hashes)
     readable = next((gate for gate in gates if decide(rights, gate, now=now).full_text), None)
-    return decide(rights, readable, now=now).model_dump(mode="json")
+    return told_decision(decide(rights, readable, now=now)).model_dump(mode="json")
 
 
 def _as_public(rec: _Recorder, known: dict, work_id: str) -> dict:
@@ -1311,7 +1358,7 @@ def _compare(rec: _Recorder, work_id: str, now: dict | None, before) -> None:
             else None,
         )
         return
-    if digest(now["projection"]) != before["projection_hash"]:
+    if work_id not in rec.hushed and digest(now["projection"]) != before["projection_hash"]:
         # Each correction of a record is a new event, keyed by the projection it leaves, never the next
         # revision of an earlier one (G15): an earlier correction stays true, and a revision with
         # `supersedes` means the earlier one is replaced. As revisions, GET /changes/{event_id} (the latest
@@ -1345,7 +1392,9 @@ def _compare(rec: _Recorder, work_id: str, now: dict | None, before) -> None:
             summary=f"A text version of {title} was withdrawn. Stop serving copies of it.",
             withdrawal={
                 "action": "stop_serving",
-                "reason_code": _withdrawn_because(rec.conn, work_id, version_id),
+                "reason_code": "privacy"
+                if work_id in rec.hushed
+                else _withdrawn_because(rec.conn, work_id, version_id),
             },
         )
 
@@ -1353,9 +1402,9 @@ def _compare(rec: _Recorder, work_id: str, now: dict | None, before) -> None:
 def _text(rec, work_id, now, version_id, facts, *, first):
     title = now["projection"].get("title")
     versions = tables["versions"]
-    retrieved = (rec.conn.scalar(select(versions.c.payload).where(versions.c.id == version_id)) or {}).get(
-        "retrieved_at"
-    )
+    payload = rec.conn.scalar(select(versions.c.payload).where(versions.c.id == version_id)) or {}
+    # A text that names the one it replaces is no first text, whether or not that one is still public.
+    first = first and not payload.get("prior_version_id")
     rec.add(
         "text_version_published",
         version_id,
@@ -1364,7 +1413,8 @@ def _text(rec, work_id, now, version_id, facts, *, first):
         version={"id": version_id, **facts},
         reason="first_text" if first else _reason(rec, version_id),
         extra={"version_diff": diff} if (diff := _version_diff(rec.conn, version_id)) else None,
-        observed_at=retrieved,  # when the official file this text was read from was retrieved
+        # When the official file this text was read from was retrieved.
+        observed_at=payload.get("retrieved_at"),
         summary=f"The text of {title} is now available."
         if first
         else f"A new text version of {title} was published.",
@@ -1394,7 +1444,8 @@ def change_reason(version: dict | None, prior: dict | None) -> str:
 def _remember(rec: _Recorder, work_id: str, now: dict | None, before) -> None:
     if now is None and before is None:
         return
-    projection = now["projection"] if now else before["projection"]
+    # A record with a text withdrawn in confidence keeps its last announced form until its next comparison.
+    projection = now["projection"] if now and work_id not in rec.hushed else before["projection"]
     rec.conn.execute(
         text(
             f"INSERT INTO {rec.t['published_state']} (work_id, jurisdiction_id, visible, projection, projection_hash,"
