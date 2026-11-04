@@ -2,22 +2,22 @@
 
 A tool gets only the environment it needs, so a database URL, a sign-in secret or a mail key set for this
 process does not reach it, and no open file or socket. It gets a time limit, and limits on memory, processor
-time and the size of what it writes, so that one bad file fails rather than taking the instance with it.
+time and the size of what it writes, so that one bad file fails rather than taking the instance with it. What
+it prints goes to a file, not a pipe, so that limit covers it too and none of it waits in this process's memory.
 
 The limits are set by a small interpreter that then becomes the tool (exec). `preexec_fn` would be the
 direct way, but these processes run threads (a web server's, or a job's pool), and Python code between
 fork and exec can deadlock the child when they do.
 
-This is damage limitation, not a sandbox. A tool taken over by a crafted file still runs as this user with
-this network: it can read /proc/<parent>/environ and the files this user can read, and ask the metadata
-server for this service account's token. Only a process that holds no secrets, on no outbound network,
-closes that.
+This limits damage; it does not isolate. A tool still runs as this user on this network, and a separate
+service holding no secrets, with no outbound network, would isolate it further.
 """
 
 import os
 import shutil
 import subprocess
 import sys
+import tempfile
 
 GIB = 1024**3
 MIB = 1024**2
@@ -57,11 +57,13 @@ def run_tool(
     written: int = 256 * MIB,
     check: bool = False,
     extra_env: dict[str, str] | None = None,
-    **options,
+    capture_output: bool = False,
+    text: bool = False,
 ) -> subprocess.CompletedProcess:
     """`subprocess.run` for a tool reading an outside file: see the module's notes. Processor time is
     limited to the time limit, which a single-threaded tool cannot exceed. `memory=None` runs it with no
-    limits at all but the time limit, for a tool that maps more than it uses (a model's weights)."""
+    limits at all but the time limit, for a tool that maps more than it uses (a model's weights); even then,
+    no more of what it prints than `written` is read back."""
     env = minimal_environment(extra_env)
     wrapped = command
     if memory is not None:
@@ -70,13 +72,22 @@ def run_tool(
             raise FileNotFoundError(command[0])
         limits = (str(memory), str(int(timeout)), str(written))
         wrapped = [sys.executable, "-I", "-S", "-c", BECOME, *limits, *command]
-    try:
-        completed = subprocess.run(
-            wrapped, env=env, timeout=timeout, stdin=subprocess.DEVNULL, check=False, **options
-        )
-    except subprocess.TimeoutExpired as expired:
-        expired.cmd = command  # what ran, as it would be written
-        raise
-    if check and completed.returncode != 0:
-        raise subprocess.CalledProcessError(completed.returncode, command, completed.stdout, completed.stderr)
-    return completed
+    with tempfile.TemporaryFile() as out, tempfile.TemporaryFile() as err:
+        streams = {"stdout": out, "stderr": err} if capture_output else {}
+        try:
+            finished = subprocess.run(
+                wrapped, env=env, timeout=timeout, stdin=subprocess.DEVNULL, check=False, **streams
+            )
+        except subprocess.TimeoutExpired as expired:
+            expired.cmd = command  # what ran, as it would be written
+            raise
+        printed = [_read(out, written, text), _read(err, written, text)] if capture_output else [None, None]
+    if check and finished.returncode != 0:
+        raise subprocess.CalledProcessError(finished.returncode, command, *printed)
+    return subprocess.CompletedProcess(command, finished.returncode, *printed)
+
+
+def _read(stream, limit: int, text: bool) -> str | bytes:
+    stream.seek(0)
+    data = stream.read(limit)
+    return data.decode("utf-8", "replace") if text else data
