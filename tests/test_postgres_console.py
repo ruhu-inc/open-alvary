@@ -2,6 +2,7 @@
 
 import base64
 import json
+import threading
 import time
 from datetime import timedelta
 from urllib.parse import parse_qs, urlparse
@@ -14,8 +15,8 @@ from sqlalchemy import text
 from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
 
-from accounts import keys, mail, policies
-from accounts.store import TIERS, Accounts
+from accounts import keys, mail, policies, store
+from accounts.store import TIERS, AccountError, Accounts
 from api.console import ConsoleConfig, Provider, create_console_app
 from api.store import Store, seed
 from changes.watches import Watches
@@ -1036,3 +1037,220 @@ def test_changes_that_are_not_sensitive_stay_free_of_a_step_up(console, monkeypa
         f"{org}/webhooks/{endpoint}", headers=headers, json={"url": "https://other.example.org/in"}
     )
     assert moved.status_code == 200
+
+
+# ---------- mail a request can cause ----------
+ASK = {"purpose": "Research", "expected_volume": "Some", "contact_name": "A"}
+
+
+def mailing(console):
+    accounts, fake, _ = console
+    mailer = RecordingMailer()
+    app = create_console_app(accounts, app_provider(fake), mailer=mailer)
+    browser = client(app)
+    organisation, headers, _ = onboard(browser, fake)
+    mailer.sent.clear()
+    return accounts, fake, app, mailer, browser, organisation, headers
+
+
+def invite_and_revoke(browser, organisation, headers, email):
+    path = f"/api/v1/organisations/{organisation}/invitations"
+    made = browser.post(path, headers=headers, json={"email": email, "role": "developer"})
+    if made.status_code == 201:
+        assert browser.delete(f"{path}/{made.json()['id']}", headers=headers).status_code == 204
+    return made
+
+
+def request_and_withdraw(browser, organisation, headers, email):
+    path = f"/api/v1/organisations/{organisation}/access-requests"
+    made = browser.post(path, headers=headers, json=ASK | {"contact_email": email})
+    if made.status_code == 201:
+        assert browser.post(f"{path}/{made.json()['id']}/withdraw", headers=headers).status_code == 204
+    return made
+
+
+def assert_limited(answer):
+    assert answer.status_code == 429
+    error = answer.json()["error"]
+    assert error["code"] == "rate_limited" and error["message"] and error["request_id"]
+    wait = int(answer.headers["retry-after"])
+    assert error["retry_after_seconds"] == wait and 0 < wait <= 86400
+    assert answer.headers["cache-control"] == "no-store"
+    return wait
+
+
+def test_one_address_gets_a_limited_number_of_invitations_however_it_is_written_or_revoked(console):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    for _ in range(store.MAILS_PER_ADDRESS):
+        assert invite_and_revoke(browser, organisation, headers, "guest@gmail.com").status_code == 201
+    sent = len(mailer.sent)
+    assert sent == store.MAILS_PER_ADDRESS
+    for same in ("guest@gmail.com", "GUEST@gmail.com", "guest+x@gmail.com", "g.u.e.s.t@googlemail.com"):
+        assert_limited(invite_and_revoke(browser, organisation, headers, same))
+    assert len(mailer.sent) == sent
+    # Another organisation shares the same allowance for that address.
+    second = browser.post("/api/v1/organisations", headers=headers, json={"name": "Second"}).json()["id"]
+    assert_limited(invite_and_revoke(browser, second, headers, "guest@gmail.com"))
+    with accounts.engine.connect() as conn:
+        rows = conn.scalar(text(f"SELECT count(*) FROM {accounts._t(conn, 'invitation')}"))
+    assert rows == store.MAILS_PER_ADDRESS
+    assert invite_and_revoke(browser, organisation, headers, "someone.else@gmail.com").status_code == 201
+
+
+def test_invitations_and_requests_to_one_address_count_together(console):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    for _ in range(store.REQUESTS_PER_ORGANISATION):
+        assert request_and_withdraw(browser, organisation, headers, "c@example.org").status_code == 201
+    while invite_and_revoke(browser, organisation, headers, "c@example.org").status_code == 201:
+        pass
+    with accounts.engine.connect() as conn:
+        invited = conn.scalar(text(f"SELECT count(*) FROM {accounts._t(conn, 'invitation')}"))
+    assert invited + store.REQUESTS_PER_ORGANISATION == store.MAILS_PER_ADDRESS
+
+
+def test_the_limits_roll_with_the_day_and_retry_after_says_when_room_returns(console, monkeypatch):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    monkeypatch.setattr(store, "INVITATIONS_PER_ORGANISATION", 2)
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(f"UPDATE {accounts._t(conn, 'organisation')} SET invitation_limit = 1 WHERE id = :o"),
+            {"o": organisation},
+        )
+    assert invite_and_revoke(browser, organisation, headers, "a@example.org").status_code == 201
+    assert invite_and_revoke(browser, organisation, headers, "b@example.org").status_code == 201
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(
+                f"UPDATE {accounts._t(conn, 'invitation')} SET created_at = created_at - interval '23 hours'"
+                " WHERE email = 'a@example.org'"
+            )
+        )
+    wait = assert_limited(invite_and_revoke(browser, organisation, headers, "c@example.org"))
+    assert 3500 < wait <= 3600
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(
+                f"UPDATE {accounts._t(conn, 'invitation')} SET created_at = created_at - interval '2 hours'"
+                " WHERE email = 'a@example.org'"
+            )
+        )
+    assert invite_and_revoke(browser, organisation, headers, "c@example.org").status_code == 201
+
+
+def test_withdrawing_a_request_does_not_give_its_mail_back(console):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    for number in range(store.REQUESTS_PER_ORGANISATION):
+        made = request_and_withdraw(browser, organisation, headers, f"contact{number}@example.org")
+        assert made.status_code == 201
+    sent = len(mailer.sent)
+    assert sent == 2 * store.REQUESTS_PER_ORGANISATION  # the contact and the operator
+    assert_limited(request_and_withdraw(browser, organisation, headers, "another@example.org"))
+    assert len(mailer.sent) == sent
+    with accounts.engine.connect() as conn:
+        requests = conn.scalar(text(f"SELECT count(*) FROM {accounts._t(conn, 'access_request')}"))
+    assert requests == store.REQUESTS_PER_ORGANISATION
+
+
+def test_a_new_organisation_does_not_start_a_persons_mail_again(console):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    for number in range(store.MAILS_PER_CREATOR):
+        made = browser.post("/api/v1/organisations", headers=headers, json={"name": f"Org {number}"}).json()
+        assert invite_and_revoke(browser, made["id"], headers, f"a{number}@example.org").status_code == 201
+        assert browser.delete(f"/api/v1/organisations/{made['id']}", headers=headers).status_code == 204
+    made = browser.post("/api/v1/organisations", headers=headers, json={"name": "Last"}).json()
+    assert_limited(invite_and_revoke(browser, made["id"], headers, "last@example.org"))
+
+
+def test_an_organisation_the_operator_gave_more_invitations_keeps_them(console, monkeypatch):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    monkeypatch.setattr(store, "INVITATIONS_PER_ORGANISATION", 1)
+    monkeypatch.setattr(store, "MAILS_PER_CREATOR", 1)
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(f"UPDATE {accounts._t(conn, 'organisation')} SET invitation_limit = 2 WHERE id = :o"),
+            {"o": organisation},
+        )
+    assert invite_and_revoke(browser, organisation, headers, "a@example.org").status_code == 201
+    assert invite_and_revoke(browser, organisation, headers, "b@example.org").status_code == 201
+    assert_limited(invite_and_revoke(browser, organisation, headers, "c@example.org"))
+
+
+def test_the_limits_hold_when_requests_arrive_together(console, monkeypatch):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    monkeypatch.setattr(store, "MAILS_PER_ADDRESS", 1)
+    person = browser.get("/api/v1/me").json()["person"]["id"]
+    organisations = [
+        browser.post("/api/v1/organisations", headers=headers, json={"name": f"Org {n}"}).json()["id"]
+        for n in range(4)
+    ]
+    outcomes = []
+
+    def attempt(organisation_id):
+        try:
+            accounts.invite(person, organisation_id, "same@example.org", "developer")
+            outcomes.append("sent")
+        except AccountError as refused:
+            outcomes.append(refused.code)
+
+    threads = [threading.Thread(target=attempt, args=(o,)) for o in organisations]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert sorted(outcomes) == ["rate_limited"] * 3 + ["sent"]
+
+
+def test_an_organisation_name_that_looks_like_a_link_stays_out_of_mail_to_others(console):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    revision = browser.get(f"/api/v1/organisations/{organisation}").json()["revision"]
+    renamed = browser.patch(
+        f"/api/v1/organisations/{organisation}",
+        headers=headers,
+        json={"revision": revision, "name": "Claim your refund at refund-now.example today"},
+    )
+    assert renamed.status_code == 204
+    named = browser.patch("/api/v1/me", headers=headers, json={"display_name": "See www.x.example"})
+    assert named.status_code == 204
+    invited = browser.post(
+        f"/api/v1/organisations/{organisation}/invitations",
+        headers=headers,
+        json={"email": "guest@example.org", "role": "developer"},
+    )
+    assert invited.status_code == 201
+    asked = browser.post(
+        f"/api/v1/organisations/{organisation}/access-requests",
+        headers=headers,
+        json=ASK | {"contact_email": "contact@example.org"},
+    )
+    assert asked.status_code == 201
+    invitation, received, operator = mailer.sent
+    for message in (invitation, received, operator):
+        assert "refund-now" not in message.subject + message.text and "www.x" not in message.text
+    assert "Someone invited you to join an organisation on Open Alvary" in invitation.text
+    assert "the request for your organisation" in received.text
+    assert browser.get(f"/api/v1/organisations/{organisation}").json()["name"].startswith("Claim")
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "a@b@example.org",
+        "two words@example.org",
+        "a@example.org, b@example.org",
+        "x\ny@example.org",
+        "<a>@example.org",
+    ],
+)
+def test_an_invitation_or_request_goes_to_one_plain_address(console, address):
+    accounts, fake, _, mailer, browser, organisation, headers = mailing(console)
+    invited = browser.post(
+        f"/api/v1/organisations/{organisation}/invitations",
+        headers=headers,
+        json={"email": address, "role": "developer"},
+    )
+    asked = browser.post(
+        f"/api/v1/organisations/{organisation}/access-requests",
+        headers=headers,
+        json=ASK | {"contact_email": address},
+    )
+    assert invited.status_code == 400 and asked.status_code == 400 and mailer.sent == []

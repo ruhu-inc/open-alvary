@@ -6,6 +6,7 @@ invariants the database itself guards (last owner, access periods, append-only l
 
 import hashlib
 import json
+import math
 import re
 import secrets
 from dataclasses import dataclass
@@ -40,15 +41,20 @@ IDLE_DAYS = 7
 ORGANISATIONS_PER_PERSON = 5
 PERSONAL_KEYS_PER_MEMBER = 10
 SERVICE_KEYS_PER_ORGANISATION = 20
+# Mail a request can send to someone else, over a rolling day (Accounts._within_mail_limits).
+INVITATIONS_PER_ORGANISATION = 30
+REQUESTS_PER_ORGANISATION = 3
+MAILS_PER_CREATOR = 40
+MAILS_PER_ADDRESS = 5
 KINDS = ("individual", "company", "academic", "non_profit", "government", "other")
 
 
 class AccountError(Exception):
     """A refusal the console shows: a stable code, an HTTP status and what to do."""
 
-    def __init__(self, code: str, status: int, message: str):
+    def __init__(self, code: str, status: int, message: str, retry_after: int | None = None):
         super().__init__(message)
-        self.code, self.status, self.message = code, status, message
+        self.code, self.status, self.message, self.retry_after = code, status, message, retry_after
 
 
 @dataclass(frozen=True)
@@ -60,16 +66,33 @@ class Context:
     request_id: str | None = None
 
 
+EMAIL_LOCAL = re.compile(r"[^\s@<>\"(),:;\[\]\\]{1,64}")
+EMAIL_DOMAIN = re.compile(r"[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z0-9-]{2,63}")
+
+
 def canonical_email(value: str) -> str:
-    """ACS-02: trim; IDNA and lower-case the domain; keep the local part exactly."""
+    """ACS-02: trim; IDNA and lower-case the domain; keep the local part exactly. One plain address
+    only: mail goes to what this returns, and an invitation repeats it to the person it reaches."""
     value = (value or "").strip()
     local, at, domain = value.rpartition("@")
-    if not at or not local or not domain:
+    if not at or not EMAIL_LOCAL.fullmatch(local) or not local.isprintable():
         raise AccountError("invalid_input", 400, "Enter a valid email address.")
     try:
         domain = domain.encode("idna").decode("ascii").lower()
     except UnicodeError as error:
         raise AccountError("invalid_input", 400, "Enter a valid email address.") from error
+    if len(domain) > 253 or not EMAIL_DOMAIN.fullmatch(domain):
+        raise AccountError("invalid_input", 400, "Enter a valid email address.")
+    return f"{local}@{domain}"
+
+
+def mailbox(email: str) -> str:
+    """The mailbox an address reaches, for counting what goes to it: letter case and a +tag make no new
+    one, nor do dots or the older domain name at the provider that ignores them."""
+    local, _, domain = email.lower().rpartition("@")
+    local = local.split("+", 1)[0]
+    if domain in ("gmail.com", "googlemail.com"):
+        return local.replace(".", "") + "@gmail.com"
     return f"{local}@{domain}"
 
 
@@ -158,6 +181,51 @@ class Accounts:
     def _require(self, membership: dict, action: str) -> None:
         if not roles.can(membership["role"], action):
             raise AccountError("role_forbidden", 403, "Your role in this organisation does not allow this.")
+
+    def _within_mail_limits(
+        self, conn: Connection, person_id: str, organisation_id: str, address: str, kind: str, allowed: int
+    ) -> None:
+        """Refuses an invitation or access request that would send too much mail over a rolling day:
+        ``allowed`` of this kind from the organisation, MAILS_PER_CREATOR from all the organisations this
+        person created, MAILS_PER_ADDRESS to one mailbox from anywhere. The counts come from the rows
+        themselves, which revoking, withdrawing or deleting an organisation leaves in place for longer
+        than the window, so no new record of an address is kept. The caller holds the organisation's
+        row; these locks settle the counts that cross organisations."""
+        box = mailbox(address)
+        for key in (f"mail-person:{person_id}", f"mail-address:{box}"):
+            conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"), {"k": key})
+        sent = conn.execute(
+            text(
+                "SELECT s.kind, s.address, s.organisation_id, o.created_by,"
+                " EXTRACT(EPOCH FROM s.at + interval '1 day' - statement_timestamp()) AS frees_in FROM ("
+                "SELECT 'invitation' AS kind, email AS address, organisation_id, created_at AS at"
+                f" FROM {self._t(conn, 'invitation')}"
+                " WHERE created_at > statement_timestamp() - interval '1 day' UNION ALL"
+                " SELECT 'request', contact_email, organisation_id, created_at"
+                f" FROM {self._t(conn, 'access_request')}"
+                " WHERE created_at > statement_timestamp() - interval '1 day'"
+                f") s JOIN {self._t(conn, 'organisation')} o ON o.id = s.organisation_id"
+            )
+        ).all()
+        waits = []
+        for counted, limit in (
+            ([r for r in sent if r.organisation_id == organisation_id and r.kind == kind], allowed),
+            ([r for r in sent if r.created_by == person_id], max(MAILS_PER_CREATOR, allowed)),
+            ([r for r in sent if mailbox(r.address) == box], MAILS_PER_ADDRESS),
+        ):
+            if len(counted) >= limit:
+                # Room returns once enough of the oldest have left the window.
+                waits.append(sorted(float(r.frees_in) for r in counted)[len(counted) - limit])
+        if waits:
+            wait = max(1, math.ceil(max(waits)))
+            hours = math.ceil(wait / 3600)
+            raise AccountError(
+                "rate_limited",
+                429,
+                f"Too many emails have gone out for this recently. Try again in about {hours}"
+                f" hour{'' if hours == 1 else 's'}, or contact us if you need more.",
+                retry_after=wait,
+            )
 
     def access(self, organisation_id: str, conn: Connection | None = None) -> dict:
         if conn is None:
@@ -927,6 +995,9 @@ class Accounts:
                 raise AccountError("invalid_input", 400, "Choose one of the published plans.")
             if plan is not None:
                 scope = self._plan_scope(conn, plan, scope)
+            self._within_mail_limits(
+                conn, person_id, organisation_id, contact_email, "request", REQUESTS_PER_ORGANISATION
+            )
             request_id = new_id("wrq")
             try:
                 conn.execute(
@@ -1768,6 +1839,15 @@ class Accounts:
                 raise AccountError(
                     "limit_reached", 409, "This organisation has reached its member or invitation limit."
                 )
+            self._within_mail_limits(
+                conn,
+                person_id,
+                organisation_id,
+                email,
+                "invitation",
+                # An organisation the operator gave more invitations (MAC-03) may send them in a day.
+                max(INVITATIONS_PER_ORGANISATION, counts["invitation_limit"]),
+            )
             conn.execute(
                 text(
                     f"UPDATE {self._t(conn, 'invitation')} SET state = 'expired', ended_at = statement_timestamp()"

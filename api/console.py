@@ -314,7 +314,11 @@ def create_console_app(
 
     @app.exception_handler(AccountError)
     async def account_error(request: Request, exc: AccountError):
-        return error(request, exc.status, exc.code, exc.message)
+        if exc.retry_after is None:
+            return error(request, exc.status, exc.code, exc.message)
+        answer = error(request, exc.status, exc.code, exc.message, retry_after_seconds=exc.retry_after)
+        answer.headers["Retry-After"] = str(exc.retry_after)
+        return answer
 
     # ---------- sign-in ----------
     @app.get("/auth/start")
