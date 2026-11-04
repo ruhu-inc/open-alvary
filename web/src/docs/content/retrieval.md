@@ -245,7 +245,7 @@ Each result has the item's `index` and one `result`:
 | `result` | Means | What to do |
 |---|---|---|
 | `unchanged` | The part is still published, and its words hash to your `span_hash`. | Show it. |
-| `newer_version` | A later text of the same edition exists. `newer_version_id` is that text, `newer_anchor_id` the same part in it (absent when the later text has no such part), and `same_words` whether its words are the same. | When `same_words` is false, get the part again from `newer_anchor_id` before you quote it. |
+| `newer_version` | A later text of the same edition exists. `newer_version_id` is that text, `newer_anchor_id` the same part in it (absent when the later text has no such part), and `same_words` whether its words are the same. A text corrected by a later reading of the same official file answers this too, though it can no longer be read. | When `same_words` is false, get the part again from `newer_anchor_id` before you quote it. |
 | `span_mismatch` | The part is published, but its words don't hash to the `span_hash` you sent: your copy isn't these words. | Get the part again from its anchor; don't quote your copy. |
 | `unavailable` | The part is not public now. A part that never was gets the same answer. | Remove it from the answer. |
 | `withdrawn` | With a key only: the part's text was public and was withdrawn because its rights record changed or lapsed or its approval was withdrawn. A part withdrawn for a confidential reason is `unavailable`. | Remove it from the answer, and stop serving every copy of that text. |

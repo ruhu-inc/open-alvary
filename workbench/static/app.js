@@ -253,7 +253,7 @@ const TYPE_LABEL = {
   ruling: "Ruling",
 };
 // A document's place in public view, in the list (workbench/publishing.py: short).
-const PUBLICATION_PILL = { public: ["ok", "public"], next_run: ["medium", "public at next run"], blocked: ["warn", "not publishable"], taken_down_next: ["warn", "comes down at next run"] };
+const PUBLICATION_PILL = { public: ["ok", "public"], next_run: ["medium", "public at next run"], blocked: ["warn", "not publishable"], taken_down_next: ["warn", "comes down at next run"], text_withdrawn: ["warn", "text withdrawn"] };
 const ACTION_LABEL = { page_saved: "saved", details_saved: "saved the details of", act_approved: "approved", act_revoked: "revoked approval of", signed_in: "signed in", signed_out: "signed out", operator_saved: "updated operator", sign_in_refused: "was refused sign-in" };
 
 const STATUS_CLASS = { "Approved": "ok", "Approval out of date": "warn", "Ready for approval": "ok", "Not started": "medium", "In review": "medium" };
@@ -506,8 +506,8 @@ function standingPanel(standing) {
 // Where the document stands in public view: published, waiting for the next run, or why not.
 function publicationLine(where, { link = true } = {}) {
   if (!where || where.state === "not_approved") return null;
-  const tone = { public: "ok", next_run: "medium", blocked: "warn", taken_down_next: "warn", taken_down: "warn" }[where.state] || "medium";
-  const label = { public: "Public", next_run: "Next run", blocked: "Not publishable", taken_down_next: "Comes down", taken_down: "Taken down" }[where.state] || where.state;
+  const tone = { public: "ok", next_run: "medium", blocked: "warn", taken_down_next: "warn", taken_down: "warn", text_withdrawn: "warn" }[where.state] || "medium";
+  const label = { public: "Public", next_run: "Next run", blocked: "Not publishable", taken_down_next: "Comes down", taken_down: "Taken down", text_withdrawn: "Text withdrawn" }[where.state] || where.state;
   return el("div", { class: "publication-line" },
     pill(tone, label), " ", el("span", { text: where.words }),
     where.text ? el("div", { class: "muted small", text: where.text }) : null,
@@ -2478,19 +2478,22 @@ const RUN_STATUS = { requested: ["medium", "waiting to start"], running: ["mediu
 function runWords(run) {
   const parts = [];
   for (const [code, country] of Object.entries((run.summary || {}).countries || {})) {
-    if (country.blocked) { parts.push(`${code.toUpperCase()}: not published (no country decision)`); continue; }
     const r = country.records || {}, t = country.texts || {};
     const n = (count, one, many) => `${count} ${count === 1 ? one : many}`;
-    const bits = [`${n((r.published || 0) + (r.updated || 0), "document's details", "documents' details")} public`];
-    if (r.taken_down) bits.push(`${n(r.taken_down, "document", "documents")} taken down`);
+    const down = [];
+    if (r.taken_down) down.push(`${n(r.taken_down, "document", "documents")} taken down`);
+    if (t.withdrawn) down.push(`${n(t.withdrawn, "text", "texts")} withdrawn`);
+    if (t.superseded) down.push(`${n(t.superseded, "text", "texts")} replaced by a correction`);
+    if (country.blocked) { parts.push(`${code.toUpperCase()}: nothing new published (no country decision)${down.length ? `; ${down.join(", ")}` : ""}`); continue; }
+    const bits = [`${n((r.published || 0) + (r.updated || 0), "document's details", "documents' details")} public`, ...down];
     const skipped = Object.entries(country.records_skipped || {});
     if (skipped.length) bits.push(`not published: ${skipped.map(([work, why]) => `${work} (${why})`).join("; ")}`);
     if (t.published) bits.push(`${n(t.published, "text", "texts")} published`);
-    if (t.withdrawn) bits.push(`${n(t.withdrawn, "text", "texts")} withdrawn`);
     if (t.blocked) bits.push("no text decision");
     parts.push(`${code.toUpperCase()}: ${bits.join(", ")}`);
   }
   if (run.summary && run.summary.covered_by) parts.push(`included in run ${run.summary.covered_by}`);
+  if (run.summary && (run.summary.not_in_collection || []).length) parts.push(`approved but not in the collection: ${run.summary.not_in_collection.join(", ")}`);
   if (run.error) parts.push(run.error);
   return parts.join(" · ") || "—";
 }

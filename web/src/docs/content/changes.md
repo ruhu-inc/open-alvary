@@ -113,7 +113,7 @@ writeFileSync("resume_token.txt", page.resume_token); // only after the changes 
 2. Get its parts, a page at a time, from `/api/v1/versions/{id}/structure`. Offsets are UTF-8 bytes into that exact text. Each part's `id` is an anchor: `/api/v1/anchors/{id}` gives its words, a citation and the attribution to show.
 3. Keep the `rights_revision` with your copy. `/api/v1/rights/{source_id}/history` lists every revision of the record's rights record.
 
-A later text of the same record names the one it replaces in `prior_version_id`, and `change_reason` says why: `extraction_correction` (read again from the same official file) or `source_revision` (a new official file). The same provision keeps the same `locator` across versions.
+A later text of the same record names the one it replaces in `prior_version_id`, and `change_reason` says why: `extraction_correction` (read again from the same official file) or `source_revision` (a new official file). The same provision keeps the same `locator` across versions. A text read again replaces the one it corrects, whose words were a misreading: that one is withdrawn (`reason_code` `correction`) and can no longer be read. A text from a new official file stands beside the earlier file's text, which stays readable by its ID for as long as that language version of the record has a current approval. Either way a citation to the earlier text holds: [Check cited parts](/docs/api/check-currentness) answers `newer_version`, with the same part in the later text and whether its words are the same.
 
 **To check a text you hold**, send its `ETag` back as `If-None-Match`. `304` means it is unchanged and still public. `404`, or `410` [`withdrawn`](/docs/errors#withdrawn), means it is no longer public. A `304` costs a request but no bytes.
 
@@ -121,7 +121,7 @@ A later text of the same record names the one it replaces in `prior_version_id`,
 
 | `scope_disclosure` | `action` | What to do |
 |---|---|---|
-| `named`, with `version` | `stop_serving` | Stop serving the text in `version`. `reason_code` says why: `rights_changed` (its rights record changed or lapsed) or `correction` (its approval was withdrawn). A corrected text, if there is one, arrives as a new `text_version_published`. |
+| `named`, with `version` | `stop_serving` | Stop serving the text in `version`. `reason_code` says why: `rights_changed` (its rights record changed or lapsed) or `correction` (no current approval binds it: its approval was withdrawn or lapsed, or a corrected text replaces it). A corrected text, if there is one, arrives as a new `text_version_published`. |
 | `named`, `version` null | `stop_serving` | With a key only: the record in `work` is no longer public because its rights record changed (`reason_code` `rights_changed`). Stop serving it and every text of it. |
 | `revalidate_releases` | `revalidate` | A record stopped being public, and which one is not said. Check each record you hold: one that answers `404` or `410` is no longer public; stop serving it. |
 
@@ -129,7 +129,7 @@ Apply a withdrawal to the copies you keep within 7 days of its publication, as t
 
 Whether a withdrawal names what it withdraws depends on why it was withdrawn:
 
-- **A text withdrawn from a record that stays public** is named to everyone, with its `version`, unless it was withdrawn because the record's privacy review no longer clears it: then it names nothing, to anyone, and reading it answers `404` [`unavailable`](/docs/errors#unavailable).
+- **A text withdrawn from a record that stays public** is named to everyone, with its `version`, unless it was withdrawn because the record's privacy review no longer clears it: then it names nothing, to anyone, reading it answers `404` [`unavailable`](/docs/errors#unavailable), and nothing else names the record in the same publication revision.
 - **With a key** (`https://api.open.alvary.ai/api/v1/changes`, the MCP tools `list_changes`, `get_change` and `check_currentness` with a key, and your organisation's [monitors and webhooks](/docs/webhooks) while it has API access), a record that was public and was withdrawn because its rights record changed or lapsed is named too, by its IDs only: `work` has its `id` and `jurisdiction_id`, and every other field of `work` is null (no title, citation or links). A text withdrawn from it earlier keeps its `version.id`, with `content_hash` and `language` null. Reading the record or its texts with a key then answers `410` [`withdrawn`](/docs/errors#withdrawn), and a check of a part of it answers `withdrawn`.
 - **Anything else is `revalidate_releases`** and names nothing: every withdrawal of a record to a caller without a key; a text withdrawn for privacy, and a record withdrawn for a confidential reason, such as privacy or a legal or court order, whatever the caller; a record withdrawn before Open Alvary began recording why; and a text withdrawn earlier from a record that is now withdrawn for one of those reasons. If the reason for a withdrawal named to you turns out later to be confidential, a further `withdrawal` naming nothing follows, and from then on the earlier ones name nothing either. Open Alvary can't say which texts these concern, so check every record you hold. Reads answer `404` [`unavailable`](/docs/errors#unavailable), the same as for a record that was never public or never existed.
 

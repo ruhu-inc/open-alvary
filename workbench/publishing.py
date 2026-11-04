@@ -72,17 +72,26 @@ def kind_of(now: dict) -> str:
 def standing(act: dict, now: dict, status: dict | None, decided: dict) -> dict:
     """Where one document stands in public view, and what the next run will do with it, in words:
     {"state", "words", "text"}. `now` is its review state (workbench.review), `status` what the latest
-    run recorded, `decided` its country's decisions."""
+    run recorded, `decided` its country's decisions. A run takes down what no current approval binds
+    before it looks at a decision (operations.publish), so a lapsed decision never keeps anything up."""
     head = now.get("head") or {}
     approved = bool(now.get("approved"))
     public = bool(status and status["details"] == "public")
     since = status and status.get("details_since")
     if not approved:
+        if public and status["text"] == "withdrawn":
+            return {
+                "state": "text_withdrawn",
+                "words": "Text withdrawn: its approval lapsed or was revoked. The work's record stays public "
+                "because another language version is approved. Approve this one again to publish its text.",
+                "text": None,
+            }
         if public:
             return {
                 "state": "taken_down_next",
-                "words": f"Public since {_day(since)}. Its approval is no longer current: the next run takes it "
-                "down unless it is approved again.",
+                "words": f"Public since {_day(since)}. Its approval is no longer current: the next run takes down "
+                "its text, and the work's record unless another language version stays approved, whatever "
+                "the owner's decisions say. Approve it again before then to keep it public.",
                 "text": None,
             }
         if status and status["details"] == "taken_down":
@@ -120,14 +129,29 @@ def standing(act: dict, now: dict, status: dict | None, decided: dict) -> dict:
 
 
 def _text_words(act: dict, kind: str, status: dict | None, decided: dict, pending: bool) -> str:
+    public = bool(status and status["text"] == "public")
     if act.get("text_held"):
-        return "Text held: words are masked in the source; only the details are published."
+        comes_down = " The text public now comes down at the next run." if public else ""
+        return f"Text held: words are masked in the source; only the details are published.{comes_down}"
+    if public and pending:
+        # What was published is not what is approved now: it never stays, whatever can replace it.
+        if "refused" in decided["text"]:
+            return (
+                f"The text public now comes down at the next run. Its replacement is not published: "
+                f"{decided['text']['refused']}"
+            )
+        return "The text approved now replaces the one public at the next run."
     if "refused" in decided["text"]:
+        if public:
+            return (
+                f"Text public since {_day(status.get('text_since'))}. No other text goes public: "
+                f"{decided['text']['refused']}"
+            )
         return f"Text not published: {decided['text']['refused']}"
     if kind not in decided["text"]["types"]:
         covered = ", ".join(decided["text"]["types"])
         return f"Text not published: the text decision covers {covered} only."
-    if status and status["text"] == "public" and not pending:
+    if public:
         return f"Text public since {_day(status.get('text_since'))}."
     if status and status["text"] in ("blocked", "not_covered") and status.get("reason") and not pending:
         return f"Text not published: {status['reason']}"
@@ -135,14 +159,15 @@ def _text_words(act: dict, kind: str, status: dict | None, decided: dict, pendin
 
 
 def short(row_approval: str | None, status: dict | None, decided: dict) -> str | None:
-    """A document's publication in one word for the list: public, next_run, blocked, taken_down_next."""
+    """A document's publication in one word for the list: public, next_run, blocked, taken_down_next,
+    text_withdrawn."""
     public = bool(status and status["details"] == "public")
     if row_approval == "approved":
         if "refused" in decided["catalogue"] or (status and status["details"] == "blocked"):
             return "blocked"
         return "public" if public else "next_run"
     if public:
-        return "taken_down_next"
+        return "text_withdrawn" if status["text"] == "withdrawn" else "taken_down_next"
     return None
 
 

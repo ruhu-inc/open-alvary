@@ -103,7 +103,12 @@ def test_where_a_document_stands_is_said_in_words():
     changed = publishing.standing(act, state(at=NOW + timedelta(hours=2)), row(), DECIDED)
     assert changed["state"] == "next_run"
     lapsed = publishing.standing(act, state(approved=False), row(), DECIDED)
-    assert lapsed["state"] == "taken_down_next" and "takes it down" in lapsed["words"]
+    assert lapsed["state"] == "taken_down_next"
+    assert "takes down its text" in lapsed["words"] and "another language version" in lapsed["words"]
+    # Its text is down; the record stays because a sibling language is approved. It says so, and goes on.
+    sibling = publishing.standing(act, state(approved=False), row(text="withdrawn"), DECIDED)
+    assert sibling["state"] == "text_withdrawn" and "stays public" in sibling["words"]
+    assert publishing.short("out_of_date", row(text="withdrawn"), DECIDED) == "text_withdrawn"
     assert publishing.standing(act, state(approved=False), None, DECIDED)["state"] == "not_approved"
     blocked = publishing.standing(
         act, state(), None, {**DECIDED, "catalogue": {"refused": "No catalogue decision."}}
@@ -116,6 +121,22 @@ def test_where_a_document_stands_is_said_in_words():
     assert judgment["text"] == "Text not published: the text decision covers act, constitution only."
     published = publishing.standing(act, state(), row(text="public", text_since=NOW), texts)
     assert published["text"] == "Text public since 2026-10-26."
+    # A text the approval no longer binds never stays, whichever decisions stand.
+    public_text = row(text="public", text_since=NOW)
+    again = state(at=NOW + timedelta(hours=2))
+    assert publishing.standing(act, again, public_text, texts)["text"] == (
+        "The text approved now replaces the one public at the next run."
+    )
+    assert publishing.standing(act, again, public_text, DECIDED)["text"].startswith(
+        "The text public now comes down at the next run."
+    )
+    held_now = publishing.standing({**act, "text_held": {"note": "masked"}}, state(), public_text, texts)
+    assert "comes down at the next run" in held_now["text"]
+    # Published under a decision since lapsed: still public, and nothing new goes up.
+    stays = publishing.standing(act, state(), public_text, DECIDED)
+    assert (
+        stays["text"] == "Text public since 2026-10-26. No other text goes public: No text decision for rw."
+    )
     skipped = row(details="blocked", reason="no official publication link in its details")
     refused = publishing.standing(act, state(), skipped, DECIDED)
     assert refused["state"] == "blocked" and "no official publication link" in refused["words"]

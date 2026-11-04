@@ -5,6 +5,13 @@ description: Changes to the API, the MCP server and these docs.
 
 Changes that affect how you use the API and the MCP server, newest first. New fields, values and routes can come at any time; a breaking change comes only as a new version, announced here first. See [Compatibility](/docs/compatibility).
 
+## 4 November 2026
+
+- A record's [rights record](/docs/api/get-rights) no longer has `privacy_status`, in the API or in a new release, and `decision.reasons` no longer says where a privacy review stands: a text withdrawn for privacy names nothing, so nothing else says so either. This comes at once, as an exception to the notice [Compatibility](/docs/compatibility) gives for a field removed, because it concerns confidential withdrawals. `approved_content_hashes` is empty while a record's privacy review doesn't clear its texts.
+- `rights_changed` never lists `privacy_status` in `changed_fields`, and a change to that field alone is not a revision of the rights record, so no change and no `rights_revision` come of it. A text withdrawn for privacy is alone in its publication revision: whatever else the same write changed in its record is announced later.
+- What approval no longer binds comes down at the next publishing run, not only what was revoked: a language version whose approval lapsed, while another language version of the record stays approved, and a text whose names a reviewer withheld. See [When a text is published or withdrawn](/docs/changes#when-a-text-is-published-or-withdrawn).
+- A text read again from the same official file now replaces the one it corrects, which is withdrawn (`reason_code` `correction`) and can no longer be read, where both stayed readable. [Check cited parts](/docs/api/check-currentness) still answers `newer_version` for it, with the same part in the later text. A text from a new official file stands beside the earlier file's text, as before. In a release, a text whose earlier version is no longer public has `prior_version_id` null.
+
 ## 27 October 2026
 
 - New version 2026-10-27 of the terms, the [acceptable use policy](/acceptable-use) and the [privacy notice](/privacy), accepted at your next sign-in. The terms now say that Open Alvary is not the publisher of the laws, regulations and judgments in the corpus: the bodies that issue them publish them, and Open Alvary makes copies of those official texts available, each checked against the official copy. Every record links to the official copy at its publisher, which prevails where a copy differs.

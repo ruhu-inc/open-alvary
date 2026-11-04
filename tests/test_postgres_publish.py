@@ -8,13 +8,17 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
+from test_publish import approved_text, rwanda_law
+from test_publish import both_decisions as both_decisions  # noqa: F401  (fixture)
 from test_publish import decisions as decisions  # noqa: F401  (fixture)
-from test_publish import rwanda_law
 
 from api.main import create_app
 from api.store import Store, seed
+from api.v1 import create_v1_app
+from changes import admin
 from changes.record import namespace
 from operations import publish
+from rights.policy import public_corpus
 
 pytestmark = pytest.mark.postgres
 WORK = "rw-law-055-2024"
@@ -194,3 +198,169 @@ def test_a_run_publishes_what_the_workbench_approved_and_records_where_each_docu
     assert after["countries"]["ng"]["records"]["taken_down"] == 1
     assert review_store.publication_statuses()[ACT]["details"] == "taken_down"
     assert client.get(f"/sources/{ACT}").status_code == 404
+
+
+def stored(store):
+    with store.engine.connect() as conn:
+        table = namespace(conn).qualified(conn, "changes", "change_event")
+        return [
+            dict(r)
+            for r in conn.execute(
+                text(f"SELECT * FROM {table} ORDER BY publication_revision, event_id, event_revision")
+            ).mappings()
+        ]
+
+
+def test_every_take_down_a_run_makes_is_in_the_change_log(store, both_decisions, tmp_path):  # noqa: F811
+    """A lapsed language, a correction and a new official file, through the publish job's run: what the
+    change log records of each, and what reading a text answers afterwards."""
+    from test_publish import Collection
+
+    collection = Collection(tmp_path)
+    collection.add("rw-law-en", "rw-law", "en")
+    collection.add("rw-law-fr", "rw-law", "fr", words="Le Fonds prête.", raw="9" * 64)
+    collection.run(store)
+    bare = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    versions = {v.language: v.id for v in store.load().versions}
+
+    def since(count):
+        return [(e["event_type"], e["version_id"]) for e in stored(store)[count:]]
+
+    def readable(version):
+        return bare.get(f"/versions/{version}/text").status_code == 200
+
+    # A language lapses, its sibling stays: the text is named as withdrawn, and may be told why.
+    count = len(stored(store))
+    collection.docs["rw-law-fr"]["approved"] = False
+    collection.run(store)
+    changes = stored(store)[count:]
+    assert ("withdrawal", versions["fr"]) in [(e["event_type"], e["version_id"]) for e in changes]
+    [notice] = [e for e in changes if e["event_type"] == "withdrawal"]
+    assert notice["payload"]["withdrawal"] == {"action": "stop_serving", "reason_code": "correction"}
+    assert readable(versions["en"]) and not readable(versions["fr"])
+
+    # Nothing has changed: nothing is written, nothing announced.
+    count = len(stored(store))
+    collection.run(store)
+    assert since(count) == []
+
+    # A correction of the same file: published, and what it corrects withdrawn, by the same run.
+    count = len(stored(store))
+    corrected = approved_text("The Fund lends.").text
+    collection.docs["rw-law-en"].update(built=corrected, bound=corrected)
+    collection.run(store)
+    new = next(v for v in store.load().versions if v.prior_version_id == versions["en"])
+    changes = stored(store)[count:]
+    assert sorted(e["event_type"] for e in changes if e["version_id"]) == [
+        "text_version_published",
+        "withdrawal",
+    ]
+    published = next(e for e in changes if e["event_type"] == "text_version_published")
+    assert published["change_reason"] == "extraction_correction"
+    assert published["payload"]["version_diff"]["prior_version_id"] == versions["en"]
+    assert not readable(versions["en"]) and readable(new.id)
+    # A citation to what it corrects is not lost, though its words are no longer served.
+    node = next(n for n in store.load().structure if n.version_id == versions["en"] and n.locator == "sec_1")
+    cited = {"anchor_id": node.id, "span_hash": node.span_hash}
+    [answer] = bare.post("/currentness", json={"items": [cited]}).json()["results"]
+    assert answer["result"] == "newer_version" and answer["newer_version_id"] == new.id
+    assert answer["same_words"] is False and answer["newer_anchor_id"]
+    assert "text" not in answer
+    wrong = {"anchor_id": node.id, "span_hash": "0" * 64}
+    assert (
+        bare.post("/currentness", json={"items": [wrong]}).json()["results"][0]["result"] == "span_mismatch"
+    )
+    # The record reads whole though the text before is gone, asked for any way.
+    for query in ("", "?language=en", "?as_of=2026-01-01"):
+        page = bare.get(f"/sources/rw-law/versions{query}")
+        assert page.status_code == 200, query
+    assert [v["id"] for v in bare.get("/sources/rw-law/versions").json()["items"]] == [new.id]
+    assert public_corpus(store.load()).versions[0].prior_version_id is None  # a release stands alone
+
+    # A new official file: published beside the earlier file's text, which a citation still reads.
+    count = len(stored(store))
+    gazette = approved_text("The Fund may lend.", raw="8" * 64).text
+    collection.docs["rw-law-en"].update(built=gazette, bound=gazette, raw="8" * 64)
+    collection.run(store)
+    latest = next(v for v in store.load().versions if v.prior_version_id == new.id)
+    changes = stored(store)[count:]
+    assert [e["event_type"] for e in changes if e["version_id"]] == ["text_version_published"]
+    assert any(e["change_reason"] == "source_revision" for e in changes)
+    assert readable(new.id) and readable(latest.id)
+    check = bare.post("/currentness", json={"items": [{"version_id": new.id, "locator": "sec_1"}]}).json()
+    assert check["results"][0]["result"] == "newer_version"
+
+
+def test_names_withheld_later_take_the_texts_down_with_nothing_told(store, both_decisions, tmp_path):  # noqa: F811
+    from test_publish import Collection
+
+    collection = Collection(tmp_path)
+    collection.add("rw-case-en", "rw-case", "en")
+    collection.add("rw-case-fr", "rw-case", "fr", words="Le Fonds prête.", raw="9" * 64)
+    collection.run(store)
+    bare = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    count = len(stored(store))
+    collection.docs["rw-case-en"]["anonymisation"] = "partial"
+    collection.docs["rw-case-fr"]["anonymisation"] = "partial"
+    collection.run(store)
+    changes = stored(store)[count:]
+    assert {e["event_type"] for e in changes} == {"withdrawal"} and len(changes) == 2
+    assert all(e["payload"]["withdrawal"]["reason_code"] == "privacy" for e in changes)
+    for event in (e for e in bare.get("/changes").json()["events"] if e["event_type"] == "withdrawal"):
+        assert event["work"] is None and event["version"] is None
+    rights = bare.get("/rights/rw-case").json()
+    assert rights["record"]["approved_content_hashes"] == [] and "privacy_status" not in rights["record"]
+    assert not any("rivacy" in reason for reason in rights["decision"]["reasons"])
+    # Nothing later names it either: the next run has nothing to announce.
+    count = len(stored(store))
+    collection.run(store)
+    assert stored(store)[count:] == []
+    with store.engine.begin() as conn:
+        from changes.record import sweep
+
+        sweep(conn)
+    assert stored(store)[count:] == []
+
+
+def test_a_record_whose_names_are_withheld_is_not_named_when_it_comes_down(
+    store,
+    both_decisions,  # noqa: F811
+    tmp_path,
+):
+    from test_publish import Collection
+
+    collection = Collection(tmp_path)
+    collection.add("rw-case", "rw-case")
+    collection.run(store)
+    # Marked after approval: the approval lapses with its details, so the whole record comes down too.
+    collection.docs["rw-case"].update(anonymisation="full", approved=False)
+    collection.run(store)
+    bare = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    assert bare.get("/sources/rw-case").status_code == 404
+    withdrawals = [e for e in stored(store) if e["event_type"] == "withdrawal"]
+    assert withdrawals and all(
+        (e["payload"].get("withdrawal") or {}).get("reason_code") not in ("rights_changed", "correction")
+        for e in withdrawals
+    )
+
+
+def test_a_confidential_withdrawal_is_never_undone_by_the_nightly_run(
+    store,
+    both_decisions,  # noqa: F811
+    tmp_path,
+    monkeypatch,
+):
+    from test_publish import Collection
+
+    collection = Collection(tmp_path)
+    collection.add("rw-law", "rw-law")
+    collection.run(store)
+    bare = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    assert bare.get("/sources/rw-law").status_code == 200
+    monkeypatch.setattr(admin, "engine_for", lambda: store.engine)
+    assert admin.main(["withdraw-confidentially", "--work", "rw-law"]) == 0
+    count = len(stored(store))
+    summary = collection.run(store)["countries"]["rw"]
+    assert "confidential" in summary["records_skipped"]["rw-law"]
+    assert bare.get("/sources/rw-law").status_code == 404 and stored(store)[count:] == []
+    assert collection.statuses()["rw-law"]["details"] == "blocked"
