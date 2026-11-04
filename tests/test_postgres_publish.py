@@ -8,9 +8,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
-from test_publish import approved_text, rwanda_law
 from test_publish import both_decisions as both_decisions  # noqa: F401  (fixture)
 from test_publish import decisions as decisions  # noqa: F401  (fixture)
+from test_publish import rwanda_law
 
 from api.main import create_app
 from api.store import Store, seed
@@ -246,8 +246,7 @@ def test_every_take_down_a_run_makes_is_in_the_change_log(store, both_decisions,
 
     # A correction of the same file: published, and what it corrects withdrawn, by the same run.
     count = len(stored(store))
-    corrected = approved_text("The Fund lends.").text
-    collection.docs["rw-law-en"].update(built=corrected, bound=corrected)
+    collection.approve("rw-law-en", "The Fund lends.")
     collection.run(store)
     new = next(v for v in store.load().versions if v.prior_version_id == versions["en"])
     changes = stored(store)[count:]
@@ -279,8 +278,7 @@ def test_every_take_down_a_run_makes_is_in_the_change_log(store, both_decisions,
 
     # A new official file: published beside the earlier file's text, which a citation still reads.
     count = len(stored(store))
-    gazette = approved_text("The Fund may lend.", raw="8" * 64).text
-    collection.docs["rw-law-en"].update(built=gazette, bound=gazette, raw="8" * 64)
+    collection.approve("rw-law-en", "The Fund may lend.", raw="8" * 64)
     collection.run(store)
     latest = next(v for v in store.load().versions if v.prior_version_id == new.id)
     changes = stored(store)[count:]
@@ -320,6 +318,50 @@ def test_names_withheld_later_take_the_texts_down_with_nothing_told(store, both_
 
         sweep(conn)
     assert stored(store)[count:] == []
+
+
+def test_what_else_changed_with_names_withheld_waits_for_a_later_run(store, both_decisions, tmp_path):  # noqa: F811
+    """Approved again with its details changed and names withheld: the unnamed withdrawal stands alone, and
+    the record's new details come out at a later run, not at the next revision."""
+    from test_publish import Collection, example_law
+
+    collection = Collection(tmp_path)
+    collection.add("rw-case", "rw-case")
+    collection.run(store)
+    count = len(stored(store))
+    collection.docs["rw-case"].update(anonymisation="partial", record=example_law())
+    collection.run(store)
+    changes = stored(store)[count:]
+    assert [e["event_type"] for e in changes] == ["withdrawal"]
+    assert changes[0]["payload"]["withdrawal"]["reason_code"] == "privacy"
+    assert next(s for s in store.load().sources if s.id == "rw-case").title.startswith("Law n° 055/2024")
+    # The next run: the new title, named, with nothing to tie it to the night before.
+    collection.run(store)
+    later = stored(store)[count + 1 :]
+    assert [e["event_type"] for e in later] == ["metadata_corrected"]
+    assert "title" in later[0]["payload"]["changed_fields"]
+    assert later[0]["publication_revision"] > changes[0]["publication_revision"]
+    assert next(s for s in store.load().sources if s.id == "rw-case").title == "Example Law n° 009/2026"
+
+
+def test_a_public_title_naming_someone_withheld_leaves_without_being_named(store, both_decisions, tmp_path):  # noqa: F811
+    from test_publish import Collection, named_judgment
+
+    collection = Collection(tmp_path)
+    collection.add("rw-case", "rw-case", record=named_judgment())
+    collection.run(store)
+    bare = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    assert "Bello" in bare.get("/sources/rw-case").json()["title"]
+    count = len(stored(store))
+    collection.docs["rw-case"].update(anonymisation="partial", record=named_judgment(True))
+    collection.run(store)
+    assert bare.get("/sources/rw-case").status_code == 404
+    changes = [e for e in stored(store)[count:] if e["event_type"] != "coverage_changed"]
+    assert [e["event_type"] for e in changes] == ["withdrawal"] and "withdrawal" not in changes[0]["payload"]
+    # The next run it is back, without the name, and nothing public holds the name.
+    collection.run(store)
+    assert "Bello" not in bare.get("/sources/rw-case").json()["title"]
+    assert "Bello" not in bare.get("/changes").text
 
 
 def test_a_record_whose_names_are_withheld_is_not_named_when_it_comes_down(

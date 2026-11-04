@@ -83,14 +83,14 @@ def standing(act: dict, now: dict, status: dict | None, decided: dict) -> dict:
             return {
                 "state": "text_withdrawn",
                 "words": "Text withdrawn: its approval lapsed or was revoked. The work's record stays public "
-                "because another language version is approved. Approve this one again to publish its text.",
+                "because another version of the work is approved. Approve this one again to publish its text.",
                 "text": None,
             }
         if public:
             return {
                 "state": "taken_down_next",
                 "words": f"Public since {_day(since)}. Its approval is no longer current: the next run takes down "
-                "its text, and the work's record unless another language version stays approved, whatever "
+                "its text, and the work's record unless another version of the work stays approved, whatever "
                 "the owner's decisions say. Approve it again before then to keep it public.",
                 "text": None,
             }

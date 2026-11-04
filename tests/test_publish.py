@@ -13,6 +13,7 @@ from schema.record import (
     Absent,
     Body,
     Classification,
+    Court,
     Dated,
     DocumentRecord,
     Event,
@@ -20,15 +21,18 @@ from schema.record import (
     ExecutiveProfile,
     Expression,
     Identity,
+    JudgmentProfile,
     LanguageRule,
     LegislationProfile,
     Number,
+    Party,
     Place,
     Publication,
     Reference,
     RegionalProfile,
     Relation,
     Status,
+    Summary,
     TextInfo,
     TreatyParty,
     TreatyProfile,
@@ -502,7 +506,7 @@ def test_an_approved_text_is_published_with_its_structure_rights_and_lineage(dec
     raw = version.canonical_text.encode()
     assert raw[nodes["sec_1__subsec_2"].start_byte : nodes["sec_1__subsec_2"].end_byte].startswith(b"(2)")
     assert nodes["contents__entry_1"].target_node_id == section.id
-    assert corpus.sources[0].catalogue_note.startswith("Text published from the official file after review")
+    assert corpus.sources[0].catalogue_note.startswith(publish.TEXT_NOTE)
     # Nothing new: the same bytes and structure are left as they are.
     again = publish.publish_texts(store, "ng", publish.Texts(approved=[approved_text()]), decision)
     assert again["unchanged"] == ["ng-example-act-2023"] and len(store.load().versions) == 1
@@ -515,9 +519,8 @@ def test_an_approved_text_is_published_with_its_structure_rights_and_lineage(dec
         (corrected.id, None)
     ]
     # A revoked approval withdraws the work's reviewed texts.
-    revoked = publish.publish_texts(
-        store, "ng", publish.Texts(revoked={("ng-example-act-2023", "en")}), decision
-    )
+    texts = publish.Texts(bound={("ng-example-act-2023", "en"): [publish.Bound(why="revoked")]})
+    revoked = publish.publish_texts(store, "ng", texts, decision)
     assert revoked["withdrawn"] == ["ng-example-act-2023 (en)"]
     corpus = store.load()
     assert corpus.rights[0].approved_content_hashes == [] and public_corpus(corpus).versions == []
@@ -633,7 +636,7 @@ def test_a_text_from_a_new_official_file_keeps_the_earlier_files_text_as_history
     assert done["superseded"] == [new.id]
     assert sorted(v.raw_hash for v in public_corpus(store.load()).versions) == ["7" * 64, "8" * 64]
     # With no current approval of the language at all, nothing vouches for the history: it comes down too.
-    lapsed = publish.Texts(bound={("ng-example-act-2023", "en"): publish.Bound()})
+    lapsed = publish.Texts(bound={("ng-example-act-2023", "en"): [publish.Bound()]})
     assert publish.publish_texts(store, "ng", lapsed, decision)["withdrawn"] == ["ng-example-act-2023 (en)"]
     assert public_corpus(store.load()).versions == []
 
@@ -648,14 +651,12 @@ def test_a_language_whose_approval_lapsed_comes_down_while_its_sibling_stays(dec
     french.language = "fr"
     publish.publish_texts(store, "ng", publish.Texts(approved=[approved_text(), french]), decision)
     assert readable(store) == {("en", "The Fund shall lend to students."), ("fr", "Le Fonds prête.")}
-    note = next(s for s in store.load().sources if s.id == "ng-example-act-2023").catalogue_note
-    assert "(English, French)" in note
-    texts = publish.Texts(approved=[approved_text()], bound={("ng-example-act-2023", "fr"): publish.Bound()})
+    texts = publish.Texts(
+        approved=[approved_text()], bound={("ng-example-act-2023", "fr"): [publish.Bound()]}
+    )
     done = publish.take_down(store, "ng", set(), texts)
     assert done["withdrawn"] == ["ng-example-act-2023 (fr)"] and done["taken_down"] == []
     assert readable(store) == {("en", "The Fund shall lend to students.")}
-    note = next(s for s in store.load().sources if s.id == "ng-example-act-2023").catalogue_note
-    assert "(English)" in note and "French" not in note  # what the record says of its texts follows
     # Nothing left to do: a second look writes nothing.
     assert publish.take_down(store, "ng", set(), texts)["withdrawn"] == []
 
@@ -672,13 +673,22 @@ class Collection:
         self.engine = connect(f"sqlite:///{tmp_path / 'review.db'}")
         self.jurisdiction = jurisdiction
         self.unreadable = set()
+        self.asked = []  # (document, with its text) of each state read, in order
 
     def add(self, doc, work, language="en", words="The Fund shall lend.", raw="7" * 64, **state):
         built = approved_text(words, raw=raw).text
         self.docs[doc] = {
-            "work": work, "language": language, "built": built, "raw": raw, "bound": built,
-            "approved": True, "decision": "approved", "anonymisation": "none", "text_held": None, **state,
+            "work": work, "language": language, "built": built, "raw": raw, "bound": built, "earlier": [],
+            "approved": True, "decision": "approved", "anonymisation": "none", "text_held": None,
+            "jurisdiction": self.jurisdiction, "record": None, **state,
         }  # fmt: skip
+
+    def approve(self, doc, words, raw=None):
+        """A reviewer approves another text of this document: its earlier approvals stay on record."""
+        found = self.docs[doc]
+        built = approved_text(words).text
+        found["earlier"].append(found["bound"].text_sha256)
+        found.update(built=built, bound=built, raw=raw or found["raw"], approved=True, decision="approved")
 
     # the library
     def documents(self):
@@ -688,7 +698,7 @@ class Collection:
         found = self.docs[doc]
         return {
             "id": doc, "work": found["work"], "language": found["language"],
-            "jurisdiction": self.jurisdiction, "text_held": found["text_held"],
+            "jurisdiction": found["jurisdiction"], "text_held": found["text_held"],
         }  # fmt: skip
 
     def has(self, doc):
@@ -702,7 +712,9 @@ class Collection:
     def state(self, act, text=False):
         if act["id"] in self.unreadable:
             raise ConnectionError("the review database went away")
+        self.asked.append((act["id"], text))
         found, bound = self.docs[act["id"]], self.docs[act["id"]]["bound"]
+        approvals = [bound.text_sha256, *reversed(found["earlier"])]
         return {
             "head": {
                 "decision": found["decision"], "author": "ada@example.org",
@@ -710,13 +722,14 @@ class Collection:
                 "structure_sha256": bound.structure_sha256, "serialization_profile": bound.profile_id,
                 "structure_rules": bound.rules_id,
             },
+            "approvals": [{"decision": "approved", "text_sha256": sha} for sha in approvals],
             "approved": found["approved"] and found["decision"] == "approved",
             "text": found["built"] if text else None,
             "view": {"values": {"profile.anonymisation": found["anonymisation"]}},
         }  # fmt: skip
 
     def built(self, act, view):
-        return rwanda_law()
+        return self.docs[act["id"]]["record"] or rwanda_law()
 
     # the review store
     def approved_ids(self):
@@ -838,8 +851,7 @@ def test_a_corrected_approval_replaces_the_published_text_at_the_next_run(both_d
     collection.add("rw-law", "rw-law")
     collection.run(store)
     (old,) = store.load().versions
-    corrected = approved_text("The Fund lends.").text
-    collection.docs["rw-law"].update(built=corrected, bound=corrected)
+    collection.approve("rw-law", "The Fund lends.")
     summary = collection.run(store)["countries"]["rw"]
     assert summary["texts"]["published"] == 1 and summary["texts"]["superseded"] == 1
     assert summary["texts"]["withdrawn"] == 0
@@ -888,8 +900,7 @@ def test_a_judgment_anonymised_later_comes_down_in_every_language_and_stays_down
     collection.docs["rw-case-en"]["anonymisation"] = "none"
     collection.docs["rw-case-fr"]["anonymisation"] = "none"
     before = {v.id for v in store.load().versions}
-    reread = approved_text("The Fund lends.").text
-    collection.docs["rw-case-en"].update(built=reread, bound=reread)
+    collection.approve("rw-case-en", "The Fund lends.")
     collection.run(store)
     assert public_texts(store) == [("rw-case", "en"), ("rw-case", "fr")]
     assert store.load().rights[0].privacy_status == "cleared"
@@ -907,16 +918,290 @@ def test_a_text_held_later_comes_down(both_decisions, store, tmp_path):
     assert summary["texts"]["withdrawn"] == 1 and collection.statuses()["rw-law"]["text"] == "held"
 
 
-def test_a_text_whose_document_left_the_collection_comes_down(both_decisions, store, tmp_path):
+def test_a_document_that_left_the_collection_takes_its_text_and_record_down(both_decisions, store, tmp_path):
     collection = Collection(tmp_path)
     collection.add("rw-a", "rw-a")
     collection.add("rw-b", "rw-b", words="Another.", raw="8" * 64)
     collection.run(store)
+    # A record no run published: no status is on record for it, so no run ever takes it down.
+    corpus = store.load()
+    source = corpus.sources[0]
+    corpus.sources.append(source.model_copy(update={"id": "rw-from-the-catalogue"}))
+    corpus.rights.append(
+        corpus.rights[0].model_copy(
+            update={"id": "rights-rw-from-the-catalogue", "source_id": "rw-from-the-catalogue"}
+        )
+    )
+    store.save(corpus)
     del collection.docs["rw-b"]
     collection.approved_ids = lambda: {"rw-a", "rw-b"}  # its approval is still on record
     found = collection.run(store)
     assert public_texts(store) == [("rw-a", "en")]
+    assert public_records(store) == ["rw-a", "rw-from-the-catalogue"]
     assert found["countries"]["rw"]["texts"]["withdrawn"] == 1 and found["not_in_collection"] == ["rw-b"]
+    assert found["take_downs"]["rw"]["taken_down"] == 1
+    gone = collection.statuses()["rw-b"]
+    assert (gone["details"], gone["text"]) == ("taken_down", "withdrawn")
+    # Said once: the next run has nothing more to do, and is not stopped by what it did.
+    assert collection.run(store)["take_downs"]["rw"]["taken_down"] == 0
+
+
+def public_words(store):
+    from rights.policy import public_corpus
+
+    return {v.canonical_text.split("(1) ")[1].split("\n")[0] for v in public_corpus(store.load()).versions}
+
+
+LEAD, CONTRIBUTION = "The lead opinion.", "A contribution."
+
+
+@pytest.fixture
+def shared(both_decisions, store, tmp_path):
+    """A judgment's lead opinion and a contribution: one work, one language, each from its own file."""
+    collection = Collection(tmp_path)
+    collection.add("rw-lead", "rw-case", words=LEAD, raw="1" * 64)
+    collection.add("rw-contribution", "rw-case", words=CONTRIBUTION, raw="2" * 64)
+    collection.run(store)
+    assert public_words(store) == {LEAD, CONTRIBUTION}
+    assert all(v.prior_version_id is None for v in store.load().versions)  # neither replaces the other
+    return collection
+
+
+@pytest.mark.parametrize("change", [{"decision": "revoked"}, {"approved": False}])
+def test_a_document_comes_down_alone_though_another_shares_its_work_and_language(shared, store, change):
+    shared.docs["rw-contribution"].update(change)
+    summary = shared.run(store)["countries"]["rw"]
+    assert public_words(store) == {LEAD} and summary["texts"]["withdrawn"] == 1
+    statuses = shared.statuses()
+    assert statuses["rw-contribution"]["text"] == "withdrawn" and statuses["rw-lead"]["text"] == "public"
+    assert public_records(store) == ["rw-case"]  # the lead opinion is still approved
+
+
+def test_a_document_held_comes_down_alone_though_another_shares_its_work_and_language(shared, store):
+    shared.docs["rw-contribution"]["text_held"] = {"note": "words are masked"}
+    shared.run(store)
+    assert public_words(store) == {LEAD} and shared.statuses()["rw-contribution"]["text"] == "held"
+
+
+def test_each_documents_history_is_its_own(shared, store):
+    # The contribution's new file keeps its own earlier text; a correction of it replaces that one only.
+    shared.approve("rw-contribution", "A contribution, reprinted.", raw="3" * 64)
+    shared.run(store)
+    assert public_words(store) == {LEAD, CONTRIBUTION, "A contribution, reprinted."}
+    new = next(v for v in store.load().versions if "reprinted" in v.canonical_text)
+    old = next(v for v in store.load().versions if CONTRIBUTION in v.canonical_text)
+    assert new.prior_version_id == old.id  # its own earlier text, not the lead opinion
+    shared.approve("rw-contribution", "A contribution, read again.", raw="3" * 64)
+    shared.run(store)
+    assert public_words(store) == {LEAD, CONTRIBUTION, "A contribution, read again."}
+    # Its approval lapses: its history comes down with it, and the lead opinion stays.
+    shared.docs["rw-contribution"]["approved"] = False
+    shared.run(store)
+    assert public_words(store) == {LEAD}
+
+
+def test_no_take_down_changes_what_a_record_says_of_its_texts(both_decisions, store, tmp_path):
+    """A note that said which texts stand would mark out, by when it changes or when it does not, a text
+    withdrawn for a reason that is not told. It says the same however a text came down."""
+
+    def note_of(work):
+        return next(s for s in store.load().sources if s.id == work).catalogue_note
+
+    collection = Collection(tmp_path)
+    collection.add("rw-lapses", "rw-lapses", words="Lapses.", raw="1" * 64)
+    collection.add("rw-revoked", "rw-revoked", words="Revoked.", raw="2" * 64)
+    collection.add("rw-withheld", "rw-withheld", words="Withheld.", raw="3" * 64)
+    collection.add("rw-en", "rw-both", words="English.", raw="4" * 64)
+    collection.add("rw-fr", "rw-both", "fr", words="French.", raw="5" * 64)
+    collection.add("rw-keeps", "rw-keeps", words="Keeps.", raw="6" * 64)
+    collection.run(store)
+    works = ("rw-lapses", "rw-revoked", "rw-withheld", "rw-both", "rw-keeps")
+    notes = {work: note_of(work) for work in works}
+    assert len(set(notes.values())) == 1 and next(iter(notes.values())).startswith(publish.TEXT_NOTE)
+    collection.docs["rw-fr"]["approved"] = False
+    collection.docs["rw-withheld"]["anonymisation"] = "partial"
+    collection.docs["rw-lapses"].update(approved=False)
+    collection.docs["rw-revoked"].update(decision="revoked")
+    collection.run(store)
+    collection.run(store)
+    assert {work: note_of(work) for work in works} == notes
+
+
+def two_countries(tmp_path):
+    publish.decide("ke", "Ada Reviewer", 12, [], "", "")
+    publish.decide_text("ke", "Ada Reviewer", 12, EVIDENCE, **TEXT_DECISION)
+    kenya = rwanda_law(
+        place=Place(code="ke", name="Kenya", level="national"),
+        identity=Identity(
+            family="legislation", type="law", work_uri="/akn/ke/act/2026/9", title="Example Act"
+        ),
+    )
+    collection = Collection(tmp_path)
+    many(collection, 12)
+    for number in range(12, 15):
+        collection.add(
+            f"ke-{number}", f"ke-{number}", words=f"Kenyan law {number}.", raw=f"{number:x}" * 64,
+            jurisdiction="ke", record=kenya,
+        )  # fmt: skip
+    return collection
+
+
+def test_a_mass_lapse_stops_nothing_someone_recorded_in_any_country(both_decisions, store, tmp_path):
+    collection = two_countries(tmp_path)
+    collection.run(store)
+    everything = public_records(store)
+    # Everything in Rwanda lapses: a wrong collection, say. Revocations and withheld names still act.
+    for number in range(12):
+        collection.docs[f"rw-{number}"]["approved"] = False
+    collection.docs["rw-0"]["decision"] = "revoked"
+    collection.docs["rw-1"]["anonymisation"] = "partial"
+    collection.docs["ke-12"]["decision"] = "revoked"
+    collection.docs["ke-13"]["anonymisation"] = "partial"
+    collection.add("rw-new", "rw-new", words="New.", raw="e" * 64)
+    with pytest.raises(publish.Refused, match="would take down") as refused:
+        collection.run(store)
+    assert "--allow-take-downs" in str(refused.value)
+    # Details changed to withhold names lapse too, and that comes down; what only lapsed does not.
+    assert public_records(store) == sorted(set(everything) - {"rw-0", "rw-1", "ke-12"})
+    texts = {work for work, _ in public_texts(store)}
+    assert not texts & {"rw-0", "rw-1", "ke-12", "ke-13"} and "rw-2" in texts and "ke-14" in texts
+    assert "rw-new" not in {s.id for s in store.load().sources}
+    last = collection.runs()[-1]
+    assert last["status"] == "failed" and last["summary"]["take_downs"]["ke"]["taken_down"] == 1
+
+
+def named_judgment(names_withheld=False, summary=None, also_known_as=()):
+    """A fictional judgment whose title names a party, who may be marked withheld."""
+    return DocumentRecord(
+        identity=Identity(
+            family="judgment", type="judgment", work_uri="/akn/rw/judgment/2026/9",
+            title="Ada Bello v Example Services Limited", year=2026, alternative_titles=also_known_as,
+        ),
+        place=Place(code="rw", name="Rwanda", level="national"),
+        expressions=(Expression(language="en", this_text=True),),
+        publications=(Publication(kind="law_report", name="Court site", url="https://www.judiciary.gov.rw/9"),),
+        events=(Event(kind="delivered", when=Dated(value=date(2026, 3, 1))),),
+        status=Status(legal="decided"),
+        text=TextInfo(
+            form="court_copy", version=Version(label="As delivered"),
+            summary=Summary(kind="editorial", text=summary, official=False) if summary else None,
+        ),
+        classification=Classification(hierarchy="judicial"),
+        profile=JudgmentProfile(
+            family="judgment", court=Court(name="High Court", code="hc", level="superior", seat="Kigali"),
+            parties=(
+                Party(name="Ada Bello", role="appellant", anonymised=names_withheld),
+                Party(name="Example Services Limited", role="respondent"),
+            ),
+            anonymisation="partial" if names_withheld else "none",
+            anonymisation_reason="child" if names_withheld else None,
+        ),
+    )  # fmt: skip
+
+
+@pytest.fixture
+def case_named(both_decisions, store, tmp_path):
+    collection = Collection(tmp_path)
+    collection.add("rw-case", "rw-case", record=named_judgment())
+    collection.run(store)
+    assert public_records(store) == ["rw-case"]
+    return collection
+
+
+def title_of(store, work="rw-case"):
+    return next(s for s in store.load().sources if s.id == work).title
+
+
+def withheld_now(collection, summary=None):
+    """The reviewer marks the name withheld and approves again: the approval is current."""
+    collection.docs["rw-case"].update(anonymisation="partial", record=named_judgment(True, summary))
+
+
+def test_a_public_title_naming_someone_withheld_comes_down_then_returns_without_the_name(case_named, store):
+    withheld_now(case_named)
+    first = case_named.run(store)
+    assert public_records(store) == [] and public_texts(store) == []
+    assert first["take_downs"]["rw"]["taken_down"] == 1
+    assert case_named.statuses()["rw-case"]["details"] == "taken_down"
+    case_named.run(store)
+    assert public_records(store) == ["rw-case"] and "Bello" not in title_of(store)
+    assert public_texts(store) == []  # its text stays withheld
+
+
+def test_a_public_title_naming_someone_withheld_comes_down_when_its_details_are_refused(case_named, store):
+    withheld_now(case_named, summary="Bello was dismissed while on leave.")
+    case_named.run(store)
+    assert public_records(store) == []
+    summary = case_named.run(store)["countries"]["rw"]
+    assert "would still name a withheld party" in summary["records_skipped"]["rw-case"]
+    assert public_records(store) == []  # and stays down until the details are put right
+    withheld_now(case_named)
+    case_named.run(store)
+    assert public_records(store) == ["rw-case"] and "Bello" not in title_of(store)
+
+
+def test_a_public_title_naming_someone_withheld_comes_down_with_no_current_decision(
+    case_named, store, both_decisions
+):
+    (both_decisions / "rw-catalogue.json").unlink()
+    withheld_now(case_named)
+    summary = case_named.run(store)["countries"]["rw"]
+    assert "blocked" in summary and public_records(store) == [] and public_texts(store) == []
+
+
+def test_an_alias_naming_someone_withheld_goes_with_the_title(both_decisions, store, tmp_path):
+    """Aliases are never deleted by a save, so one the details no longer give must stop naming anyone, or
+    the record is found by that name and taken down again at every other run."""
+    collection = Collection(tmp_path)
+    collection.add("rw-case", "rw-case", record=named_judgment(also_known_as=("The Bello case",)))
+    collection.run(store)
+    assert any("Bello" in c.value for c in store.load().citations)
+    withheld_now(collection)
+    collection.run(store)
+    assert public_records(store) == []
+    collection.run(store)
+    assert public_records(store) == ["rw-case"]
+    assert not any("Bello" in c.value for c in store.load().citations)
+    collection.run(store)
+    assert public_records(store) == ["rw-case"]
+
+
+def test_a_record_that_no_longer_names_anyone_withheld_is_not_taken_down_again(case_named, store):
+    withheld_now(case_named)
+    case_named.run(store)
+    case_named.run(store)
+    assert public_records(store) == ["rw-case"]
+    assert case_named.run(store)["take_downs"]["rw"]["taken_down"] == 0
+    assert public_records(store) == ["rw-case"]
+
+
+def test_a_text_is_built_only_to_publish_it_one_country_at_a_time(
+    both_decisions, store, tmp_path, monkeypatch
+):
+    """A run reads every approval first, without the texts, which are the bulk of what it could hold; each
+    country's texts are built when it publishes them and let go with it."""
+    collection = two_countries(tmp_path)
+    collection.run(store)
+    collection.asked.clear()
+    marks = []
+    take_down, publish_texts = publish.take_down, publish.publish_texts
+
+    def counting_take_down(*args, **kwargs):
+        marks.append(len(collection.asked))
+        return take_down(*args, **kwargs)
+
+    def counting_texts(*args, **kwargs):
+        marks.append(len(collection.asked))
+        return publish_texts(*args, **kwargs)
+
+    monkeypatch.setattr(publish, "take_down", counting_take_down)
+    monkeypatch.setattr(publish, "publish_texts", counting_texts)
+    collection.run(store)
+    first_write = marks[0]
+    assert all(not with_text for _, with_text in collection.asked[:first_write])
+    built = [doc[:2] for doc, with_text in collection.asked if with_text]
+    assert built and collection.asked[first_write:] and all(w for _, w in collection.asked[first_write:])
+    assert built == sorted(built)  # a country at a time
 
 
 # --- a run that cannot tell what is approved, or looks wrong, does nothing and says so ---------------
@@ -1006,6 +1291,7 @@ def test_a_mass_lapse_is_refused_as_a_wrong_collection_until_an_operator_accepts
     assert last["status"] == "failed" and "--allow-take-downs" in last["error"]
     with pytest.raises(publish.Refused, match="would take down"):
         collection.run(store, allow_take_downs=5)  # fewer than it would take down
+    assert snapshot(store) == before
     collection.run(store, allow_take_downs=12)
     assert public_records(store) == ["rw-new"]
 

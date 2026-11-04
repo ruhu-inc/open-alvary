@@ -18,21 +18,22 @@ Texts follow their records under a separate decision (ingestion/decisions/<juris
 TXP-07): the reviewed text of each approved language version, its legal structure and its rights,
 exactly as its approval bound them, or nothing.
 
-What comes down. Each run works out, for each work and language, what current approvals bind (Texts),
-and takes down every reviewed text they do not bind and every work with no current approval (take_down),
+What comes down. Each run works out, for each document, what its current approval binds (Bound), and takes
+down every reviewed text no current approval binds and every work with no current approval (take_down),
 before it looks at a decision: a missing or expired decision stops new publication, never a take-down.
 A correction read from the same official file replaces the text it corrects. A text read from an earlier
-official file stays as history for citations to it (TXP-04) while its language has a current approval.
-Names withheld in a sensitive case take down every text of the work, for a reason that is not told.
+official file stays as history for citations to it (TXP-04) while its document has a current approval.
+Names withheld in a sensitive case take down every text of the work, for a reason that is not told, and
+its record too while what is public still names someone withheld; what else changed waits for a later run.
 
-When it does nothing. A run reads everything before it writes anything: if it cannot read the approvals
-it publishes nothing, takes nothing down and fails. It refuses, the same way, what looks like a wrong
-collection or review database rather than a decision: an empty read of the approvals beside public
-records or texts, a collection holding none of the approved documents, or more take-downs resting only on
-not finding a current approval than check_take_downs allows. An operator who has looked lets the run
-through with --allow-take-downs N. A revocation, withheld names, a held text and a replaced text are each
-a decision someone recorded, so no count holds them back. A rights record whose privacy review is blocked
-is an operator's hold: no run publishes over it.
+When it holds back. A run reads every approval before it writes anything: if it cannot read them it
+publishes nothing, takes nothing down and fails. It does the same on an empty read of the approvals beside
+public records or texts, and on a collection holding none of the approved documents. More take-downs
+resting only on not finding a current approval than refused_take_downs allows look like a wrong collection
+or review database rather than a decision: those wait, nothing is published, and the run fails, until an
+operator who has looked passes --allow-take-downs N. A revocation, withheld names, a held text and a
+replaced text are each something someone recorded, so no count holds them back. A rights record whose
+privacy review is blocked is an operator's hold: no run publishes over it.
 
   python -m operations.publish decide --jurisdiction rw --by "Full Name" [--months 12] [--evidence URL]...
   python -m operations.publish records --jurisdiction rw [--dry-run] [--allow-take-downs N]
@@ -230,10 +231,13 @@ class Approved:
     approved_at: datetime
 
 
-def from_workbench(review, library, store, jurisdiction: str, only=None) -> tuple[list[Approved], set[str]]:
+def from_workbench(
+    review, library, store, jurisdiction: str, only=None, into=None
+) -> tuple[list[Approved], set[str]]:
     """Works with at least one approved language version (details confirmed and covered), and the
     works present in the collection that are not approved; of the documents in `only` when given (a
-    run looks only at documents an approval names: a work never approved was never published)."""
+    run looks only at documents an approval names: a work never approved was never published). What each
+    document's approvals bind goes `into` the Texts given, without building a text."""
     works: dict[str, list[dict]] = {}
     for listed in library.documents():
         if listed.get("jurisdiction") != jurisdiction or listed.get("part"):
@@ -247,6 +251,8 @@ def from_workbench(review, library, store, jurisdiction: str, only=None) -> tupl
         for listed in documents:
             act = library.act(listed["id"])
             now = review.state(act)
+            if into is not None:
+                read_approvals(into, act, now, library)
             if not now["approved"]:
                 continue
             record = review.built(act, now["view"])
@@ -639,6 +645,7 @@ def publish_records(
             by_id["authorities"][entry["authority"].id] = entry["authority"]
         for alias in entry["citations"]:
             _put(corpus, "citations", alias)
+        _mask_old_aliases(corpus, item.work, withheld_names(item.record), {c.id for c in entry["citations"]})
         if existing is not None and _owned_beyond_records(existing):
             # A later text decision or an operator's hold owns this rights record and the note on what
             # text there is, with or without a text public now; the records step never narrows either.
@@ -675,6 +682,17 @@ def publish_records(
     if not dry_run:
         store.save(corpus, confidential=confidential)
     return report
+
+
+def _mask_old_aliases(corpus: Corpus, work: str, names: list[str], current: set[str]) -> None:
+    """An alias the details no longer give stays (a save never deletes a row): with names withheld, it stops
+    naming anyone, so nobody finds the record by a name it no longer shows."""
+    for alias in list(corpus.citations) if names else ():
+        if alias.source_id == work and alias.id not in current:
+            value = withhold(alias.value, names)
+            value = NAME_WITHHELD if still_named([value], names) else value
+            if value != alias.value:
+                _put(corpus, "citations", alias.model_copy(update={"value": value}))
 
 
 def _owned_beyond_records(rights: RightsRecord) -> bool:
@@ -803,41 +821,75 @@ class ApprovedText:
     approved_at: datetime
     provenance: dict
     effective_from: date | None = None
+    past: set[str] | None = None  # every text its document's approvals bound; None when they were not read
 
 
 @dataclass
 class Bound:
-    """What the current approval of one language version of a work binds: the exact texts, and the
-    official files they were read from. Nothing, when no approval of it is current."""
+    """What one document's approvals bind. Documents can share a work and a language (a judgment's
+    contributions share its lead opinion's), so each answers only for its own texts."""
 
+    document: str | None = None
+    # What its current approval binds, nothing when none is current, whether or not this run could publish
+    # from it: rules that changed stop a new text, never one public exactly as its approval bound it.
     hashes: set[str] = field(default_factory=set)
-    files: set[str] = field(default_factory=set)
+    files: set[str] = field(default_factory=set)  # the official file its current approval read
+    # Every text any approval of it bound, which is how a published text is known to be its own. None where
+    # the approvals were not read: it then answers for every text of its language.
+    past: set[str] | None = None
+    why: str | None = None  # what someone recorded when nothing is bound: "revoked" or "held"
 
 
 @dataclass
 class Texts:
     approved: list[ApprovedText] = field(default_factory=list)
-    revoked: set[tuple[str, str]] = field(default_factory=set)  # (work, language) whose approval was revoked
     skipped: dict[str, str] = field(default_factory=dict)
-    # Each language version looked at: (work, language) -> what its current approval binds. It binds what it
-    # bound whether or not this run could publish from it: rules that changed stop a new text, never one
-    # that is public exactly as its approval bound it.
-    bound: dict[tuple[str, str], Bound] = field(default_factory=dict)
-    held: set[tuple[str, str]] = field(default_factory=set)  # approved on its details alone
-    absent: set[tuple[str, str]] = field(default_factory=set)  # public, with no document here to say why
+    # Each language version looked at, (work, language), and its documents.
+    bound: dict[tuple[str, str], list[Bound]] = field(default_factory=dict)
     withheld: set[str] = field(default_factory=set)  # works with names withheld: no text of them is public
 
-    def binding(self) -> dict[tuple[str, str], Bound]:
-        """What is known of each language version, the texts to publish now included."""
-        found = {key: Bound(set(b.hashes), set(b.files)) for key, b in self.bound.items()}
-        for key in self.revoked:
-            found.setdefault(key, Bound())
+    def binding(self) -> dict[tuple[str, str], list[Bound]]:
+        """What is known of each language version, texts named to publish with no approvals read included."""
+        found = {key: list(documents) for key, documents in self.bound.items()}
         for item in self.approved:
-            bound = found.setdefault((item.work, item.language), Bound())
-            bound.hashes.add(item.text.text_sha256)
-            if item.provenance.get("sha256"):
-                bound.files.add(item.provenance["sha256"])
+            if (item.work, item.language) not in self.bound:
+                file = item.provenance.get("sha256")
+                found.setdefault((item.work, item.language), []).append(
+                    Bound(item.document_id, {item.text.text_sha256}, {file} if file else set())
+                )
         return found
+
+    def of(self, document: str) -> Bound:
+        for documents in self.bound.values():
+            for bound in documents:
+                if bound.document == document:
+                    return bound
+        return Bound(document)
+
+
+def read_approvals(found: Texts, act: dict, now: dict, library) -> Bound:
+    """Add to `found` what this document's approvals bind, from its review state (workbench.review)."""
+    head, approvals = now["head"], now.get("approvals")
+    work = act.get("work") or act["id"]
+    bound = Bound(act["id"])
+    if approvals is not None:
+        bound.past = {
+            a["text_sha256"] for a in approvals if a["decision"] == "approved" and a.get("text_sha256")
+        }
+    found.bound.setdefault((work, act.get("language") or "en"), []).append(bound)
+    if names_withheld(now):
+        found.withheld.add(work)
+    if act.get("text_held"):  # approved on its details alone (owner, 2026-10-25)
+        bound.why = "held"
+    elif head and head["decision"] == "revoked":
+        bound.why = "revoked"
+    elif now["approved"]:
+        if head.get("text_sha256"):
+            bound.hashes.add(head["text_sha256"])
+        file = library.provenance(act["id"]).get("sha256")
+        if file:
+            bound.files.add(file)
+    return bound
 
 
 def names_withheld(now: dict) -> bool:
@@ -855,8 +907,8 @@ NAMES_WITHHELD = (
 def texts_from_workbench(review, library, store, jurisdiction: str, only=None) -> Texts:
     """Each language version whose latest approval covers its current pages, details and text, built
     again from those pages; refused when the text or structure differ from what the approval bound.
-    With them, what the current approval of each language version binds, publishable or not. Of the
-    documents in `only` when given."""
+    With them, what each document's approvals bind, publishable or not. Of the documents in `only` when
+    given."""
     found = Texts()
     for listed in library.documents():
         if listed.get("jurisdiction") != jurisdiction or listed.get("part"):
@@ -868,25 +920,16 @@ def texts_from_workbench(review, library, store, jurisdiction: str, only=None) -
         head, built = now["head"], now["text"]
         work = act.get("work") or act["id"]
         language = act.get("language") or "en"
-        bound = found.bound.setdefault((work, language), Bound())
-        if names_withheld(now):
-            found.withheld.add(work)
-        if head and head["decision"] == "revoked":
-            found.revoked.add((work, language))
+        approvals = read_approvals(found, act, now, library)
         if not now["approved"]:
             continue
-        if act.get("text_held"):  # approved on its details alone (owner, 2026-10-25)
-            found.held.add((work, language))
+        if act.get("text_held"):
             found.skipped[act["id"]] = f"its text is held: {act['text_held'].get('note', 'not publishable')}"
             continue
         if work in found.withheld:
             found.skipped[act["id"]] = NAMES_WITHHELD
             continue
         provenance = library.provenance(act["id"])
-        if head.get("text_sha256"):
-            bound.hashes.add(head["text_sha256"])
-        if provenance.get("sha256"):
-            bound.files.add(provenance["sha256"])
         # Errors before the bound hashes, as approving again cannot cure them: a document approved
         # before its kind had to have structure rules says so, not "approve it again".
         if built.errors:
@@ -919,6 +962,7 @@ def texts_from_workbench(review, library, store, jurisdiction: str, only=None) -
                 approver=store.names([author]).get(author.lower(), "Open Alvary reviewer"),
                 approved_at=when if when.tzinfo else when.replace(tzinfo=UTC),
                 provenance=provenance,
+                past=approvals.past,
             )
         )
     # Details are shared by a work's language versions, so one withheld is all of them; whichever order
@@ -1005,25 +1049,20 @@ def text_rights(rights: RightsRecord, decision: dict, hashes: list[str]) -> Righ
     )
 
 
-def _text_note(corpus: Corpus, record: RightsRecord) -> str:
-    """What a record says of its texts: the languages public now, and why they may be republished."""
-    names = sorted(
-        {
-            v.language
-            for v in corpus.versions
-            if v.source_id == record.source_id and v.content_hash in record.approved_content_hashes
-        }
-    )
-    return (
-        f"Text published from the official file after review "
-        f"({', '.join(LANGUAGES.get(code, code) for code in names)}). {record.legal_note}"
-    )
+TEXT_NOTE = "A text is published here only after review against the official file."
 
 
-NO_TEXT_NOTE = "Text not published at present. Read the text at its official publication."
+def _text_note(record: RightsRecord) -> str:
+    """What a record whose texts a decision covers says of them, and why they may be republished. It says
+    the same whichever are public: a note that followed them would mark out, by changing or by not changing,
+    a text withdrawn for a reason that is not told. has_full_text and the record's editions say what is
+    public now."""
+    return f"{TEXT_NOTE} {record.legal_note}"
+
+
 # Why a reviewed text comes down, where nothing but not finding a current approval says it should: what a
-# wrong collection or review database would produce, so check_take_downs counts them. Every other reason is
-# something recorded: "revoked", "held", "withheld", "replaced".
+# wrong collection or review database would produce, so refused_take_downs counts them. Every other reason
+# is something recorded: "revoked", "held", "withheld", "replaced".
 INFERRED = ("lapsed", "absent")
 
 
@@ -1036,22 +1075,26 @@ class Unbound:
     why: str
 
 
-def _why_unbound(version: SourceVersion, key, bound: Bound, corrected: set[str], texts: Texts) -> str | None:
+def _why_unbound(
+    version: SourceVersion, work: str, documents: list[Bound], corrected: set[str], texts: Texts
+) -> str | None:
     """Why a public reviewed text must come down, or None when it stays: exactly what a current approval
-    binds, or the history of one (TXP-04), a text read from another official file that no later reading
-    of that file corrected, still true of that file and still cited."""
-    if key[0] in texts.withheld:
+    binds, or the history of the document it was read for (TXP-04), a text read from another official file
+    that no later reading of that file corrected, still true of that file and still cited."""
+    if work in texts.withheld:
         return "withheld"
-    if version.content_hash in bound.hashes:
+    if any(version.content_hash in document.hashes for document in documents):
         return None
-    if bound.hashes:
-        history = bound.files and version.raw_hash not in bound.files and version.id not in corrected
+    own = [d for d in documents if d.past is None or version.content_hash in d.past]
+    if not own:
+        return "absent"
+    current = [d for d in own if d.hashes]
+    if current:
+        history = version.id not in corrected and all(
+            d.files and version.raw_hash not in d.files for d in current
+        )
         return None if history else "replaced"
-    if key in texts.revoked:
-        return "revoked"
-    if key in texts.held:
-        return "held"
-    return "absent" if key in texts.absent else "lapsed"
+    return next((d.why for d in own if d.why), "lapsed")
 
 
 def _public_reviewed_texts(corpus: Corpus) -> list[SourceVersion]:
@@ -1089,23 +1132,20 @@ def unbound_texts(corpus: Corpus, texts: Texts) -> list[Unbound]:
         for version in versions:
             if version.content_hash not in record.approved_content_hashes:
                 continue
-            why = _why_unbound(version, key, known.get(key) or Bound(), corrected, texts)
+            why = _why_unbound(version, key[0], known.get(key, []), corrected, texts)
             if why:
                 found.append(Unbound(version.id, key[0], key[1], version.content_hash, why))
     return found
 
 
-def take_down_texts(corpus: Corpus, texts: Texts) -> dict:
-    """Take every unbound text out of its rights record's approved hashes (Corpus edited, nothing written).
-    Names withheld also leave the record's privacy review not cleared, so the change log does not tell why,
-    and the record's note as it was, so nothing names the record beside a withdrawal that names nothing.
-    Otherwise the note follows, except while a corrected text waits to replace the one taken down (what
-    publishes it says so)."""
-    report = {"withdrawn": [], "superseded": [], "unbound_hashes": []}
+def take_down_texts(corpus: Corpus, texts: Texts, recorded_only=False) -> dict:
+    """Take every unbound text out of its rights record's approved hashes (Corpus edited, nothing written),
+    or with `recorded_only` those someone recorded. Names withheld also leave the record's privacy review not
+    cleared, so the change log does not tell why."""
+    report = {"withdrawn": [], "superseded": [], "unbound_hashes": [], "in_confidence": []}
     rights = {r.source_id: r for r in corpus.rights}
-    sources = {s.id: s for s in corpus.sources}
     known = texts.binding()
-    unbound = unbound_texts(corpus, texts)
+    unbound = [item for item in unbound_texts(corpus, texts) if not (recorded_only and item.why in INFERRED)]
     leaving = {item.version for item in unbound}
     for work in sorted({key[0] for key in known} | {item.work for item in unbound} | texts.withheld):
         record = rights.get(work)
@@ -1114,12 +1154,16 @@ def take_down_texts(corpus: Corpus, texts: Texts) -> dict:
         versions = [v for v in corpus.versions if v.source_id == work]
         kept = {v.content_hash for v in versions if v.id not in leaving}
         mine = [item for item in unbound if item.work == work]
-        bound = {h for key, found in known.items() if key[0] == work for h in found.hashes}
-        if work in texts.withheld:
-            bound = set()
+        bound = {
+            sha for key, documents in known.items() if key[0] == work for d in documents for sha in d.hashes
+        }
         gone = {item.content_hash for item in mine} - kept
         all_hashes = {v.content_hash for v in versions}
-        stray = {h for h in record.approved_content_hashes if h not in all_hashes and h not in bound}
+        stray = (
+            set()
+            if recorded_only
+            else {h for h in record.approved_content_hashes if h not in all_hashes and h not in bound}
+        )
         hold = work in texts.withheld and record.privacy_status in PRIVACY_CLEARED
         if not gone and not stray and not hold:
             continue
@@ -1131,42 +1175,43 @@ def take_down_texts(corpus: Corpus, texts: Texts) -> dict:
             elif f"{work} ({item.language})" not in report["withdrawn"]:
                 report["withdrawn"].append(f"{work} ({item.language})")
         report["unbound_hashes"].extend(sorted(stray))
+        if work in texts.withheld:
+            report["in_confidence"].append(work)
         remaining = [h for h in record.approved_content_hashes if h not in gone | stray]
-        record = record.model_copy(
-            update={"approved_content_hashes": remaining} | ({"privacy_status": "pending"} if hold else {})
-        )
-        _put(corpus, "rights", record)
-        source = sources.get(work)
-        if source is None or not gone or work in texts.withheld:
-            continue
-        note = _text_note(corpus, record) if remaining else NO_TEXT_NOTE if not bound else None
-        if note:
-            _put(corpus, "sources", source.model_copy(update={"catalogue_note": note}))
+        update = {"approved_content_hashes": remaining} | ({"privacy_status": "pending"} if hold else {})
+        _put(corpus, "rights", record.model_copy(update=update))
     return report
 
 
 def note_absent(corpus: Corpus, jurisdiction: str, texts: Texts) -> None:
-    """Add to `texts` each public reviewed text of this jurisdiction that no document looked at accounts
-    for: its document has left the collection, or no approval names it. No current approval can be shown
-    to bind it, so it comes down, within what check_take_downs allows."""
+    """Add to `texts` each language with a public reviewed text in this jurisdiction that no document looked
+    at accounts for: its document has left the collection, or no approval names it. No current approval can
+    be shown to bind it, so it comes down, within what refused_take_downs allows."""
     places = {s.id for s in corpus.sources if s.jurisdiction_id == jurisdiction}
     known = texts.binding()
     for version in _public_reviewed_texts(corpus):
         key = (version.source_id, version.language)
         if version.source_id in places and key not in known:
-            texts.bound[key] = Bound()
-            texts.absent.add(key)
+            texts.bound[key] = []
 
 
-def take_down(store, jurisdiction: str, waiting: set[str], texts: Texts, dry_run=False) -> dict:
-    """Take down every work with no current approval and every reviewed text no current approval binds,
-    in one write that needs no decision (the change log records what changed; a work whose names are
-    withheld is not named). Writes nothing when there is nothing to do. Returns what was done, with what
-    stays public after it."""
+def _recorded_works(texts: Texts) -> set[str]:
+    """The works someone has recorded something of: names withheld, a revocation, a held text."""
+    recorded = {key[0] for key, documents in texts.binding().items() if any(d.why for d in documents)}
+    return recorded | texts.withheld
+
+
+def take_down(
+    store, jurisdiction: str, waiting: set[str], texts: Texts, dry_run=False, recorded_only=False
+) -> dict:
+    """Take down every work with no current approval and every reviewed text no current approval binds, or
+    with `recorded_only` those someone recorded, in one write that needs no decision (the change log records
+    what changed; a work whose names are withheld is not named). Writes nothing when there is nothing to do.
+    Returns what was done, with what stays public after it."""
     corpus = store.load()
     note_absent(corpus, jurisdiction, texts)
-    down = _take_down_records(corpus, waiting)
-    report = take_down_texts(corpus, texts)
+    down = _take_down_records(corpus, waiting & _recorded_works(texts) if recorded_only else waiting)
+    report = take_down_texts(corpus, texts, recorded_only=recorded_only)
     if not dry_run and (down or any(report.values())):
         store.save(corpus, confidential=texts.withheld)
     rights = {r.source_id: r for r in corpus.rights}
@@ -1174,7 +1219,7 @@ def take_down(store, jurisdiction: str, waiting: set[str], texts: Texts, dry_run
         "taken_down": down,
         "records_public": {r.source_id for r in corpus.rights if rights_decision(r).metadata},
         "texts_public": {
-            (v.source_id, v.language)
+            (v.source_id, v.content_hash)
             for v in corpus.versions
             if rights_decision(rights.get(v.source_id), v).full_text
         },
@@ -1185,11 +1230,10 @@ def planned_take_downs(corpus: Corpus, works: set[str], waiting: set[str], texts
     """Of the works a run looks at and those with a public reviewed text: how many it would take something
     down from on nothing but not finding a current approval, and how many are public."""
     rights = {r.source_id: r for r in corpus.rights}
-    revoked = {key[0] for key in texts.revoked}
-    records = {w for w in works if w in rights and rights[w].metadata_public}
+    records = {w for w in works | waiting if w in rights and rights[w].metadata_public}
     readable = {v.source_id for v in _public_reviewed_texts(corpus)}
     places = {key[0] for key in texts.binding()}
-    inferred = {w for w in waiting if w in records and w not in revoked}
+    inferred = (waiting & records) - _recorded_works(texts)
     inferred |= {item.work for item in unbound_texts(corpus, texts) if item.why in INFERRED}
     return len(inferred), len(records | (readable & places))
 
@@ -1197,23 +1241,26 @@ def planned_take_downs(corpus: Corpus, works: set[str], waiting: set[str], texts
 # More than this share of a country's public works, or this many at least, is not a day's lapses.
 MASS_TAKE_DOWN_SHARE = 0.10
 MASS_TAKE_DOWN_FLOOR = 5
-WHAT_TO_DO = (
-    "Nothing was published or taken down. Check ALVARY_REVIEW_COLLECTIONS and the review database; "
-    "if this is right, run `python -m operations.publish {command} --allow-take-downs {count}`."
+CHECK_FIRST = (
+    "Check ALVARY_REVIEW_COLLECTIONS and the review database; if this is right, run "
+    "`python -m operations.publish {command} --allow-take-downs {count}`."
 )
 
 
-def check_take_downs(jurisdiction: str, inferred: int, public: int, allowed: int, command="run") -> None:
-    """Refuse what looks like a wrong collection or review database rather than decisions: more take-downs
-    resting only on not finding a current approval than a day's lapses, or every public work of a country
-    at once, unless an operator has allowed that many."""
+def refused_take_downs(
+    jurisdiction: str, inferred: int, public: int, allowed: int, command="run"
+) -> str | None:
+    """Why not to go on, or None: what looks like a wrong collection or review database rather than
+    decisions, being more take-downs resting only on not finding a current approval than a day's lapses, or
+    every public work of a country at once, unless an operator has allowed that many."""
     limit = max(MASS_TAKE_DOWN_FLOOR, int(public * MASS_TAKE_DOWN_SHARE))
     if inferred <= allowed or not (inferred > limit or (inferred == public and public > 1)):
-        return
-    raise Refused(
+        return None
+    return (
         f"This run would take down {inferred} of the {public} works public in {jurisdiction} because no "
         "current approval could be found for them, which looks like a wrong collection or review database. "
-        + WHAT_TO_DO.format(command=command, count=inferred)
+        "Only what someone recorded came down, and nothing was published. "
+        + CHECK_FIRST.format(command=command, count=inferred)
     )
 
 
@@ -1259,7 +1306,9 @@ def publish_texts(store, jurisdiction: str, texts: Texts, decision: dict, dry_ru
             )
             report["unchanged"].append(item.document_id)
             continue
-        prior = max(mine, key=lambda v: v.content_verified_at or v.retrieved_at, default=None)
+        # The text it replaces is its own document's: another document of the language is not an earlier text.
+        own = [v for v in mine if item.past is None or v.content_hash in item.past]
+        prior = max(own, key=lambda v: v.content_verified_at or v.retrieved_at, default=None)
         if record.privacy_status not in PRIVACY_CLEARED:
             prior = None  # a text withdrawn for a reason not told is not linked to the work by its successor
         version, nodes = version_from(item, sources[item.work], prior)
@@ -1273,7 +1322,7 @@ def publish_texts(store, jurisdiction: str, texts: Texts, decision: dict, dry_ru
     for record in rights.values():
         _put(corpus, "rights", record)
     for work in sorted(named):
-        note = _text_note(corpus, rights[work])
+        note = _text_note(rights[work])
         _put(corpus, "sources", sources[work].model_copy(update={"catalogue_note": note}))
     report |= take_down_texts(corpus, texts)
     corpus = Corpus.model_validate(corpus.model_dump(mode="json"))  # every span, hash and link checked
@@ -1378,14 +1427,15 @@ def _count(report: dict) -> dict:
 
 @dataclass
 class Reading:
-    """What one country's run needs from the review database and the collections: all of it read before
-    anything is written, so a run that cannot read it changes nothing."""
+    """What one country's run needs to know of the approvals, read before anything is written, so a run
+    that cannot read them changes nothing. It holds no text: those are built when they are published."""
 
     jurisdiction: str
     documents: dict[str, dict]  # document -> what the library says of it
     approved: list[Approved]
     waiting: set[str]
-    texts: Texts
+    texts: Texts  # what each document's approvals bind
+    left: dict[str, str] = field(default_factory=dict)  # a document no longer here -> its work
 
     def work(self, document: str) -> str:
         return self.documents[document].get("work") or document
@@ -1395,16 +1445,48 @@ class Reading:
 
 
 def read_country(review, library, review_store, jurisdiction: str, ids: set[str]) -> Reading:
-    approved, waiting = from_workbench(review, library, review_store, jurisdiction, only=ids)
-    texts = texts_from_workbench(review, library, review_store, jurisdiction, only=ids)
+    texts = Texts()
+    approved, waiting = from_workbench(review, library, review_store, jurisdiction, only=ids, into=texts)
     return Reading(jurisdiction, {i: library.act(i) for i in ids}, approved, waiting, texts)
 
 
-def publish_country(reading: Reading, public_store, taken: dict, previous: dict[str, dict]):
+def account_for(corpus: Corpus, reading: Reading, previous: dict[str, dict]) -> None:
+    """Add to a country's reading what its documents alone cannot say. A text or a record a run published
+    whose document is no longer looked at comes down; a record no run published has no status, and is left
+    alone. A public record that still names someone now withheld comes down too, approval or no approval, and
+    whether or not what would replace it can be published: it returns without the name at a later run."""
+    note_absent(corpus, reading.jurisdiction, reading.texts)
+    works = {reading.work(i) for i in reading.documents}
+    for document, status in previous.items():
+        if (
+            status["jurisdiction"] == reading.jurisdiction
+            and document not in reading.documents
+            and "public" in (status["details"], status["text"])
+        ):
+            reading.left[document] = status["work"]
+            if status["work"] not in works:
+                reading.waiting.add(status["work"])
+    sources = {s.id: s for s in corpus.sources}
+    public = {r.source_id for r in corpus.rights if r.metadata_public}
+    for item in reading.approved:
+        names = withheld_names(item.record)
+        if not names or item.work not in public or item.work not in sources:
+            continue
+        source = sources[item.work]
+        cited = (c.value for c in corpus.citations if c.source_id == item.work)
+        if still_named([source.title, source.citation, source.summary, *cited], names):
+            reading.waiting.add(item.work)
+            reading.texts.withheld.add(item.work)
+
+
+def publish_country(
+    reading: Reading, review, library, review_store, public_store, taken: dict, previous: dict[str, dict]
+):
     """One country's run, after its take-downs (`taken`): its details, then its texts, each under its
-    decision; and where each of its documents stands afterwards, in words a reviewer reads."""
+    decision; and where each of its documents stands afterwards, in words a reviewer reads. A record taken
+    down, or with a text withdrawn in confidence, in this run is not touched again until a later one, so
+    nothing names it beside a withdrawal that names nothing."""
     jurisdiction = reading.jurisdiction
-    withdrawn = set(taken["withdrawn"])
     rows = {
         i: {
             "document_id": i,
@@ -1418,21 +1500,39 @@ def publish_country(reading: Reading, public_store, taken: dict, previous: dict[
     }
     for i, row in rows.items():
         if reading.work(i) in taken["taken_down"]:
-            row.update(details="taken_down", reason="its approval lapsed or was revoked")
-        if f"{reading.work(i)} ({reading.key(i)[1]})" in withdrawn:
-            row.update(text="withdrawn", reason=row["reason"] or "its approval lapsed or was revoked")
+            why = (
+                "names are withheld in this case: its details return without them at a later run"
+                if reading.work(i) in reading.texts.withheld
+                else "its approval lapsed or was revoked"
+            )
+            row.update(details="taken_down", reason=why)
+
+    def public_now(document: str) -> bool:
+        bound = reading.texts.of(document)
+        hashes = bound.hashes if bound.past is None else bound.past
+        return any((reading.work(document), sha) in taken["texts_public"] for sha in hashes)
 
     def settled():
         """Each row, with what is true of its text whatever this run could do: a text still public is
         public, and one public before that this run did not publish has been withdrawn."""
         for i, row in rows.items():
-            if row["text"] == "withdrawn":
+            if row["text"] == "public":
                 continue
-            if row["text"] != "public" and reading.key(i) in taken["texts_public"]:
+            if public_now(i):
                 row["text"] = "public"
             elif row["text"] == "waiting" and (previous.get(i) or {}).get("text") in ("public", "withdrawn"):
-                row["text"] = "withdrawn"
-        return list(rows.values())
+                row.update(text="withdrawn", reason=row["reason"] or "its approval lapsed or was revoked")
+        return list(rows.values()) + [
+            {
+                "document_id": document,
+                "work": work,
+                "jurisdiction": jurisdiction,
+                "details": "taken_down",
+                "text": "withdrawn",
+                "reason": "its document is no longer in the collection",
+            }
+            for document, work in reading.left.items()
+        ]
 
     done = {"taken_down": len(taken["taken_down"])}
     undone = {"withdrawn": len(taken["withdrawn"]), "superseded": len(taken["superseded"])}
@@ -1447,7 +1547,9 @@ def publish_country(reading: Reading, public_store, taken: dict, previous: dict[
             if row["text"] == "waiting" and not still:
                 row["text"] = "blocked"
         return {"blocked": str(refused), "records": done, "texts": undone}, settled()
-    records = publish_records(public_store, jurisdiction, reading.approved, set(), decision)
+    held_back = set(taken["taken_down"]) | set(taken["in_confidence"])
+    approved = [item for item in reading.approved if item.work not in held_back]
+    records = publish_records(public_store, jurisdiction, approved, set(), decision)
     public = set(records["published"]) | set(records["updated"])
     for i, row in rows.items():
         work = reading.work(i)
@@ -1455,6 +1557,8 @@ def publish_country(reading: Reading, public_store, taken: dict, previous: dict[
             row["details"] = "public"
         elif work in records["skipped"]:
             row.update(details="blocked", reason=records["skipped"][work])
+        elif work in taken["in_confidence"] and work in taken["records_public"]:
+            row["details"] = "public"
         elif work in reading.waiting and row["details"] != "taken_down":
             row["reason"] = "its approval is not current: approve it again"
     summary = {
@@ -1470,11 +1574,13 @@ def publish_country(reading: Reading, public_store, taken: dict, previous: dict[
                 continue
             if reading.documents[i].get("text_held"):
                 row["text"] = "held"
-            elif reading.texts.bound[reading.key(i)].hashes:
+            elif reading.texts.of(i).hashes:
                 row.update(text="no_decision", reason=str(refused))
         summary["texts"] = {"blocked": str(refused)} | undone
         return summary, settled()
-    report = publish_texts(public_store, jurisdiction, reading.texts, text_decision)
+    # A country's texts are built here, and let go with it: they are the bulk of what a run could hold.
+    texts = texts_from_workbench(review, library, review_store, jurisdiction, only=set(reading.documents))
+    report = publish_texts(public_store, jurisdiction, texts, text_decision)
     published = {entry["document"] for entry in report["published"]} | set(report["unchanged"])
     for i, row in rows.items():
         if i in published:
@@ -1499,10 +1605,11 @@ def publish_country(reading: Reading, public_store, taken: dict, previous: dict[
 
 
 def run(review, library, review_store, public_store, log: PublicationLog, *, allow_take_downs=0) -> dict:
-    """A publishing run. Everything is read first, and a read that fails or looks wrong stops the run with
-    nothing changed. Then every country's take-downs, which no decision can stop and no later failure can
-    undo; then every country with an approved document, its details then its texts; and each document's
-    standing recorded for the workbench. A failure is recorded and raised."""
+    """A publishing run. Every approval is read first, and a read that fails or finds nothing to read stops
+    the run with nothing changed. Then every country's take-downs, which no decision can stop and no later
+    failure can undo, or only those someone recorded when the rest look wrong, which stops the run there;
+    then every country with an approved document, its details then its texts; and each document's standing
+    recorded for the workbench. A failure is recorded and raised."""
     number, trigger, by = log.start()
     summary: dict = {"trigger": trigger, "requested_by": by, "countries": {}}
     try:
@@ -1510,19 +1617,20 @@ def run(review, library, review_store, public_store, log: PublicationLog, *, all
         documents = library.documents()
         listed = {d["id"]: d for d in documents if d["id"] in named and not d.get("part")}
         missing = named - {d["id"] for d in documents}
-        if missing:  # what they published comes down, within check_take_downs: said on the run either way
+        if missing:  # what they published comes down, within refused_take_downs: said on the run either way
             summary["not_in_collection"] = sorted(missing)[:50]
         previous = log.statuses()
         corpus = public_store.load()
         public_texts = _public_reviewed_texts(corpus)
         places = {s.id: s.jurisdiction_id for s in corpus.sources}
+        public_before = [s for s in previous.values() if "public" in (s["details"], s["text"])]
         countries = {d.get("jurisdiction") for d in listed.values() if d.get("jurisdiction")}
-        countries |= {places[v.source_id] for v in public_texts}
+        countries |= {places[v.source_id] for v in public_texts} | {s["jurisdiction"] for s in public_before}
         readings = []
         for country in sorted(countries):
             ids = {i for i, d in listed.items() if d.get("jurisdiction") == country}
             reading = read_country(review, library, review_store, country, ids)
-            note_absent(corpus, country, reading.texts)
+            account_for(corpus, reading, previous)
             readings.append(reading)
         planned = {
             reading.jurisdiction: planned_take_downs(
@@ -1531,32 +1639,42 @@ def run(review, library, review_store, public_store, log: PublicationLog, *, all
             for reading in readings
         }
         total = sum(inferred for inferred, _ in planned.values())
-        looks_empty = not named and (
-            public_texts or any("public" in (s["details"], s["text"]) for s in previous.values())
-        )
-        if looks_empty and allow_take_downs < max(total, 1):
+        if not named and (public_texts or public_before) and allow_take_downs < max(total, 1):
             raise Refused(
                 "The review database names no approval, yet reviewed records or texts are public. "
-                + WHAT_TO_DO.format(command="run", count=total)
+                "Nothing was published or taken down. " + CHECK_FIRST.format(command="run", count=total)
             )
         if named and not listed and allow_take_downs < max(total, 1):
             raise Refused(
                 f"The collection holds none of the {len(named)} documents the approvals name. "
-                + WHAT_TO_DO.format(command="run", count=total)
+                "Nothing was published or taken down. " + CHECK_FIRST.format(command="run", count=total)
             )
-        for country, (inferred, public) in planned.items():
-            check_take_downs(country, inferred, public, allow_take_downs)
+        refusals = [
+            refusal
+            for country, (inferred, public) in planned.items()
+            if (refusal := refused_take_downs(country, inferred, public, allow_take_downs))
+        ]
+        # The catalogue is the bulk of what a run holds: each step below reads it for itself.
+        del corpus, public_texts
         taken, summary["take_downs"] = {}, {}
         for reading in readings:
-            done = take_down(public_store, reading.jurisdiction, reading.waiting, reading.texts)
+            done = take_down(
+                public_store,
+                reading.jurisdiction,
+                reading.waiting,
+                reading.texts,
+                recorded_only=bool(refusals),
+            )
             taken[reading.jurisdiction] = done
             summary["take_downs"][reading.jurisdiction] = {
                 key: len(done[key]) for key in ("taken_down", "withdrawn", "superseded", "unbound_hashes")
             }
+        if refusals:
+            raise Refused(" ".join(refusals))
         rows: list[dict] = []
         for reading in readings:
             summary["countries"][reading.jurisdiction], found = publish_country(
-                reading, public_store, taken[reading.jurisdiction], previous
+                reading, review, library, review_store, public_store, taken[reading.jurisdiction], previous
             )
             rows += found
         log.record(number, rows, previous)
@@ -1588,10 +1706,6 @@ def _structure_of(corpus: Corpus, version: SourceVersion) -> list[tuple]:
     return [(n.kind, n.locator, n.label, n.heading, n.start_byte, n.end_byte, n.cell_states) for n in ordered]
 
 
-def _here(listed: dict, jurisdiction: str) -> bool:
-    return listed.get("jurisdiction") == jurisdiction and not listed.get("part")
-
-
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -1611,7 +1725,7 @@ def main(argv=None) -> int:
         default=0,
         metavar="N",
         help="Having looked: let through up to N take-downs in a country that rest only on not finding a "
-        "current approval (check_take_downs)",
+        "current approval (refused_take_downs)",
     )
     records = commands.add_parser("records", parents=[allowance])
     records.add_argument("--jurisdiction", required=True)
@@ -1685,7 +1799,13 @@ def main(argv=None) -> int:
             corpus = store.load()
             note_absent(corpus, args.jurisdiction, texts)
             inferred, public = planned_take_downs(corpus, set(), set(), texts)
-            check_take_downs(args.jurisdiction, inferred, public, args.allow_take_downs, command="texts")
+            del corpus
+            refusal = refused_take_downs(
+                args.jurisdiction, inferred, public, args.allow_take_downs, command="texts"
+            )
+            if refusal:
+                take_down(store, args.jurisdiction, set(), texts, args.dry_run, recorded_only=True)
+                raise Refused(refusal)
             report = publish_texts(store, args.jurisdiction, texts, decision, args.dry_run)
             print(json.dumps(report, indent=2))
             return 0
@@ -1703,19 +1823,18 @@ def main(argv=None) -> int:
         review_store = ReviewStore(create_engine(os.environ["ALVARY_REVIEW_DATABASE_URL"]))  # read only
         library = Library()
         review = Review(review_store, library, registry())
-        approved, waiting = from_workbench(review, library, review_store, args.jurisdiction)
-        withheld = {
-            act.get("work") or act["id"]
-            for act in map(library.act, (d["id"] for d in library.documents() if _here(d, args.jurisdiction)))
-            if names_withheld(review.state(act))
-        }
+        texts = Texts()
+        approved, waiting = from_workbench(review, library, review_store, args.jurisdiction, into=texts)
         store = Store(engine_for())
-        inferred, public = planned_take_downs(
-            store.load(), {a.work for a in approved} | waiting, waiting, Texts()
+        inferred, public = planned_take_downs(store.load(), {a.work for a in approved}, waiting, texts)
+        refusal = refused_take_downs(
+            args.jurisdiction, inferred, public, args.allow_take_downs, command="records"
         )
-        check_take_downs(args.jurisdiction, inferred, public, args.allow_take_downs, command="records")
+        if refusal:
+            take_down(store, args.jurisdiction, waiting, texts, args.dry_run, recorded_only=True)
+            raise Refused(refusal)
         report = publish_records(
-            store, args.jurisdiction, approved, waiting, decision, args.dry_run, confidential=withheld
+            store, args.jurisdiction, approved, waiting, decision, args.dry_run, confidential=texts.withheld
         )
         print(json.dumps(report, indent=2))
         return 0
