@@ -1025,7 +1025,8 @@ def test_every_revision_of_a_public_records_rights_record_is_announced(feed, cle
         "revision": 2,
         "decision": {"metadata": True, "full_text": True, "reasons": []},
     }
-    assert {"status", "licence", "approved_content_hashes"} <= set(opened["changed_fields"])
+    assert {"status", "licence"} <= set(opened["changed_fields"])
+    assert "approved_content_hashes" not in opened["changed_fields"]  # text events say what text there is
     assert opened["rights"]["decision"] == v1.get(f"/rights/{work}").json()["decision"]
     # The other events of a record now name the revision in force too.
     [status] = of_type(client, "metadata_corrected")
@@ -1412,8 +1413,9 @@ def test_a_text_withdrawn_in_confidence_is_named_nowhere_public_though_its_recor
     after = every_public_answer(store, client, headers, work, citation)
     assert LegacyReleases(store, root, bulk_text=True).listing() == []  # those bundles held the text
     after |= released(store, root, "2026-11-02")
+    # Only a past revision still says what it said: no new answer names the text or its hash.
     found = said_of(after, VERSION, digest_)
-    assert not any(found.values()), found
+    assert found == {VERSION: [], digest_: [f"/api/v1/rights/{work}/history"]}, found
     assert not [path for path, body in after.items() if PRIVATE.search(body)]
     # Its one new event names nothing, in every answer; nothing else names the record since.
     [new] = [e for e in events(store) if str(e["event_id"]) not in had]
@@ -1422,10 +1424,8 @@ def test_a_text_withdrawn_in_confidence_is_named_nowhere_public_though_its_recor
         shown = client.get(path, params={"limit": 100}, **kwargs).json()["events"]
         since = [e for e in shown if e["publication_revision"] >= new["publication_revision"]]
         assert [e["work"] for e in since] == [None]
-    # The answers read as those of any other text not served: no revision came of it, no hash, no reason.
-    assert client.get(f"/api/v1/rights/{work}/history", headers=headers).json()["revisions"] == [
-        {**r, "record": r["record"] | {"approved_content_hashes": []}} for r in history
-    ]
+    # No revision came of it, and what each past revision said it still says.
+    assert client.get(f"/api/v1/rights/{work}/history", headers=headers).json()["revisions"] == history
     rights = client.get(f"/site/v1/rights/{work}").json()
     assert rights["revision"] == told_revision and rights["record"]["approved_content_hashes"] == []
     assert rights["decision"] == {"metadata": True, "full_text": False, "reasons": ["No matching version"]}
@@ -1433,6 +1433,40 @@ def test_a_text_withdrawn_in_confidence_is_named_nowhere_public_though_its_recor
     edit(store, lambda c: setattr(rights_of(c, work), "privacy_status", "cleared"))
     assert client.get(f"/site/v1/rights/{work}").json()["revision"] == told_revision
     assert client.get(f"/api/v1/versions/{VERSION}/text", headers=headers).status_code == 200
+
+
+def test_a_hold_reads_as_a_lapse_in_every_rights_answer(surfaces, cleared, tmp_path):
+    """Whatever someone could read of a record's rights, now or by comparing with an earlier read, is the
+    same for a text held for privacy as for one whose approval lapsed: neither makes a revision."""
+    store, client, headers = surfaces
+    store.save(cleared)
+    work = cleared.sources[0].id
+
+    def answers():
+        return {
+            path: client.get(path, headers=headers).json()
+            for path in (
+                f"/api/v1/rights/{work}",
+                f"/api/v1/rights/{work}/history",
+                f"/api/v1/sources/{work}",
+            )
+        }
+
+    before = answers()
+    assert before[f"/api/v1/rights/{work}"]["record"]["approved_content_hashes"]
+    edit(store, lambda c: setattr(rights_of(c, work), "privacy_status", "blocked"))
+    held = answers()
+    edit(store, lambda c: setattr(rights_of(c, work), "privacy_status", "cleared"))
+    assert answers() == before  # lifted: as if it had never been
+    count = len([e for e in events(store) if e["event_type"] == "rights_changed"])
+    edit(store, lambda c: setattr(rights_of(c, work), "approved_content_hashes", []))
+    assert answers() == held
+    assert len([e for e in events(store) if e["event_type"] == "rights_changed"]) == count
+    assert held[f"/api/v1/rights/{work}/history"] == before[f"/api/v1/rights/{work}/history"]
+    # A later revision for another reason says the same of either too.
+    edit(store, lambda c: setattr(rights_of(c, work), "licence", "A later licence"))
+    lapsed_later = client.get(f"/api/v1/rights/{work}/history", headers=headers).json()["revisions"][0]
+    assert lapsed_later["record"]["approved_content_hashes"] == []
 
 
 def test_a_withdrawal_for_a_reason_that_may_be_told_is_still_named_to_keyed_callers(surfaces, cleared):

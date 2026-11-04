@@ -1591,7 +1591,9 @@ FIELDS: dict[str, dict[str, str]] = {
         "legal_note": "A note on the decision.",
         "conditions": "Conditions of reuse.",
         "conditions_satisfied": "Whether the conditions are met here.",
-        "approved_content_hashes": "The `content_hash` of each text the decision covers.",
+        "approved_content_hashes": "The `content_hash` of each text the decision covers. It follows the "
+        "texts, which `text_version_published` and `withdrawal` announce: a change to it alone is no new "
+        "revision, so a revision shows what was covered when it was recorded.",
         "metadata_public": "Whether the catalogue record may be shown.",
         "metadata_basis": "Why the catalogue record may be shown.",
     },

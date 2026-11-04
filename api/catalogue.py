@@ -27,7 +27,7 @@ from changes.record import namespace
 from rights.policy import decide, told_decision
 from schema.dates import within
 from schema.jurisdictions import catalogue_entry, registry
-from schema.models import PRIVACY_CLEARED, Citation, Corpus
+from schema.models import Citation, Corpus
 from schema.policy import MetadataPage, PublicMetadata
 from schema.public import (
     AnchorView,
@@ -790,18 +790,11 @@ class LegacyCatalogue:
         )
 
     def rights_history(self, source_id) -> RightsHistory:
-        """Every revision of a public record's rights record, newest first (OA-R1). A hidden record
-        and one that does not exist are the same answer: unavailable. While the record's privacy review
-        does not clear its texts no revision names them, or the answer would say what the current one
-        does not."""
-        _, rights = self._require(source_id)
+        """Every revision of a public record's rights record, newest first (OA-R1), each as it was told
+        when recorded, whatever has happened since. A hidden record and one that does not exist are the
+        same answer: unavailable."""
+        self._require(source_id)
         rows = self._rights_revisions(source_id, limit=MAX_UNPAGED_ROWS)
-        cleared = rights.privacy_status in PRIVACY_CLEARED
-
-        def told(row):
-            record = RightsViewRecord.model_validate(row["record"]).told()
-            return record if cleared else record.model_copy(update={"approved_content_hashes": ()})
-
         return RightsHistory(
             source_id=source_id,
             revisions=tuple(
@@ -809,7 +802,7 @@ class LegacyCatalogue:
                     revision=row["revision"],
                     recorded_at=row["committed_at"],
                     publication_revision=row["publication_revision"],
-                    record=told(row),
+                    record=RightsViewRecord.model_validate(row["record"]).told(),
                 )
                 for row in rows
             ),

@@ -104,7 +104,7 @@ def test_where_a_document_stands_is_said_in_words():
     assert changed["state"] == "next_run"
     lapsed = publishing.standing(act, state(approved=False), row(), DECIDED)
     assert lapsed["state"] == "taken_down_next"
-    assert "takes down its text" in lapsed["words"] and "another language version" in lapsed["words"]
+    assert "takes down its text" in lapsed["words"] and "another version" in lapsed["words"]
     # Its text is down; the record stays because a sibling language is approved. It says so, and goes on.
     sibling = publishing.standing(act, state(approved=False), row(text="withdrawn"), DECIDED)
     assert sibling["state"] == "text_withdrawn" and "stays public" in sibling["words"]

@@ -11836,7 +11836,7 @@
             "type": "array",
             "title": "Approved Content Hashes",
             "default": [],
-            "description": "The `content_hash` of each text the decision covers."
+            "description": "The `content_hash` of each text the decision covers. It follows the texts, which `text_version_published` and `withdrawal` announce: a change to it alone is no new revision, so a revision shows what was covered when it was recorded."
           },
           "metadata_public": {
             "type": "boolean",

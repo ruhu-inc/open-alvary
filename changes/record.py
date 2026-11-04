@@ -22,11 +22,12 @@ confidential, its privacy review is blocked, or nothing recorded says why). chan
 by its IDs to keyed callers; the second stays as every whole-record withdrawal was before.
 
 A confidential withdrawal discloses nothing further. A record's privacy review is in no event and no
-rights revision: a change to it alone is not a revision, and while it does not clear a record's texts
-neither are the texts its rights record covers. A write that withdraws a text for a confidential reason,
-its record staying public, announces nothing else of that record: what else the write changed waits for
-the record's next comparison (``_withdrawn_in_confidence``), and so never shares a publication revision
-with the withdrawal that names nothing.
+rights revision: a change to it alone is not a revision. Nor is a change to the texts a rights record
+covers, which text events announce: a text that lapses and one held in confidence leave the rights history
+alike. A write that withdraws a text for a confidential reason, its record staying public, announces nothing
+else of that record: what else the write changed waits for the record's next comparison
+(``_withdrawn_in_confidence``), and so never shares a publication revision with the withdrawal that names
+nothing.
 """
 
 import hashlib
@@ -65,9 +66,13 @@ PUBLIC_FIELDS = (
 # Public events say which version of their shape they are; new event types and fields may be added
 # within a version, and consumers ignore what they do not know (SUB-02).
 SCHEMA_VERSION = "change-event-1"
-# A rights record's fields, as GET /rights/{id} serves them: what a rights_changed event names as changed.
-RIGHTS_FIELDS = tuple(name for name, spec in RightsViewRecord.model_fields.items() if not spec.exclude)
-TEXTS_COVERED = "approved_content_hashes"
+# A rights record's fields, as GET /rights/{id} serves them: what a rights_changed event names as changed,
+# and a change to any of them a new revision. What texts it covers is said by text events instead.
+RIGHTS_FIELDS = tuple(
+    name
+    for name, spec in RightsViewRecord.model_fields.items()
+    if not spec.exclude and name != "approved_content_hashes"
+)
 # The events about a record that carry the revision of its rights record in force after the change they
 # announce (OA-R1), as rights_revision. Recorded on catalogue_added, metadata_corrected and rights_changed
 # from G15 on; events recorded before then carry it only on text_version_published and withdrawal.
@@ -456,19 +461,15 @@ def _withdrawn_in_confidence(rec: _Recorder, now: dict, previous: dict) -> set[s
 
 
 def _rights_changes(record: dict, before: dict | None) -> list[str]:
-    """The fields anyone may be told changed between two forms of a rights record (all, for its first):
-    never its privacy review, nor, while that does not clear its texts, the texts it covers."""
-    fields = [
-        f for f in RIGHTS_FIELDS if f != TEXTS_COVERED or record.get("privacy_status") in PRIVACY_CLEARED
-    ]
-    return [f for f in fields if before is None or record.get(f) != before.get(f)]
+    """The fields that changed between two forms of a rights record (all, for its first)."""
+    return [f for f in RIGHTS_FIELDS if before is None or record.get(f) != before.get(f)]
 
 
 def _rights_revisions(rec: _Recorder, scope) -> list[dict]:
-    """The works whose rights record differs, in what anyone may be told of it, from its last recorded
-    revision, each with its next revision; and, in rec.rights_revision, the revision in force for every
-    work in scope (OA-R1). A record with a text withdrawn in confidence by this write has no new revision
-    now: its next comparison finds what else changed."""
+    """The works whose rights record differs, in a field a revision is of (RIGHTS_FIELDS), from its last
+    recorded revision, each with its next revision; and, in rec.rights_revision, the revision in force for
+    every work in scope (OA-R1). A record with a text withdrawn in confidence by this write has no new
+    revision now: its next comparison finds what else changed."""
     table = rec.t["rights_revision"]
     if not scope or rec.conn.scalar(text("SELECT to_regclass(:t)"), {"t": table}) is None:
         return []  # a database before migration 0029 keeps no rights history
