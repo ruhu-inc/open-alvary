@@ -319,6 +319,9 @@ NO_LOGIN = {
     "changes": {"vectors_*"},
 }
 
+# Where a function running as its owner looks for a name it does not qualify: nowhere else, in this order.
+SAFE_SEARCH_PATH = "search_path=pg_catalog, pg_temp"
+
 # A job that cannot get on fails and can be run again; it does not hold others up behind it.
 LOCK_TIMEOUT = "SET LOCAL lock_timeout = '30s'"
 
@@ -518,15 +521,17 @@ def problems(conn: Connection, namespace: PolicyNamespace, login: Login) -> list
     allowed.add((namespace.base, "identity_check_legacy_authority(boolean)"))
     executable = conn.execute(
         text(
-            "SELECT n.nspname, p.proname || '(' || oidvectortypes(p.proargtypes) || ')'"
+            "SELECT n.nspname, p.proname || '(' || oidvectortypes(p.proargtypes) || ')', p.proconfig"
             " FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace"
             " WHERE p.prosecdef AND n.nspname !~ '^pg_' AND has_function_privilege(:r, p.oid, 'EXECUTE')"
         ),
         {"r": role},
     ).all()
-    found += [
-        f"{role} can run {schema}.{name}" for schema, name in executable if (schema, name) not in allowed
-    ]
+    for schema, name, settings in executable:
+        if (schema, name) not in allowed:
+            found.append(f"{role} can run {schema}.{name}")
+        if SAFE_SEARCH_PATH not in (settings or ()):
+            found.append(f"{role} can run {schema}.{name}, which does not fix its search path")
     return found
 
 

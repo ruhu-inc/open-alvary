@@ -1,6 +1,7 @@
 """The restricted logins' plan (rights.logins) and the Terraform that uses it stay in step, with no database.
 tests/test_postgres_logins.py signs in as each; deployment/gcp-terraform/env/tests plans each step of the move."""
 
+import json
 import re
 from pathlib import Path
 
@@ -46,6 +47,27 @@ def test_every_grant_is_on_a_kind_of_schema_the_namespace_knows_and_every_functi
         for function in login.functions:
             kind, signature = function.split(".", 1)
             assert kind in {"accounts", "policy"} and signature.endswith(")")
+
+
+def test_the_search_path_bundle_covers_what_a_login_can_run_and_changes_only_the_path():
+    folder = ROOT / "rights/sql/v0050"
+    manifest = json.loads((folder / "manifest.json").read_text())
+    pinned = {entry["signature"] for entry in manifest["functions"]}
+    runs_as_owner = {
+        function.split(".", 1)[1]
+        for login in logins.LOGINS.values()
+        for function in login.functions
+        if function.startswith("policy.")
+    } - {"accounts_access(text)"}  # runs as whoever calls it
+    assert pinned == runs_as_owner
+    for entry in manifest["functions"]:
+        assert entry["prior_body_hash"] == entry["current_body_hash"], entry["signature"]
+        before = (folder / entry["prior_file"]).read_text().splitlines()
+        after = (folder / entry["file"]).read_text().splitlines()
+        changed = [(a, b) for a, b in zip(before, after, strict=True) if a != b]
+        assert changed == [
+            (" SET search_path TO 'pg_catalog'", " SET search_path TO 'pg_catalog', 'pg_temp'")
+        ]
 
 
 def test_no_login_is_written_into_a_grant_of_a_guarded_column():
