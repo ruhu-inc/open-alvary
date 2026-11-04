@@ -9,6 +9,7 @@ from schema.dates import DateBounds, UncertainDate
 from schema.memberships import BASES, ROLES
 from schema.models import (
     ID,
+    PRIVACY_CLEARED,
     Edition,
     Hash,
     Jurisdiction,
@@ -134,6 +135,18 @@ class RightsViewRecord(RightsRecord):
     evidence: tuple[HttpUrl, ...] = ()
     conditions: tuple[Nonempty, ...] = ()
     approved_content_hashes: tuple[Hash, ...] = ()
+    # Read to take the decision, never served: a text withdrawn for privacy names nothing, so where a
+    # record's privacy review stands is told to no one (rights.policy.told_rights).
+    privacy_status: Literal["pending", "cleared", "redacted", "blocked"] = Field(
+        default="pending", exclude=True
+    )
+
+    def told(self) -> "RightsViewRecord":
+        """This record as anyone is told it: the texts it covers only while its privacy review clears them,
+        or a text withdrawn for privacy could be told from any other that is not served."""
+        if self.privacy_status in PRIVACY_CLEARED:
+            return self
+        return self.model_copy(update={"approved_content_hashes": ()})
 
 
 class VersionViewRecord(SourceVersion):

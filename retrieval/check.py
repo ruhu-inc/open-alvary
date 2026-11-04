@@ -4,7 +4,9 @@ exists (with the same locator's anchor there), and gives the part's currentness 
 jurisdiction, also whether the record binds there on that date (api.applicable: bound, not_bound or
 unknown, with its basis). A part that is not public now and one that never was are the same answer:
 unavailable (DAT-06); only for a keyed caller is a part whose text was public and was withdrawn for a
-reason that may be told ``withdrawn`` instead (owner decision, 2026-10-22; changes.feed.Withdrawals)."""
+reason that may be told ``withdrawn`` instead (owner decision, 2026-10-22; changes.feed.Withdrawals).
+A part of a text replaced by a corrected reading is not lost to whoever cited it: it answers newer_version
+like any other part with a later text, though its own words are no longer served (TXP-04)."""
 
 import hashlib
 from collections.abc import Callable
@@ -13,7 +15,7 @@ from datetime import UTC, date, datetime
 from api.catalogue import LegacyCatalogue, SourceUnavailable, expression_id
 from retrieval.legal_time import Events
 from retrieval.pack import dataset_revision
-from schema.public import CheckItem, CheckPage, CheckResult, NodeViewRecord
+from schema.public import CheckItem, CheckPage, CheckResult, NodeViewRecord, VersionViewRecord
 
 
 class Checker:
@@ -84,19 +86,61 @@ class Checker:
             at = nxt
         return at
 
+    def _replaced(self, item: CheckItem):
+        """For a part of a text that is not public: (that text, its record, the part, the latest public text
+        of the same expression that descends from it), when its record is public and there is one. A record
+        whose privacy review does not clear its texts has none, and a text published in place of one
+        withdrawn for that reason does not descend from it (operations.publish)."""
+        repository = self.service.repository
+        row = repository.node(item.anchor_id) if item.anchor_id is not None else None
+        version_id = row["version_id"] if row else item.version_id
+        source_id = repository.version_owner(version_id) if version_id else None
+        if source_id is None:
+            return None
+        try:
+            source, rights = self.service._require(source_id)
+        except SourceUnavailable:
+            return None
+        public = {v.id: v for v in self.service._approved(source, rights)}
+        texts = {text["id"]: text for text in repository.rows("versions", source_id=source_id)}
+        children: dict[str, list[str]] = {}
+        for text in texts.values():
+            if text.get("language") == texts[version_id].get("language") and text.get("prior_version_id"):
+                children.setdefault(text["prior_version_id"], []).append(text["id"])
+        newest, waiting, seen = None, [version_id], {version_id}
+        while waiting:
+            for child in sorted(children.get(waiting.pop(0), [])):
+                if child not in seen:
+                    seen.add(child)
+                    waiting.append(child)
+                    newest = public.get(child, newest)
+        if newest is None:
+            return None
+        version = VersionViewRecord.model_validate(texts[version_id])
+        node = (
+            NodeViewRecord.model_validate(row)
+            if row
+            else next((n for n in self._structure(version) if n.locator == item.locator), None)
+        )
+        return (version, source, node, newest) if node is not None else None
+
     def check(self, items: tuple[CheckItem, ...]) -> CheckPage:
         results = []
         for index, item in enumerate(items):
-            located = self._locate(item)
+            located, newest = self._locate(item), None
             if located is None:
-                told = self.withdrawn is not None and self.withdrawn(item)
-                results.append(CheckResult(index=index, result="withdrawn" if told else "unavailable",
-                                           anchor_id=item.anchor_id, version_id=item.version_id,
-                                           locator=item.locator))  # fmt: skip
-                continue
+                replaced = self._replaced(item)
+                if replaced is None:
+                    told = self.withdrawn is not None and self.withdrawn(item)
+                    results.append(CheckResult(index=index, result="withdrawn" if told else "unavailable",
+                                               anchor_id=item.anchor_id, version_id=item.version_id,
+                                               locator=item.locator))  # fmt: skip
+                    continue
+                *located, newest = replaced
             version, source, node = located
             self.jurisdictions.add(source.jurisdiction_id)
-            self.served.add((version.id, version.content_hash))
+            # What is read must still be public when the answer leaves: never the replaced text's words.
+            self.served.add(((newest or version).id, (newest or version).content_hash))
             raw = version.canonical_text.encode()
             span = raw[node.start_byte : node.end_byte]
             base = {"index": index, "anchor_id": node.id, "version_id": version.id, "locator": node.locator}
@@ -109,7 +153,7 @@ class Checker:
                 source, version, node.locator, within, item.as_of, self.today
             )
             applicability = self._applicability(item, source)
-            newest = self._newest(version, source)
+            newest = newest or self._newest(version, source)
             if newest.id == version.id:
                 results.append(
                     CheckResult(

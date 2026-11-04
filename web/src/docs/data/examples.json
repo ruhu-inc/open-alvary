@@ -142,7 +142,6 @@
         "attribution_required": null,
         "attribution_text": null,
         "database_rights_notes": null,
-        "privacy_status": "pending",
         "reviewer": null,
         "reviewed_at": null,
         "expires_at": null,
@@ -177,7 +176,6 @@
         "attribution_required": null,
         "attribution_text": null,
         "database_rights_notes": null,
-        "privacy_status": "pending",
         "reviewer": null,
         "reviewed_at": null,
         "expires_at": null,
@@ -197,7 +195,6 @@
           "Redistribution permission is missing",
           "Commercial reuse and derivatives require explicit permission",
           "Rights evidence/reviewer/licence record is incomplete",
-          "Privacy review is incomplete",
           "Attribution obligations are unresolved",
           "No matching version"
         ]

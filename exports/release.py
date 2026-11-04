@@ -10,7 +10,7 @@ from pathlib import Path
 
 from api.store import ROOT, Store, engine_for
 from exports.identity import validate_release_id
-from rights.policy import public_corpus
+from rights.policy import public_corpus, told_rights
 from schema.models import Corpus
 
 
@@ -61,11 +61,9 @@ def write_release(
         for name in Corpus.model_fields:
             rows = sorted(getattr(public, name), key=lambda r: r.id)
             path = stage / f"{name}.jsonl"
+            told = told_rights if name == "rights" else lambda r: r.model_dump(mode="json")
             path.write_text(
-                "".join(
-                    json.dumps(r.model_dump(mode="json"), sort_keys=True, ensure_ascii=False) + "\n"
-                    for r in rows
-                )
+                "".join(json.dumps(told(r), sort_keys=True, ensure_ascii=False) + "\n" for r in rows)
             )
             files[path.name] = {"sha256": sha256(path.read_bytes()).hexdigest(), "records": len(rows)}
         extras = {

@@ -14,7 +14,7 @@ from pathlib import Path
 
 from api.repositories import LegacyRepository
 from api.store import Store, check_legacy_authority
-from rights.policy import decide
+from rights.policy import decide, told_rights
 from schema.models import Corpus, RightsRecord
 
 BATCH = 500
@@ -72,14 +72,17 @@ def _still_public(directory: Path, repository: LegacyRepository) -> bool:
         public = repository.public_among([row["id"] for row in rows])
         if any(row["id"] not in public for row in rows):
             return False
-    # Review corrections invalidate bundles containing stale rights assertions.
+    # Review corrections invalidate bundles containing stale rights assertions: what a release tells of each
+    # rights record, against what would be told of it now. (A release made before privacy reviews stopped
+    # being released still has that field; it is not what is compared.)
     for rows in batched(_rows(directory, "rights"), BATCH):
         rights = repository.public_rights([row["source_id"] for row in rows])
         for row in rows:
             current = rights.get(row["source_id"])
             if current is None:
                 return False
-            if row != current and RightsRecord.model_validate(row) != RightsRecord.model_validate(current):
+            released = RightsRecord.model_validate(row).model_dump(mode="json", exclude={"privacy_status"})
+            if released != told_rights(RightsRecord.model_validate(current)):
                 return False
     claims = ((row["id"], row["content_hash"]) for row in _rows(directory, "versions"))
     for batch in batched(claims, BATCH):

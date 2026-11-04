@@ -11,7 +11,9 @@ withdraw-confidentially --work ID
                     (privacy, a legal or court order, or another confidential reason): its rights
                     record stops allowing its metadata, and its withdrawal names nothing, to anyone.
                     For a record already withdrawn whose withdrawal keyed callers are told of, stop
-                    telling them: a withdrawal naming nothing is appended (what was delivered stays)
+                    telling them: a withdrawal naming nothing is appended (what was delivered stays).
+                    Either way its privacy review is set to blocked, which the publish job never
+                    publishes over, even with a current approval: only an operator lifts that
 
 Any other write that takes a record out of public view by changing its rights record is announced as a
 withdrawal with reason_code rights_changed, which names the record by its IDs to keyed callers (owner
@@ -52,18 +54,16 @@ def main(argv=None) -> int:
             print(f"Recorded {sweep(conn)} changes")
         elif args.command == "withdraw-confidentially":
             check_legacy_authority(conn, write=True)
+            rights = tables["rights"]
+            record = conn.scalar(select(rights.c.payload).where(rights.c.source_id == args.work))
+            held = (record or {}) | {"metadata_public": False, "privacy_status": "blocked"}
             if not current(conn, [args.work]):
                 if not withhold(conn, args.work):
                     raise SystemExit("No public record, or withdrawal told to keyed callers, has that ID")
+                conn.execute(update(rights).where(rights.c.source_id == args.work).values(payload=held))
                 print("Its withdrawal is no longer told; answers already delivered cannot be recalled")
                 return 0
-            rights = tables["rights"]
-            record = conn.scalar(select(rights.c.payload).where(rights.c.source_id == args.work))
-            conn.execute(
-                update(rights)
-                .where(rights.c.source_id == args.work)
-                .values(payload=record | {"metadata_public": False})
-            )
+            conn.execute(update(rights).where(rights.c.source_id == args.work).values(payload=held))
             recorded = publish(conn, [args.work], confidential=[args.work])
             print(f"Withdrawn; recorded {recorded} changes, none naming the record")
         elif args.command == "new-epoch":

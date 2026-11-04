@@ -11,7 +11,7 @@ from api.catalogue import LegacyCatalogue
 from api.main import create_app
 from api.repositories import LegacyRepository
 from exports.release import coverage
-from rights.policy import decide, public_corpus
+from rights.policy import decide, public_corpus, told_decision, told_rights
 from schema.models import Citation, RightsRecord
 
 
@@ -44,12 +44,14 @@ def test_scoped_services_preserve_pilot_wire_contract(cleared, store, tmp_path, 
         versions = [v for v in expected.versions if v.source_id == source.id]
         assert client.get(f"/sources/{source.id}").json() == source_view(expected, source)
         assert client.get(f"/rights/{source.id}").json() == {
-            "record": record.model_dump(mode="json"),
-            "decision": decide(record, versions[0] if versions else None).model_dump(mode="json"),
+            "record": told_rights(record),
+            "decision": told_decision(decide(record, versions[0] if versions else None)).model_dump(
+                mode="json"
+            ),
         }
         assert client.get(f"/sources/{source.id}/versions").json() == {
             "items": [v.model_dump(mode="json") for v in versions],
-            "rights": record.model_dump(mode="json"),
+            "rights": told_rights(record),
             "structure": [n.model_dump(mode="json") for n in expected.structure if n.source_id == source.id],
             "notice": None if versions else "No version has passed both rights and content review.",
         }
