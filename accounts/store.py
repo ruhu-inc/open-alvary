@@ -586,21 +586,30 @@ class Accounts:
 
     # ---------- console sessions and sign-in flows ----------
     def create_session(
-        self, person_id: str, *, second_factor: bool, client_family=None, network_prefix=None
+        self,
+        person_id: str,
+        *,
+        second_factor: bool,
+        client_family=None,
+        network_prefix=None,
+        authenticated_at: datetime | None = None,
     ) -> tuple[str, str]:
+        """``authenticated_at``: when the person really signed in, if that was before now."""
         token, csrf = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
+        signed_in = "LEAST(CAST(:at AS timestamptz), statement_timestamp())"
         with self.engine.begin() as conn:
             conn.execute(
                 text(
                     f"INSERT INTO {self._t(conn, 'console_session')} (token_hash, person_id, csrf, expires_at,"
                     " authenticated_at, second_factor_at, client_family, network_prefix) VALUES (:h, :p, :c,"
-                    f" statement_timestamp() + interval '{SESSION_DAYS} days', statement_timestamp(),"
-                    " CASE WHEN :mfa THEN statement_timestamp() END, :client, :network)"
+                    f" statement_timestamp() + interval '{SESSION_DAYS} days', {signed_in},"
+                    f" CASE WHEN :mfa THEN {signed_in} END, :client, :network)"
                 ),
                 {
                     "h": token_hash(token),
                     "p": person_id,
                     "c": csrf,
+                    "at": authenticated_at,
                     "mfa": second_factor,
                     "client": client_family,
                     "network": network_prefix,

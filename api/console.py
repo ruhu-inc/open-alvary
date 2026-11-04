@@ -16,8 +16,8 @@ outside loopback, SameSite=Lax (the provider's redirect back is a cross-site nav
 limited to /console. Every change needs the session's CSRF token and, when the browser sends one,
 our own Origin. Sensitive actions need a sign-in within the last 10 minutes, and owners and admins
 of an organisation with access also a second factor within the same window (MAC-08). Those times
-come only from signing in with a method the person already had. Adding a method is itself a
-sensitive action, and records nothing about the session (F08).
+come only from signing in with a method the person already had, by when the provider says it really
+happened. Adding a method is itself a sensitive action, and records nothing about the session (F08).
 
 A development sign-in exists for a local trial only: it must be switched on explicitly
 (ALVARY_CONSOLE_DEV_LOGIN=1) and answers only on a loopback address from a loopback client.
@@ -55,6 +55,8 @@ from changes.webhooks import Webhooks, svix_valid
 SESSION_COOKIE = "oa_console"
 FLOW_COOKIE = "oa_console_flow"
 FRESH = timedelta(minutes=10)
+PROVIDER_SESSION_SECONDS = 30 * 86400  # the longest the provider remembers a sign-in
+CLOCK_SKEW_SECONDS = 60
 REGISTRATION_EMAILS_AN_HOUR = 30
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 RETURN = re.compile(r"^/console(/[A-Za-z0-9/_?=&%.-]*)?$")
@@ -121,8 +123,11 @@ class Provider:
             query["connection"] = CONNECTIONS[method]
         if login_hint:
             query["login_hint"] = login_hint  # "Continue as …": the provider pre-fills the account
-        if purpose != "sign_in":
+        if purpose == "sign_in":
+            query["max_age"] = str(PROVIDER_SESSION_SECONDS)  # the ID token then says when it happened
+        else:
             query["prompt"] = "login"  # a fresh sign-in, never the provider's remembered session
+            query["max_age"] = "0"  # the same, in the form that makes the ID token say when it happened
         if purpose == "second_factor":
             query["acr_values"] = MFA_POLICY
         return f"{self.discovery()['authorization_endpoint']}?{urlencode(query)}"
@@ -152,7 +157,20 @@ class Provider:
             or not claims.get("sub")
         ):
             raise AccountError("sign_in_refused", 401, "The sign-in could not be verified. Try again.")
+        # The request above went to the provider through the browser, so what it asked is checked here:
+        # a flow that asked for a fresh sign-in comes back with one made since it began.
+        if (
+            flow["purpose"] != "sign_in"
+            and signed_in_at(claims) < flow["created_at"].timestamp() - CLOCK_SKEW_SECONDS
+        ):
+            raise AccountError("sign_in_refused", 401, "The sign-in could not be verified. Try again.")
         return claims
+
+
+def signed_in_at(claims: dict) -> float:
+    """When the person really signed in at the provider (auth_time), or 0 if the token doesn't say."""
+    moment = claims.get("auth_time")
+    return float(moment) if isinstance(moment, int | float) and not isinstance(moment, bool) else 0.0
 
 
 def _claims(token: str) -> dict:
@@ -382,7 +400,14 @@ def create_console_app(
                 raise AccountError("method_not_supported", 403, "Sign in with Google or an email code.")
             mfa = "mfa" in (claims.get("amr") or [])
             return _complete(
-                request, flow, provider.config.issuer, claims["sub"], method, claims["email"], mfa
+                request,
+                flow,
+                provider.config.issuer,
+                claims["sub"],
+                method,
+                claims["email"],
+                mfa,
+                signed_in_at(claims),
             )
         except AccountError as refused:
             failed(request, flow, refused.code, claims.get("sub"), method)
@@ -392,7 +417,7 @@ def create_console_app(
         person = accounts.person_for_identity(provider.config.issuer, subject) if subject else None
         accounts.sign_in_failed(code, flow["purpose"], person, method, context(request))
 
-    def _complete(request, flow, issuer, subject, method, email, mfa) -> Response:
+    def _complete(request, flow, issuer, subject, method, email, mfa, signed_at) -> Response:
         ctx = context(request)
         notices: list[mail.Message] = []
         purpose = flow["purpose"]
@@ -400,9 +425,12 @@ def create_console_app(
             signed = accounts.sign_in(
                 issuer=issuer, subject=subject, method=method, email=email, label=email, context=ctx
             )
+            # A session is as fresh as the sign-in behind it. The provider may answer from a sign-in it
+            # remembers, which keeps its age here and, once older than the window, no second factor.
             token, _ = accounts.create_session(
                 signed["id"],
-                second_factor=mfa,
+                second_factor=mfa and time.time() - signed_at <= FRESH.total_seconds(),
+                authenticated_at=datetime.fromtimestamp(signed_at, UTC),
                 client_family=ctx.client_family,
                 network_prefix=ctx.network_prefix,
             )
@@ -482,7 +510,9 @@ def create_console_app(
             token = request.cookies.get(SESSION_COOKIE, "")
             flow["session_hash"] = hashlib.sha256(token.encode()).digest()
         try:
-            return _complete(request, flow, DEV_ISSUER, "dev|" + email.lower(), "email", email, bool(mfa))
+            return _complete(
+                request, flow, DEV_ISSUER, "dev|" + email.lower(), "email", email, bool(mfa), time.time()
+            )
         except AccountError as refused:
             return _back(request, refused.code)
 

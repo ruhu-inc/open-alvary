@@ -95,7 +95,9 @@ def sign_in(
     return_to="/console",
     amr=None,
     code="c",
+    ago=0,
 ):
+    """``ago``: how long since the person really signed in at the provider; None leaves the claim out."""
     start = browser.get(
         "/auth/start", params={"purpose": purpose, "method": "google", "return_to": return_to}
     )
@@ -112,6 +114,8 @@ def sign_in(
     }
     if amr:
         claims["amr"] = amr
+    if ago is not None:
+        claims["auth_time"] = time.time() - ago
     fake.codes[code] = claims
     return browser.get("/auth/callback", params={"state": query["state"][0], "code": code}), query
 
@@ -790,7 +794,7 @@ def test_a_real_sign_in_with_a_linked_method_refreshes_the_session(console):
     assert browser.post("/api/v1/me/export", headers=headers).status_code == 401
     before = session_times(accounts)
     done, query = sign_in(browser, fake, purpose="reauthenticate", code="r")
-    assert query["prompt"] == ["login"] and "acr_values" not in query
+    assert query["prompt"] == ["login"] and query["max_age"] == ["0"] and "acr_values" not in query
     assert done.headers["location"] == "/console"
     after = session_times(accounts)
     assert after.authenticated_at > before.authenticated_at and after.second_factor_at is None
@@ -828,9 +832,25 @@ def test_a_method_linked_after_a_step_up_began_cannot_finish_it(console):
         "sub": "google-oauth2|second",
         "email": "a2@example.org",
         "email_verified": True,
+        "auth_time": time.time(),
     }
     done = browser.get("/auth/callback", params={"state": query["state"][0], "code": "late"})
     assert done.headers["location"] == "/console/sign-in?error=wrong_account"
+    assert session_times(accounts) == before
+
+
+@pytest.mark.parametrize("ago", [3600, None], ids=["provider-session-kept", "no-sign-in-time"])
+@pytest.mark.parametrize("purpose", ["reauthenticate", "second_factor"])
+def test_a_step_up_needs_a_sign_in_made_since_it_began(console, purpose, ago):
+    """The redirect to the provider passes through the browser, so what it asked for is checked on the way
+    back: the sign-in the provider reports must be newer than the flow."""
+    accounts, fake, app = console
+    browser = client(app)
+    onboard(browser, fake)
+    age_session(accounts, 11)
+    before = session_times(accounts)
+    done, _ = sign_in(browser, fake, purpose=purpose, amr=["mfa"], ago=ago, code="s")
+    assert done.headers["location"] == "/console/sign-in?error=sign_in_refused"
     assert session_times(accounts) == before
 
 
@@ -844,8 +864,37 @@ def test_parameters_a_browser_adds_to_the_start_change_nothing_asked_of_the_prov
         | {"acr_values": "anything", "prompt": "none", "max_age": "999999", "scope": "openid admin"},
     )
     query = parse_qs(urlparse(started.headers["location"]).query)
-    assert "acr_values" not in query and query["prompt"] == ["login"]
+    assert "acr_values" not in query and query["prompt"] == ["login"] and query["max_age"] == ["0"]
     assert query["scope"] == ["openid email profile"]
+
+
+def test_a_sign_in_counts_as_fresh_only_from_when_the_person_really_signed_in(console):
+    accounts, fake, app = console
+    onboard(client(app), fake)
+    with accounts.engine.begin() as conn:
+        conn.execute(text(f"DELETE FROM {accounts._t(conn, 'console_session')}"))
+    # A sign-in the provider answers from its own earlier session, whatever that session proved.
+    browser = client(app)
+    done, query = sign_in(browser, fake, amr=["mfa"], ago=3600, code="k")
+    assert done.headers["location"] == "/console" and "max_age" in query and "prompt" not in query
+    assert session_times(accounts).second_factor_at is None
+    headers = {"X-CSRF-Token": browser.get("/api/v1/me").json()["csrf"]}
+    assert browser.post("/api/v1/me/export", headers=headers).status_code == 401
+    assert browser.get("/auth/start", params=LINK).headers["location"].startswith("/console/auth/start")
+    # No time reported: the session works, and sensitive changes ask for a sign-in first.
+    browser = client(app)
+    sign_in(browser, fake, ago=None, code="n")
+    me = browser.get("/api/v1/me")
+    assert me.status_code == 200
+    headers = {"X-CSRF-Token": me.json()["csrf"]}
+    assert browser.post("/api/v1/me/export", headers=headers).status_code == 401
+    # A sign-in just made counts, with its second factor.
+    browser = client(app)
+    sign_in(browser, fake, amr=["mfa"], code="f")
+    me = browser.get("/api/v1/me").json()
+    assert me["second_factor_until"] is not None
+    headers = {"X-CSRF-Token": me["csrf"]}
+    assert browser.post("/api/v1/me/export", headers=headers).status_code == 200
 
 
 def stepped_world(accounts, fake, app):
