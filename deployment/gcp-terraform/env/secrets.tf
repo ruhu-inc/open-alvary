@@ -21,7 +21,7 @@ locals {
     },
   )
 
-  # Made by Terraform from the new instance (postgres.tf); the service connects with the first, and
+  # Made by Terraform from the new instance (postgres.tf); the first is the database owner's login, and
   # the launch check reads the second (scripts.check_launch, in the migrate job).
   generated_secrets = {
     "database-url" = format(
@@ -34,14 +34,79 @@ locals {
     "database-password" = random_password.postgres.result
   }
 
-  secret_readers = merge(
-    { for name, readers in local.copied_secrets : name => readers },
-    { "database-url" = ["public"], "database-password" = ["public"] },
-  )
-  workload_accounts = {
-    public    = google_service_account.public.member
-    workbench = google_service_account.workbench.member
+  # The restricted logins (rights/logins.py), each with what its workloads do and no more; the logins job
+  # makes them from these URLs. The owner's login is then for the migrations alone. Each URL's password
+  # is generated here and reaches the job only through the secret: a plan shows neither.
+  login_roles = {
+    service   = "open_alvary_service"
+    jobs      = "open_alvary_jobs"
+    retrieval = "open_alvary_retrieval"
+    publish   = "open_alvary_publish"
   }
+  database_logins = var.database_logins_ready ? {
+    for login, role in local.login_roles : login => role if login != "publish" || local.publish_enabled
+  } : {}
+  # The login each workload signs in with once it is in database_logins_in_use, and the account that
+  # reads the login's secret.
+  workload_login = {
+    service   = "service"
+    worker    = "jobs"
+    daily     = "jobs"
+    terms     = "jobs"
+    retrieval = "retrieval"
+    indexer   = "retrieval"
+    publish   = "publish"
+  }
+  login_reader = {
+    service   = "public"
+    jobs      = "jobs"
+    retrieval = "retrieval"
+    publish   = "publisher"
+  }
+  # Workload → the secret holding the URL it signs in with.
+  database_secret = {
+    for workload, login in local.workload_login :
+    workload => contains(var.database_logins_in_use, workload) ? "database-url-${login}" : "database-url"
+  }
+
+  # The shared account keeps the owner's secrets until nothing on it signs in as the owner.
+  on_shared_account  = ["service", "worker", "daily", "terms", "retrieval", "indexer", "migrate"]
+  shared_needs_owner = length(setsubtract(local.on_shared_account, var.database_logins_in_use)) > 0
+  owner_readers = concat(
+    local.shared_needs_owner ? ["public"] : [],
+    var.database_logins_ready ? ["migrator"] : [],
+  )
+  # What a job moved off the shared account reads beside its own login (jobs.tf).
+  moved_job_readers = var.database_logins_ready ? {
+    "webhook-keys"   = ["jobs"]
+    "resend-api-key" = var.accounts_enabled ? ["jobs"] : []
+    "auth0-deletion-client-id" = (
+      contains(var.optional_secrets, "auth0-deletion-client-id") ? ["jobs"] : []
+    )
+    "auth0-deletion-client-secret" = (
+      contains(var.optional_secrets, "auth0-deletion-client-secret") ? ["jobs"] : []
+    )
+  } : {}
+
+  secret_readers = merge(
+    {
+      for name, readers in local.copied_secrets :
+      name => concat(name == "access-role-password" ? local.owner_readers : readers, lookup(local.moved_job_readers, name, []))
+    },
+    { "database-url" = local.owner_readers, "database-password" = local.owner_readers },
+  )
+  workload_accounts = merge(
+    {
+      public    = google_service_account.public.member
+      workbench = google_service_account.workbench.member
+    },
+    var.database_logins_ready ? {
+      migrator  = google_service_account.migrator[0].member
+      jobs      = google_service_account.jobs[0].member
+      retrieval = google_service_account.retrieval[0].member
+    } : {},
+    local.publish_enabled ? { publisher = google_service_account.publisher[0].member } : {},
+  )
 }
 
 resource "google_secret_manager_secret" "copied" {
@@ -78,6 +143,54 @@ resource "google_secret_manager_secret_version" "generated" {
   for_each    = toset(keys(local.generated_secrets))
   secret      = google_secret_manager_secret.generated[each.key].id
   secret_data = local.generated_secrets[each.key]
+}
+
+# Each restricted login's URL, its password generated here (letters and digits: rights/logins.py writes
+# it into the role). Read by the workloads that sign in with it and by the logins job.
+resource "random_password" "database_login" {
+  for_each = local.database_logins
+  length   = 40
+  special  = false
+}
+
+resource "google_secret_manager_secret" "database_login" {
+  for_each  = local.database_logins
+  secret_id = "database-url-${each.key}"
+
+  replication {
+    user_managed {
+      replicas {
+        location = var.region
+      }
+    }
+  }
+
+  depends_on = [google_project_service.main]
+}
+
+resource "google_secret_manager_secret_version" "database_login" {
+  for_each = local.database_logins
+  secret   = google_secret_manager_secret.database_login[each.key].id
+  secret_data = format(
+    "postgresql+psycopg://%s:%s@%s:5432/%s?sslmode=require",
+    each.value,
+    random_password.database_login[each.key].result,
+    google_sql_database_instance.main.private_ip_address,
+    local.database,
+  )
+}
+
+resource "google_secret_manager_secret_iam_member" "database_login" {
+  for_each = {
+    for pair in flatten([
+      for login in keys(local.database_logins) : [
+        for reader in distinct(["migrator", local.login_reader[login]]) : { login = login, reader = reader }
+      ]
+    ]) : "${pair.login}/${pair.reader}" => pair
+  }
+  secret_id = google_secret_manager_secret.database_login[each.value.login].id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = local.workload_accounts[each.value.reader]
 }
 
 resource "google_secret_manager_secret_iam_member" "readers" {

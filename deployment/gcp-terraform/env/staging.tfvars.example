@@ -47,6 +47,11 @@ inference_gpu     = "t4"
 # Empty until a generation passes its gates (RSV-12): the service runs on the lexical arms.
 vector_profile = ""
 
+# Restricted database logins (rights/logins.py): off, and the order to turn them on is in the runbook's
+# "Database logins". The owner's login is then for the migrations alone.
+# database_logins_ready  = true
+# database_logins_in_use = ["retrieval", "indexer", "publish", "worker", "daily", "terms", "service", "migrate"]
+
 # Phase 4: the workbench, behind Identity-Aware Proxy at its run.app address.
 # workbench_image       = ""
 # workbench_iap_members = ["group:workbench-operators@example.org"]

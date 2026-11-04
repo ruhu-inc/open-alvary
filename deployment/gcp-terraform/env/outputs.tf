@@ -9,7 +9,11 @@ output "registry" {
 
 output "secrets" {
   description = "The secrets secrets.sh fills, by name; Terraform filled the generated ones."
-  value       = sort(concat(keys(local.copied_secrets), keys(local.generated_secrets)))
+  value = sort(concat(
+    keys(local.copied_secrets),
+    keys(local.generated_secrets),
+    [for login in keys(local.database_logins) : "database-url-${login}"],
+  ))
 }
 
 output "storage" {

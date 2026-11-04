@@ -2,8 +2,9 @@
 # Flexible Server. The same major version (16) as on Azure and today's Cloud SQL, so the database
 # moves by pg_dump and pg_restore (deployment/gcp-terraform/data.sh). The service connects over TCP
 # to the private address, encrypted (ssl_mode and sslmode=require), not through the Cloud SQL
-# connector's socket, which needs a public address. The user is open_alvary, as today; the
-# migrations create the restricted roles (rights/sql/provision) inside.
+# connector's socket, which needs a public address. The user is open_alvary, as today, and owns the
+# schema; the restricted logins the running system moves to are made inside by rights/logins.py
+# (secrets.tf, database_logins_ready).
 #
 # Extensions: Cloud SQL has no allow-list to set (Azure's azure.extensions). pg_trgm (catalogue
 # search) and vector (the dense arm's fallback store) are both on its list of supported extensions,

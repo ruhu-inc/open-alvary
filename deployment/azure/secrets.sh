@@ -57,6 +57,7 @@ if [[ "$COMMAND" == plan ]]; then
   cat <<'PLAN'
 Made elsewhere, not copied:
   database-url, database-password, review-database-url   Terraform, from the new servers' passwords
+  database-url-service, -jobs, -retrieval                Terraform, when database_logins_ready (rights/logins.py)
   access-database-url                 copy composes it: the access role's password, the new host
   workbench-entra-client-secret       the owner, from the workbench's Entra app registration
   google-wif-config                   the owner, gcloud iam workload-identity-pools create-cred-config

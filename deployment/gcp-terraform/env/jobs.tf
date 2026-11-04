@@ -7,17 +7,23 @@
 # - worker and daily (activation B): monitors, digests and webhooks every five minutes; audit seals,
 #   sweeps and purges once a day at 03:15 UTC, as today; terms, run by hand, emails owners of
 #   new terms. Their schedules stay paused until the
-#   public domains point here (domain_live): only the live environment writes to the outside world.
+#   public domains point here (domain_live): only the live environment writes to the outside world;
+# - logins: makes or repairs the restricted database logins (rights/logins.py), run by hand.
+#
+# A job named in database_logins_in_use signs in with its own login, under its own account, with only
+# the secrets it reads; until then it shares the service's login, account and secrets, as it always has.
 
 locals {
   jobs = merge(
     {
       migrate = {
-        command = ["sh", "-c", "python -m scripts.check_launch && alembic upgrade head && python -m scripts.seed"]
+        # With the logins made, what a migration added reaches them before the new revision starts.
+        command = ["sh", "-c", "python -m scripts.check_launch && alembic upgrade head && python -m scripts.seed${var.database_logins_ready ? " && python -m rights.logins grants" : ""}"]
         args    = []
         cron    = null
         timeout = 900
         secrets = { POSTGRES_PASSWORD = "database-password" } # scripts.check_launch checks it
+        reads   = []
       }
     },
     # Off while the image is a release from before the retrieval service (retrieval.worker), such as
@@ -29,6 +35,7 @@ locals {
         cron    = "* * * * *"
         timeout = 55
         secrets = {}
+        reads   = []
       }
       # The semantic index's operator commands, run by hand with the arguments of each run (README,
       # "Semantic index"): prepare, validate, activate, rollback, purge, status.
@@ -38,6 +45,7 @@ locals {
         cron    = null
         timeout = 900
         secrets = {}
+        reads   = []
       }
     } : {},
     var.accounts_enabled ? {
@@ -47,6 +55,7 @@ locals {
         cron    = "*/5 * * * *"
         timeout = 280
         secrets = {}
+        reads   = ["ALVARY_WEBHOOK_KEYS", "RESEND_API_KEY"]
       }
       daily = {
         command = ["sh", "-c", "python -m accounts.seals seal && python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge && python -m accounts.seals verify && python -m api.traffic maintain"]
@@ -54,6 +63,7 @@ locals {
         cron    = "15 3 * * *"
         timeout = 600
         secrets = {}
+        reads   = ["ALVARY_AUTH0_DELETION_CLIENT_ID", "ALVARY_AUTH0_DELETION_CLIENT_SECRET"]
       }
       # New terms, emailed to organisations' owners (runbook, "New terms"), run by hand with the
       # operator and the notice's arguments. The command is fixed, so the job can do nothing else.
@@ -63,6 +73,7 @@ locals {
         cron    = null
         timeout = 900
         secrets = {}
+        reads   = ["RESEND_API_KEY"]
       }
       # The workbench's database role and its grants (runbook, "Website traffic counts"), run by hand
       # after a migration that adds something the Access or Traffic section reads. Grants only: it has
@@ -73,10 +84,64 @@ locals {
         cron    = null
         timeout = 300
         secrets = {}
+        reads   = []
+      }
+    } : {},
+    # Makes or repairs the restricted logins, safe to run again: with the argument check, signs in as each
+    # and proves what it can and cannot do, changing nothing (the runbook's "Database logins").
+    var.database_logins_ready ? {
+      logins = {
+        command = ["python", "-m", "rights.logins"]
+        args    = ["provision"]
+        cron    = null
+        timeout = 300
+        secrets = { for login in keys(local.database_logins) : "ALVARY_LOGIN_${upper(login)}_URL" => "database-url-${login}" }
+        reads   = []
       }
     } : {},
   )
   scheduled_jobs = { for name, job in local.jobs : name => job if job.cron != null }
+
+  # Moved off the shared account: the logins job always; access-role with the migrations, whose login it
+  # shares; each other job when database_logins_in_use names it.
+  moved_jobs = toset([
+    for name in keys(local.jobs) : name
+    if name == "logins" || contains(var.database_logins_in_use, name == "access-role" ? "migrate" : name)
+  ])
+  job_accounts = {
+    migrate     = "migrator"
+    access-role = "migrator"
+    logins      = "migrator"
+    retrieval   = "retrieval"
+    indexer     = "retrieval"
+    worker      = "jobs"
+    daily       = "jobs"
+    terms       = "jobs"
+  }
+  moved_accounts = var.database_logins_ready ? {
+    migrator  = google_service_account.migrator[0].email
+    jobs      = google_service_account.jobs[0].email
+    retrieval = google_service_account.retrieval[0].email
+  } : {}
+  # Jobs read neither the admission configurations nor the service's other secrets.
+  admission_settings = ["ALVARY_ADMISSION_CONFIG", "ALVARY_SITE_ADMISSION_CONFIG"]
+  job_env = {
+    for name in keys(local.jobs) : name => {
+      for key, value in local.public_env : key => value
+      if !contains(local.moved_jobs, name) || !contains(local.admission_settings, key)
+    }
+  }
+  job_secret_env = {
+    for name, job in local.jobs : name => merge(
+      contains(local.moved_jobs, name) ? {
+        for key, secret in local.public_secret_env : key => secret if contains(job.reads, key)
+      } : local.public_secret_env,
+      job.secrets,
+      {
+        DATABASE_URL = contains(keys(local.database_secret), name) ? local.database_secret[name] : "database-url"
+      },
+    )
+  }
 }
 
 resource "google_cloud_run_v2_job" "public" {
@@ -90,7 +155,7 @@ resource "google_cloud_run_v2_job" "public" {
     parallelism = 1
 
     template {
-      service_account = google_service_account.public.email
+      service_account = contains(local.moved_jobs, each.key) ? local.moved_accounts[local.job_accounts[each.key]] : google_service_account.public.email
       timeout         = "${each.value.timeout}s"
       max_retries     = 0
 
@@ -116,14 +181,14 @@ resource "google_cloud_run_v2_job" "public" {
         }
 
         dynamic "env" {
-          for_each = local.public_env
+          for_each = local.job_env[each.key]
           content {
             name  = env.key
             value = env.value
           }
         }
         dynamic "env" {
-          for_each = merge(local.public_secret_env, each.value.secrets)
+          for_each = local.job_secret_env[each.key]
           content {
             name = env.key
             value_source {
@@ -136,7 +201,7 @@ resource "google_cloud_run_v2_job" "public" {
         }
 
         dynamic "volume_mounts" {
-          for_each = local.public_secret_files
+          for_each = contains(local.moved_jobs, each.key) ? {} : local.public_secret_files
           content {
             name       = volume_mounts.key
             mount_path = "/secrets/${volume_mounts.key}"
@@ -145,7 +210,7 @@ resource "google_cloud_run_v2_job" "public" {
       }
 
       dynamic "volumes" {
-        for_each = local.public_secret_files
+        for_each = contains(local.moved_jobs, each.key) ? {} : local.public_secret_files
         content {
           name = volumes.key
           secret {
@@ -166,7 +231,12 @@ resource "google_cloud_run_v2_job" "public" {
     ignore_changes = [client, client_version]
   }
 
-  depends_on = [google_secret_manager_secret_iam_member.readers, google_secret_manager_secret_version.generated]
+  depends_on = [
+    google_secret_manager_secret_iam_member.readers,
+    google_secret_manager_secret_version.generated,
+    google_secret_manager_secret_iam_member.database_login,
+    google_secret_manager_secret_version.database_login,
+  ]
 }
 
 # Cloud Scheduler starts each scheduled job through Cloud Run's API, as the scheduler account, which

@@ -99,6 +99,7 @@ if [[ "$COMMAND" == plan ]]; then
   cat <<'PLAN'
 Made elsewhere, not copied:
   database-url, database-password, review-database-url   Terraform, from the new instances
+  database-url-service, -jobs, -retrieval, -publish      Terraform, when database_logins_ready (rights/logins.py)
   access-database-url                                    copy composes it: the access role's password, the new host
   the workbench's IAP sign-in client                     the owner, gcloud iap settings set (README, phase 4)
 Not needed on Google Cloud: google-wif-config (Document AI is reached natively).

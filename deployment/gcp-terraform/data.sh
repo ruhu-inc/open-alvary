@@ -197,6 +197,7 @@ backup)
   echo "Restored. Now give $TO's users this environment's passwords again, in deployment/gcp-terraform/env:"
   echo "  terraform apply -var-file=${ENVIRONMENT}.tfvars -replace='$PASSWORD'"
   [[ "$TARGET" == public ]] && echo "Then release the public service (release.sh $ENVIRONMENT public): its migrations check the schema."
+  [[ "$TARGET" == public ]] && echo "With the restricted logins made, run the logins job too: the copy brought the source's passwords (runbook, \"Database logins\")."
   ;;
 
 restore)

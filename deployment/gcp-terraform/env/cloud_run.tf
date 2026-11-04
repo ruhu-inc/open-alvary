@@ -73,7 +73,13 @@ resource "google_cloud_run_v2_service" "public" {
     max_instance_request_concurrency = 80
     # Cloud Run reads a secret when an instance starts: a new database URL (a new password after a
     # backup restore, data.sh) starts a new revision in the same apply.
-    labels = { database-url-version = google_secret_manager_secret_version.generated["database-url"].version }
+    labels = {
+      database-url-version = (
+        local.database_secret["service"] == "database-url"
+        ? google_secret_manager_secret_version.generated["database-url"].version
+        : google_secret_manager_secret_version.database_login["service"].version
+      )
+    }
 
     scaling {
       min_instance_count = var.public_min_replicas
@@ -112,7 +118,7 @@ resource "google_cloud_run_v2_service" "public" {
         }
       }
       dynamic "env" {
-        for_each = local.public_secret_env
+        for_each = merge(local.public_secret_env, { DATABASE_URL = local.database_secret["service"] })
         content {
           name = env.key
           value_source {
@@ -164,5 +170,10 @@ resource "google_cloud_run_v2_service" "public" {
     }
   }
 
-  depends_on = [google_secret_manager_secret_iam_member.readers, google_secret_manager_secret_version.generated]
+  depends_on = [
+    google_secret_manager_secret_iam_member.readers,
+    google_secret_manager_secret_version.generated,
+    google_secret_manager_secret_iam_member.database_login,
+    google_secret_manager_secret_version.database_login,
+  ]
 }

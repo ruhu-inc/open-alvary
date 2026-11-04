@@ -372,6 +372,26 @@ variable "transfer_source" {
   default     = "gs://open-alvary-corpus"
 }
 
+variable "database_logins_ready" {
+  description = "Makes the restricted database logins' passwords and secrets, the service accounts that read them and the job that sets them up (rights/logins.py). Nothing signs in with them until database_logins_in_use names it."
+  type        = bool
+  default     = false
+}
+
+variable "database_logins_in_use" {
+  description = "The workloads moved off the database owner's login, one or several at a time; empty means none. Each of service, worker, daily, terms, retrieval, indexer and publish signs in with its own login (and, a job, under its own service account); migrate keeps the owner's login under an account of its own. The runbook's \"Database logins\" gives the order and the way back."
+  type        = set(string)
+  default     = []
+  validation {
+    condition     = alltrue([for workload in var.database_logins_in_use : contains(["service", "worker", "daily", "terms", "retrieval", "indexer", "publish", "migrate"], workload)])
+    error_message = "database_logins_in_use may name service, worker, daily, terms, retrieval, indexer, publish and migrate."
+  }
+  validation {
+    condition     = var.database_logins_ready || length(var.database_logins_in_use) == 0
+    error_message = "database_logins_in_use needs database_logins_ready, and the logins job run first."
+  }
+}
+
 variable "azure_federation" {
   description = "Moving back from Azure (README): Azure's ingestion identity (terraform output ingestion_identity there), admitted to act as this project's ingestion account, so Azure's copy job writes these buckets with no key. null otherwise."
   type = object({
