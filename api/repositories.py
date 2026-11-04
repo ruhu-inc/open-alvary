@@ -350,6 +350,24 @@ class LegacyRepository:
         )
         return list(self.connection.scalars(statement))
 
+    def public_among(self, source_ids) -> set[str]:
+        """Which of these records are public now, by the gate every catalogue read applies: IDs alone."""
+        statement = (
+            select(self._sources.c.id)
+            .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
+            .where(self._public_gate(), self._sources.c.id.in_(source_ids))
+        )
+        return set(self.connection.scalars(statement))
+
+    def public_rights(self, source_ids) -> dict[str, dict]:
+        """The whole rights record, as stored, of each of these that is public now, by source."""
+        statement = (
+            select(self._rights.c.source_id, self._rights.c.payload)
+            .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
+            .where(self._public_gate(), self._sources.c.id.in_(source_ids))
+        )
+        return {row.source_id: row.payload for row in self.connection.execute(statement)}
+
     def treaties(self) -> Iterator:
         """The public records that carry a treaty's status (schema.models.TreatyStatus), in ID order."""
         return self.sources(where=self._field(self._sources, "treaty").is_not(None))
@@ -619,6 +637,29 @@ class LegacyRepository:
             if len(rows) < BATCH_SIZE:
                 return
             cursor = rows[-1]["id"]
+
+    def gates_of_versions(self, version_ids) -> dict[str, VersionGate]:
+        """These versions' policy inputs, by ID, reading no text. Where the database keeps the gates
+        (_gated) they come from its columns, since a field read from a payload parses all its text; gate_text
+        has then asked for what is stated here, and a version it refuses is left out, as decide refuses it."""
+        if self._gated():
+            statement = text(
+                "SELECT id, source_id, gate_content_hash AS content_hash,"
+                " gate_verified_at AS content_verified_at FROM versions"
+                " WHERE gate_text AND id = ANY(CAST(:ids AS text[]))"
+            ).bindparams(ids=list(version_ids))
+            asked = {"verification_status": "verified", "content_verifier": "recorded"}
+        else:
+            table = tables["versions"]
+            fields = ("content_hash", "verification_status", "content_verifier", "content_verified_at")
+            statement = select(
+                table.c.id,
+                table.c.source_id,
+                *(table.c.payload[key].as_string().label(key) for key in fields),
+            ).where(table.c.id.in_(version_ids), self._identity_matches(table))
+            asked = {}
+        rows = self.connection.execute(statement).mappings()
+        return {row["id"]: VersionGate.model_validate({**row, **asked}) for row in rows}
 
     def version(self, version_id: str, source_id: str) -> VersionViewRecord:
         table = tables["versions"]

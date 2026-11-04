@@ -76,6 +76,18 @@ def test_concurrency_and_global_leases_block_until_release_or_expiry(store):
     assert store.admit(request(key="ip:b", global_limit=1))["admitted"]
 
 
+def test_an_address_at_its_cap_is_refused_while_others_are_admitted_up_to_the_ceiling(store):
+    limits = dict(capacity=100, concurrency=2, global_limit=4)
+    held = [store.admit(request(**limits)) for _ in range(2)]
+    assert all(lease["admitted"] for lease in held)
+    refused = store.admit(request(**limits))
+    assert refused["blocked"] == ["ip:a"] and 1 <= refused["retry_after"] <= 30
+    others = [store.admit(request(key="ip:b", **limits)) for _ in range(2)]
+    assert all(lease["admitted"] for lease in others)
+    store.release(held[0]["lease_id"])  # a finished request frees its slot at once
+    assert store.admit(request(**limits))["admitted"]
+
+
 def test_parallel_arrivals_never_exceed_capacity_or_global_ceiling(store):
     with ThreadPoolExecutor(12) as pool:
         results = list(

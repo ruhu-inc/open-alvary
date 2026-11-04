@@ -15,6 +15,7 @@ from accounts import keys
 from accounts.store import TIERS, listed_plans
 from api.credentials import CredentialGate, GateConfig
 from api.site import create_downloads_app
+from api.store import Store
 from api.v1 import CLASSES, PUBLIC_PATHS, create_v1_app
 from exports.release import write_release
 from scripts.docs_reference import DATA
@@ -113,6 +114,16 @@ def test_an_organisation_with_bulk_access_lists_and_downloads_full_text_releases
     assert sum(entry["bytes"] for entry in usage if entry["class"] == "bulk") == sent > 0
     # Still never served keyless.
     assert client.get("/downloads/2026-10-05/ng/corpus/versions.jsonl").status_code == 404
+
+
+def test_the_keyed_routes_never_load_the_corpus(store, releases, monkeypatch):
+    def refused(self):
+        raise AssertionError("A request loaded the whole corpus")
+
+    monkeypatch.setattr(Store, "load", refused)
+    client = service(store, releases, lambda asked: access(BULK))
+    assert {r["mode"] for r in client.get("/api/v1/releases", headers=KEY).json()} == {"corpus", "metadata"}
+    assert client.get("/api/v1/bulk/2026-10-05/ng/corpus/versions.jsonl", headers=KEY).status_code == 200
 
 
 def test_bulk_text_is_only_for_the_countries_of_the_plan(store, releases):

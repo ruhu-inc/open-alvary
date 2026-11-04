@@ -92,6 +92,9 @@ class AdmissionConfig:
             or not 1 <= len(self.policy_revision) <= 64
         ):
             raise ValueError("Invalid admission configuration")
+        # One address never holds every admitted slot.
+        if self.identity_concurrency >= self.global_concurrency:
+            raise ValueError("Per-address concurrency must be below the global ceiling")
         # P <= C - R - O: the public pool can never consume the operator/recovery reserve.
         if self.public_pool_size > self.db_connections - self.operator_reserve - self.other_workers:
             raise ValueError("Public connection pool exceeds the database budget")
