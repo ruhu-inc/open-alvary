@@ -88,7 +88,8 @@ def seal(accounts: Accounts, now: datetime | None = None, out=sys.stdout) -> lis
     sealed = []
     with accounts.engine.begin() as conn:
         seals, log = accounts._t(conn, "audit_seal"), accounts._t(conn, "audit_event")
-        conn.execute(text(f"LOCK TABLE {seals} IN SHARE ROW EXCLUSIVE MODE"))  # one sealer at a time
+        # One sealer at a time, a lock that asks for no right to change the seals.
+        conn.execute(text("SELECT pg_advisory_xact_lock(hashtextextended('open-alvary:audit-seal', 0))"))
         now = _now(conn, now)
         last = conn.execute(text(f"SELECT day, seal_hash FROM {seals} ORDER BY day DESC LIMIT 1")).first()
         if last is not None:
