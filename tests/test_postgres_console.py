@@ -15,8 +15,11 @@ from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
 
 from accounts import keys, mail, policies
-from accounts.store import Accounts
+from accounts.store import TIERS, Accounts
 from api.console import ConsoleConfig, Provider, create_console_app
+from api.store import Store, seed
+from changes.watches import Watches
+from changes.webhooks import Sealer, Sender, Webhooks
 from rights.database import PolicyNamespace
 
 pytestmark = pytest.mark.postgres
@@ -675,3 +678,312 @@ def test_owners_see_the_published_countries_and_change_their_plans_countries(con
     assert details["current"]["scope"] == {"jurisdictions": ["ng", "rw"]} and details["country_change_after"]
     again = browser.post(path, headers=headers, json={"jurisdictions": ["ke"]})
     assert again.status_code == 409 and again.json()["error"]["code"] == "change_too_soon"
+
+
+# ---------- step-up: what a session records, and when ----------
+def session_times(accounts):
+    with accounts.engine.connect() as conn:
+        return conn.execute(
+            text(f"SELECT authenticated_at, second_factor_at FROM {accounts._t(conn, 'console_session')}")
+        ).one()
+
+
+def age_session(accounts, minutes):
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(
+                f"UPDATE {accounts._t(conn, 'console_session')} SET authenticated_at = authenticated_at"
+                f" - interval '{minutes} minutes',"
+                f" second_factor_at = second_factor_at - interval '{minutes} minutes'"
+            )
+        )
+
+
+LINK = {"purpose": "link", "method": "google", "return_to": "/console/security"}
+LINK_START = "/console/auth/start?purpose=link&method=google&return_to=%2Fconsole%2Fsecurity"
+
+
+def test_linking_needs_a_fresh_sign_in_and_comes_back_after_it(console):
+    accounts, fake, app = console
+    browser = client(app)
+    onboard(browser, fake)
+    age_session(accounts, 11)
+    refused = browser.get("/auth/start", params=LINK)
+    target = urlparse(refused.headers["location"])
+    assert refused.status_code == 303 and target.path == "/console/auth/start"  # not the provider
+    query = parse_qs(target.query)
+    assert query["purpose"] == ["reauthenticate"] and query["return_to"] == [LINK_START]
+    assert "method" not in query  # any method already linked will do
+    with accounts.engine.connect() as conn:
+        assert not conn.scalar(text(f"SELECT count(*) FROM {accounts._t(conn, 'sign_in_flow')}"))
+    done, _ = sign_in(browser, fake, purpose="reauthenticate", return_to=LINK_START, code="r")
+    assert done.headers["location"] == LINK_START
+    next_step = browser.get(LINK_START.removeprefix("/console"))
+    assert next_step.headers["location"].startswith(ISSUER + "authorize")
+    assert parse_qs(urlparse(next_step.headers["location"]).query)["connection"] == ["google-oauth2"]
+
+
+def test_linking_needs_the_second_factor_when_any_organisation_of_the_person_does(console):
+    accounts, fake, app = console
+    browser = client(app)
+    organisation, _, _ = onboard(browser, fake)
+    accounts.grant_access(
+        "op", organisation, tier="pilot", scope={"all": True}, source="manual", ends_at=None, reason="Pilot"
+    )
+    refused = browser.get("/auth/start", params=LINK)
+    query = parse_qs(urlparse(refused.headers["location"]).query)
+    assert query["purpose"] == ["second_factor"] and query["return_to"] == [LINK_START]
+    sign_in(browser, fake, purpose="second_factor", amr=["mfa"], code="m")
+    assert browser.get("/auth/start", params=LINK).headers["location"].startswith(ISSUER + "authorize")
+
+
+def test_finishing_a_link_leaves_the_session_as_it_was_and_tells_the_person(console):
+    accounts, fake, _ = console
+    mailer = RecordingMailer()
+    browser = client(create_console_app(accounts, app_provider(fake), mailer=mailer))
+    onboard(browser, fake)
+    age_session(accounts, 5)
+    before = session_times(accounts)
+    assert before.second_factor_at is None
+    mailer.sent.clear()
+    done, _ = sign_in(
+        browser,
+        fake,
+        purpose="link",
+        sub="google-oauth2|second",
+        email="amina.second@example.org",
+        return_to="/console/security",
+        amr=["mfa"],
+        code="l",
+    )
+    assert done.headers["location"] == "/console/security"
+    assert session_times(accounts) == before
+    assert len(browser.get("/api/v1/me/identities").json()["identities"]) == 2
+    [notice] = mailer.sent
+    assert notice.to == "amina@example.org" and notice.subject == "A sign-in method was added"
+    # The window keeps running from the sign-in before the link.
+    age_session(accounts, 6)
+    headers = {"X-CSRF-Token": browser.get("/api/v1/me").json()["csrf"]}
+    stale = browser.post("/api/v1/me/export", headers=headers)
+    assert stale.status_code == 401 and stale.json()["error"]["code"] == "reauthentication_required"
+
+
+def test_linking_a_method_already_linked_records_nothing_and_sends_nothing(console):
+    accounts, fake, _ = console
+    mailer = RecordingMailer()
+    browser = client(create_console_app(accounts, app_provider(fake), mailer=mailer))
+    onboard(browser, fake)
+    age_session(accounts, 5)
+    before = session_times(accounts)
+    mailer.sent.clear()
+    sign_in(browser, fake, purpose="link", amr=["mfa"], code="l")
+    assert session_times(accounts) == before and mailer.sent == []
+
+
+def test_a_real_sign_in_with_a_linked_method_refreshes_the_session(console):
+    accounts, fake, app = console
+    browser = client(app)
+    onboard(browser, fake)
+    sign_in(browser, fake, purpose="link", sub="google-oauth2|second", email="a2@example.org", code="l")
+    age_session(accounts, 11)
+    headers = {"X-CSRF-Token": browser.get("/api/v1/me").json()["csrf"]}
+    assert browser.post("/api/v1/me/export", headers=headers).status_code == 401
+    before = session_times(accounts)
+    done, query = sign_in(browser, fake, purpose="reauthenticate", code="r")
+    assert query["prompt"] == ["login"] and "acr_values" not in query
+    assert done.headers["location"] == "/console"
+    after = session_times(accounts)
+    assert after.authenticated_at > before.authenticated_at and after.second_factor_at is None
+    assert browser.post("/api/v1/me/export", headers=headers).status_code == 200
+    # A method linked in an earlier flow is a sign-in method like any other, with what it proved.
+    age_session(accounts, 11)
+    sign_in(
+        browser,
+        fake,
+        purpose="reauthenticate",
+        sub="google-oauth2|second",
+        email="a2@example.org",
+        amr=["mfa"],
+        code="s",
+    )
+    assert session_times(accounts).second_factor_at is not None
+
+
+def test_a_method_linked_after_a_step_up_began_cannot_finish_it(console):
+    accounts, fake, app = console
+    browser = client(app)
+    onboard(browser, fake)
+    started = browser.get("/auth/start", params={"purpose": "reauthenticate"})
+    query = parse_qs(urlparse(started.headers["location"]).query)
+    held = browser.cookies.get("oa_console_flow", path="/console/auth")
+    sign_in(browser, fake, purpose="link", sub="google-oauth2|second", email="a2@example.org", code="l")
+    age_session(accounts, 11)
+    before = session_times(accounts)
+    browser.cookies.set("oa_console_flow", held, path="/console/auth")
+    fake.codes["late"] = {
+        "iss": ISSUER,
+        "aud": "console",
+        "exp": time.time() + 60,
+        "nonce": query["nonce"][0],
+        "sub": "google-oauth2|second",
+        "email": "a2@example.org",
+        "email_verified": True,
+    }
+    done = browser.get("/auth/callback", params={"state": query["state"][0], "code": "late"})
+    assert done.headers["location"] == "/console/sign-in?error=wrong_account"
+    assert session_times(accounts) == before
+
+
+def test_parameters_a_browser_adds_to_the_start_change_nothing_asked_of_the_provider(console):
+    accounts, fake, app = console
+    browser = client(app)
+    onboard(browser, fake)
+    started = browser.get(
+        "/auth/start",
+        params=LINK
+        | {"acr_values": "anything", "prompt": "none", "max_age": "999999", "scope": "openid admin"},
+    )
+    query = parse_qs(urlparse(started.headers["location"]).query)
+    assert "acr_values" not in query and query["prompt"] == ["login"]
+    assert query["scope"] == ["openid email profile"]
+
+
+def stepped_world(accounts, fake, app):
+    """An owner of a paid organisation, stepped up, with a second sign-in method, a second member and a
+    webhook endpoint, ready for each sensitive change."""
+    accounts.set_tiers(json.loads(TIERS.read_text()))
+    browser = client(app)
+    organisation, headers, _ = onboard(browser, fake)
+    accounts.grant_access(
+        "op",
+        organisation,
+        tier="developer",
+        scope={"jurisdictions": ["ng"]},
+        source="manual",
+        ends_at=None,
+        reason="Test",
+    )
+    sign_in(browser, fake, purpose="second_factor", amr=["mfa"], code="m")
+    sign_in(browser, fake, purpose="link", sub="google-oauth2|second", email="a2@example.org", code="l")
+    identities = browser.get("/api/v1/me/identities").json()["identities"]
+    identity = next(i["id"] for i in identities if i["label"] == "a2@example.org")
+    invited = browser.post(
+        f"/api/v1/organisations/{organisation}/invitations",
+        headers=headers,
+        json={"email": "d@example.org", "role": "developer"},
+    )
+    other = client(app)
+    sign_in(other, fake, sub="google-oauth2|dev", email="d@example.org", code="d")
+    other.post(
+        f"/api/v1/invitations/{invited.json()['id']}/accept",
+        headers={"X-CSRF-Token": other.get("/api/v1/me").json()["csrf"]},
+    )
+    with accounts.engine.begin() as conn:  # the other person's session is not the one under test
+        conn.execute(
+            text(
+                f"DELETE FROM {accounts._t(conn, 'console_session')} WHERE person_id ="
+                f" (SELECT person_id FROM {accounts._t(conn, 'identity')} WHERE subject = 'google-oauth2|dev')"
+            )
+        )
+    listed = browser.get(f"/api/v1/organisations/{organisation}/members").json()["members"]
+    member = next(m["id"] for m in listed if m["email"] == "d@example.org")
+    person = browser.get("/api/v1/me").json()["person"]["id"]
+    seed(Store(accounts.engine))
+    watch = Watches(accounts).create(person, organisation, {"name": "N", "filters": {"jurisdiction": ["ng"]}})
+    hooks = Webhooks(
+        accounts,
+        Sender(resolver=lambda host: ["93.184.216.34"], transport=lambda *a: (200, {}, b"{}")),
+        Sealer({"k": b"k" * 32}, "k"),
+    )
+    endpoint = hooks.create(
+        person, organisation, {"url": "https://hooks.example.org/in", "watch_ids": [watch["id"]]}
+    )
+    return browser, organisation, headers, identity, member, endpoint["endpoint"]["id"]
+
+
+def sensitive(browser, organisation, headers, identity, member, endpoint):
+    org = f"/api/v1/organisations/{organisation}"
+    return {
+        "unlink": lambda: browser.delete(f"/api/v1/me/identities/{identity}", headers=headers),
+        "close account": lambda: browser.post(
+            "/api/v1/me/delete", headers=headers, json={"confirm": "amina@example.org"}
+        ),
+        "delete organisation": lambda: browser.delete(org, headers=headers),
+        "transfer ownership": lambda: browser.post(
+            f"{org}/transfer-ownership", headers=headers, json={"member_id": member, "keep_owner": True}
+        ),
+        "invite an owner": lambda: browser.post(
+            f"{org}/invitations", headers=headers, json={"email": "o@example.org", "role": "owner"}
+        ),
+        "invite an admin": lambda: browser.post(
+            f"{org}/invitations", headers=headers, json={"email": "a@example.org", "role": "admin"}
+        ),
+        "repoint a webhook": lambda: browser.patch(
+            f"{org}/webhooks/{endpoint}", headers=headers, json={"url": "https://other.example.org/in"}
+        ),
+    }
+
+
+SENSITIVE = (
+    "unlink",
+    "close account",
+    "delete organisation",
+    "transfer ownership",
+    "invite an owner",
+    "invite an admin",
+    "repoint a webhook",
+)
+
+
+@pytest.mark.parametrize("action", SENSITIVE)
+def test_sensitive_changes_need_a_fresh_sign_in(console, action):
+    accounts, fake, app = console
+    browser, *rest = stepped_world(accounts, fake, app)
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(
+                f"UPDATE {accounts._t(conn, 'console_session')} SET second_factor_at = statement_timestamp(),"
+                " authenticated_at = statement_timestamp() - interval '11 minutes'"
+            )
+        )
+    answer = sensitive(browser, *rest)[action]()
+    assert answer.status_code == 401 and answer.json()["error"]["code"] == "reauthentication_required"
+
+
+@pytest.mark.parametrize("action", SENSITIVE)
+def test_sensitive_changes_need_the_second_factor_where_the_role_needs_one(console, action):
+    accounts, fake, app = console
+    browser, *rest = stepped_world(accounts, fake, app)
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(
+                f"UPDATE {accounts._t(conn, 'console_session')} SET authenticated_at = statement_timestamp(),"
+                " second_factor_at = statement_timestamp() - interval '11 minutes'"
+            )
+        )
+    answer = sensitive(browser, *rest)[action]()
+    assert answer.status_code == 403 and answer.json()["error"]["code"] == "second_factor_required"
+
+
+def test_changes_that_are_not_sensitive_stay_free_of_a_step_up(console, monkeypatch):
+    accounts, fake, app = console
+    browser, organisation, headers, _, _, endpoint = stepped_world(accounts, fake, app)
+    org = f"/api/v1/organisations/{organisation}"
+    age_session(accounts, 11)
+    invited = browser.post(
+        f"{org}/invitations", headers=headers, json={"email": "v@example.org", "role": "viewer"}
+    )
+    assert invited.status_code == 201
+    same_url = browser.patch(
+        f"{org}/webhooks/{endpoint}",
+        headers=headers,
+        json={"url": "https://hooks.example.org/in", "description": "Ours"},
+    )
+    assert same_url.status_code == 200 and same_url.json()["description"] == "Ours"
+    # With a fresh sign-in and second factor, a webhook can be repointed.
+    sign_in(browser, fake, purpose="second_factor", amr=["mfa"], code="again")
+    monkeypatch.setattr(Webhooks, "verify", lambda self, p, o, e: {"endpoint": {"id": e}})
+    moved = browser.patch(
+        f"{org}/webhooks/{endpoint}", headers=headers, json={"url": "https://other.example.org/in"}
+    )
+    assert moved.status_code == 200

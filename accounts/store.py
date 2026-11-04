@@ -355,14 +355,15 @@ class Accounts:
             )
             return {"id": person_id, "created": True}
 
-    def link_identity(self, person_id: str, *, issuer, subject, method, label, context=None) -> None:
+    def link_identity(self, person_id: str, *, issuer, subject, method, label, context=None) -> bool:
+        """Adds a sign-in method to this person; whether it was new to them."""
         with self.engine.begin() as conn:
             owner = conn.scalar(
                 text(f"SELECT person_id FROM {self._t(conn, 'identity')} WHERE issuer = :i AND subject = :s"),
                 {"i": issuer, "s": subject},
             )
             if owner == person_id:
-                return
+                return False
             if owner is not None:
                 raise AccountError("identity_in_use", 409, "That sign-in already belongs to another account.")
             conn.execute(
@@ -386,12 +387,24 @@ class Accounts:
                 context=context,
                 summary={"method": method},
             )
+            return True
 
     def person_for_identity(self, issuer: str, subject: str) -> str | None:
         with self.engine.connect() as conn:
             return conn.scalar(
                 text(f"SELECT person_id FROM {self._t(conn, 'identity')} WHERE issuer = :i AND subject = :s"),
                 {"i": issuer, "s": subject},
+            )
+
+    def linked_before(self, person_id: str, issuer: str, subject: str, moment: datetime) -> bool:
+        """Whether this identity was already this person's sign-in method at that moment."""
+        with self.engine.connect() as conn:
+            return conn.scalar(
+                text(
+                    f"SELECT EXISTS(SELECT 1 FROM {self._t(conn, 'identity')} WHERE issuer = :i AND subject = :s"
+                    " AND person_id = :p AND linked_at < :moment)"
+                ),
+                {"i": issuer, "s": subject, "p": person_id, "moment": moment},
             )
 
     def identities(self, person_id: str) -> list[dict]:
@@ -713,7 +726,7 @@ class Accounts:
                 conn.execute(
                     text(
                         f"DELETE FROM {self._t(conn, 'sign_in_flow')} WHERE state_hash = :s"
-                        " RETURNING browser_hash, nonce, verifier, purpose, session_hash, return_to,"
+                        " RETURNING browser_hash, nonce, verifier, purpose, session_hash, return_to, created_at,"
                         " expires_at > statement_timestamp() AS live"
                     ),
                     {"s": token_hash(state or "")},
