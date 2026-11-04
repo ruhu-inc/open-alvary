@@ -1,8 +1,8 @@
 {
-  "policy_revision": "anon-2026-10-07",
+  "policy_revision": "anon-2026-11-04",
   "capacity": 300,
   "refill_per_minute": 300,
-  "identity_concurrency": 100,
+  "identity_concurrency": 16,
   "global_concurrency": 32,
   "lease_seconds": 30,
   "queue_size": 256,

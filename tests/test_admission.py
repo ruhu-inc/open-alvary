@@ -1,5 +1,8 @@
 """ACS-05 admission middleware: identity grouping, queueing, fail-closed and headers."""
 
+import json
+from pathlib import Path
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -13,6 +16,7 @@ from api.admission import (
     network_group,
     pseudonym,
 )
+from api.service import create_service
 
 SECRET = b"s" * 32
 
@@ -109,11 +113,50 @@ def test_network_grouping_and_pseudonyms():
         dict(capacity=0),
         dict(lease_seconds=601),
         dict(api_replicas=11),
+        dict(identity_concurrency=8),
+        dict(identity_concurrency=9),
     ],
 )
 def test_configuration_rejects_unsafe_values(overrides):
     with pytest.raises(ValueError):
         config(**overrides)
+
+
+def example_values(name):
+    """A deployment example with a secret and the pool public_service.sh gives it (admission_json)."""
+    return {
+        **json.loads(Path("deployment", name).read_text()),
+        "hmac_secret": "ab" * 32,
+        "api_replicas": 3,
+        "db_connections": 50,
+        "operator_reserve": 5,
+        "other_workers": 5,
+        "public_pool_size": 30,
+    }
+
+
+@pytest.mark.parametrize("name", ["admission.example.json", "site-admission.example.json"])
+def test_the_deployment_examples_load_with_the_address_cap_below_the_ceiling(name, tmp_path):
+    path = tmp_path / name
+    path.write_text(json.dumps(example_values(name)))
+    loaded = AdmissionConfig.load(path)
+    assert loaded.identity_concurrency < loaded.global_concurrency
+
+
+@pytest.mark.parametrize("variable", ["ALVARY_ADMISSION_CONFIG", "ALVARY_SITE_ADMISSION_CONFIG"])
+def test_a_file_with_the_address_cap_at_the_ceiling_is_refused_when_the_service_starts(
+    variable, store, tmp_path, monkeypatch
+):
+    good = tmp_path / "good.json"
+    good.write_text(json.dumps(example_values("site-admission.example.json")))
+    bad = tmp_path / "bad.json"
+    values = example_values("site-admission.example.json")
+    bad.write_text(json.dumps({**values, "identity_concurrency": values["global_concurrency"]}))
+    monkeypatch.setenv("ALVARY_ADMISSION_CONFIG", str(good))
+    monkeypatch.setenv("ALVARY_SITE_ADMISSION_CONFIG", str(good))
+    monkeypatch.setenv(variable, str(bad))
+    with pytest.raises(ValueError, match="below the global ceiling"):
+        create_service(store, tmp_path)
 
 
 def test_admitted_request_carries_quota_headers_and_releases_its_lease():
