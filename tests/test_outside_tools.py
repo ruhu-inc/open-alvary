@@ -130,6 +130,31 @@ def test_a_tool_can_write_no_more_than_its_limit(tmp_path, secrets_in_environmen
     assert done.returncode != 0 and out.stat().st_size <= limit
 
 
+def test_what_a_tool_prints_counts_against_its_limit_and_never_waits_in_memory(
+    tmp_path, secrets_in_environment
+):
+    # Through a pipe this would go through whole: the limit holds because it goes to a file.
+    script = f"import sys; sys.stdout.buffer.write(b'x' * {4 * MIB})"
+    done = run_tool(
+        [sys.executable, "-I", "-S", "-c", script], timeout=30, written=MIB, capture_output=True, text=True
+    )
+    assert done.returncode != 0 and len(done.stdout) <= MIB
+
+
+def test_a_tool_with_no_limits_is_read_back_no_further_than_the_limit(tmp_path, secrets_in_environment):
+    script = f"import sys; sys.stdout.buffer.write(b'x' * {4 * MIB})"
+    done = run_tool(
+        [sys.executable, "-I", "-S", "-c", script], timeout=30, memory=None, written=MIB, capture_output=True
+    )
+    assert done.returncode == 0 and len(done.stdout) == MIB
+
+
+def test_what_a_tool_prints_is_read_as_text_whatever_its_bytes(tmp_path, secrets_in_environment):
+    fake_tool(tmp_path, "latin", r"printf 'caf\351 ok'")
+    assert run_tool(["latin"], timeout=20, capture_output=True, text=True).stdout == "caf\ufffd ok"
+    assert run_tool(["latin"], timeout=20, capture_output=True).stdout == b"caf\xe9 ok"
+
+
 def test_limits_are_those_of_the_tool_not_of_this_process(tmp_path, secrets_in_environment):
     before = resource.getrlimit(resource.RLIMIT_CPU)
     fake_tool(tmp_path, "ok", "exit 0")

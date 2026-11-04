@@ -13,6 +13,8 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from postgres_support import migrate, validated_test_url
@@ -478,6 +480,9 @@ def test_no_login_can_change_the_schema_or_grant_itself_more(signed, role):
                 f"CREATE TABLE {base}.intruder (id int)",
                 f"CREATE TABLE {accounts}.intruder (id int)",
                 f"CREATE FUNCTION {base}.intruder() RETURNS int LANGUAGE sql AS 'SELECT 1'",
+                "CREATE TEMPORARY TABLE intruder (id int)",
+                "CREATE DOMAIN pg_temp.intruder AS int",
+                "CREATE FUNCTION pg_temp.intruder() RETURNS int LANGUAGE sql AS 'SELECT 1'",
                 "CREATE SCHEMA intruder",
                 "CREATE ROLE intruder",
                 "GRANT pg_read_all_data TO CURRENT_USER",
@@ -578,6 +583,111 @@ def test_the_jobs_login_cannot_write_the_catalogue_or_rewrite_who_may_do_what(si
                 f"SELECT {signed.t(conn, 'policy', 'check_credential')}('{{}}')",
             ),
         )
+
+
+def test_a_function_running_as_the_tables_owner_looks_nowhere_else_for_a_name(signed):
+    with signed.owner.connect() as conn:
+        months = signed.t(conn, "accounts", "traffic_months")
+        config, body = conn.execute(
+            text("SELECT proconfig, prosrc FROM pg_proc WHERE oid = to_regprocedure(:f)"),
+            {"f": f"{months}(date, integer, integer)"},
+        ).one()
+    assert config == ["search_path=pg_catalog, pg_temp"]
+    assert "pg_catalog.pg_inherits" in body and "pg_catalog.pg_class" in body
+
+
+def test_every_function_running_as_its_owner_fixes_its_search_path_unless_no_login_can_reach_it(signed):
+    """Listed from the catalog, so a new one is covered the day it is made: it must fix its path whoever may run it.
+    Those pinned before the rule stay as they are only while no login can call them or fire them."""
+    with signed.owner.connect() as conn:
+        functions = conn.execute(
+            text(
+                "SELECT p.oid, p.oid::regprocedure::text AS name, p.proconfig AS settings FROM pg_proc p"
+                " JOIN pg_namespace n ON n.oid = p.pronamespace"
+                " WHERE p.prosecdef AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'"
+            )
+        ).all()
+        assert len(functions) >= 123
+        earlier = set()
+        for manifest in Path("rights/sql").glob("v*/manifest.json"):
+            if manifest.parent.name < "v0050":
+                pinned = json.loads(manifest.read_text())
+                for entry in pinned["functions"] + pinned.get("new_functions", []):
+                    earlier.add(
+                        conn.scalar(
+                            text("SELECT to_regprocedure(:f)::oid"),
+                            {"f": signed.namespace.schema("policy") + "." + entry["signature"]},
+                        )
+                    )
+        unfixed = [f for f in functions if logins.SAFE_SEARCH_PATH not in (f.settings or ())]
+        assert not [f.name for f in unfixed if f.oid not in earlier]
+        for function in unfixed:
+            for role in EVERY_LOGIN:
+                assert not conn.scalar(
+                    text("SELECT has_function_privilege(:r, :f, 'EXECUTE')"), {"r": role, "f": function.oid}
+                ), f"{role} can run {function.name}"
+        fired = conn.execute(
+            text(
+                "SELECT DISTINCT p.oid::regprocedure::text AS name, r.rolname FROM pg_trigger t"
+                " JOIN pg_proc p ON p.oid = t.tgfoid JOIN pg_roles r ON r.rolname = ANY(:logins)"
+                " WHERE NOT t.tgisinternal AND p.prosecdef AND NOT (:safe = ANY(coalesce(p.proconfig, '{}')))"
+                " AND has_table_privilege(r.oid, t.tgrelid, 'INSERT, UPDATE, DELETE, TRUNCATE')"
+            ),
+            {"logins": EVERY_LOGIN, "safe": logins.SAFE_SEARCH_PATH},
+        ).all()
+        assert fired == []
+
+
+def test_a_login_that_could_run_a_function_with_no_fixed_path_is_refused(signed):
+    with signed.owner.begin() as conn:
+        admit = signed.t(conn, "policy", "admit")
+        conn.exec_driver_sql(f"ALTER FUNCTION {admit}(jsonb) SET search_path TO pg_catalog")
+    try:
+        with pytest.raises(SystemExit, match="does not fix its search path"):
+            logins.grants(signed.owner)
+    finally:
+        with signed.owner.begin() as conn:
+            conn.exec_driver_sql(f"ALTER FUNCTION {admit}(jsonb) SET search_path TO pg_catalog, pg_temp")
+
+
+def test_the_search_paths_are_set_with_no_lock_that_would_hold_up_what_is_running(pg_engine):
+    """On the old image's tables and functions, up and down, with nothing stronger than a writer's lock on any table."""
+    migrate(pg_engine)
+    with pg_engine.begin() as conn:
+        schema = conn.scalar(text("SELECT current_schema()"))
+        config = Config("alembic.ini")
+        config.attributes["connection"] = conn
+        command.downgrade(config, "0049")
+        fence = conn.scalar(
+            text("SELECT proconfig FROM pg_proc WHERE oid = to_regprocedure(:f)"),
+            {"f": f'"{schema}".identity_legacy_write_fence()'},
+        )
+        assert fence == ["search_path=pg_catalog"]
+    with pg_engine.begin() as conn:
+        config = Config("alembic.ini")
+        config.attributes["connection"] = conn
+        command.upgrade(config, "0050")
+        held = conn.execute(
+            text(
+                "SELECT DISTINCT c.relname, l.mode FROM pg_locks l JOIN pg_class c ON c.oid = l.relation"
+                " JOIN pg_namespace n ON n.oid = c.relnamespace"
+                " WHERE l.pid = pg_backend_pid() AND n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'"
+            )
+        ).all()
+        assert {mode for _, mode in held} <= {"AccessShareLock", "RowShareLock", "RowExclusiveLock"}, held
+
+
+def test_a_grant_of_temporary_objects_is_found_and_taken_back(signed):
+    with signed.owner.begin() as conn:
+        database = conn.scalar(text("SELECT current_database()"))
+        conn.exec_driver_sql(f'GRANT TEMPORARY ON DATABASE "{database}" TO PUBLIC')
+        conn.exec_driver_sql(f'GRANT TEMPORARY ON DATABASE "{database}" TO {JOBS}')
+    with signed.owner.connect() as conn:
+        assert "open_alvary_jobs can make temporary objects" in logins.problems(
+            conn, signed.namespace, logins.JOBS
+        )
+    assert set(logins.grants(signed.owner)) == set(logins.LOGINS)
+    assert logins.check_login(signed.engine(JOBS), logins.JOBS) == []
 
 
 def test_seals_and_audit_entries_stay_append_only_for_the_job_that_keeps_them(signed):

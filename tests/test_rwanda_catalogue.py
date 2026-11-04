@@ -774,16 +774,12 @@ def test_in_a_cloud_job_the_text_layer_is_read_by_pdftotext_in_its_own_container
 
     def run(command, **kwargs):
         seen.append(command)
-        if "pdfinfo" in command:
-            return subprocess.CompletedProcess(
-                command, 0, "Pages: 2\nPage    1 rot:   0\nPage    2 rot:  90\n", ""
-            )
-        return subprocess.CompletedProcess(
-            command,
-            0,
-            '<doc><page width="600" height="840"></page><page width="600" height="840"></page></doc>',
-            "",
+        kwargs["stdout"].write(
+            b"Pages: 2\nPage    1 rot:   0\nPage    2 rot:  90\n"
+            if "pdfinfo" in command
+            else b'<doc><page width="600" height="840"></page><page width="600" height="840"></page></doc>'
         )
+        return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(gazette_layout.subprocess, "run", run)
     monkeypatch.setattr("ingestion.tools.shutil.which", lambda name, path=None: name)

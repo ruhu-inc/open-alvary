@@ -48,7 +48,8 @@ inference_gpu     = "t4"
 vector_profile = ""
 
 # Restricted database logins (rights/logins.py): off, and the order to turn them on is in the runbook's
-# "Database logins". The owner's login is then for the migrations alone.
+# "Database logins". The owner's login is then for the migrations alone. public_image must already be a
+# release that has rights/logins.py: the first line adds it to the migrate job's command.
 # database_logins_ready  = true
 # database_logins_in_use = ["retrieval", "indexer", "publish", "worker", "daily", "terms", "service", "migrate"]
 

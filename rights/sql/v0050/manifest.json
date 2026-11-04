@@ -1,0 +1,108 @@
+{
+  "vocabulary": "policy-vocabulary-1",
+  "literals": {},
+  "vocabulary_file": "vocabularies/v1.json",
+  "vocabulary_hash": "cac594e752fdb6c2cb6adfc63930ceea8a8fe8be3afe9570552d5c2f486d8c80",
+  "revision": "0050",
+  "functions": [
+    {
+      "signature": "admit(jsonb)",
+      "file": "admit.sql",
+      "prior_file": "prior_admit.sql",
+      "prior_body_hash": "c6ad4a25b19c39c178d4421cb6a03ac5e66bb906e905431bdbe7d28370146627",
+      "current_body_hash": "c6ad4a25b19c39c178d4421cb6a03ac5e66bb906e905431bdbe7d28370146627",
+      "prior_definition_hash": "a55c56068feb5c939cb6077a691030e1ea7b19dcb59b9bdb0a588dac9d81043f",
+      "current_definition_hash": "d8152b896978f8ad2934a3a7624009df67a2a161ab16e4795e95ff49b77e3cc1"
+    },
+    {
+      "signature": "allocate_publication_revision()",
+      "file": "allocate_publication_revision.sql",
+      "prior_file": "prior_allocate_publication_revision.sql",
+      "prior_body_hash": "f7ede50a5efd8c5c5039e270eb331367f2a018f01a91f7c420d4d68718aaa49d",
+      "current_body_hash": "f7ede50a5efd8c5c5039e270eb331367f2a018f01a91f7c420d4d68718aaa49d",
+      "prior_definition_hash": "72a3f8ee7a6523952c22b40dc5151998e5e23e0fb5992a8bec6618e8f5026a25",
+      "current_definition_hash": "0fecfb60bbf57d15771c7208fcfc16d3b5582161f744f62544fc6f24692fed63"
+    },
+    {
+      "signature": "begin_emission(uuid)",
+      "file": "begin_emission.sql",
+      "prior_file": "prior_begin_emission.sql",
+      "prior_body_hash": "8f7adefd0256ac74e1aa30f0736dc11dfe7b2f1c76031d6943400222c6e4d2c3",
+      "current_body_hash": "8f7adefd0256ac74e1aa30f0736dc11dfe7b2f1c76031d6943400222c6e4d2c3",
+      "prior_definition_hash": "dffc109e8e95a287b603ff51080f1430b67644db05ac837ad52596ecaa2db508",
+      "current_definition_hash": "d8c835edd859463596a26cc3343d54e664ec2bf8f2e97ecf5797052b2fd74274"
+    },
+    {
+      "signature": "check_credential(jsonb)",
+      "file": "check_credential.sql",
+      "prior_file": "prior_check_credential.sql",
+      "prior_body_hash": "916282a0d3161a24a60ced135734d9ca73f1e9f022a7aaa723ab823b546bd802",
+      "current_body_hash": "916282a0d3161a24a60ced135734d9ca73f1e9f022a7aaa723ab823b546bd802",
+      "prior_definition_hash": "8b07f49d111026e5d6c2dde63c4c4f18ce61b14071f4f3019dd3bbe9a932eb2a",
+      "current_definition_hash": "10264a1ef60a843992a38476f3fe0adb564223b25b8685819c22408b12b81994"
+    },
+    {
+      "signature": "record_traffic(jsonb)",
+      "file": "record_traffic.sql",
+      "prior_file": "prior_record_traffic.sql",
+      "prior_body_hash": "aa5828ae153a6689bc4ce9f2daec2ca15adc978c7bd57c28a9ab994982b2e4f2",
+      "current_body_hash": "aa5828ae153a6689bc4ce9f2daec2ca15adc978c7bd57c28a9ab994982b2e4f2",
+      "prior_definition_hash": "4d55418d07447729a4e99f40354179a9df1be4ca8de63a3be5eaeae382040289",
+      "current_definition_hash": "70a5f3c1cd1fbdb6e5976631434b6af2d2cc1faac5f3be5b46d509053f94305f"
+    },
+    {
+      "signature": "record_usage(jsonb)",
+      "file": "record_usage.sql",
+      "prior_file": "prior_record_usage.sql",
+      "prior_body_hash": "19df13c16c9dc41d02e798b15707d67bcbd03f4dd8397a64f503f9425ca97956",
+      "current_body_hash": "19df13c16c9dc41d02e798b15707d67bcbd03f4dd8397a64f503f9425ca97956",
+      "prior_definition_hash": "b82b8660c2d9de615e3c0994ba49492f20fd4d1ddb17829741613ae0d058d7e3",
+      "current_definition_hash": "21d29911642939b9b9732cbb7a1ffffe9c94546ff204d9765cd679ddd9ec0234"
+    },
+    {
+      "signature": "release_admission(uuid)",
+      "file": "release_admission.sql",
+      "prior_file": "prior_release_admission.sql",
+      "prior_body_hash": "9fdfd77677e36118f369dbf0bc6e218f158ee7b92dd8e567412a0f60f3f66312",
+      "current_body_hash": "9fdfd77677e36118f369dbf0bc6e218f158ee7b92dd8e567412a0f60f3f66312",
+      "prior_definition_hash": "1b45ddefba64b53c9af30dfff2eec1e49bf9351d2d595749585aa4e2cf8e2455",
+      "current_definition_hash": "e7c37c04d35a4091ab9748281ed8ff2c3f16f1b2b6d2694be1dc72081ced7d64"
+    },
+    {
+      "signature": "release_bytes(uuid)",
+      "file": "release_bytes.sql",
+      "prior_file": "prior_release_bytes.sql",
+      "prior_body_hash": "c1be17cf6d7a27cf890453735d0ad6584f781994fa9ad3995ebf57f030afbdb2",
+      "current_body_hash": "c1be17cf6d7a27cf890453735d0ad6584f781994fa9ad3995ebf57f030afbdb2",
+      "prior_definition_hash": "17200014d8d6ddeb70db59f5100c35b4f8ad02439d7126ebefd132c5438f6fe7",
+      "current_definition_hash": "65dc1f0045fd62bb7e70019d500bc780e6d48dbb5b091cbd62b452bfc445d140"
+    },
+    {
+      "signature": "reserve_bytes(jsonb)",
+      "file": "reserve_bytes.sql",
+      "prior_file": "prior_reserve_bytes.sql",
+      "prior_body_hash": "92002ad502ea12b532b673925211e7c32e5b2c1d7830fb4170bd175230044ba1",
+      "current_body_hash": "92002ad502ea12b532b673925211e7c32e5b2c1d7830fb4170bd175230044ba1",
+      "prior_definition_hash": "c901f9db5a9d6f0a601e522e5cf5c90c01b1dd93b8414f6f9b4aeca89ba1d7dd",
+      "current_definition_hash": "3e260be11a97a47055c4932a6b9cfd63c0f2b0b5bb2dad108191709539a41797"
+    },
+    {
+      "signature": "settle_bytes(uuid, bigint, text)",
+      "file": "settle_bytes.sql",
+      "prior_file": "prior_settle_bytes.sql",
+      "prior_body_hash": "b912e83650acc1d7d0af1483f8b44500a5f142aac723100dd9421150db006471",
+      "current_body_hash": "b912e83650acc1d7d0af1483f8b44500a5f142aac723100dd9421150db006471",
+      "prior_definition_hash": "ed9b4afe5a6850d3bbeece1a202cd9272a42b6c384e912d96d8e90bb63727333",
+      "current_definition_hash": "60c35146ebbbc8c7d3e7ba17053741bb1fa73bcc711c45f1b4d76e740c3c9e3c"
+    },
+    {
+      "signature": "traffic_salt(bytea)",
+      "file": "traffic_salt.sql",
+      "prior_file": "prior_traffic_salt.sql",
+      "prior_body_hash": "9cda2e41aba39b076ac3e26ed3c768ffbe5e089a968bfdf9d104e35c5886275f",
+      "current_body_hash": "9cda2e41aba39b076ac3e26ed3c768ffbe5e089a968bfdf9d104e35c5886275f",
+      "prior_definition_hash": "955eaefb92e97b3e1fa4c3cc9b921f5f95a6142b2638c0dec109ffa404f77ff7",
+      "current_definition_hash": "ea1ab27b911ad9ab0f7a4e86c18a889e450ba03e5a15034e5c9f6093fe4b5c30"
+    }
+  ]
+}

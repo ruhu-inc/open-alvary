@@ -20,7 +20,7 @@ depends_on = None
 
 FUNCTION = """
 CREATE FUNCTION {a}.traffic_months(today date, months_ahead integer, days_kept integer) RETURNS integer
-LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'pg_catalog'
+LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'pg_catalog', 'pg_temp'
 AS $function$
 DECLARE
     opening date;
@@ -38,7 +38,7 @@ BEGIN
     END LOOP;
     -- A month goes whole when its last day is past what is kept; monthly totals stay.
     FOR month_table IN
-        SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid
+        SELECT c.relname FROM pg_catalog.pg_inherits i JOIN pg_catalog.pg_class c ON c.oid = i.inhrelid
         WHERE i.inhparent = {parent}::regclass
     LOOP
         IF (to_date(right(month_table, 7), 'YYYY_MM') + interval '1 month')::date <= today - days_kept THEN

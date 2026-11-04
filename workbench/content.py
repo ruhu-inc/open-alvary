@@ -15,11 +15,12 @@ import subprocess
 from pathlib import Path
 
 from ingestion import first_collection, layout_parser, native
-from ingestion.tools import GIB, run_tool
+from ingestion.tools import GIB, MIB, run_tool
 from workbench.store import canonical_json
 
 # One page at 150 dpi, on an instance of 2 GiB: a file that wants more fails, and the instance stays up.
 RENDER_MEMORY = 3 * GIB // 2
+RENDER_WRITTEN = 64 * MIB  # /tmp is memory there too
 
 KINDS = {"heading", "paragraph", "list_item", "table"}
 MARK_TYPES = {"bold", "italic", "underline", "superscript", "subscript"}
@@ -354,6 +355,7 @@ class Library:
                 capture_output=True,
                 timeout=120,
                 memory=RENDER_MEMORY,
+                written=RENDER_WRITTEN,
             )
             trim_cache()
         else:
