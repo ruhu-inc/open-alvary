@@ -31,6 +31,15 @@ TODAY = datetime.now(UTC).date()
 BROWSER = {"user-agent": CHROME, "sec-fetch-site": "same-origin"}
 
 
+@pytest.fixture(autouse=True)
+def one_day_for_each_test(monkeypatch):
+    """The day is read as each test starts and held for it: a run can cross midnight between loading this
+    file and a test, and the database itself goes by the date."""
+    today = datetime.now(UTC).date()
+    monkeypatch.setitem(globals(), "TODAY", today)
+    monkeypatch.setattr(Traffic, "_today", lambda self: today)
+
+
 @pytest.fixture
 def namespace(pg_engine):
     migrate(pg_engine)
