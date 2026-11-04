@@ -1,7 +1,7 @@
-"""Filesystem release compatibility adapter; global pilot verifier remains explicit.
+"""Filesystem release compatibility adapter.
 
-Its existing whole-corpus integrity contract is retained until the M4 release slice.
-Regular catalogue repositories never use this adapter or load a whole Corpus.
+Each listing and file asks exports.verify whether a release may still be served, which reads only the
+records that release names, as they stand now. Nothing here loads a whole Corpus.
 """
 
 import json
@@ -69,13 +69,12 @@ class LegacyReleases:
         self.bulk_text = bulk_text
 
     def listing(self):
-        current = self.store.load()
         result = []
         for path in _published(self.root):
             manifest = json.loads(path.read_text())
             if holds_text(manifest) and not self.bulk_text:
                 continue
-            if release_available(path.parent, current):
+            if release_available(path.parent, self.store):
                 manifest["download_base"] = "/releases/" + path.parent.relative_to(self.root).as_posix()
                 result.append(manifest)
         return result
@@ -95,7 +94,7 @@ class LegacyReleases:
             raise ReleaseMissing()
         if holds_text(json.loads(manifest.read_text())) and not self.bulk_text:
             raise BulkRequired()  # missing to anyone without bulk access
-        if not release_available(directory, self.store.load()):
+        if not release_available(directory, self.store):
             raise ReleaseWithdrawn("Release withdrawn or invalid; consult the latest release")
         allowed = set(json.loads(manifest.read_text())["files"]) | {"manifest.json"}
         path = directory / filename
