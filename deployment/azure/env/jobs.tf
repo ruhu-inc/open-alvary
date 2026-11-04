@@ -10,12 +10,14 @@
 #   their schedules instead): only the live environment writes to the outside world. A Container
 #   Apps job's schedule cannot be paused, and azurerm cannot change a job's trigger in place, so
 #   changing domain_live replaces both jobs; all they keep is in the database.
+# - logins: makes or repairs the restricted database logins (rights/logins.py), started by hand. A job
+#   named in database_logins_in_use signs in with its own login.
 
 locals {
   jobs = merge(
     {
       migrate = {
-        command = ["sh", "-c", "python -m scripts.check_launch && alembic upgrade head && python -m scripts.seed"]
+        command = ["sh", "-c", "python -m scripts.check_launch && alembic upgrade head && python -m scripts.seed${var.database_logins_ready ? " && python -m rights.logins grants" : ""}"]
         cron    = null
         timeout = 900
         secrets = { POSTGRES_PASSWORD = "database-password" } # scripts.check_launch checks it
@@ -75,7 +77,21 @@ locals {
         env     = {}
       }
     } : {},
+    # Makes or repairs the restricted logins, safe to run again; with the argument check, signs in as each
+    # and proves what it can and cannot do, changing nothing (the runbook's "Database logins").
+    var.database_logins_ready ? {
+      logins = {
+        command = ["python", "-m", "rights.logins", "provision"]
+        cron    = null
+        timeout = 300
+        secrets = { for login in keys(local.database_logins) : "ALVARY_LOGIN_${upper(login)}_URL" => "database-url-${login}" }
+        env     = {}
+      }
+    } : {},
   )
+  job_database = {
+    for name in keys(local.jobs) : name => lookup(local.database_secret, name, "database-url")
+  }
 }
 
 resource "azurerm_container_app_job" "public" {
@@ -117,7 +133,7 @@ resource "azurerm_container_app_job" "public" {
   }
 
   dynamic "secret" {
-    for_each = toset(concat(local.secret_names, values(each.value.secrets)))
+    for_each = toset(concat(local.secret_names, values(each.value.secrets), [local.job_database[each.key]]))
     content {
       name                = secret.value
       identity            = azurerm_user_assigned_identity.public.id
@@ -141,7 +157,7 @@ resource "azurerm_container_app_job" "public" {
         }
       }
       dynamic "env" {
-        for_each = merge(local.public_secret_env, each.value.secrets)
+        for_each = merge(local.public_secret_env, each.value.secrets, { DATABASE_URL = local.job_database[each.key] })
         content {
           name        = env.key
           secret_name = env.value
@@ -165,5 +181,6 @@ resource "azurerm_container_app_job" "public" {
     azurerm_role_assignment.secrets,
     azurerm_role_assignment.audit_seals_write,
     azurerm_key_vault_secret.database_password,
+    azurerm_key_vault_secret.database_login,
   ]
 }

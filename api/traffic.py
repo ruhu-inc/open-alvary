@@ -475,34 +475,13 @@ def maintain(engine: Engine, namespace: PolicyNamespace, today: date | None = No
     def t(connection, name: str) -> str:
         return namespace.qualified(connection, "accounts", name)
 
+    # The months ahead and those past what is kept, as the table's owner (accounts.traffic_months).
     with engine.begin() as connection:
-        quote = connection.dialect.identifier_preparer.quote_identifier
-        parent = t(connection, "traffic_record_day")
-        schema = quote(namespace.schema("accounts"))
-        # Months ahead, so a job failing for weeks loses nothing: counts need their month to exist.
-        for ahead in range(PARTITIONS_AHEAD + 1):
-            start, end = _month(today, ahead), _month(today, ahead + 1)
-            name = quote(f"traffic_record_day_{start:%Y_%m}")
-            connection.execute(
-                text(
-                    f"CREATE TABLE IF NOT EXISTS {schema}.{name} PARTITION OF {parent}"
-                    f" FOR VALUES FROM ('{start}') TO ('{end}') WITH (fillfactor = 80)"
-                )
-            )
-        # A month goes whole when its last day is past what is kept; monthly totals stay.
-        done["months_dropped"] = 0
-        keep_from = today - timedelta(days=RECORD_DAYS_KEPT)
-        for (name,) in connection.execute(
-            text(
-                "SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid"
-                " WHERE i.inhparent = CAST(:parent AS regclass)"
-            ),
-            {"parent": parent},
-        ).all():
-            year, month = name.removeprefix("traffic_record_day_").split("_")
-            if _month(date(int(year), int(month), 1), 1) <= keep_from:
-                connection.execute(text(f"DROP TABLE {schema}.{quote(name)}"))
-                done["months_dropped"] += 1
+        months = namespace.qualified(connection, "accounts", "traffic_months")
+        done["months_dropped"] = connection.scalar(
+            text(f"SELECT {months}(:today, :ahead, :kept)"),
+            {"today": today, "ahead": PARTITIONS_AHEAD, "kept": RECORD_DAYS_KEPT},
+        )
 
     # A finished day's sketch becomes its one number, and the sketch and its salt are gone.
     with engine.begin() as connection:

@@ -15,7 +15,11 @@ import subprocess
 from pathlib import Path
 
 from ingestion import first_collection, layout_parser, native
+from ingestion.tools import GIB, run_tool
 from workbench.store import canonical_json
+
+# One page at 150 dpi, on an instance of 2 GiB: a file that wants more fails, and the instance stays up.
+RENDER_MEMORY = 3 * GIB // 2
 
 KINDS = {"heading", "paragraph", "list_item", "table"}
 MARK_TYPES = {"bold", "italic", "underline", "superscript", "subscript"}
@@ -343,12 +347,13 @@ class Library:
         pdf = pdf or self.original(act_id)
         if os.environ.get("ALVARY_RENDER") == "direct":
             folder.mkdir(parents=True, exist_ok=True)
-            subprocess.run(
+            run_tool(
                 ["pdftoppm", "-r", "150", "-jpeg", "-jpegopt", "quality=85", "-singlefile"]
                 + ["-f", str(page), "-l", str(page), str(pdf), str(folder / f"page-{page}")],
                 check=True,
                 capture_output=True,
                 timeout=120,
+                memory=RENDER_MEMORY,
             )
             trim_cache()
         else:

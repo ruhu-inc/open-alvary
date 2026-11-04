@@ -42,6 +42,28 @@ resource "azurerm_key_vault_secret" "database_url" {
   depends_on = [azurerm_role_assignment.vault_operator]
 }
 
+# The restricted logins (rights/logins.py), each with what its workloads do and no more; the logins job
+# makes them from these URLs. Each password is generated here and reaches the job only through the vault.
+resource "random_password" "database_login" {
+  for_each = local.database_logins
+  length   = 40
+  special  = false
+}
+
+resource "azurerm_key_vault_secret" "database_login" {
+  for_each     = local.database_logins
+  name         = "database-url-${each.key}"
+  key_vault_id = azurerm_key_vault.main.id
+  value = format(
+    "postgresql+psycopg://%s:%s@%s:5432/%s?sslmode=require",
+    each.value,
+    random_password.database_login[each.key].result,
+    azurerm_postgresql_flexible_server.main.fqdn,
+    local.database,
+  )
+  depends_on = [azurerm_role_assignment.vault_operator]
+}
+
 # The migrate job's launch check reads the password itself (scripts.check_launch, POSTGRES_PASSWORD),
 # as on Google Cloud.
 resource "azurerm_key_vault_secret" "database_password" {
@@ -54,9 +76,31 @@ resource "azurerm_key_vault_secret" "database_password" {
 locals {
   # A secret's address for Container Apps: versionless, so a value copied again is read within
   # Container Apps' refresh (about 30 minutes) or at the next revision.
-  secret = { for name in local.secret_names : name => "${azurerm_key_vault.main.vault_uri}secrets/${name}" }
+  secret = {
+    for name in concat(local.secret_names, [local.database_secret["service"]]) :
+    name => "${azurerm_key_vault.main.vault_uri}secrets/${name}"
+  }
+  database_logins = var.database_logins_ready ? {
+    service   = "open_alvary_service"
+    jobs      = "open_alvary_jobs"
+    retrieval = "open_alvary_retrieval"
+  } : {}
+  workload_login = {
+    service   = "service"
+    worker    = "jobs"
+    daily     = "jobs"
+    terms     = "jobs"
+    retrieval = "retrieval"
+    indexer   = "retrieval"
+  }
+  # Workload → the secret holding the URL it signs in with.
+  database_secret = {
+    for workload, login in local.workload_login :
+    workload => contains(var.database_logins_in_use, workload) ? "database-url-${login}" : "database-url"
+  }
+  # Every workload's but its database URL, which is its own.
   secret_names = concat(
-    ["database-url", "feed-keys", "webhook-keys", "admission-config", "site-admission-config"],
+    ["feed-keys", "webhook-keys", "admission-config", "site-admission-config"],
     var.accounts_enabled ? ["key-pepper", "consent-secret", "console-client-secret", "resend-api-key"] : [],
     var.optional_secrets,
   )

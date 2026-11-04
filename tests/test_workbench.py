@@ -1497,6 +1497,7 @@ def test_a_deployed_workbench_renders_pages_itself_once_per_source_and_keeps_its
 
     monkeypatch.setattr(content, "_STORES", {"test-bucket": Bucket()})
     monkeypatch.setattr(content.subprocess, "run", pdftoppm)
+    monkeypatch.setattr("ingestion.tools.shutil.which", lambda name, path=None: name)
     monkeypatch.setenv("ALVARY_REVIEW_COLLECTIONS", "gs://test-bucket/collections/rw/")
     monkeypatch.setenv("ALVARY_REVIEW_CACHE", str(tmp_path / "cache"))
     monkeypatch.setenv("ALVARY_RENDER", "direct")
@@ -1505,7 +1506,7 @@ def test_a_deployed_workbench_renders_pages_itself_once_per_source_and_keeps_its
     english = library.image("rw-law-009-2026-en", 3)
     french = library.image("rw-law-009-2026-fr", 3)
     assert english == french and english.read_bytes() == b"\xff\xd8 image"
-    assert len(ran) == 1 and ran[0][0] == "pdftoppm" and "docker" not in ran[0]
+    assert len(ran) == 1 and "pdftoppm" in ran[0] and "docker" not in ran[0]
     assert asked.count("sources/rw/minijust-gazette/abc.pdf") == 1  # one copy of the issue for both
     # A cache past its budget drops what was used least recently.
     old = tmp_path / "cache" / "old.bin"

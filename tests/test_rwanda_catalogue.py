@@ -774,7 +774,7 @@ def test_in_a_cloud_job_the_text_layer_is_read_by_pdftotext_in_its_own_container
 
     def run(command, **kwargs):
         seen.append(command)
-        if command[0] == "pdfinfo":
+        if "pdfinfo" in command:
             return subprocess.CompletedProcess(
                 command, 0, "Pages: 2\nPage    1 rot:   0\nPage    2 rot:  90\n", ""
             )
@@ -786,10 +786,11 @@ def test_in_a_cloud_job_the_text_layer_is_read_by_pdftotext_in_its_own_container
         )
 
     monkeypatch.setattr(gazette_layout.subprocess, "run", run)
+    monkeypatch.setattr("ingestion.tools.shutil.which", lambda name, path=None: name)
     monkeypatch.setenv("ALVARY_TEXT_LAYER", "direct")
     pages = gazette_layout.text_layer(tmp_path / "issue.pdf")
-    assert seen[0][:2] == ["pdftotext", "-bbox-layout"] and "docker" not in seen[0]
-    assert seen[1][0] == "pdfinfo"
+    assert "pdftotext" in seen[0] and "-bbox-layout" in seen[0] and "docker" not in seen[0]
+    assert "pdfinfo" in seen[1]
     assert (pages[0]["width"], pages[1]["width"], pages[1]["height"]) == (600.0, 840.0, 600.0)
 
 

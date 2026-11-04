@@ -9,7 +9,8 @@
 #   starts (workbench/store.py: provision_publisher): approvals, details, page revisions and operators'
 #   names, read only, and the publishing tables, where it records each run; never sessions, passkeys
 #   or enrolment codes, and never a review;
-# - writes the public catalogue with the public service's database URL;
+# - writes the public catalogue with the public service's database URL, or, once database_logins_in_use
+#   names it, with a login of its own that reaches the catalogue and the change log and no one's account;
 # - reads the collections (the first mounted read-only, the corpus ones from the corpus bucket).
 # Cloud Scheduler starts it nightly; the workbench's account may start it and nothing else.
 
@@ -74,7 +75,7 @@ resource "google_secret_manager_secret_iam_member" "review_publisher_database_ur
 }
 
 resource "google_secret_manager_secret_iam_member" "publisher_public_database" {
-  count     = local.publish_enabled ? 1 : 0
+  count     = local.publish_enabled && local.database_secret["publish"] == "database-url" ? 1 : 0
   secret_id = google_secret_manager_secret.generated["database-url"].id
   role      = "roles/secretmanager.secretAccessor"
   member    = google_service_account.publisher[0].member
@@ -146,7 +147,7 @@ resource "google_cloud_run_v2_job" "publish" {
           name = "DATABASE_URL"
           value_source {
             secret_key_ref {
-              secret  = google_secret_manager_secret.generated["database-url"].secret_id
+              secret  = local.database_secret["publish"]
               version = "latest"
             }
           }
@@ -175,6 +176,9 @@ resource "google_cloud_run_v2_job" "publish" {
   depends_on = [
     google_secret_manager_secret_iam_member.review_publisher_database_url,
     google_secret_manager_secret_iam_member.publisher_public_database,
+    google_secret_manager_secret_iam_member.database_login,
+    google_secret_manager_secret_version.generated,
+    google_secret_manager_secret_version.database_login,
     google_secret_manager_secret_version.review_publisher_database_url,
     google_storage_bucket_iam_member.publisher_reads,
   ]

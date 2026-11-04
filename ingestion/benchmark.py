@@ -29,6 +29,7 @@ from pathlib import Path
 import httpx
 
 from ingestion.compare import HtmlTables as _Tables
+from ingestion.tools import run_tool
 
 ROOT = Path(__file__).resolve().parents[1]
 BENCH = ROOT / "private-staging" / "bench"
@@ -325,8 +326,9 @@ def read_external(script: str, python: Path):
     """Readers whose dependencies live in their own environment under private-staging/bench."""
 
     def reader(act: str, page: int) -> dict:
-        done = subprocess.run(
+        done = run_tool(  # no limit on memory: each loads a model of its own
             [str(python), str(Path(__file__).with_name("bench_readers") / script), str(image(act, page))],
+            memory=None,
             check=True,
             capture_output=True,
             text=True,

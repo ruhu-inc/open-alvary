@@ -31,13 +31,16 @@ resource "google_storage_bucket" "transfer" {
 
 # Each restore job reads (and, for dump, writes) only its own database's folder.
 resource "google_storage_bucket_iam_member" "transfer" {
-  for_each = { public = google_service_account.public.member, workbench = google_service_account.workbench.member }
-  bucket   = google_storage_bucket.transfer.name
-  role     = "roles/storage.objectUser"
-  member   = each.value
+  for_each = merge(
+    { public = google_service_account.public.member, workbench = google_service_account.workbench.member },
+    var.database_logins_ready ? { migrator = google_service_account.migrator[0].member } : {},
+  )
+  bucket = google_storage_bucket.transfer.name
+  role   = "roles/storage.objectUser"
+  member = each.value
   condition {
     title      = "own-folder"
-    expression = "resource.name.startsWith(\"projects/_/buckets/${local.buckets.transfer}/objects/${each.key == "public" ? "public" : "review"}/\")"
+    expression = "resource.name.startsWith(\"projects/_/buckets/${local.buckets.transfer}/objects/${each.key == "workbench" ? "review" : "public"}/\")"
   }
 }
 
@@ -45,7 +48,8 @@ locals {
   restores = var.restore_image == "" ? {} : merge(
     {
       public = {
-        account = google_service_account.public.email
+        # The owner's login, under the migrations' account once that has moved (secrets.tf).
+        account = contains(var.database_logins_in_use, "migrate") ? google_service_account.migrator[0].email : google_service_account.public.email
         secrets = { DATABASE_URL = "database-url", ACCESS_ROLE_PASSWORD = "access-role-password" }
       }
     },

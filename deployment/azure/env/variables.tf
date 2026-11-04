@@ -297,6 +297,26 @@ variable "restore_image" {
   default     = ""
 }
 
+variable "database_logins_ready" {
+  description = "Makes the restricted database logins' passwords and secrets and the job that sets them up (rights/logins.py). Nothing signs in with them until database_logins_in_use names it."
+  type        = bool
+  default     = false
+}
+
+variable "database_logins_in_use" {
+  description = "The workloads moved off the database owner's login, one or several at a time; empty means none (the Google Cloud environment's variable of this name, and the runbook's \"Database logins\"). Every identity here still reads the whole vault, so a login limits what a query can do, not what a taken-over workload can read."
+  type        = set(string)
+  default     = []
+  validation {
+    condition     = alltrue([for workload in var.database_logins_in_use : contains(["service", "worker", "daily", "terms", "retrieval", "indexer"], workload)])
+    error_message = "database_logins_in_use may name service, worker, daily, terms, retrieval and indexer."
+  }
+  validation {
+    condition     = var.database_logins_ready || length(var.database_logins_in_use) == 0
+    error_message = "database_logins_in_use needs database_logins_ready, and the logins job run first."
+  }
+}
+
 variable "google_audience" {
   description = "The Entra application (Application ID URI) the ingestion identity's token is for when Google exchanges it (README, Google from Azure)."
   type        = string

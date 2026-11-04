@@ -21,6 +21,7 @@ from pypdf import PdfReader
 
 from ingestion import layout_parser, settings
 from ingestion.compare import HtmlTables
+from ingestion.tools import run_tool
 
 _BILLED = threading.Lock()  # a reader's requests run in threads that each count their pages
 
@@ -182,6 +183,7 @@ class DocOCRReader(DocAIReader):
 
 MINERU_FURNITURE = {"header", "footer", "page_number", "page_header", "page_footer", "page_footnote"}
 MINERU_SKIP = {"image_body", "chart", "chart_body", "image"}
+MINERU_SETTINGS = ("MINERU_", "HF_HOME", "HF_HUB_CACHE", "PYTORCH_", "TORCH_")
 
 
 def _mineru_text(content) -> str:
@@ -271,8 +273,8 @@ class MinerUReader:
 
     def read(self, pdf: Path) -> Reading:
         version = self.version()
-        environment = {
-            **os.environ,
+        environment = {  # its own settings, none of this process's keys
+            **{name: value for name, value in os.environ.items() if name.startswith(MINERU_SETTINGS)},
             "HF_HUB_OFFLINE": "1",
             "TRANSFORMERS_OFFLINE": "1",
             "MINERU_MODEL_SOURCE": "local",
@@ -288,9 +290,10 @@ class MinerUReader:
         if not kept.exists():
             with tempfile.TemporaryDirectory() as scratch:
                 out = Path(scratch) / "reading.json"
-                done = subprocess.run(
+                done = run_tool(  # no limit on memory: it maps a model's weights
                     [*command, "-o", str(out)],
-                    env=environment,
+                    extra_env=environment,
+                    memory=None,
                     capture_output=True,
                     text=True,
                     timeout=120 + 60 * count,

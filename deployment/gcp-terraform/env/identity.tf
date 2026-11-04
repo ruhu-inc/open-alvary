@@ -26,6 +26,32 @@ resource "google_service_account" "ingestion" {
   depends_on = [google_project_service.main]
 }
 
+# Accounts for workloads with database logins of their own (secrets.tf), so that one workload's token
+# reaches neither another's login nor the owner's. The first alone reads the owner's.
+resource "google_service_account" "migrator" {
+  count        = var.database_logins_ready ? 1 : 0
+  account_id   = "${local.name_prefix}-migrator"
+  display_name = "Open Alvary migrations and database roles (${var.environment})"
+
+  depends_on = [google_project_service.main]
+}
+
+resource "google_service_account" "jobs" {
+  count        = var.database_logins_ready ? 1 : 0
+  account_id   = "${local.name_prefix}-jobs"
+  display_name = "Open Alvary worker, daily and terms jobs (${var.environment})"
+
+  depends_on = [google_project_service.main]
+}
+
+resource "google_service_account" "retrieval" {
+  count        = var.database_logins_ready ? 1 : 0
+  account_id   = "${local.name_prefix}-retrieval"
+  display_name = "Open Alvary retrieval and indexer jobs (${var.environment})"
+
+  depends_on = [google_project_service.main]
+}
+
 # Cloud Scheduler calls the scheduled jobs as this account, which may only start them (jobs.tf).
 resource "google_service_account" "scheduler" {
   account_id   = "${local.name_prefix}-scheduler"
