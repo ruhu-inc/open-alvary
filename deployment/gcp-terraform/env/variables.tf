@@ -373,7 +373,7 @@ variable "transfer_source" {
 }
 
 variable "database_logins_ready" {
-  description = "Makes the restricted database logins' passwords and secrets, the service accounts that read them and the job that sets them up (rights/logins.py). Nothing signs in with them until database_logins_in_use names it."
+  description = "Makes the restricted database logins' passwords and secrets, the service accounts that read them and the job that sets them up (rights/logins.py), and adds a last step to the migrate job. public_image must already be a release that has rights/logins.py: released first, and named on this and every later apply. Nothing signs in with them until database_logins_in_use names it."
   type        = bool
   default     = false
 }

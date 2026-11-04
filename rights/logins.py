@@ -12,8 +12,8 @@ The owner's login (open_alvary) keeps the schema, and only the migrations and th
                          and the generations' state. It cannot reach the accounts schema at all.
   open_alvary_publish    the publish job: writes the catalogue and the change log, not accounts.
 
-None may create or change a table, grant a role or read the private policy and staging schemas; each may run
-only the functions named here. Grants are made to the login directly, as the workbench's access role has
+None may create or change a table, make a temporary object, grant a role or read the private policy and
+staging schemas; each may run only the functions named here. Grants are made to the login directly, as the workbench's access role has
 them (accounts.access_admin), and hold whether or not the capability roles of rights.database exist on the
 database. A login is never a member of a role, so `SET ROLE` takes it nowhere.
 
@@ -434,9 +434,12 @@ def _ensure_role(conn: Connection, role: str, url: str) -> None:
 
 
 def _close_to_public(conn: Connection, namespace: PolicyNamespace) -> None:
-    """What a login would otherwise hold through being anyone. A database that came from an older PostgreSQL
-    may let everyone create in the catalogue's schema: taken away when the owner keeps it through owning the
-    schema, and otherwise problems() says so and stops. A restore without privileges reopens functions."""
+    """What a login would otherwise hold through being anyone. Every database lets everyone make temporary
+    objects, which nothing here uses; and one that came from an older PostgreSQL may let everyone create in the
+    catalogue's schema. Taken away where the owner keeps them, as the database's or the schema's owner; otherwise
+    problems() says so and stops. A restore without privileges reopens functions, and the database's own grants."""
+    database = _quote(conn, conn.scalar(text("SELECT current_database()")))
+    conn.exec_driver_sql(f"REVOKE TEMPORARY ON DATABASE {database} FROM PUBLIC")
     months = _quote(conn, namespace.schema("accounts"))
     conn.exec_driver_sql(
         f"REVOKE ALL ON FUNCTION {months}.traffic_months(date, integer, integer) FROM PUBLIC"
@@ -486,6 +489,8 @@ def problems(conn: Connection, namespace: PolicyNamespace, login: Login) -> list
         found.append(f"{role} can create in {', '.join(can_create)}")
     if conn.scalar(text("SELECT has_database_privilege(:r, current_database(), 'CREATE')"), {"r": role}):
         found.append(f"{role} can create schemas")
+    if conn.scalar(text("SELECT has_database_privilege(:r, current_database(), 'TEMPORARY')"), {"r": role}):
+        found.append(f"{role} can make temporary objects")
     staging = namespace.schema("staging")
     if conn.scalar(text("SELECT has_schema_privilege(:r, :s, 'USAGE')"), {"r": role, "s": staging}):
         found.append(f"{role} can reach {staging}")
@@ -593,6 +598,7 @@ def remove(engine: Engine) -> list[str]:
 FORBIDDEN = (
     "CREATE TABLE {base}.intruder (id int)",
     "CREATE SCHEMA intruder",
+    "CREATE TEMPORARY TABLE intruder (id int)",
     "CREATE ROLE intruder",
     "ALTER TABLE {base}.sources ADD COLUMN intruder text",
     "DROP TABLE {base}.sources",

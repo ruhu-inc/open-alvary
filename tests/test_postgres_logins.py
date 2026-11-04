@@ -478,6 +478,9 @@ def test_no_login_can_change_the_schema_or_grant_itself_more(signed, role):
                 f"CREATE TABLE {base}.intruder (id int)",
                 f"CREATE TABLE {accounts}.intruder (id int)",
                 f"CREATE FUNCTION {base}.intruder() RETURNS int LANGUAGE sql AS 'SELECT 1'",
+                "CREATE TEMPORARY TABLE intruder (id int)",
+                "CREATE DOMAIN pg_temp.intruder AS int",
+                "CREATE FUNCTION pg_temp.intruder() RETURNS int LANGUAGE sql AS 'SELECT 1'",
                 "CREATE SCHEMA intruder",
                 "CREATE ROLE intruder",
                 "GRANT pg_read_all_data TO CURRENT_USER",
@@ -578,6 +581,30 @@ def test_the_jobs_login_cannot_write_the_catalogue_or_rewrite_who_may_do_what(si
                 f"SELECT {signed.t(conn, 'policy', 'check_credential')}('{{}}')",
             ),
         )
+
+
+def test_a_function_running_as_the_tables_owner_looks_nowhere_else_for_a_name(signed):
+    with signed.owner.connect() as conn:
+        months = signed.t(conn, "accounts", "traffic_months")
+        config, body = conn.execute(
+            text("SELECT proconfig, prosrc FROM pg_proc WHERE oid = to_regprocedure(:f)"),
+            {"f": f"{months}(date, integer, integer)"},
+        ).one()
+    assert config == ["search_path=pg_catalog, pg_temp"]
+    assert "pg_catalog.pg_inherits" in body and "pg_catalog.pg_class" in body
+
+
+def test_a_grant_of_temporary_objects_is_found_and_taken_back(signed):
+    with signed.owner.begin() as conn:
+        database = conn.scalar(text("SELECT current_database()"))
+        conn.exec_driver_sql(f'GRANT TEMPORARY ON DATABASE "{database}" TO PUBLIC')
+        conn.exec_driver_sql(f'GRANT TEMPORARY ON DATABASE "{database}" TO {JOBS}')
+    with signed.owner.connect() as conn:
+        assert "open_alvary_jobs can make temporary objects" in logins.problems(
+            conn, signed.namespace, logins.JOBS
+        )
+    assert set(logins.grants(signed.owner)) == set(logins.LOGINS)
+    assert logins.check_login(signed.engine(JOBS), logins.JOBS) == []
 
 
 def test_seals_and_audit_entries_stay_append_only_for_the_job_that_keeps_them(signed):
