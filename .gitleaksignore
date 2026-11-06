@@ -10,3 +10,6 @@ acaa41cd74a923ff1dbcb5f551c313d07cae4ade:deployment/gcp-terraform/env/transfer.t
 # Made-up values: a feed's resume token in the conformance bodies, a profile's key in a test.
 3dc32a0326f284f06c10531fd7612b8c4ac52b81:clients/conformance/bodies.json:generic-api-key:65
 d829440c27d0e7baed1f998c3456ed9a3f651cfa:tests/test_postgres_assembly.py:generic-api-key:64
+
+# The id of the public key python:3.12-slim's Python release is signed with, as that image sets GPG_KEY.
+4b28413151a75475ae134ca131d5e0c19d1df800:tests/test_render_service.py:generic-api-key:281
