@@ -30,6 +30,12 @@ structure rules for the document's jurisdiction and type (RULES):
                      before the next number ("Interpretation 1. In these …") and running heads are reported
   ng-guidance-1      Nigerian regulators' guidelines and circulars: read as ng-subsidiary-1, versioned
                      apart because guidance is not legislation
+  ng-colonial-1      Nigeria's colonial and regional legislation of 1908–1964 the bound volumes hold (a
+                     Region's Laws, Ordinances, Proclamations, and the legal notices, bye-laws,
+                     instruments and declarations made under them): ng-subsidiary-1, with the long title
+                     under the Governor's name and style, "Enacted by the Governor", "BE IT ENACTED" and
+                     "DATE OF COMMENCEMENT" opening the preamble, a part titled after its separators
+                     ("PART I.—INTRODUCTORY"), and the Clerk's certificate after a Law a notice
   ohada-uniform-act-1
                      OHADA Uniform Acts in French, as the Journal officiel prints them: the
                      SOMMAIRE, the Council of Ministers' preamble, PARTIE, LIVRE, TITRE, SOUS-TITRE,
@@ -108,7 +114,7 @@ which is not operative text: there it is a warning.
 import hashlib
 import re
 import unicodedata
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from workbench.serialize import Issue, Leaf, Serialized, clean, place
 from workbench.store import canonical_json
@@ -141,6 +147,11 @@ JUDGMENT_TYPES = {"judgment", "ruling"}
 # way: calibrated on the documents of each kind the collection held on 2026-11-05 (TXP-03).
 NG_SUBSIDIARY_TYPES = ("regulation", "order", "rules", "practice_direction")
 NG_GUIDANCE_TYPES = ("guideline", "circular")
+# The kinds the bound volumes of 1908–1964 hold besides Acts and those above (ingestion.ng_volumes.KINDS): a
+# Region's Laws, Ordinances, Proclamations, and the notices, bye-laws, instruments and declarations made under
+# them (ng-colonial-1, 2026-11-06).
+NG_COLONIAL = "ng-colonial-1"
+NG_COLONIAL_TYPES = ("law", "ordinance", "proclamation", "notice", "bye_laws", "instrument", "declaration")
 # The kinds of instrument the Rwandan Gazette reader names from the heading that opens each one
 # (ingestion.rw_gazette.KIND, CONSTITUTION), and the practice directions printed the same way, whose
 # article and division headings rw-law-1 reads. A text whose kind was not recognised ("other") is not among
@@ -186,6 +197,7 @@ RULES = {
     **{("ng", kind): JUDGMENT for kind in JUDGMENT_TYPES},
     **{("ng", kind): NG_SUBSIDIARY for kind in NG_SUBSIDIARY_TYPES},
     **{("ng", kind): NG_GUIDANCE for kind in NG_GUIDANCE_TYPES},
+    **{("ng", kind): NG_COLONIAL for kind in NG_COLONIAL_TYPES},
     **{("rw", kind): RW_LAW for kind in RW_INSTRUMENTS},
     **{("rw", kind): RW_TREATY for kind in RW_TREATIES},
 }
@@ -436,6 +448,42 @@ NG_INSTRUMENT = Drafting(
     margin_words=True,
     schedule_titles_inline=True,
 )
+# Nigeria's colonial and regional legislation, 1908–1964, as the bound volumes print it (ng-colonial-1): the
+# instruments' drafting, with the long title under the Governor's name and style ("… Governor, Eastern Region
+# A LAW TO MAKE PROVISION …", "Title. A LAW TO …"), "AN ORDINANCE TO", "A PROCLAMATION", "Enacted by the
+# Governor …", "BE IT ENACTED …" and a notice's "DATE OF COMMENCEMENT : …" opening the preamble.
+LONG_TITLE = r"(?-i:A\s+LAW\s+TO|AN?\s+ORDINANCE\s+(?:TO|FOR)|AN\s+ACT\s+TO|A\s+PROCLAMATION)\b"
+COLONIAL_PREAMBLE = re.compile(
+    rf"^(?:(?:.{{0,300}}?\s)?{LONG_TITLE}|(?:\[[^\]]{{0,40}}\]\s*)?(?:be\s+it\s+(?:therefore\s+)?enacted\b"
+    r"|enacted\s+by\s+the\b|date\s+of\s+commencement\b)"
+    r"|commencement(?:\s+date)?\s*[.:]?\s*(?:\[|\(|\d|in\s+(?:the\s+)?exercise\b)|in\s+(?:the\s+)?exercise\s+of\b"
+    r"|whereas\b|now\s+therefore\b)",
+    re.I | re.S,
+)
+# The instrument's title in capitals, as the instruments' own, and a Law's, Ordinance's, Proclamation's,
+# bye-laws', notice's or instrument's ("THE … (CONSERVANCY) BYE-LAWS, 1956"); never its long title ("A LAW TO
+# AMEND THE … LAW, 1954.").
+COLONIAL_TITLE = re.compile(
+    rf"^(?!(?:PART|CHAPTER|ORDER|ARRANGEMENT|SCHEDULE|TABLE)\b|{LONG_TITLE})[A-Z0-9][A-Z0-9 ,.'’()&/-]*\s"
+    r"(?:REGULATIONS?|RULES|ORDER|BYE-?\s?LAWS|LAW|ORDINANCE|PROCLAMATION|NOTICE)(?:,?\s*\d{4})?\.?$"
+)
+# The closing words as the instruments', and the Clerk's certificate after a Law ("This printed impression has
+# been carefully compared by me with the Bill …").
+COLONIAL_CLOSING = re.compile(
+    rf"{INSTRUMENT_CLOSING.pattern}|^this\s+printed\s+impression\s+has\s+been\s+carefully\s+compared\b",
+    re.I | re.S,
+)
+# A part as the instruments', after any separators: "PART I.—INTRODUCTORY" is titled "INTRODUCTORY".
+COLONIAL_PART = re.compile(
+    r"^(?:PART|Part|ORDER|Order)\s+([IVXLC]+|\d+)\b(?!\s+[a-z(])\s*[—–:.-]*\s*(.*)$", re.S
+)
+NG_COLONIAL_DRAFTING = replace(
+    NG_INSTRUMENT,
+    preamble=COLONIAL_PREAMBLE,
+    title=COLONIAL_TITLE,
+    certificate=COLONIAL_CLOSING,
+    part=COLONIAL_PART,
+)
 DRAFTING = {
     NG_FEDERAL_ACT: NG,
     EAC_ACT: EAC,
@@ -444,6 +492,7 @@ DRAFTING = {
     GH_ACT: GH,
     NG_SUBSIDIARY: NG_INSTRUMENT,
     NG_GUIDANCE: NG_INSTRUMENT,
+    NG_COLONIAL: NG_COLONIAL_DRAFTING,
 }
 
 
