@@ -34,6 +34,7 @@ locals {
     engine    = "10.60.8.0/27"
     inference = "10.60.8.32/27"
     services  = "10.60.16.0/20"
+    render    = "10.62.0.0/26" # on a network of its own (render.tf)
   }
   engine_ip    = cidrhost(local.cidr.engine, 4)
   inference_ip = cidrhost(local.cidr.inference, 4)

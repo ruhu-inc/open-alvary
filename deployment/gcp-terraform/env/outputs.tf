@@ -65,6 +65,11 @@ output "workbench_url" {
   value       = local.workbench_enabled ? "https://${local.workbench_host}" : null
 }
 
+output "render_url" {
+  description = "The page renderer, reachable from the workbench alone (render.tf); null while render_image is empty."
+  value       = local.render_enabled ? "https://${local.render_host}" : null
+}
+
 output "ingestion_identity" {
   description = "The account the ingestion and copy jobs run as: the source bucket's owner grants it read (README, phase 5)."
   value       = google_service_account.ingestion.email

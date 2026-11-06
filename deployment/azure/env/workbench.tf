@@ -17,6 +17,8 @@ locals {
       ALVARY_REVIEW_CACHE_MB    = "2048"
     },
     var.workbench_settings,
+    # Last, so no setting above can send a page back to the workbench's own pdftoppm (render.tf).
+    local.render_env,
   )
   workbench_secret_env = merge(
     {
@@ -152,7 +154,7 @@ resource "azurerm_container_app" "workbench" {
     }
   }
 
-  depends_on = [azurerm_role_assignment.pull, azurerm_role_assignment.secrets, azurerm_key_vault_secret.review_database_url]
+  depends_on = [azurerm_role_assignment.pull, azurerm_role_assignment.secrets, azurerm_key_vault_secret.review_database_url, azapi_resource.render]
 }
 
 resource "azurerm_container_app_custom_domain" "workbench" {

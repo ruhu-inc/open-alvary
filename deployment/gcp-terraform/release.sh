@@ -8,6 +8,7 @@
 #   deployment/gcp-terraform/release.sh staging public       # build, then migrate, then print the apply
 #   deployment/gcp-terraform/release.sh staging workbench    # build
 #   deployment/gcp-terraform/release.sh staging ingestion    # build
+#   deployment/gcp-terraform/release.sh staging render       # build the page renderer (render.tf)
 #   deployment/gcp-terraform/release.sh staging restore      # build the database restore job (phase 5)
 #   COMMIT=2163537 deployment/gcp-terraform/release.sh staging public   # an earlier commit: the one live today
 #
@@ -21,8 +22,8 @@ set -euo pipefail
 
 ENVIRONMENT="${1:-}"
 WHAT="${2:-}"
-[[ "$ENVIRONMENT" == staging || "$ENVIRONMENT" == prod ]] && [[ "$WHAT" =~ ^(public|workbench|ingestion|restore)$ ]] || {
-  echo "Usage: $0 staging|prod public|workbench|ingestion|restore" >&2
+[[ "$ENVIRONMENT" == staging || "$ENVIRONMENT" == prod ]] && [[ "$WHAT" =~ ^(public|workbench|ingestion|render|restore)$ ]] || {
+  echo "Usage: $0 staging|prod public|workbench|ingestion|render|restore" >&2
   exit 2
 }
 REVISION="${COMMIT:-HEAD}"
@@ -55,6 +56,7 @@ case "$WHAT" in
   public) NAME=public-service DOCKERFILE=deployment/public-service.Dockerfile ;;
   workbench) NAME=workbench DOCKERFILE=deployment/workbench.Dockerfile ;;
   ingestion) NAME=ingestion DOCKERFILE=deployment/ingestion-jobs.Dockerfile ;;
+  render) NAME=render DOCKERFILE=deployment/render.Dockerfile ;;
   restore) NAME=restore DOCKERFILE=deployment/azure/restore.Dockerfile ;;  # the same job for both clouds
 esac
 git cat-file -e "$REVISION:$DOCKERFILE" 2>/dev/null || { echo "No $DOCKERFILE at $COMMIT" >&2; exit 1; }

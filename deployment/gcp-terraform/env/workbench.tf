@@ -32,6 +32,8 @@ locals {
       ALVARY_PUBLISH_SCHEDULE = local.publish_words
     } : {},
     var.workbench_settings,
+    # Last, so no setting above can send a page back to the workbench's own pdftoppm (render.tf).
+    local.render_env,
   )
   workbench_secret_env = merge(
     {
@@ -234,6 +236,9 @@ resource "google_cloud_run_v2_service" "workbench" {
     google_storage_bucket_iam_member.collection_read,
     google_secret_manager_secret_iam_member.review_publisher_database_url,
     google_secret_manager_secret_version.review_publisher_database_url,
+    # The renderer answers, to the workbench alone, before the workbench is told to use it.
+    google_cloud_run_v2_service_iam_member.render,
+    google_dns_record_set.render,
   ]
 }
 

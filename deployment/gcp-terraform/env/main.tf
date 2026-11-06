@@ -29,6 +29,7 @@ locals {
       "sts.googleapis.com",
     ],
     var.ingestion_image != "" ? ["documentai.googleapis.com"] : [],
+    var.render_image != "" ? ["dns.googleapis.com"] : [], # the renderer's name and its network's resolver (render.tf)
     var.budget_enabled ? ["billingbudgets.googleapis.com"] : [],
   )
 }
