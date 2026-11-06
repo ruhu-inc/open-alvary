@@ -64,6 +64,7 @@ def test_documents_with_rules_keep_exactly_the_structure_they_had(document, page
         ({"id": "ng-sc-2019-4", "jurisdiction": "ng", "type": "Judgment"}, "judgment-paragraphs-1"),
         ({"id": "ng-sc-2019-5", "jurisdiction": "ng", "type": "act", "document_type": "ruling"}, "judgment-paragraphs-1"),
         *[({"id": f"rw-{kind}-1-en", "jurisdiction": "rw", "type": kind}, "rw-law-1") for kind in structure.RW_INSTRUMENTS],
+        *[({"id": f"rw-{kind}-1-en", "jurisdiction": "rw", "type": kind}, "rw-treaty-1") for kind in structure.RW_TREATIES],
         *[({"id": f"ng-{kind}-1", "jurisdiction": "ng", "type": kind}, "ng-subsidiary-1") for kind in ("regulation", "order", "rules", "practice_direction")],
         *[({"id": f"ng-{kind}-1", "jurisdiction": "ng", "type": kind}, "ng-guidance-1") for kind in ("guideline", "circular")],
         ({"id": "aa-eac-act-2005-1", "jurisdiction": "aa-eac", "type": "act"}, "eac-act-1"),
@@ -97,7 +98,8 @@ def test_rules_are_chosen_by_jurisdiction_and_type(document, rules):
         # A Nigerian order has rules since 2026-11-06 (ng-subsidiary-1); a bill still has none.
         ({"id": "ng-example-bill-2024", "jurisdiction": "ng", "type": "bill"}, "ng/bill"),
         ({"id": "ng-example-2024", "jurisdiction": "ng"}, "ng/(no type)"),
-        # Rwanda's treaties are read by rw-law-1 (2026-10-29); a text of no recognised kind still has none.
+        # Rwanda's treaties have rules (rw-law-1 from 2026-10-29, rw-treaty-1 from 2026-11-06); a text of no
+        # recognised kind still has none.
         ({"id": "rw-other-00553a47bc45-fr", "jurisdiction": "rw", "type": "other"}, "rw/other"),
         ({"id": "rw-other-00f8ef71645e-fr", "jurisdiction": "rw", "type": "other"}, "rw/other"),
         ({"id": "rw-sc-2020-1", "jurisdiction": "rw", "type": "judgment"}, "rw/judgment"),

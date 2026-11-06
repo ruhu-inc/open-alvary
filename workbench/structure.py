@@ -72,6 +72,11 @@ structure rules for the document's jurisdiction and type (RULES):
   rw-law-1           Rwandan laws, orders and the other instruments of the Official Gazette, one
                      language at a time: titles, chapters, divisions (a civil-law "section" groups
                      articles) and articles
+  rw-treaty-1        Rwanda's treaties, conventions, protocols, charters and agreements, one language at
+                     a time: rw-law-1, with the title, the preamble from its name, the contents to the
+                     first heading printed only once, an article's heading on the line after its number,
+                     "IN WITNESS WHEREOF" and "EN FOI DE QUOI" with the signatures, and the annexes
+                     after them, whose articles restart (annex_i__art_1)
   judgment-paragraphs-1
                      Nigerian judgments and rulings: the header, each opinion with its numbered
                      paragraphs (each one a retrieval unit, cited "[2019] NGSC 4 [12]"), and the orders
@@ -115,6 +120,7 @@ ZA_ACT = "za-act-1"
 GH_ACT = "gh-act-1"
 OHADA_UNIFORM_ACT = "ohada-uniform-act-1"
 RW_LAW = "rw-law-1"
+RW_TREATY = "rw-treaty-1"
 AU_TREATY = "au-treaty-1"
 ECOWAS_ACT = "ecowas-act-1"
 ECOWAS_DIRECTIVE = "ecowas-directive-1"
@@ -136,16 +142,12 @@ JUDGMENT_TYPES = {"judgment", "ruling"}
 NG_SUBSIDIARY_TYPES = ("regulation", "order", "rules", "practice_direction")
 NG_GUIDANCE_TYPES = ("guideline", "circular")
 # The kinds of instrument the Rwandan Gazette reader names from the heading that opens each one
-# (ingestion.rw_gazette.KIND, CONSTITUTION), and the treaties and practice directions printed the same
-# way, whose article and division headings rw-law-1 reads (30 of 30 sampled treaties, conventions,
-# protocols and agreements built without an error, 2026-10-29). A text whose kind was not recognised
-# ("other") is not among them: its reviewer gives its kind first.
+# (ingestion.rw_gazette.KIND, CONSTITUTION), and the practice directions printed the same way, whose
+# article and division headings rw-law-1 reads. A text whose kind was not recognised ("other") is not among
+# them: its reviewer gives its kind first. The treaties Rwanda keeps, read by rw-law-1 until 2026-11-06, are
+# read by rw-treaty-1, which adds what a treaty prints and a law does not (TreatyBuilder).
+RW_TREATIES = ("agreement", "treaty", "convention", "protocol", "charter")
 RW_INSTRUMENTS = (
-    "agreement",
-    "treaty",
-    "convention",
-    "protocol",
-    "charter",
     "practice_direction",
     "constitution",
     "organic_law",
@@ -185,6 +187,7 @@ RULES = {
     **{("ng", kind): NG_SUBSIDIARY for kind in NG_SUBSIDIARY_TYPES},
     **{("ng", kind): NG_GUIDANCE for kind in NG_GUIDANCE_TYPES},
     **{("rw", kind): RW_LAW for kind in RW_INSTRUMENTS},
+    **{("rw", kind): RW_TREATY for kind in RW_TREATIES},
 }
 NO_RULES = "no_structure_rules"
 NOT_OPERATIVE = ("notice", "contents")  # a marked cell in a table inside one does not stop approval
@@ -548,6 +551,8 @@ def derive(
     units = {(p["page"], i): unit for p in pages for i, unit in enumerate(p["units"])}
     if rules_id == RW_LAW:
         builder: Builder = RwandaBuilder(language or "en", serialized, units)
+    elif rules_id == RW_TREATY:
+        builder = TreatyBuilder(language or "en", serialized, units)
     elif rules_id == JUDGMENT:
         builder = JudgmentBuilder(serialized, units)
     elif rules_id in DRAFTING:
@@ -1467,6 +1472,143 @@ class RwandaBuilder(Builder):
         self.article, self.region_node = None, None
         self.notes_to(node, False)
         self.hold(node, index)
+
+
+class TreatyBuilder(RwandaBuilder):
+    """One language column of a treaty, convention, protocol, charter or agreement as Rwanda keeps it (the
+    Law Reform Commission's files of its international instruments, rw-treaty-1): rw-law-1's divisions and
+    articles in each language, with what a treaty prints and a law does not. Its title is the first
+    heading; the notes after it (translated from, adopted at, ratified by) are front matter. The preamble
+    opens at its name ("PREAMBLE", "PRÉAMBULE", "IRANGASHINGIRO") and holds the recitals and the agreeing
+    words to the first division or article. The contents ("ARRANGEMENT OF ARTICLES", "TABLE DES MATIÈRES",
+    "ISHAKIRO", or those words ending the title's heading) hold every heading the body prints again, so
+    they end at the first one printed only once. An article's heading is the line after its number where
+    the number has none: a heading, or a short line in capitals ("DEFINITIONS"). "IN WITNESS WHEREOF" and
+    "EN FOI DE QUOI" open the signatures' notice, as "Done at", "Fait à" and "Bikorewe" do; an annex
+    named after them ("ANNEX I", "ANNEXE", "UMUGEREKA") is an annex of the document, whose divisions and
+    articles restart and are qualified by it (annex_i__art_1)."""
+
+    CONTENTS = re.compile(
+        r"^(?:ishakiro|(?:table\s+of\s+)?contents|arrangement\s+of\s+articles|table\s+des\s+mati[eè]res|sommaire)"
+        r"\s*[.:*]*$",  # "TABLE OF CONTENTS *", its note on what an editor added
+        re.I,
+    )
+    CONTENTS_AFTER_TITLE = re.compile(r"\barrangement\s+of\s+articles\s*$", re.I)
+    PREAMBLE = re.compile(r"^(?:preamble|pr[ée]ambule|irangashingiro|iriburiro)\s*[.:]?$", re.I)
+    SIGNATURE = re.compile(
+        r"^(?:in\s+witness\s+whereof|en\s+foi\s+de\s+quoi|bikorewe\b|done\s+(?:at|in)\b|fait\s+[àa]\b)", re.I
+    )
+    ANNEX = re.compile(
+        r"^(?:annex(?:ure|e)?|umugereka)(?:\s+(?:n[°o]\s*)?([ivxlc]{1,6}|\d{1,2}|[a-z])(?!\w))?\s*[.:—–-]?\s*(.*)$",
+        re.I | re.S,
+    )
+    # A line in capitals, the article's heading where it is not set as one: "DEFINITIONS".
+    HEADING_LINE = re.compile(r"^(?=(?:[^A-ZÀ-Ý]*[A-ZÀ-Ý]){3})[^a-zà-ÿ]{3,120}(?<![;,])$")
+
+    def __init__(self, language: str, *args):
+        super().__init__(language, *args)
+        self.heading_due: Node | None = None  # an article printed without its heading, which may follow
+        self.base: Node = self.root  # what articles open in: the document, or an annex
+        self.signed = False  # the signatures are printed: what is named an annex after them is one
+        # Where each heading is printed, and the preamble's name, to tell the contents from the body.
+        self.printed: dict[str, list[int]] = {}
+        for index, leaf in enumerate(self.leaves):
+            text = clean(leaf.text)
+            key = self.preamble_key(text) or (
+                self.heading_key(text) if self.unit(leaf).get("kind") == "heading" else None
+            )
+            if leaf.role == "text" and key:
+                self.printed.setdefault(key, []).append(index)
+
+    def preamble_key(self, text: str) -> str | None:
+        return "preamble" if self.PREAMBLE.match(text) else None
+
+    def heading_key(self, text: str) -> str | None:
+        """What a heading names, as the contents and the body both print it: an article or a division."""
+        for name, pattern in self.divisions:
+            if found := pattern.match(text):
+                return f"{name}:{slug(found.group(1))}"
+        found = self.article_pattern.match(text) if self.article_pattern else None
+        return f"art:{self.rw._number(found.group(1))}" if found else None
+
+    def printed_again(self, index: int, key: str | None) -> bool:
+        return bool(key) and any(later > index for later in self.printed.get(key, ()))
+
+    def put(self, node: Node, index: int) -> None:
+        self.notes_to(node, False)
+        self.hold(node, index)
+
+    def place(self, index: int, leaf: Leaf) -> None:
+        unit, text = self.unit(leaf), clean(leaf.text)
+        heading_unit = unit.get("kind") == "heading"
+        due, self.heading_due = self.heading_due, None
+        contents = self.region_node is not None and self.region_node.kind == "contents"
+        if not self.root.heading and heading_unit and not (self.root.children or self.open or self.article):
+            self.root.heading = text  # the title, the contents' name perhaps after it
+            self.put(self.root, index)
+            if self.CONTENTS_AFTER_TITLE.search(text):
+                self.region_node = self.add(self.root, "contents", "contents", leaf, heading=text)
+            return
+        if self.preamble_key(text) and not (contents and self.printed_again(index, "preamble")):
+            self.region_node, self.article, self.open = (
+                self.add(self.root, "preamble", "preamble", leaf),
+                None,
+                [],
+            )
+            self.put(self.region_node, index)
+            return
+        if contents and heading_unit and self.printed_again(index, self.heading_key(text)):
+            self.put(self.region_node, index)  # a heading the contents list
+            return
+        signing = self.region_node is not None and self.region_node.kind == "notice" and not self.article
+        self.signed = self.signed or signing
+        if signing and self.SIGNATURE.match(text):
+            self.put(self.region_node, index)  # "IN WITNESS WHEREOF …" then "Done at …": one notice
+            return
+        found = self.ANNEX.match(text) if self.signed else None
+        if found and (heading_unit or (found.group(1) and len(text) <= 200)):  # "Annex V: Information …"
+            self.open_annex(index, leaf, found)
+            return
+        article = self.article_pattern.match(text) if self.article_pattern and heading_unit else None
+        if article and not any(pattern.match(text) for _, pattern in self.divisions):
+            self.open_article(index, leaf, article)
+            return
+        if due is not None and (heading_unit or self.HEADING_LINE.match(text)):
+            due.heading = text  # "ARTICLE 1" then "DEFINITIONS"; "Annex III:" then its title
+            self.put(due, index)
+            return
+        super().place(index, leaf)
+
+    def repeatable(self) -> set[int]:
+        """An annex's articles and divisions repeat the body's headings ("ARTICLE 1"): not running heads."""
+        kinds = ("article", "title", "chapter", "division", "annex")
+        return super().repeatable() | {n.leaves[0] for n in self.root.walk() if n.kind in kinds and n.leaves}
+
+    def open_article(self, index: int, leaf: Leaf, found: re.Match) -> None:
+        """An article, as rw-law-1 opens one, its locator within the annex it is in."""
+        if self.region_node is not None and self.region_node.kind == "contents":
+            self.region_node = None  # the first article heading not printed again ends the contents
+        number = self.rw._number(found.group(1))
+        parent = self.open[-1][1] if self.open else self.root
+        own = f"art_{slug(str(number))}"
+        locator = own if self.base is self.root else f"{self.base.locator}__{own}"
+        self.article = self.add(parent, "article", locator, leaf, label=clean(leaf.text)[: found.end(1)])
+        self.article.heading = (found.group(2) or found.group(3) or "").strip()
+        self.notes_to(self.article, True)
+        self.hold(self.article, index)
+        self.heading_due = None if self.article.heading else self.article
+
+    def open_annex(self, index: int, leaf: Leaf, found: re.Match) -> None:
+        number = found.group(1) or str(1 + sum(1 for c in self.root.children if c.kind == "annex"))
+        printed = clean(leaf.text)
+        label = printed[: len(printed) - len(found.group(2))].strip(" :.-–—")
+        node = self.add(
+            self.root, "annex", f"annex_{slug(number)}", leaf, label=label, heading=found.group(2).strip()
+        )
+        self.region_node, self.article, self.base = node, None, node
+        self.open = [(-1, node)]  # below every division: what opens in the annex is within it
+        self.put(node, index)
+        self.heading_due = None if node.heading else node
 
 
 # --- ohada-uniform-act-1 -----------------------------------------------------------------------------
