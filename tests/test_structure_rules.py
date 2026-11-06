@@ -64,6 +64,9 @@ def test_documents_with_rules_keep_exactly_the_structure_they_had(document, page
         ({"id": "ng-sc-2019-4", "jurisdiction": "ng", "type": "Judgment"}, "judgment-paragraphs-1"),
         ({"id": "ng-sc-2019-5", "jurisdiction": "ng", "type": "act", "document_type": "ruling"}, "judgment-paragraphs-1"),
         *[({"id": f"rw-{kind}-1-en", "jurisdiction": "rw", "type": kind}, "rw-law-1") for kind in structure.RW_INSTRUMENTS],
+        *[({"id": f"rw-{kind}-1-en", "jurisdiction": "rw", "type": kind}, "rw-treaty-1") for kind in structure.RW_TREATIES],
+        *[({"id": f"ng-{kind}-1", "jurisdiction": "ng", "type": kind}, "ng-subsidiary-1") for kind in ("regulation", "order", "rules", "practice_direction")],
+        *[({"id": f"ng-{kind}-1", "jurisdiction": "ng", "type": kind}, "ng-guidance-1") for kind in ("guideline", "circular")],
         ({"id": "aa-eac-act-2005-1", "jurisdiction": "aa-eac", "type": "act"}, "eac-act-1"),
         ({"id": "ke-act-2019-24", "type": "act"}, "ke-act-1"),
         ({"id": "za-act-2013-4", "jurisdiction": "za", "type": "act"}, "za-act-1"),
@@ -92,9 +95,11 @@ def test_rules_are_chosen_by_jurisdiction_and_type(document, rules):
     "document, named",
     [
         ({"id": "aa-ohada-auscgie-2014-fr", "jurisdiction": "aa-ohada", "type": "act"}, "aa-ohada/act"),
-        ({"id": "ng-example-order-2024", "jurisdiction": "ng", "type": "order"}, "ng/order"),
+        # A Nigerian order has rules since 2026-11-06 (ng-subsidiary-1); a bill still has none.
+        ({"id": "ng-example-bill-2024", "jurisdiction": "ng", "type": "bill"}, "ng/bill"),
         ({"id": "ng-example-2024", "jurisdiction": "ng"}, "ng/(no type)"),
-        # Rwanda's treaties are read by rw-law-1 (2026-10-29); a text of no recognised kind still has none.
+        # Rwanda's treaties have rules (rw-law-1 from 2026-10-29, rw-treaty-1 from 2026-11-06); a text of no
+        # recognised kind still has none.
         ({"id": "rw-other-00553a47bc45-fr", "jurisdiction": "rw", "type": "other"}, "rw/other"),
         ({"id": "rw-other-00f8ef71645e-fr", "jurisdiction": "rw", "type": "other"}, "rw/other"),
         ({"id": "rw-sc-2020-1", "jurisdiction": "rw", "type": "judgment"}, "rw/judgment"),
@@ -193,6 +198,20 @@ def test_the_workbench_shows_a_document_with_no_rules_and_cannot_approve_it(worl
     assert approver.get(f"/api/documents/{WORKBENCH_ACT}/canonical").json()["rules"] is None
     monkeypatch.undo()  # with its rules, the same pages approve
     assert approve(approver).json() == {"revision": 1}
+
+
+@pytest.mark.parametrize(
+    "kind", ["order", "rules", "guideline", "circular", "practice_direction", "regulation"]
+)
+def test_the_workbench_reads_a_nigerian_instrument_by_its_rules(world, kind, monkeypatch):
+    # Typed as the Nigerian collection types its regulators' documents, the same pages have rules and no error.
+    _, library = world
+    act = library.act
+    monkeypatch.setattr(library, "act", lambda act_id: {**act(act_id), "type": kind})
+    approver = ready_to_approve(world)
+    check = approver.get(f"/api/documents/{WORKBENCH_ACT}").json()["text_check"]
+    rules = "ng-guidance-1" if kind in ("guideline", "circular") else "ng-subsidiary-1"
+    assert check["rules"] == rules and check["errors"] == []
 
 
 def test_publishing_refuses_a_document_approved_before_its_kind_had_to_have_rules(

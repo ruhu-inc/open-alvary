@@ -131,6 +131,35 @@ def test_each_family_has_its_catalogue_document_type(decisions):
     assert publish.catalogue_entries(item, decision)["source"].document_type == "regulation"
 
 
+@pytest.mark.parametrize(
+    "family, kind, document_type",
+    [
+        # Nigeria's instruments: regulations, orders, rules and practice directions are subsidiary legislation;
+        # guidelines and circulars direct without legislating (2026-11-06).
+        ("subsidiary_legislation", "regulations", "regulation"),
+        ("subsidiary_legislation", "order", "regulation"),
+        ("subsidiary_legislation", "rules", "regulation"),
+        ("subsidiary_legislation", "practice_direction", "regulation"),
+        ("soft_law", "guideline", "guidance"),
+        ("executive_instrument", "circular", "guidance"),
+        ("executive_instrument", "presidential_order", "regulation"),
+        # A treaty is a treaty, no longer "other" (2026-11-06).
+        ("treaty", "agreement", "treaty"),
+        ("treaty", "convention", "treaty"),
+        ("regional_instrument", "directive", "other"),
+    ],
+)
+def test_each_kind_has_the_document_type_a_text_decision_names(family, kind, document_type):
+    assert publish.document_type(family, kind) == document_type
+    assert document_type in publish.TEXT_TYPES
+
+
+def test_a_text_decision_can_name_treaties_and_guidance(decisions):
+    types = ["regulation", "guidance", "treaty"]
+    decision = publish.decide_text("rw", "Ada Reviewer", 12, EVIDENCE, **(TEXT_DECISION | {"types": types}))
+    assert decision["document_types"] == ["guidance", "regulation", "treaty"]
+
+
 def test_every_form_a_work_is_cited_by_becomes_an_alias(decisions):
     decision = publish.decide("rw", "Ada Reviewer", 12, [], "", "")
     identity = rwanda_law().identity.model_copy(

@@ -3994,6 +3994,7 @@
                   "judgment",
                   "gazette",
                   "guidance",
+                  "treaty",
                   "other"
                 ],
                 "type": "string"
@@ -4387,6 +4388,7 @@
                   "judgment",
                   "gazette",
                   "guidance",
+                  "treaty",
                   "other"
                 ],
                 "type": "string"
@@ -8750,7 +8752,7 @@
               }
             ],
             "title": "Instrument Rank",
-            "description": "The instrument's place in the hierarchy, 0 highest (constitution 0, Act 1, subsidiary legislation 2, guidance 3)."
+            "description": "The instrument's place in the hierarchy, 0 highest (constitution 0, Act 1, subsidiary legislation 2, guidance 3, gazette 4, a treaty or any other record 5)."
           },
           "court_relation": {
             "type": "string",
@@ -12072,10 +12074,11 @@
               "judgment",
               "gazette",
               "guidance",
+              "treaty",
               "other"
             ],
             "title": "Document Type",
-            "description": "`constitution`, `act`, `regulation`, `judgment`, `gazette`, `guidance` or `other`."
+            "description": "`constitution`, `act`, `regulation`, `judgment`, `gazette`, `guidance`, `treaty` or `other`."
           },
           "canonical_url": {
             "type": "string",

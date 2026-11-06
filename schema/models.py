@@ -202,7 +202,9 @@ class Source(Model):
     jurisdiction_id: ID
     authority_id: ID
     title: Nonempty
-    document_type: Literal["constitution", "act", "regulation", "judgment", "gazette", "guidance", "other"]
+    document_type: Literal[
+        "constitution", "act", "regulation", "judgment", "gazette", "guidance", "treaty", "other"
+    ]
     canonical_url: HttpUrl
     url_kind: Literal["document", "landing_page", "discovery"] = "landing_page"
     citation: Nonempty

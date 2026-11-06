@@ -18,6 +18,18 @@ structure rules for the document's jurisdiction and type (RULES):
                      inside them; a section's heading printed above it; definitions in ‘‘ ’’
   gh-act-1           Ghanaian Acts: unnumbered group headings, a section's heading printed above it,
                      and the first group heading after "PASSED by Parliament …" opening the body
+  ng-subsidiary-1    Nigeria's regulations, orders, rules and practice directions, as the Official
+                     Gazette and the regulators print them: Nigeria's rules, with the Gazette's cover a
+                     notice, the instrument's title, the arrangement of regulations or rules, the
+                     commencement and "In exercise of the powers …" or an order's recitals as the
+                     preamble, "3.—(1)", a heading that prints its provision's number ("1. Purpose"),
+                     decimal numbering nested by number (the civil aviation regulations' "19.6.1"), a
+                     rules of court's Orders qualifying their rules (order_5__sec_1), appendices and
+                     annexes as schedules, "MADE at …", "Dated this …" and the explanatory note as
+                     notices, with an order's appendices after its date; a margin note left in the words
+                     before the next number ("Interpretation 1. In these …") and running heads are reported
+  ng-guidance-1      Nigerian regulators' guidelines and circulars: read as ng-subsidiary-1, versioned
+                     apart because guidance is not legislation
   ohada-uniform-act-1
                      OHADA Uniform Acts in French, as the Journal officiel prints them: the
                      SOMMAIRE, the Council of Ministers' preamble, PARTIE, LIVRE, TITRE, SOUS-TITRE,
@@ -60,6 +72,11 @@ structure rules for the document's jurisdiction and type (RULES):
   rw-law-1           Rwandan laws, orders and the other instruments of the Official Gazette, one
                      language at a time: titles, chapters, divisions (a civil-law "section" groups
                      articles) and articles
+  rw-treaty-1        Rwanda's treaties, conventions, protocols, charters and agreements, one language at
+                     a time: rw-law-1, with the title, the preamble from its name, the contents to the
+                     first heading printed only once, an article's heading on the line after its number,
+                     "IN WITNESS WHEREOF" and "EN FOI DE QUOI" with the signatures, and the annexes
+                     after them, whose articles restart (annex_i__art_1)
   judgment-paragraphs-1
                      Nigerian judgments and rulings: the header, each opinion with its numbered
                      paragraphs (each one a retrieval unit, cited "[2019] NGSC 4 [12]"), and the orders
@@ -103,6 +120,7 @@ ZA_ACT = "za-act-1"
 GH_ACT = "gh-act-1"
 OHADA_UNIFORM_ACT = "ohada-uniform-act-1"
 RW_LAW = "rw-law-1"
+RW_TREATY = "rw-treaty-1"
 AU_TREATY = "au-treaty-1"
 ECOWAS_ACT = "ecowas-act-1"
 ECOWAS_DIRECTIVE = "ecowas-directive-1"
@@ -114,19 +132,22 @@ SN_LAW = "sn-loi-1"
 BF_LAW = "bf-loi-1"
 MZ_LAW = "mz-lei-1"
 CV_LAW = "cv-lei-1"
+NG_SUBSIDIARY = "ng-subsidiary-1"
+NG_GUIDANCE = "ng-guidance-1"
 JUDGMENT = "judgment-paragraphs-1"
 JUDGMENT_TYPES = {"judgment", "ruling"}
+# Nigeria's instruments made under an Act (statutory instruments, a regulator's orders, rules of court and
+# the SEC's rules, practice directions), and the regulators' guidelines and circulars, which print the same
+# way: calibrated on the documents of each kind the collection held on 2026-11-05 (TXP-03).
+NG_SUBSIDIARY_TYPES = ("regulation", "order", "rules", "practice_direction")
+NG_GUIDANCE_TYPES = ("guideline", "circular")
 # The kinds of instrument the Rwandan Gazette reader names from the heading that opens each one
-# (ingestion.rw_gazette.KIND, CONSTITUTION), and the treaties and practice directions printed the same
-# way, whose article and division headings rw-law-1 reads (30 of 30 sampled treaties, conventions,
-# protocols and agreements built without an error, 2026-10-29). A text whose kind was not recognised
-# ("other") is not among them: its reviewer gives its kind first.
+# (ingestion.rw_gazette.KIND, CONSTITUTION), and the practice directions printed the same way, whose
+# article and division headings rw-law-1 reads. A text whose kind was not recognised ("other") is not among
+# them: its reviewer gives its kind first. The treaties Rwanda keeps, read by rw-law-1 until 2026-11-06, are
+# read by rw-treaty-1, which adds what a treaty prints and a law does not (TreatyBuilder).
+RW_TREATIES = ("agreement", "treaty", "convention", "protocol", "charter")
 RW_INSTRUMENTS = (
-    "agreement",
-    "treaty",
-    "convention",
-    "protocol",
-    "charter",
     "practice_direction",
     "constitution",
     "organic_law",
@@ -163,7 +184,10 @@ RULES = {
     ("mz", "law"): MZ_LAW,
     ("cv", "law"): CV_LAW,
     **{("ng", kind): JUDGMENT for kind in JUDGMENT_TYPES},
+    **{("ng", kind): NG_SUBSIDIARY for kind in NG_SUBSIDIARY_TYPES},
+    **{("ng", kind): NG_GUIDANCE for kind in NG_GUIDANCE_TYPES},
     **{("rw", kind): RW_LAW for kind in RW_INSTRUMENTS},
+    **{("rw", kind): RW_TREATY for kind in RW_TREATIES},
 }
 NO_RULES = "no_structure_rules"
 NOT_OPERATIVE = ("notice", "contents")  # a marked cell in a table inside one does not stop approval
@@ -226,6 +250,38 @@ class Drafting:
     # A schedule's line of the sections it serves, printed under its name ("SECOND SCHEDULE" then
     # "(ss. 18, 19, and 20.)"): held by the schedule, whose heading is the line after it.
     reference: re.Pattern | None = None
+    # The number that opens a section, and a schedule's name (Nigeria's subsidiary instruments: "3.—(1) …",
+    # "Appendix 1").
+    section: re.Pattern = SECTION
+    schedule: re.Pattern = SCHEDULE
+    # A heading that prints a provision's number opens that provision, the words after the number its
+    # heading ("1. Purpose"); otherwise every heading is a cross-heading.
+    numbered_headings: bool = False
+    # Decimal numbers open provisions nested by their number, "19.6.1" within "19.6", each cited by its
+    # own number (DECIMAL).
+    decimal: bool = False
+    # Parts whose provisions restart their numbering, so that the part qualifies them: a rules of court's
+    # Orders ("ORDER 5", order_5__sec_1).
+    restarting: re.Pattern | None = None
+    # The contents end where the text prints again a provision, part or chapter they list.
+    contents_end_on_repeat: bool = False
+    # A schedule named after the closing words is the instrument's own (an order's appendices after its
+    # date), not the notice they open.
+    schedules_after_close: bool = False
+    # A schedule's line of the provisions it serves is read in any unit, not only a heading or a centred
+    # line ("(Regulation 8)").
+    reference_any_unit: bool = False
+    # A heading in the body printing the instrument's title, or the open part's heading on a later page, is
+    # a running head the reading kept: the open provision holds it and goes on.
+    running_heads: bool = False
+    # What is printed before the contents is front matter, a part's heading too, where the contents come
+    # before any provision (each Part of the civil aviation regulations prints its heading, "PART 19—…", above them).
+    front_until_contents: bool = False
+    # A margin note the reading left in a provision's words before its number opens that provision, with a
+    # warning, where the number is the one expected next (margin_note, ActBuilder.next_numbered).
+    margin_words: bool = False
+    # A schedule's title may follow its name on the same line ("Appendix 1: Vasket Tariffs").
+    schedule_titles_inline: bool = False
 
 
 # An Act's title as printed above its long title or on the gazette's cover: "THE DATA PROTECTION ACT",
@@ -285,7 +341,110 @@ GH = Drafting(
     headings_above=True,
     enacting=re.compile(r"^passed\s+by\s+parliament\b", re.I),
 )
-DRAFTING = {NG_FEDERAL_ACT: NG, EAC_ACT: EAC, KE_ACT: KE, ZA_ACT: ZA, GH_ACT: GH}
+
+# Nigeria's subsidiary instruments and the regulators' guidance (ng-subsidiary-1, ng-guidance-1). A section's
+# number before a dash, as the Gazette prints it ("3.—(1) A person …"), as well as before a space.
+INSTRUMENT_SECTION = re.compile(
+    r"^(\d{1,3}[A-Z]{0,2})\.(?=\s|$|[—–-])\s*(?:[—–-]\s*)?(?:(\((\d{1,3}[A-Z]?)\))(?=\s|$))?"
+)
+# A decimal number, "19.1.", "6.2", "4.2.1.—General": the provision it opens is within the one its number
+# extends.
+DECIMAL = re.compile(r"^(\d{1,3}(?:\.\d{1,3}){1,5})\.?(?=\s|$|[—–])")
+# A decimal provision's first item, printed after its number in the same unit: "4.2.1.6.—(a) …".
+DECIMAL_ITEM = re.compile(r"\s*[—–-]?\s*(\((?:[a-z]{1,2}|\d{1,3})\))(?=\s)")
+# A margin note the reading kept in a provision's words, before its number ("Interpretation 1. In these …", "Records.
+# 4.2.1.6.—(a) …"): a few words with no figure in them, never ending with the word the number belongs
+# to ("Amendment of section 6. 5. …", "Note 2.— …").
+MARGIN_WORDS = re.compile(r"^([A-Z][^\d;:“”\"()\[\]]{0,100}?)\s+(?=\d)")
+AHEAD = 5  # how far ahead of the last a number read after margin words may be
+NUMBERED_WORDS = set(
+    "section sections regulation regulations rule rules paragraph paragraphs article articles chapter part"
+    " schedule form order item appendix annex no note notes table figure fig page area cap step".split()
+)
+
+
+def margin_note(text: str) -> re.Match | None:
+    found = MARGIN_WORDS.match(text)
+    words = found.group(1).split() if found else []
+    if not words or len(words) > 12 or words[-1].strip(".,").casefold() in NUMBERED_WORDS:
+        return None
+    return found
+
+
+# "PART I — PRELIMINARY", "Part II" (its title on the next line), "PART VII-MISCELLANEOUS", a
+# rules of court's "ORDER 5 — COSTS"; never a sentence that begins with one ("Part 2 applies to …").
+INSTRUMENT_PART = re.compile(
+    r"^(?:PART|Part|ORDER|Order)\s+([IVXLC]+|\d+)\b(?!\s+[a-z(])\s*[—–:.-]?\s*(.*)$", re.S
+)
+PART_TOKENS = {"PART": "part", "ORDER": "order"}  # the word a part is printed with, and its locator token
+# The instrument's title, in capitals: "… (LABELLING) REGULATIONS, 2024", "… COURT
+# RULES, 2024", "GUIDELINES ON …"; never a part, an Order or the contents' heading.
+INSTRUMENT_TITLE = re.compile(
+    r"^(?!(?:PART|CHAPTER|ORDER|ARRANGEMENT|SCHEDULE|TABLE)\b)(?:"
+    r"[A-Z0-9][A-Z0-9 ,.'’()&/-]*\s(?:REGULATIONS?|RULES|ORDER|DIRECTIONS?|GUIDELINES?)(?:,?\s*\d{4})?\.?"
+    r"|(?:REGULATIONS?|RULES|GUIDELINES?|DIRECTIONS?)\s(?:ON|FOR|OF)\s[A-Z0-9 ,.'’()&/-]+)$"
+)
+INSTRUMENT_CONTENTS = re.compile(
+    r"^(?:arrangement\s+of\s+(?:sections|clauses|articles|paragraphs|regulations|rules|orders)\b"
+    r"|(?:arrangement|(?:table\s+of\s+)?contents)\s*[.:]?$)",
+    re.I,
+)
+# What a statutory instrument prints before its first provision: its commencement, the powers it is made
+# under, an order's recitals ("Commencement. [1st March, 2013] In exercise of the powers …", "WHEREAS:").
+INSTRUMENT_PREAMBLE = re.compile(
+    r"^(?:commencement(?:\s+date)?\s*[.:]?\s*(?:\[|\(|\d|in\s+(?:the\s+)?exercise\b)"
+    r"|in\s+(?:the\s+)?exercise\s+of\b|whereas\b|now\s+therefore\b)",
+    re.I,
+)
+# The closing words, after the last provision or schedule: "MADE at Abuja this …", "MADE by the Minister at
+# Enugu …", "Dated this 1st day of …", "GIVEN under my hand …", and the explanatory note; never a
+# form's blank ("DATED this ........ day of …").
+INSTRUMENT_CLOSING = re.compile(
+    r"^(?:(?:made|issued|given|dated|signed|done)\b(?:\s+by\b[^.]{0,80}?)?"
+    r"\s+(?:at|this|the|on|in|under\s+(?:my|our)\s+hand)\b(?!.*\.{4})|explanatory\s+note\b)",
+    re.I | re.S,
+)
+INSTRUMENT_REFERENCE = re.compile(  # "(Regulation 8)", "(Order 3, rule 20)" under a schedule's name
+    r"^\((?:regulations?|regs?\.?|rules?|r\.|paragraphs?|paras?\.?|sections?|ss?\.|orders?)\s.{0,160}\)\.?$",
+    re.I | re.S,
+)
+INSTRUMENT_SCHEDULE = re.compile(
+    r"^(?:(" + "|".join(ORDINALS) + r")\s+(?:schedule|appendix|annex)|(?:schedule|appendix|annexure|annex)"
+    r"(?:\s*[:.—–-]?\s*([ivxlc]+|\d+|(?-i:[A-Z]))(?!\w))?)(?!\w)(?!\s+to\s+the\b)",
+    re.I,
+)
+NG_INSTRUMENT = Drafting(
+    preamble=INSTRUMENT_PREAMBLE,
+    contents=INSTRUMENT_CONTENTS,
+    part=INSTRUMENT_PART,
+    definition=DEFINITIONS,
+    # The Official Gazette's cover ("UNITY AND FAITH, PEACE AND PROGRESS", the issue, its Government Notice).
+    notices=(re.compile(r"^(?:extraordinary\s+)?unity\s+and\s+faith\b", re.I), MEMORANDUM),
+    certificate=INSTRUMENT_CLOSING,
+    title=INSTRUMENT_TITLE,
+    reference=INSTRUMENT_REFERENCE,
+    section=INSTRUMENT_SECTION,
+    schedule=INSTRUMENT_SCHEDULE,
+    numbered_headings=True,
+    decimal=True,
+    restarting=re.compile(r"^(?:ORDER|Order)\s"),
+    contents_end_on_repeat=True,
+    schedules_after_close=True,
+    reference_any_unit=True,
+    running_heads=True,
+    front_until_contents=True,
+    margin_words=True,
+    schedule_titles_inline=True,
+)
+DRAFTING = {
+    NG_FEDERAL_ACT: NG,
+    EAC_ACT: EAC,
+    KE_ACT: KE,
+    ZA_ACT: ZA,
+    GH_ACT: GH,
+    NG_SUBSIDIARY: NG_INSTRUMENT,
+    NG_GUIDANCE: NG_INSTRUMENT,
+}
 
 
 @dataclass
@@ -392,6 +551,8 @@ def derive(
     units = {(p["page"], i): unit for p in pages for i, unit in enumerate(p["units"])}
     if rules_id == RW_LAW:
         builder: Builder = RwandaBuilder(language or "en", serialized, units)
+    elif rules_id == RW_TREATY:
+        builder = TreatyBuilder(language or "en", serialized, units)
     elif rules_id == JUDGMENT:
         builder = JudgmentBuilder(serialized, units)
     elif rules_id in DRAFTING:
@@ -557,7 +718,24 @@ class ActBuilder(Builder):
         self.counts: dict[str, int] = {}
         self.enacted = False  # the preamble holds the enacting words (Drafting.enacting)
         self.listed_chapter: str | None = None  # the chapter the contents list parts under
+        self.listed_part: str | None = None  # the Order the contents list rules under (Drafting.restarting)
+        self.restart: Node | None = None  # the open Order whose rules restart their numbering
+        self.decimals: set[int] = set()  # the decimal provisions (Drafting.decimal), by id
+        self.last_decimal: tuple[int, ...] | None = None
         self.titles: set[int] = set()  # leaves that print the Act's title (Drafting.title)
+        self.contents_start = self.first_contents() if drafting.front_until_contents else -1
+
+    def first_contents(self) -> int:
+        """The leaf the contents open with, where it comes before any provision; else -1."""
+        for index, leaf in enumerate(self.leaves):
+            text = leaf.text
+            if leaf.role != "text":
+                continue
+            if self.drafting.contents.match(text):
+                return index
+            if self.drafting.section.match(text) or self.decimal(text):
+                return -1
+        return -1
 
     def next_number(self, key: str) -> int:
         self.counts[key] = self.counts.get(key, 0) + 1
@@ -584,6 +762,9 @@ class ActBuilder(Builder):
             self.hold(self.region_node, index)
             return
         if self.region == "endmatter":
+            if drafting.schedules_after_close and self.schedule_named(text, unit):
+                self.body(index, leaf, unit, heading_unit, awaiting)  # the instrument's own, after its date
+                return
             self.notes_to(self.region_node, False)
             self.hold(self.region_node, index)
             return
@@ -595,7 +776,14 @@ class ActBuilder(Builder):
             self.hold(self.root, index)
             return
         if self.region == "front":
-            opens = *drafting.notices, drafting.contents, drafting.preamble, SECTION, drafting.part, CHAPTER
+            opens = (
+                *drafting.notices,
+                drafting.contents,
+                drafting.preamble,
+                drafting.section,
+                drafting.part,
+                CHAPTER,
+            )
             first = not self.root.leaves and not self.root.children and not drafting.title
             if first and heading_unit and not any(pattern.match(text) for pattern in opens):
                 self.root.heading = text  # the document's title
@@ -623,6 +811,12 @@ class ActBuilder(Builder):
         if self.region == "contents" and not self.contents_ends(leaf, unit):
             self.contents_entry(index, leaf, unit)
             return
+        if self.region == "front" and index < self.contents_start:  # a part's heading above the contents
+            if self.drafting.part.match(text):
+                self.titles.add(index)  # printed again over the body, as the title is
+            self.notes_to(self.region_node or self.root, False)
+            self.hold(self.region_node or self.root, index)
+            return
         if self.region in ("front", "contents", "preamble") and not self.body_starts(text, heading_unit):
             self.notes_to(self.region_node or self.root, False)
             self.hold(self.region_node or self.root, index)
@@ -630,7 +824,11 @@ class ActBuilder(Builder):
                 self.enacted = True
             return
         if self.region in ("front", "contents", "preamble"):
-            if self.region == "contents" and not drafting.contents_after_preamble:
+            # A family whose contents end where the text prints again what they list has no enacting words
+            # to wait for (a guideline, an order).
+            if self.region == "contents" and not (
+                drafting.contents_after_preamble or drafting.contents_end_on_repeat
+            ):
                 self.issue(
                     "warning", "contents_unclosed", leaf, "The contents end without the enacting words"
                 )
@@ -639,15 +837,19 @@ class ActBuilder(Builder):
 
     def open_region(self, region: str, kind: str, locator: str, leaf: Leaf) -> Node:
         self.region, self.stack, self.container = region, [], self.root
-        self.chapter = self.schedule = None
+        self.chapter = self.schedule = self.restart = None
         self.region_node = self.add(self.root, kind, locator, leaf)
         return self.region_node
 
     def contents_ends(self, leaf: Leaf, unit: dict) -> bool:
         """A long numbered paragraph with a margin note is the body, not a contents entry; so is a
-        chapter or part the contents already list, where they follow the enacting words."""
-        if SECTION.match(leaf.text) and (unit.get("notes") or len(leaf.text) > 150):
+        chapter or part the contents already list, where they follow the enacting words, and, where a
+        family's contents end so, any provision, part or chapter they already list."""
+        if self.drafting.section.match(leaf.text) and (unit.get("notes") or len(leaf.text) > 150):
             return True
+        if self.drafting.contents_end_on_repeat:
+            entry = self.entry_of(leaf.text)
+            return entry is not None and any(e.target == entry[1] for e in self.region_node.children)
         if not self.drafting.contents_after_preamble:
             return False
         chapter, part = CHAPTER.match(leaf.text), self.drafting.part.match(leaf.text)
@@ -662,32 +864,88 @@ class ActBuilder(Builder):
     def body_starts(self, text: str, heading_unit: bool) -> bool:
         if heading_unit and self.enacted:  # the first group heading after "PASSED by Parliament …"
             return True
-        return bool(SECTION.match(text) or self.drafting.part.match(text) or CHAPTER.match(text))
+        drafting = self.drafting
+        return bool(
+            drafting.section.match(text)
+            or self.decimal(text)
+            or drafting.part.match(text)
+            or CHAPTER.match(text)
+        )
 
-    def part_locator(self, number: str, chapter: str | None) -> str:
-        """part_II; within a chapter where parts restart in each, chap_3__part_A."""
+    def decimal(self, text: str) -> re.Match | None:
+        """A decimal provision's number ("19.6.1."), where the family numbers so."""
+        return DECIMAL.match(text) if self.drafting.decimal else None
+
+    def numbered_heading(self, text: str) -> bool:
+        """Whether a heading prints the number of a provision or of an item within one ("(d)")."""
+        roman = ROMAN.match(text)
+        return bool(
+            self.drafting.section.match(text)
+            or self.decimal(text)
+            or SUBSECTION.match(text)
+            or LETTER.match(text)
+            or (roman and roman.group(1))
+        )
+
+    def part_locator(self, number: str, chapter: str | None, word: str = "PART") -> str:
+        """part_II; within a chapter where parts restart in each, chap_3__part_A; a rules of court's
+        Order, order_5."""
+        token = PART_TOKENS.get(word, "part")
         qualified = self.drafting.parts_in_chapters and chapter
-        return f"{chapter}__part_{number}" if qualified else f"part_{number}"
+        return f"{chapter}__{token}_{number}" if qualified else f"{token}_{number}"
+
+    def entry_of(self, text: str) -> tuple[str, str, str] | None:
+        """What a line of the contents lists: its label, the locator it points to, and its kind. A section
+        listed under an Order its rules restart in points into that Order (order_5__sec_1)."""
+        drafting = self.drafting
+        if found := drafting.section.match(text):
+            target = f"sec_{found.group(1)}"
+            return (
+                f"{found.group(1)}.",
+                f"{self.listed_part}__{target}" if self.listed_part else target,
+                "section",
+            )
+        if found := self.decimal(text):
+            target = f"sec_{found.group(1)}"
+            return (
+                f"{found.group(1)}.",
+                f"{self.listed_part}__{target}" if self.listed_part else target,
+                "section",
+            )
+        if found := drafting.part.match(text):
+            word = text.split()[0].upper()
+            return (
+                f"{word} {found.group(1)}",
+                self.part_locator(found.group(1), self.listed_chapter, word),
+                "part",
+            )
+        if found := CHAPTER.match(text):
+            return f"CHAPTER {found.group(1)}", f"chap_{found.group(1)}", "chapter"
+        if found := drafting.schedule.match(text):
+            return found.group(0), f"sch_{self.schedule_number(found)}", "schedule"
+        return None
 
     def contents_entry(self, index: int, leaf: Leaf, unit: dict) -> None:
-        text, contents, part = leaf.text, self.region_node, self.drafting.part
-        found = SECTION.match(text) or part.match(text) or CHAPTER.match(text) or SCHEDULE.match(text)
+        text, contents = leaf.text, self.region_node
+        found = self.entry_of(text)
         self.notes_to(contents, False)
         if not found:
             self.hold(contents, index)
             return
-        if found.re is SECTION:
-            label, target = f"{found.group(1)}.", f"sec_{found.group(1)}"
-        elif found.re is part:
-            label, target = f"PART {found.group(1)}", self.part_locator(found.group(1), self.listed_chapter)
-        elif found.re is CHAPTER:
-            label, target = f"CHAPTER {found.group(1)}", f"chap_{found.group(1)}"
+        label, target, kind = found
+        if kind == "chapter":
             self.listed_chapter = target
-        else:
-            label, target = found.group(0), f"sch_{self.schedule_number(found)}"
+        elif kind == "part":
+            restarting = self.drafting.restarting
+            self.listed_part = target if restarting and restarting.match(text) else None
         entry = self.add(contents, "contents_entry", f"contents__entry_{len(contents.children) + 1}", leaf)
         entry.label, entry.target = label, target
         self.hold(entry, index)
+
+    def schedule_named(self, text: str, unit: dict) -> bool:
+        """Whether a unit names a schedule as the body reads one: in a heading or a centred line."""
+        found = self.drafting.schedule.match(text)
+        return bool(found) and (unit.get("kind") == "heading" or unit.get("align") == "center")
 
     def schedule_number(self, found: re.Match) -> str:
         if found.group(1):
@@ -698,7 +956,10 @@ class ActBuilder(Builder):
         owner = self.stack[-1] if self.stack else self.region_node or self.container
         if leaf.role == "caption":
             self.notes_to(owner, False)
-            caption = SCHEDULE.match(leaf.text) if self.region != "endmatter" else None
+            caption = self.drafting.schedule.match(leaf.text) if self.region != "endmatter" else None
+            named = f"sch_{self.schedule_number(caption)}" if caption else None
+            if self.drafting.running_heads and self.schedule is not None and named == self.schedule.locator:
+                caption = None  # "Appendix 2: …" over each page of its table: Appendix 2 goes on
             if caption:
                 owner = self.open_schedule(leaf, caption)
             node = self.add(
@@ -723,6 +984,7 @@ class ActBuilder(Builder):
 
     def open_schedule(self, leaf: Leaf, found: re.Match) -> Node:
         self.region, self.stack, self.chapter, self.region_node = "schedules", [], None, None
+        self.restart = None
         self.schedule = self.add(self.root, "schedule", f"sch_{self.schedule_number(found)}", leaf)
         self.schedule.label = found.group(0)
         self.container = self.schedule
@@ -735,12 +997,30 @@ class ActBuilder(Builder):
             self.notes_to(self.root, False)
             self.hold(self.root, index)
             return
-        found = SCHEDULE.match(text)
+        found = self.drafting.schedule.match(text)
         if found and (heading_unit or unit.get("align") == "center" or self.region == "schedules"):
             node = self.open_schedule(leaf, found)
             self.notes_to(node, False)
             self.hold(node, index)
-            self.awaiting_heading = node
+            title = (
+                text[found.end() :].lstrip(" :.—–-").strip() if self.drafting.schedule_titles_inline else ""
+            )
+            node.heading = title
+            self.awaiting_heading = None if title else node
+            return
+        if self.drafting.running_heads and heading_unit and self.runs_again(leaf):
+            # The instrument's title or the open part's heading again at the head of a page: the provision
+            # open goes on through it, and the reviewer is asked to remove it (check_running_heads, for a part).
+            if self.root.heading and clean(text).casefold() == clean(self.root.heading).casefold():
+                self.issue(
+                    "warning",
+                    "running_head",
+                    leaf,
+                    f"“{text[:80]}” repeats the title: a running head to remove?",
+                )
+            owner = self.stack[-1] if self.stack else self.container
+            self.notes_to(owner, False)
+            self.hold(owner, index)
             return
         if self.region == "schedules" and self.schedule is None:
             self.issue(
@@ -754,7 +1034,7 @@ class ActBuilder(Builder):
             return
         part, chapter = self.drafting.part.match(text), CHAPTER.match(text)
         if chapter and self.region == "body":
-            self.stack = []
+            self.stack, self.restart = [], None
             self.chapter = self.container = self.add(self.root, "chapter", f"chap_{chapter.group(1)}", leaf)
             self.chapter.label, self.chapter.heading = f"CHAPTER {chapter.group(1)}", chapter.group(2).strip()
             self.notes_to(self.chapter, False)
@@ -763,28 +1043,51 @@ class ActBuilder(Builder):
             return
         if part:
             self.stack = []
+            word = text.split()[0].upper()  # PART, or a rules of court's ORDER
             owner = self.schedule if self.region == "schedules" else self.chapter or self.root
             if self.region == "schedules":
-                locator = f"{self.schedule.locator}__part_{part.group(1)}"
+                locator = f"{self.schedule.locator}__{PART_TOKENS.get(word, 'part')}_{part.group(1)}"
             else:
-                locator = self.part_locator(part.group(1), self.chapter.locator if self.chapter else None)
+                locator = self.part_locator(
+                    part.group(1), self.chapter.locator if self.chapter else None, word
+                )
             self.container = self.add(owner, "part", locator, leaf)
-            self.container.label, self.container.heading = f"PART {part.group(1)}", part.group(2).strip()
+            self.container.label, self.container.heading = f"{word} {part.group(1)}", part.group(2).strip()
+            restarting = self.drafting.restarting
+            if restarting and self.region != "schedules":
+                self.restart = self.container if restarting.match(text) else None
+                if self.restart is not None:
+                    self.last_section = None  # its rules are numbered from 1
             self.notes_to(self.container, False)
             self.hold(self.container, index)
             self.awaiting_heading = None if self.container.heading else self.container
             return
-        numbered = SECTION.match(text) or SUBSECTION.match(text) or LETTER.match(text)
+        numbered = (
+            self.drafting.section.match(text)
+            or self.decimal(text)
+            or SUBSECTION.match(text)
+            or LETTER.match(text)
+        )
         if awaiting is not None and not awaiting.heading and not numbered:
-            if heading_unit or unit.get("align") == "center":
-                reference = self.drafting.reference
-                if reference and awaiting.kind == "schedule" and reference.match(text):
+            reference = self.drafting.reference
+            referred = reference is not None and awaiting.kind == "schedule" and reference.match(text)
+            if (
+                heading_unit
+                or unit.get("align") == "center"
+                or (referred and self.drafting.reference_any_unit)
+            ):
+                if referred:
                     self.awaiting_heading = awaiting  # its title is the next line
                 else:
                     awaiting.heading = text  # "PART III" then "LICENSED INDEPENDENT POWER PRODUCERS"
                 self.notes_to(awaiting, False)
                 self.hold(awaiting, index)
                 return
+        if heading_unit and self.drafting.numbered_headings and self.numbered_heading(text):
+            self.provision(
+                index, leaf, unit, heading=True
+            )  # "1. Purpose", "19.1. APPLICABILITY", "(d) Surfaces"
+            return
         if heading_unit:
             following = self.depth_of(self.next_text(index))
             if self.drafting.headings_above and self.region == "body" and following == SECTION_DEPTH:
@@ -814,7 +1117,7 @@ class ActBuilder(Builder):
         if leaf is None:
             return None
         level = self.unit(leaf).get("level")
-        if SECTION.match(leaf.text):
+        if self.drafting.section.match(leaf.text) or self.decimal(leaf.text):
             return SECTION_DEPTH if level is None else level
         if SUBSECTION.match(leaf.text) or LETTER.match(leaf.text) or ROMAN.match(leaf.text):
             return (
@@ -835,7 +1138,9 @@ class ActBuilder(Builder):
                     f"The contents list has {node.label}, but the text has no {node.target}",
                 )
 
-    def provision(self, index: int, leaf: Leaf, unit: dict) -> None:
+    def provision(self, index: int, leaf: Leaf, unit: dict, heading: bool = False) -> None:
+        """A numbered unit opens the provision its number names; with ``heading``, a heading printing
+        that number, whose words after it are the provision's heading."""
         text, level = leaf.text, unit.get("level")
         in_schedule = self.region == "schedules"
         if unit.get("marker") and NUMBERED.match(clean(unit.get("text") or "")):
@@ -845,16 +1150,30 @@ class ActBuilder(Builder):
                 leaf,
                 f"“{text[:24]}…” has two numbers in a row: the restored number may be in the wrong place",
             )
-        section = SECTION.match(text)
+        section = self.drafting.section.match(text)
+        decimal = None if section or level not in (None, 0) else self.decimal(text)
+        words, at = None, 0  # a margin note the reading kept before the number, and where the number is
+        if (
+            not (section or decimal or heading or in_schedule)
+            and level in (None, 0)
+            and self.drafting.margin_words
+        ):
+            words = margin_note(text)
+            section, decimal = self.next_numbered(text[words.end() :]) if words else (None, None)
+            words, at = (words, words.end()) if section or decimal else (None, 0)
         definition = self.drafting.definition.match(text) if not in_schedule else None
         if section:
-            depth, label = SECTION_DEPTH, f"{section.group(1)}."
+            depth, label, printed = SECTION_DEPTH, f"{section.group(1)}.", at + section.end(1)
+        elif decimal:
+            depth, label, printed = SECTION_DEPTH, decimal.group(0), at + decimal.end(1)
         elif SUBSECTION.match(text):
             depth, label = SUBSECTION_DEPTH, SUBSECTION.match(text).group(0)
+            printed = len(label)
         elif LETTER.match(text) or (ROMAN.match(text) and ROMAN.match(text).group(1)):
             depth, label = self.letter_or_roman(text)
+            printed = len(label)
         else:
-            depth, label = None, ""
+            depth, label, printed = None, "", 0
         if level is not None and isinstance(level, int):
             if label and depth != level:
                 section = None  # the reviewer's level decides: "(b)" at level 3 is a sub-paragraph
@@ -865,16 +1184,132 @@ class ActBuilder(Builder):
                 return
             self.unnumbered(index, leaf, level)
             return
-        node = self.open_provision(depth, label, leaf, in_schedule)
+        if decimal:
+            node = self.open_decimal(decimal.group(1), label, leaf, in_schedule)
+        elif not section and level is None and self.decimals.intersection(map(id, self.stack)):
+            node = self.open_item(label, leaf, in_schedule)
+        else:
+            node = self.open_provision(depth, label, leaf, in_schedule)
+        if heading:  # "1. Purpose", "19.1. APPLICABILITY", "(d) Records"
+            node.heading = text[printed:].lstrip(" .:—–-").strip()
+        if words:  # "Interpretation 1. In these …", "Records. 4.2.1.6.—(a) …"
+            node.heading = node.heading or words.group(1)
+            self.issue(
+                "warning",
+                "margin_note_in_words",
+                leaf,
+                f"“{words.group(1)[:60]}” before {label} is read as its margin note: make it one if it is",
+            )
         self.notes_to(node, heading=depth == SECTION_DEPTH and not in_schedule)
-        if section and section.group(2) and level in (None, 0):  # "5. (1) There is established…"
+        if (
+            section and section.group(2) and level in (None, 0) and not heading
+        ):  # "5. (1) There is established…"
             child = self.open_provision(SUBSECTION_DEPTH, section.group(2), leaf, in_schedule)
-            child.trim[index] = len(text[: section.start(2)].encode())
+            child.trim[index] = len(text[: at + section.start(2)].encode())
+            node.opens_at = leaf.start
+            node = child
+        item = DECIMAL_ITEM.match(text, at + decimal.end()) if decimal and not heading else None
+        if item:  # "4.2.1.6.—(a) The operator …"
+            child = self.open_item(item.group(1), leaf, in_schedule)
+            child.trim[index] = len(text[: item.start(1)].encode())
             node.opens_at = leaf.start
             node = child
         self.hold(node, index)
-        if depth == SECTION_DEPTH and not in_schedule:
+        if depth == SECTION_DEPTH and not in_schedule and not decimal:
             self.check_order(leaf, label)
+
+    def open_decimal(self, number: str, label: str, leaf: Leaf, in_schedule: bool) -> Node:
+        """A decimal provision ("19.6.1."), within the open one its number extends ("19.6"), else at the top
+        of its part, chapter or schedule. It is cited by its own number, so its locator is its number alone
+        (sec_19.6.1, or within a schedule sch_2__para_8.1, within an Order order_5__sec_1.2)."""
+        while self.stack and not number.startswith(number_of(self.stack[-1].label) + "."):
+            self.stack.pop()
+        parent = self.stack[-1] if self.stack else self.container
+        kind, token = ("paragraph", "para") if in_schedule else ("section", "sec")
+        own = f"{token}_{number}"  # its number as printed, dots and all: sec_19.6.1
+        within = self.container if in_schedule else self.restart
+        node = self.add(
+            parent,
+            kind,
+            f"{within.locator}__{own}" if within else own,
+            leaf,
+            label=label,
+            depth=SECTION_DEPTH,
+        )
+        self.stack.append(node)
+        self.decimals.add(id(node))
+        self.last_decimal = tuple(int(n) for n in number.split("."))
+        return node
+
+    def next_numbered(self, rest: str) -> tuple[re.Match | None, re.Match | None]:
+        """The section's or decimal provision's number that ``rest`` opens with, when it comes next: a section
+        a few after the last (the reading may lose some), a decimal one a few after the last at its level, or
+        the first within it ("4.2.1.6" after "4.2.1.5", "4.2.2" after "4.2.1.5", "4.2.1.5.1")."""
+        found = self.drafting.section.match(rest)
+        if found:
+            value, last = int(re.match(r"\d+", found.group(1)).group(0)), self.last_section
+            follows = 0 < value - last[0] <= AHEAD if last else value == 1
+            return (found, None) if follows else (None, None)
+        found = self.decimal(rest)
+        if not found:
+            return None, None
+        new, last = tuple(int(n) for n in found.group(1).split(".")), self.last_decimal
+        if last is None:
+            follows = new[-1] == 1
+        elif len(new) <= len(last):
+            follows = new[:-1] == last[: len(new) - 1] and 0 < new[-1] - last[len(new) - 1] <= AHEAD
+        else:
+            follows = len(new) == len(last) + 1 and new[:-1] == last and new[-1] == 1
+        return (None, found) if follows else (None, None)
+
+    def open_item(self, label: str, leaf: Leaf, in_schedule: bool) -> Node:
+        """An item below a decimal provision, nested as the text first prints them: Nig.CARs number
+        "4.2.1 (h) … (1) …" and "4.3.1 (iv) … (a) …" alike, so an item of the style of one open opens
+        beside it, and an item of a new style within the innermost one (sec_4.2.1__para_h__subsec_1)."""
+        style = self.item_style(label)
+        base = max(n for n, node in enumerate(self.stack) if id(node) in self.decimals)
+        for n in range(len(self.stack) - 1, base, -1):
+            if self.item_style(self.stack[n].label, self.stack[n]) == style:
+                del self.stack[n:]
+                break
+        parent = self.stack[-1]
+        kind = (
+            "subparagraph"
+            if in_schedule
+            else {"number": "subsection", "letter": "paragraph"}.get(style, "subparagraph")
+        )
+        own = f"{BODY_TOKENS[kind]}_{slug(number_of(label))}"
+        node = self.add(parent, kind, f"{parent.locator}__{own}", leaf, label=label, depth=parent.depth + 1)
+        self.stack.append(node)
+        return node
+
+    def item_style(self, label: str, node: Node | None = None) -> str:
+        """An item's numbering: "number" (1), "letter" (a) or "roman" (i); "(i)" after an open "(h)" is a
+        letter, as is an open item's own kind."""
+        if node is not None and node.kind in ("subsection", "paragraph"):
+            return "number" if node.kind == "subsection" else "letter"
+        if SUBSECTION.match(label):
+            return "number"
+        letter, roman = LETTER.match(label), ROMAN.match(label)
+        if letter and not (roman and roman.group(1)):
+            return "letter"
+        if node is not None:  # an open item in a schedule: by its printed number alone
+            return "roman"
+        previous = next((n for n in reversed(self.stack) if n.kind == "paragraph" and n.label), None)
+        before = number_of(previous.label) if previous is not None else ""
+        if letter and len(before) == len(letter.group(1)) and chr(ord(before[-1]) + 1) == letter.group(1)[-1]:
+            return "letter"
+        return "roman"
+
+    def runs_again(self, leaf: Leaf) -> bool:
+        """Whether a heading in the body prints the instrument's title, or the open part's heading on a later
+        page: a running head the reading kept (Drafting.running_heads)."""
+        printed = clean(leaf.text).casefold()
+        if self.root.heading and printed == clean(self.root.heading).casefold():
+            return True
+        part = self.container if self.container.kind == "part" else None
+        first = self.leaves[part.leaves[0]] if part is not None and part.leaves else None
+        return first is not None and first.page != leaf.page and clean(first.text).casefold() == printed
 
     def letter_or_roman(self, text: str) -> tuple[int, str]:
         """(i), (v) and (x) are letters only when they continue a run of letters: (h) then (i)."""
@@ -906,6 +1341,8 @@ class ActBuilder(Builder):
         own = f"{token}_{slug(number_of(label))}"
         qualified = kind == "section" or parent.kind in ("document", "part", "chapter")
         locator = own if qualified and not in_schedule else f"{parent.locator}__{own}"
+        if qualified and not in_schedule and self.restart is not None:
+            locator = f"{self.restart.locator}__{own}"  # an Order's rule: order_5__sec_1
         if not qualified and parent.kind in ("document", "part", "chapter") and not in_schedule:
             self.issue("warning", "outside_section", leaf, f"{label} is outside any section")
         node = self.add(parent, kind, locator, leaf, label=label, depth=depth)
@@ -1035,6 +1472,144 @@ class RwandaBuilder(Builder):
         self.article, self.region_node = None, None
         self.notes_to(node, False)
         self.hold(node, index)
+
+
+class TreatyBuilder(RwandaBuilder):
+    """One language column of a treaty, convention, protocol, charter or agreement as Rwanda keeps it (the
+    Law Reform Commission's files of its international instruments, rw-treaty-1): rw-law-1's divisions and
+    articles in each language, with what a treaty prints and a law does not. Its title is the first
+    heading; the notes after it (translated from, adopted at, ratified by) are front matter. The preamble
+    opens at its name ("PREAMBLE", "PRÉAMBULE", "IRANGASHINGIRO") and holds the recitals and the agreeing
+    words to the first division or article. The contents ("ARRANGEMENT OF ARTICLES", "TABLE DES MATIÈRES",
+    "ISHAKIRO", or those words ending the title's heading) hold every heading the body prints again, so
+    they end at the first one printed only once. An article's heading is the line after its number where
+    the number has none: a heading, or a short line in capitals ("DEFINITIONS"). "IN WITNESS WHEREOF" and
+    "EN FOI DE QUOI" open the signatures' notice, as "Done at", "Fait à" and "Bikorewe" do; an annex
+    named after them ("ANNEX I", "ANNEXE", "UMUGEREKA") is an annex of the document, whose divisions and
+    articles restart and are qualified by it (annex_i__art_1)."""
+
+    CONTENTS = re.compile(
+        r"^(?:ishakiro|(?:table\s+of\s+)?contents|arrangement\s+of\s+articles|table\s+des\s+mati[eè]res|sommaire)"
+        r"\s*[.:*]*$",  # "TABLE OF CONTENTS *", its note on what an editor added
+        re.I,
+    )
+    CONTENTS_AFTER_TITLE = re.compile(r"\barrangement\s+of\s+articles\s*$", re.I)
+    PREAMBLE = re.compile(r"^(?:preamble|pr[ée]ambule|irangashingiro|iriburiro)\s*[.:]?$", re.I)
+    SIGNATURE = re.compile(
+        r"^(?:in\s+witness\s+whereof|en\s+foi\s+de\s+quoi|bikorewe\b|done\s+(?:at|in)\b|fait\s+[àa]\b)", re.I
+    )
+    ANNEX = re.compile(
+        r"^(?:annex(?:ure|e)?|umugereka)(?!\w)(?:\s+(?:n[°o]\s*)?([ivxlc]{1,6}|\d{1,2}|[a-z])(?!\w))?"
+        r"\s*[.:—–-]?\s*(.*)$",  # never "Annexes shall …"
+        re.I | re.S,
+    )
+    # A line in capitals, the article's heading where it is not set as one: "DEFINITIONS".
+    HEADING_LINE = re.compile(r"^(?=(?:[^A-ZÀ-Ý]*[A-ZÀ-Ý]){3})[^a-zà-ÿ]{3,120}(?<![;,])$")
+
+    def __init__(self, language: str, *args):
+        super().__init__(language, *args)
+        self.heading_due: Node | None = None  # an article printed without its heading, which may follow
+        self.base: Node = self.root  # what articles open in: the document, or an annex
+        self.signed = False  # the signatures are printed: what is named an annex after them is one
+        # Where each heading is printed, and the preamble's name, to tell the contents from the body.
+        self.printed: dict[str, list[int]] = {}
+        for index, leaf in enumerate(self.leaves):
+            text = clean(leaf.text)
+            key = self.preamble_key(text) or (
+                self.heading_key(text) if self.unit(leaf).get("kind") == "heading" else None
+            )
+            if leaf.role == "text" and key:
+                self.printed.setdefault(key, []).append(index)
+
+    def preamble_key(self, text: str) -> str | None:
+        return "preamble" if self.PREAMBLE.match(text) else None
+
+    def heading_key(self, text: str) -> str | None:
+        """What a heading names, as the contents and the body both print it: an article or a division."""
+        for name, pattern in self.divisions:
+            if found := pattern.match(text):
+                return f"{name}:{slug(found.group(1))}"
+        found = self.article_pattern.match(text) if self.article_pattern else None
+        return f"art:{self.rw._number(found.group(1))}" if found else None
+
+    def printed_again(self, index: int, key: str | None) -> bool:
+        return bool(key) and any(later > index for later in self.printed.get(key, ()))
+
+    def put(self, node: Node, index: int) -> None:
+        self.notes_to(node, False)
+        self.hold(node, index)
+
+    def place(self, index: int, leaf: Leaf) -> None:
+        unit, text = self.unit(leaf), clean(leaf.text)
+        heading_unit = unit.get("kind") == "heading"
+        due, self.heading_due = self.heading_due, None
+        contents = self.region_node is not None and self.region_node.kind == "contents"
+        if not self.root.heading and heading_unit and not (self.root.children or self.open or self.article):
+            self.root.heading = text  # the title, the contents' name perhaps after it
+            self.put(self.root, index)
+            if self.CONTENTS_AFTER_TITLE.search(text):
+                self.region_node = self.add(self.root, "contents", "contents", leaf, heading=text)
+            return
+        if self.preamble_key(text) and not (contents and self.printed_again(index, "preamble")):
+            self.region_node, self.article, self.open = (
+                self.add(self.root, "preamble", "preamble", leaf),
+                None,
+                [],
+            )
+            self.put(self.region_node, index)
+            return
+        if contents and heading_unit and self.printed_again(index, self.heading_key(text)):
+            self.put(self.region_node, index)  # a heading the contents list
+            return
+        signing = self.region_node is not None and self.region_node.kind == "notice" and not self.article
+        self.signed = self.signed or signing
+        if signing and self.SIGNATURE.match(text):
+            self.put(self.region_node, index)  # "IN WITNESS WHEREOF …" then "Done at …": one notice
+            return
+        found = self.ANNEX.match(text) if self.signed else None
+        if found and (heading_unit or (found.group(1) and len(text) <= 200)):  # "Annex V: Information …"
+            self.open_annex(index, leaf, found)
+            return
+        article = self.article_pattern.match(text) if self.article_pattern and heading_unit else None
+        if article and not any(pattern.match(text) for _, pattern in self.divisions):
+            self.open_article(index, leaf, article)
+            return
+        if due is not None and (heading_unit or self.HEADING_LINE.match(text)):
+            due.heading = text  # "ARTICLE 1" then "DEFINITIONS"; "Annex III:" then its title
+            self.put(due, index)
+            return
+        super().place(index, leaf)
+
+    def repeatable(self) -> set[int]:
+        """An annex's articles and divisions repeat the body's headings ("ARTICLE 1"): not running heads."""
+        kinds = ("article", "title", "chapter", "division", "annex")
+        return super().repeatable() | {n.leaves[0] for n in self.root.walk() if n.kind in kinds and n.leaves}
+
+    def open_article(self, index: int, leaf: Leaf, found: re.Match) -> None:
+        """An article, as rw-law-1 opens one, its locator within the annex it is in."""
+        if self.region_node is not None and self.region_node.kind == "contents":
+            self.region_node = None  # the first article heading not printed again ends the contents
+        number = self.rw._number(found.group(1))
+        parent = self.open[-1][1] if self.open else self.root
+        own = f"art_{slug(str(number))}"
+        locator = own if self.base is self.root else f"{self.base.locator}__{own}"
+        self.article = self.add(parent, "article", locator, leaf, label=clean(leaf.text)[: found.end(1)])
+        self.article.heading = (found.group(2) or found.group(3) or "").strip()
+        self.notes_to(self.article, True)
+        self.hold(self.article, index)
+        self.heading_due = None if self.article.heading else self.article
+
+    def open_annex(self, index: int, leaf: Leaf, found: re.Match) -> None:
+        number = found.group(1) or str(1 + sum(1 for c in self.root.children if c.kind == "annex"))
+        printed = clean(leaf.text)
+        label = printed[: len(printed) - len(found.group(2))].strip(" :.-–—")
+        node = self.add(
+            self.root, "annex", f"annex_{slug(number)}", leaf, label=label, heading=found.group(2).strip()
+        )
+        self.region_node, self.article, self.base = node, None, node
+        self.open = [(-1, node)]  # below every division: what opens in the annex is within it
+        self.put(node, index)
+        self.heading_due = None if node.heading else node
 
 
 # --- ohada-uniform-act-1 -----------------------------------------------------------------------------

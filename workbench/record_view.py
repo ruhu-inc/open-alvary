@@ -1077,9 +1077,9 @@ def from_legacy(details: dict, absent: dict) -> tuple[dict, dict]:
         link["kind"] == "amends" and "constitution" in link["target"].lower() for link in relations
     )
     kind = details.get("document_type", "act")
-    values["identity.family"] = (
-        "constitution" if constitutional else FAMILY_OF_TYPE.get(kind, "official_document")
-    )
+    # A kind DETAILS-1 does not list (a Nigerian collection's rules, practice direction, guideline or
+    # circular) is filed in the only family listing it, as the reader's suggestions are (family_for).
+    values["identity.family"] = "constitution" if constitutional else family_for(kind) or "official_document"
     values["identity.type"] = (
         "constitutional_amendment"
         if constitutional

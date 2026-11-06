@@ -203,7 +203,7 @@ def test_the_ocr_check_as_the_scan_reader_stores_it_words_and_boxes_only():
     assert max(lines.values()) > 1
 
 
-def test_the_structure_rules_follow_the_type_and_regulations_wait_for_theirs():
+def test_the_structure_rules_follow_the_type_and_a_regulation_has_its_own():
     from workbench import content, publication
 
     reading = ng_documents.cloud_reading(gazette(TWO), None)
@@ -213,7 +213,7 @@ def test_the_structure_rules_follow_the_type_and_regulations_wait_for_theirs():
     assert publication.build(document, final, part).rules_id == "ng-federal-act-1"
     regulation = {**document, "type": "regulation"}
     built = publication.build(regulation, final, part)
-    assert built.rules_id is None and [e.code for e in built.errors] == ["no_structure_rules"]
+    assert built.rules_id == "ng-subsidiary-1" and not built.errors  # since 2026-11-06
 
 
 def test_a_supreme_court_judgment_takes_its_details_from_the_courts_catalogue():
