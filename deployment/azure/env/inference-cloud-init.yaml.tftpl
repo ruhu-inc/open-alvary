@@ -6,6 +6,8 @@
 # The reranker's own limit is 8,192 tokens; it warms up on one such input, not on the server's default
 # batch of two, so the two models fit on a T4 side by side. Its inputs (a question and a passage of at
 # most 2,000 characters each, retrieval.rerank) are far shorter, and one longer is refused, never cut.
+# It takes a query's passages in one request, up to 150 (retrieval.rerank: 50 candidates of 3 passages
+# each), where the server's default refuses more than 32.
 # The inference machine: Docker with NVIDIA's container toolkit, and the two models as services. Each
 # waits for the GPU driver (installed by Azure's extension), then serves on the private address only.
 package_update: true
@@ -13,7 +15,7 @@ package_upgrade: true
 packages: [docker.io, curl, gnupg, unattended-upgrades]
 
 write_files:
-%{ for name, spec in { embedder = { model = embedder.model, revision = embedder.revision, port = 8080, args = "--max-batch-tokens 8192 --auto-truncate" }, reranker = { model = reranker.model, revision = reranker.revision, port = 8081, args = "--max-batch-tokens 8192" } } ~}
+%{ for name, spec in { embedder = { model = embedder.model, revision = embedder.revision, port = 8080, args = "--max-batch-tokens 8192 --auto-truncate" }, reranker = { model = reranker.model, revision = reranker.revision, port = 8081, args = "--max-batch-tokens 8192 --max-client-batch-size 150" } } ~}
   - path: /etc/systemd/system/${name}.service
     content: |
       [Unit]

@@ -285,18 +285,21 @@ def test_every_input_is_embedded_whole_within_the_servers_limit():
 
     import httpx
 
-    from retrieval import vectors
+    from retrieval import indexer, rerank, vectors
     from retrieval.vectors import HttpEmbedder, Profile, fitted, input_bytes
 
-    # Both clouds' GPU machines take the inputs the code allows: MAX_INPUT_TOKENS.
+    # Both clouds' inference machines take the inputs the code allows: MAX_INPUT_TOKENS, and a batch
+    # of windows within the server's default of 32 a request.
     root = Path(__file__).resolve().parents[1]
+    assert indexer.BATCH <= 32
     for cloud in ("gcp-terraform", "azure"):
         template = (root / "deployment" / cloud / "env" / "inference-cloud-init.yaml.tftpl").read_text()
         args = re.search(r'embedder = \{[^}]*args = "([^"]*)"', template).group(1)
         assert args == f"--max-batch-tokens {vectors.MAX_INPUT_TOKENS} --auto-truncate"
-        # The reranker warms up on one input of its model's 8,192 tokens, and never truncates.
-        assert (
-            re.search(r'reranker = \{[^}]*args = "([^"]*)"', template).group(1) == "--max-batch-tokens 8192"
+        # The reranker warms up on one input of its model's 8,192 tokens, never truncates, and takes
+        # every passage of a query's candidates in one request (the server's default refuses over 32).
+        assert re.search(r'reranker = \{[^}]*args = "([^"]*)"', template).group(1) == (
+            f"--max-batch-tokens 8192 --max-client-batch-size {rerank.MAX_CANDIDATES * rerank.PASSAGES}"
         )
     # The longest window, even in four-byte characters, fits an input whole; a longer one is refused.
     base = {"id": "p", "model": "m", "revision": "1", "dims": 8, "embedder": "http"}
