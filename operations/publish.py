@@ -24,7 +24,8 @@ before it looks at a decision: a missing or expired decision stops new publicati
 A correction read from the same official file replaces the text it corrects. A text read from an earlier
 official file stays as history for citations to it (TXP-04) while its document has a current approval.
 Names withheld in a sensitive case take down every text of the work, for a reason that is not told, and
-its record too while what is public still names someone withheld; what else changed waits for a later run.
+its record too while what is public, its official link included, still names someone withheld; what else
+changed waits for a later run.
 
 When it holds back. A run reads every approval before it writes anything: if it cannot read them it
 publishes nothing, takes nothing down and fails. It does the same on an empty read of the approvals beside
@@ -51,11 +52,12 @@ import hashlib
 import json
 import os
 import re
+import unicodedata
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import unquote_plus, urlsplit
 
 from sqlalchemy import create_engine, insert, select, update
 
@@ -340,6 +342,25 @@ def still_named(texts, names: list[str]) -> bool:
     return any(w.lower() in words for text in texts for w in NAME_WORD.findall(text or ""))
 
 
+def named_in_link(link: str | None, names: list[str]) -> bool:
+    """Whether a link's path, query or fragment names a withheld party, however it spells the name there:
+    a slug, an encoded space, another case, no accents. Its host is the publisher's, never a party's."""
+    if not link or not names:
+        return False
+    found = urlsplit(link)
+    said = _spelt(" ".join((found.path, found.query, found.fragment)))
+    joined = f" {' '.join(said)} "
+    if any(spelt and f" {' '.join(spelt)} " in joined for spelt in (_spelt(name) for name in names)):
+        return True
+    words = {w for name in names for w in _spelt(name) if len(w) > 3} - NOT_A_NAME
+    return any(w in words for w in said)
+
+
+def _spelt(text: str) -> list[str]:
+    plain = unicodedata.normalize("NFKD", unquote_plus(text)).encode("ascii", "ignore").decode().lower()
+    return re.findall(r"[a-z0-9]+", plain)
+
+
 def catalogue_entries(item: Approved, decision: dict) -> dict:
     """The legacy catalogue rows for one approved work: its source, rights record, citation and
     issuing authority. Raises Refused when the record lacks what a catalogue entry needs."""
@@ -363,10 +384,13 @@ def catalogue_entries(item: Approved, decision: dict) -> dict:
     citation = withhold(citation, withheld)
     summary = withhold(record.text.summary.text if record.text.summary else None, withheld)
     cited = aliases(item.work, citation, record.identity, withheld)
-    if withheld and still_named([title, citation, summary, *(c.value for c in cited)], withheld):
+    if withheld and (
+        still_named([title, citation, summary, *(c.value for c in cited)], withheld)
+        or named_in_link(url, withheld)
+    ):
         raise Refused(
-            f"{item.work}: names are withheld in this case, but its title, citations or summary would still "
-            "name a withheld party: edit them"
+            f"{item.work}: names are withheld in this case, but its title, citations, summary or official link "
+            "would still name a withheld party: edit them"
         )
     languages = [e.language for e in record.expressions]
     names = ", ".join(LANGUAGES.get(code, code) for code in languages)
@@ -1474,7 +1498,9 @@ def account_for(corpus: Corpus, reading: Reading, previous: dict[str, dict]) -> 
             continue
         source = sources[item.work]
         cited = (c.value for c in corpus.citations if c.source_id == item.work)
-        if still_named([source.title, source.citation, source.summary, *cited], names):
+        if still_named([source.title, source.citation, source.summary, *cited], names) or named_in_link(
+            str(source.canonical_url), names
+        ):
             reading.waiting.add(item.work)
             reading.texts.withheld.add(item.work)
 
