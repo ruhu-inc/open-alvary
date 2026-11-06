@@ -61,6 +61,10 @@ locals {
     var.inference_enabled ? {
       OPEN_ALVARY_EMBEDDER_URL = "http://${local.inference_ip}:8080/v1"
     } : {},
+    # On CPUs a question's embedding waits behind every window sent before it: one a request (indexer._batch).
+    var.inference_enabled && !local.inference_on_gpu ? {
+      OPEN_ALVARY_EMBEDDER_BATCH = "1"
+    } : {},
     # Without a GPU, the reranker only when reranker_on_cpu says so.
     var.inference_enabled && (local.inference_on_gpu || var.reranker_on_cpu) ? {
       OPEN_ALVARY_RERANKER_URL     = "http://${local.inference_ip}:8081"

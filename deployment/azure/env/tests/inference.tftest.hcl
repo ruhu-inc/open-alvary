@@ -43,6 +43,10 @@ run "a_t4_by_default" {
     condition     = local.retrieval_env["OPEN_ALVARY_EMBEDDER_URL"] == "http://10.50.9.36:8080/v1" && local.retrieval_env["OPEN_ALVARY_RERANKER_URL"] == "http://10.50.9.36:8081" && local.retrieval_env["OPEN_ALVARY_RERANKER_PROFILE"] == "BAAI/bge-reranker-v2-m3@953dc6f6f85a"
     error_message = "The service reaches both models at the machine's private address."
   }
+  assert {
+    condition     = !contains(keys(local.retrieval_env), "OPEN_ALVARY_EMBEDDER_BATCH")
+    error_message = "On a GPU the indexer sends its batches as it did."
+  }
 }
 
 run "no_gpu" {
@@ -75,6 +79,10 @@ run "no_gpu" {
   assert {
     condition     = !contains(keys(local.retrieval_env), "OPEN_ALVARY_RERANKER_URL") && !contains(keys(local.retrieval_env), "OPEN_ALVARY_RERANKER_PROFILE")
     error_message = "Without a GPU, the service ranks without the reranker unless reranker_on_cpu says so."
+  }
+  assert {
+    condition     = local.retrieval_env["OPEN_ALVARY_EMBEDDER_BATCH"] == "1"
+    error_message = "Without a GPU, the indexer sends one window a request, so a question's embedding waits behind one."
   }
 }
 

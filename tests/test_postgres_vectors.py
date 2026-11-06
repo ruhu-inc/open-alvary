@@ -84,6 +84,22 @@ def test_a_generation_is_built_validated_activated_and_searched(store, backend):
     assert found["evidence"][0]["anchor_id"] == nodes["sec_1"].id
 
 
+def test_a_text_is_embedded_in_requests_as_small_as_the_machine_asks(store, monkeypatch):
+    publish_act(store, UNITS)
+    monkeypatch.setenv("OPEN_ALVARY_EMBEDDER_BATCH", "1")
+    sizes = []
+
+    class Counting(HashingEmbedder):
+        def embed(self, texts, *, query):
+            sizes.append(len(texts))
+            return super().embed(texts, query=query)
+
+    generation = indexer.prepare(store.engine, PROFILE, backend="exact")
+    assert indexer.work(store.engine, batches=5, embedders={PROFILE.id: Counting(PROFILE)})["failed"] == 0
+    assert len(sizes) > 1 and set(sizes) == {1}
+    assert indexer.validate(store.engine, generation, embedder=HashingEmbedder(PROFILE))["passed"]
+
+
 def test_publication_queues_new_texts_and_withdrawal_is_enforced_then_purged(store):
     publish_act(store, UNITS)
     generation, embedders = build(store, "pgvector")
