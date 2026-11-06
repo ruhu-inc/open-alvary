@@ -146,7 +146,7 @@ A monitor watches for changes to the records you care about: laws added, catalog
 
 - {1} A name, such as "Nigeria: new and corrected laws".
 - {2} Countries to follow. A country includes its states and local law.
-- {3} Kinds of change: **Added**, **Corrected**, **Text published**, **Withdrawn**, **Coverage**, **Membership** and **Suspension**.
+- {3} Kinds of change: **Added**, **Corrected**, **Text published**, **Withdrawn**, **Coverage**, **Membership**, **Suspension**, **Treatment** and **Rights**.
 - {4} Optionally, a keyword from the title or citation.
 - {5} Email: **No email, inbox only**, a **Weekly digest**, or a **Daily digest** on every plan except Starter. On Team and above you can also share a monitor with your organisation.
 - {6} **Create monitor**.
