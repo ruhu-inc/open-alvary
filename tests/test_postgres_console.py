@@ -1101,6 +1101,49 @@ def test_a_session_that_is_not_fresh_cannot_sign_the_person_out_everywhere(conso
     assert browser.get("/api/v1/me").status_code == 401 and elsewhere.get("/api/v1/me").status_code == 401
 
 
+def test_signing_out_everywhere_disconnects_the_persons_apps_and_leaves_their_keys(console):
+    """Every app the person connected stops at its next request, as if disconnected one by one; keys are
+    not sessions and stay."""
+    accounts, fake, app = console
+    consent_app = create_console_app(accounts, app_provider(fake), consent_secret=CONSENT_SECRET)
+    browser = client(consent_app)
+    organisation, headers, _ = onboard(browser, fake)
+    accounts.grant_access(
+        "op", organisation, tier="pilot", scope={"all": True}, source="manual", ends_at=None, reason="Pilot"
+    )
+    answer = client(consent_app).post(
+        "/oauth/api/decision",
+        json={"session_token": hand_off(), "state": "s1", "decision": "allow", "organisation": organisation},
+    )
+    from api.console import verify_hs256
+
+    grant = verify_hs256(
+        parse_qs(urlparse(answer.json()["redirect"]).query)["consent_token"][0], CONSENT_SECRET
+    )
+    credential = {
+        "kind": "grant",
+        "grant_id": grant["grant"],
+        "resource": "mcp",
+        "issuer": ISSUER,
+        "subject": "google-oauth2|amina",
+    }
+    assert accounts.check_credential(credential)["ok"]
+    sign_in(browser, fake, purpose="second_factor", amr=["mfa"], code="m")
+    key = browser.post(f"/api/v1/organisations/{organisation}/keys", json={"name": "CI"}, headers=headers)
+    assert key.status_code == 201
+    done = browser.post("/api/v1/me/sessions/revoke-all", headers=headers)
+    assert done.status_code == 204
+    assert not accounts.check_credential(credential)["ok"]
+    with accounts.engine.connect() as conn:
+        grants = conn.execute(
+            text(f"SELECT revoked_at IS NOT NULL, revoked_reason FROM {accounts._t(conn, 'client_grant')}")
+        ).all()
+        live_keys = conn.scalar(
+            text(f"SELECT count(*) FROM {accounts._t(conn, 'api_key')} WHERE revoked_at IS NULL")
+        )
+    assert grants == [(True, "person")] and live_keys == 1
+
+
 # ---------- what the console sends to developers' endpoints ----------
 def test_a_test_beyond_its_hourly_limit_is_refused_with_when_to_try_again(console):
     from accounts.ids import new_id

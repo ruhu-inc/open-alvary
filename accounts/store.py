@@ -750,6 +750,9 @@ class Accounts:
             )
 
     def end_all_sessions(self, person_id: str, context=None) -> None:
+        """Every console session of the person, and every app they connected in any organisation: the
+        credential check refuses a revoked grant at its next request, whatever tokens the app still holds.
+        Keys are not sessions and stay."""
         with self.engine.begin() as conn:
             conn.execute(
                 text(
@@ -758,7 +761,20 @@ class Accounts:
                 ),
                 {"p": person_id},
             )
-            self._audit(conn, self._actor(conn, person_id), "session.ended_everywhere", context=context)
+            disconnected = conn.execute(
+                text(
+                    f"UPDATE {self._t(conn, 'client_grant')} SET revoked_at = statement_timestamp(),"
+                    " revoked_reason = 'person' WHERE person_id = :p AND revoked_at IS NULL"
+                ),
+                {"p": person_id},
+            ).rowcount
+            self._audit(
+                conn,
+                self._actor(conn, person_id),
+                "session.ended_everywhere",
+                summary={"apps_disconnected": disconnected},
+                context=context,
+            )
 
     def sessions(self, person_id: str) -> list[dict]:
         with self.engine.connect() as conn:

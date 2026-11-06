@@ -2162,6 +2162,7 @@ export function Security({ me, refresh }: { me: Me; refresh: () => void }) {
           >
             Sign out everywhere
           </button>
+          <span className="fine">It also disconnects every app you connected. Keys keep working.</span>
         </div>
       </div>
     </>
