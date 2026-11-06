@@ -385,12 +385,12 @@ variable "database_logins_ready" {
 }
 
 variable "database_logins_in_use" {
-  description = "The workloads moved off the database owner's login, one or several at a time; empty means none. Each of service, worker, daily, terms, retrieval, indexer and publish signs in with its own login (and, a job, under its own service account); migrate keeps the owner's login under an account of its own. The runbook's \"Database logins\" gives the order and the way back."
+  description = "The workloads moved off the database owner's login, one or several at a time; empty means none. Each of service, worker, daily, terms, retrieval, indexer and publish signs in with its own login (and, a job, under its own service account); catalogue gives the public service a second login, for every route that serves the catalogue, which reaches no account; migrate keeps the owner's login under an account of its own. The runbook's \"Database logins\" gives the order and the way back."
   type        = set(string)
   default     = []
   validation {
-    condition     = alltrue([for workload in var.database_logins_in_use : contains(["service", "worker", "daily", "terms", "retrieval", "indexer", "publish", "migrate"], workload)])
-    error_message = "database_logins_in_use may name service, worker, daily, terms, retrieval, indexer, publish and migrate."
+    condition     = alltrue([for workload in var.database_logins_in_use : contains(["service", "catalogue", "worker", "daily", "terms", "retrieval", "indexer", "publish", "migrate"], workload)])
+    error_message = "database_logins_in_use may name service, catalogue, worker, daily, terms, retrieval, indexer, publish and migrate."
   }
   validation {
     condition     = var.database_logins_ready || length(var.database_logins_in_use) == 0

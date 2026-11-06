@@ -57,6 +57,15 @@ locals {
     admission      = "admission-config"
     site-admission = "site-admission-config"
   }
+
+  # The service's own database URLs: its login, and once database_logins_in_use names the catalogue, a
+  # login of the catalogue's own for every route that serves it (api.service), which reaches no account.
+  catalogue_login_in_use = contains(var.database_logins_in_use, "catalogue")
+  service_secret_env = merge(
+    local.public_secret_env,
+    { DATABASE_URL = local.database_secret["service"] },
+    local.catalogue_login_in_use ? { ALVARY_CATALOGUE_DATABASE_URL = local.database_secret["catalogue"] } : {},
+  )
 }
 
 resource "google_cloud_run_v2_service" "public" {
@@ -73,13 +82,18 @@ resource "google_cloud_run_v2_service" "public" {
     max_instance_request_concurrency = 80
     # Cloud Run reads a secret when an instance starts: a new database URL (a new password after a
     # backup restore, data.sh) starts a new revision in the same apply.
-    labels = {
-      database-url-version = (
-        local.database_secret["service"] == "database-url"
-        ? google_secret_manager_secret_version.generated["database-url"].version
-        : google_secret_manager_secret_version.database_login["service"].version
-      )
-    }
+    labels = merge(
+      {
+        database-url-version = (
+          local.database_secret["service"] == "database-url"
+          ? google_secret_manager_secret_version.generated["database-url"].version
+          : google_secret_manager_secret_version.database_login["service"].version
+        )
+      },
+      local.catalogue_login_in_use ? {
+        catalogue-url-version = google_secret_manager_secret_version.database_login["catalogue"].version
+      } : {},
+    )
 
     scaling {
       min_instance_count = var.public_min_replicas
@@ -118,7 +132,7 @@ resource "google_cloud_run_v2_service" "public" {
         }
       }
       dynamic "env" {
-        for_each = merge(local.public_secret_env, { DATABASE_URL = local.database_secret["service"] })
+        for_each = local.service_secret_env
         content {
           name = env.key
           value_source {

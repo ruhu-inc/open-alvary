@@ -77,5 +77,34 @@ def test_no_login_is_written_into_a_grant_of_a_guarded_column():
     jobs = logins.JOBS.tables["accounts"]
     assert "token_hash" not in jobs["console_session"] and "SELECT (" in jobs["console_session"]
     assert "nonce" not in jobs["sign_in_flow"] and "SELECT (" in jobs["sign_in_flow"]
-    for login in (logins.RETRIEVAL, logins.PUBLISH):
+    for login in (logins.CATALOGUE, logins.RETRIEVAL, logins.PUBLISH):
         assert "accounts" not in login.tables and not any(f.startswith("accounts.") for f in login.functions)
+
+
+def test_the_catalogues_login_reads_what_readers_may_see_and_nothing_of_anyones_account():
+    catalogue = logins.CATALOGUE
+    assert {privileges for tables in catalogue.tables.values() for privileges in tables.values()} == {
+        logins.READ
+    }
+    assert catalogue.tables == logins.READERS_SEE and catalogue.vectors == logins.READ
+    # What an anonymous request writes, and nothing that answers about a credential or an account.
+    assert catalogue.functions == logins.ANONYMOUS_WRITES
+    for function in ("check_credential(jsonb)", "record_usage(jsonb)", "accounts_access(text)"):
+        assert f"policy.{function}" not in catalogue.functions
+
+
+def test_until_the_catalogues_login_is_in_use_the_services_holds_all_it_does():
+    """The service serves the catalogue on its own login until database_logins_in_use names the catalogue, so a
+    table the catalogue's routes read is the service's too, and what the service reads outside accounts is the
+    catalogue's: a table for readers goes in READERS_SEE, which both hold, or this fails."""
+    service, catalogue = logins.SERVICE, logins.CATALOGUE
+    assert {kind: tables for kind, tables in service.tables.items() if kind != "accounts"} == catalogue.tables
+    assert set(catalogue.functions) <= set(service.functions) and catalogue.vectors == service.vectors
+
+
+def test_the_service_is_given_the_catalogues_login_by_the_setting_it_reads():
+    assert 'os.getenv("ALVARY_CATALOGUE_DATABASE_URL")' in (ROOT / "api/service.py").read_text()
+    given = 'ALVARY_CATALOGUE_DATABASE_URL = local.database_secret["catalogue"]'
+    assert given in (GOOGLE / "cloud_run.tf").read_text() and given in (AZURE / "keyvault.tf").read_text()
+    for variables in (GOOGLE / "variables.tf", AZURE / "variables.tf"):
+        assert '"service", "catalogue",' in variables.read_text()

@@ -51,7 +51,7 @@ vector_profile = ""
 # "Database logins". The owner's login is then for the migrations alone. public_image must already be a
 # release that has rights/logins.py: the first line adds it to the migrate job's command.
 # database_logins_ready  = true
-# database_logins_in_use = ["retrieval", "indexer", "publish", "worker", "daily", "terms", "service", "migrate"]
+# database_logins_in_use = ["retrieval", "indexer", "publish", "worker", "daily", "terms", "catalogue", "service", "migrate"]
 
 # Phase 4: the workbench, behind Identity-Aware Proxy at its run.app address.
 # workbench_image       = ""

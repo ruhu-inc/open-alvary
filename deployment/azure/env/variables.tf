@@ -310,12 +310,12 @@ variable "database_logins_ready" {
 }
 
 variable "database_logins_in_use" {
-  description = "The workloads moved off the database owner's login, one or several at a time; empty means none (the Google Cloud environment's variable of this name, and the runbook's \"Database logins\"). Every identity here still reads the whole vault, so a login limits what a query can do, not what a taken-over workload can read."
+  description = "The workloads moved off the database owner's login, one or several at a time; empty means none (the Google Cloud environment's variable of this name, and the runbook's \"Database logins\"). catalogue gives the public service a second login, for every route that serves the catalogue, which reaches no account. Every identity here still reads the whole vault, so a login limits what a query can do, not what a taken-over workload can read."
   type        = set(string)
   default     = []
   validation {
-    condition     = alltrue([for workload in var.database_logins_in_use : contains(["service", "worker", "daily", "terms", "retrieval", "indexer"], workload)])
-    error_message = "database_logins_in_use may name service, worker, daily, terms, retrieval and indexer."
+    condition     = alltrue([for workload in var.database_logins_in_use : contains(["service", "catalogue", "worker", "daily", "terms", "retrieval", "indexer"], workload)])
+    error_message = "database_logins_in_use may name service, catalogue, worker, daily, terms, retrieval and indexer."
   }
   validation {
     condition     = var.database_logins_ready || length(var.database_logins_in_use) == 0

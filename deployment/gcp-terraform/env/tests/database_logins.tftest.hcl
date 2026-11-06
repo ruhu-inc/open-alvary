@@ -63,6 +63,10 @@ run "off_by_default" {
     error_message = "The service and the publish job keep the login they have."
   }
   assert {
+    condition     = local.service_secret_env["DATABASE_URL"] == "database-url" && !contains(keys(local.service_secret_env), "ALVARY_CATALOGUE_DATABASE_URL")
+    error_message = "The service serves the catalogue on the login it has."
+  }
+  assert {
     condition = alltrue([
       for name, job in google_cloud_run_v2_job.public :
       job.template[0].template[0].service_account == google_service_account.public.email
@@ -91,8 +95,12 @@ run "ready_changes_nothing_in_use" {
   }
 
   assert {
-    condition     = toset(keys(google_secret_manager_secret.database_login)) == toset(["service", "jobs", "retrieval", "publish"])
+    condition     = toset(keys(google_secret_manager_secret.database_login)) == toset(["service", "catalogue", "jobs", "retrieval", "publish"])
     error_message = "Each login has its secret."
+  }
+  assert {
+    condition     = contains(keys(google_secret_manager_secret_iam_member.database_login), "catalogue/public") && contains(keys(local.job_secret_env["logins"]), "ALVARY_LOGIN_CATALOGUE_URL")
+    error_message = "The service's account can read the catalogue's login, and the logins job makes it."
   }
   assert {
     condition     = google_cloud_run_v2_job.public["logins"].template[0].template[0].service_account == google_service_account.migrator[0].email
@@ -103,8 +111,8 @@ run "ready_changes_nothing_in_use" {
     error_message = "The logins job signs in as the owner."
   }
   assert {
-    condition     = local.database_secret["service"] == "database-url"
-    error_message = "The service stays on the login it has."
+    condition     = local.database_secret["service"] == "database-url" && !contains(keys(local.service_secret_env), "ALVARY_CATALOGUE_DATABASE_URL")
+    error_message = "The service stays on the login it has, for the catalogue too."
   }
   assert {
     condition = alltrue([
@@ -145,12 +153,41 @@ run "one_job_moves_alone" {
   }
 }
 
+run "the_catalogue_moves_alone" {
+  command = plan
+
+  variables {
+    database_logins_ready  = true
+    database_logins_in_use = ["catalogue"]
+  }
+
+  assert {
+    condition     = local.service_secret_env["ALVARY_CATALOGUE_DATABASE_URL"] == "database-url-catalogue"
+    error_message = "The service serves the catalogue on the catalogue's login."
+  }
+  assert {
+    condition     = local.service_secret_env["DATABASE_URL"] == "database-url" && contains(local.secret_readers["database-url"], "public")
+    error_message = "The console stays on the login it has, and its account keeps the owner's secret."
+  }
+  assert {
+    condition     = google_cloud_run_v2_service.public[0].template[0].service_account == google_service_account.public.email
+    error_message = "The service keeps its account."
+  }
+  assert {
+    condition = alltrue([
+      for name, job in google_cloud_run_v2_job.public :
+      job.template[0].template[0].service_account == google_service_account.public.email if name != "logins"
+    ]) && alltrue([for name, env in local.job_secret_env : !contains(keys(env), "ALVARY_CATALOGUE_DATABASE_URL")])
+    error_message = "No job moves, and none is given the catalogue's login."
+  }
+}
+
 run "all_moved" {
   command = plan
 
   variables {
     database_logins_ready  = true
-    database_logins_in_use = ["service", "worker", "daily", "terms", "retrieval", "indexer", "publish", "migrate"]
+    database_logins_in_use = ["service", "catalogue", "worker", "daily", "terms", "retrieval", "indexer", "publish", "migrate"]
   }
 
   assert {
@@ -164,6 +201,10 @@ run "all_moved" {
   assert {
     condition     = local.database_secret["service"] == "database-url-service" && local.database_secret["publish"] == "database-url-publish"
     error_message = "The service and the publish job sign in with their own logins."
+  }
+  assert {
+    condition     = local.service_secret_env["DATABASE_URL"] == "database-url-service" && local.service_secret_env["ALVARY_CATALOGUE_DATABASE_URL"] == "database-url-catalogue"
+    error_message = "The console and the catalogue each sign in with a login of their own."
   }
   assert {
     condition     = google_cloud_run_v2_job.public["migrate"].template[0].template[0].service_account == google_service_account.migrator[0].email

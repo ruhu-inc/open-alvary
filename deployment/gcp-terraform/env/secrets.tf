@@ -39,6 +39,7 @@ locals {
   # is generated here and reaches the job only through the secret: a plan shows neither.
   login_roles = {
     service   = "open_alvary_service"
+    catalogue = "open_alvary_catalogue"
     jobs      = "open_alvary_jobs"
     retrieval = "open_alvary_retrieval"
     publish   = "open_alvary_publish"
@@ -47,9 +48,11 @@ locals {
     for login, role in local.login_roles : login => role if login != "publish" || local.publish_enabled
   } : {}
   # The login each workload signs in with once it is in database_logins_in_use, and the account that
-  # reads the login's secret.
+  # reads the login's secret. The catalogue is the public service's routes that serve it (api.service):
+  # until it is named, the service serves them on its own login.
   workload_login = {
     service   = "service"
+    catalogue = "catalogue"
     worker    = "jobs"
     daily     = "jobs"
     terms     = "jobs"
@@ -59,6 +62,7 @@ locals {
   }
   login_reader = {
     service   = "public"
+    catalogue = "public"
     jobs      = "jobs"
     retrieval = "retrieval"
     publish   = "publisher"

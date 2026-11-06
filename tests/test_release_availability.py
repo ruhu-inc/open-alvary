@@ -16,11 +16,11 @@ from api import release_adapter
 from api.repositories import LegacyRepository
 from api.service import create_service
 from api.store import Store
-from exports import verify
+from exports import integrity, verify
 from exports.release import write_release
 from exports.verify import release_available
 from rights.policy import public_corpus, told_rights
-from schema.models import Corpus, RightsRecord, SourceVersion
+from schema.models import RightsRecord, SourceVersion
 
 METADATA = "/downloads/2026-10-05/ng/metadata/sources.jsonl"
 
@@ -278,14 +278,14 @@ def test_a_line_separator_inside_a_value_is_no_new_row(cleared, store, tmp_path)
 def test_a_release_is_validated_once_for_its_bytes_however_many_ask(cleared, store, tmp_path, monkeypatch):
     store.save(cleared)
     path = write_release(cleared, tmp_path, "2026-10-05", "ng", metadata_only=True)
-    validate = Corpus.model_validate
+    validate = integrity.valid
     calls = []
 
     def counted(*args, **kwargs):
         calls.append(args)
         return validate(*args, **kwargs)
 
-    monkeypatch.setattr(Corpus, "model_validate", counted)
+    monkeypatch.setattr(integrity, "valid", counted)
     written = (path / "manifest.json").read_bytes()
     with ThreadPoolExecutor(8) as pool:
         assert all(pool.map(lambda _: verify._valid(path, written), range(8)))

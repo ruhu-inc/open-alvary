@@ -18,7 +18,7 @@ from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from postgres_support import migrate, validated_test_url
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.pool import NullPool
 from test_postgres import pg_engine as pg_engine
@@ -51,7 +51,7 @@ PEPPER = b"v" * 32
 ALPHABET = string.ascii_letters + string.digits
 PASSWORDS = {role: "".join(secrets.choice(ALPHABET) for _ in range(40)) for role in logins.LOGINS}
 EVERY_LOGIN = list(logins.LOGINS)
-SERVICE, JOBS, RETRIEVAL, PUBLISH = EVERY_LOGIN
+SERVICE, CATALOGUE, JOBS, RETRIEVAL, PUBLISH = EVERY_LOGIN
 CHROME = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/126.0 Safari/537.36"
 
 
@@ -237,6 +237,135 @@ def test_the_public_service_serves_every_door_on_its_own_login(signed, monkeypat
     with signed.owner.connect() as conn:
         buckets = signed.t(conn, "policy", "admission_bucket")
         assert conn.scalar(text(f"SELECT count(*) FROM {buckets}")) >= 1
+
+
+@pytest.fixture
+def console_alone(signed):
+    """A login with the console's tables and functions and nothing of the catalogue's, so that a route serving the
+    catalogue that ran on it would fail: made here for the test, and gone after it."""
+    role = f"oa_{uuid4().hex[:12]}_console_test"
+    password = "".join(secrets.choice(ALPHABET) for _ in range(40))
+    plan = logins.Login(
+        role, {"base": {}, "accounts": logins.SERVICE.tables["accounts"]}, logins.SERVICE.functions
+    )
+    with signed.owner.begin() as conn:
+        database = conn.scalar(text("SELECT current_database()"))
+        conn.execute(text(f"CREATE ROLE {role} LOGIN NOINHERIT PASSWORD '{password}'"))
+        conn.execute(text(f'GRANT CONNECT ON DATABASE "{database}" TO {role}'))
+        logins.apply_grants(conn, signed.namespace, plan)
+    engine = create_engine(
+        signed.owner.url.set(username=role, password=password),
+        poolclass=NullPool,
+        hide_parameters=True,
+        connect_args={"options": f"-csearch_path={signed.schema}"},
+    )
+    yield engine
+    engine.dispose()
+    with signed.owner.begin() as conn:
+        conn.execute(text(f"DROP OWNED BY {role}"))
+        conn.execute(text(f"DROP ROLE {role}"))
+
+
+def test_on_two_logins_an_anonymous_request_never_reaches_the_consoles_and_the_catalogue_is_read_on_its_own(
+    signed, console_alone, monkeypatch, tmp_path
+):
+    """The service as it runs with ALVARY_CATALOGUE_DATABASE_URL: admission, byte allowance and traffic counts on,
+    keys in use. The console's side is a login that cannot read the catalogue at all, so every route serving the
+    catalogue, keyed or not, read it on open_alvary_catalogue; and no anonymous request sent it a statement."""
+    monkeypatch.setenv("ALVARY_KEY_PEPPER", base64.b64encode(PEPPER).decode())
+    monkeypatch.setenv("ALVARY_ACCOUNTS", "1")
+    monkeypatch.setenv("ALVARY_TRAFFIC_COUNTS", "1")
+    monkeypatch.setenv("ALVARY_ADMISSION_CONFIG", str(admission_config(tmp_path, "api")))
+    monkeypatch.setenv("ALVARY_SITE_ADMISSION_CONFIG", str(admission_config(tmp_path, "site")))
+    monkeypatch.setenv("ALVARY_POLICY_SCHEMA", signed.schema)
+    monkeypatch.setenv("PUBLIC_DOMAIN", "open.example.test")
+    monkeypatch.delenv("ALVARY_CONSOLE_CLIENT_ID", raising=False)
+    seed(Store(signed.owner))
+    Accounts(signed.owner, signed.namespace).set_tiers(json.loads(TIERS.read_text()))
+    publish_act(Store(signed.engine(PUBLISH)), UNITS)
+
+    asked = []
+    event.listen(console_alone, "before_cursor_execute", lambda conn, cursor, sql, *rest: asked.append(sql))
+    frontend = tmp_path / "site"
+    frontend.mkdir()
+    (frontend / "index.html").write_text("<html></html>")
+    browser = {"user-agent": CHROME, "sec-fetch-site": "same-origin"}
+    service = create_service(
+        store=Store(console_alone), frontend=frontend, catalogue=Store(signed.engine(CATALOGUE))
+    )
+    with TestClient(service, client=("203.0.113.9", 4321)) as client:
+        asked.clear()
+        assert client.get("/healthz").json() == {"status": "ok"}
+        assert (
+            client.get("/", headers={"user-agent": CHROME, "sec-fetch-dest": "document"}).status_code == 200
+        )
+        for path in (
+            "/site/v1/sources",
+            f"/site/v1/sources/{WORK}",
+            f"/site/v1/sources/{WORK}/versions",
+            f"/site/v1/sources/{WORK}/relationships",
+            f"/site/v1/rights/{WORK}",
+            "/site/v1/search?q=enacted",
+            "/site/v1/coverage",
+            "/site/v1/changes",
+            "/site/v1/releases",
+            "/sitemap.xml",
+            "/api/changes",
+        ):
+            assert client.get(path, headers=browser).status_code == 200, path
+        assert asked == []
+
+        accounts = Accounts(console_alone, signed.namespace, key_pepper=PEPPER)
+        who, organisation = person(accounts)
+        secret = accounts.create_key(who, organisation, kind="personal", name="laptop")["secret"]
+        headers = {"Authorization": f"Bearer {secret}"}
+        for path in (
+            "/api/v1/sources",
+            f"/api/v1/sources/{WORK}",
+            f"/api/v1/sources/{WORK}/versions",
+            "/api/v1/search?q=enacted",
+            "/api/v1/retrieve?q=enacted",
+            "/api/v1/changes",
+            "/api/v1/coverage",
+            "/api/v1/key",
+        ):
+            assert client.get(path, headers=headers).status_code == 200, path
+        listed = client.post(
+            "/mcp", headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+        )
+        assert listed.status_code == 200 and "result" in listed.json()
+        assert accounts.usage(who, organisation)[0]["requests"] >= 1
+    with signed.owner.connect() as conn:
+        assert conn.scalar(text(f"SELECT count(*) FROM {signed.t(conn, 'accounts', 'traffic_day')}")) >= 1
+        assert conn.scalar(text(f"SELECT count(*) FROM {signed.t(conn, 'policy', 'admission_bucket')}")) >= 1
+
+
+def test_the_catalogues_login_cannot_reach_an_account_write_what_it_reads_or_answer_for_a_credential(signed):
+    with signed.engine(CATALOGUE).connect() as conn:
+        base = conn.dialect.identifier_preparer.quote_identifier(signed.schema)
+        refused(
+            conn,
+            (
+                *(
+                    f"SELECT 1 FROM {signed.t(conn, 'accounts', table)} LIMIT 0"
+                    for table in (
+                        "person",
+                        "organisation",
+                        "api_key",
+                        "console_session",
+                        "tier",
+                        "traffic_day",
+                    )
+                ),
+                f"UPDATE {base}.sources SET payload = payload",
+                f"INSERT INTO {signed.t(conn, 'changes', 'change_event')} DEFAULT VALUES",
+                f"DELETE FROM {signed.t(conn, 'changes', 'text_unit')}",
+                f"SELECT {signed.t(conn, 'policy', 'check_credential')}('{{}}')",
+                f"SELECT {signed.t(conn, 'policy', 'record_usage')}('{{}}')",
+                f"SELECT {signed.t(conn, 'policy', 'accounts_access')}('x')",
+                f"SELECT {signed.t(conn, 'accounts', 'traffic_months')}(current_date, 0, 90)",
+            ),
+        )
 
 
 def test_the_console_works_for_a_person_on_the_services_login(signed):
@@ -427,11 +556,14 @@ def test_a_generation_prepared_by_the_owner_is_filled_on_the_retrieval_login_and
     assert indexer.validate(worker_engine, generation, embedder=embedders[profile.id])["passed"]
     indexer.activate(worker_engine, generation, allow_test=True)
     assert [row["generation_id"] for row in indexer.status(worker_engine)] == [generation]
-    with signed.engine(SERVICE).begin() as conn:
-        retriever = Retriever(
-            LegacyCatalogue(LegacyRepository(conn)), vector_profile=profile.id, embedder=embedders[profile.id]
-        )
-        assert retriever.retrieve(Request(query="enacted", filters=Filters())).model_dump(mode="json")
+    for role in (SERVICE, CATALOGUE):
+        with signed.engine(role).begin() as conn:
+            retriever = Retriever(
+                LegacyCatalogue(LegacyRepository(conn)),
+                vector_profile=profile.id,
+                embedder=embedders[profile.id],
+            )
+            assert retriever.retrieve(Request(query="enacted", filters=Filters())).model_dump(mode="json")
     assert indexer.purge(worker_engine) == 0
 
 
@@ -690,6 +822,46 @@ def test_a_grant_of_temporary_objects_is_found_and_taken_back(signed):
     assert logins.check_login(signed.engine(JOBS), logins.JOBS) == []
 
 
+def test_the_check_finds_what_a_login_holds_beyond_its_plan_however_it_came_to_hold_it(signed):
+    """Signed in as itself: a column of an account, a write on what it only reads, a grant to everyone, a function
+    that answers for a credential, and one of its own taken away. And without the accounts schema in its plan, a
+    login that could reach it is refused before it is made."""
+    with signed.owner.begin() as conn:
+        quote = conn.dialect.identifier_preparer.quote_identifier
+        accounts = quote(signed.namespace.schema("accounts"))
+        policy = quote(signed.namespace.schema("policy"))
+        for statement in (
+            f"GRANT SELECT (email) ON {signed.t(conn, 'accounts', 'person')} TO {CATALOGUE}",
+            f"GRANT INSERT ON {signed.t(conn, 'changes', 'change_event')} TO {CATALOGUE}",
+            f"GRANT SELECT ON {signed.t(conn, 'accounts', 'audit_seal')} TO PUBLIC",
+            f"GRANT EXECUTE ON FUNCTION {policy}.check_credential(jsonb) TO {CATALOGUE}",
+            f"REVOKE EXECUTE ON FUNCTION {policy}.admit(jsonb) FROM {CATALOGUE}",
+            f"GRANT USAGE ON SCHEMA {accounts} TO PUBLIC",
+        ):
+            conn.exec_driver_sql(statement)
+    accounts, changes, policy = (signed.namespace.schema(kind) for kind in ("accounts", "changes", "policy"))
+    assert set(logins.check_login(signed.engine(CATALOGUE), logins.CATALOGUE)) >= {
+        f"{CATALOGUE} can select {accounts}.person",
+        f"{CATALOGUE} can insert {changes}.change_event",
+        f"{CATALOGUE} can select {accounts}.audit_seal",
+        f"{CATALOGUE} can run {policy}.check_credential(jsonb)",
+        f"{CATALOGUE} cannot run policy.admit(jsonb)",
+    }
+    assert f"{SERVICE} can select {accounts}.audit_seal" in logins.check_login(
+        signed.engine(SERVICE), logins.SERVICE
+    )
+    assert logins.check_login(signed.engine(JOBS), logins.JOBS) == []  # it keeps the seals
+    with signed.owner.connect() as conn:
+        assert f"{CATALOGUE} can reach {accounts}" in logins.problems(
+            conn, signed.namespace, logins.CATALOGUE
+        )
+        assert f"{RETRIEVAL} can reach {accounts}" in logins.problems(
+            conn, signed.namespace, logins.RETRIEVAL
+        )
+    with pytest.raises(SystemExit, match=f"{CATALOGUE} can reach"):
+        logins.grants(signed.owner)
+
+
 def test_seals_and_audit_entries_stay_append_only_for_the_job_that_keeps_them(signed):
     with signed.owner.begin() as conn:
         conn.execute(
@@ -712,8 +884,8 @@ def test_seals_and_audit_entries_stay_append_only_for_the_job_that_keeps_them(si
         refused(conn, (f"DELETE FROM {signed.t(conn, 'accounts', 'audit_event')}",), match="append_only")
 
 
-def test_the_retrieval_and_publish_logins_cannot_reach_accounts_at_all(signed):
-    for role in (RETRIEVAL, PUBLISH):
+def test_the_catalogue_retrieval_and_publish_logins_cannot_reach_accounts_at_all(signed):
+    for role in (CATALOGUE, RETRIEVAL, PUBLISH):
         with signed.engine(role).connect() as conn:
             refused(
                 conn,
@@ -756,6 +928,32 @@ def test_every_table_has_been_decided(signed):
             assert not undecided, f"{kind}: name these in rights/logins.py: {sorted(undecided)}"
             gone = (planned | names) - present
             assert not gone, f"{kind}: no such table: {sorted(gone)}"
+        # And to the right one of the public service's two logins, as the database has it: the catalogue's reaches
+        # no table of the accounts schema, and reads every other table the service's does, so that either can
+        # serve the catalogue (rights.logins.READERS_SEE).
+        accounts = signed.namespace.schema("accounts")
+        for schema, table, service, catalogue in conn.execute(
+            text(
+                "SELECT n.nspname, c.relname, has_any_column_privilege(:s, c.oid, 'SELECT, INSERT, UPDATE'),"
+                " has_any_column_privilege(:c, c.oid, 'SELECT, INSERT, UPDATE')"
+                " FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
+                " WHERE n.nspname = ANY(:schemas) AND c.relkind IN ('r', 'p', 'v', 'm')"
+            ),
+            {
+                "s": SERVICE,
+                "c": CATALOGUE,
+                "schemas": [
+                    signed.schema,
+                    *(signed.namespace.schema(k) for k in ("accounts", "changes", "corpus")),
+                ],
+            },
+        ):
+            if schema == accounts:
+                assert not catalogue, f"{CATALOGUE} reaches {table}"
+            else:
+                assert service == catalogue, (
+                    f"{table}: one of the service's logins reads it and the other not"
+                )
 
 
 def test_running_it_again_repairs_what_drifted(signed):
@@ -782,10 +980,11 @@ def test_the_grants_step_brings_a_generations_table_to_the_logins_and_leaves_pas
         table = signed.t(conn, "changes", "vectors_0123")
         conn.execute(text(f"CREATE TABLE {table} (version_id text)"))
     assert set(logins.grants(signed.owner)) == set(logins.LOGINS)
-    with signed.engine(SERVICE).connect() as conn:
-        assert conn.exec_driver_sql(f"SELECT version_id FROM {table}").all() == []
-        conn.rollback()
-        refused(conn, (f"DELETE FROM {table}",))
+    for role in (SERVICE, CATALOGUE):
+        with signed.engine(role).connect() as conn:
+            assert conn.exec_driver_sql(f"SELECT version_id FROM {table}").all() == []
+            conn.rollback()
+            refused(conn, (f"DELETE FROM {table}",))
     with signed.engine(RETRIEVAL).begin() as conn:
         conn.exec_driver_sql(f"INSERT INTO {table} VALUES ('v')")
     with signed.engine(JOBS).connect() as conn:

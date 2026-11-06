@@ -14,6 +14,7 @@ from pathlib import Path
 
 from api.repositories import LegacyRepository
 from api.store import Store, check_legacy_authority
+from exports import integrity
 from rights.policy import decide, told_rights
 from schema.models import Corpus, RightsRecord
 
@@ -52,16 +53,16 @@ def _intact(directory: Path, manifest: dict) -> bool:
 
 
 def _valid(directory: Path, manifest: bytes) -> bool:
-    """Whether an intact release's rows validate together. This reads the release whole, so it is done once
-    for the same bytes and one release at a time, however many ask at once."""
+    """Whether an intact release's rows validate together, as one Corpus would. This reads every row, so it is
+    done once for the same bytes and one release at a time, however many ask at once; and it reads them a row at
+    a time (exports.integrity), so a large release needs no more memory than a small one."""
     key = hashlib.sha256(manifest).hexdigest()
     if key in _validated:
         return _validated[key]
     with _validating:
         if key not in _validated:
             try:
-                Corpus.model_validate({name: list(_rows(directory, name)) for name in Corpus.model_fields})
-                _validated[key] = True
+                _validated[key] = integrity.valid(lambda name: _rows(directory, name))
             except (ValueError, KeyError, TypeError):
                 _validated[key] = False
         return _validated[key]
