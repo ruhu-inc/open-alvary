@@ -1986,6 +1986,7 @@ export function Security({ me, refresh }: { me: Me; refresh: () => void }) {
   const identities = useAsync(() => api<{ identities: Identity[] }>("/me/identities"), []);
   const sessions = useAsync(() => api<{ sessions: Session[] }>("/me/sessions"), []);
   const [error, setError] = useState<unknown>(null);
+  const [sessionsError, setSessionsError] = useState<unknown>(null);
   const [name, setName] = useState(me.person.display_name ?? "");
   const [saved, setSaved] = useState(false);
   const factorSeen = me.person.second_factor !== "none" || !!me.second_factor_until;
@@ -2107,16 +2108,18 @@ export function Security({ me, refresh }: { me: Me; refresh: () => void }) {
         ) : (
           <Loading />
         )}
+        <Problem error={sessionsError} onDismiss={() => setSessionsError(null)} />
         <div className="row">
           <button
             className="btn danger"
             type="button"
             onClick={async () => {
+              setSessionsError(null);
               try {
                 await api("/me/sessions/revoke-all", { method: "POST" });
                 location.assign("/console/sign-in");
               } catch (e) {
-                setError(e);
+                setSessionsError(e);
               }
             }}
           >

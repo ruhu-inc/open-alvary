@@ -655,6 +655,9 @@ def create_console_app(
     @app.post("/api/v1/me/sessions/revoke-all")
     def revoke_all(request: Request):
         session = guard(request, write=True)
+        # It ends every session of the person, this one too: a cookie taken from one browser must not sign
+        # the person out of the others, so it asks what any change to the person asks.
+        fresh(session, second_factor=needs_second_factor_anywhere(session["person_id"]))
         accounts.end_all_sessions(session["person_id"], context(request))
         response = Response(status_code=204)
         response.delete_cookie(SESSION_COOKIE, path="/console")

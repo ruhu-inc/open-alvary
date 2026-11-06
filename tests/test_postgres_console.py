@@ -955,6 +955,7 @@ def sensitive(browser, organisation, headers, identity, member, endpoint):
     org = f"/api/v1/organisations/{organisation}"
     return {
         "unlink": lambda: browser.delete(f"/api/v1/me/identities/{identity}", headers=headers),
+        "sign out everywhere": lambda: browser.post("/api/v1/me/sessions/revoke-all", headers=headers),
         "close account": lambda: browser.post(
             "/api/v1/me/delete", headers=headers, json={"confirm": "amina@example.org"}
         ),
@@ -976,6 +977,7 @@ def sensitive(browser, organisation, headers, identity, member, endpoint):
 
 SENSITIVE = (
     "unlink",
+    "sign out everywhere",
     "close account",
     "delete organisation",
     "transfer ownership",
@@ -1037,6 +1039,27 @@ def test_changes_that_are_not_sensitive_stay_free_of_a_step_up(console, monkeypa
         f"{org}/webhooks/{endpoint}", headers=headers, json={"url": "https://other.example.org/in"}
     )
     assert moved.status_code == 200
+
+
+def test_a_session_that_is_not_fresh_cannot_sign_the_person_out_everywhere(console):
+    """A cookie taken from one browser cannot end the person's other sessions, nor its own: it gets the
+    refusal any sensitive change gets, and the person, signing in again, can."""
+    accounts, fake, app = console
+    browser = client(app)
+    _, headers, _ = onboard(browser, fake)
+    elsewhere = client(app)
+    sign_in(elsewhere, fake, code="e")
+    age_session(accounts, 11)
+    refused = browser.post("/api/v1/me/sessions/revoke-all", headers=headers)
+    assert refused.status_code == 401 and refused.json()["error"]["code"] == "reauthentication_required"
+    assert browser.get("/api/v1/me").status_code == 200 and elsewhere.get("/api/v1/me").status_code == 200
+    assert len(browser.get("/api/v1/me/sessions").json()["sessions"]) == 2
+    sign_in(elsewhere, fake, purpose="reauthenticate", code="r")
+    done = elsewhere.post(
+        "/api/v1/me/sessions/revoke-all", headers={"X-CSRF-Token": elsewhere.get("/api/v1/me").json()["csrf"]}
+    )
+    assert done.status_code == 204
+    assert browser.get("/api/v1/me").status_code == 401 and elsewhere.get("/api/v1/me").status_code == 401
 
 
 # ---------- mail a request can cause ----------
