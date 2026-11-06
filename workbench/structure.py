@@ -1499,7 +1499,8 @@ class TreatyBuilder(RwandaBuilder):
         r"^(?:in\s+witness\s+whereof|en\s+foi\s+de\s+quoi|bikorewe\b|done\s+(?:at|in)\b|fait\s+[àa]\b)", re.I
     )
     ANNEX = re.compile(
-        r"^(?:annex(?:ure|e)?|umugereka)(?:\s+(?:n[°o]\s*)?([ivxlc]{1,6}|\d{1,2}|[a-z])(?!\w))?\s*[.:—–-]?\s*(.*)$",
+        r"^(?:annex(?:ure|e)?|umugereka)(?!\w)(?:\s+(?:n[°o]\s*)?([ivxlc]{1,6}|\d{1,2}|[a-z])(?!\w))?"
+        r"\s*[.:—–-]?\s*(.*)$",  # never "Annexes shall …"
         re.I | re.S,
     )
     # A line in capitals, the article's heading where it is not set as one: "DEFINITIONS".
