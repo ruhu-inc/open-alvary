@@ -1101,6 +1101,56 @@ def test_a_session_that_is_not_fresh_cannot_sign_the_person_out_everywhere(conso
     assert browser.get("/api/v1/me").status_code == 401 and elsewhere.get("/api/v1/me").status_code == 401
 
 
+# ---------- what the console sends to developers' endpoints ----------
+def test_a_test_beyond_its_hourly_limit_is_refused_with_when_to_try_again(console):
+    from accounts.ids import new_id
+    from changes.webhooks import TESTS_PER_ENDPOINT
+
+    accounts, fake, app = console
+    browser, organisation, headers, _, _, endpoint = stepped_world(accounts, fake, app)
+    with accounts.engine.begin() as conn:
+        actor = conn.scalar(
+            text(f"SELECT id FROM {accounts._t(conn, 'actor')} WHERE person_id IS NOT NULL LIMIT 1")
+        )
+        for _ in range(TESTS_PER_ENDPOINT):
+            conn.execute(
+                text(
+                    f"INSERT INTO {accounts._t(conn, 'audit_event')} (id, actor_type, actor_ref, organisation_id,"
+                    " action, target_type, target_id) VALUES (:id, 'person', :a, :o, 'webhook.tested',"
+                    " 'webhook_endpoint', :e)"
+                ),
+                {"id": new_id("evt"), "a": actor, "o": organisation, "e": endpoint},
+            )
+    refused = browser.post(f"/api/v1/organisations/{organisation}/webhooks/{endpoint}/test", headers=headers)
+    assert refused.status_code == 429 and refused.json()["error"]["code"] == "rate_limited"
+    assert 3500 < int(refused.headers["retry-after"]) <= 3600
+    assert refused.json()["error"]["retry_after_seconds"] == int(refused.headers["retry-after"])
+
+
+def test_a_test_or_verification_is_sent_from_threads_the_website_does_not_use(console, monkeypatch):
+    """A slow or silent endpoint holds only a thread kept for sending to endpoints, never one of the threads
+    the website's routes run on."""
+    from anyio import from_thread, to_thread
+
+    accounts, fake, app = console
+    browser, organisation, headers, _, _, endpoint = stepped_world(accounts, fake, app)
+
+    def taken(*args):
+        return {
+            "site_threads_taken": from_thread.run_sync(
+                lambda: to_thread.current_default_thread_limiter().borrowed_tokens
+            )
+        }
+
+    monkeypatch.setattr(Webhooks, "test", taken)
+    monkeypatch.setattr(Webhooks, "verify", taken)
+    for action in ("test", "verify"):
+        answer = browser.post(
+            f"/api/v1/organisations/{organisation}/webhooks/{endpoint}/{action}", headers=headers
+        )
+        assert answer.json() == {"site_threads_taken": 0}, action
+
+
 # ---------- mail a request can cause ----------
 ASK = {"purpose": "Research", "expected_volume": "Some", "contact_name": "A"}
 

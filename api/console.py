@@ -42,6 +42,7 @@ from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
 import httpx
+from anyio import CapacityLimiter, to_thread
 from fastapi import BackgroundTasks, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
@@ -59,6 +60,7 @@ FRESH = timedelta(minutes=10)
 PROVIDER_SESSION_SECONDS = 30 * 86400  # the longest the provider remembers a sign-in
 CLOCK_SKEW_SECONDS = 60
 REGISTRATION_EMAILS_AN_HOUR = 30
+ENDPOINT_SENDS = 4  # verifications and tests to developers' endpoints at once, on threads of their own
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 RETURN = re.compile(r"^/console(/[A-Za-z0-9/_?=&%.-]*)?$")
 LINKED = "/console/security"  # where adding a sign-in method comes back to
@@ -1134,6 +1136,12 @@ def create_console_app(
     # ---------- webhooks (SUB C3) ----------
     hooks = Webhooks(accounts)
     hook_path = "/api/v1/organisations/{organisation_id}/webhooks"
+    sending = CapacityLimiter(ENDPOINT_SENDS)
+
+    async def to_endpoint(work, *args):
+        """What sends to a developer's endpoint while someone waits (a verification, a test), on threads of
+        its own: a slow or silent endpoint never holds a thread that serves the website, nor the event loop."""
+        return await to_thread.run_sync(work, *args, limiter=sending)
 
     @app.get(hook_path)
     def list_webhooks(request: Request, organisation_id: str):
@@ -1144,7 +1152,9 @@ def create_console_app(
         session = guard(request, write=True)
         data = await body(request)
         fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id))
-        created = hooks.create(session["person_id"], organisation_id, data, context(request))
+        created = await to_endpoint(
+            hooks.create, session["person_id"], organisation_id, data, context(request)
+        )
         return JSONResponse(jsonable_encoder(created), status_code=201, headers={"Cache-Control": "no-store"})
 
     @app.patch(hook_path + "/{endpoint_id}")
@@ -1155,7 +1165,7 @@ def create_console_app(
         person = session["person_id"]
         if "url" in data and data["url"] != hooks.get(person, organisation_id, endpoint_id)["url"]:
             fresh(session, second_factor=needs_second_factor(person, organisation_id))
-        return hooks.update(person, organisation_id, endpoint_id, data, context(request))
+        return await to_endpoint(hooks.update, person, organisation_id, endpoint_id, data, context(request))
 
     @app.delete(hook_path + "/{endpoint_id}")
     def delete_webhook(request: Request, organisation_id: str, endpoint_id: str):
@@ -1171,14 +1181,16 @@ def create_console_app(
         return JSONResponse(jsonable_encoder(rotated), headers={"Cache-Control": "no-store"})
 
     @app.post(hook_path + "/{endpoint_id}/verify")
-    def verify_webhook(request: Request, organisation_id: str, endpoint_id: str):
+    async def verify_webhook(request: Request, organisation_id: str, endpoint_id: str):
         session = guard(request, write=True)
-        return hooks.verify(session["person_id"], organisation_id, endpoint_id)
+        return await to_endpoint(hooks.verify, session["person_id"], organisation_id, endpoint_id)
 
     @app.post(hook_path + "/{endpoint_id}/test")
-    def test_webhook(request: Request, organisation_id: str, endpoint_id: str):
+    async def test_webhook(request: Request, organisation_id: str, endpoint_id: str):
         session = guard(request, write=True)
-        return hooks.test(session["person_id"], organisation_id, endpoint_id)
+        return await to_endpoint(
+            hooks.test, session["person_id"], organisation_id, endpoint_id, context(request)
+        )
 
     @app.get(hook_path + "/{endpoint_id}/deliveries")
     def webhook_deliveries(request: Request, organisation_id: str, endpoint_id: str):
