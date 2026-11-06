@@ -293,7 +293,8 @@ def test_files_are_prepared_once_read_and_again_when_the_ocr_arrives():
     assert ng_documents.prepare_pdfs(store, items, list(items), collection)["waiting"] == 1
     store.objects[f"readings/ng/docai/{sha}.json"] = json.dumps(gazette(TWO)).encode()
     first = ng_documents.prepare_pdfs(store, items, list(items), collection)
-    assert (first["prepared"], first["documents"]) == (1, 3)  # the issue's front page and its two Acts
+    # Its two Acts; the issue's front page, a Gazette record, held (not reviewed since 2026-11-05).
+    assert (first["prepared"], first["documents"], first["held"]) == (1, 2, 1)
     index = json.loads(store.objects[f"collections/ng/issues/{sha}.json"])
     assert index["readings"] == {"docai": True, "ocr": False} and index["source"] == "nln-repository"
     assert ng_documents.prepare_pdfs(store, items, list(items), collection)["skipped_done"] == 1
@@ -303,11 +304,14 @@ def test_files_are_prepared_once_read_and_again_when_the_ocr_arrives():
     assert ng_documents.prepare_pdfs(store, items, list(items), collection)["prepared"] == 1  # read again
     collection.save_manifest()
     manifest = json.loads(store.objects["collections/ng/manifest.json"])
-    assert [d["id"] for d in manifest["documents"]] == [
-        "ng-act-3-2024",
-        "ng-act-4-2024",
+    assert [d["id"] for d in manifest["documents"]] == ["ng-act-3-2024", "ng-act-4-2024"]
+    (front,) = manifest["held"]
+    assert (front["id"], front["type"], front["pages"], front["reason"]) == (
         "ng-gazette-111-12-2024",
-    ]
+        "gazette",
+        [1, 1],
+        ng_documents.FRONT_PAGE_HELD,
+    )
     entry = manifest["documents"][0]
     assert (
         entry["source_object"] == f"sources/ng/nln-repository/{sha}.pdf"
@@ -453,13 +457,15 @@ def test_a_file_read_only_in_part_is_held_not_filed_as_its_first_pages():
 def test_a_known_volume_stays_held_when_it_is_read_through(monkeypatch):
     store = MemoryStore()
     sha = "e" * 64
-    monkeypatch.setitem(ng_documents.VOLUMES, sha, "a bound volume of many laws")
+    monkeypatch.setitem(
+        ng_documents.VOLUMES, sha, {"what": "a compendium", "held": "a compendium of many laws"}
+    )
     items = stored_files(
         store, [("e", "Acts of 1964", "A FIRST ACT, 1964", "Short title.")], "nln-repository", "act"
     )
     counts, manifest = prepared_manifest(store, items)
     assert counts["held"] == 1 and manifest["documents"] == []
-    assert manifest["held"][0]["reason"] == "a bound volume of many laws"
+    assert manifest["held"][0]["reason"] == "a compendium of many laws"
 
 
 def test_a_file_prepared_before_it_was_known_to_be_a_volume_is_held_at_the_next_run(monkeypatch):
@@ -469,7 +475,7 @@ def test_a_file_prepared_before_it_was_known_to_be_a_volume_is_held_at_the_next_
     )
     _, manifest = prepared_manifest(store, items)
     assert len(manifest["documents"]) == 1
-    monkeypatch.setitem(ng_documents.VOLUMES, "e" * 64, "a bound volume of many laws")
+    monkeypatch.setitem(ng_documents.VOLUMES, "e" * 64, {"what": "a compendium", "held": "a compendium"})
     counts, manifest = prepared_manifest(store, items)
     assert counts["held"] == 1 and manifest["documents"] == [] and len(manifest["held"]) == 1
 
@@ -592,3 +598,116 @@ def test_a_file_listed_twice_is_prepared_under_one_listing_however_tasks_are_sha
     assert provenance["item"] == smallest and provenance["url"] == "https://x/study-2.pdf"
     for tasks, order in ((2, [0, 1]), (2, [1, 0]), (3, [2, 1, 0]), (3, [1, 2, 0])):
         assert prepared(tasks, order) == (ids, files)
+
+
+def test_the_listing_gives_the_kind_unless_the_file_says_otherwise_beyond_doubt():
+    """Before 2026-11-05 a first heading naming an Act overrode any listing: an agency's guideline printed
+    under the Act it is made under, or a regulation whose title ends with its Act, was filed as an Act."""
+    kind = ng_documents.file_kind
+    # The Act an agency's guideline or regulation is made under, printed at its head.
+    assert (
+        kind("EXAMPLE COMMUNICATIONS ACT, 2003", "guideline", "Guideline on Example Recovery") == "guideline"
+    )
+    assert (
+        kind("EXAMPLE COMMUNICATIONS ACT, 2003", "regulation", "Draft Example Regulations 2025")
+        == "regulation"
+    )
+    assert kind("EXAMPLE COMMUNICATIONS ACT, 2003", "regulation") == "regulation"
+    # A title that names the Act it is made under.
+    assert kind("Guidance on Sections 6 – 9 of the Example Securities Act, 2007", "guideline") == "guideline"
+    assert (
+        kind("ORDER ON THE PROCEDURE FOR EXAMPLE LICENCES UNDER THE EXAMPLE POWER ACT 2005", "order")
+        == "order"
+    )
+    assert kind(
+        "Revised Regulation on Example Annuity Pursuant to the Example Pension Act 2014", "regulation"
+    ) == ("regulation")
+    # An Act's own title, which the listing's title names as an Act too.
+    assert (
+        kind("EXAMPLE POWER SECTOR ACT, 2005", "regulation", "Example Power Sector Act (EPS), 2005") == "act"
+    )
+    # A Bill's listing gives way to the Act the file holds; a Gazette's listing does not.
+    assert kind("EXAMPLE REVENUE BOARD ACT, 2025", "bill") == "act"
+    assert kind("EXAMPLE REVENUE BOARD ACT, 2025", "gazette") == "gazette"
+    # Listed twice, once as an Act and once as a circular, and nothing in it an Act's: a circular.
+    assert (
+        kind("2.0 Example Capital Requirement", "act", "Example Reform Act 2025", ["circular"]) == "circular"
+    )
+    assert kind("EXAMPLE REFORM ACT, 2025", "act", "Example Reform Act 2025", ["circular"]) == "act"
+    # An instrument's own title of another kind than an Act, the listing's title naming none: the title's.
+    assert kind("EXAMPLE REGULATIONS, 2024", "act") == "regulation"
+    assert kind("EXAMPLE RULES AND REGULATIONS, 2013", "rules", "Consolidated Example Rules 2013") == "rules"
+
+
+def test_a_guideline_under_an_act_takes_its_listings_title_and_id():
+    reading = ng_documents.cloud_reading(
+        one_text("EXAMPLE COMMUNICATIONS ACT, 2003", "1. Recovery plans."), None
+    )
+    record = {
+        "source": "ncc",
+        "type": "guideline",
+        "url": "u",
+        "listed": {"title": "Guideline on Example Recovery"},
+    }
+    ((document, _),) = ng_documents.documents(reading, record)
+    assert (document["id"], document["type"], document["title"]) == (
+        "ng-guideline-guideline-on-example-recovery",
+        "guideline",
+        "Guideline on Example Recovery",
+    )
+
+
+def contents_rows(docai, rows):
+    """The Gazette's front page with its contents table replaced by these rows."""
+    front = docai["pages"][0]
+    front["nodes"] = [
+        table(1, rows) if node["kind"] == "table" and node["header_rows"] else node for node in front["nodes"]
+    ]
+    return docai
+
+
+def test_a_contents_title_printed_over_two_rows_is_one_supplement_and_the_cover_goes_with_it():
+    """Three Gazette issues publishing one regulation each were filed as a Gazette record (their cover) and
+    the regulation, its title the second row's alone ("Regulations, 2011"), before 2026-11-05."""
+    rows = [
+        ["S. I. No.", "Short Title", "Page"],
+        ["18", "Example Environmental (Coastal Area)", ""],
+        ["", "Regulations, 2024 .. ..", "A10-11"],
+    ]
+    reading = ng_documents.cloud_reading(contents_rows(gazette(TWO[:1]), rows), None)
+    record = {"source": "nesrea", "type": "regulation", "url": "u", "listed": {}}
+    ((document, _),) = ng_documents.documents(reading, record)
+    assert (document["id"], document["type"], document["title"], document["pages"]) == (
+        "ng-si-18-2024",
+        "regulation",
+        "Example Environmental (Coastal Area) Regulations, 2024",
+        [1, 3],
+    )
+    # The second volume of two an issue published, not in this file: listed, but left out.
+    rows = [
+        ["S.I. No.", "Short Title", "Page"],
+        ["73", "Example Part 1 Regulations .. ..", "A10-11"],
+        ["", "Example Part 2 Regulations .. ..", "A13-90"],
+    ]
+    reading = ng_documents.cloud_reading(contents_rows(gazette(TWO[:1]), rows), None)
+    ((document, _),) = ng_documents.documents(reading, record)
+    assert (document["title"], document["pages"]) == ("Example Part 1 Regulations", [1, 3])
+
+
+def test_a_gazette_of_many_issues_is_held_not_reviewed():
+    store = MemoryStore()
+    items = stored_files(
+        store,
+        [("g", "Example Regional Gazette 1960", "EXAMPLE TAXES ACT, 1960", LONG)],
+        "nln-repository",
+        "gazette",
+    )
+    counts, manifest = prepared_manifest(store, items)
+    assert (counts["prepared"], counts["documents"], counts["held"]) == (1, 0, 1)
+    assert manifest["documents"] == []
+    (held,) = manifest["held"]
+    assert (held["type"], held["title"], held["reason"]) == (
+        "gazette",
+        "Example Regional Gazette 1960",
+        ng_documents.GAZETTE_HELD,
+    )

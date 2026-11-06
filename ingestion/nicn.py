@@ -2152,7 +2152,8 @@ HELD_KEYS = (
 HELD_NOTE = (
     "Partial judgments: the court's portal holds only part of each. Not reviewed, approved or published "
     "(owner, 2026-10-25) until the court supplies a complete copy. A PDF read only in part is held the same "
-    "way until it is read through; each entry gives its reason."
+    "way until it is read through; so are a bound volume's instruments that could not be cut from it with "
+    "confidence, and Gazette records, until they are cut into their instruments. Each entry gives its reason."
 )
 COPY_WORDS = 0.98  # the share of two readings' words that must be the same for them to be one text
 
@@ -2257,7 +2258,12 @@ class FolderCollection:
         return entry
 
     def finish(
-        self, sha: str, entries: list[dict], skipped: str | None = None, held: list | None = None
+        self,
+        sha: str,
+        entries: list[dict],
+        skipped: str | None = None,
+        held: list | None = None,
+        left: list | None = None,
     ) -> None:
         self.held += held or []
 
@@ -2313,6 +2319,7 @@ class BucketCollection:
         source: str = SOURCE,
         readings: dict | None = None,
         held: list | None = None,
+        left: list | None = None,
     ) -> None:
         index = {"pipeline": self.pipeline, "source": source, "documents": entries}
         if readings:
@@ -2321,6 +2328,8 @@ class BucketCollection:
             index["skipped"] = skipped
         if held:
             index["held"] = held
+        if left:
+            index["left"] = left  # a bound volume's pages in no instrument, and why (ingestion.ng_volumes)
         self._put(f"{self.prefix}issues/{sha}.json", index)
 
     def save_manifest(self) -> None:

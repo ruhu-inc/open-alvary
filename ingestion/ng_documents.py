@@ -18,7 +18,10 @@ same layout:
   2022 | A179-243"); each becomes its own document over the physical pages its printed pages map to,
   as Rwanda's issues are split per instrument (ingestion.rwanda). A file with no such front page (a
   certified Act, an agency's regulation, a judgment) is one instrument;
-- its type and structure rules: an Act or a constitutional alteration is ng/act (ng-federal-act-1);
+- its type: its listing's, unless the file says otherwise beyond doubt (file_kind): its front page lists it
+  as an Act, or its first heading is the title of an instrument of another kind that the listing's title
+  does not contradict;
+- its structure rules: an Act or a constitutional alteration is ng/act (ng-federal-act-1);
   a Supreme Court judgment or ruling ng/judgment or ng/ruling (judgment-paragraphs-1); a
   regulation, order, rules, guideline, circular or practice direction has no rules yet, so its
   structure is one node with the error no_structure_rules, which blocks its approval until rules
@@ -27,8 +30,12 @@ same layout:
   ng-si-<number>-<year>, a notice ng-gn-<number>-<year>; else the type and its title's slug; a
   Supreme Court judgment ng-sc-<suit number>-<date delivered>. Different texts that come to one id
   are told apart when the manifest is built (nicn.BucketCollection._keep_apart);
-- a file the Layout Parser read only in part, or known to be a bound volume of many instruments (VOLUMES),
-  is held, not filed as one: its first heading says nothing of the rest.
+- a file the Layout Parser read only in part is held, not filed as one: its first heading says nothing
+  of the rest. A bound volume of many instruments (VOLUMES) is cut into them (ingestion.ng_volumes), each
+  its own document; what cannot be cut with confidence is held, and the pages of no instrument (title
+  pages, indexes, Bills) are named in the file's index;
+- a Gazette record (a file of many issues, an issue's own front page) is held, not reviewed, until its
+  notices are cut from it (owner).
 
 Nothing here reads a PDF or calls a paid service: it takes the stored readings, and a file not yet
 read waits (prepare_pdfs, run by the corpus-preparer job with PREPARE_COUNTRY=ng and the source in
@@ -159,6 +166,21 @@ def contents(reading: dict) -> list[dict]:
             title = LEADERS.sub("", row[1]).strip()
             if not title:
                 continue
+            before = out[-1] if out and out[-1]["kind"] == kind else None
+            if before and not before["printed"] and before["number"] and not row[0].strip(" .") and pages:
+                # A title printed over two rows, its number on the first and its pages on the second
+                # ("18 | National Environmental (Coastal and Marine Area Protection)", "| Regulations, 2011
+                # | B 561-590"): one supplement (before 2026-11-05, two, the issue's cover filed apart).
+                before.update(
+                    {
+                        "title": f"{before['title']} {title}",
+                        "printed": row[-1].strip(),
+                        "series": pages.group("series"),
+                        "from": int(pages.group("start")),
+                        "to": int(pages.group("end")),
+                    }
+                )
+                continue
             out.append(
                 {
                     "kind": kind,
@@ -198,13 +220,86 @@ def printed_pages(reading: dict) -> dict[int, tuple[str, int]]:
     return found
 
 
-def instruments(reading: dict, listed_type: str, listed_title: str | None = None) -> list[dict]:
+# A heading that names an Act or regulation it is not: one that opens with another instrument's word
+# ("Guidance on Implementation of Sections 60 – 63 of Investments and Securities Act, 2007", "ORDER ON THE
+# PROCEDURE … ACT 2005", "Revised Regulation on Retiree Life Annuity Pursuant to the Pension Reform Act
+# 2014"), or that names the law it is made under.
+NOT_OWN_TITLE = re.compile(
+    r"^\W*(?:the\s+)?(?:draft|revised|guidance|guidelines?|regulations?|rules|orders?|circular|notice|directive"
+    r"|code|framework|policy|exposure|consultation|procedure|template|form|amendments?\s+to)\b"
+    r"|\b(?:pursuant\s+to|made\s+under|issued\s+under|in\s+pursuance\s+of)\b",
+    re.I,
+)
+# The kinds a source's listing title names: "Electric Power Sector Reform Act (EPSR), 2005" an Act; "Guideline
+# on Disaster Recovery" a guideline.
+LISTING_KINDS = (
+    (re.compile(r"\bacts?\b|\bdecree\b|\bconstitution\b", re.I), "act"),
+    (re.compile(r"\bregulations?\b", re.I), "regulation"),
+    (re.compile(r"\border\b", re.I), "order"),
+    (re.compile(r"\brules\b", re.I), "rules"),
+    (re.compile(r"\bguidelines?\b|\bguidance\b|\bframework\b", re.I), "guideline"),
+    (re.compile(r"\bcircular\b", re.I), "circular"),
+)
+
+
+def own_kind(title: str) -> str | None:
+    """The kind a heading is the title of, by its last words and year ("ELECTRICITY ACT, 2023": act); None
+    for a heading that only names one (NOT_OWN_TITLE)."""
+    kind = next((k for pattern, k in TITLE_KIND if pattern.search(title)), None)
+    return None if kind is None or NOT_OWN_TITLE.search(title) else kind
+
+
+def file_kind(title: str, listed_type: str, listed_title: str | None = None, also_listed=()) -> str:
+    """A file's kind: its listing's, unless the file says otherwise beyond doubt. Before 2026-11-05 a first
+    heading naming an Act overrode any listing, and 11 documents were filed as Acts against theirs: an
+    agency's guidelines and regulations under the Act they print at their head ("NIGERIAN COMMUNICATIONS
+    ACT, 2003" over "Draft Regulations on E-Waste"), or whose title ends with the Act they are made under.
+    Now a heading decides only when it is the title of an instrument of its own kind, and the listing's
+    title does not name another kind: for an Act, the listing's title must name an Act. A file the source
+    lists as a Gazette stays one (a bound Gazette's first heading says nothing of the rest), a Bill's
+    listing gives way to the Act the file holds, and a file listed twice, once as an Act and once as
+    another kind, is an Act only when the file says so."""
+    listed = TYPES.get(listed_type)
+    own = own_kind(title or "")
+    if listed == "gazette":
+        return "gazette"
+    if listed is None:
+        return own or TYPES.get(listed_type, "other")
+    if own is None or own == listed:
+        others = sorted({TYPES.get(t) for t in also_listed} - {None, "act", "gazette", listed})
+        return others[0] if listed == "act" and own != "act" and others else listed
+    names = {kind for pattern, kind in LISTING_KINDS if pattern.search(listed_title or "")}
+    if own == "act":
+        return "act" if names == {"act"} else listed
+    return own if not names or names == {own} else listed
+
+
+def instruments(
+    reading: dict, listed_type: str, listed_title: str | None = None, also_listed=()
+) -> list[dict]:
     """The instruments a file holds, each with its physical pages: those a Gazette's front page lists,
     over the pages their printed numbers map to (the front page with them when it publishes only one);
-    else the whole file, one instrument, titled by its first heading."""
+    else the whole file, one instrument, titled by its first heading, of its listing's kind unless the
+    file says otherwise beyond doubt (file_kind)."""
     pages = [page["page"] for page in reading["pages"]]
     listed = contents(reading)
     printed = printed_pages(reading)
+    # A supplement the front page lists whose printed pages all lie past the file's own, or before them,
+    # is not in the file (one volume of two that one issue published): only the others are its.
+    numbers = {}
+    for series, number in printed.values():
+        numbers.setdefault(series, []).append(number)
+    listed = [
+        entry
+        for entry in listed
+        if not (
+            entry["from"] is not None
+            and entry["to"] is not None
+            and 0 < entry["from"] <= entry["to"]
+            and numbers.get(entry["series"])
+            and (entry["from"] > max(numbers[entry["series"]]) or entry["to"] < min(numbers[entry["series"]]))
+        )
+    ]
     out = []
     for entry in listed:
         doubtful = entry["from"] is None or entry["to"] is None or entry["from"] > entry["to"]
@@ -270,7 +365,9 @@ def instruments(reading: dict, listed_type: str, listed_title: str | None = None
         ),
         listed_title or "",
     )
-    kind = next((k for pattern, k in TITLE_KIND if pattern.search(title)), TYPES.get(listed_type, "other"))
+    kind = file_kind(title, listed_type, listed_title, also_listed)
+    if kind != "act" and own_kind(title) == "act" and listed_title:
+        title = listed_title  # the Act it is made under, printed at its head: its listing names it
     return [
         {
             "kind": kind,
@@ -330,7 +427,9 @@ def documents(reading: dict, record: dict) -> list[tuple[dict, dict]]:
             "suggested_evidence": evidence,
         }
         return [(document, reading)]
-    found = instruments(reading, record.get("type") or "", listed.get("title"))
+    found = instruments(
+        reading, record.get("type") or "", listed.get("title"), record.get("also_listed") or ()
+    )
     if (
         len(found) == 1
         and not found[0].get("number")
@@ -359,6 +458,7 @@ def documents(reading: dict, record: dict) -> list[tuple[dict, dict]]:
             document = {
                 "id": doc_id,
                 "type": "gazette",
+                "front": True,
                 "title": title + (f" ({gazette['date']})" if gazette.get("date") else ""),
                 "jurisdiction": COUNTRY,
                 "language": "en",
@@ -492,7 +592,10 @@ def sc_details(listed: dict, kind: str, url: str) -> tuple[dict, dict]:
 # (schedules past the listed range, the issue's front page as its own record, unmapped ranges whole).
 # 2026-11-03.1: a file read only in part held; the listing's title kept, to tell apart texts of one id.
 # 2026-11-03.2: a file listed twice under one fixed listing (prepare_job.prepare_nigeria).
-PIPELINE = "ng-pdf-2026-11-03.2"
+# 2026-11-05.1: bound volumes cut into their instruments (ingestion.ng_volumes); Gazette records held; a
+# listing's kind kept unless the file says otherwise beyond doubt (file_kind); a contents title printed
+# over two rows one supplement, and one the file does not hold left out.
+PIPELINE = "ng-pdf-2026-11-05.1"
 # The sources whose stored files are PDFs read by the scan-reader job (their other files, the Supreme
 # Court's data records and SEC's circular pages, have no reader here yet).
 PDF_SOURCES = {
@@ -511,24 +614,147 @@ PDF_SOURCES = {
     "naicom",
     "fhc-rules",
 }
-# Files that are bound volumes of many instruments, by fingerprint, held until each is cut from them: filed
-# as one document, they would stand under their first heading ("Interpretation Act, 1964").
+# Files that are bound volumes of many instruments, by fingerprint: what each is, and the short name its
+# instruments' ids carry for the legislature or government that made them (none for the Federation's). Filed
+# as one document, a volume stood under its first heading ("Interpretation Act, 1964"); each is cut into its
+# instruments (ingestion.ng_volumes), what cannot be cut with confidence held. A volume held whole says why.
 VOLUMES = {
-    "3e19292041621f32f47cfb405dcca5c7e8a3037d171cc86b2ad9bda4b0ae8c65": "a bound volume of many laws (Acts of Nigeria 1964)",
-    "55ca52ff91245d7b40175674ff7f8961182930c819367b2df449460843ffb204": "a bound volume of many laws (the Western Region's legislation of 1957)",
-    "cd70e9193eaeacc3e0f3992e97aed36ba37e6986fb5d8a09cf47e6073acabaf5": "a bound volume of many laws (the Eastern Region's laws of 1954)",
-    "2f7401831ad459281cc1ff0c475e3bda15c850d9ac9f3c82f346178e1133ae2f": "a bound volume of many laws (the Colony of Southern Nigeria's regulations, 1908-1912)",
-    "e5bc7dbf787fac44a76d192b1eb45d24ca9a90edc5d06424d28dcf002925706e": "a bound volume of many laws (Northern Nigeria's Proclamations 1-9 of 1910)",
-    "b026bbb2a4b9c8a52b46da083e361404b9639c21a80cd3ec6fb088ac7dfdb2d8": "a compendium of many declarations (Western State chieftaincy declarations, Akoko Division)",
+    "3e19292041621f32f47cfb405dcca5c7e8a3037d171cc86b2ad9bda4b0ae8c65": {
+        "what": "a bound volume of many laws (Acts of Nigeria 1964)",
+    },
+    "55ca52ff91245d7b40175674ff7f8961182930c819367b2df449460843ffb204": {
+        "what": "a bound volume of many laws (the Western Region's legislation of 1957)",
+        "issuer": "wr",
+    },
+    "cd70e9193eaeacc3e0f3992e97aed36ba37e6986fb5d8a09cf47e6073acabaf5": {
+        "what": "a bound volume of many laws (the Eastern Region's laws of 1954)",
+        "issuer": "er",
+    },
+    "2f7401831ad459281cc1ff0c475e3bda15c850d9ac9f3c82f346178e1133ae2f": {
+        "what": "a bound volume of many laws (the Colony of Southern Nigeria's regulations, 1908-1912)",
+        "issuer": "csn",
+    },
+    "e5bc7dbf787fac44a76d192b1eb45d24ca9a90edc5d06424d28dcf002925706e": {
+        "what": "a bound volume of many laws (Northern Nigeria's Proclamations 1-9 of 1910)",
+        "issuer": "nn",
+    },
+    # Held whole on the owner's word: its declarations print no number, most a page each.
+    "b026bbb2a4b9c8a52b46da083e361404b9639c21a80cd3ec6fb088ac7dfdb2d8": {
+        "what": "a compendium of many declarations (Western State chieftaincy declarations, Akoko Division)",
+        "held": "a compendium of many declarations (Western State chieftaincy declarations, Akoko Division)",
+    },
 }
+# Gazette records are not reviewed (owner): a file of many issues and notices, and an issue's own front page,
+# are held, with the reason, until their notices are cut from them.
+GAZETTE_HELD = (
+    "a Gazette file of many issues and notices, out of the review queue until it is cut into its instruments"
+)
+FRONT_PAGE_HELD = (
+    "a Gazette issue's own front page (its contents and the notice publishing its supplements), out of the "
+    "review queue with the Gazette records"
+)
+
+
+def volume_id(instrument: dict, issuer: str | None) -> str:
+    """An instrument cut from a volume, by its printed number: ng-act-11-1964 (a Lagos Act's "1964, No. III"
+    ng-act-iii-1964), ng-ln-24-1964 (Legal Notice 24 of 1964), ng-wr-law-12-1957 (Western Region Law No. 12 of
+    1957), ng-wr-ln-4-1957 (W.R.L.N. 4 of 1957), ng-nn-proclamation-2-1910, ng-csn-rule-3-1912."""
+    word = {"ln": "ln", "rule": "rule" if instrument["kind"] == "rules" else "regulation"}.get(
+        instrument["series"], instrument["kind"]
+    )
+    prefix = f"ng-{issuer}-" if issuer else "ng-"
+    return f"{prefix}{word}-{_slug(instrument['number'])}-{instrument['year']}"
+
+
+def volume_documents(reading: dict, record: dict, sha: str, volume: dict, unread: int = 0):
+    """A volume's documents (manifest document, reading) for each instrument cut from it, the entries held
+    with their reasons, and the runs of pages left out, as ingestion.ng_volumes cuts it."""
+    from ingestion import ng_volumes
+
+    found = ng_volumes.cut(reading, unread)
+    issuer = volume.get("issuer")
+    listed = (record.get("listed") or {}).get("title") or ""
+    taken: set[str] = set()
+
+    def unique(doc_id: str, pages: list[int]) -> str:
+        if doc_id in taken and pages:
+            doc_id = f"{doc_id}-pages-{pages[0]}-{pages[-1]}"
+        taken.add(doc_id)
+        return doc_id
+
+    def printed(entry: dict) -> str | None:
+        numbers = [n for p in entry["pages"] for n in [ng_volumes.printed_number(by_page[p])] if n]
+        if not numbers:
+            return None
+        first, last = numbers[0], numbers[-1]
+        return " ".join(map(str, first)).strip() + (
+            "" if first == last else "–" + " ".join(map(str, last)).strip()
+        )
+
+    by_page = {page["page"]: page for page in reading["pages"]}
+    out = []
+    for instrument in found["instruments"]:
+        document = {
+            "id": unique(volume_id(instrument, issuer), instrument["pages"]),
+            "type": instrument["kind"],
+            "title": instrument["title"],
+            "jurisdiction": COUNTRY,
+            "language": "en",
+            "url": record.get("url"),
+            "pages": [instrument["pages"][0], instrument["pages"][-1]],
+            "number": instrument["number"],
+            "year": int(instrument["year"]),
+            # Cut from a volume: the reviewer confirms its first and last pages are its own.
+            "cut_from_volume": {"title": listed, "what": volume["what"]},
+            **({"printed_pages": printed(instrument)} if printed(instrument) else {}),
+            **(
+                {"listed_in_volume": instrument["listed_in_volume"]}
+                if instrument.get("listed_in_volume")
+                else {}
+            ),
+        }
+        out.append((document, part(reading, instrument["pages"])))
+    held = []
+    for entry in found["held"]:
+        pages = entry["pages"]
+        doc_id = (
+            volume_id(entry, issuer)
+            if entry.get("number") and entry.get("year") and entry["kind"] != "other"
+            else f"ng-volume-{sha[:12]}-" + (f"pages-{pages[0]}-{pages[-1]}" if pages else "unread")
+        )
+        held.append(
+            {
+                "id": unique(doc_id, pages),
+                "title": entry["title"] or listed,
+                "type": entry["kind"] if entry["kind"] != "other" else record.get("type"),
+                "url": record.get("url"),
+                "source_object": f"sources/{COUNTRY}/{record['source']}/{sha}.pdf",
+                "reason": entry["reason"],
+                **({"pages": [pages[0], pages[-1]]} if pages else {}),
+                **({"number": entry["number"], "year": int(entry["year"])} if entry.get("number") else {}),
+                "cut_from_volume": {"title": listed, "what": volume["what"]},
+            }
+        )
+    return out, held, found["left"]
+
+
+def _also_listed(items: dict) -> dict[str, set]:
+    """The types each stored file is listed under, by fingerprint (a source lists some files twice)."""
+    out: dict[str, set] = {}
+    for record in items.values():
+        if record.get("sha256"):
+            out.setdefault(record["sha256"], set()).add(record.get("type"))
+    return out
 
 
 def prepare_pdfs(store, items: dict, chosen: list[str], collection, log=print) -> dict:
     """Each chosen stored PDF whose Layout Parser reading is in the bucket, into the collection
     (nicn.BucketCollection with this PIPELINE): its documents, an index naming the readings used, so a
     file is prepared again once its OCR reading arrives. A file not yet read waits; one read only in part
-    is held; one that fails is noted and the rest go on."""
+    is held, but for a bound volume's instruments the Layout Parser has read; a Gazette record is held; one
+    that fails is noted and the rest go on."""
     counts = {"prepared": 0, "documents": 0, "waiting": 0, "skipped_done": 0, "held": 0, "failed": 0}
+    listings = _also_listed(items)
     for item_id in chosen:
         record = items[item_id]
         sha = record.get("sha256")
@@ -551,11 +777,14 @@ def prepare_pdfs(store, items: dict, chosen: list[str], collection, log=print) -
             ocr = json.loads(store.get(check)) if used["ocr"] else None
             source_object = f"sources/{COUNTRY}/{record['source']}/{sha}.pdf"
             read, whole = len(docai["pages"]), len(ocr["pages"]) if ocr else 0
-            reason = VOLUMES.get(sha) or (
-                f"the Layout Parser read only {read} of its {whole} pages" if whole > read else None
+            volume = VOLUMES.get(sha)
+            reason = (volume or {}).get("held") or (
+                f"the Layout Parser read only {read} of its {whole} pages"
+                if whole > read and not volume
+                else None
             )
+            title = (record.get("listed") or {}).get("title") or ""
             if reason:
-                title = (record.get("listed") or {}).get("title") or ""
                 held = {
                     "id": f"ng-{_slug(record.get('type') or 'file')}-{_slug(title or sha[:12])[:90]}",
                     "title": title,
@@ -572,8 +801,34 @@ def prepare_pdfs(store, items: dict, chosen: list[str], collection, log=print) -
             reading = cloud_reading(docai, ocr)
             sidecar_name = source_object[: -len(".pdf")] + ".json"
             sidecar = json.loads(store.get(sidecar_name)) if store.exists(sidecar_name) else {}
+            record = {
+                **record,
+                "also_listed": sorted(t for t in listings.get(sha, set()) - {record.get("type")} if t),
+            }
+            if volume:
+                found, held, left = volume_documents(reading, record, sha, volume, max(0, whole - read))
+            else:
+                found, held, left = documents(reading, record), [], []
             entries = []
-            for document, part_reading in documents(reading, record):
+            for document, part_reading in found:
+                if document["type"] == "gazette":
+                    # A Gazette record: held, not reviewed, until its notices are cut from it.
+                    held.append(
+                        {
+                            "id": document["id"],
+                            # A file of many issues by its listing's name: its first heading says nothing of the rest.
+                            "title": document["title"]
+                            if document.get("front")
+                            else title or document["title"],
+                            "type": "gazette",
+                            "url": record.get("url"),
+                            "source_object": source_object,
+                            "reason": FRONT_PAGE_HELD if document.get("front") else GAZETTE_HELD,
+                            "pages": document["pages"],
+                            **({"issue": document["issue"]} if document.get("issue") else {}),
+                        }
+                    )
+                    continue
                 provenance = {
                     "url": record.get("url"),
                     "final_url": sidecar.get("final_url") or record.get("url"),
@@ -588,9 +843,13 @@ def prepare_pdfs(store, items: dict, chosen: list[str], collection, log=print) -
                 }
                 document = {**document, "summary": part_reading["summary"], "source_object": source_object}
                 entries.append(collection.write(document, part_reading, provenance, sha))
-            collection.finish(sha, entries, source=record["source"], readings=used)
+            readings = {**used, "docai_pages": read} if volume and whole > read else used
+            collection.finish(
+                sha, entries, source=record["source"], readings=readings, held=held or None, left=left or None
+            )
             counts["prepared"] += 1
             counts["documents"] += len(entries)
+            counts["held"] += len(held)
         except Exception as error:  # noqa: BLE001 - noted and left for a later run
             counts["failed"] += 1
             log(f"failed {item_id}: {type(error).__name__}: {str(error)[:300]}")
