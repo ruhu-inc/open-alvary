@@ -17,7 +17,7 @@ export const SIZES: Record<string, [number, number]> = {
   consent: [588, 578],
   "apps-list": [1280, 800],
   "monitor-empty": [1280, 800],
-  "monitor-new": [608, 826],
+  "monitor-new": [608, 873],
   "monitor-preview": [558, 145],
   "monitor-inbox": [1280, 800],
   "record-monitor": [417, 280],

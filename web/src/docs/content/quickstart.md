@@ -21,7 +21,7 @@ You will create an API key, search the catalogue and read one record. You need a
 
 3. Copy the key. It is shown only once.
 
-![The new key, blurred, with a Copy button](/guide/key-created.webp)
+![The new key, an example value, with a Copy button](/guide/key-created.webp)
 
 > Note: On a paid or approved plan, owners and admins confirm a second factor before creating keys. The console asks when it's needed; see [Authentication](/docs/authentication#second-factor).
 
