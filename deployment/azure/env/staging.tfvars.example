@@ -29,8 +29,8 @@ auth0_domain      = ""
 console_client_id = ""
 
 # A standby (MAC-12a): no Vespa machine and no GPU; the service searches
-# in PostgreSQL. Both on before staging takes the public domains, the GPU once Azure grants quota (the
-# A10 slice, Standard_NV6ads_A10_v5, is offered in Spain Central only).
+# in PostgreSQL. Both on before staging takes the public domains; the GPU only where the subscription
+# has GPU quota (the A10 slice, Standard_NV6ads_A10_v5, is offered in Spain Central only).
 engine_enabled    = false
 inference_enabled = false
 # inference_gpu   = "none" # the two models on CPUs alone, without GPU quota (much slower; README)
