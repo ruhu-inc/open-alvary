@@ -133,10 +133,13 @@ resource "azurerm_container_app" "public" {
         path = "/secrets"
       }
 
+      # A replica is restarted only when the process stops answering (/livez, which takes no database
+      # connection), so a database that is down or saturated does not get healthy replicas restarted. It
+      # takes traffic while it reads the database (/healthz), which the uptime check reads too.
       liveness_probe {
         transport = "HTTP"
         port      = 8080
-        path      = "/healthz"
+        path      = "/livez"
       }
       readiness_probe {
         transport = "HTTP"
