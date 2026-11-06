@@ -273,7 +273,9 @@ resource "google_iap_web_cloud_run_service_iam_member" "operators" {
 # each run (README, "Workbench operators"):
 #   gcloud run jobs execute <name> --region <region> --args=enrol,someone@example.org,--replace
 # Its default, list, changes nothing. An enrolment code it prints (24 hours, one use) is in the job's
-# log, readable by the project's owners only.
+# log, readable by the project's owners only. It reads the collections as the workbench does, its
+# first collection mounted and the same corpus copies, so "impact" and "carry" compare a new copy
+# with the one operators review.
 resource "google_cloud_run_v2_job" "operators" {
   count               = local.workbench_enabled ? 1 : 0
   name                = "${local.name_prefix}-operators"
@@ -283,9 +285,10 @@ resource "google_cloud_run_v2_job" "operators" {
   template {
     task_count = 1
     template {
-      service_account = google_service_account.workbench.email
-      timeout         = "120s"
-      max_retries     = 0
+      service_account       = google_service_account.workbench.email
+      execution_environment = "EXECUTION_ENVIRONMENT_GEN2" # the collection mount needs it
+      timeout               = "900s"                       # "impact" reads every reading of two copies
+      max_retries           = 0
 
       vpc_access {
         egress = "PRIVATE_RANGES_ONLY"
@@ -309,6 +312,18 @@ resource "google_cloud_run_v2_job" "operators" {
           }
         }
 
+        dynamic "env" {
+          for_each = {
+            ALVARY_REVIEW_STAGING     = local.workbench_env["ALVARY_REVIEW_STAGING"]
+            ALVARY_REVIEW_COLLECTIONS = local.workbench_env["ALVARY_REVIEW_COLLECTIONS"]
+            ALVARY_REVIEW_CACHE       = "/tmp/review-cache"
+            ALVARY_REVIEW_CACHE_MB    = "512"
+          }
+          content {
+            name  = env.key
+            value = env.value
+          }
+        }
         env {
           name = "ALVARY_REVIEW_DATABASE_URL"
           value_source {
@@ -317,6 +332,19 @@ resource "google_cloud_run_v2_job" "operators" {
               version = "latest"
             }
           }
+        }
+
+        volume_mounts {
+          name       = "collection"
+          mount_path = "/data/collection"
+        }
+      }
+
+      volumes {
+        name = "collection"
+        gcs {
+          bucket    = local.collection_bucket
+          read_only = true
         }
       }
     }
