@@ -70,10 +70,10 @@ A key lets your code call the REST API and MCP. Claude, ChatGPT and Codex don't 
 
 ![The Create an API key form: name, type, expiry and Create key](/guide/key-create.webp)
 
-- {1} **Copy** the key. This is the only time it is shown: store it in a password manager or your server's secret store. (It is blurred in this picture.)
+- {1} **Copy** the key. This is the only time it is shown: store it in a password manager or your server's secret store. (The key in this picture is an example, not a real one.)
 - {2} **I've stored it** closes the window.
 
-![The new key, blurred, with a Copy button, a sample request and I've stored it](/guide/key-created.webp)
+![The new key, an example value, with a Copy button, a sample request and I've stored it](/guide/key-created.webp)
 
 Then make your first request, with the key in the Authorization header ([Quickstart](/docs/quickstart)):
 
@@ -188,9 +188,9 @@ On every plan except Starter, webhooks send your monitors' matches to your own H
 
 ![The Add a webhook endpoint form: endpoint URL, description, monitors and Add endpoint](/guide/webhooks-add.webp)
 
-Copy the signing secret: it is shown only once (blurred here). We then send your endpoint a challenge. To answer it, reply to that first POST, of type `endpoint.verification`, with a 2xx status and the body `{"challenge": "<the challenge>"}`. If your endpoint wasn't ready, choose **Verify** later to try again.
+Copy the signing secret: it is shown only once (the one here is an example). We then send your endpoint a challenge. To answer it, reply to that first POST, of type `endpoint.verification`, with a 2xx status and the body `{"challenge": "<the challenge>"}`. If your endpoint wasn't ready, choose **Verify** later to try again.
 
-![The endpoint's signing secret, blurred, and how to verify the endpoint](/guide/webhooks-secret.webp)
+![The endpoint's signing secret, an example value, and how to verify the endpoint](/guide/webhooks-secret.webp)
 
 Each endpoint has **Verify**, **Send test**, **Deliveries** (what was sent and how it answered), **Rotate secret** and **Delete**. **How to receive deliveries** on the page has sample code.
 
