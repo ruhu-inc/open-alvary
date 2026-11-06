@@ -269,6 +269,12 @@ variable "workbench_entra_client_id" {
   default     = ""
 }
 
+variable "render_image" {
+  description = "The page renderer's image (release.sh render). Empty: no renderer, and the workbench draws pages in its own container as before. Set: the renderer is made (render.tf) and the workbench draws pages there and nowhere else."
+  type        = string
+  default     = ""
+}
+
 variable "ingestion_image" {
   description = "The ingestion jobs' image; empty until ingestion moves (phase 5)."
   type        = string

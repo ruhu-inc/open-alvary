@@ -52,6 +52,11 @@ output "egress_address" {
   value       = azurerm_public_ip.egress.ip_address
 }
 
+output "render_url" {
+  description = "The page renderer, reachable inside the Container Apps environment only (render.tf); null while render_image is empty."
+  value       = local.render_enabled ? local.render_env["ALVARY_RENDER_URL"] : null
+}
+
 output "ingestion_identity" {
   description = "Google's workload identity provider admits this principal only (README, Google from Azure)."
   value = {

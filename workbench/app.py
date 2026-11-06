@@ -26,7 +26,7 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from ingestion import settings
+from ingestion import render, settings
 from schema import record as R
 from schema.jurisdictions import registry as jurisdiction_registry
 from workbench import access as access_section
@@ -639,6 +639,8 @@ def create_app(
             image = library.image(act_id, page)
         except FileNotFoundError as error:
             raise HTTPException(404, str(error)) from error
+        except render.Failed as error:
+            raise HTTPException(502, str(error)) from error
         return FileResponse(
             image, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"}
         )
