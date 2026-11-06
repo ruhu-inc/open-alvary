@@ -10,7 +10,8 @@ direct way, but these processes run threads (a web server's, or a job's pool), a
 fork and exec can deadlock the child when they do.
 
 This limits damage; it does not isolate. A tool still runs as this user on this network, and a separate
-service holding no secrets, with no outbound network, would isolate it further.
+service holding no secrets, with no outbound network, would isolate it further: the workbench's pages are
+drawn by one (ingestion/render.py), which runs its tool through this helper too.
 """
 
 import os

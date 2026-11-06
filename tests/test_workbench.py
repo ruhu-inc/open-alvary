@@ -212,6 +212,17 @@ def test_a_document_says_where_to_check_it_against_its_source(world, tmp_path):
     assert browser.get(f"/api/documents/{ACT}/original.pdf").content == b"%PDF-1.4\n"
 
 
+def test_a_page_the_renderer_could_not_draw_is_a_bad_gateway_with_its_reason(world, monkeypatch):
+    from ingestion import render
+
+    def failed(act_id, page):
+        raise render.Failed("The page renderer answered 422: pdftoppm could not draw page 1")
+
+    monkeypatch.setattr(world[1], "image", failed)
+    answer = signed_in(world, "reviewer@example.org").get(f"/api/documents/{ACT}/pages/1/image")
+    assert answer.status_code == 502 and "could not draw page 1" in answer.json()["message"]
+
+
 def test_a_deployed_collection_shows_its_prepared_page_images_without_the_pdf(tmp_path, monkeypatch):
     # The workbench upload carries readings and page images, never PDFs (deployment/gcp/workbench.sh).
     monkeypatch.delenv("ALVARY_REVIEW_COLLECTIONS", raising=False)

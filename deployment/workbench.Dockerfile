@@ -1,5 +1,6 @@
 # The review workbench on Cloud Run (deployment/gcp/workbench.sh). Page images are drawn on demand
-# by pdftoppm in this container, which is the sandbox (ALVARY_RENDER=direct); Liberation and DejaVu
+# by pdftoppm in this container (ALVARY_RENDER=direct), or, where Terraform has made the page renderer
+# (render_image), by that service alone (ALVARY_RENDER=service); Liberation and DejaVu
 # stand in for the Times New Roman and Arial that Gazette PDFs use without embedding. Source PDFs,
 # readings and images fetched from the corpus bucket are cached in /tmp, kept within
 # ALVARY_REVIEW_CACHE_MB (Cloud Run's /tmp is the instance's memory).

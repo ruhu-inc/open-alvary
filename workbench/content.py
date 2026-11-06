@@ -14,13 +14,8 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from ingestion import first_collection, layout_parser, native
-from ingestion.tools import GIB, MIB, run_tool
+from ingestion import first_collection, layout_parser, native, render
 from workbench.store import canonical_json
-
-# One page at 150 dpi, on an instance of 2 GiB: a file that wants more fails, and the instance stays up.
-RENDER_MEMORY = 3 * GIB // 2
-RENDER_WRITTEN = 64 * MIB  # /tmp is memory there too
 
 KINDS = {"heading", "paragraph", "list_item", "table"}
 MARK_TYPES = {"bold", "italic", "underline", "superscript", "subscript"}
@@ -329,12 +324,13 @@ class Library:
         return json.loads(self._here(act_id, ".native.json").read_text())
 
     def image(self, act_id: str, page: int) -> Path:
-        """A legible page image (150 dpi), rendered once: in the sealed tools container here, or, in
-        a deployed workbench whose own container is the sandbox (ALVARY_RENDER=direct), by
-        pdftoppm there. Images of a corpus collection's pages are shared by the documents of one
-        source file and kept in the bounded cache. A collection in private staging uses the images
-        prepared beside its readings, and needs the PDF only to render one that is missing: its
-        upload to a deployed workbench carries no PDFs."""
+        """A legible page image (150 dpi), rendered once: in the sealed tools container here; in a
+        deployed workbench, by the page renderer, a service holding no secrets (ALVARY_RENDER=service,
+        ingestion/render.py), and never in the workbench itself; or, where the workbench's own container
+        is the sandbox (ALVARY_RENDER=direct), by pdftoppm there. Images of a corpus collection's pages
+        are shared by the documents of one source file and kept in the bounded cache. A collection in
+        private staging uses the images prepared beside its readings, and needs the PDF only to render
+        one that is missing: its upload to a deployed workbench carries no PDFs."""
         manifest, staging = self._where(act_id)
         pdf = self.original(act_id) if manifest.get("_remote") else None  # fetched from the bucket
         folder = staging / "review-images" / (pdf.stem if pdf is not None else act_id)
@@ -346,17 +342,19 @@ class Library:
                 pass  # a prepared image on a read-only mount is not in the cache
             return path
         pdf = pdf or self.original(act_id)
-        if os.environ.get("ALVARY_RENDER") == "direct":
+        mode = os.environ.get("ALVARY_RENDER")
+        if mode == "service":
+            url = os.environ.get("ALVARY_RENDER_URL")
+            if not url:
+                raise render.Failed(
+                    "ALVARY_RENDER=service needs ALVARY_RENDER_URL: pages are drawn nowhere else"
+                )
             folder.mkdir(parents=True, exist_ok=True)
-            run_tool(
-                ["pdftoppm", "-r", "150", "-jpeg", "-jpegopt", "quality=85", "-singlefile"]
-                + ["-f", str(page), "-l", str(page), str(pdf), str(folder / f"page-{page}")],
-                check=True,
-                capture_output=True,
-                timeout=120,
-                memory=RENDER_MEMORY,
-                written=RENDER_WRITTEN,
-            )
+            render.fetch(url, pdf, page, path, audience=os.environ.get("ALVARY_RENDER_AUDIENCE"))
+            trim_cache()
+        elif mode == "direct":
+            folder.mkdir(parents=True, exist_ok=True)
+            render.draw(pdf, page, path)
             trim_cache()
         else:
             if not shutil.which("docker"):
