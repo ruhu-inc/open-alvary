@@ -203,6 +203,36 @@ def test_the_ocr_check_as_the_scan_reader_stores_it_words_and_boxes_only():
     assert max(lines.values()) > 1
 
 
+def test_a_statutory_instrument_is_typed_by_its_title_and_keeps_its_id():
+    """A front page listing Statutory Instruments: one whose title is of rules is rules, one of an order an
+    order, any other a regulation; each keeps its ng-si id (before 2026-11-06 all were regulations)."""
+    supplements = [
+        ("21", "Example Court Rules, 2024", "A10-11", ["EXAMPLE COURT RULES, 2024", "1. These Rules apply."]),
+        (
+            "22",
+            "Example Ports Order, 2024",
+            "A12-13",
+            ["EXAMPLE PORTS ORDER, 2024", "1. This Order applies."],
+        ),
+        (
+            "23",
+            "Example Fees Regulations, 2024",
+            "A14-15",
+            ["EXAMPLE FEES REGULATIONS, 2024", "1. They apply."],
+        ),
+    ]
+    issue_reading = gazette(supplements)
+    contents = issue_reading["pages"][0]["nodes"][-1]
+    contents["header_rows"][0][0]["text"] = "S. I. No."
+    record = {"source": "nln-repository", "type": "regulation", "url": "u", "listed": {}}
+    found = ng_documents.documents(ng_documents.cloud_reading(issue_reading, None), record)
+    assert [(d["id"], d["type"]) for d, _ in found if not d.get("front")] == [
+        ("ng-si-21-2024", "rules"),
+        ("ng-si-22-2024", "order"),
+        ("ng-si-23-2024", "regulation"),
+    ]
+
+
 def test_the_structure_rules_follow_the_type_and_a_regulation_has_its_own():
     from workbench import content, publication
 

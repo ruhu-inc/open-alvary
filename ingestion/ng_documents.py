@@ -21,11 +21,13 @@ same layout:
 - its type: its listing's, unless the file says otherwise beyond doubt (file_kind): its front page lists it
   as an Act, or its first heading is the title of an instrument of another kind that the listing's title
   does not contradict;
-- its structure rules: an Act or a constitutional alteration is ng/act (ng-federal-act-1);
-  a Supreme Court judgment or ruling ng/judgment or ng/ruling (judgment-paragraphs-1); a
-  regulation, order, rules, guideline, circular or practice direction has no rules yet, so its
-  structure is one node with the error no_structure_rules, which blocks its approval until rules
-  are written from real texts (TXP-03, DAT-05);
+- its structure rules (workbench.structure.RULES, TXP-03): an Act or a constitutional alteration is ng/act
+  (ng-federal-act-1); a Supreme Court judgment or ruling ng/judgment or ng/ruling (judgment-paragraphs-1); a
+  regulation, order, rules or practice direction ng-subsidiary-1, a guideline or circular ng-guidance-1; a
+  bound volume's Law, Ordinance, Proclamation, notice, bye-laws, instrument or declaration ng-colonial-1. A
+  Statutory Instrument a Gazette's front page lists is a regulation unless its title is of rules or an order
+  (si_kind). A type of no rules (a gazette, "other") has one node with the error no_structure_rules, which
+  blocks its approval until rules are written from real texts (DAT-05);
 - its id: an Act ng-act-<number>-<year> ("ng-act-8-2022"), a Statutory Instrument
   ng-si-<number>-<year>, a notice ng-gn-<number>-<year>; else the type and its title's slug; a
   Supreme Court judgment ng-sc-<suit number>-<date delivered>. Different texts that come to one id
@@ -249,6 +251,14 @@ def own_kind(title: str) -> str | None:
     return None if kind is None or NOT_OWN_TITLE.search(title) else kind
 
 
+def si_kind(title: str) -> str:
+    """A Statutory Instrument a Gazette's front page lists: the kind its title is of where it is rules or an
+    order ("Supreme Court Rules, 2024", "… Order, 2024"), else a regulation. Before 2026-11-06 every one was a
+    regulation, the Supreme Court's and the National Industrial Court's rules among them."""
+    kind = own_kind(title)
+    return kind if kind in ("rules", "order") else "regulation"
+
+
 def file_kind(title: str, listed_type: str, listed_title: str | None = None, also_listed=()) -> str:
     """A file's kind: its listing's, unless the file says otherwise beyond doubt. Before 2026-11-05 a first
     heading naming an Act overrode any listing, and 11 documents were filed as Acts against theirs: an
@@ -311,7 +321,7 @@ def instruments(
         out.append(
             {
                 **entry,
-                "type": {"act": "act", "si": "regulation", "gn": "gazette_notice"}.get(
+                "type": {"act": "act", "si": si_kind(entry.get("title") or ""), "gn": "gazette_notice"}.get(
                     entry["kind"], "other"
                 ),
                 "pages": held,
@@ -388,6 +398,8 @@ def document_id(instrument: dict) -> str:
     prefix = {"act": "act", "regulation": "si", "gazette_notice": "gn"}.get(
         instrument["type"], instrument["type"]
     )
+    if instrument.get("kind") == "si":
+        prefix = "si"  # a Statutory Instrument, whatever its kind: ng-si-21-2024, the Supreme Court Rules
     if number and year:
         return f"ng-{prefix}-{int(number)}-{year[-1]}"
     return f"ng-{_slug(instrument['type'])}-{_slug(instrument.get('title') or 'untitled')[:90]}"
@@ -595,7 +607,9 @@ def sc_details(listed: dict, kind: str, url: str) -> tuple[dict, dict]:
 # 2026-11-05.1: bound volumes cut into their instruments (ingestion.ng_volumes); Gazette records held; a
 # listing's kind kept unless the file says otherwise beyond doubt (file_kind); a contents title printed
 # over two rows one supplement, and one the file does not hold left out.
-PIPELINE = "ng-pdf-2026-11-05.1"
+# 2026-11-06.1: a Statutory Instrument a front page lists typed rules or an order where its title is one
+# (si_kind), its id unchanged.
+PIPELINE = "ng-pdf-2026-11-06.1"
 # The sources whose stored files are PDFs read by the scan-reader job (their other files, the Supreme
 # Court's data records and SEC's circular pages, have no reader here yet).
 PDF_SOURCES = {

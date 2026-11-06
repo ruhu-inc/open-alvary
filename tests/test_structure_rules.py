@@ -67,6 +67,7 @@ def test_documents_with_rules_keep_exactly_the_structure_they_had(document, page
         *[({"id": f"rw-{kind}-1-en", "jurisdiction": "rw", "type": kind}, "rw-treaty-1") for kind in structure.RW_TREATIES],
         *[({"id": f"ng-{kind}-1", "jurisdiction": "ng", "type": kind}, "ng-subsidiary-1") for kind in ("regulation", "order", "rules", "practice_direction")],
         *[({"id": f"ng-{kind}-1", "jurisdiction": "ng", "type": kind}, "ng-guidance-1") for kind in ("guideline", "circular")],
+        *[({"id": f"ng-{kind}-1-1957", "jurisdiction": "ng", "type": kind}, "ng-colonial-1") for kind in structure.NG_COLONIAL_TYPES],
         ({"id": "aa-eac-act-2005-1", "jurisdiction": "aa-eac", "type": "act"}, "eac-act-1"),
         ({"id": "ke-act-2019-24", "type": "act"}, "ke-act-1"),
         ({"id": "za-act-2013-4", "jurisdiction": "za", "type": "act"}, "za-act-1"),

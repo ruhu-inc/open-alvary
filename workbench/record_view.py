@@ -1038,6 +1038,17 @@ FAMILY_OF_TYPE = {
 }
 
 
+# The record's kind of a Nigerian collection's type named otherwise (ingestion.ng_volumes.KINDS): a bound
+# volume's legal notices, bye-laws and instruments, and the declarations made under a Law, which the
+# Regions published as legal notices.
+RECORD_KIND = {
+    "notice": "legal_notice",
+    "bye_laws": "by_law",
+    "instrument": "statutory_instrument",
+    "declaration": "legal_notice",
+}
+
+
 def family_for(kind: str | None) -> str | None:
     """The record's family for a kind: the one written for it, else the only family listing it."""
     if not kind:
@@ -1077,8 +1088,10 @@ def from_legacy(details: dict, absent: dict) -> tuple[dict, dict]:
         link["kind"] == "amends" and "constitution" in link["target"].lower() for link in relations
     )
     kind = details.get("document_type", "act")
+    kind = RECORD_KIND.get(kind, kind)
     # A kind DETAILS-1 does not list (a Nigerian collection's rules, practice direction, guideline or
-    # circular) is filed in the only family listing it, as the reader's suggestions are (family_for).
+    # circular, a bound volume's Law or Ordinance) is filed in the only family listing it, as the reader's
+    # suggestions are (family_for).
     values["identity.family"] = "constitution" if constitutional else family_for(kind) or "official_document"
     values["identity.type"] = (
         "constitutional_amendment"
