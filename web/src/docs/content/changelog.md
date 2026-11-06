@@ -7,6 +7,8 @@ Changes that affect how you use the API and the MCP server, newest first. New fi
 
 ## 6 November 2026
 
+- A record's `document_type` can be `treaty`: a treaty, convention, protocol, charter or agreement between states, which was `other`, as each is next published, so `type=treaty` finds them. In [Retrieve evidence](/docs/api/retrieve-evidence) a treaty's `instrument_rank` stays 5, with `other`: where a treaty stands among a country's laws differs from country to country.
+- Records of guidelines and other guidance, and of circulars, have `document_type` `guidance`, no longer `other` (a circular was `regulation`), as each is next published.
 - [Resolve a citation](/docs/api/resolve-citation) and [Retrieve evidence](/docs/api/retrieve-evidence) read a provision numbered by decimals by its own number, `reg. 19.6.1(a)`, and a rule of a court's rules within its Order, whose rules restart in each Order: `Order 5, r. 1(2)`, `Order 5 rule 1`. Parts of texts so numbered are cited the same way.
 
 ## 4 November 2026

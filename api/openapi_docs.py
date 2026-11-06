@@ -1076,7 +1076,7 @@ FIELDS: dict[str, dict[str, str]] = {
     "EvidenceAuthority": {
         "document_type": "The record's document type.",
         "instrument_rank": "The instrument's place in the hierarchy, 0 highest (constitution 0, Act 1, "
-        "subsidiary legislation 2, guidance 3).",
+        "subsidiary legislation 2, guidance 3, gazette 4, a treaty or any other record 5).",
         "court_relation": "For a decision, the ranking signal: how its court's decisions bear on the courts "
         "of the jurisdiction asked about generally, from a reviewed relation of its court register. "
         "`binding` (precedent binds) ranks first within a band; `prevails_on_matter` (precedence on a "
@@ -1330,7 +1330,8 @@ FIELDS: dict[str, dict[str, str]] = {
         "jurisdiction_id": "Its jurisdiction, such as `ng` or `rw`.",
         "authority_id": "The authority that issued it, such as a legislature or ministry.",
         "title": "The title as published.",
-        "document_type": "`constitution`, `act`, `regulation`, `judgment`, `gazette`, `guidance` or `other`.",
+        "document_type": "`constitution`, `act`, `regulation`, `judgment`, `gazette`, `guidance`, `treaty` or "
+        "`other`.",
         "canonical_url": "The official source (see `url_kind`).",
         "url_kind": "What `canonical_url` is: `document` (the file itself), `landing_page` (the official "
         "page for it) or `discovery` (an official listing where it can be found).",

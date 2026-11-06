@@ -283,7 +283,8 @@ def from_workbench(
 
 # ---------- into the public catalogue ----------
 # The catalogue's document type of each record family (schema.record.FAMILIES); every other family is
-# "other".
+# "other". Guidelines and the rest of soft law are guidance, as are circulars, the one kind of executive
+# instrument that directs without legislating (KIND_TYPES).
 DOCUMENT_TYPES = {
     "constitution": "constitution",
     "legislation": "act",
@@ -291,11 +292,19 @@ DOCUMENT_TYPES = {
     "executive_instrument": "regulation",
     "judgment": "judgment",
     "gazette": "gazette",
+    "soft_law": "guidance",
+    "treaty": "treaty",
 }
+KIND_TYPES = {"circular": "guidance"}
+
+
+def document_type(family: str | None, kind: str | None) -> str:
+    """The catalogue's document type, which the text decision names, of a record of this family and kind."""
+    return KIND_TYPES.get(kind or "") or DOCUMENT_TYPES.get(family or "", "other")
 
 
 def _document_type(record) -> str:
-    return DOCUMENT_TYPES.get(record.identity.family, "other")
+    return document_type(record.identity.family, record.identity.type)
 
 
 def _slug(text: str) -> str:
@@ -728,7 +737,7 @@ def _put(corpus, name, model):
 
 
 # ---------- the owner's text decision (TXP-07) ----------
-TEXT_TYPES = ("constitution", "act", "regulation", "judgment", "gazette", "guidance", "other")
+TEXT_TYPES = ("constitution", "act", "regulation", "judgment", "gazette", "guidance", "treaty", "other")
 
 
 def text_decision_path(jurisdiction: str) -> Path:

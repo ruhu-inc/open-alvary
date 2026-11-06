@@ -63,10 +63,11 @@ def decisions(jurisdiction: str) -> dict:
 
 
 def kind_of(now: dict) -> str:
-    """The text decision's kind for a document: its details' family, as publishing reads it."""
+    """The text decision's kind for a document: its details' family and kind, as publishing reads them."""
     from operations import publish
 
-    return publish.DOCUMENT_TYPES.get((now.get("view") or {}).get("family"), "other")
+    view = now.get("view") or {}
+    return publish.document_type(view.get("family"), view.get("kind"))
 
 
 def standing(act: dict, now: dict, status: dict | None, decided: dict) -> dict:

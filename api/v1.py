@@ -78,7 +78,9 @@ from schema.public import (
 PUBLIC_PATHS = frozenset({"/openapi.json", "/quota-policy", "/tiers"})
 # Paths in another class of the credential gate: bulk downloads need a plan that includes bulk.
 CLASSES = (("/bulk/", "bulk"),)
-DocumentType = Literal["constitution", "act", "regulation", "judgment", "gazette", "guidance", "other"]
+DocumentType = Literal[
+    "constitution", "act", "regulation", "judgment", "gazette", "guidance", "treaty", "other"
+]
 # A BCP 47 language tag, such as en, fr or en-NG.
 LANGUAGE = Query(None, min_length=2, max_length=35, pattern=r"^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$")
 PLACE = re.compile(r"[a-z]{2}(?:-[a-z0-9]{1,12})?")  # a court register's jurisdiction (schema.record)

@@ -43,7 +43,11 @@ NOT_IN_FORCE = 0.8
 NOT_IN_FORCE_STATUSES = frozenset({"repealed", "superseded", "historical"})
 # The instrument hierarchy shared by the jurisdiction profiles assessed so far (0 is highest). A
 # judgment's authority is its court's (CPR-04), not a document type's.
-INSTRUMENT_RANK = {"constitution": 0, "act": 1, "regulation": 2, "guidance": 3, "gazette": 4, "other": 5}
+# A treaty's place differs from one country to another (above the laws where it binds as made, nothing until
+# a law makes it law in others), so it ranks with the records of no other type, as it did when it was one.
+INSTRUMENT_RANK = {
+    "constitution": 0, "act": 1, "regulation": 2, "guidance": 3, "gazette": 4, "other": 5, "treaty": 5,
+}  # fmt: skip
 # A decision's court relation to the queried jurisdiction (CPR-04 court register, api.courts.relation):
 # binding first, and with it a rule of precedence on a matter, which the relation answers only on a
 # question of that matter; then persuasive. A ruling that binds only the court that referred a question,

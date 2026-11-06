@@ -107,6 +107,7 @@ export const DOCUMENT_TYPES: Record<string, string> = {
   judgment: "Judgment",
   gazette: "Gazette",
   guidance: "Guidance",
+  treaty: "Treaty",
   other: "Other",
 };
 export const LEGAL_STATUS: Record<string, string> = {
