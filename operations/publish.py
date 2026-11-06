@@ -24,8 +24,8 @@ before it looks at a decision: a missing or expired decision stops new publicati
 A correction read from the same official file replaces the text it corrects. A text read from an earlier
 official file stays as history for citations to it (TXP-04) while its document has a current approval.
 Names withheld in a sensitive case take down every text of the work, for a reason that is not told, and
-its record too while what is public, its official link included, still names someone withheld; what else
-changed waits for a later run.
+its record too while what is public still names someone withheld, its official link and what the change log
+still tells of it included; what else changed waits for a later run.
 
 When it holds back. A run reads every approval before it writes anything: if it cannot read them it
 publishes nothing, takes nothing down and fails. It does the same on an empty read of the approvals beside
@@ -359,6 +359,16 @@ def named_in_link(link: str | None, names: list[str]) -> bool:
 def _spelt(text: str) -> list[str]:
     plain = unicodedata.normalize("NFKD", unquote_plus(text)).encode("ascii", "ignore").decode().lower()
     return re.findall(r"[a-z0-9]+", plain)
+
+
+def names_anyone(texts, names: list[str], links=()) -> bool:
+    """Whether what is public now names a withheld party: a whole name as it was withheld, a word of one
+    (still_named), or either in a link."""
+    return bool(names) and (
+        any(withhold(text, names) != text for text in texts if text)
+        or still_named(texts, names)
+        or any(named_in_link(link, names) for link in links)
+    )
 
 
 def catalogue_entries(item: Approved, decision: dict) -> dict:
@@ -1474,11 +1484,12 @@ def read_country(review, library, review_store, jurisdiction: str, ids: set[str]
     return Reading(jurisdiction, {i: library.act(i) for i in ids}, approved, waiting, texts)
 
 
-def account_for(corpus: Corpus, reading: Reading, previous: dict[str, dict]) -> None:
+def account_for(corpus: Corpus, reading: Reading, previous: dict[str, dict], told=lambda works: {}) -> None:
     """Add to a country's reading what its documents alone cannot say. A text or a record a run published
     whose document is no longer looked at comes down; a record no run published has no status, and is left
-    alone. A public record that still names someone now withheld comes down too, approval or no approval, and
-    whether or not what would replace it can be published: it returns without the name at a later run."""
+    alone. A public record that still names someone now withheld comes down too (still_naming), approval or
+    no approval, and whether or not what would replace it can be published: it returns without the name at a
+    later run."""
     note_absent(corpus, reading.jurisdiction, reading.texts)
     works = {reading.work(i) for i in reading.documents}
     for document, status in previous.items():
@@ -1490,19 +1501,51 @@ def account_for(corpus: Corpus, reading: Reading, previous: dict[str, dict]) -> 
             reading.left[document] = status["work"]
             if status["work"] not in works:
                 reading.waiting.add(status["work"])
+    for work in still_naming(corpus, reading.approved, told):
+        reading.waiting.add(work)
+        reading.texts.withheld.add(work)
+
+
+def still_naming(corpus: Corpus, approved: list[Approved], told=lambda works: {}) -> set[str]:
+    """The public records whose details now withhold a name that something public still gives: the record's
+    title, citation, summary, official link or an alias, or what the change log still tells of it (``told``,
+    changes.feed.Feed.told_of), its own events or another record's that name it. Such a record comes down in
+    confidence, and that is what stops the log telling anything announced before (changes.feed)."""
     sources = {s.id: s for s in corpus.sources}
     public = {r.source_id for r in corpus.rights if r.metadata_public}
-    for item in reading.approved:
-        names = withheld_names(item.record)
-        if not names or item.work not in public or item.work not in sources:
-            continue
-        source = sources[item.work]
-        cited = (c.value for c in corpus.citations if c.source_id == item.work)
-        if still_named([source.title, source.citation, source.summary, *cited], names) or named_in_link(
-            str(source.canonical_url), names
+    unnamed = {
+        item.work: names
+        for item in approved
+        if (names := withheld_names(item.record)) and item.work in public and item.work in sources
+    }
+    logged = told(set(unnamed))
+    found = set()
+    for work, names in unnamed.items():
+        source = sources[work]
+        cited = [c.value for c in corpus.citations if c.source_id == work]
+        said = logged.get(work) or {"words": [], "links": []}
+        if names_anyone(
+            [source.title, source.citation, source.summary, *cited, *said["words"]],
+            names,
+            links=[str(source.canonical_url), *said["links"]],
         ):
-            reading.waiting.add(item.work)
-            reading.texts.withheld.add(item.work)
+            found.add(work)
+    return found
+
+
+def told_by(store):
+    """What the public change log still tells of records (changes.feed.Feed.told_of), for account_for: a
+    catalogue in PostgreSQL keeps one, a pilot's SQLite file none."""
+
+    def told(works: set[str]) -> dict[str, dict[str, list[str]]]:
+        if not works or store.engine.dialect.name != "postgresql":
+            return {}
+        from changes.feed import Feed
+
+        with store.engine.connect() as conn:
+            return Feed(conn, None, keyed=True).told_of(works)
+
+    return told
 
 
 def publish_country(
@@ -1656,7 +1699,7 @@ def run(review, library, review_store, public_store, log: PublicationLog, *, all
         for country in sorted(countries):
             ids = {i for i, d in listed.items() if d.get("jurisdiction") == country}
             reading = read_country(review, library, review_store, country, ids)
-            account_for(corpus, reading, previous)
+            account_for(corpus, reading, previous, told_by(public_store))
             readings.append(reading)
         planned = {
             reading.jurisdiction: planned_take_downs(
@@ -1852,7 +1895,14 @@ def main(argv=None) -> int:
         texts = Texts()
         approved, waiting = from_workbench(review, library, review_store, args.jurisdiction, into=texts)
         store = Store(engine_for())
-        inferred, public = planned_take_downs(store.load(), {a.work for a in approved}, waiting, texts)
+        corpus = store.load()
+        # As in a run: a public record that still names someone now withheld comes down, in confidence.
+        naming = still_naming(corpus, approved, told_by(store))
+        waiting |= naming
+        texts.withheld |= naming
+        approved = [item for item in approved if item.work not in naming]
+        inferred, public = planned_take_downs(corpus, {a.work for a in approved}, waiting, texts)
+        del corpus
         refusal = refused_take_downs(
             args.jurisdiction, inferred, public, args.allow_take_downs, command="records"
         )

@@ -1077,6 +1077,7 @@ def named_judgment(
     title="Ada Bello v Example Services Limited",
     url="https://www.judiciary.gov.rw/9",
     party="Ada Bello",
+    relations=(),
 ):
     """A fictional judgment whose title names a party, who may be marked withheld."""
     return DocumentRecord(
@@ -1088,6 +1089,7 @@ def named_judgment(
         expressions=(Expression(language="en", this_text=True),),
         publications=(Publication(kind="law_report", name="Court site", url=url),),
         events=(Event(kind="delivered", when=Dated(value=date(2026, 3, 1))),),
+        relations=relations,
         status=Status(legal="decided"),
         text=TextInfo(
             form="court_copy", version=Version(label="As delivered"),
@@ -1230,6 +1232,23 @@ def test_a_public_record_whose_link_names_someone_withheld_stays_down_until_the_
     collection.docs["rw-case"]["record"] = named_judgment(True, title=NEUTRAL)
     collection.run(store)
     assert public_records(store) == ["rw-case"]
+
+
+def test_a_public_title_naming_someone_withheld_by_short_words_comes_down_too(
+    both_decisions, store, tmp_path
+):
+    """No word of "Ado Obi" is long enough to be told from any other on its own, but the whole name is."""
+    title = "Ado Obi v Example Services Limited"
+    collection = Collection(tmp_path)
+    collection.add("rw-case", "rw-case", record=named_judgment(title=title, party="Ado Obi"))
+    collection.run(store)
+    collection.docs["rw-case"].update(
+        anonymisation="partial", record=named_judgment(True, title=title, party="Ado Obi")
+    )
+    assert collection.run(store)["take_downs"]["rw"]["taken_down"] == 1
+    assert public_records(store) == []
+    collection.run(store)
+    assert public_records(store) == ["rw-case"] and title_of(store) == "[Withheld] v Example Services Limited"
 
 
 def test_a_text_is_built_only_to_publish_it_one_country_at_a_time(
