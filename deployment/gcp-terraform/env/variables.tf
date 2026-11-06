@@ -203,43 +203,49 @@ variable "vespa_image" {
 }
 
 variable "inference_enabled" {
-  description = "The GPU machine for the embedder and reranker. Off until the project has GPU quota in the region: the service then runs on the lexical arms without a reranker, and says so in every pack."
+  description = "The machine for the embedder and reranker, with a GPU or without one (inference_gpu). Off until the project has quota for its GPU in the region: the service then runs on the lexical arms without a reranker, and says so in every pack."
   type        = bool
   default     = true
 }
 
 variable "inference_running" {
-  description = "Whether the GPU machine runs. false stops it and keeps its disk (no GPU or machine charges while stopped): the service then searches on the lexical arms without a reranker and says so in every pack. Starting it again is setting this to true and applying; Google may have no T4 free in the zone for a while (a stockout), and then the apply says so: try again later, or another zone (inference_zone)."
+  description = "Whether the inference machine runs. false stops it and keeps its disk (no GPU or machine charges while stopped): the service then searches on the lexical arms without a reranker and says so in every pack. Starting it again is setting this to true and applying; Google may have no T4 free in the zone for a while (a stockout), and then the apply says so: try again later, or another zone (inference_zone)."
   type        = bool
   default     = true
 }
 
 variable "inference_gpu" {
-  description = "The GPU: t4 (n1-standard-4 with one NVIDIA T4, Turing; the owner's choice, as on Azure) or l4 (g2-standard-4, one NVIDIA L4, Ada). The project needs quota for it in the region."
+  description = "The GPU: t4 (n1-standard-4 with one NVIDIA T4, Turing; the owner's choice, as on Azure), l4 (g2-standard-4, one NVIDIA L4, Ada), or none: the same two models on the CPUs of an n2-standard-8 (8 vCPUs, 32 GiB), at the same private address and API, much slower (README). The project needs quota for a GPU in the region. A machine that exists keeps its boot image and start-up script, so changing this on one replaces it: apply with -replace=google_compute_instance.inference[0]."
   type        = string
   default     = "t4"
   validation {
-    condition     = contains(["l4", "t4"], var.inference_gpu)
-    error_message = "inference_gpu must be l4 or t4."
+    condition     = contains(["l4", "t4", "none"], var.inference_gpu)
+    error_message = "inference_gpu must be l4, t4 or none."
   }
 }
 
 variable "inference_vm_size" {
-  description = "The GPU machine's type. Empty: g2-standard-4 for an L4, n1-standard-4 for a T4."
+  description = "The inference machine's type. Empty: g2-standard-4 for an L4, n1-standard-4 for a T4, n2-standard-8 without a GPU (an x86 machine: the CPU build of text-embeddings-inference is for x86-64). Without a GPU, keep 32 GiB: each model warms up on one input of 8,192 tokens."
   type        = string
   default     = ""
 }
 
 variable "inference_boot_image" {
-  description = "A Deep Learning VM image with NVIDIA's driver installed (Ubuntu 22.04). Families are retired over time: list the current ones with gcloud compute images list --project deeplearning-platform-release --filter='family~common-cu.*ubuntu-2204'."
+  description = "The inference machine's boot image. Empty: with a GPU, a Deep Learning VM image with NVIDIA's driver installed (Ubuntu 22.04; families are retired over time: list the current ones with gcloud compute images list --project deeplearning-platform-release --filter='family~common-cu.*ubuntu-2204'); without one, Ubuntu 22.04 LTS."
   type        = string
-  default     = "projects/deeplearning-platform-release/global/images/family/common-cu129-ubuntu-2204-nvidia-580"
+  default     = ""
 }
 
 variable "tei_image" {
-  description = "Hugging Face text-embeddings-inference for the chosen GPU. Empty: turing-1.8 (Turing, for the T4; experimental upstream) or 89-1.8 (Ada, for the L4). Pin a release whose notes list Qwen3-Embedding (1.8 and later)."
+  description = "Hugging Face text-embeddings-inference for the chosen GPU. Empty: turing-1.8 (Turing, for the T4; experimental upstream), 89-1.8 (Ada, for the L4) or, without a GPU, cpu-1.8.3 (the same release, built for x86-64 CPUs). Pin a release whose notes list Qwen3-Embedding (1.8 and later)."
   type        = string
   default     = ""
+}
+
+variable "reranker_on_cpu" {
+  description = "Without a GPU (inference_gpu = none), whether the service sends its questions to the reranker on the CPUs. Off by default: there a question's 50 candidates take far longer than the reranker's 5-second limit (retrieval/rerank.py), so each question would wait it out and be ranked without it (README). The machine runs the reranker either way, so it can be measured there. Ignored with a GPU, whose reranker is always used."
+  type        = bool
+  default     = false
 }
 
 variable "embedder" {

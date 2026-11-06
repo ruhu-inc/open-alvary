@@ -40,25 +40,33 @@ locals {
 
   database = "open_alvary"
 
-  # The GPU machine for each GPU, and the text-embeddings-inference build for its architecture.
+  # The inference machine for each GPU, or for none (the CPUs alone), with its boot image and the
+  # text-embeddings-inference build for its architecture.
   gpu = {
-    l4 = { machine = "g2-standard-4", accelerator = null, tei = "ghcr.io/huggingface/text-embeddings-inference:89-1.8" }
-    t4 = { machine = "n1-standard-4", accelerator = "nvidia-tesla-t4", tei = "ghcr.io/huggingface/text-embeddings-inference:turing-1.8" }
+    l4   = { machine = "g2-standard-4", accelerator = null, boot = local.gpu_boot_image, tei = "ghcr.io/huggingface/text-embeddings-inference:89-1.8" }
+    t4   = { machine = "n1-standard-4", accelerator = "nvidia-tesla-t4", boot = local.gpu_boot_image, tei = "ghcr.io/huggingface/text-embeddings-inference:turing-1.8" }
+    none = { machine = "n2-standard-8", accelerator = null, boot = "projects/ubuntu-os-cloud/global/images/family/ubuntu-2204-lts", tei = "ghcr.io/huggingface/text-embeddings-inference:cpu-1.8.3" }
   }[var.inference_gpu]
-  inference_vm_size = var.inference_vm_size != "" ? var.inference_vm_size : local.gpu.machine
-  tei_image         = var.tei_image != "" ? var.tei_image : local.gpu.tei
+  gpu_boot_image       = "projects/deeplearning-platform-release/global/images/family/common-cu129-ubuntu-2204-nvidia-580"
+  inference_on_gpu     = var.inference_gpu != "none"
+  inference_vm_size    = var.inference_vm_size != "" ? var.inference_vm_size : local.gpu.machine
+  inference_boot_image = var.inference_boot_image != "" ? var.inference_boot_image : local.gpu.boot
+  tei_image            = var.tei_image != "" ? var.tei_image : local.gpu.tei
 
   # What the retrieval service is told (retrieval/engine.py, retrieval/vectors.py, retrieval/rerank.py):
-  # the engine only when its machine exists, the models only when the GPU machine does.
+  # the engine only when its machine exists, the models only when the inference machine does.
   retrieval_env = merge(
     var.engine_enabled ? {
       OPEN_ALVARY_ENGINE_URL        = "http://${local.engine_ip}:8080"
       OPEN_ALVARY_ENGINE_CONFIG_URL = "http://${local.engine_ip}:19071"
     } : {},
-    # The models only while the GPU machine runs: stopped, the service searches on the lexical arms
-    # without a reranker and says so, rather than waiting on a machine that does not answer.
+    # The models only while the inference machine runs: stopped, the service searches on the lexical arms
+    # without a reranker and says so, rather than waiting on a machine that does not answer. Without a GPU,
+    # the reranker only when reranker_on_cpu says so.
     var.inference_enabled && var.inference_running ? {
-      OPEN_ALVARY_EMBEDDER_URL     = "http://${local.inference_ip}:8080/v1"
+      OPEN_ALVARY_EMBEDDER_URL = "http://${local.inference_ip}:8080/v1"
+    } : {},
+    var.inference_enabled && var.inference_running && (local.inference_on_gpu || var.reranker_on_cpu) ? {
       OPEN_ALVARY_RERANKER_URL     = "http://${local.inference_ip}:8081"
       OPEN_ALVARY_RERANKER_PROFILE = "${var.reranker.model}@${substr(var.reranker.revision, 0, 12)}"
     } : {},

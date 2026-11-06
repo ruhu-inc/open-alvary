@@ -8,6 +8,10 @@
 # place of Azure's driver extension; cloud-init adds Docker and NVIDIA's container toolkit where the
 # image lacks them. A GPU machine cannot move during Google's host maintenance, so it stops and
 # starts again (on_host_maintenance TERMINATE); the services come back with it.
+#
+# Without a GPU (inference_gpu = none) the same two models run on the machine's CPUs, at the same
+# address and on the same ports, from text-embeddings-inference's CPU build: no driver, no toolkit, a
+# plain Ubuntu image, and the machine moves during host maintenance without stopping.
 
 resource "google_compute_address" "inference" {
   count        = var.inference_enabled ? 1 : 0
@@ -29,7 +33,7 @@ resource "google_compute_instance" "inference" {
 
   boot_disk {
     initialize_params {
-      image = var.inference_boot_image
+      image = local.inference_boot_image
       size  = 128 # images and model weights
       type  = "pd-balanced"
     }
@@ -45,7 +49,7 @@ resource "google_compute_instance" "inference" {
   }
 
   scheduling {
-    on_host_maintenance = "TERMINATE"
+    on_host_maintenance = local.inference_on_gpu ? "TERMINATE" : "MIGRATE"
     automatic_restart   = true
   }
 
@@ -54,17 +58,19 @@ resource "google_compute_instance" "inference" {
     network_ip = google_compute_address.inference[0].address
   }
 
-  metadata = {
+  metadata = merge({
     user-data = templatefile("${path.module}/inference-cloud-init.yaml.tftpl", {
       image    = local.tei_image
       ip       = local.inference_ip
       embedder = var.embedder
       reranker = var.reranker
+      gpu      = local.inference_on_gpu
     })
-    install-nvidia-driver  = "True" # the Deep Learning VM images' own switch, if the driver is not yet in place
     enable-oslogin         = "TRUE"
     block-project-ssh-keys = "TRUE"
-  }
+    }, local.inference_on_gpu ? {
+    install-nvidia-driver = "True" # the Deep Learning VM images' own switch, if the driver is not yet in place
+  } : {})
 
   service_account {
     email  = google_service_account.machines.email

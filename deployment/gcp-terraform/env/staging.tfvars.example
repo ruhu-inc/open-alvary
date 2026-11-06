@@ -39,7 +39,8 @@ existing_corpus_bucket = "open-alvary-corpus"
 existing_review_bucket = "open-alvary-ingestion-review-collection"
 
 # Vespa and the GPU machine (one T4) are on. The project needs T4 quota in europe-west1 first
-# (README, Before the first apply); until it is granted, set inference_enabled = false.
+# (README, Before the first apply); until it is granted, set inference_enabled = false, or
+# inference_gpu = "none" for the two models on CPUs alone (much slower; README).
 engine_enabled    = true
 inference_enabled = true
 inference_gpu     = "t4"

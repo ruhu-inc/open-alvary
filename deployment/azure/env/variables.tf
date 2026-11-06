@@ -174,21 +174,37 @@ variable "vespa_image" {
 }
 
 variable "inference_enabled" {
-  description = "The GPU machine for the embedder and reranker. Off until the region grants GPU quota: the service then runs on the lexical arms without a reranker, and says so in every pack."
+  description = "The machine for the embedder and reranker, with a GPU or without one (inference_gpu). Off until the region grants quota for its GPU: the service then runs on the lexical arms without a reranker, and says so in every pack."
   type        = bool
   default     = true
 }
 
-variable "inference_vm_size" {
-  description = "One GPU for the embedder and the reranker (NCasT4_v3: one T4, 16 GB). Needs GPU quota in the region."
+variable "inference_gpu" {
+  description = "The GPU: t4 (NC4as T4 v3, one NVIDIA T4), or none: the same two models on the CPUs of a D8s v5 (8 vCPUs, 32 GiB), at the same private address and API, much slower (README). A machine that exists keeps its start-up script, so changing this on one replaces it: apply with -replace=azurerm_linux_virtual_machine.inference[0]."
   type        = string
-  default     = "Standard_NC4as_T4_v3"
+  default     = "t4"
+  validation {
+    condition     = contains(["t4", "none"], var.inference_gpu)
+    error_message = "inference_gpu must be t4 or none."
+  }
+}
+
+variable "inference_vm_size" {
+  description = "The inference machine's size. Empty: Standard_NC4as_T4_v3 for the T4 (one T4, 16 GB; needs GPU quota in the region), Standard_D8s_v5 without a GPU (an x86 machine: the CPU build of text-embeddings-inference is for x86-64). Without a GPU, keep 32 GiB: each model warms up on one input of 8,192 tokens."
+  type        = string
+  default     = ""
 }
 
 variable "tei_image" {
-  description = "Hugging Face text-embeddings-inference for Turing GPUs (T4), at a release that serves Qwen3-Embedding."
+  description = "Hugging Face text-embeddings-inference, at a release that serves Qwen3-Embedding. Empty: turing-1.8 for the T4 (Turing GPUs), cpu-1.8.3 without a GPU (the same release, built for x86-64 CPUs)."
   type        = string
-  default     = "ghcr.io/huggingface/text-embeddings-inference:turing-1.8"
+  default     = ""
+}
+
+variable "reranker_on_cpu" {
+  description = "Without a GPU (inference_gpu = none), whether the service sends its questions to the reranker on the CPUs. Off by default: there a question's 50 candidates take far longer than the reranker's 5-second limit (retrieval/rerank.py), so each question would wait it out and be ranked without it (README). The machine runs the reranker either way, so it can be measured there. Ignored with a GPU, whose reranker is always used."
+  type        = bool
+  default     = false
 }
 
 variable "embedder" {

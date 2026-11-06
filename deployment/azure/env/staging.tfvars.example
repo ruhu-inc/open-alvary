@@ -33,6 +33,7 @@ console_client_id = ""
 # A10 slice, Standard_NV6ads_A10_v5, is offered in Spain Central only).
 engine_enabled    = false
 inference_enabled = false
+# inference_gpu   = "none" # the two models on CPUs alone, without GPU quota (much slower; README)
 
 # Empty until a generation passes its gates (RSV-12): the service runs on the lexical arms.
 vector_profile = ""
