@@ -98,12 +98,18 @@ def sign_in(
     code="c",
     ago=0,
 ):
-    """``ago``: how long since the person really signed in at the provider; None leaves the claim out."""
-    start = browser.get(
-        "/auth/start", params={"purpose": purpose, "method": "google", "return_to": return_to}
-    )
-    assert start.status_code == 303
-    query = parse_qs(urlparse(start.headers["location"]).query)
+    """``ago``: how long since the person really signed in at the provider; None leaves the claim out. A link
+    starts as the console's page starts one, and comes back to Security."""
+    if purpose == "link":
+        start = start_link(browser)
+        assert start.status_code == 200
+        query = parse_qs(urlparse(start.json()["redirect"]).query)
+    else:
+        start = browser.get(
+            "/auth/start", params={"purpose": purpose, "method": "google", "return_to": return_to}
+        )
+        assert start.status_code == 303
+        query = parse_qs(urlparse(start.headers["location"]).query)
     claims = {
         "iss": ISSUER,
         "aud": "console",
@@ -119,6 +125,19 @@ def sign_in(
         claims["auth_time"] = time.time() - ago
     fake.codes[code] = claims
     return browser.get("/auth/callback", params={"state": query["state"][0], "code": code}), query
+
+
+def start_link(browser, method="google", **headers):
+    """Adding a sign-in method, as the Security page asks for it: a change, with the session's CSRF token."""
+    csrf = browser.get("/api/v1/me").json()["csrf"]
+    return browser.post(
+        "/api/v1/me/identities/link", json={"method": method}, headers={"X-CSRF-Token": csrf, **headers}
+    )
+
+
+def flows(accounts):
+    with accounts.engine.connect() as conn:
+        return conn.scalar(text(f"SELECT count(*) FROM {accounts._t(conn, 'sign_in_flow')}"))
 
 
 def onboard(browser, fake, **kwargs):
@@ -704,28 +723,23 @@ def age_session(accounts, minutes):
         )
 
 
-LINK = {"purpose": "link", "method": "google", "return_to": "/console/security"}
-LINK_START = "/console/auth/start?purpose=link&method=google&return_to=%2Fconsole%2Fsecurity"
-
-
 def test_linking_needs_a_fresh_sign_in_and_comes_back_after_it(console):
     accounts, fake, app = console
     browser = client(app)
     onboard(browser, fake)
     age_session(accounts, 11)
-    refused = browser.get("/auth/start", params=LINK)
-    target = urlparse(refused.headers["location"])
-    assert refused.status_code == 303 and target.path == "/console/auth/start"  # not the provider
-    query = parse_qs(target.query)
-    assert query["purpose"] == ["reauthenticate"] and query["return_to"] == [LINK_START]
-    assert "method" not in query  # any method already linked will do
-    with accounts.engine.connect() as conn:
-        assert not conn.scalar(text(f"SELECT count(*) FROM {accounts._t(conn, 'sign_in_flow')}"))
-    done, _ = sign_in(browser, fake, purpose="reauthenticate", return_to=LINK_START, code="r")
-    assert done.headers["location"] == LINK_START
-    next_step = browser.get(LINK_START.removeprefix("/console"))
-    assert next_step.headers["location"].startswith(ISSUER + "authorize")
-    assert parse_qs(urlparse(next_step.headers["location"]).query)["connection"] == ["google-oauth2"]
+    refused = start_link(browser)
+    assert refused.status_code == 401 and refused.json()["error"]["code"] == "reauthentication_required"
+    assert flows(accounts) == 0 and "oa_console_flow" not in browser.cookies
+    # Any method already linked will do; the page comes back to Security and asks again.
+    done, _ = sign_in(browser, fake, purpose="reauthenticate", return_to="/console/security", code="r")
+    assert done.headers["location"] == "/console/security"
+    started = start_link(browser)
+    assert started.status_code == 200 and started.headers["cache-control"] == "no-store"
+    target = started.json()["redirect"]
+    assert target.startswith(ISSUER + "authorize")
+    assert parse_qs(urlparse(target).query)["connection"] == ["google-oauth2"]
+    assert flows(accounts) == 1 and browser.cookies.get("oa_console_flow", path="/console/auth")
 
 
 def test_linking_needs_the_second_factor_when_any_organisation_of_the_person_does(console):
@@ -735,11 +749,32 @@ def test_linking_needs_the_second_factor_when_any_organisation_of_the_person_doe
     accounts.grant_access(
         "op", organisation, tier="pilot", scope={"all": True}, source="manual", ends_at=None, reason="Pilot"
     )
-    refused = browser.get("/auth/start", params=LINK)
-    query = parse_qs(urlparse(refused.headers["location"]).query)
-    assert query["purpose"] == ["second_factor"] and query["return_to"] == [LINK_START]
+    refused = start_link(browser)
+    assert refused.status_code == 403 and refused.json()["error"]["code"] == "second_factor_required"
     sign_in(browser, fake, purpose="second_factor", amr=["mfa"], code="m")
-    assert browser.get("/auth/start", params=LINK).headers["location"].startswith(ISSUER + "authorize")
+    assert start_link(browser).json()["redirect"].startswith(ISSUER + "authorize")
+
+
+def test_a_link_starts_only_from_the_console_itself(console):
+    """Adding a sign-in method is a change like any other: a link, a form or a script on another site cannot
+    start one, nor can a request without the session's CSRF token."""
+    accounts, fake, app = console
+    browser = client(app)
+    onboard(browser, fake)
+    linked = len(browser.get("/api/v1/me/identities").json()["identities"])
+    for params in (
+        {"purpose": "link", "method": "google", "return_to": "/console/security"},
+        {"purpose": "link"},
+    ):
+        followed = browser.get("/auth/start", params=params)
+        assert followed.headers["location"] == "/console/sign-in?error=invalid", params
+    assert browser.post("/api/v1/me/identities/link", json={"method": "google"}).status_code == 403
+    other_site = start_link(browser, origin="https://elsewhere.example")
+    assert other_site.status_code == 403 and other_site.json()["error"]["code"] == "forbidden_origin"
+    assert start_link(browser, method="github").json()["error"]["code"] == "invalid_input"
+    assert flows(accounts) == 0 and "oa_console_flow" not in browser.cookies
+    assert client(app).post("/api/v1/me/identities/link", json={"method": "google"}).status_code == 401
+    assert len(browser.get("/api/v1/me/identities").json()["identities"]) == linked
 
 
 def test_finishing_a_link_leaves_the_session_as_it_was_and_tells_the_person(console):
@@ -859,14 +894,14 @@ def test_parameters_a_browser_adds_to_the_start_change_nothing_asked_of_the_prov
     accounts, fake, app = console
     browser = client(app)
     onboard(browser, fake)
-    started = browser.get(
-        "/auth/start",
-        params=LINK
-        | {"acr_values": "anything", "prompt": "none", "max_age": "999999", "scope": "openid admin"},
-    )
-    query = parse_qs(urlparse(started.headers["location"]).query)
-    assert "acr_values" not in query and query["prompt"] == ["login"] and query["max_age"] == ["0"]
-    assert query["scope"] == ["openid email profile"]
+    added = {"acr_values": "anything", "prompt": "none", "max_age": "999999", "scope": "openid admin"}
+    started = browser.get("/auth/start", params={"purpose": "reauthenticate", "method": "google"} | added)
+    csrf = {"X-CSRF-Token": browser.get("/api/v1/me").json()["csrf"]}
+    linking = browser.post("/api/v1/me/identities/link", json={"method": "google"} | added, headers=csrf)
+    for address in (started.headers["location"], linking.json()["redirect"]):
+        query = parse_qs(urlparse(address).query)
+        assert "acr_values" not in query and query["prompt"] == ["login"] and query["max_age"] == ["0"]
+        assert query["scope"] == ["openid email profile"]
 
 
 def test_a_sign_in_counts_as_fresh_only_from_when_the_person_really_signed_in(console):
@@ -881,7 +916,7 @@ def test_a_sign_in_counts_as_fresh_only_from_when_the_person_really_signed_in(co
     assert session_times(accounts).second_factor_at is None
     headers = {"X-CSRF-Token": browser.get("/api/v1/me").json()["csrf"]}
     assert browser.post("/api/v1/me/export", headers=headers).status_code == 401
-    assert browser.get("/auth/start", params=LINK).headers["location"].startswith("/console/auth/start")
+    assert start_link(browser).json()["error"]["code"] == "reauthentication_required"
     # No time reported: the session works, and sensitive changes ask for a sign-in first.
     browser = client(app)
     sign_in(browser, fake, ago=None, code="n")
@@ -954,6 +989,9 @@ def stepped_world(accounts, fake, app):
 def sensitive(browser, organisation, headers, identity, member, endpoint):
     org = f"/api/v1/organisations/{organisation}"
     return {
+        "add a sign-in method": lambda: browser.post(
+            "/api/v1/me/identities/link", headers=headers, json={"method": "email"}
+        ),
         "unlink": lambda: browser.delete(f"/api/v1/me/identities/{identity}", headers=headers),
         "sign out everywhere": lambda: browser.post("/api/v1/me/sessions/revoke-all", headers=headers),
         "close account": lambda: browser.post(
@@ -976,6 +1014,7 @@ def sensitive(browser, organisation, headers, identity, member, endpoint):
 
 
 SENSITIVE = (
+    "add a sign-in method",
     "unlink",
     "sign out everywhere",
     "close account",

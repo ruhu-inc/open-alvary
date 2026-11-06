@@ -1,7 +1,7 @@
 """The developer console's back end (MAC-08, MAC-10), on the website's origin under /console.
 
-    /console/auth/start      begin a sign-in, fresh sign-in, second factor or link at the provider
-    /console/auth/callback   finish it in the browser that started it, within 10 minutes
+    /console/auth/start      begin a sign-in, fresh sign-in or second factor at the provider
+    /console/auth/callback   finish it, or a link, in the browser that started it, within 10 minutes
     /console/auth/sign-out   end this session
     /console/api/v1/...      the console API (machine-access-contracts, "Console endpoints")
     /console/...             the console's page, which reads the address itself
@@ -17,7 +17,8 @@ limited to /console. Every change needs the session's CSRF token and, when the b
 our own Origin. Sensitive actions need a sign-in within the last 10 minutes, and owners and admins
 of an organisation with access also a second factor within the same window (MAC-08). Those times
 come only from signing in with a method the person already had, by when the provider says it really
-happened. Adding a method is itself a sensitive action, and records nothing about the session (F08).
+happened. Adding a method is itself a sensitive action, started as a change (POST
+/console/api/v1/me/identities/link), and records nothing about the session (F08).
 
 A development sign-in exists for a local trial only: it must be switched on explicitly
 (ALVARY_CONSOLE_DEV_LOGIN=1) and answers only on a loopback address from a loopback client.
@@ -60,6 +61,7 @@ CLOCK_SKEW_SECONDS = 60
 REGISTRATION_EMAILS_AN_HOUR = 30
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 RETURN = re.compile(r"^/console(/[A-Za-z0-9/_?=&%.-]*)?$")
+LINKED = "/console/security"  # where adding a sign-in method comes back to
 EMAIL = re.compile(r"[^\s@<>\"']{1,64}@[A-Za-z0-9.-]{1,253}\.[A-Za-z]{2,63}")
 # Provider connections offered at launch (D24); Microsoft waits for its MAC-16 check.
 CONNECTIONS = {"google": "google-oauth2", "email": "email"}
@@ -329,20 +331,16 @@ def create_console_app(
         return_to: str = "/console",
         login_hint: str | None = None,
     ):
-        if purpose not in ("sign_in", "reauthenticate", "second_factor", "link") or (
+        # A link is not started here: a top-level GET can come from any site (link_method).
+        if purpose not in ("sign_in", "reauthenticate", "second_factor") or (
             method is not None and method not in CONNECTIONS
         ):
             return RedirectResponse("/console/sign-in?error=invalid", status_code=303)
         if not RETURN.match(return_to) or len(return_to) > 500:
             return_to = "/console"
         session = request.cookies.get(SESSION_COOKIE)
-        if purpose != "sign_in":
-            live = accounts.resume(session or "")
-            if not live:
-                return RedirectResponse("/console/sign-in?error=signed_out", status_code=303)
-            first = step_up_before_linking(live, method, return_to) if purpose == "link" else None
-            if first:
-                return RedirectResponse(first, status_code=303)
+        if purpose != "sign_in" and not accounts.resume(session or ""):
+            return RedirectResponse("/console/sign-in?error=signed_out", status_code=303)
         if provider is None:
             if dev_login and is_loopback(request):
                 query = urlencode({"purpose": purpose, "return_to": return_to})
@@ -355,6 +353,10 @@ def create_console_app(
             ),
             status_code=303,
         )
+        set_flow(response, request, flow)
+        return response
+
+    def set_flow(response: Response, request: Request, flow: dict) -> None:
         response.set_cookie(
             FLOW_COOKIE,
             flow["browser"],
@@ -364,20 +366,6 @@ def create_console_app(
             secure=secure(request),
             samesite="lax",
         )
-        return response
-
-    def step_up_before_linking(session: dict, method: str | None, return_to: str) -> str | None:
-        """F08: adding a sign-in method asks what a sensitive change asks, and a new method can answer
-        for every organisation of the person. Where to go first, which comes back to start the link."""
-        try:
-            fresh(session, second_factor=needs_second_factor_anywhere(session["person_id"]))
-        except AccountError as needed:
-            link = {"purpose": "link", **({"method": method} if method else {}), "return_to": return_to}
-            back = f"/console/auth/start?{urlencode(link)}"
-            purpose = "second_factor" if needed.code == "second_factor_required" else "reauthenticate"
-            query = {"purpose": purpose, "return_to": back if len(back) <= 500 else return_to}
-            return f"/console/auth/start?{urlencode(query)}"
-        return None
 
     @app.get("/auth/callback")
     def callback(request: Request, state: str = "", code: str = ""):
@@ -634,6 +622,27 @@ def create_console_app(
     @app.get("/api/v1/me/identities")
     def identities(request: Request):
         return {"identities": accounts.identities(guard(request)["person_id"])}
+
+    @app.post("/api/v1/me/identities/link")
+    async def link_method(request: Request):
+        """F08: start adding a sign-in method, bound to this session; where the browser goes next. It is a
+        change, with the session's CSRF token and our own Origin, so no other site can start one. It asks
+        what a sensitive change asks, as a new method can answer for every organisation of the person, and
+        a session that is not fresh gets the same refusal: the page steps up, then asks again."""
+        session = guard(request, write=True)
+        method = (await body(request)).get("method")
+        if not isinstance(method, str) or method not in CONNECTIONS:
+            raise AccountError("invalid_input", 400, "Choose Google or an email code.")
+        fresh(session, second_factor=needs_second_factor_anywhere(session["person_id"]))
+        if provider is None:
+            if dev_login and is_loopback(request):
+                query = urlencode({"purpose": "link", "return_to": LINKED})
+                return {"redirect": f"/console/auth/dev?{query}"}
+            raise AccountError("unavailable", 503, "Sign-in isn't available right now. Try again later.")
+        flow = accounts.begin_flow("link", LINKED, request.cookies.get(SESSION_COOKIE))
+        response = JSONResponse({"redirect": provider.authorize_url(flow, "link", method)})
+        set_flow(response, request, flow)
+        return response
 
     @app.delete("/api/v1/me/identities/{identity_id}")
     def unlink(request: Request, identity_id: str):
