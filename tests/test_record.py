@@ -205,6 +205,28 @@ def test_the_details_screen_edits_each_versions_authority_and_the_language_rule(
     assert original["expressions"][0]["authority"] == "authoritative"
 
 
+@pytest.mark.parametrize(
+    "kind, family, filed",
+    [
+        ("act", "legislation", "act"),
+        ("regulation", "subsidiary_legislation", "regulations"),
+        ("order", "subsidiary_legislation", "order"),
+        # Kinds DETAILS-1 does not list, as the Nigerian collection types them: the only family listing each,
+        # never an official document's "policy" (until 2026-11-06).
+        ("rules", "subsidiary_legislation", "rules"),
+        ("practice_direction", "subsidiary_legislation", "practice_direction"),
+        ("guideline", "soft_law", "guideline"),
+        ("circular", "executive_instrument", "circular"),
+        ("other", "official_document", "other"),
+    ],
+)
+def test_a_nigerian_first_draft_files_each_kind_in_its_family(kind, family, filed):
+    from workbench import record_view as V
+
+    values, _ = V.from_legacy({"document_type": kind}, {})
+    assert (values["identity.family"], values["identity.type"]) == (family, filed)
+
+
 def test_regional_instruments_and_treaties_have_their_own_profiles():
     regional = core(
         identity=R.Identity(

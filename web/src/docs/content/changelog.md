@@ -5,6 +5,10 @@ description: Changes to the API, the MCP server and these docs.
 
 Changes that affect how you use the API and the MCP server, newest first. New fields, values and routes can come at any time; a breaking change comes only as a new version, announced here first. See [Compatibility](/docs/compatibility).
 
+## 6 November 2026
+
+- [Resolve a citation](/docs/api/resolve-citation) and [Retrieve evidence](/docs/api/retrieve-evidence) read a provision numbered by decimals by its own number, `reg. 19.6.1(a)`, and a rule of a court's rules within its Order, whose rules restart in each Order: `Order 5, r. 1(2)`, `Order 5 rule 1`. Parts of texts so numbered are cited the same way.
+
 ## 4 November 2026
 
 - A record's [rights record](/docs/api/get-rights) no longer has `privacy_status`, in the API or in a new release, and `decision.reasons` no longer says where a privacy review stands: a text withdrawn for privacy names nothing, so nothing else says so either. This comes at once, as an exception to the notice [Compatibility](/docs/compatibility) gives for a field removed, because it concerns confidential withdrawals. `approved_content_hashes` is empty while a record's privacy review doesn't clear its texts.

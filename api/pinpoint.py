@@ -16,6 +16,9 @@ annex's article 1 is never the law's own. A Portuguese article's ordinal sign is
 number: "art. 1.º" is "art. 1". The text an amending article quotes has no pinpoint of its own: it is
 words of that article.
 
+A provision numbered decimally is cited by its own number, "reg. 19.6.1(a)" (Nigeria's civil aviation
+regulations); a rules of court's rule within its Order, whose rules restart in each, "Order 5, r. 1(2)".
+
 A judgment's paragraph (judgment-paragraphs-1) is cited by its number in brackets after the neutral
 citation, "[2019] NGSC 4 [12]" or "[2019] NGSC 4 at [12]", or "[2019] NGSC 4, para. 12"; a paragraph
 of a later opinion that numbers its own paragraphs is "op. 2 [4]". "para. 12" alone is read only
@@ -40,8 +43,9 @@ _ALINEA = r"(?:,?\s*(?:alin[ée]a|al)\.?\s*(\d{1,3}|premier)(?:er)?\.?)?"  # "al
 # French words in lower case only, as they are written, so "s. 5 De Beers Act" keeps its title whole.
 _OF = r"(?:of\s+(?:the\s+)?|(?-i:de\s+la\s+|de\s+l['’]\s*|des\s+|du\s+|de\s+))"
 _QUOTE = r"[\"“”'‘’]"
+# A section, regulation or rule, and its decimal number where an instrument numbers so ("reg. 19.6.1(a)").
 SECTION = re.compile(
-    rf"^(?:{_SECTION_LEADS})\.?\s*(\d{{1,4}}[a-z]{{0,2}})\.?\s*{_SUBS}"
+    rf"^(?:{_SECTION_LEADS})\.?\s*(\d{{1,4}}[a-z]{{0,2}}(?:\.\d{{1,3}}){{0,5}})\.?\s*{_SUBS}"
     rf"(?:,?\s*(?:definition\s+of\s+)?{_QUOTE}\s*(.+?)\s*{_QUOTE})?$",
     re.I,
 )
@@ -59,6 +63,12 @@ SCHEDULE = re.compile(
     rf"^(?:({'|'.join(ORDINALS)}|\d{{1,2}}(?:st|nd|rd|th))\s+schedule|(?:schedule|sch)\.?\s*(\d{{1,2}}|[ivxlc]{{1,6}})?)"
     r"\s*(?:,?\s*(?:part|pt)\.?\s*(\d{1,2}|[ivxlc]{1,6}))?"
     rf"\s*(?:,?\s*(?:paragraphs?|paras?|p)\.?\s*(\d{{1,3}}[a-z]?)\.?\s*{_SUBS})?$",
+    re.I,
+)
+# A rules of court's Order, and a rule within it, whose rules restart in each Order: "Order 5", "Order 5,
+# r. 1(2)", "Order 5 rule 1".
+ORDER = re.compile(
+    rf"^order\.?\s*(\d{{1,3}}|[ivxlc]{{1,6}})(?:\s*,?\s*(?:rules?|r)\.?\s*(\d{{1,4}}[a-z]{{0,2}})\.?\s*{_SUBS})?$",
     re.I,
 )
 # A Part or Chapter of an Act outside its schedules: "Part V", "Pt. 5", "Chapter 3", "Chap. III".
@@ -89,7 +99,7 @@ AFTER_NEUTRAL = re.compile(
 # Where a pinpoint may begin within a citation: "NDPA s. 23(1)(a)", "ISA 2025, First Schedule, para. 3".
 _STARTS = re.compile(
     rf"(?:^|(?<=[\s,;(]))(?:{_SECTION_LEADS}|{_ARTICLE_LEADS}|(?:{'|'.join(ORDINALS)}|\d{{1,2}}(?:st|nd|rd|th))\s+schedule"
-    rf"|schedule|sch|part|pt|chapter|chap|ch|{_ANNEX_LEADS})(?=[\s.,\d(]|$)",
+    rf"|schedule|sch|part|pt|chapter|chap|ch|order|{_ANNEX_LEADS})(?=[\s.,\d(]|$)",
     re.I,
 )
 
@@ -163,6 +173,7 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
     schedule = False
     annex: tuple[list[str], str] | None = None  # within an annex: its key and name, before what is in it
     opinion: str | None = None  # within a judgment's opinion: its number, "1" for the first
+    order: tuple[list[str], str] | None = None  # within a rules of court's Order: its key and name
     lead = "reg. " if document_type == "regulation" else "s. "
     named = False  # whether the last part itself is named: a table in s. 23 is not s. 23
     for part in chain:
@@ -188,6 +199,11 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
             number = re.sub(r"^part\s+", "", _printed(part.label), flags=re.I)
             key.append(f"part:{_ordinal(number)}")
             shown += f", Part {number.upper() if _ROMAN.fullmatch(number.casefold()) else number}"
+        elif part.kind == "part" and re.match(r"^order\s", _printed(part.label), re.I) and not schedule:
+            # A rules of court's Order: its rules restart in each, so a rule is cited within it, "Order 5, r. 1".
+            number = _printed(part.label).split()[1]
+            key, shown = [f"order:{_ordinal(number)}"], f"Order {number}"
+            order = (list(key), shown)
         elif part.kind in ("part", "chapter") and part.label and not schedule:
             # "Part V", "Chapter 3": a section or article inside it is cited by its own number.
             word = "Part" if part.kind == "part" else "Chapter"
@@ -198,6 +214,8 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
             shown = f"{word} {number.upper() if _ROMAN.fullmatch(number.casefold()) else number}"
             if annex:  # "Republicação, Chapter II"
                 key, shown = [*annex[0], *key], f"{annex[1]}, {shown}"
+        elif part.kind == "section" and part.label and not schedule and order:
+            key, shown = [*order[0], f"s:{_plain(part.label)}"], f"{order[1]}, r. {_printed(part.label)}"
         elif part.kind == "section" and part.label and not schedule:
             key, shown = [f"s:{_plain(part.label)}"], f"{lead}{_printed(part.label)}"
         elif part.kind == "article" and part.label:
@@ -252,6 +270,10 @@ def read(pinpoint: str) -> tuple[str, ...] | None:
         alinea = (found.group(3) or "").casefold()
         alinea = "1" if alinea == "premier" else _plain(alinea)
         return (f"art:{number.lstrip('0') or number}", *subs(found.group(2)), *([alinea] if alinea else []))
+    found = ORDER.match(value)
+    if found:
+        within = (f"s:{_plain(found.group(2))}", *subs(found.group(3))) if found.group(2) else ()
+        return (f"order:{_ordinal(found.group(1))}", *within)
     found = CONTAINER.match(value)
     if found:
         lead = found.group(1).casefold()
@@ -317,7 +339,7 @@ def split(citation: str) -> list[tuple[str, str, tuple[str, ...]]]:
         pin = " ".join(words[:n]).strip(" ,;")
         work = re.sub(r"^(?:of\s+)?(?:the\s+)?", "", " ".join(words[n:]).strip(" ,;"), flags=re.I)
         key = read(pin)
-        if key is not None and key[0].split(":")[0] in ("s", "art", "sch", "part", "chap", "annex"):
+        if key is not None and key[0].split(":")[0] in ("s", "art", "sch", "part", "chap", "annex", "order"):
             if work and all(f[1] != pin for f in found):
                 found.append((work, pin, key))
             break
