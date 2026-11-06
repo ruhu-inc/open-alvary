@@ -279,24 +279,66 @@ def test_the_http_embedder_sends_a_key_only_when_it_has_one(monkeypatch):
     assert __import__("json").loads(seen[-1].content)["dimensions"] == 8
 
 
+def test_a_query_waits_as_long_as_ever_and_a_batch_of_windows_longer_by_its_size():
+    import httpx
+
+    from retrieval import indexer, vectors
+    from retrieval.vectors import HttpEmbedder, Profile
+
+    waited = []
+
+    def answer(request):
+        waited.append(request.extensions["timeout"]["read"])
+        inputs = __import__("json").loads(request.content)["input"]
+        return httpx.Response(
+            200, json={"data": [{"index": i, "embedding": [1.0] * 8} for i in range(len(inputs))]}
+        )
+
+    profile = Profile.from_dict({"id": "p", "model": "m", "revision": "1", "dims": 8, "embedder": "http"})
+    embedder = HttpEmbedder(profile, url="http://embedder.test", transport=httpx.MockTransport(answer))
+    embedder.embed(["salary"], query=True)
+    embedder.embed(["s. 1"] * indexer.BATCH, query=False)
+    embedder.embed(["s. 1"], query=False)
+    assert waited == [
+        vectors.TIMEOUT_SECONDS,
+        vectors.TIMEOUT_SECONDS + vectors.WINDOW_SECONDS * indexer.BATCH,
+        vectors.TIMEOUT_SECONDS + vectors.WINDOW_SECONDS,
+    ]
+    # A query still gives up in time for the lexical arms to answer within RET-02's deadline.
+    assert vectors.TIMEOUT_SECONDS == 10
+
+
+def test_the_indexer_sends_fewer_windows_a_request_only_when_asked(monkeypatch):
+    from retrieval import indexer
+
+    monkeypatch.delenv("OPEN_ALVARY_EMBEDDER_BATCH", raising=False)
+    assert indexer._batch() == indexer.BATCH == 32
+    for value, size in (("4", 4), ("1", 1), ("0", 1), ("100", indexer.BATCH)):
+        monkeypatch.setenv("OPEN_ALVARY_EMBEDDER_BATCH", value)
+        assert indexer._batch() == size
+
+
 def test_every_input_is_embedded_whole_within_the_servers_limit():
     import re
     from pathlib import Path
 
     import httpx
 
-    from retrieval import vectors
+    from retrieval import indexer, rerank, vectors
     from retrieval.vectors import HttpEmbedder, Profile, fitted, input_bytes
 
-    # Both clouds' GPU machines take the inputs the code allows: MAX_INPUT_TOKENS.
+    # Both clouds' inference machines take the inputs the code allows: MAX_INPUT_TOKENS, and a batch
+    # of windows within the server's default of 32 a request.
     root = Path(__file__).resolve().parents[1]
+    assert indexer.BATCH <= 32
     for cloud in ("gcp-terraform", "azure"):
         template = (root / "deployment" / cloud / "env" / "inference-cloud-init.yaml.tftpl").read_text()
         args = re.search(r'embedder = \{[^}]*args = "([^"]*)"', template).group(1)
         assert args == f"--max-batch-tokens {vectors.MAX_INPUT_TOKENS} --auto-truncate"
-        # The reranker warms up on one input of its model's 8,192 tokens, and never truncates.
-        assert (
-            re.search(r'reranker = \{[^}]*args = "([^"]*)"', template).group(1) == "--max-batch-tokens 8192"
+        # The reranker warms up on one input of its model's 8,192 tokens, never truncates, and takes
+        # every passage of a query's candidates in one request (the server's default refuses over 32).
+        assert re.search(r'reranker = \{[^}]*args = "([^"]*)"', template).group(1) == (
+            f"--max-batch-tokens 8192 --max-client-batch-size {rerank.MAX_CANDIDATES * rerank.PASSAGES}"
         )
     # The longest window, even in four-byte characters, fits an input whole; a longer one is refused.
     base = {"id": "p", "model": "m", "revision": "1", "dims": 8, "embedder": "http"}

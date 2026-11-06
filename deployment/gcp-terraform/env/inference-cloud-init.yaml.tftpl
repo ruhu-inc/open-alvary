@@ -6,18 +6,22 @@
 # The reranker's own limit is 8,192 tokens; it warms up on one such input, not on the server's default
 # batch of two, so the two models fit on a T4 side by side. Its inputs (a question and a passage of at
 # most 2,000 characters each, retrieval.rerank) are far shorter, and one longer is refused, never cut.
+# It takes a query's passages in one request, up to 150 (retrieval.rerank: 50 candidates of 3 passages
+# each), where the server's default refuses more than 32.
 # The inference machine: Docker with NVIDIA's container toolkit, and the two models as services. Each
 # waits for the GPU driver (in the boot image), then serves on the private address only. As
 # deployment/azure/env/inference-cloud-init.yaml.tftpl, but Docker and the toolkit are installed only
 # where the image lacks them (a Deep Learning VM image may carry both), and packages are refreshed,
 # not upgraded: a kernel or driver upgrade under a running GPU leaves it unusable until a reboot, so a
-# new boot image replaces the machine instead.
+# new boot image replaces the machine instead. Without a GPU (gpu false) the machine has Docker alone,
+# and the same services run on its CPUs. There a warm-up holds one 8,192-token input's attention in
+# float32, several gigabytes, so the reranker starts once the embedder answers: never both at once.
 package_update: true
 package_upgrade: false
 packages: [curl, gnupg]
 
 write_files:
-%{ for name, spec in { embedder = { model = embedder.model, revision = embedder.revision, port = 8080, args = "--max-batch-tokens 8192 --auto-truncate" }, reranker = { model = reranker.model, revision = reranker.revision, port = 8081, args = "--max-batch-tokens 8192" } } ~}
+%{ for name, spec in { embedder = { model = embedder.model, revision = embedder.revision, port = 8080, args = "--max-batch-tokens 8192 --auto-truncate" }, reranker = { model = reranker.model, revision = reranker.revision, port = 8081, args = "--max-batch-tokens 8192 --max-client-batch-size 150" } } ~}
   - path: /etc/systemd/system/${name}.service
     content: |
       [Unit]
@@ -25,9 +29,15 @@ write_files:
       After=docker.service
       Requires=docker.service
       [Service]
+%{ if gpu ~}
       ExecStartPre=/usr/bin/nvidia-smi
+%{ endif ~}
+%{ if !gpu && name == "reranker" ~}
+      ExecStartPre=/bin/sh -c 'until curl -fs http://${ip}:8080/health >/dev/null; do sleep 10; done'
+      TimeoutStartSec=30min
+%{ endif ~}
       ExecStartPre=-/usr/bin/docker rm -f ${name}
-      ExecStart=/usr/bin/docker run --rm --name ${name} --gpus all \
+      ExecStart=/usr/bin/docker run --rm --name ${name}${gpu ? " --gpus all" : ""} \
         -p ${ip}:${spec.port}:80 -v /var/models:/data ${image} \
         --model-id ${spec.model} --revision ${spec.revision} ${spec.args}
       ExecStop=/usr/bin/docker stop -t 30 ${name}
@@ -39,11 +49,13 @@ write_files:
 
 runcmd:
   - [sh, -c, "command -v docker >/dev/null || (apt-get update && apt-get install -y docker.io)"]
+%{ if gpu ~}
   - [sh, -c, "command -v nvidia-ctk >/dev/null || curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor --yes -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"]
   - [sh, -c, "command -v nvidia-ctk >/dev/null || curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' > /etc/apt/sources.list.d/nvidia-container-toolkit.list"]
   - [sh, -c, "command -v nvidia-ctk >/dev/null || (apt-get update && apt-get install -y nvidia-container-toolkit)"]
   - [nvidia-ctk, runtime, configure, --runtime=docker]
   - [systemctl, restart, docker]
+%{ endif ~}
   - [mkdir, -p, /var/models]
   - [systemctl, daemon-reload]
   - [systemctl, enable, --now, embedder.service, reranker.service]

@@ -3,6 +3,10 @@
 # retrieval/vectors.py and retrieval/rerank.py speak. Each runs Hugging Face's text-embeddings-
 # inference at the revision the development screen measured, so no query leaves Open Alvary's network.
 # The region needs GPU quota for the machine size (README, "Before the first apply").
+#
+# Without a GPU (inference_gpu = none) the same two models run on the machine's CPUs, at the same
+# address and on the same ports, from text-embeddings-inference's CPU build: no driver extension and
+# no container toolkit.
 
 resource "azurerm_network_interface" "inference" {
   count = var.inference_enabled ? 1 : 0
@@ -26,15 +30,16 @@ resource "azurerm_linux_virtual_machine" "inference" {
   name                            = "${local.name_prefix}-inference"
   location                        = azurerm_resource_group.main.location
   resource_group_name             = azurerm_resource_group.main.name
-  size                            = var.inference_vm_size
+  size                            = local.inference_vm_size
   admin_username                  = "openalvary"
   disable_password_authentication = true
   network_interface_ids           = [azurerm_network_interface.inference[0].id]
   custom_data = base64encode(templatefile("${path.module}/inference-cloud-init.yaml.tftpl", {
-    image    = var.tei_image
+    image    = local.tei_image
     ip       = local.inference_ip
     embedder = var.embedder
     reranker = var.reranker
+    gpu      = local.inference_on_gpu
   }))
   tags = local.common_tags
 
@@ -62,9 +67,9 @@ resource "azurerm_linux_virtual_machine" "inference" {
   }
 }
 
-# NVIDIA's driver, installed and kept by Azure's extension.
+# NVIDIA's driver, installed and kept by Azure's extension, on the GPU machine only.
 resource "azurerm_virtual_machine_extension" "gpu_driver" {
-  count = var.inference_enabled ? 1 : 0
+  count = var.inference_enabled && local.inference_on_gpu ? 1 : 0
 
   name                       = "NvidiaGpuDriverLinux"
   virtual_machine_id         = azurerm_linux_virtual_machine.inference[0].id

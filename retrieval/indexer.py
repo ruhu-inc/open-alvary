@@ -19,6 +19,7 @@ removes the vectors afterwards.
 
 import argparse
 import json
+import os
 import sys
 import uuid
 from datetime import UTC, datetime
@@ -30,7 +31,7 @@ from retrieval.vectors import Profile, Store, embedder_for, fitted, profile_hash
 
 MAX_ATTEMPTS = 3
 LEASE_SECONDS = 600
-BATCH = 32  # windows per embedding request
+BATCH = 32  # windows per embedding request, unless OPEN_ALVARY_EMBEDDER_BATCH asks for fewer (_batch)
 RECOMPUTE_FLOOR = 0.995  # cosine between a stored vector and its recomputation (halfvec rounds)
 ANN_FLOOR = 0.98  # EMB-03's proposed approximate-search recall@20 against exact search
 
@@ -218,6 +219,15 @@ def _prepare_engine(admin: Engine, profile: Profile, engine) -> str:
     return generation_id
 
 
+def _batch() -> int:
+    """Windows per embedding request: BATCH, or fewer where OPEN_ALVARY_EMBEDDER_BATCH says so. A server
+    without a GPU embeds inputs in the order they came, so a question's embedding waits for every window
+    sent before it, and it pads each batch to its longest input; there, one window a request keeps the
+    wait to one window and embeds fastest."""
+    value = os.environ.get("OPEN_ALVARY_EMBEDDER_BATCH")
+    return min(BATCH, max(1, int(value))) if value else BATCH
+
+
 def _lease(engine: Engine, batch: int) -> list[tuple[str, str]]:
     with engine.begin() as conn:
         jobs = _t(conn, "index_job")
@@ -294,9 +304,9 @@ def work(
                 embedder = embedders.get(profile.id) or embedders.setdefault(
                     profile.id, embedder_for(profile)
                 )
-                vectors = []
-                for start in range(0, len(inputs), BATCH):
-                    chunk = inputs[start : start + BATCH]
+                vectors, size = [], _batch()
+                for start in range(0, len(inputs), size):
+                    chunk = inputs[start : start + size]
                     vectors += embedder.embed([i["input"] for i in chunk], query=False)
                 with engine.begin() as conn:
                     store_for(conn, found, searcher).replace(

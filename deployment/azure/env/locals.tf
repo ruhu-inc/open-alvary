@@ -42,6 +42,16 @@ locals {
 
   database = "open_alvary"
 
+  # The inference machine with the T4, or without a GPU (the CPUs alone), and the text-embeddings-
+  # inference build for it.
+  gpu = {
+    t4   = { size = "Standard_NC4as_T4_v3", tei = "ghcr.io/huggingface/text-embeddings-inference:turing-1.8" }
+    none = { size = "Standard_D8s_v5", tei = "ghcr.io/huggingface/text-embeddings-inference:cpu-1.8.3" }
+  }[var.inference_gpu]
+  inference_on_gpu  = var.inference_gpu != "none"
+  inference_vm_size = var.inference_vm_size != "" ? var.inference_vm_size : local.gpu.size
+  tei_image         = var.tei_image != "" ? var.tei_image : local.gpu.tei
+
   # What the retrieval service is told (retrieval/engine.py, retrieval/vectors.py, retrieval/rerank.py).
   retrieval_env = merge(
     var.engine_enabled ? {
@@ -49,7 +59,14 @@ locals {
       OPEN_ALVARY_ENGINE_CONFIG_URL = "http://${local.engine_ip}:19071"
     } : {},
     var.inference_enabled ? {
-      OPEN_ALVARY_EMBEDDER_URL     = "http://${local.inference_ip}:8080/v1"
+      OPEN_ALVARY_EMBEDDER_URL = "http://${local.inference_ip}:8080/v1"
+    } : {},
+    # On CPUs a question's embedding waits behind every window sent before it: one a request (indexer._batch).
+    var.inference_enabled && !local.inference_on_gpu ? {
+      OPEN_ALVARY_EMBEDDER_BATCH = "1"
+    } : {},
+    # Without a GPU, the reranker only when reranker_on_cpu says so.
+    var.inference_enabled && (local.inference_on_gpu || var.reranker_on_cpu) ? {
       OPEN_ALVARY_RERANKER_URL     = "http://${local.inference_ip}:8081"
       OPEN_ALVARY_RERANKER_PROFILE = "${var.reranker.model}@${substr(var.reranker.revision, 0, 12)}"
     } : {},

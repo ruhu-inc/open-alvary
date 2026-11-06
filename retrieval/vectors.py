@@ -39,7 +39,11 @@ WINDOW_CHARS, WINDOW_OVERLAP = 2_000, 200  # about 400-500 tokens of English, ov
 # room for the tokens the server adds, is always embedded whole.
 MAX_INPUT_TOKENS = 8_192
 INPUT_BYTES = MAX_INPUT_TOKENS - 8
-TIMEOUT_SECONDS = 10
+TIMEOUT_SECONDS = 10  # a query's embedding
+# A batch of a text's windows is background work, and has longer: on a machine without a GPU
+# (deployment/*/env/inference.tf, inference_gpu = none) a full window takes seconds, where a GPU takes
+# milliseconds, so a batch of them gets this much more for each window it holds.
+WINDOW_SECONDS = 4
 
 
 @dataclass(frozen=True)
@@ -179,7 +183,8 @@ class HttpEmbedder:
         body = {"model": self.profile.model, "input": inputs}
         if self.profile.request_dims:
             body["dimensions"] = self.profile.dims
-        answer = self.client.post("/embeddings", json=body)
+        timeout = TIMEOUT_SECONDS if query else TIMEOUT_SECONDS + WINDOW_SECONDS * len(inputs)
+        answer = self.client.post("/embeddings", json=body, timeout=timeout)
         answer.raise_for_status()
         data = sorted(answer.json()["data"], key=lambda d: d["index"])
         vectors = [_normalise([float(x) for x in d["embedding"]]) for d in data]
