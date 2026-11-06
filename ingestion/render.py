@@ -18,6 +18,7 @@ end to end: over HTTP/1, Cloud Run takes no request larger than 32 MiB, and a Ga
 `fetch` is the workbench's side of the service.
 """
 
+import json
 import os
 import re
 import subprocess
@@ -160,18 +161,24 @@ def fetch(
     try:
         if audience:
             headers["Authorization"] = f"Bearer {id_token(audience)}"
-        with pdf.open("rb") as body:
-            answer = client.post(
-                f"{url.rstrip('/')}/pages", params={"page": page, "dpi": dpi}, content=body, headers=headers
-            )
+        with (
+            pdf.open("rb") as body,
+            client.stream(
+                "POST",
+                f"{url.rstrip('/')}/pages",
+                params={"page": page, "dpi": dpi},
+                content=body,
+                headers=headers,
+            ) as answer,
+        ):
+            image = within(answer, WRITTEN + 1)  # read no further than the largest image taken
     except httpx.HTTPError as error:
         raise Failed(f"The page renderer could not be reached: {type(error).__name__}") from error
     finally:
         if own:
             client.close()
     if answer.status_code != 200:
-        raise Failed(f"The page renderer answered {answer.status_code}: {reason(answer)}")
-    image = answer.content
+        raise Failed(f"The page renderer answered {answer.status_code}: {reason(image)}")
     if not image.startswith(JPEG) or len(image) > WRITTEN:
         raise Failed("The page renderer answered with something other than a page image")
     # A name of its own: two requests for the same page may arrive together, and each keeps its whole image.
@@ -183,10 +190,20 @@ def fetch(
     return out
 
 
-def reason(answer) -> str:
+def within(answer, limit: int) -> bytes:
+    """An answer's body, read no further than `limit` bytes."""
+    kept = bytearray()
+    for chunk in answer.iter_bytes():
+        kept += chunk
+        if len(kept) >= limit:
+            break
+    return bytes(kept)
+
+
+def reason(body: bytes) -> str:
     """What the service said was wrong (FastAPI's detail), in plain words."""
     try:
-        found = answer.json()
+        found = json.loads(body)
     except ValueError:
         return "no reason given"
     return said(str(found.get("detail", "") if isinstance(found, dict) else "").encode())

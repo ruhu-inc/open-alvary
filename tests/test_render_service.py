@@ -218,6 +218,26 @@ def test_what_the_workbench_takes_back_must_be_a_page_image(tmp_path):
     assert not (tmp_path / "page-1.jpg").exists()
 
 
+def test_an_answer_that_never_ends_is_read_no_further_than_the_largest_image(tmp_path, monkeypatch):
+    monkeypatch.setattr(render, "WRITTEN", MIB)
+    pdf = tmp_path / "issue.pdf"
+    pdf.write_bytes(made_pdf())
+    sent = []
+
+    def endless():
+        yield render.JPEG
+        while True:
+            sent.append(64 * 1024)
+            yield b"x" * (64 * 1024)
+
+    client = httpx.Client(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, content=endless()))
+    )
+    with pytest.raises(render.Failed, match="something other than a page image"):
+        render.fetch(URL, pdf, 1, tmp_path / "page-1.jpg", client=client)
+    assert sum(sent) <= MIB + 64 * 1024
+
+
 def test_an_unreachable_renderer_fails_the_page(tmp_path):
     pdf = tmp_path / "issue.pdf"
     pdf.write_bytes(made_pdf())
