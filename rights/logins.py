@@ -2,9 +2,14 @@
 
 The owner's login (open_alvary) keeps the schema, and only the migrations and these commands use it:
 
-  open_alvary_service    the public service: reads the catalogue and the change log; the console's accounts,
-                         through column grants that leave out key hashes. It writes neither the catalogue
-                         nor the change log.
+  open_alvary_service    the public service's console and the credential gate of its keyed API: the console's
+                         accounts, through column grants that leave out key hashes. Until the catalogue's
+                         login is in use it serves the catalogue too, so it also reads all that one does.
+                         It writes neither the catalogue nor the change log.
+  open_alvary_catalogue  the public service's catalogue: the website's data path, downloads, sitemaps and
+                         what the keyed API reads of the catalogue. It reads what readers may see, writes
+                         admission, bytes and traffic only through their functions, and cannot reach the
+                         accounts schema at all.
   open_alvary_jobs       the worker, daily and terms jobs: monitors, digests, webhooks, seals, purges and the
                          change log's sweep. It never sees a key hash, a session's token or a sign-in flow's
                          secrets, though it removes the expired ones.
@@ -50,7 +55,7 @@ WRITE = "SELECT, INSERT, UPDATE"
 FULL = "SELECT, INSERT, UPDATE, DELETE"
 
 # The catalogue: public records, full texts and rights, which only the code's rights gate filters.
-CATALOGUE = (
+CATALOGUE_TABLES = (
     "languages",
     "jurisdictions",
     "authorities",
@@ -139,12 +144,39 @@ SEALED_SECRET = ("accounts", "webhook_key", "secret_sealed")
 UNSUBSCRIBE_TOKEN = ("accounts", "unsubscribe_token", "token_hash")
 PROVIDER_SUBJECT = ("accounts", "identity", "subject")
 
+# What a reader may be shown: the catalogue, whose rights gate is in the code, and the change log and the search
+# index, worked out from what is public. Nothing of anyone's account.
+READERS_SEE = {"base": _reading(CATALOGUE_TABLES), "changes": _reading(PUBLISHED), "corpus": _reading(FACTS)}
+# What an anonymous request writes, each only through its function: admission's leases and buckets, the byte
+# allowance on texts, and the day's traffic counts.
+ANONYMOUS_WRITES = (
+    "policy.admit(jsonb)",
+    "policy.begin_emission(uuid)",
+    "policy.record_traffic(jsonb)",
+    "policy.release_admission(uuid)",
+    "policy.release_bytes(uuid)",
+    "policy.reserve_bytes(jsonb)",
+    "policy.settle_bytes(uuid, bigint, text)",
+    "policy.traffic_salt(bytea)",
+)
+
+# The public service's catalogue: the website's data path, the downloads, the sitemaps and the old anonymous API,
+# and what the keyed API and MCP read of the catalogue once their credential has passed. A flaw in any of them
+# reaches no account: this login holds no table of the accounts schema, and no function that answers about one.
+CATALOGUE = Login(
+    "open_alvary_catalogue",
+    READERS_SEE,
+    ANONYMOUS_WRITES,
+    vectors=READ,
+    never_reads=(KEY_HASH, SESSION_TOKEN, SEALED_SECRET, PROVIDER_SUBJECT),
+)
+
+# The rest of the public service: the console, and the credential gate of the keyed API and MCP. Until the
+# catalogue's login is in use, the same process serves the catalogue on this one, so it holds all that does.
 SERVICE = Login(
     "open_alvary_service",
     {
-        "base": _reading(CATALOGUE),
-        "changes": _reading(PUBLISHED),
-        "corpus": _reading(FACTS),
+        **READERS_SEE,
         "accounts": {
             "access_request": WRITE,
             "actor": FULL,
@@ -181,16 +213,9 @@ SERVICE = Login(
     },
     (
         "policy.accounts_access(text)",
-        "policy.admit(jsonb)",
-        "policy.begin_emission(uuid)",
         "policy.check_credential(jsonb)",
-        "policy.record_traffic(jsonb)",
         "policy.record_usage(jsonb)",
-        "policy.release_admission(uuid)",
-        "policy.release_bytes(uuid)",
-        "policy.reserve_bytes(jsonb)",
-        "policy.settle_bytes(uuid, bigint, text)",
-        "policy.traffic_salt(bytea)",
+        *ANONYMOUS_WRITES,
     ),
     vectors=READ,
     never_reads=(KEY_HASH,),
@@ -199,7 +224,7 @@ SERVICE = Login(
 JOBS = Login(
     "open_alvary_jobs",
     {
-        "base": _reading(CATALOGUE),
+        "base": _reading(CATALOGUE_TABLES),
         "changes": {**LOG_WRITES, **INDEX_WRITES},
         "corpus": _reading(RECORDED_FACTS),
         "accounts": {
@@ -250,7 +275,7 @@ JOBS = Login(
 RETRIEVAL = Login(
     "open_alvary_retrieval",
     {
-        "base": _reading(CATALOGUE),
+        "base": _reading(CATALOGUE_TABLES),
         "changes": {
             **INDEX_WRITES,
             "change_event": READ,
@@ -267,7 +292,7 @@ RETRIEVAL = Login(
 PUBLISH = Login(
     "open_alvary_publish",
     {
-        "base": dict.fromkeys(CATALOGUE, WRITE),
+        "base": dict.fromkeys(CATALOGUE_TABLES, WRITE),
         "changes": {**LOG_WRITES, **INDEX_WRITES},
         "corpus": _reading(RECORDED_FACTS),
     },
@@ -275,7 +300,7 @@ PUBLISH = Login(
     never_reads=(KEY_HASH, SESSION_TOKEN, SEALED_SECRET, PROVIDER_SUBJECT),
 )
 
-LOGINS = {login.role: login for login in (SERVICE, JOBS, RETRIEVAL, PUBLISH)}
+LOGINS = {login.role: login for login in (SERVICE, CATALOGUE, JOBS, RETRIEVAL, PUBLISH)}
 
 # Tables no login reaches: the migrations' own, the identity shadow (operators' commands) and the capability
 # model's private and maintenance tables. A new table belongs in a plan above or here.
@@ -456,6 +481,19 @@ def _close_to_public(conn: Connection, namespace: PolicyNamespace) -> None:
         conn.exec_driver_sql(f"REVOKE CREATE ON SCHEMA {schema} FROM PUBLIC")
 
 
+def _reaches_accounts(login: Login) -> bool:
+    return "accounts" in login.tables or any(f.startswith("accounts.") for f in login.functions)
+
+
+def _runs_as_owner(namespace: PolicyNamespace, login: Login) -> set[tuple[str, str]]:
+    """Of functions that run with their owner's rights, those it may run: its own, and the one every session calls."""
+    allowed = {
+        (_schema(namespace, kind), function) for kind, function in (f.split(".", 1) for f in login.functions)
+    }
+    allowed.add((namespace.base, "identity_check_legacy_authority(boolean)"))
+    return allowed
+
+
 def problems(conn: Connection, namespace: PolicyNamespace, login: Login) -> list[str]:
     """What this login should not be able to do but can, by the catalogs."""
     role = login.role
@@ -497,6 +535,11 @@ def problems(conn: Connection, namespace: PolicyNamespace, login: Login) -> list
     staging = namespace.schema("staging")
     if conn.scalar(text("SELECT has_schema_privilege(:r, :s, 'USAGE')"), {"r": role, "s": staging}):
         found.append(f"{role} can reach {staging}")
+    accounts = namespace.schema("accounts")
+    if not _reaches_accounts(login) and conn.scalar(
+        text("SELECT has_schema_privilege(:r, :s, 'USAGE')"), {"r": role, "s": accounts}
+    ):
+        found.append(f"{role} can reach {accounts}")
     private_tables = conn.scalars(
         text(
             "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
@@ -514,11 +557,7 @@ def problems(conn: Connection, namespace: PolicyNamespace, login: Login) -> list
             {"r": role, "t": qualified, "c": column},
         ):
             found.append(f"{role} can read {table}.{column}")
-    # Of functions that run with their owner's rights: those named, and the one every session calls.
-    allowed = {
-        (_schema(namespace, kind), function) for kind, function in (f.split(".", 1) for f in login.functions)
-    }
-    allowed.add((namespace.base, "identity_check_legacy_authority(boolean)"))
+    allowed = _runs_as_owner(namespace, login)
     executable = conn.execute(
         text(
             "SELECT n.nspname, p.proname || '(' || oidvectortypes(p.proargtypes) || ')', p.proconfig"
@@ -659,8 +698,74 @@ def check_login(engine: Engine, login: Login) -> list[str]:
                 schema = _quote(conn, _schema(namespace, kind))
                 if _attempt(conn, f"SELECT {column} FROM {schema}.{_quote(conn, table)} LIMIT 0"):
                     found.append(f"{login.role} can read {table}.{column}")
+            found += _beyond_its_plan(conn, namespace, login)
         finally:
             transaction.rollback()
+    return found
+
+
+# What can be held of a table, and how to ask: at the table or any of its columns, or at the table alone.
+TABLE_PRIVILEGES = {
+    "SELECT": "has_any_column_privilege",
+    "INSERT": "has_any_column_privilege",
+    "UPDATE": "has_any_column_privilege",
+    "REFERENCES": "has_any_column_privilege",
+    "DELETE": "has_table_privilege",
+    "TRUNCATE": "has_table_privilege",
+    "TRIGGER": "has_table_privilege",
+}
+
+
+def _beyond_its_plan(conn: Connection, namespace: PolicyNamespace, login: Login) -> list[str]:
+    """Asked of the catalogs as the signed-in login, so that a grant to PUBLIC counts too: what it holds of every
+    table and view in the system's schemas beyond its plan, an extension's own aside; which functions running as
+    their owner it can run beyond its own; and whether it can run each of its own."""
+    role = login.role
+    schemas = {
+        kind: _schema(namespace, kind)
+        for kind in ("base", "accounts", "changes", "corpus", "policy", "staging")
+    }
+    planned = {
+        (schemas[kind], table): set(re.findall(r"\b[A-Z]+\b", privileges))  # columns are in lower case
+        for kind, tables in login.tables.items()
+        for table, privileges in tables.items()
+    }
+    vectors = set(re.findall(r"\b[A-Z]+\b", login.vectors or ""))
+    asked = ", ".join(f"{function}(c.oid, '{name}')" for name, function in TABLE_PRIVILEGES.items())
+    found = []
+    for schema, table, *held in conn.execute(
+        text(
+            f"SELECT n.nspname, c.relname, {asked} FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace"
+            " WHERE n.nspname = ANY(:s) AND c.relkind IN ('r', 'p', 'v', 'm', 'f') AND NOT EXISTS ("
+            "  SELECT 1 FROM pg_depend d WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype = 'e'"
+            " ) ORDER BY 1, 2"
+        ),
+        {"s": sorted(set(schemas.values()))},
+    ):
+        may = planned.get((schema, table))
+        if may is None and schema == schemas["changes"] and table.startswith("vectors_"):
+            may = vectors
+        for name, holds in zip(TABLE_PRIVILEGES, held, strict=True):
+            if holds and name not in (may or ()):
+                found.append(f"{role} can {name.lower()} {schema}.{table}")
+    allowed = _runs_as_owner(namespace, login)
+    for schema, name in conn.execute(
+        text(
+            "SELECT n.nspname, p.proname || '(' || oidvectortypes(p.proargtypes) || ')'"
+            " FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace"
+            " WHERE p.prosecdef AND n.nspname !~ '^pg_' AND has_function_privilege(p.oid, 'EXECUTE') ORDER BY 1, 2"
+        )
+    ):
+        if (schema, name) not in allowed:
+            found.append(f"{role} can run {schema}.{name}")
+    for function in login.functions:
+        kind, signature = function.split(".", 1)
+        name, arguments = signature.split("(", 1)
+        qualified = f"{_quote(conn, _schema(namespace, kind))}.{_quote(conn, name)}({arguments}"
+        if not conn.scalar(
+            text("SELECT has_function_privilege(to_regprocedure(:f), 'EXECUTE')"), {"f": qualified}
+        ):
+            found.append(f"{role} cannot run {function}")
     return found
 
 

@@ -85,7 +85,7 @@ resource "azurerm_container_app" "public" {
   }
 
   dynamic "secret" {
-    for_each = toset(concat(local.secret_names, [local.database_secret["service"]]))
+    for_each = toset(concat(local.secret_names, values(local.service_database_env)))
     content {
       name                = secret.value
       identity            = azurerm_user_assigned_identity.public.id
@@ -121,7 +121,7 @@ resource "azurerm_container_app" "public" {
         }
       }
       dynamic "env" {
-        for_each = merge(local.public_secret_env, { DATABASE_URL = local.database_secret["service"] })
+        for_each = merge(local.public_secret_env, local.service_database_env)
         content {
           name        = env.key
           secret_name = env.value

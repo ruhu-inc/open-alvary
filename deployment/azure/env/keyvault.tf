@@ -77,16 +77,20 @@ locals {
   # A secret's address for Container Apps: versionless, so a value copied again is read within
   # Container Apps' refresh (about 30 minutes) or at the next revision.
   secret = {
-    for name in concat(local.secret_names, [local.database_secret["service"]]) :
+    for name in concat(local.secret_names, values(local.service_database_env)) :
     name => "${azurerm_key_vault.main.vault_uri}secrets/${name}"
   }
   database_logins = var.database_logins_ready ? {
     service   = "open_alvary_service"
+    catalogue = "open_alvary_catalogue"
     jobs      = "open_alvary_jobs"
     retrieval = "open_alvary_retrieval"
   } : {}
+  # The catalogue is the public service's routes that serve it (api.service): until it is named, the
+  # service serves them on its own login.
   workload_login = {
     service   = "service"
+    catalogue = "catalogue"
     worker    = "jobs"
     daily     = "jobs"
     terms     = "jobs"
@@ -98,6 +102,12 @@ locals {
     for workload, login in local.workload_login :
     workload => contains(var.database_logins_in_use, workload) ? "database-url-${login}" : "database-url"
   }
+  # The service's own database URLs: its login, and once database_logins_in_use names the catalogue, a
+  # login of the catalogue's own for every route that serves it, which reaches no account.
+  service_database_env = merge(
+    { DATABASE_URL = local.database_secret["service"] },
+    contains(var.database_logins_in_use, "catalogue") ? { ALVARY_CATALOGUE_DATABASE_URL = local.database_secret["catalogue"] } : {},
+  )
   # Every workload's but its database URL, which is its own.
   secret_names = concat(
     ["feed-keys", "webhook-keys", "admission-config", "site-admission-config"],

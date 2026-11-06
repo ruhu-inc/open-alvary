@@ -21,6 +21,16 @@ request without that Front Door profile's ID is refused (403 ``wrong_address``),
 
 Admission is all or nothing: when the API's allowance is configured, the website's own class must be
 configured too (``ALVARY_SITE_ADMISSION_CONFIG``), or the service refuses to start.
+
+Two database logins (rights.logins, MAC-12). With ALVARY_CATALOGUE_DATABASE_URL set, every route that
+serves the catalogue reads it through that URL's login, which can reach no account: the website's data path,
+the downloads, the sitemaps, /healthz, the old anonymous API, and REST v1 and MCP once a credential has passed.
+So does all an anonymous request writes, each through its own function: admission, the byte allowance on
+texts and traffic counts. DATABASE_URL's login keeps the console, its inbox's reading of the change log
+included, and the keyed API's credential gate: the credential check, usage, and the organisations' admission
+and bytes. Each login has a pool of its own, the website's admission class sizing the catalogue's and the
+API's the other; together they must fit the database's budget, or the service refuses to start. Without the
+setting, one login serves everything.
 """
 
 import json
@@ -70,8 +80,14 @@ SECURITY_HEADERS = {
 
 
 def create_service(
-    store: Store | None = None, releases: Path | None = None, frontend: Path | None = None
+    store: Store | None = None,
+    releases: Path | None = None,
+    frontend: Path | None = None,
+    *,
+    catalogue: Store | None = None,
 ) -> FastAPI:
+    """``store`` is the console's and the credential gate's; ``catalogue``, every read of the catalogue and all
+    an anonymous request writes. Given only ``store``, it serves both."""
     admission = AdmissionConfig.from_environment()
     site_admission = AdmissionConfig.from_environment("ALVARY_SITE_ADMISSION_CONFIG")
     if admission is not None and site_admission is None:
@@ -79,10 +95,11 @@ def create_service(
             "The website's data path needs its own admission class (ALVARY_SITE_ADMISSION_CONFIG)"
         )
     if store is None:
-        pool = max(c.instance_pool_size for c in (admission, site_admission) if c) if site_admission else None
-        store = Store(engine_for(pool_size=pool))
+        store, own = _stores(admission, site_admission)
+        catalogue = catalogue or own
+    catalogue = catalogue or store
     release_root = releases or ROOT / "releases"
-    traffic = Traffic.from_environment(store.engine, site_admission)
+    traffic = Traffic.from_environment(catalogue.engine, site_admission)
 
     @asynccontextmanager
     async def lifespan(_):
@@ -132,14 +149,14 @@ def create_service(
     @service.get("/healthz", include_in_schema=False)
     def health():
         try:
-            with store.engine.connect() as connection:
+            with catalogue.engine.connect() as connection:
                 connection.execute(text("SELECT id FROM sources LIMIT 1"))
         except SQLAlchemyError:
             return JSONResponse(status_code=503, content={"status": "unavailable"})
         return JSONResponse({"status": "ok"}, headers={"Cache-Control": "no-store"})
 
-    service.mount("/site/v1", create_site_app(store, release_root, site_admission, traffic))
-    service.mount("/downloads", create_downloads_app(store, release_root, site_admission, traffic))
+    service.mount("/site/v1", create_site_app(catalogue, release_root, site_admission, traffic))
+    service.mount("/downloads", create_downloads_app(catalogue, release_root, site_admission, traffic))
     accounts_on = store.engine.dialect.name == "postgresql" and os.getenv("ALVARY_ACCOUNTS") == "1"
     api_origin = os.getenv("ALVARY_API_ORIGIN", "https://api.open.alvary.ai").rstrip("/")
     if accounts_on:
@@ -152,7 +169,10 @@ def create_service(
         resource = api_origin + "/api/v1"
         metadata = api_origin + "/.well-known/oauth-protected-resource/api/v1"
         v1 = create_v1_app(
-            store, release_root, lambda: accounts.tiers(published_only=True), credentials=accounts.credential
+            catalogue,
+            release_root,
+            lambda: accounts.tiers(published_only=True),
+            credentials=accounts.credential,
         )
         # Outside a plan's countries, requests also run at the Starter rate (api.reach).
         starter = next(t for t in json.loads(TIERS.read_text()) if t["id"] == "starter")["allowance"]
@@ -192,7 +212,7 @@ def create_service(
 
         @contextmanager
         def catalogue_session():
-            with store.engine.begin() as connection:
+            with catalogue.engine.begin() as connection:
                 check_legacy_authority(connection, write=False)
                 yield LegacyCatalogue(LegacyRepository(connection))
 
@@ -274,7 +294,7 @@ def create_service(
                 countries=published_countries,
             ),
         )
-    anonymous = create_app(store, release_root, downloads_path="/downloads")
+    anonymous = create_app(catalogue, release_root, downloads_path="/downloads")
     if accounts_on:
         close_anonymous(anonymous, api_origin)
     service.mount("/api", anonymous)
@@ -294,7 +314,7 @@ def create_service(
             headers={"Cache-Control": "max-age=3600"},
         )
 
-    sitemaps = create_sitemap_app(store, (*STATIC_PAGES, *docs_pages(frontend)), _origin, site_admission)
+    sitemaps = create_sitemap_app(catalogue, (*STATIC_PAGES, *docs_pages(frontend)), _origin, site_admission)
     service.router.routes += [
         Route(path, sitemaps, methods=["GET"]) for path in ("/sitemap.xml", "/sitemap-{number}.xml")
     ]
@@ -303,6 +323,27 @@ def create_service(
         website = WebsiteFiles(directory=frontend, html=True, check_dir=False, traffic=traffic)
         service.mount("/", website, name="website")
     return service
+
+
+def _stores(admission: AdmissionConfig | None, site: AdmissionConfig | None) -> tuple[Store, Store]:
+    """The console's store and the catalogue's: one and the same until ALVARY_CATALOGUE_DATABASE_URL names a
+    login of the catalogue's own. Two logins are two pools, and the database's budget (P <= C - R - O) must
+    hold for both together, so with admission configured each class sizes one and their sum must fit."""
+    separate = os.getenv("ALVARY_CATALOGUE_DATABASE_URL")
+    if not separate:
+        pool = max(c.instance_pool_size for c in (admission, site) if c) if site else None
+        store = Store(engine_for(pool_size=pool))
+        return store, store
+    if admission is None and site is not None:
+        raise ValueError("Two logins need both admission classes, to size a pool each")
+    if admission is not None and site is not None:
+        room = min(c.db_connections - c.operator_reserve - c.other_workers for c in (admission, site))
+        if admission.public_pool_size + site.public_pool_size > room:
+            raise ValueError("The API's and the website's pools together exceed the database budget")
+    return (
+        Store(engine_for(pool_size=admission.instance_pool_size if admission else None)),
+        Store(engine_for(separate, pool_size=site.instance_pool_size if site else None)),
+    )
 
 
 def docs_pages(frontend: Path | None) -> list[str]:
