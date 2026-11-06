@@ -1070,17 +1070,26 @@ def test_a_mass_lapse_stops_nothing_someone_recorded_in_any_country(both_decisio
     assert last["status"] == "failed" and last["summary"]["take_downs"]["ke"]["taken_down"] == 1
 
 
-def named_judgment(names_withheld=False, summary=None, also_known_as=()):
+def named_judgment(
+    names_withheld=False,
+    summary=None,
+    also_known_as=(),
+    title="Ada Bello v Example Services Limited",
+    url="https://www.judiciary.gov.rw/9",
+    party="Ada Bello",
+    relations=(),
+):
     """A fictional judgment whose title names a party, who may be marked withheld."""
     return DocumentRecord(
         identity=Identity(
             family="judgment", type="judgment", work_uri="/akn/rw/judgment/2026/9",
-            title="Ada Bello v Example Services Limited", year=2026, alternative_titles=also_known_as,
+            title=title, year=2026, alternative_titles=also_known_as,
         ),
         place=Place(code="rw", name="Rwanda", level="national"),
         expressions=(Expression(language="en", this_text=True),),
-        publications=(Publication(kind="law_report", name="Court site", url="https://www.judiciary.gov.rw/9"),),
+        publications=(Publication(kind="law_report", name="Court site", url=url),),
         events=(Event(kind="delivered", when=Dated(value=date(2026, 3, 1))),),
+        relations=relations,
         status=Status(legal="decided"),
         text=TextInfo(
             form="court_copy", version=Version(label="As delivered"),
@@ -1090,7 +1099,7 @@ def named_judgment(names_withheld=False, summary=None, also_known_as=()):
         profile=JudgmentProfile(
             family="judgment", court=Court(name="High Court", code="hc", level="superior", seat="Kigali"),
             parties=(
-                Party(name="Ada Bello", role="appellant", anonymised=names_withheld),
+                Party(name=party, role="appellant", anonymised=names_withheld),
                 Party(name="Example Services Limited", role="respondent"),
             ),
             anonymisation="partial" if names_withheld else "none",
@@ -1173,6 +1182,73 @@ def test_a_record_that_no_longer_names_anyone_withheld_is_not_taken_down_again(c
     assert public_records(store) == ["rw-case"]
     assert case_named.run(store)["take_downs"]["rw"]["taken_down"] == 0
     assert public_records(store) == ["rw-case"]
+
+
+NEUTRAL = "In the matter of a child (High Court, 2026)"
+
+
+def test_an_official_link_naming_someone_withheld_is_refused_however_it_spells_the_name(decisions):
+    """A court's address can carry the parties' names: withheld, the record is not published with it."""
+    decision = publish.decide("rw", "Ada Reviewer", 12, [], "", "")
+
+    def entry(url, **changes):
+        record = named_judgment(True, url=url, **({"title": NEUTRAL} | changes))
+        return publish.catalogue_entries(
+            publish.Approved("rw-case", record, ["en"], "A", datetime.now(UTC)), decision
+        )
+
+    for url in (
+        "https://www.judiciary.gov.rw/judgments/ada-bello-v-example-services",
+        "https://www.judiciary.gov.rw/view?case=Ada+Bello",
+        "https://www.judiciary.gov.rw/files/BELLO_v_EXAMPLE.pdf",
+        "https://www.judiciary.gov.rw/files/Ada%20Bell%C3%B3.pdf",
+    ):
+        with pytest.raises(publish.Refused, match="official link would still name a withheld party"):
+            entry(url)
+    # A name whose words are too short to stand alone is still found whole.
+    with pytest.raises(publish.Refused, match="official link would still name"):
+        entry("https://www.judiciary.gov.rw/j/ado-obi-v-state", party="Ado Obi")
+    assert str(entry("https://www.judiciary.gov.rw/judgments/2026/9")["source"].canonical_url).endswith("/9")
+    # The host is the publisher's, never a party's.
+    assert entry("https://bello.example.org/judgments/9")["source"].title == NEUTRAL
+
+
+def test_a_public_record_whose_link_names_someone_withheld_stays_down_until_the_link_is_put_right(
+    both_decisions, store, tmp_path
+):
+    naming = "https://www.judiciary.gov.rw/judgments/ada-bello-v-example"
+    collection = Collection(tmp_path)
+    collection.add("rw-case", "rw-case", record=named_judgment(title=NEUTRAL, url=naming))
+    collection.run(store)
+    assert public_records(store) == ["rw-case"]
+    collection.docs["rw-case"].update(
+        anonymisation="partial", record=named_judgment(True, title=NEUTRAL, url=naming)
+    )
+    assert collection.run(store)["take_downs"]["rw"]["taken_down"] == 1
+    assert public_records(store) == []
+    summary = collection.run(store)["countries"]["rw"]
+    assert "official link would still name a withheld party" in summary["records_skipped"]["rw-case"]
+    assert public_records(store) == []
+    collection.docs["rw-case"]["record"] = named_judgment(True, title=NEUTRAL)
+    collection.run(store)
+    assert public_records(store) == ["rw-case"]
+
+
+def test_a_public_title_naming_someone_withheld_by_short_words_comes_down_too(
+    both_decisions, store, tmp_path
+):
+    """No word of "Ado Obi" is long enough to be told from any other on its own, but the whole name is."""
+    title = "Ado Obi v Example Services Limited"
+    collection = Collection(tmp_path)
+    collection.add("rw-case", "rw-case", record=named_judgment(title=title, party="Ado Obi"))
+    collection.run(store)
+    collection.docs["rw-case"].update(
+        anonymisation="partial", record=named_judgment(True, title=title, party="Ado Obi")
+    )
+    assert collection.run(store)["take_downs"]["rw"]["taken_down"] == 1
+    assert public_records(store) == []
+    collection.run(store)
+    assert public_records(store) == ["rw-case"] and title_of(store) == "[Withheld] v Example Services Limited"
 
 
 def test_a_text_is_built_only_to_publish_it_one_country_at_a_time(

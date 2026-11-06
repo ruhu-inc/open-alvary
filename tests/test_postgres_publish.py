@@ -1,7 +1,8 @@
 """Approved works reach the public catalogue as records, with their changes in the change log; a work
 whose approval lapses is taken down (operations.publish)."""
 
-from datetime import UTC, datetime
+import json
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,6 +23,7 @@ from rights.policy import public_corpus
 
 pytestmark = pytest.mark.postgres
 WORK = "rw-law-055-2024"
+BASE = "https://open.example.org"
 
 
 @pytest.fixture
@@ -406,3 +408,174 @@ def test_a_confidential_withdrawal_is_never_undone_by_the_nightly_run(
     assert "confidential" in summary["records_skipped"]["rw-law"]
     assert bare.get("/sources/rw-law").status_code == 404 and stored(store)[count:] == []
     assert collection.statuses()["rw-law"]["details"] == "blocked"
+
+
+def test_an_operator_lifts_a_privacy_block_and_the_next_run_decides(
+    store,
+    both_decisions,  # noqa: F811
+    tmp_path,
+    monkeypatch,
+):
+    """The block withdraw-confidentially sets is lifted by its own command, with the same authority. Lifting it
+    publishes nothing and tells no one anything: the record stays down, its privacy review pending, until a
+    publishing run finds a current approval for it."""
+    from test_publish import Collection
+
+    collection = Collection(tmp_path)
+    collection.add("rw-law", "rw-law")
+    collection.run(store)
+    bare = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    text_id = bare.get("/sources/rw-law/versions").json()["items"][0]["id"]
+    monkeypatch.setattr(admin, "engine_for", lambda: store.engine)
+    with pytest.raises(SystemExit):
+        admin.main(["lift-privacy-block", "--work", "rw-law"])  # nothing blocks it yet
+    assert admin.main(["withdraw-confidentially", "--work", "rw-law"]) == 0
+    count = len(stored(store))
+    assert admin.main(["lift-privacy-block", "--work", "rw-law"]) == 0
+    assert stored(store)[count:] == []
+    assert bare.get("/sources/rw-law").status_code == 404
+    assert bare.get(f"/versions/{text_id}/text").status_code == 404
+    rights = next(r for r in store.load().rights if r.source_id == "rw-law")
+    assert rights.privacy_status == "pending" and not rights.metadata_public
+    for again in ("rw-law", "rw-no-such-work"):
+        with pytest.raises(SystemExit):
+            admin.main(["lift-privacy-block", "--work", again])
+    assert stored(store)[count:] == []
+    # The next run: the approval is current, so the record returns, and its text with it.
+    collection.run(store)
+    assert bare.get("/sources/rw-law").status_code == 200
+    assert bare.get(f"/versions/{text_id}/text").status_code == 200
+    assert collection.statuses()["rw-law"]["details"] == "public"
+    [restored] = [e for e in stored(store)[count:] if e["event_type"] == "catalogue_added"]
+    assert restored["change_reason"] == "restored"
+
+
+def test_a_name_withheld_since_it_was_announced_is_told_again_by_no_channel(
+    store,
+    both_decisions,  # noqa: F811
+    tmp_path,
+    monkeypatch,
+):
+    """A judgment announced under a party's name, given a title without it, then with the name withheld: what
+    was announced before still names her, its own events and the one on the record it supersedes. So it comes
+    down in confidence, which stops all of them being served, and returns without the name; no feed, single
+    event, inbox, digest or webhook delivery tells the name again."""
+    from test_postgres_webhooks import URL, Endpoint, Mailer
+    from test_publish import NEUTRAL, Collection, named_judgment
+
+    from accounts import policies
+    from accounts.store import TIERS, Accounts
+    from changes import worker
+    from changes.feed import Feed, _Visibility
+    from changes.watches import Watches
+    from changes.webhooks import Sealer, Sender, Webhooks, deliver
+    from rights.database import PolicyNamespace
+    from schema.record import Reference, Relation
+
+    monkeypatch.delenv("PUBLIC_DOMAIN", raising=False)
+    supersedes = (Relation(kind="supersedes", target=Reference(citation="Example", work_uri="rw-earlier")),)
+    collection = Collection(tmp_path)
+    collection.add(
+        "rw-earlier", "rw-earlier", record=named_judgment(title="Example Holdings v Revenue Board")
+    )
+    collection.run(store)
+    # An organisation's monitor of Rwanda, with a webhook endpoint, from here on.
+    with store.engine.connect() as conn:
+        accounts = Accounts(store.engine, PolicyNamespace(conn.scalar(text("SELECT current_schema()"))))
+    accounts.set_tiers(json.loads(TIERS.read_text()))
+    signed = accounts.sign_in(
+        issuer="https://login.example.test/",
+        subject="email|a",
+        method="email",
+        email="a@example.org",
+        label="a",
+    )
+    owner = signed["id"]
+    accounts.accept_policies(owner, dict(policies.CURRENT))
+    organisation = accounts.welcome(owner, "Amina", "Amina")
+    accounts.grant_access(
+        "op",
+        organisation,
+        tier="developer",
+        scope={"jurisdictions": ["rw"]},
+        source="manual",
+        ends_at=None,
+        reason="Test",
+    )
+    watches = Watches(accounts)
+    watches.set_preferences(owner, {"timezone": "Africa/Kigali", "daily_time": "07:00", "weekly_day": 1})
+    monitor = watches.create(
+        owner, organisation, {"name": "Rwanda", "filters": {"jurisdiction": ["rw"]}, "email": "weekly"}
+    )
+    receiver = Endpoint()
+    hooks = Webhooks(
+        accounts,
+        Sender(resolver=lambda host: ["93.184.216.34"], transport=receiver),
+        Sealer({"k": b"k" * 32}, "k"),
+    )
+    hooks.create(owner, organisation, {"url": URL, "watch_ids": [monitor["id"]]})
+    worker.match(accounts)
+
+    # Announced under her name, with the record it supersedes; then given a title without it.
+    collection.add(
+        "rw-case", "rw-case", words="The appeal is allowed.", record=named_judgment(relations=supersedes)
+    )
+    collection.run(store)
+    collection.docs["rw-case"]["record"] = named_judgment(title=NEUTRAL, relations=supersedes)
+    collection.run(store)
+    client = TestClient(create_app(store=store))
+    assert "Bello" not in client.get("/sources/rw-case").text
+    worker.match(accounts)  # matched while public: in the inbox, and waiting to be delivered
+
+    def channels() -> dict[str, str]:
+        found = {
+            path: client.get(path).text
+            for path in (
+                "/changes?limit=100", "/site/v1/changes?limit=100", "/changes/recent", "/changes/feed.atom",
+                "/changes/feed.rss", "/site/v1/changes/feed.atom", "/site/v1/changes/feed.rss",
+            )
+        }  # fmt: skip
+        logged = stored(store)
+        found |= {f"/changes/{e['event_id']}": client.get(f"/changes/{e['event_id']}").text for e in logged}
+        with store.engine.connect() as conn:
+            for keyed in (True, False):
+                reader, visible = Feed(conn, None, keyed=keyed), _Visibility(conn)
+                found[f"projected keyed={keyed}"] = json.dumps(
+                    [reader.project(dict(e), visible) for e in logged], default=str
+                )
+        found["inbox"] = json.dumps(watches.inbox(owner, organisation, BASE), default=str)
+        return found
+
+    def naming(found):
+        return sorted(path for path, body in found.items() if "Bello" in body)
+
+    before = naming(channels())
+    assert {"/changes?limit=100", "/changes/feed.atom", "/changes/feed.rss", "inbox"} <= set(before)
+    [effect] = [e for e in stored(store) if e["event_type"] == "legal_effect_recorded"]
+    assert effect["work_id"] == "rw-earlier" and "Bello" in effect["payload"]["summary"]
+    assert f"/changes/{effect['event_id']}" in before  # another record's event names her
+
+    # Her name withheld: nothing public of the record names her now, but what the log tells of it does.
+    collection.docs["rw-case"].update(
+        anonymisation="partial", record=named_judgment(True, title=NEUTRAL, relations=supersedes)
+    )
+    assert collection.run(store)["take_downs"]["rw"]["taken_down"] == 1
+    assert client.get("/sources/rw-case").status_code == 404
+    collection.run(store)
+    assert client.get("/sources/rw-case").json()["title"] == NEUTRAL
+    assert collection.run(store)["take_downs"]["rw"]["taken_down"] == 0  # and it stays
+    worker.match(accounts)
+    assert naming(channels()) == []
+    mailer = Mailer()
+    worker.digests(accounts, mailer, BASE, now=datetime.now(UTC) + timedelta(days=8))
+    assert mailer.sent and not [m.subject for m in mailer.sent if "Bello" in m.text]
+    deliver(accounts, hooks, Mailer(), BASE)
+    sent = [payload for payload, _ in receiver.deliveries()]
+    assert sent and not [p["event"]["event_id"] for p in sent if "Bello" in json.dumps(p)]
+    # The record it supersedes is told of the link again, under the title the record has now.
+    shown = client.get("/changes", params={"limit": 100}).json()["events"]
+    assert any(
+        e["event_type"] == "legal_effect_recorded"
+        and (e["legal_effect"].get("by") or {}).get("title") == NEUTRAL
+        for e in shown
+    )

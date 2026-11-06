@@ -487,6 +487,36 @@ class Feed:
                     break
         return found
 
+    def told_of(self, work_ids) -> dict[str, dict[str, list[str]]]:
+        """What the log still serves that concerns each of these records, its words and its links apart:
+        every event about it, and every event on another record that names it (legal_effect, treatment), as
+        project() serves them. A record whose details now withhold a name any of them still gives comes down
+        in confidence (operations.publish.still_naming), and nothing announced before that is served again
+        (project): that is how a name withheld after it was announced stops being told."""
+        found: dict[str, dict[str, list[str]]] = {}
+        ids = sorted(set(work_ids))
+        if not ids or self.conn.scalar(text("SELECT to_regclass(:t)"), {"t": self.t["change_event"]}) is None:
+            return found
+        naming = [(kind, role) for kind in ("legal_effect", "treatment") for role in ("by", "of")]
+        others = " OR ".join(f"e.payload #>> '{{{kind},{role},id}}' = ANY(:ids)" for kind, role in naming)
+        rows = self.conn.execute(
+            text(f"SELECT * FROM {self.t['change_event']} e WHERE e.work_id = ANY(:ids) OR {others}"),
+            {"ids": ids},
+        ).mappings()
+        visible = _Visibility(self.conn)
+        for row in rows:
+            shown = self.project(dict(row), visible)
+            if shown is None:
+                continue
+            payload = row["payload"]
+            named = {((payload.get(kind) or {}).get(role) or {}).get("id") for kind, role in naming}
+            words, links = _said(shown)
+            for work in ({row["work_id"]} | named) & set(ids):
+                told = found.setdefault(work, {"words": [], "links": []})
+                told["words"] += words
+                told["links"] += links
+        return found
+
     def project(self, row: dict, visible: "_Visibility") -> dict | None:
         """The public form of one event, or None while what it names is not public."""
         payload = row["payload"]
@@ -838,6 +868,16 @@ class _Visibility:
             )
             self.names[jurisdiction_id] = (payload or {}).get("name", jurisdiction_id)
         return self.names[jurisdiction_id]
+
+
+def _said(shown: dict) -> tuple[list[str], list[str]]:
+    """What a served event says that could name someone: its summary, the titles and citations it gives,
+    its own record's and any other's; and the links it gives."""
+    others = [shown[kind] or {} for kind in ("legal_effect", "treatment")]
+    records = [shown["work"] or {}, *(other.get(role) or {} for other in others for role in ("by", "of"))]
+    words = [shown["summary"], *(record.get(key) for record in records for key in ("title", "citation"))]
+    links = [*shown["sources"], *(other.get("evidence_url") for other in others)]
+    return [w for w in words if w], [link for link in links if link]
 
 
 def api_url(origin: str, work_id: str) -> str:

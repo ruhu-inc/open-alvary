@@ -14,6 +14,11 @@ withdraw-confidentially --work ID
                     telling them: a withdrawal naming nothing is appended (what was delivered stays).
                     Either way its privacy review is set to blocked, which the publish job never
                     publishes over, even with a current approval: only an operator lifts that
+lift-privacy-block --work ID
+                    lift that block: the record's privacy review goes back to pending and nothing
+                    else changes. Nothing is published or announced by it: what was withdrawn stays
+                    out of public view until a publishing run finds a current approval and a current
+                    decision for it
 
 Any other write that takes a record out of public view by changing its rights record is announced as a
 withdrawal with reason_code rights_changed, which names the record by its IDs to keyed callers (owner
@@ -42,6 +47,8 @@ def main(argv=None) -> int:
     commands.add_parser("status")
     confidential = commands.add_parser("withdraw-confidentially")
     confidential.add_argument("--work", required=True)
+    lift = commands.add_parser("lift-privacy-block")
+    lift.add_argument("--work", required=True)
     args = parser.parse_args(argv)
     engine = engine_for()
     if engine.dialect.name != "postgresql":
@@ -66,6 +73,23 @@ def main(argv=None) -> int:
             conn.execute(update(rights).where(rights.c.source_id == args.work).values(payload=held))
             recorded = publish(conn, [args.work], confidential=[args.work])
             print(f"Withdrawn; recorded {recorded} changes, none naming the record")
+        elif args.command == "lift-privacy-block":
+            check_legacy_authority(conn, write=True)
+            rights = tables["rights"]
+            record = conn.scalar(select(rights.c.payload).where(rights.c.source_id == args.work))
+            if (record or {}).get("privacy_status") != "blocked":
+                raise SystemExit("No record with that ID has its privacy review blocked")
+            # Pending clears no text and leaves metadata_public as it is: nothing becomes public by this.
+            conn.execute(
+                update(rights)
+                .where(rights.c.source_id == args.work)
+                .values(payload=record | {"privacy_status": "pending"})
+            )
+            recorded = publish(conn, [args.work])
+            print(
+                f"Its privacy review is no longer blocked; recorded {recorded} changes. The next publishing"
+                " run decides whether it returns"
+            )
         elif args.command == "new-epoch":
             conn.execute(
                 text(

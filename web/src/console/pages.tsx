@@ -2,7 +2,18 @@
 
 import React, { useEffect, useState } from "react";
 import { BarChart3, BookOpen, ExternalLink, KeyRound, PauseCircle, Plug, Plus } from "lucide-react";
-import { ApiError, api, clearDraft, go, peekDraft, saveDraft, type Me, type Organisation } from "./api";
+import {
+  ApiError,
+  STEP_UP,
+  api,
+  clearDraft,
+  go,
+  peekDraft,
+  saveDraft,
+  stepUpUrl,
+  type Me,
+  type Organisation,
+} from "./api";
 import {
   COUNTRIES,
   CopyField,
@@ -1982,10 +1993,14 @@ type Session = {
   network_prefix: string | null;
 };
 
+type Linking = { method: "google" | "email"; at: number };
+const LINK_WAIT = 10 * 60 * 1000; // a sign-in flow lasts 10 minutes
+
 export function Security({ me, refresh }: { me: Me; refresh: () => void }) {
   const identities = useAsync(() => api<{ identities: Identity[] }>("/me/identities"), []);
   const sessions = useAsync(() => api<{ sessions: Session[] }>("/me/sessions"), []);
   const [error, setError] = useState<unknown>(null);
+  const [sessionsError, setSessionsError] = useState<unknown>(null);
   const [name, setName] = useState(me.person.display_name ?? "");
   const [saved, setSaved] = useState(false);
   const factorSeen = me.person.second_factor !== "none" || !!me.second_factor_until;
@@ -1997,6 +2012,29 @@ export function Security({ me, refresh }: { me: Me; refresh: () => void }) {
       setError(e);
     }
   }
+  // Adding a method is a change, so no link from another site can start one. The server answers where to
+  // go, or that a fresh sign-in (and a second factor where a role needs one) comes first: then the page goes
+  // to sign in, and back here carries on once with the method chosen.
+  async function addMethod(method: Linking["method"], stepUp = true) {
+    setError(null);
+    try {
+      const { redirect } = await api<{ redirect: string }>("/me/identities/link", { method: "POST", body: { method } });
+      location.assign(redirect);
+    } catch (e) {
+      if (stepUp && e instanceof ApiError && STEP_UP.has(e.code)) {
+        saveDraft("link", { method, at: Date.now() });
+        location.assign(stepUpUrl(e.code, "/console/security"));
+      } else {
+        setError(e);
+      }
+    }
+  }
+  useEffect(() => {
+    const pending = peekDraft<Linking>("link");
+    clearDraft("link");
+    if (pending && Date.now() - pending.at < LINK_WAIT) void addMethod(pending.method, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <>
       <Heading title="Security" description="How you sign in, your second factor, your profile and where you're signed in." />
@@ -2046,12 +2084,12 @@ export function Security({ me, refresh }: { me: Me; refresh: () => void }) {
           <Loading />
         )}
         <div className="row">
-          <a className="btn secondary" href="/console/auth/start?purpose=link&method=google&return_to=%2Fconsole%2Fsecurity">
+          <button className="btn secondary" type="button" onClick={() => addMethod("google")}>
             Add Google
-          </a>
-          <a className="btn secondary" href="/console/auth/start?purpose=link&method=email&return_to=%2Fconsole%2Fsecurity">
+          </button>
+          <button className="btn secondary" type="button" onClick={() => addMethod("email")}>
             Add email code
-          </a>
+          </button>
           <span className="fine">
             If your last sign-in was over 10 minutes ago, you'll first sign in the way you did before, then with the new method.
           </span>
@@ -2107,16 +2145,18 @@ export function Security({ me, refresh }: { me: Me; refresh: () => void }) {
         ) : (
           <Loading />
         )}
+        <Problem error={sessionsError} onDismiss={() => setSessionsError(null)} />
         <div className="row">
           <button
             className="btn danger"
             type="button"
             onClick={async () => {
+              setSessionsError(null);
               try {
                 await api("/me/sessions/revoke-all", { method: "POST" });
                 location.assign("/console/sign-in");
               } catch (e) {
-                setError(e);
+                setSessionsError(e);
               }
             }}
           >

@@ -672,3 +672,22 @@ def test_behind_front_door_only_its_requests_are_served(catalogue, store, tmp_pa
     assert client.get("/site/v1/project", headers={"X-Azure-FDID": "fd-2"}).status_code == 403
     assert client.get("/site/v1/project", headers={"X-Azure-FDID": "fd-1"}).status_code == 200
     assert client.get("/healthz").status_code == 200  # the platform's probes come straight in
+    assert client.get("/livez").status_code == 200
+
+
+def test_liveness_needs_no_database_and_health_still_reads_it(catalogue, store, tmp_path, monkeypatch):
+    """A platform restarts an instance whose liveness probe fails: /livez answers while the database cannot,
+    and /healthz, which startup, readiness, the uptime check and the site-down alert read, says it cannot."""
+    from sqlalchemy.exc import OperationalError
+
+    store.save(catalogue)
+    client = TestClient(create_service(store, tmp_path))
+    assert client.get("/livez").json() == {"status": "ok"} and client.get("/healthz").status_code == 200
+
+    def unreachable(*args, **kwargs):
+        raise OperationalError("SELECT 1", {}, ConnectionError("no connection to spare"))
+
+    monkeypatch.setattr(store.engine, "connect", unreachable)
+    live = client.get("/livez")
+    assert live.status_code == 200 and live.headers["cache-control"] == "no-store"
+    assert client.get("/healthz").status_code == 503

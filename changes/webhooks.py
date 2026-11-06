@@ -3,8 +3,10 @@ own HTTPS endpoints.
 
 Network safety: an endpoint's host is resolved at every attempt, and every address it resolves to
 must be public; the connection goes to the vetted address while TLS still checks the hostname, so a
-second lookup cannot steer it elsewhere. Redirects are never followed. Requests come from the
-worker, never from the API that serves corpus reads.
+second lookup cannot steer it elsewhere. Redirects are never followed. Deliveries come from the
+worker. A verification or a test, which someone waits for in the console, is sent from threads the
+console keeps for it (api.console), never those that serve corpus reads or the website, and a test
+has a shorter deadline and an hourly limit.
 
 Signing: HMAC-SHA256 over "<timestamp>.<exact body bytes>" with the endpoint's secret, sent as
 Open-Alvary-Signature: v1=<hex> (one per current key during a rotation) with Open-Alvary-Key,
@@ -18,6 +20,7 @@ import hmac
 import ipaddress
 import json
 import logging
+import math
 import os
 import secrets
 import socket
@@ -41,6 +44,7 @@ from changes.watches import plan_limits
 
 log = logging.getLogger("open_alvary.webhooks")
 TIMEOUT = 10.0  # seconds for the whole delivery, and for each phase within it (D19)
+TEST_TIMEOUT = 5.0  # seconds for the whole of a test someone is waiting for in the console
 MAX_BODY = 64 * 1024
 MAX_ANSWER = 8 * 1024
 RETRIES = (60, 300, 1800, 7200, 28800)  # after attempts 1-5; terminal at 24 h (D19)
@@ -48,6 +52,8 @@ TERMINAL = timedelta(hours=24)
 FAILING_AFTER, PAUSE_AFTER = 3, 20  # consecutive failed attempts (D19)
 OVERLAP = timedelta(hours=24)  # an old secret keeps signing after a rotation (D19)
 VERIFY_PER_HOUR, REPLAYS_PER_HOUR = 5, 10
+# Tests sent over a rolling hour, counted from the audit log so every instance sees the same (Webhooks.test).
+TESTS_PER_ENDPOINT, TESTS_PER_ORGANISATION = 10, 20
 USER_AGENT = "Open-Alvary-Webhooks/1"
 BLOCKED_NAMES = ("localhost", ".localhost", ".local", ".internal", ".home.arpa")
 
@@ -197,7 +203,9 @@ class Sender:
     def __init__(self, resolver: Callable[[str], list[str]] = resolve, transport=_send):
         self.resolver, self.transport = resolver, transport
 
-    def post(self, url: str, body: bytes, headers: dict) -> Outcome:
+    def post(self, url: str, body: bytes, headers: dict, limit: float | None = None) -> Outcome:
+        """``limit``: seconds for the whole attempt, the name lookup aside; TIMEOUT when not given."""
+        limit = TIMEOUT if limit is None else limit
         host = urlsplit(url).hostname or ""
         try:
             check_url(url)
@@ -209,11 +217,9 @@ class Sender:
         if not addresses or not all(public(a) for a in addresses):
             return Outcome(None, error="That address is not reachable from the internet.")
         try:
-            status, answer_headers, answer = _within(
-                TIMEOUT, self.transport, url, addresses[0], body, headers
-            )
+            status, answer_headers, answer = _within(limit, self.transport, url, addresses[0], body, headers)
         except (httpcore.TimeoutException, TimeoutError):
-            return Outcome(None, error=f"No answer within {int(TIMEOUT)} seconds.")
+            return Outcome(None, error=f"No answer within {int(limit)} seconds.")
         except (httpcore.ConnectError, ConnectionError):
             return Outcome(None, error="The connection was refused or could not be made.")
         except (httpcore.NetworkError, httpcore.ProtocolError, OSError):
@@ -662,20 +668,65 @@ class Webhooks:
             view = self._view(conn, self._endpoint(conn, person_id, organisation_id, endpoint_id), person_id)
         return {"endpoint": view, "result": {"verified": ok, "status": outcome.status, "error": error}}
 
-    def test(self, person_id, organisation_id, endpoint_id) -> dict:
-        """A signed endpoint.test event, sent now; nothing is retried."""
-        with self.engine.connect() as conn:
+    def test(self, person_id, organisation_id, endpoint_id, context=None) -> dict:
+        """A signed endpoint.test event, sent now within TEST_TIMEOUT; nothing is retried. Each is in the
+        organisation's audit log, which is what the limits count, so every instance sees the same."""
+        with self.engine.begin() as conn:
             row = self._endpoint(conn, person_id, organisation_id, endpoint_id)
+            self._within_test_limits(conn, organisation_id, endpoint_id)
+            self.accounts._audit(
+                conn,
+                self.accounts._actor(conn, person_id),
+                "webhook.tested",
+                organisation=organisation_id,
+                target=("webhook_endpoint", endpoint_id),
+                context=context,
+            )
             keys = self._keys(conn, endpoint_id)
         delivery = "test_" + secrets.token_hex(8)
         body = _envelope("endpoint.test", delivery, endpoint_id=endpoint_id)
-        outcome = self.sender.post(row["url"], body, signature_headers(body, keys, delivery))
+        outcome = self.sender.post(row["url"], body, signature_headers(body, keys, delivery), TEST_TIMEOUT)
         ok = outcome.status is not None and 200 <= outcome.status < 300
         return {
             "delivered": ok,
             "status": outcome.status,
             "error": None if ok else (outcome.error or _status_error(outcome.status)),
         }
+
+    def _within_test_limits(self, conn, organisation_id, endpoint_id) -> None:
+        """Refuses a test beyond TESTS_PER_ENDPOINT to this endpoint, or TESTS_PER_ORGANISATION from its
+        organisation, over a rolling hour; Retry-After says when room returns. The lock settles the count
+        between requests that arrive together, on any instance."""
+        conn.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:k, 0))"),
+            {"k": f"webhook-test:{organisation_id}"},
+        )
+        sent = conn.execute(
+            text(
+                f"SELECT target_id, EXTRACT(EPOCH FROM at + interval '1 hour' - statement_timestamp()) AS frees_in"
+                f" FROM {self._t(conn, 'audit_event')} WHERE organisation_id = :o AND action = 'webhook.tested'"
+                " AND at > statement_timestamp() - interval '1 hour'"
+            ),
+            {"o": organisation_id},
+        ).all()
+        waits = []
+        for counted, limit in (
+            ([r for r in sent if r.target_id == endpoint_id], TESTS_PER_ENDPOINT),
+            (sent, TESTS_PER_ORGANISATION),
+        ):
+            if len(counted) >= limit:
+                # Room returns once enough of the oldest have left the window.
+                waits.append(sorted(float(r.frees_in) for r in counted)[len(counted) - limit])
+        if waits:
+            wait = max(1, math.ceil(max(waits)))
+            minutes = math.ceil(wait / 60)
+            raise AccountError(
+                "rate_limited",
+                429,
+                f"Up to {TESTS_PER_ENDPOINT} tests an hour to an endpoint, and {TESTS_PER_ORGANISATION} from an"
+                f" organisation. Try again in about {minutes} minute{'' if minutes == 1 else 's'}.",
+                retry_after=wait,
+            )
 
     def deliveries(self, person_id, organisation_id, endpoint_id) -> dict:
         with self.engine.connect() as conn:

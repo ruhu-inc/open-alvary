@@ -138,6 +138,9 @@ resource "google_cloud_run_v2_service" "public" {
         }
       }
 
+      # An instance starts serving once it reads the database (/healthz), and is restarted only when the
+      # process stops answering (/livez, which takes no database connection): a database that is down or
+      # saturated must not get healthy instances restarted. The uptime check still reads /healthz.
       startup_probe {
         http_get {
           path = "/healthz"
@@ -148,7 +151,7 @@ resource "google_cloud_run_v2_service" "public" {
       }
       liveness_probe {
         http_get {
-          path = "/healthz"
+          path = "/livez"
           port = 8080
         }
         period_seconds = 30

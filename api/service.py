@@ -9,7 +9,8 @@
     /api/...        the legacy anonymous API, unchanged until activation B; its release-file route
                     now redirects to /downloads
     /console/...    the developer console and its API (api.console)
-    /healthz        liveness of the catalogue authority
+    /healthz        the catalogue authority answers: startup and readiness probes, the uptime check
+    /livez          the process answers, without the database: the platforms' liveness probes
     /               the built website, where a frontend directory is given (Vercel, Cloud Run with
                     ALVARY_FRONTEND, local)
 
@@ -17,7 +18,8 @@ With ALVARY_TRAFFIC_COUNTS=1 the website and its data path add to the day's tota
 
 Every response carries the website's security headers, which Vercel and nginx used to add, so the
 service can stand alone behind the load balancer (MAC-12). With ALVARY_FRONT_DOOR_ID set (Azure), a
-request without that Front Door profile's ID is refused (403 ``wrong_address``), /healthz aside.
+request without that Front Door profile's ID is refused (403 ``wrong_address``), /healthz and /livez
+aside.
 
 Admission is all or nothing: when the API's allowance is configured, the website's own class must be
 configured too (``ALVARY_SITE_ADMISSION_CONFIG``), or the service refuses to start.
@@ -57,6 +59,7 @@ from api.v1 import create_v1_app
 from rights.bytes import ByteLedger
 from rights.database import PolicyNamespace
 
+PROBES = ("/healthz", "/livez")  # what the platforms' probes ask for, past the edge check
 SECURITY_HEADERS = {
     "Strict-Transport-Security": "max-age=31536000",
     "X-Content-Type-Options": "nosniff",
@@ -94,13 +97,13 @@ def create_service(
 
     # Behind Azure Front Door (deployment/azure), a request that did not come through its profile is
     # refused, so the service's own address is no way around the edge's rules. The platform's probes
-    # reach /healthz directly.
+    # reach /healthz and /livez directly.
     edge = os.getenv("ALVARY_FRONT_DOOR_ID")
     if edge:
 
         @service.middleware("http")
         async def through_the_edge(request: Request, call_next):
-            if request.url.path != "/healthz" and request.headers.get("x-azure-fdid") != edge:
+            if request.url.path not in PROBES and request.headers.get("x-azure-fdid") != edge:
                 return JSONResponse(
                     {
                         "type": "https://open.alvary.ai/docs/errors#wrong_address",
@@ -128,6 +131,13 @@ def create_service(
     async def failed(request: Request, exception: Exception):
         # An unhandled error is answered outside every middleware, so this answer adds them itself.
         return PlainTextResponse("Internal Server Error", status_code=500, headers=SECURITY_HEADERS)
+
+    # Liveness: the process answers, and nothing more. It takes no database connection, so a database that
+    # is down or has none to spare does not get instances restarted that would serve again as soon as it
+    # recovers; /healthz, which reads it, is the signal for startup, readiness and the uptime check.
+    @service.get("/livez", include_in_schema=False)
+    async def live():
+        return JSONResponse({"status": "ok"}, headers={"Cache-Control": "no-store"})
 
     @service.get("/healthz", include_in_schema=False)
     def health():

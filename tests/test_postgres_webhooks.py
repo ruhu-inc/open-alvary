@@ -2,6 +2,7 @@
 withholding, replay and rotation (changes-contracts.md)."""
 
 import json
+import time
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -10,11 +11,21 @@ from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
 
 from accounts import policies
+from accounts.ids import new_id
 from accounts.store import TIERS, AccountError, Accounts
 from api.store import Store, seed
-from changes import worker
+from changes import webhooks, worker
 from changes.watches import Watches
-from changes.webhooks import RETRIES, Sealer, Sender, Webhooks, deliver, verify_signature
+from changes.webhooks import (
+    RETRIES,
+    TESTS_PER_ENDPOINT,
+    TESTS_PER_ORGANISATION,
+    Sealer,
+    Sender,
+    Webhooks,
+    deliver,
+    verify_signature,
+)
 from rights.database import PolicyNamespace
 
 pytestmark = pytest.mark.postgres
@@ -289,3 +300,77 @@ def test_a_keyed_organisations_endpoint_is_told_of_a_withdrawal_by_its_ids_only(
     deliver(accounts, hooks, Mailer(), BASE)
     payload, _ = receiver.deliveries()[-1]
     assert payload["event"]["event_type"] == "withdrawal" and payload["event"]["work"] is None
+
+
+def sent_tests(receiver):
+    return [b for b, _ in receiver.requests if json.loads(b)["type"] == "endpoint.test"]
+
+
+def test_tests_are_limited_per_endpoint_and_per_organisation_on_every_instance(world):
+    """A test makes us send a request to an address the account chose: so many an hour to one endpoint, so
+    many from one organisation, counted in the database, so a second instance sees what the first sent."""
+    store, accounts, hooks, receiver, owner, organisation = world
+    plan(accounts, organisation, "enterprise")
+    monitor = Watches(accounts).create(owner, organisation, {"name": "Nigeria", "filters": NIGERIA})
+    endpoints = [
+        hooks.create(owner, organisation, {"url": f"{URL}/{n}", "watch_ids": [monitor["id"]]})["endpoint"][
+            "id"
+        ]
+        for n in range(3)
+    ]
+    other = Webhooks(
+        accounts, Sender(resolver=lambda host: ["93.184.216.34"], transport=receiver), hooks.sealer
+    )
+    for n in range(TESTS_PER_ENDPOINT):
+        assert (hooks if n % 2 else other).test(owner, organisation, endpoints[0])["delivered"]
+    for instance in (hooks, other):
+        with pytest.raises(AccountError) as limited:
+            instance.test(owner, organisation, endpoints[0])
+        assert limited.value.code == "rate_limited" and limited.value.status == 429
+        assert 3500 < limited.value.retry_after <= 3600
+    assert len(sent_tests(receiver)) == TESTS_PER_ENDPOINT  # nothing sent when refused
+    # The organisation's other endpoints have the rest of its hour.
+    for _ in range(TESTS_PER_ORGANISATION - TESTS_PER_ENDPOINT):
+        assert hooks.test(owner, organisation, endpoints[1])["delivered"]
+    with pytest.raises(AccountError) as limited:
+        hooks.test(owner, organisation, endpoints[2])
+    assert limited.value.code == "rate_limited" and "organisation" in limited.value.message
+    assert len(sent_tests(receiver)) == TESTS_PER_ORGANISATION
+    with accounts.engine.connect() as conn:
+        audited = conn.scalar(
+            text(
+                f"SELECT count(*) FROM {accounts._t(conn, 'audit_event')} WHERE action = 'webhook.tested'"
+                " AND organisation_id = :o"
+            ),
+            {"o": organisation},
+        )
+    assert audited == TESTS_PER_ORGANISATION
+
+
+def test_tests_sent_over_an_hour_ago_leave_room(world):
+    created, _ = endpoint_with_monitor(world)
+    store, accounts, hooks, receiver, owner, organisation = world
+    endpoint = created["endpoint"]["id"]
+    with accounts.engine.begin() as conn:
+        actor = accounts._actor(conn, owner)
+        for _ in range(TESTS_PER_ORGANISATION):
+            conn.execute(
+                text(
+                    f"INSERT INTO {accounts._t(conn, 'audit_event')} (id, at, actor_type, actor_ref,"
+                    " organisation_id, action, target_type, target_id) VALUES (:id, statement_timestamp()"
+                    " - interval '61 minutes', 'person', :a, :o, 'webhook.tested', 'webhook_endpoint', :e)"
+                ),
+                {"id": new_id("evt"), "a": actor[1], "o": organisation, "e": endpoint},
+            )
+    assert hooks.test(owner, organisation, endpoint)["delivered"]
+
+
+def test_a_test_gives_up_on_a_silent_endpoint_well_before_a_delivery_would(world, monkeypatch):
+    created, _ = endpoint_with_monitor(world)
+    store, accounts, hooks, receiver, owner, organisation = world
+    monkeypatch.setattr(webhooks, "TEST_TIMEOUT", 2.0)
+    hooks.sender.transport = lambda *a: time.sleep(8)
+    started = time.monotonic()
+    answer = hooks.test(owner, organisation, created["endpoint"]["id"])
+    assert time.monotonic() - started < 4
+    assert not answer["delivered"] and answer["error"] == "No answer within 2 seconds."

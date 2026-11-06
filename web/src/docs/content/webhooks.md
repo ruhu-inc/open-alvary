@@ -44,7 +44,7 @@ The body's `type` is one of:
 | `type` | Body | Answer |
 |---|---|---|
 | `endpoint.verification` | `challenge` | `2xx` with the body `{"challenge": "<the same challenge>"}`, within 10 seconds |
-| `endpoint.test` | `endpoint_id` | Any `2xx` (sent by **Send test** in the console) |
+| `endpoint.test` | `endpoint_id` | Any `2xx` within 5 seconds (sent by **Send test** in the console, up to 10 times an hour to an endpoint and 20 from an organisation) |
 | `change` | `watch_ids` (the monitors that matched) and `event`, as in the [change feed](/docs/changes#what-a-change-says) | Any `2xx` |
 
 Every body also has `payload_version` (1), `delivery_id` and `attempted_at`. A change too large to send in full (over 64 KB) comes with `truncated: true` and the event's details without its long fields; fetch the rest from the record's `api_url`.
