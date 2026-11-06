@@ -406,3 +406,43 @@ def test_a_confidential_withdrawal_is_never_undone_by_the_nightly_run(
     assert "confidential" in summary["records_skipped"]["rw-law"]
     assert bare.get("/sources/rw-law").status_code == 404 and stored(store)[count:] == []
     assert collection.statuses()["rw-law"]["details"] == "blocked"
+
+
+def test_an_operator_lifts_a_privacy_block_and_the_next_run_decides(
+    store,
+    both_decisions,  # noqa: F811
+    tmp_path,
+    monkeypatch,
+):
+    """The block withdraw-confidentially sets is lifted by its own command, with the same authority. Lifting it
+    publishes nothing and tells no one anything: the record stays down, its privacy review pending, until a
+    publishing run finds a current approval for it."""
+    from test_publish import Collection
+
+    collection = Collection(tmp_path)
+    collection.add("rw-law", "rw-law")
+    collection.run(store)
+    bare = TestClient(create_v1_app(store, tmp_path, lambda: []))
+    text_id = bare.get("/sources/rw-law/versions").json()["items"][0]["id"]
+    monkeypatch.setattr(admin, "engine_for", lambda: store.engine)
+    with pytest.raises(SystemExit):
+        admin.main(["lift-privacy-block", "--work", "rw-law"])  # nothing blocks it yet
+    assert admin.main(["withdraw-confidentially", "--work", "rw-law"]) == 0
+    count = len(stored(store))
+    assert admin.main(["lift-privacy-block", "--work", "rw-law"]) == 0
+    assert stored(store)[count:] == []
+    assert bare.get("/sources/rw-law").status_code == 404
+    assert bare.get(f"/versions/{text_id}/text").status_code == 404
+    rights = next(r for r in store.load().rights if r.source_id == "rw-law")
+    assert rights.privacy_status == "pending" and not rights.metadata_public
+    for again in ("rw-law", "rw-no-such-work"):
+        with pytest.raises(SystemExit):
+            admin.main(["lift-privacy-block", "--work", again])
+    assert stored(store)[count:] == []
+    # The next run: the approval is current, so the record returns, and its text with it.
+    collection.run(store)
+    assert bare.get("/sources/rw-law").status_code == 200
+    assert bare.get(f"/versions/{text_id}/text").status_code == 200
+    assert collection.statuses()["rw-law"]["details"] == "public"
+    [restored] = [e for e in stored(store)[count:] if e["event_type"] == "catalogue_added"]
+    assert restored["change_reason"] == "restored"
