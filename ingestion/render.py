@@ -174,9 +174,12 @@ def fetch(
     image = answer.content
     if not image.startswith(JPEG) or len(image) > WRITTEN:
         raise Failed("The page renderer answered with something other than a page image")
-    partial = out.with_name(out.name + ".partial")
-    partial.write_bytes(image)
-    partial.replace(out)
+    # A name of its own: two requests for the same page may arrive together, and each keeps its whole image.
+    with tempfile.NamedTemporaryFile(
+        dir=out.parent, prefix=out.name, suffix=".partial", delete=False
+    ) as partial:
+        partial.write(image)
+    Path(partial.name).replace(out)
     return out
 
 
