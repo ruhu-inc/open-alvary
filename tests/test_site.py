@@ -468,7 +468,7 @@ def test_no_answer_lets_a_page_address_such_as_a_search_reach_another_site(catal
     client = TestClient(app, raise_server_exceptions=False)
     paths = {
         "/": 200,
-        "/search?q=data+protection": 200,
+        "/browse?q=data+protection": 200,
         f"/sources/{SOURCE}": 200,
         "/missing.js": 404,
         "/site/v1/search?q=data+protection": 200,
@@ -483,6 +483,38 @@ def test_no_answer_lets_a_page_address_such_as_a_search_reach_another_site(catal
     failed = answers["/failing"]
     assert {name: failed.headers.get(name) for name in SECURITY_HEADERS} == SECURITY_HEADERS
     assert "private-error-content" not in failed.text
+
+
+def test_an_address_that_is_no_page_is_not_found_and_the_api_host_sends_pages_to_the_site(
+    catalogue, store, tmp_path, monkeypatch
+):
+    """Findings 2026-11-16, item 20: an unknown address answered 200, the whole site was served on the
+    API's host too, and the sitemap left out the terms pages."""
+    store.save(catalogue)
+    (tmp_path / "web").mkdir()
+    (tmp_path / "web" / "index.html").write_text("<h1>Open Alvary</h1>")
+    monkeypatch.setenv("PUBLIC_DOMAIN", "open.example.org")
+    monkeypatch.setenv("ALVARY_API_ORIGIN", "https://api.example.org")
+    client = TestClient(create_service(store, tmp_path, frontend=tmp_path / "web"))
+    pages = ["/", "/browse", "/browse/", f"/sources/{SOURCE}", "/terms", "/acceptable-use", "/docs/anything"]
+    for path in pages:
+        assert client.get(path).status_code == 200, path
+    for path in ["/no-such-page", "/search", f"/sources/{SOURCE}/more", "/browse/x", "/.git/config"]:
+        missing = client.get(path)
+        assert missing.status_code == 404 and missing.text == "<h1>Open Alvary</h1>", path  # it says so
+    moved = client.get("/browse?q=land", headers={"host": "api.example.org"}, follow_redirects=False)
+    assert moved.status_code == 308 and moved.headers["location"] == "https://open.example.org/browse?q=land"
+    assert (
+        client.get("/", headers={"host": "api.example.org:443"}, follow_redirects=False).headers["location"]
+        == "https://open.example.org/"
+    )
+    assert (
+        client.get("/site/v1/sources", headers={"host": "api.example.org"}).status_code == 200
+    )  # not a page
+    listed = client.get("/sitemap.xml").text
+    assert (
+        "https://open.example.org/terms<" in listed and "https://open.example.org/acceptable-use<" in listed
+    )
 
 
 def test_the_built_website_is_served_beside_the_data(catalogue, store, tmp_path):

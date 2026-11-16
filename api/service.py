@@ -40,6 +40,7 @@ import mimetypes
 import os
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from anyio import to_thread
 from fastapi import FastAPI, Request
@@ -63,7 +64,7 @@ from api.repositories import LegacyRepository, PublicUnavailable
 from api.security_txt import security_txt
 from api.site import create_downloads_app, create_site_app, create_sitemap_app
 from api.store import ROOT, Store, check_legacy_authority, engine_for
-from api.traffic import Traffic
+from api.traffic import Traffic, page_kind
 from api.v1 import CLASSES as V1_CLASSES
 from api.v1 import PUBLIC_PATHS as V1_PUBLIC
 from api.v1 import create_v1_app
@@ -331,7 +332,13 @@ def create_service(
     ]
 
     if frontend is not None:
-        website = WebsiteFiles(directory=frontend, html=True, check_dir=False, traffic=traffic)
+        # The API's own host serves the API: a website address asked of it goes to the website's host.
+        domain = os.getenv("PUBLIC_DOMAIN")
+        api_host = urlsplit(api_origin).hostname
+        elsewhere = (api_host, f"https://{domain}") if api_host and domain and api_host != domain else None
+        website = WebsiteFiles(
+            directory=frontend, html=True, check_dir=False, traffic=traffic, elsewhere=elsewhere
+        )
         service.mount("/", website, name="website")
     # Outermost of the service's own layers: no route reads more of a body than its limit.
     service.add_middleware(BodyLimit)
@@ -377,6 +384,8 @@ STATIC_PAGES = (
     "/developers",
     "/about",
     "/privacy",
+    "/terms",
+    "/acceptable-use",
     "/security",
 )
 
@@ -435,14 +444,27 @@ mimetypes.add_type("text/markdown", ".md")
 
 class WebsiteFiles(StaticFiles):
     """The built website with real page addresses: any path that is not a file (/browse,
-    /sources/<id>) answers with the website's page, which reads the address itself. Fingerprinted
-    files under /assets are cached for a year; the page itself is revalidated on every visit."""
+    /sources/<id>) answers with the website's page, which reads the address itself. An address that
+    is none of the website's pages (api.traffic.page_kind) gets that page too, to say so, but as 404,
+    so search engines and link checkers do not take it for a page (findings 2026-11-16, item 20).
+    Fingerprinted files under /assets are cached for a year; the page itself is revalidated on every
+    visit. ``elsewhere`` is (a host, the website's origin): asked on that host (the API's), a website
+    address is sent to the same address on the website's origin."""
 
-    def __init__(self, *, traffic: Traffic | None = None, **options):
+    def __init__(
+        self, *, traffic: Traffic | None = None, elsewhere: tuple[str, str] | None = None, **options
+    ):
         super().__init__(**options)
         self.traffic = traffic
+        self.elsewhere = elsewhere
 
     async def get_response(self, path: str, scope):
+        if self.elsewhere is not None:
+            host = dict(scope.get("headers") or []).get(b"host", b"").decode("latin-1")
+            if host.rsplit(":", 1)[0].lower() == self.elsewhere[0]:
+                query = scope.get("query_string", b"").decode("latin-1")
+                address = "/" + ("" if path == "." else path) + (f"?{query}" if query else "")
+                return RedirectResponse(self.elsewhere[1] + address, status_code=308)
         page = "." not in path.rsplit("/", 1)[-1]
         try:
             response = await super().get_response(path, scope)
@@ -452,6 +474,8 @@ class WebsiteFiles(StaticFiles):
             response = await super().get_response("index.html", scope)
         if response.status_code == 404 and page:
             response = await super().get_response("index.html", scope)
+        if page and path != "." and page_kind(path) is None and response.status_code == 200:
+            response.status_code = 404  # the website's own not-found page, said as one
         response.headers["Cache-Control"] = (
             "public, max-age=31536000, immutable" if path.startswith("assets/") else "no-cache"
         )
