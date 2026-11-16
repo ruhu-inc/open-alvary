@@ -29,7 +29,9 @@ from schema.jurisdictions import registry
 # one title kept apart), notices recorded, annexes without their instrument kept, treaties' family.
 # 2026-10-30.1: a file name's "57-2008" agrees with the printed "57/2008"; .2: evidence in the details file.
 # 2026-11-16.1: titles as each language cites them, with the names their texts write; full title as printed.
-PIPELINE = "2026-11-16.1"
+# 2026-11-16.2: instruments of different kinds printed with the same number in one issue are two works
+# (Law n° 009/2026 and an Order n° 009/2026), as are two known by the same date that each have a body.
+PIPELINE = "2026-11-16.2"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -900,10 +902,10 @@ def instruments(issue_streams: dict[str, list[dict]]) -> list[dict]:
             )
         for k, opening in enumerate(found):
             end = found[k + 1]["start"] if k + 1 < len(found) else len(lines)
-            key = opening["number"]
+            key = _key(by_number, opening, language)
             if key not in by_number:
                 by_number[key] = {
-                    "number": key,
+                    "number": opening["number"],  # as printed; the key also tells the kind where it must
                     "kind": opening["kind"],
                     "date": opening["date"],
                     "versions": {},
@@ -950,6 +952,29 @@ def instruments(issue_streams: dict[str, list[dict]]) -> list[dict]:
         else:
             merged.append(entry)
     return merged
+
+
+def _key(by_number: dict[str, dict], opening: dict, language: str) -> str:
+    """Which instrument an opening is, across the issue's languages (findings 2026-11-16, item 44): its
+    number, but kind and number where another kind of instrument has that number in the issue (Law
+    n° 001/2024 and Order n° 001/2024 are two instruments); and for one known only by its date, a second
+    one of that date with its own body is another instrument, matched across languages by its place
+    among them."""
+    key, kind = opening["number"], opening["kind"]
+    held = by_number.get(key)
+    if held is not None and kind != "other" and held["kind"] not in ("other", kind):
+        key = f"{kind}|{key}"
+    if opening["number"] == opening.get("date"):
+        base, n = key, 1
+        while (
+            (held := by_number.get(key)) is not None
+            and language in held["versions"]
+            and held["versions"][language]["has_body"]
+            and opening["has_body"]
+        ):
+            n += 1
+            key = f"{base}#{n}"
+    return key
 
 
 def _pages_overlap(a: list[int], b: list[int]) -> int:

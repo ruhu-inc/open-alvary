@@ -1909,3 +1909,61 @@ def test_a_kinyarwanda_name_begins_at_a_word_its_text_never_writes_in_lower_case
     )
     assert names.get("urwego rw'igihugu") == "Urwego rw'Igihugu"
     assert "imikorere by'urwego rw'igihugu" not in names
+
+
+def test_a_law_and_an_order_with_the_same_number_in_one_issue_are_two_instruments():
+    """Consolidated findings item 44: two instruments numbered alike became one work, and the second
+    disappeared."""
+    header = "Official Gazette n° 11 Bis of 16/03/2026"
+    law_page = page(
+        ["ITEGEKO N° 009/2026 RYO KU WA", "12/03/2026 RIGENGA INGERO", "Twebwe, EXAMPLE Name,", *RW],
+        ["LAW N° 009/2026 OF 12/03/2026", "GOVERNING EXAMPLES", "We, EXAMPLE Name,", *EN],
+        ["LOI N° 009/2026 DU 12/03/2026", "RÉGISSANT LES EXEMPLES", "Nous, EXAMPLE Name,", *FR],
+        header=header,
+    )
+    order_page = page(
+        [
+            "ITEKA RYA MINISITIRI W’INTEBE N° 009/2026",
+            "RYO KU WA 12/03/2026 RISHYIRAHO",
+            "Minisitiri w’Intebe,",
+            *RW,
+        ],
+        [
+            "PRIME MINISTER’S ORDER N° 009/2026 OF",
+            "12/03/2026 APPOINTING EXAMPLES",
+            "The Prime Minister,",
+            *EN,
+        ],
+        [
+            "ARRÊTÉ DU PREMIER MINISTRE N° 009/2026",
+            "DU 12/03/2026 PORTANT NOMINATION",
+            "Le Premier Ministre,",
+            *FR,
+        ],
+        header=header,
+    )
+    found = RG.instruments(RG.streams(RG.split_issue([law_page, order_page])))
+    assert [(f["kind"], f["number"]) for f in found] == [
+        ("law", "009/2026"),
+        ("prime_ministers_order", "009/2026"),
+    ]
+    assert all(set(f["versions"]) == {"rw", "en", "fr"} for f in found)
+    assert found[0]["versions"]["en"]["pages"] == [1, 1] and found[1]["versions"]["en"]["pages"] == [2, 2]
+
+
+def test_a_work_holding_another_works_pages_in_one_file_is_reported_and_its_own_annexes_are_not():
+    from ingestion.rwanda import enclosed_works
+
+    def doc(id_, pages, work=None, language="en", source="gazette.pdf"):
+        return {"id": id_, "work": work or id_, "pages": pages, "language": language, "source_object": source}
+
+    documents = [
+        doc("rw-law-1-en", [1, 20]),
+        doc("rw-law-1-annex-1-en", [15, 20], work="rw-law-1-en"),  # its own annex: by design
+        doc("rw-order-2-en", [5, 8]),  # inside the law's pages: one of them took the other's
+        doc("rw-order-2-fr", [5, 8], language="fr"),  # another language: not compared with the English
+        doc("rw-order-3-en", [5, 8], source="other.pdf"),  # another file
+        doc("rw-order-4-en", [21, 25]),
+    ]
+    [problem] = enclosed_works(documents)
+    assert problem.startswith("rw-law-1-en (pages 1-20) holds the pages of rw-order-2-en (5-8)")

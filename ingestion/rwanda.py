@@ -1653,9 +1653,39 @@ def prepare_selection(
         log(f"{record['listed']['name']}: {len(found)} instruments, {len(set(roles.values()))} annexes")
     scratch.cleanup()
     manifest["documents"] = sorted(documents.values(), key=lambda d: d["id"])
+    enclosed = enclosed_works(manifest["documents"])
+    for problem in enclosed:
+        log(f"Check before approving: {problem}")
     if save:  # a cloud task prepares file by file and assembles the manifest once, at its end
         collection.save_manifest(manifest)
-    return {"documents": len(manifest["documents"]), "instruments": summary}
+    return {"documents": len(manifest["documents"]), "instruments": summary, "enclosed": enclosed}
+
+
+def enclosed_works(documents: list[dict]) -> list[str]:
+    """Where one work's pages lie inside another's in the same file and language: one of them took the
+    other's pages, as when two instruments numbered alike became one (findings 2026-11-16, item 44). A
+    work's own parts (annexes) are inside it by design and are not reported."""
+    by_place: dict[tuple, list[dict]] = {}
+    for document in documents:
+        pages = document.get("pages")
+        if pages and document.get("source_object") and document.get("language"):
+            by_place.setdefault((document["source_object"], document["language"]), []).append(document)
+    found = []
+    for (source, language), held in sorted(by_place.items()):
+        for outer in held:
+            for inner in held:
+                if (
+                    inner is not outer
+                    and (inner.get("work") or inner["id"]) != (outer.get("work") or outer["id"])
+                    and outer["pages"][0] <= inner["pages"][0]
+                    and inner["pages"][1] <= outer["pages"][1]
+                    and (outer["pages"] != inner["pages"] or outer["id"] < inner["id"])
+                ):
+                    found.append(
+                        f"{outer['id']} (pages {outer['pages'][0]}-{outer['pages'][1]}) holds the pages of "
+                        f"{inner['id']} ({inner['pages'][0]}-{inner['pages'][1]}) in {source}, {language}"
+                    )
+    return found
 
 
 def document_title(entry: dict, language: str, lines: dict, values: dict, nodes: list[dict] = ()) -> str:
@@ -2234,6 +2264,8 @@ def main(argv=None) -> int:
     check.add_argument("--approved-by", required=True)
     check.add_argument("--max-pages", type=int, required=True, help="the approved budget, in pages")
     check.add_argument("--basis", required=True, help="where and when the budget was approved")
+    pages = sub.add_parser("check-pages", help="report works whose pages hold another work's, in one file")
+    pages.add_argument("manifest", type=Path, help="a prepared collection's manifest.json")
     work = sub.add_parser("scan-worklist", help="write the cloud job's list of files with scanned pages")
     work.add_argument("--approved-by", required=True)
     work.add_argument(
@@ -2263,6 +2295,12 @@ def main(argv=None) -> int:
         )
         print(json.dumps(summary["by"].get("all", {}), ensure_ascii=False))
         return 0
+    if args.command == "check-pages":
+        found = enclosed_works(json.loads(args.manifest.read_text())["documents"])
+        for problem in found:
+            print(problem)
+        print(f"{len(found)} works hold another's pages")
+        return 1 if found else 0
     if args.command == "scan-progress":
         print(json.dumps(scan_progress(corpus_store.open_store())))
         return 0
