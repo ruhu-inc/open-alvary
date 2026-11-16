@@ -957,7 +957,18 @@ function approvalPanel(actId, data, current) {
       toast(decision === "approved" ? "Approved and recorded" : "Approval revoked");
       if (location.hash === address) actView(actId);
     };
+    // Names withheld: the approver confirms what the catalogue will show, exactly as it will show it.
+    const shown = data.withheld_wording;
+    const wording = shown ? el("div", { class: "card withheld-wording" },
+      el("h4", { text: "As it will be published, with names withheld" }),
+      el("dl", {},
+        el("dt", { text: "Title" }), el("dd", { text: shown.title || "—" }),
+        el("dt", { text: "Citation" }), el("dd", { text: shown.citation || "—" }),
+        el("dt", { text: "Summary" }), el("dd", { text: shown.summary || "None" }),
+        el("dt", { text: "Other names" }), el("dd", { text: shown.aliases.length ? shown.aliases.join("; ") : "None" })),
+      shown.names_left ? el("p", { class: "notice warn", text: "A withheld name is still in this wording. Edit the details before approving." }) : null) : null;
     panel.append(
+      ...(wording ? [wording] : []),
       el("h4", { text: "Rights basis" }), basis,
       el("h4", { text: `Verification (confirm each against ${data.act.type === "judgment" || data.act.type === "ruling" ? "the official source" : "the gazette"})` }), el("div", { class: "materials" }, boxes.map((b) => b.row)),
       note,

@@ -750,6 +750,10 @@ class Collection:
                 "created_at": datetime.now(UTC) - timedelta(minutes=5), "text_sha256": bound.text_sha256,
                 "structure_sha256": bound.structure_sha256, "serialization_profile": bound.profile_id,
                 "structure_rules": bound.rules_id,
+                # The approver confirmed the wording as published (workbench), unless a test says not.
+                "materials": {} if found.get("unconfirmed") else {
+                    "withheld_wording": publish.wording_hash(found["work"], found["record"] or rwanda_law())
+                },
             },
             "approvals": [{"decision": "approved", "text_sha256": sha} for sha in approvals],
             "approved": found["approved"] and found["decision"] == "approved",
@@ -1222,8 +1226,9 @@ def test_an_official_link_naming_someone_withheld_is_refused_however_it_spells_t
 
     def entry(url, **changes):
         record = named_judgment(True, url=url, **({"title": NEUTRAL} | changes))
+        confirmed = frozenset({publish.wording_hash("rw-case", record)})
         return publish.catalogue_entries(
-            publish.Approved("rw-case", record, ["en"], "A", datetime.now(UTC)), decision
+            publish.Approved("rw-case", record, ["en"], "A", datetime.now(UTC), confirmed), decision
         )
 
     for url in (
@@ -1477,3 +1482,66 @@ def test_nothing_an_operator_holds_back_is_published_again(both_decisions, store
     rights = {r.source_id: r for r in store.load().rights}
     assert rights["rw-a"].privacy_status == "blocked" and rights["rw-b"].privacy_status == "blocked"
     assert not rights["rw-b"].metadata_public
+
+
+@pytest.mark.parametrize(
+    "printed, name, published",
+    [
+        ("Obi v The State", "Obi", "[Withheld] v The State"),
+        ("EZE v. Okafor", "Eze", "[Withheld] v. Okafor"),
+        ("Ọláwálé v Example Bank", "Olawale", "[Withheld] v Example Bank"),
+        ("Olawale v Example Bank", "Ọláwálé", "[Withheld] v Example Bank"),
+        ("N’Diaye v Example", "N'Diaye", "[Withheld] v Example"),
+        ("NDIAYE v Example", "N'Diaye", "[Withheld] v Example"),
+        ("Ada Obi v Example", "Ada Obi", "[Withheld] v Example"),
+    ],
+)
+def test_a_withheld_name_is_found_whatever_its_case_accents_apostrophes_or_length(printed, name, published):
+    """Consolidated findings item 32: names of two or three letters, or with accents, were published."""
+    assert publish.withhold(printed, [name]) == published
+    assert not publish.still_named([published], [name])
+
+
+def test_a_withheld_name_given_otherwise_is_refused_and_another_word_holding_it_is_left_alone():
+    assert publish.withhold("Obi Ada v Example", ["Ada Obi"]) == "Obi Ada v Example"  # reversed: not replaced
+    assert publish.still_named(["Obi Ada v Example"], ["Ada Obi"])  # … so refused
+    assert publish.still_named(["In re Obi (a minor)"], ["Ada Obi"])  # in part
+    assert publish.still_named(["Diaye v Example"], ["N'Diaye"])  # without its first letter
+    untouched = "Somali Bahrain Trading v Example"  # "Ali Bah" is no part of these words
+    assert publish.withhold(untouched, ["Ali Bah"]) == untouched
+    assert not publish.still_named([untouched], ["Ali Bah"])
+    assert not publish.still_named(["Federal Republic of Nigeria v [Withheld]"], ["Ada Obi"])
+    assert not publish.still_named(["A v B"], ["A. Obi"]) and publish.still_named(["Obi v B"], ["A. Obi"])
+
+
+def test_a_record_with_names_withheld_is_published_only_with_the_wording_its_approver_confirmed(decisions):
+    """The approver sees the title, citation and summary as they will be published and confirms them; a
+    record whose wording was not confirmed, or has changed since, is refused (findings item 32)."""
+    decision = publish.decide("rw", "Ada Reviewer", 12, [], "", "")
+    record = named_judgment(True, summary="The appellant, a child, was dismissed.")
+    shown = publish.published_wording("rw-case", record)
+    assert shown["title"] == "[Withheld] v Example Services Limited" and not shown["names_left"]
+
+    def entry(confirmed):
+        item = publish.Approved("rw-case", record, ["en"], "A", datetime.now(UTC), frozenset(confirmed))
+        return publish.catalogue_entries(item, decision)
+
+    with pytest.raises(publish.Refused, match="confirming its title, citation and summary"):
+        entry(set())
+    earlier = publish.wording_hash("rw-case", named_judgment(True, summary="Another summary."))
+    with pytest.raises(publish.Refused, match="confirming its title, citation and summary"):
+        entry({earlier})
+    assert entry({publish.wording_hash("rw-case", record)})["source"].title == shown["title"]
+    assert publish.wording_hash("rw-case", named_judgment(False)) is None  # nothing withheld, nothing asked
+
+
+def test_an_unconfirmed_approval_keeps_a_record_with_names_withheld_from_the_catalogue(case_named, store):
+    withheld_now(case_named)
+    case_named.docs["rw-case"]["unconfirmed"] = True
+    case_named.run(store)  # comes down: it names someone withheld
+    summary = case_named.run(store)["countries"]["rw"]
+    assert "confirming its title, citation and summary" in summary["records_skipped"]["rw-case"]
+    assert public_records(store) == []
+    case_named.docs["rw-case"]["unconfirmed"] = False
+    case_named.run(store)
+    assert public_records(store) == ["rw-case"] and "Bello" not in title_of(store)

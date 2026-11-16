@@ -44,12 +44,23 @@ DETAILS_ONLY_MATERIALS = {
 }
 
 
-def materials_for(act: dict) -> dict:
+# A record with names withheld: the approver confirms what the catalogue will show, not only the details
+# (operations.publish.published_wording; findings 2026-11-16, item 32).
+WITHHELD_WORDING = {
+    "withheld_wording": "The title, citation, summary and other names, as shown for publication, name no one "
+    "whose name is withheld",
+}
+
+
+def materials_for(act: dict, withheld: bool = False) -> dict:
     """The checks an approver confirms, worded for the document's kind (the keys are always MATERIALS',
-    but for a document whose text is held, approved on its details alone)."""
+    but for a document whose text is held, approved on its details alone), and the published wording
+    when names are withheld."""
     if act.get("text_held"):
-        return DETAILS_ONLY_MATERIALS
-    return JUDGMENT_MATERIALS if act.get("type") in {"judgment", "ruling"} else MATERIALS
+        found = DETAILS_ONLY_MATERIALS
+    else:
+        found = JUDGMENT_MATERIALS if act.get("type") in {"judgment", "ruling"} else MATERIALS
+    return {**found, **WITHHELD_WORDING} if withheld else found
 
 
 COLLECTION_ID = re.compile(r"[a-z]{2}-[a-z0-9-]{3,120}")

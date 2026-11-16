@@ -515,6 +515,19 @@ def create_app(
             "documents": shown,
         }
 
+    def withheld_wording(act: dict, now: dict) -> dict | None:
+        """For a record with names withheld, what the catalogue will show of it (title, citation, summary,
+        other names), whether a withheld name is still in it, and the hash an approval records; else None."""
+        record = built(act, now["view"])
+        if record is None:
+            return None
+        from operations import publish
+
+        if not publish.withheld_names(record):
+            return None
+        work = act.get("work") or act["id"]
+        return publish.published_wording(work, record) | {"hash": publish.wording_hash(work, record)}
+
     @app.get("/api/documents/{act_id}")
     def act_detail(request: Request, act_id: str):
         auth.current(request, store)
@@ -546,6 +559,7 @@ def create_app(
                 }
             )
         provenance = library.provenance(act_id)
+        wording = withheld_wording(act, now)
         return {
             "act": {
                 **act,
@@ -567,7 +581,8 @@ def create_app(
             "details_sha256": now["details_sha256"],
             "approved": now["approved"],
             "approvals": [recorded(a) for a in now["approvals"]],
-            "materials": content.materials_for(act),
+            "materials": content.materials_for(act, withheld=wording is not None),
+            "withheld_wording": wording,
             "publication": publishing_section.standing(
                 act,
                 now,
@@ -697,11 +712,19 @@ def create_app(
             raise HTTPException(422, "decision must be approved or revoked")
         materials = body.get("materials") or {}
         basis = str(body.get("rights_basis", "")).strip()[:2000]
+        wording = withheld_wording(act, now)
+        required = content.materials_for(act, withheld=wording is not None)
         if decision == "approved":
             ready = now["readiness"]
             if not ready["ready"]:
                 raise HTTPException(409, {"message": "Not ready for approval", "readiness": ready})
-            if set(materials) != set(content.materials_for(act)) or not all(materials.values()):
+            if wording is not None and wording["names_left"]:
+                raise HTTPException(
+                    409,
+                    "Names are withheld, but the title, citation, summary or another name would still give "
+                    "one: edit the details first.",
+                )
+            if set(materials) != set(required) or not all(materials.values()):
                 raise HTTPException(422, "Confirm every verification check")
             if not basis:
                 raise HTTPException(422, "State the rights basis")
@@ -737,7 +760,14 @@ def create_app(
                 serialization_profile=now["text"].profile_id,
                 structure_rules=now["text"].rules_id,
                 rights_basis=basis,
-                materials={k: bool(v) for k, v in materials.items() if k in content.materials_for(act)},
+                # For a record with names withheld, what was confirmed is the wording itself (its hash):
+                # publishing refuses the record if what it would show is not exactly that.
+                materials={k: bool(v) for k, v in materials.items() if k in required}
+                | (
+                    {"withheld_wording": wording["hash"]}
+                    if wording is not None and decision == "approved"
+                    else {}
+                ),
                 note=note,
                 routing=now["readiness"].get("routing") if decision == "approved" else None,
             )

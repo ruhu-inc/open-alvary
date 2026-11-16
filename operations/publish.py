@@ -231,6 +231,8 @@ class Approved:
     languages: list[str]
     approver: str
     approved_at: datetime
+    # The wording as published (wording_hash) that an approver confirmed, for a record with names withheld.
+    confirmed: frozenset = frozenset()
 
 
 def from_workbench(
@@ -261,7 +263,10 @@ def from_workbench(
             if record is None:
                 continue
             head = now["head"]
-            found = found or {"record": record, "languages": [], "head": head}
+            found = found or {"record": record, "languages": [], "head": head, "confirmed": set()}
+            confirmed = (head.get("materials") or {}).get("withheld_wording")
+            if isinstance(confirmed, str):
+                found["confirmed"].add(confirmed)
             found["languages"].append(act.get("language") or record.expressions[0].language)
             if head["created_at"] > found["head"]["created_at"]:
                 found["head"] = head
@@ -278,6 +283,7 @@ def from_workbench(
                 sorted(found["languages"]),
                 approver,
                 when if isinstance(when, datetime) else datetime.fromisoformat(str(when)),
+                frozenset(found["confirmed"]),
             )
         )
     return approved, waiting
@@ -315,12 +321,51 @@ def _slug(text: str) -> str:
 
 # Names a reviewer withheld in a sensitive case (a child, a sexual offence: owner, 2026-10-27) are never
 # published: each is given as NAME_WITHHELD, and a record whose details would still name one is refused.
+# Scrubbing alone is not relied on: the approver confirms the wording as it will be published
+# (wording_hash, workbench approval), and this check stays as the backstop (findings 2026-11-16, item 32).
+# Names and texts are compared word by word, whole words only, without case, accents or apostrophes:
+# "Ọláwálé" is "Olawale", "N'Diaye" is "NDiaye", and "Ali" is no part of "Somali".
 NAME_WITHHELD = "[Withheld]"
-NAME_WORD = re.compile(r"[A-Za-z][A-Za-z'’-]{3,}")
+NAME_TOKEN = re.compile(r"[^\W_]+(?:['’ʼ‘`´][^\W_]+)*")
+APOSTROPHES = re.compile(r"['’ʼ‘`´]")
 NOT_A_NAME = {
     "limited", "company", "nigeria", "federal", "republic", "state", "government", "attorney", "general",
     "bank", "council", "commission", "university", "others", "industrial", "court", "national", "ministry",
 }  # fmt: skip
+# Words that join or title a name and say nothing of whose it is.
+PARTICLES = {
+    "v", "vs", "and", "of", "the", "in", "re", "de", "da", "das", "do", "dos", "di", "del", "della", "du", "la",
+    "le", "van", "von", "der", "den", "ten", "ter", "bin", "binti", "bint", "ibn", "al", "el", "ben", "mr",
+    "mrs", "ms", "miss", "dr", "chief", "alhaji", "alhaja", "hon", "sir", "prof", "mallam", "madam", "otherwise",
+}  # fmt: skip
+
+
+def _fold(word: str) -> str:
+    """A word as names are compared: no accents (ọ is o), no case, no apostrophes."""
+    plain = "".join(c for c in unicodedata.normalize("NFKD", word) if not unicodedata.combining(c))
+    return APOSTROPHES.sub("", plain.casefold())
+
+
+def _tokens(text: str) -> list[tuple[int, int, str]]:
+    """Each word of the text (in NFC, as stored) with where it is, folded."""
+    return [(m.start(), m.end(), _fold(m.group())) for m in NAME_TOKEN.finditer(text)]
+
+
+def _forms(word: str) -> set[str]:
+    """A word as it may be found: whole ("ndiaye"), and its parts across an apostrophe ("diaye")."""
+    found = {_fold(word)}
+    found |= {_fold(part) for part in re.split(r"['’ʼ‘`´]", word) if len(_fold(part)) >= 3}
+    return found
+
+
+def name_words(names: list[str]) -> set[str]:
+    """Every word of the withheld names that could tell who is meant: all of them, short ones included,
+    but initials, particles and the words that name institutions."""
+    words = set()
+    for name in names:
+        for match in NAME_TOKEN.finditer(unicodedata.normalize("NFC", name)):
+            words |= _forms(match.group())
+    return {w for w in words if len(w) >= 2 and not w.isdigit()} - PARTICLES - NOT_A_NAME
 
 
 def withheld_names(record) -> list[str]:
@@ -337,18 +382,38 @@ def withheld_names(record) -> list[str]:
 
 
 def withhold(text, names: list[str]):
-    """The text with each withheld name given as NAME_WITHHELD (any case)."""
+    """The text with each withheld name, as a run of whole words in the same order, given as NAME_WITHHELD
+    (without regard to case, accents or apostrophes). A name given otherwise (reversed, or in part) is
+    left for still_named to refuse."""
     if not text:
         return text
+    text = unicodedata.normalize("NFC", text)
     for name in sorted(names, key=len, reverse=True):
-        text = re.sub(re.escape(name.strip()), NAME_WITHHELD, text, flags=re.I)
+        wanted = [t[2] for t in _tokens(unicodedata.normalize("NFC", name))]
+        if not wanted:
+            continue
+        found = _tokens(text)
+        runs, at = [], 0
+        while at + len(wanted) <= len(found):
+            if [t[2] for t in found[at : at + len(wanted)]] == wanted:
+                runs.append((found[at][0], found[at + len(wanted) - 1][1]))
+                at += len(wanted)
+            else:
+                at += 1
+        for begin, end in reversed(runs):
+            text = text[:begin] + NAME_WITHHELD + text[end:]
     return text
 
 
 def still_named(texts, names: list[str]) -> bool:
-    """Whether a word of a withheld name is left in what would be published (a name cited differently)."""
-    words = {w.lower() for name in names for w in NAME_WORD.findall(name)} - NOT_A_NAME
-    return any(w.lower() in words for text in texts for w in NAME_WORD.findall(text or ""))
+    """Whether a word of a withheld name is left in what would be published (a name cited differently,
+    reversed, in part, or in another spelling of the same letters)."""
+    words = name_words(names)
+    for text in texts:
+        for match in NAME_TOKEN.finditer(unicodedata.normalize("NFC", text or "")):
+            if _forms(match.group()) & words:
+                return True
+    return False
 
 
 def named_in_link(link: str | None, names: list[str]) -> bool:
@@ -361,20 +426,51 @@ def named_in_link(link: str | None, names: list[str]) -> bool:
     joined = f" {' '.join(said)} "
     if any(spelt and f" {' '.join(spelt)} " in joined for spelt in (_spelt(name) for name in names)):
         return True
-    words = {w for name in names for w in _spelt(name) if len(w) > 3} - NOT_A_NAME
+    words = name_words(names)
     return any(w in words for w in said)
 
 
 def _spelt(text: str) -> list[str]:
-    plain = unicodedata.normalize("NFKD", unquote_plus(text)).encode("ascii", "ignore").decode().lower()
+    plain = _fold(unquote_plus(text)).encode("ascii", "ignore").decode()
     return re.findall(r"[a-z0-9]+", plain)
+
+
+def published_wording(work: str, record) -> dict:
+    """What the catalogue will show of a record, with any withheld name given as NAME_WITHHELD: its title,
+    citation, summary and other names (aliases), and whether a word of a withheld name is still in them.
+    The approver sees and confirms exactly this (workbench approval); publishing checks it is unchanged."""
+    withheld = withheld_names(record)
+    citation = record.identity.citations[0].text if record.identity.citations else record.identity.title
+    title = withhold(record.identity.title, withheld)
+    citation = withhold(citation, withheld)
+    summary = withhold(record.text.summary.text if record.text.summary else None, withheld)
+    others = [
+        c.value for c in aliases(work, citation, record.identity, withheld) if c.value not in (citation,)
+    ]
+    return {
+        "title": title,
+        "citation": citation,
+        "summary": summary,
+        "aliases": others,
+        "names_left": bool(withheld) and still_named([title, citation, summary, *others], withheld),
+    }
+
+
+def wording_hash(work: str, record) -> str | None:
+    """The hash of published_wording, which an approval of a record with names withheld records; None for
+    a record that withholds no name."""
+    if not withheld_names(record):
+        return None
+    shown = published_wording(work, record)
+    words = [shown["title"], shown["citation"], shown["summary"] or "", *shown["aliases"]]
+    return hashlib.sha256(json.dumps(words, ensure_ascii=False).encode()).hexdigest()
 
 
 def names_anyone(texts, names: list[str], links=()) -> bool:
     """Whether what is public now names a withheld party: a whole name as it was withheld, a word of one
     (still_named), or either in a link."""
     return bool(names) and (
-        any(withhold(text, names) != text for text in texts if text)
+        any(withhold(text, names) != unicodedata.normalize("NFC", text) for text in texts if text)
         or still_named(texts, names)
         or any(named_in_link(link, names) for link in links)
     )
@@ -397,19 +493,19 @@ def catalogue_entries(item: Approved, decision: dict) -> dict:
         kind=kind,
         official_url=official.get(kind, official.get("*", url)),
     )
-    citation = record.identity.citations[0].text if record.identity.citations else record.identity.title
     withheld = withheld_names(record)
-    title = withhold(record.identity.title, withheld)
-    citation = withhold(citation, withheld)
-    summary = withhold(record.text.summary.text if record.text.summary else None, withheld)
+    shown = published_wording(item.work, record)
+    title, citation, summary = shown["title"], shown["citation"], shown["summary"]
     cited = aliases(item.work, citation, record.identity, withheld)
-    if withheld and (
-        still_named([title, citation, summary, *(c.value for c in cited)], withheld)
-        or named_in_link(url, withheld)
-    ):
+    if withheld and (shown["names_left"] or named_in_link(url, withheld)):
         raise Refused(
             f"{item.work}: names are withheld in this case, but its title, citations, summary or official link "
             "would still name a withheld party: edit them"
+        )
+    if withheld and wording_hash(item.work, record) not in item.confirmed:
+        raise Refused(
+            f"{item.work}: names are withheld in this case: approve it again, confirming its title, citation "
+            "and summary as they will be published"
         )
     languages = [e.language for e in record.expressions]
     names = ", ".join(LANGUAGES.get(code, code) for code in languages)

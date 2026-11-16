@@ -1802,3 +1802,89 @@ def test_a_versions_title_is_given_in_the_details_and_heads_the_document(world):
     listed = reviewer.get("/api/documents", params={"q": ACT}).json()
     rows = listed.get("documents") or listed.get("items") or listed.get("rows") or []
     assert [d["title"] for d in rows if d["id"] == ACT] == ["The Data Protection Act, 2023"]
+
+
+def test_a_judgment_with_names_withheld_is_approved_on_the_wording_it_will_be_published_with(
+    tmp_path, monkeypatch
+):
+    """Consolidated findings item 32: the approver sees the title, citation and summary as the catalogue
+    will show them and confirms them; the approval records that wording, which publishing checks."""
+    import hashlib
+
+    from test_nicn import page, record
+
+    from ingestion import nicn
+    from operations import publish
+
+    folder = tmp_path / "ng"
+    collection = nicn.FolderCollection(folder)
+    sha = hashlib.sha256(page("word")).hexdigest()
+    items = {"nicn-judgments:9001": record(9001, sha=sha, suit="NICN/LA/123/2020", date="2026-01-08")}
+    found = lambda item: (page("word"), {"url": item["url"], "retrieved_at": "2026-10-23T00:28:42Z",  # noqa: E731
+                                         "listed": item["listed"]})  # fmt: skip
+    nicn.prepare_items(items, list(items), found, collection)
+    collection.save_manifest()
+    monkeypatch.setenv("ALVARY_REVIEW_COLLECTIONS", str(folder))
+    (tmp_path / "first").mkdir()
+    store = Store(connect(f"sqlite:///{tmp_path / 'w.db'}"))
+    store.add_operator("approver@example.org", "App", {"reviewer", "approver"})
+    library = content.Library(tmp_path / "first")
+    browser = TestClient(create_app(store, library, None, dev_login=True), base_url="http://127.0.0.1")
+    assert browser.post("/auth/dev", json={"email": "approver@example.org"}).status_code == 200
+    browser.headers["X-CSRF-Token"] = browser.get("/api/me").json()["csrf"]
+    act = "ng-nicn-la-123-2020-2026-01-08"
+    for number in range(1, len(library.reading(act)["pages"]) + 1):
+        latest = browser.get(f"/api/documents/{act}/pages/{number}").json()
+        units = (latest.get("latest") or {}).get("units") or latest["machine_units"]
+        body = {"expected_revision": 0, "units": units, "status": "checked", "resolutions": {}, "comment": ""}
+        assert browser.post(f"/api/documents/{act}/pages/{number}", json=body).status_code == 200
+    current = browser.get(f"/api/documents/{act}/details").json()
+    given = {
+        "text.form": "court_copy",
+        **current["record"]["details"],
+        "identity.title": "AMINA BELLO -VS- EXAMPLE SERVICES LIMITED",
+        "profile.parties": [
+            {"name": "Amina Bello", "role": "claimant", "anonymised": "yes"},
+            {"name": "Example Services Limited", "role": "defendant", "anonymised": "no"},
+        ],
+        "profile.anonymisation": "partial",
+        "profile.anonymisation_reason": "child",
+    }
+    absent = {key: "unknown" for key in current["missing"] if not given.get(key)}
+    absent.update({k: v for k, v in current["record"]["absent"].items() if k not in given})
+    confirmed = browser.post(
+        f"/api/documents/{act}/details",
+        json={"expected_revision": 0, "status": "confirmed", "details": given, "absent": absent},
+    )
+    assert confirmed.status_code == 200, confirmed.text
+    page_now = browser.get(f"/api/documents/{act}").json()
+    shown = page_now["withheld_wording"]
+    assert shown["title"] == "[Withheld] -VS- EXAMPLE SERVICES LIMITED" and shown["names_left"] is False
+    assert "withheld_wording" in page_now["materials"]
+    checks = dict.fromkeys(page_now["materials"], True)
+    hashes = {
+        "content_sha256": page_now["content_sha256"],
+        "details_sha256": page_now["details_sha256"],
+        "text_sha256": (page_now["text_check"] or {}).get("text_sha256"),
+    }
+    body = {"expected_revision": 0, "decision": "approved", "rights_basis": "s.3(b)", "shown": hashes}
+    unconfirmed = {k: v for k, v in checks.items() if k != "withheld_wording"}
+    assert (
+        browser.post(f"/api/documents/{act}/approval", json=body | {"materials": unconfirmed}).status_code
+        == 422
+    )
+    approved = browser.post(f"/api/documents/{act}/approval", json=body | {"materials": checks})
+    assert approved.status_code == 200, approved.text
+    [head] = browser.get(f"/api/documents/{act}").json()["approvals"]
+    assert head["materials"]["withheld_wording"] == shown["hash"]
+    work_record = built_record(store, library, act)
+    assert shown["hash"] == publish.wording_hash(library.act(act).get("work") or act, work_record)
+
+
+def built_record(store, library, act_id):
+    from schema.jurisdictions import registry
+    from workbench.review import Review
+
+    review = Review(store, library, registry())
+    act = library.act(act_id)
+    return review.built(act, review.state(act)["view"])

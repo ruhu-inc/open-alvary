@@ -896,8 +896,9 @@ def test_names_withheld_in_a_sensitive_case_are_never_published(tmp_path, monkey
 
     def entry(changes):
         built = review.built(act, {**view, "values": {**values, **changes}})
+        confirmed = frozenset({publish.wording_hash(act["id"], built)})  # as the approver saw it
         return publish.catalogue_entries(
-            publish.Approved(act["id"], built, ["en"], "Owner", datetime.now(UTC)), decision
+            publish.Approved(act["id"], built, ["en"], "Owner", datetime.now(UTC), confirmed), decision
         )
 
     published = entry({})
