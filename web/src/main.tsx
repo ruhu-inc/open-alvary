@@ -72,8 +72,13 @@ function resultOpened(path: string): Record<string, string> | undefined {
   openedResult = "";
   return headers;
 }
+class RequestFailed extends Error {
+  constructor(readonly status: number) {
+    super(`Request failed (${status})`);
+  }
+}
 function useData<T>(path: string) {
-  const [state, set] = useState<{ path: string; data?: T; error?: string }>({
+  const [state, set] = useState<{ path: string; data?: T; error?: string; status?: number }>({
     path: "",
   });
   useEffect(() => {
@@ -82,7 +87,7 @@ function useData<T>(path: string) {
     // The website's own data path (MAC-01): anonymous, bounded, never the developer API.
     fetch("/site/v1" + path, { signal: controller.signal, headers: resultOpened(path) })
       .then((r) => {
-        if (!r.ok) throw new Error(`Request failed (${r.status})`);
+        if (!r.ok) throw new RequestFailed(r.status);
         return r.json();
       })
       .then((data) => {
@@ -90,11 +95,11 @@ function useData<T>(path: string) {
       })
       .catch((e) => {
         if (!controller.signal.aborted && e.name !== "AbortError")
-          set({ path, error: e.message });
+          set({ path, error: e.message, status: e instanceof RequestFailed ? e.status : undefined });
       });
     return () => controller.abort();
   }, [path]);
-  return state.path === path ? state : { data: undefined, error: undefined };
+  return state.path === path ? state : { data: undefined, error: undefined, status: undefined };
 }
 function Feedback({ error }: { error?: string }) {
   return (
@@ -139,14 +144,18 @@ class PageBoundary extends React.Component<
   }
 }
 
-function NotFound() {
+function NotFound({ record = false }: { record?: boolean }) {
   useEffect(() => {
-    document.title = "Page not found · Open Alvary";
-  }, []);
+    document.title = (record ? "Record not found" : "Page not found") + " · Open Alvary";
+  }, [record]);
   return (
     <div className="page not-found">
-      <h1>This page doesn’t exist.</h1>
-      <p>The address may be mistyped, or the page may have moved.</p>
+      <h1>{record ? "There is no record at this address." : "This page doesn’t exist."}</h1>
+      <p>
+        {record
+          ? "The identifier may be mistyped, or the record may have been withdrawn from the catalogue."
+          : "The address may be mistyped, or the page may have moved."}
+      </p>
       <p>
         <Link className="button primary" to="/browse">
           Search the catalogue <ArrowRight size={17} aria-hidden="true" />
@@ -752,6 +761,13 @@ function Reader({ id }: { id: string }) {
     decision: { reasons: string[] };
   }>("/rights/" + encodeURIComponent(id));
   const history = useData<History>("/sources/" + encodeURIComponent(id) + "/relationships");
+  // Until the record is shown, the tab does not keep the previous page's title.
+  useEffect(() => {
+    if (!source.data && source.status !== 404)
+      document.title = (source.error ? "Record unavailable" : "Loading the record") + " · Open Alvary";
+  }, [source.data, source.error, source.status]);
+  // A missing record is not found, not a failure to try again (findings 2026-11-16, item 18).
+  if (source.status === 404) return <NotFound record />;
   if (!source.data)
     return (
       <div className="page">
