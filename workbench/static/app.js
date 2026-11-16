@@ -113,6 +113,17 @@ async function api(path, { method = "GET", body } = {}) {
   return { ok: response.ok, status: response.status, data };
 }
 
+// A view's own data. A failed answer stops the view: route() shows why in place of "Loading…". Requests that
+// save, approve or check answers keep using api() and read result.ok themselves.
+class ViewFailed extends Error {}
+async function viewData(path) {
+  const result = await api(path);
+  if (result.ok) return result;
+  throw new ViewFailed(result.status === 404
+    ? "There is nothing at this address: the document or page may have been removed, or the link is mistyped."
+    : message(result));
+}
+
 function message(result) {
   const detail = result.data || {};
   return detail.message || (typeof detail === "string" ? detail : `Request failed (${result.status})`);
@@ -198,7 +209,8 @@ function setCrumbs(...parts) {
 // before it touches the crumbs, the title, app.view, app.dirty or the page. A saved change draws its view
 // again only if the person is still on that address.
 function main(...children) {
-  document.getElementById("main").replaceChildren(...children);
+  // A child left out by a condition (null, false) is not drawn: replaceChildren would write "null".
+  document.getElementById("main").replaceChildren(...children.filter((child) => child != null && child !== false));
   window.scrollTo(0, 0);
 }
 
@@ -406,7 +418,7 @@ async function dashboard() {
   const turn = ++app.turn;
   setCrumbs("");
   document.title = "Documents · Open Alvary Review";
-  const { data } = await api("/api/overview");
+  const { data } = await viewData("/api/overview");
   if (turn !== app.turn) return;
   const t = data.totals;
   const share = t.pages ? Math.round((100 * t.checked) / t.pages) : 0;
@@ -511,7 +523,7 @@ async function dashboard() {
 
 async function actView(actId) {
   const turn = ++app.turn;
-  const { data } = await api(`/api/documents/${encodeURIComponent(actId)}`);
+  const { data } = await viewData(`/api/documents/${encodeURIComponent(actId)}`);
   if (turn !== app.turn) return;
   const act = data.act;
   setCrumbs(el("a", { href: "#/", text: "Documents" }), act.title);
@@ -860,7 +872,7 @@ async function languagesView(actId) {
 
 async function readView(actId) {
   const turn = ++app.turn;
-  const { data } = await api(`/api/documents/${encodeURIComponent(actId)}`);
+  const { data } = await viewData(`/api/documents/${encodeURIComponent(actId)}`);
   if (turn !== app.turn) return;
   setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: data.act.title }), "Read");
   const list = el("div", { class: "reading" });
@@ -990,8 +1002,8 @@ function detailsSummary(actId, ready, act) {
 
 async function detailsView(actId) {
   const turn = ++app.turn, address = location.hash;
-  const { data } = await api(`/api/documents/${encodeURIComponent(actId)}/details`);
-  const doc = await api(`/api/documents/${encodeURIComponent(actId)}`);
+  const { data } = await viewData(`/api/documents/${encodeURIComponent(actId)}/details`);
+  const doc = await viewData(`/api/documents/${encodeURIComponent(actId)}`);
   if (turn !== app.turn) return;
   const title = doc.data.act.title;
   setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: title }), "Details");
@@ -1414,7 +1426,7 @@ function provisionSelect(provisions, value) {
 async function eventsView(actId) {
   const id = encodeURIComponent(actId);
   const turn = ++app.turn, address = location.hash;
-  const [listing, doc] = await Promise.all([api(`/api/documents/${id}/events`), api(`/api/documents/${id}`)]);
+  const [listing, doc] = await Promise.all([api(`/api/documents/${id}/events`), viewData(`/api/documents/${id}`)]);
   if (turn !== app.turn) return;
   if (!listing.ok) return main(el("p", { text: message(listing) }));
   const data = listing.data;
@@ -1520,7 +1532,7 @@ async function eventsView(actId) {
 async function instructionsView(actId) {
   const id = encodeURIComponent(actId);
   const turn = ++app.turn, address = location.hash;
-  const [listing, doc] = await Promise.all([api(`/api/documents/${id}/instructions`), api(`/api/documents/${id}`)]);
+  const [listing, doc] = await Promise.all([api(`/api/documents/${id}/instructions`), viewData(`/api/documents/${id}`)]);
   if (turn !== app.turn) return;
   if (!listing.ok) return main(el("p", { text: message(listing) }));
   const data = listing.data;
@@ -1660,7 +1672,7 @@ function citationsSummary(actId) {
 async function citationsView(actId) {
   const id = encodeURIComponent(actId);
   const turn = ++app.turn, address = location.hash;
-  const [listing, doc] = await Promise.all([api(`/api/documents/${id}/citations`), api(`/api/documents/${id}`)]);
+  const [listing, doc] = await Promise.all([api(`/api/documents/${id}/citations`), viewData(`/api/documents/${id}`)]);
   if (turn !== app.turn) return;
   if (!listing.ok) return main(el("p", { text: message(listing) }));
   const data = listing.data;
@@ -1789,7 +1801,7 @@ function unitText(unit) {
 async function pageView(actId, pageNumber) {
   const turn = ++app.turn, address = location.hash;
   const [actResult, pageResult] = await Promise.all([
-    api(`/api/documents/${encodeURIComponent(actId)}`),
+    viewData(`/api/documents/${encodeURIComponent(actId)}`),
     api(`/api/documents/${encodeURIComponent(actId)}/pages/${pageNumber}`),
   ]);
   if (turn !== app.turn) return;
@@ -1815,7 +1827,11 @@ async function pageView(actId, pageNumber) {
   renderPage(view);
 }
 
-function changed(view) { app.dirty = true; if (view.dirtyBadge) view.dirtyBadge.hidden = false; saveDraft(view); }
+// Every edit counts (view.edits), so a save can tell whether the page changed while it was being sent.
+function changed(view) {
+  view.edits = (view.edits || 0) + 1;
+  app.dirty = true; if (view.dirtyBadge) view.dirtyBadge.hidden = false; saveDraft(view);
+}
 
 // Under a routing decision: what this page needs, in a sentence (nothing for a page to review whole,
 // which is reviewed as before, whether it was routed there or sampled for the audit).
@@ -2545,18 +2561,38 @@ function restoreMachineReading(view) {
 
 function saveBar(view) {
   const comment = el("textarea", { rows: 1, value: view.comment, placeholder: "Comment for this revision (optional)", on: { input: (e) => { view.comment = e.target.value; changed(view); } } });
+  // One save at a time: the buttons (and so Ctrl/Cmd+S and +Enter, which press them) wait for the answer.
   const save = async (status, thenNext = false) => {
+    if (view.saving) return;
     const high = view.page.flags.filter((f) => f.severity === "high" && !view.resolutions[f.id]);
     if (status === "checked" && high.length && !confirm(`${high.length} high flag(s) are not resolved. Save as checked anyway? (The document cannot be approved until they are.)`)) return;
-    const result = await api(`/api/documents/${encodeURIComponent(view.actId)}/pages/${view.pageNumber}`, {
-      method: "POST",
-      body: { expected_revision: view.expected, units: currentUnits(view), status, resolutions: view.resolutions, comment: view.comment },
-    });
+    const buttons = [...bar.querySelectorAll("button")];
+    const enabled = buttons.filter((b) => !b.disabled);
+    view.saving = true;
+    for (const b of enabled) b.disabled = true;
+    const sent = view.edits || 0;
+    let result;
+    try {
+      result = await api(`/api/documents/${encodeURIComponent(view.actId)}/pages/${view.pageNumber}`, {
+        method: "POST",
+        body: { expected_revision: view.expected, units: currentUnits(view), status, resolutions: view.resolutions, comment: view.comment },
+      });
+    } finally {
+      view.saving = false;
+      for (const b of enabled) b.disabled = false;
+    }
     // The old page stays up while the next one loads, so the address may have moved on before this save was sent.
     const left = location.hash !== view.address;
     if (result.status === 409 && left) return toast(`Page ${view.pageNumber} was not saved: someone saved it first.`);
     if (result.status === 409) { toast("Someone saved this page first. Reloading their version."); app.dirty = false; return pageView(view.actId, view.pageNumber); }
     if (!result.ok) return toast(message(result));
+    if (!left && (view.edits || 0) !== sent) {
+      // Words typed while the save was on its way are newer than what was saved: they stay on screen,
+      // unsaved, and the next save builds on the revision just made.
+      view.expected = result.data.revision;
+      saveDraft(view);
+      return toast(`Saved revision ${result.data.revision}. What you typed since is not saved yet.`);
+    }
     clearDraft(view);
     toast(`Saved revision ${result.data.revision}`);
     if (left) return;
@@ -2576,20 +2612,21 @@ function saveBar(view) {
     if (open) return toast(`Resolve every flag first: ${open} still open${view.showLow ? "" : " (tick “show punctuation-only” to see them all)"}`);
     save("edited");
   };
-  return el("div", { class: "savebar" },
+  const bar = el("div", { class: "savebar" },
     comment,
     spans ? el("button", { class: "primary", text: "Save: flags resolved", title: "Records your decision on each flag; the rest of the page needs no proofreading", disabled: !canEdit, on: { click: flagsDone } }) : null,
     el("button", { class: spans ? "" : "primary", text: "Save as checked", disabled: !canEdit, on: { click: () => save("checked") } }),
     el("button", { text: "Checked → next page", disabled: !canEdit, on: { click: () => save("checked", true) } }),
     el("button", { text: "Save: needs attention", disabled: !canEdit, on: { click: () => save("attention") } }),
     canEdit ? null : el("span", { class: "muted", text: "Editing needs the reviewer role." }));
+  return bar;
 }
 
 // --- activity log ---------------------------------------------------------------------------------
 
 async function auditView(actId) {
   const turn = ++app.turn;
-  const { data } = await api(`/api/audit?act=${encodeURIComponent(actId)}`);
+  const { data } = await viewData(`/api/audit?act=${encodeURIComponent(actId)}`);
   if (turn !== app.turn) return;
   setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: actId }), "Activity");
   main(el("div", { class: "card" }, el("h3", { text: "Activity log" }),
@@ -2631,7 +2668,7 @@ function runWords(run) {
 async function publishingView() {
   const turn = ++app.turn;
   setCrumbs("Publishing");
-  const { data } = await api("/api/publishing");
+  const { data } = await viewData("/api/publishing");
   if (turn !== app.turn) return;
   const load = () => publishingView();
   const runButton = data.can_run && !data.waiting
@@ -2698,8 +2735,20 @@ async function route() {
     if (parts[0] === "publishing" && app.me.publishing) return await publishingView();
     return await dashboard();
   } catch (error) {
-    if (error.message !== "signed out" && location.hash === address) toast(error.message);
+    if (error.message === "signed out" || location.hash !== address) return;
+    // A view that could not be drawn says why where it would have been, rather than "Loading…" for good.
+    if (error instanceof ViewFailed || document.querySelector("#main > .loading")) viewFailed(error.message);
+    else toast(error.message);
   }
+}
+
+function viewFailed(text) {
+  app.view = null;
+  setCrumbs(el("a", { href: "#/", text: "Documents" }), "Not shown");
+  main(el("div", { class: "card" },
+    el("h2", { text: "This could not be shown" }),
+    el("p", { text }),
+    el("p", {}, el("a", { href: "#/", text: "Back to the documents" }))));
 }
 
 window.addEventListener("beforeunload", (event) => { if (app.dirty) { event.preventDefault(); event.returnValue = ""; } });
