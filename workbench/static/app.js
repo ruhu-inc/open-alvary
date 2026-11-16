@@ -2120,7 +2120,7 @@ function gotoFlag(view, step) {
 
 function actOnFlag(code) {
   const pop = document.querySelector(".popover");
-  if (!pop) return toast("Open a flag first (Alt+N)");
+  if (!pop) return toast(`Open a flag first (${FLAG_KEYS}N)`);
   const buttons = [...pop.querySelectorAll("button")];
   const pick = (test) => buttons.find((b) => test(b.textContent));
   const choice = {
@@ -2139,10 +2139,18 @@ function resolveLow(view) {
   toast(low.length ? `Kept ${low.length} punctuation-only differences as read` : "No punctuation-only flags open");
 }
 
+// The flag shortcuts. On a Mac, Option with a letter types a character (Option+E is the accent of é), so
+// there they are Ctrl+Shift, which types nothing and is no system or screen-reader key; elsewhere Alt with a
+// letter types nothing, and they are Alt (findings 2026-11-16, item 22).
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const FLAG_KEYS = MAC ? "Ctrl+Shift+" : "Alt+";
+const flagKeys = (event) =>
+  MAC ? event.ctrlKey && event.shiftKey && !event.altKey && !event.metaKey : event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+
 document.addEventListener("keydown", (event) => {
   const view = app.view;
   if (!view || view.tab !== "edit" || !view.surface || !location.hash.includes("/page/")) return;
-  if (!event.altKey || event.ctrlKey || event.metaKey) return;
+  if (!flagKeys(event)) return;
   const actions = {
     KeyN: () => gotoFlag(view, 1), KeyP: () => gotoFlag(view, -1), KeyL: () => resolveLow(view),
     KeyK: () => actOnFlag("KeyK"), KeyD: () => actOnFlag("KeyD"), KeyE: () => actOnFlag("KeyE"),
@@ -2425,7 +2433,7 @@ function editTab(view) {
         el("p", { text: "Tables: Tab / Shift+Tab move between cells (Tab in the last cell adds a row). Drag across cells, or Shift+arrow keys, to select several; then Table ▾ › Merge cells, or type to replace their words. The Table menu also adds and deletes rows and columns, splits merged cells, marks header rows, and marks cells illegible or unsupported when they cannot be transcribed." }),
         el("p", { text: "Paste: text from Word, a web page or a PDF becomes paragraphs, headings, list items and tables; bold, italic, underline, superscript and subscript are kept, fonts and colours are not." }),
         el("p", { text: "Margin notes: click into a note, then Note ↑ / Note ↓ (Alt+Shift+↑ / ↓) moves it to the paragraph it belongs beside." }),
-        el("p", { text: "Flags: Alt+N next, Alt+P previous; then Alt+1 / Alt+2 use that reading, Alt+K keep as read, Alt+E I corrected it, Alt+D dismiss. Alt+L keeps all punctuation-only differences." }),
+        el("p", { text: `Flags: ${FLAG_KEYS}N next, ${FLAG_KEYS}P previous; then ${FLAG_KEYS}1 / ${FLAG_KEYS}2 use that reading, ${FLAG_KEYS}K keep as read, ${FLAG_KEYS}E I corrected it, ${FLAG_KEYS}D dismiss. ${FLAG_KEYS}L keeps all punctuation-only differences.` }),
         el("p", { text: "Ctrl/Cmd+F find and replace on this page (Ctrl/Cmd+G next match). Escape or Alt+F10 goes to the toolbar; there the arrow keys move along it and Escape returns to the text. Ctrl/Cmd+S save as checked; Ctrl/Cmd+Enter save as checked and go to the next page. Ctrl/Cmd + scroll zooms the page image." }))),
     // Far from the save buttons: it discards this page's corrections (after asking; nothing is saved).
     canEdit ? el("button", { type: "button", class: "small restore", title: "Puts back the machine reading of this page only, as it was before anyone edited it. Unsaved edits and flag decisions on this page are cleared. Nothing changes until you save, and earlier revisions stay in History.", text: "Reset page to machine reading…", on: { click: () => restoreMachineReading(view) } }) : null,
@@ -2453,8 +2461,8 @@ function flagList(view) {
     bar.append(...[
       el("strong", { text: `${open.length} open flag${open.length === 1 ? "" : "s"}` }),
       high ? pill("high", `${high} high`) : null,
-      el("button", { class: "small", title: "Previous flag (Alt+P)", text: "◀", on: { click: () => gotoFlag(view, -1) } }),
-      el("button", { class: "small primary", title: "Next flag (Alt+N)", text: "Next flag ▶", on: { click: () => gotoFlag(view, 1) } }),
+      el("button", { class: "small", title: `Previous flag (${FLAG_KEYS}P)`, text: "◀", on: { click: () => gotoFlag(view, -1) } }),
+      el("button", { class: "small primary", title: `Next flag (${FLAG_KEYS}N)`, text: "Next flag ▶", on: { click: () => gotoFlag(view, 1) } }),
     ].filter(Boolean));
   }
   for (const flag of offText) {
@@ -2463,7 +2471,7 @@ function flagList(view) {
       on: { click: (event) => openFlag(view, flag.id, event.currentTarget.getBoundingClientRect()) } }));
   }
   bar.append(el("span", { class: "spacer" }));
-  if (openLow) bar.append(el("button", { class: "small", text: `Keep ${openLow} punctuation-only (Alt+L)`, on: { click: () => resolveLow(view) } }));
+  if (openLow) bar.append(el("button", { class: "small", text: `Keep ${openLow} punctuation-only (${FLAG_KEYS}L)`, on: { click: () => resolveLow(view) } }));
   if (all.some((f) => f.severity === "low")) {
     bar.append(el("label", { class: "muted small" }, el("input", { type: "checkbox", checked: view.showLow, on: { change: (e) => { view.showLow = e.target.checked; currentUnits(view); view.showTab("edit"); } } }), " show punctuation-only"));
   }
