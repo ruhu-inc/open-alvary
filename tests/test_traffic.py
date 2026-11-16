@@ -301,4 +301,5 @@ def test_each_deployment_gives_the_country_and_runs_the_daily_upkeep():
     front_door = (DEPLOYMENT / "azure/env/frontdoor.tf").read_text()
     assert '"X-Client-Country"' in front_door and "{geo_country}" in front_door
     for daily in ("gcp-terraform/env/jobs.tf", "azure/env/jobs.tf", "gcp/public_service.sh"):
-        assert "python -m api.traffic maintain" in (DEPLOYMENT / daily).read_text()
+        # The step is named in each daily job (Google Cloud's runs its steps in a loop: "api.traffic maintain").
+        assert "api.traffic maintain" in (DEPLOYMENT / daily).read_text()
