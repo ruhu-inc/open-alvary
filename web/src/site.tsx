@@ -3,6 +3,7 @@
 
 import React, { createContext, useContext } from "react";
 import { ArrowRight, ArrowUpRight, Menu, X } from "lucide-react";
+import { safeDecode } from "./safe";
 
 export type Project = {
   repository_url?: string;
@@ -97,6 +98,23 @@ export function Link({
 export function navigate(to: string) {
   history.pushState(null, "", to);
   window.dispatchEvent(new PopStateEvent("popstate"));
+}
+
+// Brings the address's #section into view once the page has drawn it: a page may still be loading
+// its code or data, so it looks again on each frame for a few seconds. Whether there was a section.
+export function scrollToAnchor(): boolean {
+  const hash = location.hash;
+  const id = safeDecode(hash.slice(1));
+  if (!id || id.startsWith("/")) return false;
+  let tries = 0;
+  const look = () => {
+    if (location.hash !== hash) return;
+    const target = document.getElementById(id);
+    if (target) target.scrollIntoView();
+    else if (++tries < 180) requestAnimationFrame(look);
+  };
+  requestAnimationFrame(look);
+  return true;
 }
 
 // Plain-language names for the record's fields.

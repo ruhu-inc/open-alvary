@@ -34,6 +34,7 @@ import {
   jurisdictionName,
   Link,
   navigate,
+  scrollToAnchor,
   typeLabel,
   LANGUAGE_NAMES,
   LEGAL_STATUS,
@@ -42,6 +43,7 @@ import {
   type RightsRecord,
   type Source,
 } from "./site";
+import { RootBoundary } from "./safe";
 
 // The documentation loads only when a /docs page is opened.
 const DocsSite = React.lazy(() => import("./docs/DocsSite"));
@@ -175,6 +177,7 @@ function App() {
       setRoute(currentRoute());
       setMenu(false);
       window.scrollTo(0, 0);
+      scrollToAnchor();
     };
     // Links to the site's own pages move without reloading it; files, data and other sites load.
     const click = (e: MouseEvent) => {
@@ -192,7 +195,7 @@ function App() {
         return;
       e.preventDefault();
       openedResult = a.dataset.result ?? "";
-      navigate(url.pathname + url.search);
+      navigate(url.pathname + url.search + url.hash);
     };
     window.addEventListener("popstate", change);
     document.addEventListener("click", click);
@@ -223,8 +226,7 @@ function App() {
       ?.setAttribute("href", location.origin + pathname);
     document.querySelector<HTMLElement>("main")?.focus({ preventScroll: true });
     // A page opened at an anchor (/docs/errors#gone) renders after the browser looked for it.
-    const anchor = decodeURIComponent(location.hash.slice(1));
-    if (anchor) requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView());
+    scrollToAnchor();
   }, [pathname]);
   return (
     <ProjectContext.Provider value={project.data ?? {}}>
@@ -1478,6 +1480,8 @@ function About() {
 }
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <RootBoundary home="/">
+      <App />
+    </RootBoundary>
   </React.StrictMode>,
 );

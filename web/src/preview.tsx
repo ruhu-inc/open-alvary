@@ -11,6 +11,7 @@ import "@fontsource/dm-sans/latin-600.css";
 import "@fontsource/libre-caslon-display/latin-400.css";
 import "./style.css";
 import "./preview.css";
+import { RootBoundary, safeDecode } from "./safe";
 import {
   jurisdictionName,
   LinkStyle,
@@ -67,7 +68,7 @@ const DETAIL_STATUS: Record<string, string> = {
 const linkTo = (query?: string) =>
   `${location.origin}${location.pathname}#/sources/${encodeURIComponent(documentId)}${query ? "?" + query : ""}`;
 
-const documentId = decodeURIComponent(
+const documentId = safeDecode(
   location.pathname.replace(/^\/preview\//, "").replace(/\/$/, ""),
 );
 
@@ -354,8 +355,10 @@ function Preview() {
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     {/* The preview keeps its own #/ addresses inside the workbench. */}
-    <LinkStyle.Provider value="hash">
-      <Preview />
-    </LinkStyle.Provider>
+    <RootBoundary home={location.pathname}>
+      <LinkStyle.Provider value="hash">
+        <Preview />
+      </LinkStyle.Provider>
+    </RootBoundary>
   </React.StrictMode>,
 );

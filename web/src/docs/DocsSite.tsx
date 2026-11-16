@@ -13,7 +13,7 @@ import spec from "./data/openapi.json";
 import tools from "./data/mcp-tools.json";
 import plans from "./data/plans.json";
 import examples from "./data/examples.json";
-import { navigate } from "../site";
+import { navigate, scrollToAnchor } from "../site";
 import "./docs.css";
 
 const FILES = Object.fromEntries(
@@ -533,8 +533,7 @@ export default function DocsSite({ path }: { path: string }) {
   useEffect(() => {
     document.title = page ? `${page.title} · Open Alvary docs` : "Page not found · Open Alvary docs";
     setMenu(false);
-    const anchor = decodeURIComponent(location.hash.slice(1));
-    if (anchor) requestAnimationFrame(() => document.getElementById(anchor)?.scrollIntoView());
+    scrollToAnchor();
   }, [slug]);
   const at = ORDER.indexOf(slug);
   const previous = at > 0 ? pages.get(ORDER[at - 1]) : undefined;

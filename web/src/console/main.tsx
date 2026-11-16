@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { createRoot } from "react-dom/client";
 import "./console.css";
+import { RootBoundary, safeDecode } from "../safe";
 import { ApiError, api, go, setCsrf, signOut, type Me, type Organisation } from "./api";
 import { Consent } from "./consent";
 import { AccessPage, Apps, Connect, Keys, MembersPage, Overview, Security, Settings as Settings_, Usage } from "./pages";
@@ -108,7 +109,7 @@ function App() {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [version, signingIn]);
-  if (unsubscribing) return <Unsubscribe token={decodeURIComponent(path.slice("/console/unsubscribe/".length))} />;
+  if (unsubscribing) return <Unsubscribe token={safeDecode(path.slice("/console/unsubscribe/".length))} />;
   if (path === "/console/oauth/consent") return <Consent />;
   if (signingIn) return <SignIn />;
   if (error) {
@@ -667,6 +668,8 @@ function GoogleIcon() {
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <RootBoundary home="/console">
+      <App />
+    </RootBoundary>
   </React.StrictMode>,
 );
