@@ -755,7 +755,7 @@ class Collection:
                     "withheld_wording": publish.wording_hash(found["work"], found["record"] or rwanda_law())
                 },
             },
-            "approvals": [{"decision": "approved", "text_sha256": sha} for sha in approvals],
+            "approvals": found.get("approvals") or [{"decision": "approved", "text_sha256": sha} for sha in approvals],
             "approved": found["approved"] and found["decision"] == "approved",
             "text": found["built"] if text else None,
             "view": {"values": {"profile.anonymisation": found["anonymisation"]}},
@@ -1570,3 +1570,45 @@ def test_the_records_command_takes_down_a_text_naming_someone_now_withheld_as_a_
     records()
     assert public_records(store) == ["rw-case"] and "Bello" not in title_of(store)
     assert public_texts(store) == []  # the text stays withheld
+
+
+def test_a_revoked_approval_is_no_accepted_history_even_when_a_newer_one_follows_before_any_run():
+    """Consolidated findings item 38: approve X, revoke it, approve Y, all before a run: X stayed as
+    accepted history, so a public X could stay up beside Y."""
+
+    def decided(decision, sha):
+        return {"decision": decision, "text_sha256": sha}
+
+    approved_x, revoked, approved_y = (
+        decided("approved", "x"),
+        decided("revoked", "x"),
+        decided("approved", "y"),
+    )
+    assert publish.accepted_history([approved_y, revoked, approved_x]) == {"y"}  # newest first
+    assert publish.accepted_history([approved_y, approved_x]) == {"x", "y"}  # a history, kept
+    # A revocation recorded against a text since edited still takes away the one it revoked.
+    assert publish.accepted_history([approved_y, decided("revoked", "x2"), approved_x]) == {"y"}
+    assert publish.accepted_history([decided("approved", "x"), revoked, approved_x]) == {
+        "x"
+    }  # approved again
+    assert publish.accepted_history([]) == set()
+
+
+def test_a_text_whose_approval_was_revoked_comes_down_though_a_newer_one_was_approved_before_the_run(
+    both_decisions, store, tmp_path
+):
+    from rights.policy import public_corpus
+
+    collection = Collection(tmp_path)
+    collection.add("rw-law", "rw-law", words="The Fund shall lend.", raw="7" * 64)
+    collection.run(store)
+    [first] = public_corpus(store.load()).versions
+    collection.approve("rw-law", "The Fund shall lend to students.", raw="8" * 64)  # read from another file
+    newer = collection.docs["rw-law"]["bound"].text_sha256
+    collection.docs["rw-law"]["approvals"] = [
+        {"decision": "approved", "text_sha256": newer},
+        {"decision": "revoked", "text_sha256": first.content_hash},  # the first approval was revoked
+        {"decision": "approved", "text_sha256": first.content_hash},
+    ]
+    collection.run(store)
+    assert {v.content_hash for v in public_corpus(store.load()).versions} == {newer}

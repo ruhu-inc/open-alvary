@@ -1034,9 +1034,7 @@ def read_approvals(found: Texts, act: dict, now: dict, library) -> Bound:
     work = act.get("work") or act["id"]
     bound = Bound(act["id"])
     if approvals is not None:
-        bound.past = {
-            a["text_sha256"] for a in approvals if a["decision"] == "approved" and a.get("text_sha256")
-        }
+        bound.past = accepted_history(approvals)
     found.bound.setdefault((work, act.get("language") or "en"), []).append(bound)
     if names_withheld(now):
         found.withheld.add(work)
@@ -1051,6 +1049,25 @@ def read_approvals(found: Texts, act: dict, now: dict, library) -> Bound:
         if file:
             bound.files.add(file)
     return bound
+
+
+def accepted_history(approvals: list[dict]) -> set[str]:
+    """The texts a document's approvals accept, replayed in order (``approvals`` come newest first): an
+    approval adds its text, and a revocation takes away the text it revoked (the one approved before it,
+    and the one it was recorded against), so a revoked text never stays as accepted history because a
+    newer approval followed before any run (findings 2026-11-16, item 38)."""
+    accepted: list[str] = []
+    last = None
+    for decided in reversed(approvals):
+        sha = decided.get("text_sha256")
+        if decided["decision"] == "approved" and sha:
+            accepted.append(sha)
+            last = sha
+        elif decided["decision"] == "revoked":
+            revoked = {last, sha} - {None}
+            accepted = [kept for kept in accepted if kept not in revoked]
+            last = None
+    return set(accepted)
 
 
 def names_withheld(now: dict) -> bool:
