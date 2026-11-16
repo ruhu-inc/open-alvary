@@ -394,14 +394,17 @@ class Retriever:
             terms = text_index.query_terms(self.conn, query)
             try:
                 found = self.engine.lexical(terms, filters, ARM_LIMIT)
-                arms["lexical"], total = [_hit(r) for r in found], found.total
+                arms["lexical"], total = self._rechecked([_hit(r) for r in found], filters), found.total
                 if found.total < SIDE_LIMIT and "citation" not in plan.routes:
                     relaxed = self.engine.lexical(terms, filters, ARM_LIMIT, every=False)
-                    arms["lexical_any"] = [_hit(r) for r in relaxed]
-                arms["document"] = [
-                    _hit(r, "document")
-                    for r in self.engine.lexical(terms, filters, SIDE_LIMIT, unit_kind="document")
-                ]
+                    arms["lexical_any"] = self._rechecked([_hit(r) for r in relaxed], filters)
+                arms["document"] = self._rechecked(
+                    [
+                        _hit(r, "document")
+                        for r in self.engine.lexical(terms, filters, SIDE_LIMIT, unit_kind="document")
+                    ],
+                    replace(filters, kinds=()),
+                )
             except Exception:  # the system of record's own search carries the request
                 degraded.append("engine:unavailable")
                 for arm in ("lexical", "lexical_any", "document"):
@@ -431,6 +434,38 @@ class Retriever:
                 arms["dense"] = dense
         return arms, degraded, total
 
+    def _rechecked(self, hits: list[Hit], filters) -> list[Hit]:
+        """The engine's hits as the system of record has them now (RSV-04): a hit whose text no longer
+        meets the request's filters in PostgreSQL is dropped, and each kept one takes its status, its
+        "replaced by a later text", its jurisdiction and its type from PostgreSQL, never the engine's
+        copy, which is only as fresh as the projector's last sync. The filters are the section index's
+        own SQL (api.text_index.Filters.where), so both apply one meaning to language, years and dates.
+        Done per arm, before fusion, so the per-text caps count only what may be served."""
+        if not hits:
+            return hits
+        units, _ = text_index._tables(self.conn)
+        where, params = filters.where()
+        rows = self.conn.execute(
+            sql(
+                f"SELECT DISTINCT ON (u.version_id) u.version_id, u.legal_status, u.replaced, u.jurisdiction_id,"
+                f" u.document_type FROM {units} u WHERE u.version_id = ANY(:r_versions) AND {where}"
+                " ORDER BY u.version_id"
+            ),
+            params | {"r_versions": sorted({h.version_id for h in hits})},
+        ).mappings()
+        now = {r["version_id"]: r for r in rows}
+        return [
+            replace(
+                hit,
+                legal_status=now[hit.version_id]["legal_status"] or "unknown",
+                replaced=bool(now[hit.version_id]["replaced"]),
+                jurisdiction_id=now[hit.version_id]["jurisdiction_id"] or "unknown",
+                document_type=now[hit.version_id]["document_type"] or "other",
+            )
+            for hit in hits
+            if hit.version_id in now
+        ]
+
     def _dense(self, query: str, filters, degraded: list[str]) -> list[Hit] | None:
         """The dense arm over the active generation (RSV-04); None (with the reason in ``degraded``) when
         no profile is configured or active, or the embedder or search fails."""
@@ -449,10 +484,15 @@ class Retriever:
             if self.generation["backend"] == "vespa":
                 if self.engine is None:
                     raise LookupError("the engine holding this generation is unavailable")
-                return [
-                    _hit(r)
-                    for r in self.engine.dense(vector, self.generation["vectors_table"], filters, ARM_LIMIT)
-                ]
+                return self._rechecked(
+                    [
+                        _hit(r)
+                        for r in self.engine.dense(
+                            vector, self.generation["vectors_table"], filters, ARM_LIMIT
+                        )
+                    ],
+                    filters,
+                )
             units, _ = text_index._tables(self.conn)
             where, params = filters.where()
             with self.conn.begin_nested():

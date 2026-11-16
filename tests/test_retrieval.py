@@ -546,6 +546,9 @@ def test_a_new_analyzer_is_a_new_application_and_reanalyses_held_units(monkeypat
     monkeypatch.setattr(text_index, "ANALYZER", "oa-search-test")
     assert projector.application_hash(Application()) != before
 
+    def facts(version_id):  # a unit the engine holds as PostgreSQL has it now
+        return {k: "" for k in projector.FACTS} | {"unit_id": f"{version_id}:0"}
+
     class Database:
         @contextmanager
         def begin(self):
@@ -556,10 +559,10 @@ def test_a_new_analyzer_is_a_new_application_and_reanalyses_held_units(monkeypat
             self.calls = []
 
         def visit(self, selection, fields):
-            assert fields == "version_id,analyzer"
+            assert fields == ",".join(("version_id", "analyzer", *projector.FACTS))
             return [
                 {"version_id": "ver_old", "analyzer": "oa-search-4"},
-                {"version_id": "ver_same", "analyzer": "oa-search-test"},
+                {"version_id": "ver_same", "analyzer": "oa-search-test", **facts("ver_same")},
                 {"version_id": "ver_mixed", "analyzer": "oa-search-test"},
                 {"version_id": "ver_mixed"},  # fed before units carried their analyzer
                 {"version_id": "ver_gone", "analyzer": "oa-search-test"},
@@ -575,14 +578,14 @@ def test_a_new_analyzer_is_a_new_application_and_reanalyses_held_units(monkeypat
             self.calls.append(("delete", version_id))
             return 1
 
-    wanted = {v: [{"unit_id": f"{v}:0"}] for v in ("ver_old", "ver_same", "ver_mixed", "ver_new")}
+    wanted = {v: [facts(v)] for v in ("ver_old", "ver_same", "ver_mixed", "ver_new")}
     monkeypatch.setattr(projector, "_documents", lambda conn, work_id: wanted)
     engine = Engine()
     report = projector.reconcile(Database(), engine, ["w"])
     assert engine.calls == [
         ("delete", "ver_gone"), ("reanalyse", "ver_mixed:0"), ("put", "ver_new:0"), ("reanalyse", "ver_old:0"),
     ]  # fmt: skip
-    assert report == {"works": 1, "fed": 1, "removed": 1, "reanalysed": 2}
+    assert report == {"works": 1, "fed": 1, "removed": 1, "reanalysed": 2, "refreshed": 0}
 
 
 def test_reanalysing_a_unit_assigns_every_field_and_creates_a_missing_one():

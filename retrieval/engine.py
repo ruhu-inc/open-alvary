@@ -48,7 +48,10 @@ LOCALES = {"english": "en", "french": "fr", "portuguese": "pt", "spanish": "es",
 WORD_FOR_WORD = "sw"
 TIMEOUT_SECONDS = 10
 EPOCH = date(1970, 1, 1)
-UNKNOWN_DAY = -1
+# An unknown date, as a day number no date can have (date.min is day -719,162), small enough to write in
+# YQL without a long suffix: -1 was 1969-12-31, so texts in force from before 1970 matched no date, and no
+# date before 1970 matched anything.
+UNKNOWN_DAY = -1_000_000
 
 
 def locale(config: str) -> str:
@@ -336,7 +339,7 @@ class Engine:
         if filters.year_from is not None:
             clauses.append(f"year >= {int(filters.year_from)}")
         if filters.year_to is not None:
-            clauses.append(f"year <= {int(filters.year_to)}")
+            clauses.append(f"year > 0 and year <= {int(filters.year_to)}")  # an unknown year is fed as 0
         if filters.source_id:
             clauses.append(f"work_id contains {quoted(filters.source_id)}")
         if filters.version_id:

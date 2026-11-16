@@ -155,17 +155,31 @@ def _documents(conn: Connection, work_id: str) -> dict[str, list[dict]]:
     return found
 
 
+# What a unit carries about its text besides its words: a correction to the record (its status, year,
+# type, title, a later text replacing it) or a change in how a value is written (an unknown date) must
+# reach the engine, which otherwise filters and ranks on what it was first fed.
+FACTS = (
+    "unit_id", "legal_status", "year", "document_type", "jurisdiction_id", "replaced", "language",
+    "effective_from", "effective_until", "title", "identifiers",
+)  # fmt: skip
+
+
 def reconcile(db: Engine, engine: SearchEngine, work_ids: list[str]) -> dict:
-    """Make the engine hold exactly each work's public units, analysed as the section index is now."""
+    """Make the engine hold exactly each work's public units, analysed as the section index is now and
+    carrying the facts PostgreSQL holds now."""
     from api import text_index
 
-    fed = removed = reanalysed = 0
+    fed = removed = reanalysed = refreshed = 0
     for work_id in work_ids:
         with db.begin() as conn:
             wanted = _documents(conn, work_id)
         held: dict[str, set] = {}
-        for d in engine.visit(f'unit.work_id=="{work_id}"', fields="version_id,analyzer"):
+        stored: dict[str, dict] = {}
+        for d in engine.visit(
+            f'unit.work_id=="{work_id}"', fields=",".join(("version_id", "analyzer", *FACTS))
+        ):
             held.setdefault(d["version_id"], set()).add(d.get("analyzer"))
+            stored[d.get("unit_id")] = d
         for version_id in sorted(set(held) - set(wanted)):
             removed += engine.delete_version(version_id)
         for version_id, docs in sorted(wanted.items()):
@@ -177,7 +191,15 @@ def reconcile(db: Engine, engine: SearchEngine, work_ids: list[str]) -> dict:
                 for doc in docs:
                     engine.reanalyse(doc)
                     reanalysed += 1
-    return {"works": len(work_ids), "fed": fed, "removed": removed, "reanalysed": reanalysed}
+            else:
+                for doc in docs:
+                    there = stored.get(doc["unit_id"])
+                    if there is None or any(there.get(k) != doc[k] for k in FACTS):
+                        engine.reanalyse(doc)  # every field assigned again; its vectors are kept
+                        refreshed += 1
+    return {
+        "works": len(work_ids), "fed": fed, "removed": removed, "reanalysed": reanalysed, "refreshed": refreshed,
+    }  # fmt: skip
 
 
 def _all_works(db: Engine) -> list[str]:

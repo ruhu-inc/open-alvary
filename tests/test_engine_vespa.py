@@ -13,7 +13,7 @@ import os
 import pytest
 from test_postgres import migrate
 from test_postgres import pg_engine as pg_engine
-from test_v1_text import UNITS, publish_act, withdraw
+from test_v1_text import UNITS, WORK, publish_act, withdraw
 
 from api.catalogue import LegacyCatalogue
 from api.repositories import LegacyRepository
@@ -168,3 +168,53 @@ def test_the_pack_falls_back_to_the_system_of_record_when_the_engine_is_down(sto
     found = pack(store, down, "repaid from salary")
     assert "engine:unavailable" in found.coverage.degraded and found.evidence
     assert found.revisions.engine is None
+
+
+def test_a_corrected_record_reaches_the_engine_and_a_stale_hit_is_never_served(store, engine):
+    """Consolidated findings item 5: a text already fed kept its first status, year and type in the
+    engine, and /retrieve's filters and warnings used them."""
+    from dataclasses import replace
+
+    publish_act(store, UNITS)
+    projector.sync(store.engine, engine)
+    corpus = store.load()
+    record = next(s for s in corpus.sources if s.id == WORK)
+    assert record.legal_status != "repealed"
+    record.legal_status = "repealed"
+    store.save(corpus)
+    # Before the projector catches up, the engine still says otherwise: the pack asks PostgreSQL.
+    with store.engine.begin() as conn:
+        retriever = Retriever(LegacyCatalogue(LegacyRepository(conn)), search_engine=engine)
+        from api import text_index
+
+        terms = text_index.query_terms(conn, "salary")
+        found = engine.lexical(terms, Filters(), 10)
+        assert found and {h["legal_status"] for h in found} != {"repealed"}
+        current = Filters(statuses=("current", "unknown", "historical", "superseded"))
+        stale = engine.lexical(terms, current, 10)
+        assert stale  # the engine's copy still matches the old status
+        from retrieval.pack import _hit
+
+        assert retriever._rechecked([_hit(r) for r in stale], current) == []
+        kept = retriever._rechecked([_hit(r) for r in found], Filters())
+        assert kept and {h.legal_status for h in kept} == {"repealed"}
+        assert replace(kept[0]).legal_status == "repealed"
+    refreshed = projector.sync(store.engine, engine)
+    assert refreshed["refreshed"] > 0 and refreshed["fed"] == 0
+    assert {d["legal_status"] for d in engine.visit(fields="legal_status")} == {"repealed"}
+    assert projector.sync(store.engine, engine)["refreshed"] == 0  # nothing changed since
+
+
+def test_texts_in_force_before_1970_match_dates_before_and_after_it(store, engine):
+    """Consolidated findings item 43: -1 meant both "unknown" and 1969-12-31."""
+    from datetime import date
+
+    publish_act(store, UNITS, effective_from=date(1960, 10, 1))
+    projector.sync(store.engine, engine)
+    from api import text_index
+
+    with store.engine.connect() as conn:
+        terms = text_index.query_terms(conn, "salary")
+    on = lambda day: engine.lexical(terms, Filters(as_of=day), 10)  # noqa: E731
+    assert on(date(1965, 1, 1)) and on(date(2024, 1, 1))
+    assert not on(date(1959, 12, 31))
