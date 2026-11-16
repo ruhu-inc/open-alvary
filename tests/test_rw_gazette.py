@@ -1951,6 +1951,47 @@ def test_a_law_and_an_order_with_the_same_number_in_one_issue_are_two_instrument
     assert found[0]["versions"]["en"]["pages"] == [1, 1] and found[1]["versions"]["en"]["pages"] == [2, 2]
 
 
+def test_one_instrument_named_by_different_kinds_in_its_languages_stays_one():
+    """Kinyarwanda's "AMABWIRIZA" reads as regulations and its English "INSTRUCTIONS" as instructions:
+    one instrument (Gazette of 01/11/2016, n° 01/11/AG/16), not two one-language works, and an
+    instruction, as English and French say. French names who gives it before the number."""
+    header = "Official Gazette n° 45 of 07/11/2016"
+    auditor = page(
+        [
+            "AMABWIRIZA Y’UMUGENZUZI MUKURU Nº 01/11/AG/16",
+            "YO KUWA 01/11/2016 ASHYIRAHO",
+            "Umugenzuzi Mukuru,",
+            *RW,
+        ],
+        [
+            "INSTRUCTIONS Nº 01/11/AG/16 OF 01/11/2016",
+            "DETERMINING THE ORGANISATION",
+            "The Auditor General,",
+            *EN,
+        ],
+        [
+            "INSTRUCTIONS DE L’AUDITEUR GENERAL Nº",
+            "01/11/AG/16 DU 01/11/2016 DETERMINANT",
+            "L’Auditeur Général,",
+            *FR,
+        ],
+        header=header,
+    )
+    minister = page(
+        ["AMABWIRIZA YA MINISITIRI W’UBUREZI N°002/2010", "YO KUWA 09/12/2010 AGENGA", "Minisitiri,", *RW],
+        ["MINISTERIAL INSTRUCTIONS N°002/2010 OF", "09/12/2010 REGULATING LITERACY", "The Minister,", *EN],
+        ["INSTRUCTIONS MINISTERIELLES N°002/2010", "DU 09/12/2010 REGISSANT", "Le Ministre,", *FR],
+        header=header,
+    )
+    found = RG.instruments(RG.streams(RG.split_issue([auditor, minister])))
+    assert [(f["kind"], f["number"]) for f in found] == [
+        ("instructions", "01/11/AG/16"),
+        ("instructions", "002/2010"),
+    ]
+    assert all(set(f["versions"]) == {"rw", "en", "fr"} for f in found)
+    assert found[1]["versions"]["fr"]["pages"] == [2, 2]
+
+
 def test_a_work_holding_another_works_pages_in_one_file_is_reported_and_its_own_annexes_are_not():
     from ingestion.rwanda import enclosed_works
 

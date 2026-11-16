@@ -32,7 +32,9 @@ from schema.jurisdictions import registry
 # 2026-11-16.2: instruments of different kinds printed with the same number in one issue are two works
 # (Law n° 009/2026 and an Order n° 009/2026), as are two known by the same date that each have a body.
 # 2026-11-16.3: Kinyarwanda's "NO" ("and") is a word, not a number sign; a title's apostrophe is kept.
-PIPELINE = "2026-11-16.3"
+# 2026-11-16.4: one instrument its languages name by different kinds stays one ("AMABWIRIZA", "INSTRUCTIONS"),
+# an instruction as English and French say; French instructions named by who gives them are recognised.
+PIPELINE = "2026-11-16.4"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -78,6 +80,8 @@ KIND_WORDS = {
     "fr": r"LOI ORGANIQUE|D[ÉE]CRET-LOI|ORDONNANCE-LOI|ORDONNANCE L[ÉE]GISLATIVE|LOI|ARR[ÊE]T[ÉE] PR[ÉE]SIDENTIEL"
     r"|ARR[ÊE]T[ÉE] DU PREMIER MINISTRE|ARR[ÊE]T[ÉE] MINIST[ÉE]RIEL|ARR[ÊE]T[ÉE] ROYAL"
     r"|INSTRUCTIONS? DU PREMIER MINISTRE|INSTRUCTIONS? DU PR[ÉE]SIDENT DE LA COUR SUPR[ÊE]ME"
+    r"|INSTRUCTIONS? MINIST[ÉE]RIELLES?|INSTRUCTIONS? DU MINISTRE"
+    r"|INSTRUCTIONS? DU REGISTRAIRE G[ÉE]N[ÉE]RAL|INSTRUCTIONS? DE L[’']AUDITEUR G[ÉE]N[ÉE]RAL"
     r"|DIRECTIVES? PRATIQUES?|R[ÈE]GLEMENTS?|INSTRUCTIONS?|ORDONNANCE|D[ÉE]CRET",
 }
 _DATED = {"rw": r"\s+R?YO\s+KU\s?WA\s+(.*\d{4})", "en": r"\s+OF\s+(.*\d{4})", "fr": r"\s+DU\s+(.*\d{4})"}
@@ -134,6 +138,20 @@ KIND = {
     "PRIME MINISTER’S INSTRUCTION": "instructions",
     "INSTRUCTIONS DU PREMIER MINISTRE": "instructions",
     "INSTRUCTION DU PREMIER MINISTRE": "instructions",
+    # French instructions named by who gives them between the kind and the number (2026-11-16: not
+    # recognised, so the French version was found only by its pages, and ran on into the next one).
+    "INSTRUCTIONS MINISTÉRIELLES": "instructions",
+    "INSTRUCTION MINISTÉRIELLE": "instructions",
+    "INSTRUCTIONS DU MINISTRE": "instructions",
+    "INSTRUCTION DU MINISTRE": "instructions",
+    "INSTRUCTIONS DU REGISTRAIRE GÉNÉRAL": "instructions",
+    "INSTRUCTIONS DU REGISTRAIRE GENERAL": "instructions",
+    "INSTRUCTION DU REGISTRAIRE GÉNÉRAL": "instructions",
+    "INSTRUCTION DU REGISTRAIRE GENERAL": "instructions",
+    "INSTRUCTIONS DE L’AUDITEUR GÉNÉRAL": "instructions",
+    "INSTRUCTIONS DE L’AUDITEUR GENERAL": "instructions",
+    "INSTRUCTION DE L’AUDITEUR GÉNÉRAL": "instructions",
+    "INSTRUCTION DE L’AUDITEUR GENERAL": "instructions",
     "AMABWIRIZA YA PEREZIDA W’URUKIKO RW’IKIRENGA": "practice_direction",
     "AMABWIRIZA YA MINISITIRI": "instructions",
     "MINISTERIAL INSTRUCTIONS": "instructions",
@@ -913,7 +931,11 @@ def instruments(issue_streams: dict[str, list[dict]]) -> list[dict]:
                 }
                 order.append(key)
             entry = by_number[key]
-            if entry["kind"] == "other":
+            if entry["kind"] == "other" or (
+                # Kinyarwanda's "AMABWIRIZA" says only rules; English and French say which (instructions,
+                # practice directions), and the instrument is that.
+                entry["kind"] == "regulations" and opening["kind"] in ("instructions", "practice_direction")
+            ):
                 entry["kind"] = opening["kind"]
             entry["date"] = entry["date"] or opening["date"]
             if language in entry["versions"]:
@@ -930,6 +952,7 @@ def instruments(issue_streams: dict[str, list[dict]]) -> list[dict]:
                 continue
             entry["versions"][language] = {
                 "title": opening["title"],
+                "kind": opening["kind"],  # as this language names it (_key)
                 "has_body": opening["has_body"],
                 "start": opening["start"],
                 "end": end,
@@ -960,10 +983,24 @@ def _key(by_number: dict[str, dict], opening: dict, language: str) -> str:
     number, but kind and number where another kind of instrument has that number in the issue (Law
     n° 001/2024 and Order n° 001/2024 are two instruments); and for one known only by its date, a second
     one of that date with its own body is another instrument, matched across languages by its place
-    among them."""
+    among them.
+
+    Two kinds are two instruments only where one language prints both, or the second kind is already
+    known: the languages often name one instrument by different kinds ("AMABWIRIZA" is regulations,
+    its English "INSTRUCTIONS" instructions), and splitting them left two one-language works whose
+    French pages a neighbour took (2026-11-16-b: Instructions n° 002/2010 and n° 01/11/AG/16). A
+    language's title printed again (over the contents, then over the body) is the same kind as before."""
     key, kind = opening["number"], opening["kind"]
     held = by_number.get(key)
-    if held is not None and kind != "other" and held["kind"] not in ("other", kind):
+    if (
+        held is not None
+        and kind != "other"
+        and held["kind"] not in ("other", kind)
+        and (
+            f"{kind}|{key}" in by_number
+            or held["versions"].get(language, {}).get("kind", kind) not in ("other", kind)
+        )
+    ):
         key = f"{kind}|{key}"
     if opening["number"] == opening.get("date"):
         base, n = key, 1
