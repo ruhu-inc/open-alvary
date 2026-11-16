@@ -654,3 +654,16 @@ def test_ghanas_houses_of_chiefs_are_bound_only_on_a_chieftaincy_question():
     bearings = {b.court: b.matter for b in courts.evidence_court(gh, "gh-sc", date(2026, 10, 21)).bears_on}
     assert {house: bearings[house] for house in houses} == dict.fromkeys(houses, "chieftaincy")
     assert bearings["gh-ca"] is None  # the Court of Appeal is bound on any matter
+
+
+def test_a_court_answers_only_once_created_and_a_named_court_falls_back_to_the_general_relation():
+    """Consolidated findings item 49."""
+    xx = courts.CourtRegister.model_validate(register())
+    # No relation of the apex court to the Court of Appeal by name: its relation to the courts generally.
+    assert courts.relation(xx, "apex", "xx", before="appeal") == "binding"
+    assert courts.relation(xx, "apex", "xx", before="high") == "binding"  # its own, by name
+    data = register(review=False)
+    next(c for c in data["courts"] if c["id"] == "apex")["valid_from"] = "2010-01-01"
+    later = courts.CourtRegister.model_validate(reviewed(data))
+    assert courts.relation(later, "apex", "xx", on=date(1970, 1, 1)) == "unknown"  # not yet created
+    assert courts.relation(later, "apex", "xx", on=date(2020, 1, 1)) == "binding"

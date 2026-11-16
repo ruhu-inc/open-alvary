@@ -76,3 +76,28 @@ def test_benchmarks_load_and_are_consistent():
         benchmark = records.load(directory)
         assert benchmark.cases and benchmark.manifest.id == directory.name
         assert records.gate_profile(directory) is not None
+
+
+def test_an_empty_pack_from_a_search_that_never_ran_is_no_correct_abstention():
+    """Consolidated findings item 51: a search timeout or an unbuilt index scored as a correct abstention."""
+    from types import SimpleNamespace
+
+    from evaluations import runner
+
+    abstain = Case(case_id="a", query="q", route="unanswerable", expected="abstain", family="f", split="dev")
+    benchmark = SimpleNamespace(
+        cases=[abstain], judged=lambda case_id: [],
+        manifest=SimpleNamespace(id="b", version="1", review_state="draft", synthetic=True), digest="d",
+    )  # fmt: skip
+
+    def pack(*degraded):
+        return lambda case: {
+            "evidence": [], "status": "no_result", "query": {"routes": []}, "revisions": {},
+            "coverage": {"degraded": list(degraded)},
+        }  # fmt: skip
+
+    ran = runner.run(benchmark, pack("dense:not_configured"), split="dev", system={})
+    assert ran["cases"]["a"] == {"abstain": 1.0}
+    for reason in ("lexical:timeout", "lexical:building", "lexical:unavailable"):
+        failed = runner.run(benchmark, pack(reason), split="dev", system={})
+        assert failed["cases"]["a"] == {"abstain": 0.0} and reason in failed["failures"]["a"]

@@ -405,7 +405,12 @@ def relation(
     (``answered``)."""
     on = on or date.today()
     courts = {c.id: c for c in register.courts}
-    if court_id not in courts:
+    # The cited court must have been created by that date: a court created in 2010 binds nobody in 1970
+    # (findings 2026-11-16, item 49). One since abolished may still bear, as its relations dated after it
+    # say (the Privy Council, persuasive after 1963).
+    if court_id not in courts or (
+        courts[court_id].valid_from is not None and on < courts[court_id].valid_from
+    ):
         return "unknown"
     if register.jurisdiction == queried_jurisdiction:
         if before is not None and (before not in courts or not courts[before].applies(on)):
@@ -414,6 +419,12 @@ def relation(
             r for r in register.relations
             if r.court == court_id and not r.members and r.bound == before and r.applies(on)
         ]  # fmt: skip
+        if before is not None and not found:
+            # No relation to that court of its own: the relation to the jurisdiction's courts generally.
+            found = [
+                r for r in register.relations
+                if r.court == court_id and not r.members and r.bound is None and r.applies(on)
+            ]  # fmt: skip
     elif register.reaches(queried_jurisdiction, court_id, on):
         found = [r for r in register.relations if r.court == court_id and r.members and r.applies(on)]
     else:

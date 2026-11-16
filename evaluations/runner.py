@@ -85,6 +85,19 @@ def over_http(base: str, key: str) -> Callable[[records.Case], dict]:
     return ask
 
 
+# The system of record's own search, which carries every request, could not answer (retrieval.pack).
+NOT_SEARCHED = ("lexical:timeout", "lexical:building", "lexical:unavailable")
+
+
+def not_searched(pack: dict) -> list[str]:
+    return [d for d in (pack.get("coverage") or {}).get("degraded") or () if d in NOT_SEARCHED]
+
+
+def searched(pack: dict) -> bool:
+    """Whether the pack's search ran: an empty pack from a search that did not is no answer at all."""
+    return not not_searched(pack)
+
+
 def run(
     benchmark: records.Benchmark, ask: Callable[[records.Case], dict], *, split: str, system: dict
 ) -> dict:
@@ -105,8 +118,12 @@ def run(
         if pack and revisions is None:
             revisions = pack["revisions"]
         scores = scoring.score_case(case, benchmark.judged(case.case_id), delivered)
-        if pack is None and case.expected == "abstain":
-            scores = {"abstain": 0.0}  # a failure is never a correct abstention
+        if case.expected == "abstain" and (pack is None or not searched(pack)):
+            # A failure, or a search that never ran (it timed out, or its index was not built), is never a
+            # correct abstention: only a search that ran and found nothing is (findings 2026-11-16, item 51).
+            scores = {"abstain": 0.0}
+            if pack is not None:
+                failures[case.case_id] = "search did not run: " + ", ".join(not_searched(pack))
         per_case[case.case_id] = scores
         outcomes[case.case_id] = {
             "status": pack["status"] if pack else "error",
