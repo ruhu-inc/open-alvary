@@ -5,7 +5,16 @@ from enum import StrEnum
 from hashlib import sha256
 from typing import Annotated, Literal
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, HttpUrl, StringConstraints, model_validator
+from pydantic import (
+    AwareDatetime,
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    PrivateAttr,
+    StringConstraints,
+    model_validator,
+)
 
 from schema.record import EXPRESSION_AUTHORITY, LEGAL_EFFECTS
 
@@ -370,6 +379,8 @@ class Translation(Model):
 
 
 class Corpus(Model):
+    # What the store held of each row when this corpus was loaded (api.store.Store): never serialised.
+    _loaded: dict | None = PrivateAttr(default=None)
     jurisdictions: list[Jurisdiction] = Field(default_factory=list)
     authorities: list[Authority] = Field(default_factory=list)
     languages: list[Language] = Field(default_factory=list)

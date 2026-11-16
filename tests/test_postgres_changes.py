@@ -43,10 +43,11 @@ def events(store):
         ]
 
 
-def edit(store, change):
+def edit(store, change, lift=False):
+    """``lift``: the change takes a record out of an operator's privacy block, as only a lift may."""
     corpus = store.load()
     change(corpus)
-    store.save(corpus)
+    store.save(corpus, lift_privacy_block=lift)
 
 
 def test_the_first_publication_is_a_baseline_and_reseeding_changes_nothing(feed):
@@ -477,6 +478,7 @@ def test_a_record_never_public_or_withdrawn_confidentially_is_never_named_or_tol
                 setattr(rights_of(c, work), "privacy_status", "cleared"),
                 setattr(rights_of(c, work), "metadata_public", True),
             ],
+            lift=True,
         )
         edit(store, lambda c: setattr(rights_of(c, work), "metadata_public", False))
         code, named = told_of(work)
@@ -561,6 +563,7 @@ def test_a_text_withdrawn_for_privacy_names_nothing_to_anyone_though_its_record_
             setattr(rights_of(c, work), "privacy_status", "cleared"),
             setattr(rights_of(c, work), "metadata_public", False),
         ],
+        lift=True,
     )
     text_, record = sorted(
         feed_withdrawals(client, "/api/v1/changes", headers=headers), key=lambda e: e["publication_revision"]
@@ -1445,7 +1448,7 @@ def test_a_text_withdrawn_in_confidence_is_named_nowhere_public_though_its_recor
     assert rights["revision"] == told_revision and rights["record"]["approved_content_hashes"] == []
     assert rights["decision"] == {"metadata": True, "full_text": False, "reasons": ["No matching version"]}
     # Cleared again: the same text, the same rights revision, and the text back in the feed.
-    edit(store, lambda c: setattr(rights_of(c, work), "privacy_status", "cleared"))
+    edit(store, lambda c: setattr(rights_of(c, work), "privacy_status", "cleared"), lift=True)
     assert client.get(f"/site/v1/rights/{work}").json()["revision"] == told_revision
     assert client.get(f"/api/v1/versions/{VERSION}/text", headers=headers).status_code == 200
 
@@ -1471,7 +1474,7 @@ def test_a_hold_reads_as_a_lapse_in_every_rights_answer(surfaces, cleared, tmp_p
     assert before[f"/api/v1/rights/{work}"]["record"]["approved_content_hashes"]
     edit(store, lambda c: setattr(rights_of(c, work), "privacy_status", "blocked"))
     held = answers()
-    edit(store, lambda c: setattr(rights_of(c, work), "privacy_status", "cleared"))
+    edit(store, lambda c: setattr(rights_of(c, work), "privacy_status", "cleared"), lift=True)
     assert answers() == before  # lifted: as if it had never been
     count = len([e for e in events(store) if e["event_type"] == "rights_changed"])
     edit(store, lambda c: setattr(rights_of(c, work), "approved_content_hashes", []))
@@ -1601,3 +1604,41 @@ def test_a_record_approved_but_never_public_can_be_held_back_for_a_confidential_
     assert publish.publish_records(store, "rw", approved, set(), decision)["published"] == [work]
     with pytest.raises(SystemExit):
         admin.main(["lift-privacy-block", "--work", work])  # nothing held any more
+
+
+def test_a_withdrawal_made_while_a_run_works_survives_its_save(feed, monkeypatch):
+    """Consolidated findings item 36: Store.save rewrote every row it had loaded, so a confidential
+    withdrawal committed between a publishing run's load and its save was undone, and announced as added."""
+    from sqlalchemy.exc import DBAPIError
+
+    from api.store import Conflict
+
+    store, _ = feed
+    monkeypatch.setattr(admin, "engine_for", lambda: store.engine)
+    corpus = store.load()
+    work = next(r.source_id for r in corpus.rights if r.metadata_public)
+    left_alone, changed = store.load(), store.load()  # two runs, started before the withdrawal
+    rights = next(r for r in changed.rights if r.source_id == work)
+    changed.rights[changed.rights.index(rights)] = rights.model_copy(update={"legal_note": "Edited by a run"})
+    assert admin.main(["withdraw-confidentially", "--work", work]) == 0
+
+    def held():
+        return next(r for r in store.load().rights if r.source_id == work)
+
+    store.save(left_alone)  # a run that did not touch the record writes nothing over the withdrawal
+    assert held().privacy_status == "blocked" and not held().metadata_public
+    with pytest.raises(Conflict, match=f"rights-{work}|{work}"):
+        store.save(changed)  # one that did is stopped, and writes nothing
+    assert held().privacy_status == "blocked" and held().legal_note != "Edited by a run"
+    # The last guard: the database takes a row out of "blocked" only for the lift command.
+    with pytest.raises(DBAPIError, match="lifted only by lift-privacy-block"):
+        with store.engine.begin() as conn:
+            conn.execute(
+                text(
+                    'UPDATE rights SET payload = (payload::jsonb || \'{"privacy_status": "cleared"}\')::json'
+                    " WHERE source_id = :w"
+                ),
+                {"w": work},
+            )
+    assert admin.main(["lift-privacy-block", "--work", work]) == 0
+    assert held().privacy_status == "pending"

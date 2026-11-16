@@ -1,5 +1,7 @@
 """Relational identities and foreign keys, with validated JSON entity payloads."""
 
+import hashlib
+import json
 import logging
 import os
 from collections.abc import Iterable
@@ -104,6 +106,14 @@ def check_legacy_authority(connection: Connection, *, write: bool) -> None:
         connection.execute(text("SELECT identity_check_legacy_authority(:write)"), {"write": write})
 
 
+class Conflict(RuntimeError):
+    """The catalogue changed between a load and the save built on it: nothing was written."""
+
+
+def _digest(payload) -> str:
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 class Store:
     def __init__(self, engine: Engine):
         self.engine = engine
@@ -111,24 +121,53 @@ class Store:
     def load(self) -> Corpus:
         with self.engine.begin() as conn:
             check_legacy_authority(conn, write=False)
-            return Corpus.model_validate(
-                {
-                    name: list(conn.scalars(select(table.c.payload).order_by(table.c.id)))
-                    for name, table in tables.items()
-                }
-            )
+            rows = {
+                name: list(conn.scalars(select(table.c.payload).order_by(table.c.id)))
+                for name, table in tables.items()
+            }
+        corpus = Corpus.model_validate(rows)
+        # What each row held when read (a digest of its payload), carried by the corpus and its copies: a
+        # save writes only what the caller changed, and stops if anyone else changed that row meanwhile
+        # (findings 2026-11-16, item 36: a run's save rewrote a withdrawal made during the run).
+        corpus._loaded = {
+            (name, payload["id"]): _digest(payload) for name, payloads in rows.items() for payload in payloads
+        }
+        return corpus
 
-    def save(self, corpus: Corpus, confidential: Iterable[str] = ()) -> None:
+    def save(
+        self, corpus: Corpus, confidential: Iterable[str] = (), *, lift_privacy_block: bool = False
+    ) -> None:
         """Write the corpus and, in the same transaction, what it changed in the public change log. A work
         in ``confidential`` that this write takes out of public view is withdrawn for a reason that must not
-        be told (changes.record.publish)."""
+        be told (changes.record.publish). Only a save that says ``lift_privacy_block`` may take a record out
+        of an operator's privacy block (migration 0054); no publishing run or seed says it."""
+        given, loaded = corpus, corpus._loaded
         corpus = Corpus.model_validate(corpus.model_dump(mode="json"))
+        written: dict[tuple[str, str], str] = {}
         with self.engine.begin() as conn:
             check_legacy_authority(conn, write=True)
+            if conn.dialect.name == "postgresql":  # one catalogue write at a time, on any instance
+                conn.execute(
+                    text("SELECT pg_advisory_xact_lock(hashtextextended('open-alvary:catalogue', 0))")
+                )
+                if lift_privacy_block:
+                    conn.execute(text("SELECT set_config('open_alvary.lift_privacy_block', 'on', true)"))
             for name, table in tables.items():
                 for model in getattr(corpus, name):
                     payload = model.model_dump(mode="json")
-                    old = conn.scalar(select(table.c.payload).where(table.c.id == model.id))
+                    written[(name, model.id)] = _digest(payload)
+                    was = loaded.get((name, model.id)) if loaded is not None else None
+                    if was is not None and was == _digest(payload):
+                        continue  # the caller left it as loaded: whatever is stored now stays
+                    old = conn.scalar(select(table.c.payload).where(table.c.id == model.id).with_for_update())
+                    stored = None if old is None else _digest(old)
+                    if loaded is not None and was != stored:
+                        raise Conflict(
+                            f"The catalogue changed while this was prepared ({name} {model.id}): nothing was "
+                            "written. Run it again."
+                        )
+                    if stored == _digest(payload):
+                        continue  # unchanged: never written back
                     review_fields = (
                         {"verification_status", "content_verifier", "content_verified_at"}
                         if name == "versions"
@@ -159,6 +198,8 @@ class Store:
 
             affected = {s.id for s in corpus.sources} | {r.source_id for r in corpus.rights}
             publish(conn, affected | {v.source_id for v in corpus.versions}, confidential=confidential)
+        if loaded is not None:  # saved: what it holds is now what the store holds of it
+            given._loaded = loaded | written
 
 
 # What the catalogue says to readers about a source; its file stays the authority for these.

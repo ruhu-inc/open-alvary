@@ -93,6 +93,8 @@ def main(argv=None) -> int:
             if (record or {}).get("privacy_status") != "blocked":
                 raise SystemExit("No record with that ID has its privacy review blocked")
             # Pending clears no text and leaves metadata_public as it is: nothing becomes public by this.
+            # The database lets only this transaction take a row out of "blocked" (migration 0054).
+            conn.execute(text("SELECT set_config('open_alvary.lift_privacy_block', 'on', true)"))
             conn.execute(
                 update(rights)
                 .where(rights.c.source_id == args.work)
