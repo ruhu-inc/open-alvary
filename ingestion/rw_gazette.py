@@ -17,10 +17,10 @@ import statistics
 import unicodedata
 from bisect import bisect_right
 from collections import Counter
-from functools import cache
+from functools import cache, lru_cache
 from itertools import accumulate, pairwise
 
-from ingestion import gazette_layout
+from ingestion import cited_names, gazette_layout
 from schema.jurisdictions import registry
 
 # The version of what this module makes of an issue: raised whenever its output changes, so that
@@ -28,7 +28,8 @@ from schema.jurisdictions import registry
 # 2026-10-29.1: headings over two lines, more kinds, bodies known by their enacting words (orders with
 # one title kept apart), notices recorded, annexes without their instrument kept, treaties' family.
 # 2026-10-30.1: a file name's "57-2008" agrees with the printed "57/2008"; .2: evidence in the details file.
-PIPELINE = "2026-11-01.4"
+# 2026-11-16.1: titles as each language cites them, with the names their texts write; full title as printed.
+PIPELINE = "2026-11-16.1"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -1769,7 +1770,7 @@ def sentence_case(title: str) -> str:
     number = re.search(r"\bN\s?(?:[°º]|O(?![A-Za-z]))\.?\s*(\S+)", title)
     sentence = title[0] + title[1:].lower()
     for name in CITED_AS:
-        if sentence.lower().startswith(name.lower() + " "):
+        if sentence.lower().replace("’", "'").startswith(name.lower().replace("’", "'") + " "):
             sentence = name + sentence[len(name) :]
             break
     sentence = re.sub(
@@ -1788,6 +1789,193 @@ def sentence_case(title: str) -> str:
     return re.sub(
         r"\(([a-z]{2,8}(?:/[a-z]{2,8})*)\)", lambda m: f"({acronyms.get(m.group(1), m.group(1))})", sentence
     )
+
+
+# --- titles as each language cites them (2026-11-16) ----------------------------------------------------
+#
+# A title printed in capitals cannot say which of its words are names; the text under it can. A law's
+# English text writes "adopted by the United Nations General Assembly, in New York", so its title is
+# cited "… adopted by the United Nations General Assembly, in New York on 18 December 2002" rather
+# than sentence_case's "… united nations general assembly, in new york on 18 december 2002". A treaty
+# in English is cited in title case, as international instruments are; French and Kinyarwanda keep the
+# sentence case their texts write, with the names those texts capitalise.
+
+# Words a name's capitalised words may hold between them: "Convention against Torture", "Banque
+# Nationale du Rwanda", "Banki Nkuru y'u Rwanda".
+NAME_JOINS = frozenset(
+    "of the and or for against on in to at by de des du d la le l et ou pour sur aux au "
+    "wa ya y yo rya ry w z b u cya cy bya by za ka k rwa rw twa tw ba bw kwa kw".split()
+)
+_COORDINATING = frozenset({"and", "or", "et", "ou"})
+# Words that open a name in a sentence but are not part of it: "the Minister", "la Commission".
+NAME_OPENERS = frozenset(
+    "the a an this that these those its his her their each any every all no such "
+    "le la les l un une ce cet cette ces son sa ses leur leurs tout toute tous".split()
+)
+# A word, an elided "d'" or "l'" its own (so "d'Afrique" is two), a hyphened "Abaja-Ngwo" one.
+_NAME_TOKEN = re.compile(r"[^\W_]+[’'](?=[^\W_])|[^\W_]+(?:-[^\W_]+)*[’']?")
+_VALID_ROMAN = re.compile(r"M{0,3}(?:CM|CD|D?C{0,3})(?:XC|XL|L?X{0,3})(?:IX|IV|V?I{0,3})")
+# Capitals that make a valid numeral but are words: "MIX", "DIX", "CIVIL" is none, "MI-" a prefix.
+_NOT_NUMERALS = frozenset(
+    {"MIX", "DIX", "MI", "DI", "LI", "MIL", "CID", "VIC", "MID", "DC", "CD", "MD", "CC", "CM"}
+)
+# A month in a date: "18 december 2002", "december 18, 2002" (never the "may" of "may be").
+_MONTHS_EN = re.compile(
+    r"(?<=\d )(january|february|march|april|may|june|july|august|september|october|november|december)\b"
+    r"|\b(january|february|march|april|may|june|july|august|september|october|november|december)(?= \d)"
+)
+
+_APOSTROPHE = re.compile(r"[’']")
+# Words a treaty's title keeps in lower case besides cited_names.SMALL: "Agreement between …".
+_TREATY_SMALL = re.compile(
+    r"(?<=\s)(Between|Against|Among|Amongst|Within|Without|Through|Concerning|Regarding|Via|As|But|Nor|Per)(?=\s)"
+)
+
+
+@cache
+def _cited_by_number(name: str) -> re.Pattern:
+    return re.compile(r"(?<!\w)" + _APOSTROPHE.sub("[’']", re.escape(name)) + r"(?=\s+n\s?[°º])", re.I)
+
+
+@lru_cache(maxsize=8192)
+def _named(key: str) -> re.Pattern:
+    """A name's words in a title, in any case, either apostrophe."""
+    return re.compile(r"(?<!\w)" + _APOSTROPHE.sub("[’']", re.escape(key)) + r"(?!\w)", re.I)
+
+
+def _is_capitalised(token: str) -> bool:
+    return token[:1].isupper() and not token.isupper()
+
+
+def _is_acronym(token: str) -> bool:
+    letters = token.replace("-", "")
+    return len(letters) >= 2 and letters.isalpha() and letters.isupper()
+
+
+def _close_name(run: list[str], runs: Counter, single: Counter) -> None:
+    """Count the name a run of capitalised words makes, without the words that open or join it at its
+    ends ("the Minister of" is "Minister"), and empty the run."""
+    while run and run[-1].rstrip("’'").lower() in NAME_JOINS:
+        run.pop()
+    while run and run[0].rstrip("’'").lower() in NAME_OPENERS | NAME_JOINS:
+        run.pop(0)
+    if len(run) > 1:
+        runs[tuple(run)] += 1
+        # Each name a coordinating word joins counts too: "the Ministry of Trade and Industry" holds
+        # "Ministry of Trade"; "Rwanda and Burundi" holds both.
+        part: list[str] = []
+        for word in [*run, "and"]:
+            if word.rstrip("’'").lower() in _COORDINATING and part:
+                while part and part[-1].rstrip("’'").lower() in NAME_JOINS:
+                    part.pop()
+                if 1 < len(part) < len(run):
+                    runs[tuple(part)] += 1
+                part = []
+            elif part or word.rstrip("’'").lower() not in NAME_JOINS:
+                part.append(word)
+    elif run:
+        single[run[0].rstrip("’'")] += 1
+    run.clear()
+
+
+def names_in(nodes: list[dict], language: str = "en") -> dict[str, str]:
+    """The names a language version's own sentences write with capitals, by their words in lower case:
+    each run of capitalised words a sentence carries past its first word ("United Nations General
+    Assembly", "Banque Nationale du Rwanda"); a single word only where the text capitalises it twice or
+    more and never writes it in lower case ("Kigali", "Minister"); and an acronym the text introduces
+    in brackets ("(ICCROM)", "(NEPAD)"), for a word a sentence prints in capitals is as often a formula
+    ("ADOPTE", "ARRÊTE") or a name ("KAGAME Paul")."""
+    runs: Counter = Counter()
+    single: Counter = Counter()
+    acronyms: set[str] = set()
+    lower: set[str] = set()
+    for node in nodes:
+        if node.get("kind") not in ("paragraph", "list_item") or not node.get("text"):
+            continue
+        tokens = list(_NAME_TOKEN.finditer(node["text"]))
+        words = [t.group(0) for t in tokens]
+        if not words or sum(map(_is_capitalised, words)) > 0.6 * len(words):
+            continue  # a heading, a list of names or a title quoted in capitals: no sentence to read
+        for word in words:
+            if word[:1].islower():
+                lower.add(word.rstrip("’'").lower())
+        acronyms.update(re.findall(r"\(([A-Z]{2,10})\)", node["text"]))
+        run: list[str] = []
+        for k, token in enumerate(tokens):
+            word = token.group(0)
+            between = node["text"][tokens[k - 1].end() : token.start()] if k else "."
+            starts = bool(re.search(r"[.:;!?°)•–—-]", between)) or not k
+            if between.strip():  # punctuation ends a name
+                _close_name(run, runs, single)
+            if _is_acronym(word):
+                _close_name(run, runs, single)
+            elif _is_capitalised(word):
+                if starts and not run:
+                    continue  # a sentence's first word, capitalised for being first
+                run.append(word)
+            elif run and word.rstrip("’'").lower() in NAME_JOINS:
+                run.append(word)
+            else:
+                _close_name(run, runs, single)
+        _close_name(run, runs, single)
+    names: dict[str, str] = {}
+    for word, count in single.items():
+        if count >= 2 and word.lower() not in lower:
+            names[word.lower()] = word
+    for word in acronyms:
+        if word.lower() not in lower:
+            names[word.lower()] = word
+    for run, _ in runs.most_common():
+        words = list(run)
+        if language == "rw":
+            # A Kinyarwanda text capitalises the nouns of a title it quotes ("Imikorere by'Urwego rw'Igihugu"):
+            # a name begins at a word it never writes in lower case.
+            while len(words) > 1 and (
+                words[0].lower() in lower or words[0].rstrip("’'").lower() in NAME_JOINS
+            ):
+                words.pop(0)
+            if len(words) == 1:
+                continue
+        written = " ".join(words).replace("’ ", "’").replace("' ", "'").rstrip("’'")
+        names.setdefault(written.lower(), written)
+    return names
+
+
+def cited_title(printed: str, names: dict[str, str], language: str, treaty: bool = False) -> str:
+    """A title as it is cited, from the title as printed and the names its text writes (names_in): a
+    treaty in English in title case; otherwise sentence case, its names, acronyms, Roman numerals and,
+    in English, months written as the text and the language write them."""
+    printed = clean_title(printed)
+    if not printed:
+        return printed
+    if treaty and language == "en":
+        title = cited_names.cited(printed)[0]
+        title = _TREATY_SMALL.sub(lambda m: m.group(1).lower(), title)
+        title = re.sub(r"\bCo-O", "Co-o", title)
+        for key, written in names.items():
+            if written.isupper():
+                title = _named(key).sub(lambda _, w=written: w, title)
+        return title
+    title = sentence_case(printed)
+    folded = _APOSTROPHE.sub("'", title.lower())
+    for key in sorted((k for k in names if _APOSTROPHE.sub("'", k) in folded), key=len, reverse=True):
+        if key in ("bis", "ter"):
+            continue  # part of a number: "n° 13 bis/2009"
+        title = _named(key).sub(lambda _, w=names[key]: w, title)
+    if language != "fr":  # another instrument cited by its number: "amending Law n° 066/2024"
+        for name in CITED_AS:  # (French writes "modifiant la loi n° 066/2024")
+            title = _cited_by_number(name).sub(lambda _, w=name: w, title)
+    if language == "en":
+        title = _MONTHS_EN.sub(lambda m: m.group(0).capitalize(), title)
+        title = re.sub(r"\barticle(?=\s+\d)", "Article", title)
+    numerals = {
+        word
+        for word in re.findall(r"(?<![\w’'])[IVXLCDM]{2,}(?![\w’'])", printed)
+        if _VALID_ROMAN.fullmatch(word) and word not in _NOT_NUMERALS
+    }
+    for word in numerals:
+        title = re.sub(rf"(?<!\w){word}(?!\w)", word, title, flags=re.I)
+    return title[:1].upper() + title[1:]
 
 
 # --- details read from the text ------------------------------------------------------------------------
@@ -2667,8 +2855,14 @@ def suggest(versions: dict[str, list[dict]], entry: dict, issue: dict) -> tuple[
         if found:
             title, heading_page = found
     if title:
-        values["identity.full_title"] = values["identity.title"] = sentence_case(title)
-        values["identity.citation"] = values["identity.full_title"]
+        # Cited with the names its text writes, a treaty in English in title case; the full title as
+        # printed (2026-11-16: every word but the first was lowered, names included).
+        language = "en" if "en" in entry["versions"] else next(iter(entry["versions"]))
+        names = names_in(versions_nodes(versions.get(language, []), language), language)
+        treaty = values["identity.family"] == "treaty"
+        values["identity.title"] = cited_title(title, names, language, treaty)
+        values["identity.citation"] = values["identity.title"]
+        values["identity.full_title"] = clean_title(title)
         for key in ("identity.title", "identity.full_title", "identity.citation"):
             said(key, values[key], heading_page, title)
     if entry["number"] != "constitution" and not entry.get("number_made"):

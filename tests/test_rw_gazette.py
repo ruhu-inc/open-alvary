@@ -294,7 +294,10 @@ def read_law() -> tuple[dict, dict, dict]:
 
 def test_a_law_suggests_its_record_details_from_the_text_and_the_issue():
     values, legal, inferred, evidence = read_law()
-    assert values["identity.full_title"] == "Law n° 009/2026 of 12/03/2026 governing examples"
+    # Cited in sentence case; the full title as printed (2026-11-16).
+    assert values["identity.title"] == "Law n° 009/2026 of 12/03/2026 governing examples"
+    assert values["identity.citation"] == values["identity.title"]
+    assert values["identity.full_title"] == "LAW N° 009/2026 OF 12/03/2026 GOVERNING EXAMPLES"
     # Each value with the words and page it is read from (2026-10-29).
     assert evidence["step:promulgated.date"] == {
         "value": "2026-03-12",
@@ -1358,7 +1361,9 @@ def test_an_rlrc_covers_facts_are_suggested_with_their_words():
         },
     }
     values, legal, _, evidence = RG.suggest({"en": stream, "rw": [], "fr": []}, entry, {})
-    assert values["identity.title"] == "Treaty of the african medicines agency (AMA)"  # sentence case
+    # A treaty in English is cited in title case (2026-11-16); its full title as printed.
+    assert values["identity.title"] == "Treaty of the African Medicines Agency (AMA)"
+    assert values["identity.full_title"] == "TREATY OF THE AFRICAN MEDICINES AGENCY (AMA)"
     assert "identity.number.value" not in values  # the fingerprint names nothing printed
     assert values["profile.adopted_at"] == "Addis Ababa" and values["event:adopted.date"] == "2019-06-12"
     assert values["profile.parties"] == [{"party": "Rwanda", "ratified": "2019-11-06"}]
@@ -1783,3 +1788,124 @@ def test_a_title_never_takes_a_contents_lines_leaders_and_a_fragment_is_not_a_ti
     assert RG.clean_title(title) == "REGLEMENT N° 005/2009 DU 10/12/2009 PORTANT" and RG.is_title(
         RG.clean_title(title)
     )
+
+
+# --- titles as each language cites them (2026-11-16) ----------------------------------------------------
+
+
+def paragraphs(*texts: str) -> list[dict]:
+    return [{"kind": "paragraph", "text": text} for text in texts]
+
+
+LAW_17_2013 = paragraphs(
+    "This Law authorises the ratification of the Optional Protocol to the Convention against Torture "
+    "and Other Cruel, Inhuman or Degrading Treatment or Punishment, adopted by the United Nations "
+    "General Assembly, in New York on 18 December 2002.",
+    "This Law comes into force on the date of its publication in the Official Gazette of the Republic "
+    "of Rwanda.",
+)
+
+
+def test_a_title_keeps_the_names_its_text_writes_with_capitals():
+    printed = (
+        "LAW N° 17/2013 OF 25/03/2013 AUTHORISING THE RATIFICATION OF THE OPTIONAL PROTOCOL TO THE "
+        "CONVENTION AGAINST TORTURE AND OTHER CRUEL, INHUMAN OR DEGRADING TREATMENT OR PUNISHMENT, "
+        "ADOPTED BY THE UNITED NATIONS GENERAL ASSEMBLY, IN NEW YORK ON 18 DECEMBER 2002"
+    )
+    assert RG.cited_title(printed, RG.names_in(LAW_17_2013), "en") == (
+        "Law n° 17/2013 of 25/03/2013 authorising the ratification of the Optional Protocol to the "
+        "Convention against Torture and Other Cruel, Inhuman or Degrading Treatment or Punishment, "
+        "adopted by the United Nations General Assembly, in New York on 18 December 2002"
+    )
+
+
+def test_what_a_text_capitalises_only_for_beginning_a_sentence_is_no_name():
+    names = RG.names_in(
+        paragraphs(
+            "The Minister in charge of finance shall publish the list. The list is kept by the Minister.",
+            "This Law establishes the Rwanda Revenue Authority (RRA). Kigali is its seat; Kigali hosts it.",
+            "ADOPTE la présente loi.",
+        )
+    )
+    assert "the" not in names and "this" not in names and "the minister" not in names
+    assert names["minister"] == "Minister"  # capitalised twice past a sentence's start, never lowered
+    assert names["rwanda revenue authority"] == "Rwanda Revenue Authority"
+    assert names["rra"] == "RRA"  # introduced in brackets
+    assert "adopte" not in names  # a formula printed in capitals is no acronym
+    assert "kigali" not in names  # each time a sentence's first word
+
+
+def test_a_title_keeps_its_roman_numerals_and_a_dates_month():
+    assert RG.cited_title("XX. RESOLUTION ADOPTED BY THE GENERAL ASSEMBLY", {}, "en") == (
+        "XX. resolution adopted by the general assembly"
+    )
+    assert RG.cited_title("MIX OF FEES OF 12 MAY 2020", {}, "en") == "Mix of fees of 12 May 2020"
+
+
+def test_an_english_treaty_is_cited_in_title_case_and_keeps_its_texts_acronyms():
+    names = RG.names_in(paragraphs("the International Centre (ICCROM) is established in Rome by members."))
+    assert RG.cited_title(
+        "STATUTES OF THE INTERNATIONAL CENTRE FOR THE STUDY OF THE PRESERVATION AND RESTORATION OF "
+        "CULTURAL PROPERTY ICCROM",
+        names,
+        "en",
+        treaty=True,
+    ) == (
+        "Statutes of the International Centre for the Study of the Preservation and Restoration of "
+        "Cultural Property ICCROM"
+    )
+    assert RG.cited_title(
+        "AMENDMENT TO ARTICLE 109 OF THE CHARTER OF THE UNITED NATIONS", {}, "en", True
+    ) == ("Amendment to Article 109 of the Charter of the United Nations")
+
+
+def test_french_and_kinyarwanda_titles_keep_the_capitals_their_own_texts_write():
+    french = paragraphs(
+        "Il est créé l'Office rwandais des recettes, ci-après dénommé l'Office. Le siège de l'Office est à "
+        "Kigali, au Rwanda, membre de la Communauté d'Afrique de l'Est."
+    )
+    assert RG.cited_title(
+        "LOI N° 08/2009 DU 27/04/2009 PORTANT CRÉATION DE L'OFFICE RWANDAIS DES RECETTES DANS LA "
+        "COMMUNAUTÉ D'AFRIQUE DE L'EST",
+        RG.names_in(french),
+        "fr",
+    ) == (
+        "Loi n° 08/2009 du 27/04/2009 portant création de l'Office rwandais des recettes dans la "
+        "Communauté d'Afrique de l'Est"
+    )
+    kinyarwanda = paragraphs("Iri teka rigena abagize Umutwe w'Abadepite n'Inteko Ishinga Amategeko.")
+    assert (
+        RG.cited_title(
+            "ITEKA RYA PEREZIDA N° 23/01 RYO KUWA 30/04/2013 RIGENA ABAGIZE UMUTWE W'ABADEPITE",
+            RG.names_in(kinyarwanda),
+            "rw",
+        )
+        == "Iteka rya Perezida n° 23/01 ryo kuwa 30/04/2013 rigena abagize Umutwe w'Abadepite"
+    )
+
+
+def test_an_instrument_cited_by_its_number_is_named_as_it_is_cited_in_english_not_in_french():
+    names = RG.names_in(paragraphs("the text reads Bis in a number: Law n° 13 Bis/2009, as Bis is printed."))
+    assert RG.cited_title(
+        "LAW N° 008/2025 OF 17/03/2025 AMENDING LAW N° 13 BIS/2009 OF 16/06/2009", names, "en"
+    ) == ("Law n° 008/2025 of 17/03/2025 amending Law n° 13 bis/2009 of 16/06/2009")
+    assert RG.cited_title("LOI N° 008/2025 DU 17/03/2025 MODIFIANT LA LOI N° 066/2024", {}, "fr") == (
+        "Loi n° 008/2025 du 17/03/2025 modifiant la loi n° 066/2024"
+    )
+
+
+def test_an_english_treatys_title_keeps_its_prepositions_in_lower_case():
+    assert RG.cited_title(
+        "CO-OPERATION AGREEMENT BETWEEN NORTHERN CORRIDOR COUNTRIES IN COMBATING TERRORISM", {}, "en", True
+    ) == ("Co-operation Agreement between Northern Corridor Countries in Combating Terrorism")
+
+
+def test_a_kinyarwanda_name_begins_at_a_word_its_text_never_writes_in_lower_case():
+    names = RG.names_in(
+        paragraphs(
+            "Iri tegeko rigena imikorere y'inzego. Rigena Imikorere by'Urwego rw'Igihugu rushinzwe intwari.",
+        ),
+        "rw",
+    )
+    assert names.get("urwego rw'igihugu") == "Urwego rw'Igihugu"
+    assert "imikorere by'urwego rw'igihugu" not in names

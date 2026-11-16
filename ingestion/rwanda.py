@@ -1487,7 +1487,7 @@ def prepare_selection(
                     "id": doc_id,
                     "summary": reading["summary"],
                     "type": entry["kind"],
-                    "title": document_title(entry, language, lines, values),
+                    "title": document_title(entry, language, lines, values, nodes),
                     # The title its heading or file's listing gave it, which dates it among instruments
                     # sharing its number (separate_instruments), so its id stays as it was.
                     "heading_title": rw_gazette.sentence_case(entry["versions"][language]["title"]),
@@ -1658,11 +1658,12 @@ def prepare_selection(
     return {"documents": len(manifest["documents"]), "instruments": summary}
 
 
-def document_title(entry: dict, language: str, lines: dict, values: dict) -> str:
+def document_title(entry: dict, language: str, lines: dict, values: dict, nodes: list[dict] = ()) -> str:
     """A document's title in its language: as its heading printed it, without a contents line's dot
     leaders. A text titled from its file's name ("1977_0_1.PDF" as "0 1") or with a fragment for a
     title ("(DUHAMIC – ADRI) » ……30", taken from a contents list) takes the title it prints in this
-    language, else its details' title (2026-11-01)."""
+    language, else its details' title (2026-11-01). Written as it is cited, with the names this
+    version's text (`nodes`) writes (2026-11-16: rw_gazette.cited_title)."""
     title = rw_gazette.clean_title(entry["versions"][language]["title"])
     if entry.get("title_from_listing") or not rw_gazette.is_title(title):
         printed = rw_gazette.printed_title(lines, (language,))
@@ -1670,7 +1671,8 @@ def document_title(entry: dict, language: str, lines: dict, values: dict) -> str
             title = rw_gazette.clean_title(printed[0])
         elif not rw_gazette.is_title(title) and values.get("identity.title"):
             return values["identity.title"]
-    return rw_gazette.sentence_case(title)
+    treaty = values.get("identity.family") == "treaty"
+    return rw_gazette.cited_title(title, rw_gazette.names_in(list(nodes), language), language, treaty)
 
 
 def listing_title(name: str) -> str:
