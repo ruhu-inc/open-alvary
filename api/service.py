@@ -479,7 +479,8 @@ class WebsiteFiles(StaticFiles):
         response.headers["Cache-Control"] = (
             "public, max-age=31536000, immutable" if path.startswith("assets/") else "no-cache"
         )
-        if self.traffic is not None and (page or path == ".") and response.status_code in (200, 304):
+        # An address that is no page still counts, as a bot (api.traffic: people do not open such addresses).
+        if self.traffic is not None and (page or path == ".") and response.status_code in (200, 304, 404):
             self.traffic.arrival(scope, "" if path == "." else path)
         return response
 

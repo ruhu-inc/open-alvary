@@ -321,7 +321,7 @@ def test_a_search_through_the_service_counts_and_its_words_reach_no_table(
         assert client.get("/", headers=document).status_code == 200
         assert client.get(f"/browse?q={MARKER}", headers=page).status_code == 200
         assert client.get("/app.js", headers=document).status_code == 200  # a file, not a page
-        assert client.get("/.git/config", headers=document).status_code == 200  # the site's page, at a guess
+        assert client.get("/.git/config", headers=document).status_code == 404  # no page: not found (item 20)
     assert total(pg_engine, namespace, "searches", "all") == 1
     assert total(pg_engine, namespace, "searches", "none_found") == 1
     assert total(pg_engine, namespace, "bots", "other") == 2
