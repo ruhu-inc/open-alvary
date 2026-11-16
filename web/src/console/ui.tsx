@@ -190,22 +190,34 @@ export function number(value: number): string {
   return value.toLocaleString("en-GB");
 }
 
+// What load() gives for these deps. A reload keeps the data on screen while it runs; data loaded for other
+// deps (another organisation) is never returned, so nothing shows or saves one organisation's details as
+// another's.
 export function useAsync<T>(load: () => Promise<T>, deps: unknown[]) {
-  const [state, setState] = useState<{ data?: T; error?: unknown; loading: boolean }>({ loading: true });
+  const key = JSON.stringify(deps);
+  const [state, setState] = useState<{ data?: T; error?: unknown; loading: boolean; key?: string }>({
+    loading: true,
+  });
   const [version, setVersion] = useState(0);
   useEffect(() => {
     let live = true;
     setState((s) => ({ ...s, loading: true }));
     load().then(
-      (data) => live && setState({ data, loading: false }),
-      (error) => live && setState({ error, loading: false }),
+      (data) => live && setState({ data, loading: false, key }),
+      (error) => live && setState({ error, loading: false, key }),
     );
     return () => {
       live = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, version]);
-  return { ...state, reload: () => setVersion((v) => v + 1) };
+  const current = state.key === key;
+  return {
+    data: current ? state.data : undefined,
+    error: current ? state.error : undefined,
+    loading: state.loading || !current,
+    reload: () => setVersion((v) => v + 1),
+  };
 }
 
 export function Loading() {

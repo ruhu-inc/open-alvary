@@ -1899,7 +1899,7 @@ export function Settings({ org, refresh }: PageProps) {
         </fieldset>
         {manager ? (
           <div className="row">
-            <button className="btn secondary" type="submit">
+            <button className="btn secondary" type="submit" disabled={details.loading}>
               Save
             </button>
             <span className="fine" aria-live="polite">

@@ -269,7 +269,8 @@ function Shell({ me, path, refresh }: { me: Me; path: string; refresh: () => voi
           </div>
         </header>
         <main id="main" tabIndex={-1} className="content">
-          {page}
+          {/* Each organisation's pages start afresh: no form keeps another organisation's values. */}
+          <React.Fragment key={org.id}>{page}</React.Fragment>
         </main>
       </div>
     </div>
