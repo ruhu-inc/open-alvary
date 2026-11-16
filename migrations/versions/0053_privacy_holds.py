@@ -32,6 +32,12 @@ def upgrade():
     held_at timestamptz NOT NULL DEFAULT statement_timestamp()
 )"""
     )
+    # The guard reads every corpus table (bundle v0003): granted here too, whatever the provisioning order.
+    conn = op.get_bind()
+    guard = PolicyNamespace(conn.scalar(text("SELECT current_schema()"))).role("guard")
+    if conn.scalar(text("SELECT to_regrole(:role)"), {"role": guard}) is not None:
+        quoted = conn.dialect.identifier_preparer.quote_identifier(guard)
+        op.execute(f"GRANT SELECT ON {corpus()}.privacy_hold TO {quoted}")
 
 
 def downgrade():
