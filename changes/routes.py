@@ -21,6 +21,13 @@ def site_origin(request: Request) -> str:
     return f"https://{domain}" if domain else f"{request.url.scheme}://{request.url.netloc}"
 
 
+def own_url(request: Request) -> str:
+    """The address a feed was asked for, as its readers asked for it. Behind the load balancer the
+    service sees plain http; where a public domain is configured every public address is https."""
+    url = request.url
+    return str(url.replace(scheme="https")) if os.getenv("PUBLIC_DOMAIN") else str(url)
+
+
 PARAMETERS = {"jurisdiction", "work", "type", "class", "language", "q", "issuer", "collection", "topic"}
 
 
@@ -108,7 +115,7 @@ def create_router(
     def window(request: Request, render, media):
         def work(feed: Feed):
             events = feed.recent(Filters.parse(_values(request, PARAMETERS)))
-            body = render(events, str(request.url), origin(request))
+            body = render(events, own_url(request), origin(request))
             return Response(body, media_type=media, headers={"Cache-Control": "no-store"})
 
         return run(request, work)

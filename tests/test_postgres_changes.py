@@ -658,6 +658,21 @@ def test_atom_and_rss_are_well_formed_and_escape_titles(feed, cleared):
         parsedate_to_datetime(item.find("pubDate").text)
 
 
+def test_a_feed_names_itself_by_its_https_address_behind_the_load_balancer(feed, monkeypatch):
+    """The service sees plain http behind the load balancer; a feed's own address is still https."""
+    _, client = feed
+    monkeypatch.setenv("PUBLIC_DOMAIN", "open.alvary.ai")
+    atom = ET.fromstring(client.get("/changes/feed.atom", params={"jurisdiction": "ng"}).text)
+    a = "{http://www.w3.org/2005/Atom}"
+    own = "https://testserver/changes/feed.atom?jurisdiction=ng"
+    assert atom.find(a + "id").text == own
+    assert [link.get("href") for link in atom.findall(a + "link") if link.get("rel") == "self"] == [own]
+    channel = ET.fromstring(client.get("/changes/feed.rss").text).find("channel")
+    self_link = channel.find("{http://www.w3.org/2005/Atom}link")
+    assert self_link.get("href") == "https://testserver/changes/feed.rss"
+    assert channel.find("link").text == "https://open.alvary.ai/changes"
+
+
 def withdrawals(client):
     return [e for e in client.get("/changes").json()["events"] if e["event_type"] == "withdrawal"]
 
