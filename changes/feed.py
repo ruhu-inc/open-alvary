@@ -951,6 +951,7 @@ LABELS = {
     "catalogue_added": "Added",
     "metadata_corrected": "Corrected",
     "text_version_published": "Text published",
+    "legal_effect_recorded": "Legal effect",
     "withdrawal": "Withdrawn",
     "coverage_changed": "Coverage",
     "membership_recorded": "Membership",
