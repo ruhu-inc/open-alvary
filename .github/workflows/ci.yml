@@ -27,7 +27,9 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            web/package-lock.json
+            workbench/editor/package-lock.json
       - run: pip install -r requirements.lock -r deployment/ingestion-jobs.requirements.lock && pip install --no-deps -e .
       - run: ruff check . && ruff format --check . && pytest -q --fast
       - name: PostgreSQL integration contracts
@@ -46,4 +48,13 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg://open_alvary:test-only@localhost:5432/open_alvary_test
       - run: npm --prefix web ci && npm --prefix web run build
+      - name: Review editor tests, and both committed workbench bundles built from their source
+        run: |
+          npm --prefix workbench/editor ci
+          npm --prefix workbench/editor test
+          npm --prefix workbench/editor run build
+          npm --prefix web run build:preview
+          git diff --exit-code -- workbench/static/editor.js workbench/static/public-preview
+          untracked=$(git ls-files --others --exclude-standard -- workbench/static/public-preview)
+          if [ -n "$untracked" ]; then echo "Files the preview build makes are not committed: $untracked"; exit 1; fi
       - run: scripts/container_smoke.sh
