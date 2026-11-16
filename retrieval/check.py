@@ -174,7 +174,7 @@ class Checker:
             within = [n.locator for n in self._structure(version) if node.start_byte <= n.start_byte
                       and n.end_byte <= node.end_byte and n.locator != node.locator]  # fmt: skip
             currentness = self.events.currentness(
-                source, version, node.locator, within, item.as_of, self.today
+                source, version, node.locator, within, item.as_of, self.today, self._structure(version)
             )
             applicability = self._applicability(item, source)
             newest = newest or self._newest(version, source)
@@ -194,7 +194,7 @@ class Checker:
                     newer_anchor_id=there.id if there else None,
                     same_words=there is not None and newer[there.start_byte : there.end_byte] == span,
                     currentness=self.events.currentness(
-                        source, newest, node.locator, within, item.as_of, self.today
+                        source, newest, node.locator, within, item.as_of, self.today, self._structure(newest)
                     ),
                     applicability=applicability,
                     **base,

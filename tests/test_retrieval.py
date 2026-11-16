@@ -626,3 +626,80 @@ def test_each_language_matched_word_for_word_has_a_notice():
         "Texts in rw-RW are matched word for word (no stemming or common words) until the language passes "
         "the search tests.",
     ]
+
+
+def test_an_uncertain_stop_a_parts_event_or_a_silent_instrument_never_reads_as_in_force():
+    """Consolidated findings item 37: when unsure, unknown, never the reassuring answer."""
+    from types import SimpleNamespace
+
+    from retrieval.legal_time import containing
+
+    at = date(2024, 6, 1)
+    commenced = event("e1", "commenced", date(2023, 6, 12))
+    undated = [commenced, event("e2", "repealed", None, precision="unknown")]
+    assert provision_state(undated, "sec_5", at, None)[0] == "unknown"
+    this_year = [commenced, event("e2", "expired", date(2024, 1, 1), precision="year")]
+    assert provision_state(this_year, "sec_5", at, None)[0] == "unknown"  # some day in 2024
+    assert provision_state(this_year, "sec_5", date(2025, 1, 1), None)[0] == "not_in_force"
+    assert provision_state(this_year, "sec_5", date(2023, 12, 31), None)[0] == "in_force"
+    suspended = [commenced, event("e3", "suspended", date(2024, 1, 1), precision="year")]
+    assert provision_state(suspended, "sec_5", at, None)[0] == "unknown"
+    # A repeal of Part II reaches its sections, whose locators do not say so.
+    part = [commenced, event("e4", "repealed", date(2024, 1, 1), scope="explicit_nodes", locators=["part_2"])]
+    assert provision_state(part, "sec_5", at, None, frozenset({"part_2"}))[0] == "not_in_force"
+    assert provision_state(part, "sec_1", at, None, frozenset({"part_1"}))[0] == "in_force"
+    nodes = [
+        SimpleNamespace(id="n0", parent_id=None, locator="document"),
+        SimpleNamespace(id="n2", parent_id="n0", locator="part_2"),
+        SimpleNamespace(id="n5", parent_id="n2", locator="sec_5"),
+    ]
+    assert containing(nodes, ["sec_5"]) == {"sec_5": frozenset({"part_2", "document"})}
+    # Silent on commencement is said of the instrument: one commencement order anywhere, and a section it
+    # leaves out has not commenced on assent.
+    assent = Profile("p", "assent")
+    ordered = [
+        event("e5", "assented", date(2023, 6, 12)),
+        event("e6", "commenced", date(2023, 9, 1), scope="explicit_nodes", locators=["sec_1"]),
+    ]
+    assert provision_state(ordered, "sec_2", at, assent)[0] == "unknown"
+    assert provision_state(ordered[:1], "sec_2", at, assent)[0] == "in_force"
+    # Two commencement dates conflict whatever the date asked, not only once both have passed.
+    two = [commenced, event("e7", "commenced", date(2025, 1, 1))]
+    assert provision_state(two, "sec_1", at, None)[0] == "contested"
+
+
+def test_a_text_not_yet_in_effect_is_not_in_force_today():
+    version = SimpleNamespace(effective_from=date(2027, 1, 1), effective_until=None)
+    found = record_currentness("current", version, None, date(2026, 10, 19))
+    assert found.state == "not_in_force" and "takes effect on 2027-01-01" in found.reasons[0]
+
+
+def test_adding_a_stopping_event_never_moves_an_answer_towards_in_force():
+    """A property, over many generated histories: a repeal, expiry or suspension added to the events can
+    keep an answer, or move it away from in force, but never towards it."""
+    import random
+
+    chance = random.Random(20261116)
+    kinds = ["commenced", "entered_into_force", "revived", "assented", "repealed", "expired", "suspended"]
+    stops = ["repealed", "expired", "declared_invalid", "disapplied", "suspended"]
+
+    def any_event(n, kind):
+        precision = chance.choice(["day", "day", "month", "year", "unknown"])
+        day = (
+            None if precision == "unknown" else date(2020 + chance.randrange(6), 1 + chance.randrange(12), 1)
+        )
+        scope, locators = chance.choice(
+            [("whole", ()), ("explicit_nodes", ("sec_1",)), ("explicit_nodes", ("part_1",))]
+        )
+        until = date(day.year + 1, 1, 1) if kind == "suspended" and day and chance.random() < 0.5 else None
+        return event(f"e{n}", kind, day, scope=scope, locators=locators, precision=precision, until=until)
+
+    for case in range(3000):
+        events = [any_event(n, chance.choice(kinds)) for n in range(chance.randrange(0, 4))]
+        at = date(2019 + chance.randrange(8), 1 + chance.randrange(12), 15)
+        profile = chance.choice([None, Profile("p", "assent")])
+        outer = chance.choice([frozenset(), frozenset({"part_1"})])
+        before = provision_state(events, "sec_1", at, profile, outer)[0]
+        after = provision_state([*events, any_event(9, chance.choice(stops))], "sec_1", at, profile, outer)[0]
+        assert after != "in_force" or before == "in_force", (case, events, at, before, after)
+        assert before != "not_in_force" or after in ("not_in_force", "contested"), (case, events, at, after)

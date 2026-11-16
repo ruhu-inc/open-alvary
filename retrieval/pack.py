@@ -895,7 +895,7 @@ class Retriever:
                     attribution_required=rights.attribution_required,
                     attribution_text=rights.attribution_text,
                     currentness=self.events.currentness(
-                        source, version, hit.locator, inner(nodes, hit), plan.as_of, self.today
+                        source, version, hit.locator, inner(nodes, hit), plan.as_of, self.today, nodes
                     ),
                     authority=EvidenceAuthority(
                         document_type=source.document_type,

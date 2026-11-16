@@ -60,6 +60,9 @@ def record_currentness(legal_status: str, version, as_of: date | None, today: da
         state = _BY_STATUS.get(legal_status, "unknown")
         if state == "unknown":
             reasons.append("The record's legal status is unknown.")
+        if version.effective_from is not None and today < version.effective_from and state == "in_force":
+            state = "not_in_force"
+            reasons.append(f"The text takes effect on {version.effective_from.isoformat()}, after today.")
         if version.effective_until is not None and today >= version.effective_until and state == "in_force":
             state = "not_in_force"
             reasons.append("The text's effective period has ended.")
@@ -107,29 +110,55 @@ def _after(event: Event, at: date) -> bool:
     return event.date_from is not None and event.precision != "unknown" and event.date_from > at
 
 
-def covers(event: Event, locator: str) -> bool:
-    return event.scope == "whole" or any(locator == x or locator.startswith(x + "__") for x in event.locators)
+def covers(event: Event, locator: str, outer: frozenset[str] = frozenset()) -> bool:
+    """Whether an event reaches a provision: the whole work, the provision, a provision whose locator
+    holds it ("sec_2" holds "sec_2__subsec_1"), or one the structure places around it (``outer``: a Part
+    holds its sections, whatever their locators say)."""
+    return event.scope == "whole" or any(
+        locator == x or locator.startswith(x + "__") or x in outer for x in event.locators
+    )
+
+
+def silent_on_commencement(events: list[Event]) -> bool:
+    """Whether the instrument says nothing of its commencement: no reviewed commencement of any part of it.
+    Decided for the instrument as a whole, so a provision left out of a commencement order is never taken
+    to have commenced on assent."""
+    superseded = {e.supersedes for e in events if e.supersedes}
+    return not any(
+        e.event_type in ("commenced", "entered_into_force") and e.event_id not in superseded for e in events
+    )
 
 
 def provision_state(
-    events: list[Event], locator: str, at: date, profile: Profile | None
+    events: list[Event],
+    locator: str,
+    at: date,
+    profile: Profile | None,
+    outer: frozenset[str] = frozenset(),
 ) -> tuple[str, list[str], list[str]]:
-    """One provision's state at ``at``: (state, reasons, the events relied on)."""
+    """One provision's state at ``at``: (state, reasons, the events relied on). ``outer``: the locators of
+    the parts the structure places around it. When unsure, the answer is unknown, never in force."""
     superseded = {e.supersedes for e in events if e.supersedes}
-    relevant = [e for e in events if e.event_id not in superseded and covers(e, locator)]
+    relevant = [e for e in events if e.event_id not in superseded and covers(e, locator, outer)]
     used = [e.event_id for e in relevant]
     if any(e.conditions for e in relevant if e.event_type in STARTS | STOPS):
         return "unknown", ["A relevant event has a condition that is not assessed."], used
     starts = [e for e in relevant if e.event_type in STARTS]
     stops = [e for e in relevant if e.event_type in STOPS]
-    if not starts and profile is not None and profile.silent_commencement == "assent":
+    if (
+        not starts
+        and profile is not None
+        and profile.silent_commencement == "assent"
+        and silent_on_commencement(events)
+    ):
         assent = [e for e in relevant if e.event_type == "assented" and e.scope == "whole"]
         starts = assent  # the reviewed profile: an instrument silent on commencement commences on assent
     if not starts:
         return "unknown", ["No reviewed commencement evidence covers this provision."], used
-    commenced = [e for e in starts if e.event_type != "revived" and _before(e, at)]
-    if len({e.date_from for e in commenced}) > 1:
+    # Conflicting commencement evidence is reported whatever date is asked, not only once both have passed.
+    if len({e.date_from for e in starts if e.event_type != "revived"}) > 1:
         return "contested", ["Reviewed events give different commencement dates."], used
+    commenced = [e for e in starts if e.event_type != "revived" and _before(e, at)]
     ceased = [e for e in stops if _before(e, at)]
     revived = [e for e in starts if e.event_type == "revived" and _before(e, at)]
     if ceased and revived and any(r.date_from >= s.date_from for r in revived for s in ceased):
@@ -148,6 +177,22 @@ def provision_state(
         ):
             return "not_in_force", ["Suspended on the date asked."], used
     if commenced or revived:
+        # A repeal, expiry or suspension that is not certainly after the date asked may have stopped it:
+        # unknown, with the reason, rather than in force.
+        uncertain = [
+            e
+            for e in relevant
+            if (e.event_type in STOPS or e.event_type == "suspended")
+            and not _before(e, at)
+            and not _after(e, at)
+            and not (e.date_to is not None and e.date_to <= at)
+        ]
+        if uncertain:
+            reasons = [
+                f"A reviewed {e.event_type} event's date is not certain relative to the date asked."
+                for e in uncertain
+            ]
+            return "unknown", reasons, used
         return "in_force", [], used
     if all(_after(e, at) for e in starts):
         return "not_in_force", ["Commences after the date asked."], used
@@ -172,12 +217,18 @@ def provision_currentness(
     inner: list[str],
     as_of: date | None,
     today: date,
+    outer: dict[str, frozenset[str]] | None = None,
 ) -> Currentness:
-    """A unit's currentness: its own provision and every part inside it (``inner``) that an event names."""
+    """A unit's currentness: its own provision and every part inside it (``inner``) that an event names.
+    ``outer``: for each of those locators, the locators of the parts the structure places around it."""
     at = as_of or today
+    outer = outer or {}
     named = {x for e in events for x in e.locators}
     assessed = [locator] + [i for i in inner if any(i == x or i.startswith(x + "__") for x in named)]
-    results = [provision_state(events, loc, at, profile) for loc in dict.fromkeys(assessed)]
+    results = [
+        provision_state(events, loc, at, profile, outer.get(loc, frozenset()))
+        for loc in dict.fromkeys(assessed)
+    ]
     state = aggregate([r[0] for r in results])
     reasons = list(dict.fromkeys(reason for r in results for reason in r[1]))
     evidence = tuple(dict.fromkeys(e for r in results for e in r[2]))
@@ -246,10 +297,29 @@ class Events:
             self._profiles[key] = Profile(row[0], row[1]) if row else None
         return self._profiles[key]
 
-    def currentness(self, source, version, locator: str, inner: list[str], as_of: date | None, today: date):
-        """Provision-level when the work has reviewed events; otherwise record-level."""
+    def currentness(
+        self, source, version, locator: str, inner: list[str], as_of: date | None, today: date, nodes=()
+    ):
+        """Provision-level when the work has reviewed events; otherwise record-level. ``nodes``: the
+        version's structure, so an event on a part reaches every part the structure places inside it."""
         events = self.of(source.id)
         if not events:
             return record_currentness(source.legal_status, version, as_of, today)
         profile = self.profile(source.jurisdiction_id, source.document_type)
-        return provision_currentness(events, profile, locator, inner, as_of, today)
+        return provision_currentness(
+            events, profile, locator, inner, as_of, today, outer=containing(nodes, [locator, *inner])
+        )
+
+
+def containing(nodes, locators: list[str]) -> dict[str, frozenset[str]]:
+    """For each locator, the locators of the nodes its node sits inside, by the structure's parents."""
+    by_id = {n.id: n for n in nodes}
+    by_locator = {n.locator: n for n in nodes}
+    found = {}
+    for locator in locators:
+        node, chain, steps = by_locator.get(locator), set(), 0
+        while node is not None and node.parent_id in by_id and steps < 64:
+            node, steps = by_id[node.parent_id], steps + 1
+            chain.add(node.locator)
+        found[locator] = frozenset(chain)
+    return found
