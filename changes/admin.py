@@ -65,6 +65,15 @@ def main(argv=None) -> int:
             record = conn.scalar(select(rights.c.payload).where(rights.c.source_id == args.work))
             held = (record or {}) | {"metadata_public": False, "privacy_status": "blocked"}
             if not current(conn, [args.work]):
+                if record is None:
+                    # Approved, perhaps, but never public: held back so no publishing run makes it so.
+                    hold = ns.qualified(conn, "corpus", "privacy_hold")
+                    conn.execute(
+                        text(f"INSERT INTO {hold} (work_id) VALUES (:w) ON CONFLICT (work_id) DO NOTHING"),
+                        {"w": args.work},
+                    )
+                    print("Held back: no publishing run publishes it until lift-privacy-block")
+                    return 0
                 if not withhold(conn, args.work):
                     raise SystemExit("No public record, or withdrawal told to keyed callers, has that ID")
                 conn.execute(update(rights).where(rights.c.source_id == args.work).values(payload=held))
@@ -77,6 +86,10 @@ def main(argv=None) -> int:
             check_legacy_authority(conn, write=True)
             rights = tables["rights"]
             record = conn.scalar(select(rights.c.payload).where(rights.c.source_id == args.work))
+            hold = ns.qualified(conn, "corpus", "privacy_hold")
+            if conn.execute(text(f"DELETE FROM {hold} WHERE work_id = :w"), {"w": args.work}).rowcount:
+                print("No longer held back. The next publishing run decides whether it is published")
+                return 0
             if (record or {}).get("privacy_status") != "blocked":
                 raise SystemExit("No record with that ID has its privacy review blocked")
             # Pending clears no text and leaves metadata_public as it is: nothing becomes public by this.

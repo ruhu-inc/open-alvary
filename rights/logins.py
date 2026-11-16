@@ -295,7 +295,8 @@ PUBLISH = Login(
     {
         "base": dict.fromkeys(CATALOGUE_TABLES, WRITE),
         "changes": {**LOG_WRITES, **INDEX_WRITES},
-        "corpus": _reading(RECORDED_FACTS),
+        # privacy_hold: records an operator held back before they were public (changes.admin), never published.
+        "corpus": {**_reading(RECORDED_FACTS), "privacy_hold": READ},
     },
     ("policy.allocate_publication_revision()",),
     never_reads=(KEY_HASH, SESSION_TOKEN, SEALED_SECRET, PROVIDER_SUBJECT),

@@ -1573,3 +1573,31 @@ def test_events_recorded_before_are_read_without_the_privacy_review(feed, cleare
     mixed = recorded(91, ["licence", "privacy_status"])[-1]
     assert mixed["changed_fields"] == ["licence"] and mixed["rights"]["decision"]["reasons"] == []
     assert not PRIVATE.search(json.dumps(mixed)) and mixed["summary"].endswith("changed (licence).")
+
+
+def test_a_record_approved_but_never_public_can_be_held_back_for_a_confidential_reason(feed, monkeypatch):
+    """Consolidated findings item 35: withdraw-confidentially refused a record that was not yet public,
+    and the next publishing run published it."""
+    from datetime import UTC, datetime
+
+    from test_publish import rwanda_law
+
+    from operations import publish
+
+    store, _ = feed
+    monkeypatch.setattr(admin, "engine_for", lambda: store.engine)
+    work = "rw-law-055-2024"
+    decision = {"basis": "b", "legal_note": "n", "expires_at": "2027-10-26T00:00:00+00:00", "evidence": []}
+    from schema.record import Expression
+
+    english = rwanda_law(expressions=(Expression(language="en", authority="authoritative", this_text=True),))
+    approved = [publish.Approved(work, english, ["en"], "Ada Reviewer", datetime.now(UTC))]
+    assert work not in {s.id for s in store.load().sources}
+    assert admin.main(["withdraw-confidentially", "--work", work]) == 0  # never public: held back
+    report = publish.publish_records(store, "rw", approved, set(), decision)
+    assert "held it back for a confidential reason" in report["skipped"][work]
+    assert work not in {s.id for s in store.load().sources}
+    assert admin.main(["lift-privacy-block", "--work", work]) == 0
+    assert publish.publish_records(store, "rw", approved, set(), decision)["published"] == [work]
+    with pytest.raises(SystemExit):
+        admin.main(["lift-privacy-block", "--work", work])  # nothing held any more

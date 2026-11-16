@@ -60,6 +60,7 @@ from pathlib import Path
 from urllib.parse import unquote_plus, urlsplit
 
 from sqlalchemy import create_engine, insert, select, update
+from sqlalchemy import text as sql_text
 
 from api.catalogue import NAME_WITHHELD
 from api.search import normalize_citation
@@ -741,6 +742,21 @@ def withheld_relations(approved: list[Approved]) -> list[dict]:
     ]
 
 
+def privacy_holds(store) -> set[str]:
+    """The works an operator held back for a confidential reason before they were ever public
+    (corpus.privacy_hold, python -m changes.admin withdraw-confidentially); none where there is no table."""
+    engine = store.engine
+    if engine.dialect.name != "postgresql":
+        return set()
+    from changes.record import namespace
+
+    with engine.connect() as conn:
+        table = namespace(conn).qualified(conn, "corpus", "privacy_hold")
+        if conn.scalar(sql_text("SELECT to_regclass(:t)"), {"t": table}) is None:
+            return set()
+        return set(conn.scalars(sql_text(f"SELECT work_id FROM {table}")))
+
+
 def publish_records(
     store,
     jurisdiction: str,
@@ -756,6 +772,7 @@ def publish_records(
     corpus = store.load()
     by_id = {name: {m.id: m for m in getattr(corpus, name)} for name in Corpus.model_fields}
     report = {"published": [], "updated": [], "taken_down": [], "skipped": {}}
+    held = privacy_holds(store)
     if jurisdiction not in by_id["jurisdictions"]:
         # From the project's jurisdiction profile; a regional body carries no country code (DAT-02).
         languages = {code for item in approved for code in (e.language for e in item.record.expressions)}
@@ -763,6 +780,11 @@ def publish_records(
             catalogue_entry(jurisdiction, name=NAMES.get(jurisdiction), languages=languages)
         )
     for item in approved:
+        if item.work in held:
+            report["skipped"][item.work] = (
+                "an operator held it back for a confidential reason: only they lift it"
+            )
+            continue
         try:
             entry = catalogue_entries(item, decision)
         except (Refused, ValueError) as error:
