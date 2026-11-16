@@ -289,8 +289,8 @@ def _tables(conn) -> dict[str, str]:
 
 
 def _parts(service, work_id: str) -> dict[str, dict]:
-    """The parts of a work's public texts by locator: kind, words, printed pinpoint and document order
-    (the first text that has the locator)."""
+    """The parts of a work's public texts by locator: kind, words, printed pinpoint, document order and
+    the text they are in (its content hash), from the first text that has the locator."""
     source, rights = service._require(work_id)
     found: dict[str, dict] = {}
     for version in service._approved(source, rights):
@@ -305,6 +305,7 @@ def _parts(service, work_id: str) -> dict[str, dict]:
                     "words": words_of(raw[node.start_byte : node.end_byte].decode()),
                     "pinpoint": service._pinpoint(node, source.document_type, by_id) or node.locator,
                     "order": order,
+                    "text": version.content_hash,
                 },
             )
     return found
@@ -434,10 +435,11 @@ def publish(engine, citations: CitationFile, *, dry_run: bool = False) -> dict:
                     text(
                         f"INSERT INTO {t['citation']} (citation_id, citing_work, citing_locator, citing_pinpoint,"
                         " citing_order, cited_work, cited_locator, cited_pinpoint, cited_order, printed, quote,"
-                        " evidence_url, extraction, review_state, reviewed_by, reviewer_role, reviewed_at)"
+                        " evidence_url, extraction, review_state, reviewed_by, reviewer_role, reviewed_at,"
+                        " source_sha256)"
                         " VALUES (:id, :citing_work, :citing_locator, :citing_pinpoint, :citing_order, :cited_work,"
                         " :cited_locator, :cited_pinpoint, :cited_order, :printed, :quote, :url, :extraction,"
-                        " 'reviewed', :by, :role, :at)"
+                        " 'reviewed', :by, :role, :at, :source)"
                     ),
                     {
                         "id": citation.id, "citing_work": citation.citing_work,
@@ -449,6 +451,8 @@ def publish(engine, citations: CitationFile, *, dry_run: bool = False) -> dict:
                         "quote": citation.quote, "url": str(citation.evidence_url),
                         "extraction": citation.extraction, "by": citation.reviewed_by,
                         "role": citation.reviewer_role, "at": citation.reviewed_at,
+                        # Its words are served only while this very text of the citing judgment is public.
+                        "source": paragraph["text"],
                     },
                 )  # fmt: skip
                 report["citations_added"] += 1
@@ -470,15 +474,17 @@ def publish(engine, citations: CitationFile, *, dry_run: bool = False) -> dict:
                 conn.execute(
                     text(
                         f"INSERT INTO {t['judicial_treatment']} (treatment_id, citation_id, treatment, opinion,"
-                        " quote, review_state, reviewed_by, reviewer_role, reviewer_qualification, reviewed_at)"
+                        " quote, review_state, reviewed_by, reviewer_role, reviewer_qualification, reviewed_at,"
+                        " source_sha256)"
                         " VALUES (:id, :citation, :kind, :opinion, :quote, 'reviewed', :by, :role, :qualification,"
-                        " :at)"
+                        " :at, :source)"
                     ),
                     {
                         "id": treatment.id, "citation": citation.id, "kind": treatment.kind,
                         "opinion": treatment.opinion, "quote": treatment.quote, "by": treatment.reviewed_by,
                         "role": treatment.reviewer_role, "qualification": treatment.reviewer_qualification,
                         "at": treatment.reviewed_at,
+                        "source": (part_of(citation.citing_work, citation.citing_locator) or {}).get("text"),
                     },
                 )  # fmt: skip
                 report["treatments_added"] += 1

@@ -61,6 +61,7 @@ from urllib.parse import unquote_plus, urlsplit
 
 from sqlalchemy import create_engine, insert, select, update
 
+from api.catalogue import NAME_WITHHELD
 from api.search import normalize_citation
 from api.store import Store, engine_for
 from ingestion import settings
@@ -325,7 +326,6 @@ def _slug(text: str) -> str:
 # (wording_hash, workbench approval), and this check stays as the backstop (findings 2026-11-16, item 32).
 # Names and texts are compared word by word, whole words only, without case, accents or apostrophes:
 # "Ọláwálé" is "Olawale", "N'Diaye" is "NDiaye", and "Ali" is no part of "Somali".
-NAME_WITHHELD = "[Withheld]"
 NAME_TOKEN = re.compile(r"[^\W_]+(?:['’ʼ‘`´][^\W_]+)*")
 APOSTROPHES = re.compile(r"['’ʼ‘`´]")
 NOT_A_NAME = {

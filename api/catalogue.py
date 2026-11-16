@@ -161,15 +161,20 @@ def _offset(cursor: str | None, expected: str = "edges") -> int:
     raise InvalidSearch("Invalid cursor")
 
 
+# How a withheld party's name is given in what is published (operations.publish withholds it): a case whose
+# title or citation shows it withholds names.
+NAME_WITHHELD = "[Withheld]"
 # Graph bounds (API-04, BUD-01): links one step away, a page of 25 by default and 100 at most, and
 # at most 300 links examined in a request (the walk to the source in force now, three steps at most).
 EDGES_PER_PAGE, MAX_EDGES_PER_PAGE, EDGE_BUDGET, MAX_SUCCESSION = 25, 100, 300, 3
 LOCATOR = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,299}")
 
 
-def _asserted(row: dict, readable: bool) -> dict:
+def _asserted(row: dict, public_texts: set[str], names_withheld: bool = False) -> dict:
     """A judgment's reviewed citation or treatment as a relationship's fields: its paragraph, the part it
-    cites, the review, and the words only while the citing judgment's text is public."""
+    cites, the review, and its words only while the very text of the citing judgment they were taken from
+    is public (``public_texts``: the content hashes of its public texts). A citation's words name the case
+    it cites, so they are never served while that case withholds names (findings 2026-11-16, item 33)."""
     review = {
         "level": row["level"],
         "reviewed_by": row["reviewed_by"],
@@ -186,8 +191,8 @@ def _asserted(row: dict, readable: bool) -> dict:
         "citing_pinpoint": row["citing_pinpoint"],
         "cited_locator": row["cited_locator"],
         "cited_pinpoint": row["cited_pinpoint"],
-        "printed": row["printed"] if readable else None,
-        "quote": row["quote"] if readable else None,
+        "printed": row["printed"] if row.get("printed_from") in public_texts and not names_withheld else None,
+        "quote": row["quote"] if row.get("quoted_from") in public_texts and not names_withheld else None,
         "opinion": row.get("opinion"),
         "review": review,
     }
@@ -516,7 +521,15 @@ class LegacyCatalogue:
         # A citation's words are the citing judgment's text: shown only while that text is public.
         citing = {link["citing_work"] for _, _, link in edges if isinstance(link, dict)}
         readable = {
-            work: next(self._approved(*pair), None) is not None for work, pair in self._public(citing).items()
+            work: {version.content_hash for version in self._approved(*pair)}
+            for work, pair in self._public(citing).items()
+        }
+        # A case whose names are withheld shows NAME_WITHHELD in its title or citation (operations.publish).
+        cited = {link["cited_work"] for _, _, link in edges if isinstance(link, dict)}
+        withheld = {
+            work
+            for work, (found, _) in self._public(cited).items()
+            if NAME_WITHHELD in f"{found.title} {found.citation}"
         }
         items = tuple(
             RelatedSource(
@@ -527,7 +540,7 @@ class LegacyCatalogue:
                 legal_status=public[other][0].legal_status,
                 year=public[other][0].year,
                 **(
-                    _asserted(link, readable.get(link["citing_work"], False))
+                    _asserted(link, readable.get(link["citing_work"], set()), link["cited_work"] in withheld)
                     if isinstance(link, dict)
                     else {
                         "effective_date": link.effective_date,

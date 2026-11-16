@@ -203,11 +203,11 @@ BROWSE_SETS = {
 CITATION_COLUMNS = (
     "citation_id", "citing_work", "citing_locator", "citing_pinpoint", "citing_order", "cited_work",
     "cited_locator", "cited_pinpoint", "cited_order", "printed", "quote", "evidence_url", "review_state",
-    "reviewed_by", "reviewer_role", "reviewed_at",
+    "reviewed_by", "reviewer_role", "reviewed_at", "source_sha256",
 )  # fmt: skip
 TREATMENT_COLUMNS = (
     "treatment_id", "citation_id", "treatment", "opinion", "quote", "review_state", "reviewed_by",
-    "reviewer_role", "reviewer_qualification", "reviewed_at",
+    "reviewer_role", "reviewer_qualification", "reviewed_at", "source_sha256",
 )  # fmt: skip
 MAX_UNPAGED_ROWS = 1000
 MAX_BUFFER_BYTES = 10 * 1024 * 1024
@@ -820,6 +820,7 @@ class LegacyRepository:
                 "citing_work", c.c.citing_work, "citing_locator", c.c.citing_locator,
                 "citing_pinpoint", c.c.citing_pinpoint, "cited_locator", c.c.cited_locator,
                 "cited_pinpoint", c.c.cited_pinpoint, "printed", c.c.printed, "evidence_url", c.c.evidence_url,
+                "cited_work", c.c.cited_work, "printed_from", c.c.source_sha256,
             ]  # fmt: skip
 
         for direction, mine, other, here in (
@@ -831,6 +832,7 @@ class LegacyRepository:
             if seen in kinds:
                 payload = func.json_build_object(
                     "assertion_id", c.c.citation_id, *citation_fields(), "quote", c.c.quote,
+                    "quoted_from", c.c.source_sha256,
                     "level", "structural", "reviewed_by", c.c.reviewed_by, "reviewer_role", c.c.reviewer_role,
                     "reviewed_at", c.c.reviewed_at, type_=JSON,
                 )  # fmt: skip
@@ -850,6 +852,7 @@ class LegacyRepository:
                 continue
             payload = func.json_build_object(
                 "assertion_id", t.c.treatment_id, *citation_fields(), "quote", t.c.quote, "opinion", t.c.opinion,
+                "quoted_from", t.c.source_sha256,
                 "level", "doctrinal", "reviewed_by", t.c.reviewed_by, "reviewer_role", t.c.reviewer_role,
                 "reviewer_qualification", t.c.reviewer_qualification, "reviewed_at", t.c.reviewed_at, type_=JSON,
             )  # fmt: skip

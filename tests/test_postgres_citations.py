@@ -329,3 +329,48 @@ def test_what_the_workbench_confirms_is_what_is_published(store, v1, world, prop
     assert (
         overruled_by["review"]["reviewed_by"] == "Test Advocate" and overruled_by["citing_pinpoint"] == "[3]"
     )
+
+
+def test_a_citations_words_are_served_only_from_their_own_public_text_and_never_name_a_withheld_case(
+    store, v1
+):
+    """Consolidated findings item 33: a citation's stored words were tied to the work, not a text, so the
+    words of a text since replaced (with a name withheld) were still served."""
+    from test_citations import CITING_UNITS, published
+
+    case_law(store)
+    publish(store, to_act(), to_judgment())
+    [cites_act] = related(v1, ACT, kind="cited_by")["items"]
+    assert cites_act["quote"] == to_act()["quote"]
+    # The citing judgment is published again with a name withheld, and its old text taken down.
+    renamed = [
+        {**unit, "text": unit["text"].replace("the appellant's data", "[Withheld]'s data")}
+        if unit.get("text", "").startswith("[2]") else unit
+        for unit in CITING_UNITS
+    ]  # fmt: skip
+    published(store, CITING, "Adeyemi v. Example Bank", "[2024] NGSC 7", "judgment", renamed)
+    corpus = store.load()
+    newest = next(
+        v for v in corpus.versions if v.source_id == CITING and "[Withheld]'s data" in v.canonical_text
+    )
+    rights = next(r for r in corpus.rights if r.source_id == CITING)
+    held = [h for h in rights.approved_content_hashes if h != newest.content_hash]
+    if held:  # the old text is no longer public
+        update = {"approved_content_hashes": [newest.content_hash]}
+        corpus.rights[corpus.rights.index(rights)] = rights.model_copy(update=update)
+        store.save(corpus)
+    [stale] = related(v1, ACT, kind="cited_by")["items"]
+    assert "quote" not in stale and "printed" not in stale  # words of a text no longer public
+    # A case whose names are withheld: no citation of it gives its words, from either end.
+    [cites_case] = related(v1, CITING, kind="cites", locator="para_3")["items"]
+    corpus = store.load()
+    cited = next(s for s in corpus.sources if s.id == CITED)
+    corpus.sources[corpus.sources.index(cited)] = cited.model_copy(
+        update={"title": "[Withheld] v. The State"}
+    )
+    store.save(corpus)
+    for item in (
+        *related(v1, CITING, kind="cites", locator="para_3")["items"],
+        *related(v1, CITED, kind="cited_by")["items"],
+    ):
+        assert "quote" not in item and "printed" not in item
