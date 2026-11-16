@@ -1121,7 +1121,7 @@ def test_on_a_database_owned_by_an_ordinary_login_as_on_cloud_sql(capability_rol
         for job, role, settings in (
             ("retrieval", RETRIEVAL, {}),
             ("worker", JOBS, {"ALVARY_WEBHOOK_KEYS": keys, "ALVARY_WEBHOOK_KEY_ID": "w1"}),
-            ("daily", JOBS, {}),
+            ("daily", JOBS, {"ALVARY_BACKUP_INSTANCES": "none"}),  # no Cloud SQL here to ask
         ):
             done = run_job(job_command(jobs_tf, job), world.urls()[role], settings)
             assert done.returncode == 0, f"{job}: {done.stdout}\n{done.stderr}"

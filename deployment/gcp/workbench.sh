@@ -119,6 +119,16 @@ setup() {
 
 upload() {
   test -d "$COLLECTION" || { echo "No collection at $COLLECTION"; exit 1; }
+  # The upload deletes from the bucket whatever is not in this folder: the operator types the bucket's
+  # name first (CONFIRM=<bucket> answers ahead), and versioning keeps what it replaces or deletes.
+  echo "This makes gs://$BUCKET hold exactly $COLLECTION: objects not in it are deleted." >&2
+  local typed="${CONFIRM:-}"
+  if [[ -z "$typed" ]]; then
+    [[ -r /dev/tty ]] || { echo "No terminal to confirm on: set CONFIRM=$BUCKET to go ahead." >&2; exit 1; }
+    read -r -p "Type $BUCKET to go ahead: " typed </dev/tty
+  fi
+  [[ "$typed" == "$BUCKET" ]] || { echo "Not confirmed: nothing was uploaded." >&2; exit 1; }
+  "${GC[@]}" storage buckets update "gs://$BUCKET" --versioning >/dev/null
   # The project's own Python (3.12, with its packages), not whichever python the shell finds first.
   "${PYTHON:-.venv/bin/python}" -m workbench.prepare
   # Only what the workbench reads: reconciled readings, the positional reader's output, page images.

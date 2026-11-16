@@ -49,6 +49,17 @@ fi
 [[ "$SOURCE" == gcp || "$SOURCE" == azure ]] || { echo "The source is gcp or azure" >&2; exit 2; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# Before anything replaces a live database: the operator types its name (gcloud's own prompt is
+# silenced by --quiet). CONFIRM=<name> answers it ahead, for a rehearsed run.
+confirm() {
+  local name="$1" what="$2" typed="${CONFIRM:-}"
+  echo "This replaces everything in $name: $what" >&2
+  if [[ -z "$typed" ]]; then
+    [[ -r /dev/tty ]] || { echo "No terminal to confirm on: set CONFIRM=$name to go ahead." >&2; exit 1; }
+    read -r -p "Type $name to go ahead: " typed </dev/tty
+  fi
+  [[ "$typed" == "$name" ]] || { echo "Not confirmed: nothing was changed." >&2; exit 1; }
+}
 tfvar() {  # name: its quoted value in env/<environment>.tfvars, else nothing
   sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$HERE/env/${ENVIRONMENT}.tfvars" 2>/dev/null | head -1
 }
@@ -191,6 +202,7 @@ backup)
   read -r backup taken <<<"$(gcloud sql backups list --instance="$FROM" --project="$FROM_PROJECT" \
     --filter="status=SUCCESSFUL" --sort-by=~windowStartTime --limit=1 --format="value(id,windowStartTime)")"
   [[ -n "$backup" ]] || { echo "No successful backup of $FROM_PROJECT:$FROM" >&2; exit 1; }
+  confirm "$TO" "the restore of $FROM_PROJECT:$FROM's backup of $taken"
   echo "Restoring $FROM_PROJECT:$FROM's backup of $taken into $PROJECT:$TO (everything in $TO is replaced)…"
   "${GC[@]}" sql backups restore "$backup" --restore-instance="$TO" \
     --backup-instance="$FROM" --backup-project="$FROM_PROJECT"
@@ -204,6 +216,7 @@ restore)
   JOB="${PREFIX}-restore-${TARGET}"
   "${GC[@]}" run jobs describe "$JOB" --region="$REGION" >/dev/null 2>&1 \
     || { echo "No $JOB: set restore_image (release.sh $ENVIRONMENT restore) and apply" >&2; exit 1; }
+  confirm "${PREFIX}-${TARGET}" "the dump in gs://$TRANSFER, restored by $JOB"
   echo "Restoring ${TARGET}…"
   "${GC[@]}" run jobs execute "$JOB" --region="$REGION" --wait \
     || { echo "The restore failed: its log has the counts and names (Cloud Run, job $JOB)." >&2; exit 1; }

@@ -1,7 +1,10 @@
 name: Backup freshness
-# Daily: alert if the newest encrypted backup in R2 is older than 26 hours (dead-man's switch).
-# Needs repository secrets R2_ENDPOINT, R2_READONLY_ACCESS_KEY_ID, R2_READONLY_SECRET_ACCESS_KEY
-# (a read-only token for the backup bucket) and variable BACKUP_BUCKET_PREFIX (bucket/prefix).
+# Daily: alert if the newest encrypted backup in R2 is older than 26 hours (dead-man's switch), for the
+# self-hosted deployment (deployment/backup.sh), which writes there. Needs repository secrets
+# R2_ENDPOINT, R2_READONLY_ACCESS_KEY_ID, R2_READONLY_SECRET_ACCESS_KEY (a read-only token for the backup
+# bucket) and variable BACKUP_BUCKET_PREFIX (bucket/prefix). Without the variable it stands down;
+# with the variable but any secret missing, it fails. The Google Cloud deployment's databases are
+# checked by its own daily job instead (operations/cloud_backups.py).
 on:
   schedule:
     - cron: '0 6 * * *'
@@ -24,8 +27,13 @@ jobs:
       - name: Check the newest completed backup
         id: check
         run: |
-          if [ -z "$R2_ENDPOINT" ] || [ -z "$LOCATION" ]; then
-            echo "::notice::Backup freshness not configured (secrets/variable missing)"; echo "state=skip" >> "$GITHUB_OUTPUT"; exit 0
+          if [ -z "$LOCATION" ]; then
+            echo "::notice::No self-hosted backup bucket is named (BACKUP_BUCKET_PREFIX): nothing to check here"
+            echo "state=skip" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ -z "$R2_ENDPOINT" ] || [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "::error::BACKUP_BUCKET_PREFIX is set but a secret is missing: the backups cannot be checked"
+            echo "state=stale" >> "$GITHUB_OUTPUT"; exit 0
           fi
           bucket=${LOCATION%%/*}; prefix=${LOCATION#*/}
           # Missing objects, bad credentials or an unreachable endpoint all count as stale.

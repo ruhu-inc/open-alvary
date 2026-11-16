@@ -57,8 +57,9 @@ locals {
         secrets = {}
         reads   = ["ALVARY_WEBHOOK_KEYS", "RESEND_API_KEY"]
       }
+      # daily: the backup check runs whatever the steps before it do, and the run fails if either did.
       daily = {
-        command = ["sh", "-c", "python -m accounts.seals seal && python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge && python -m accounts.seals verify && python -m api.traffic maintain"]
+        command = ["sh", "-c", "(python -m accounts.seals seal && python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge && python -m accounts.seals verify && python -m api.traffic maintain); steps=$?; python -m operations.cloud_backups check; backups=$?; exit $((steps | backups))"]
         args    = []
         cron    = "15 3 * * *"
         timeout = 600
@@ -126,11 +127,19 @@ locals {
   # Jobs read neither the admission configurations nor the service's other secrets.
   admission_settings = ["ALVARY_ADMISSION_CONFIG", "ALVARY_SITE_ADMISSION_CONFIG"]
   job_env = {
-    for name in keys(local.jobs) : name => {
-      for key, value in local.public_env : key => value
-      if !contains(local.moved_jobs, name) || !contains(local.admission_settings, key)
-    }
+    for name in keys(local.jobs) : name => merge(
+      {
+        for key, value in local.public_env : key => value
+        if !contains(local.moved_jobs, name) || !contains(local.admission_settings, key)
+      },
+      name == "daily" ? { ALVARY_BACKUP_INSTANCES = join(",", local.backed_up_databases) } : {},
+    )
   }
+  # The databases whose backups the daily job checks (operations.cloud_backups), as project:instance.
+  backed_up_databases = concat(
+    ["${var.project_id}:${google_sql_database_instance.main.name}"],
+    [for review in google_sql_database_instance.review : "${var.project_id}:${review.name}"],
+  )
   job_secret_env = {
     for name, job in local.jobs : name => merge(
       contains(local.moved_jobs, name) ? {

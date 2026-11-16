@@ -89,6 +89,18 @@ resource "google_project_iam_member" "sql_client" {
 # Document AI's user role, in the project that holds the processors (ALVARY_DOCAI_PROJECT: today
 # open-alvary-ingestion, whose processors the readings and the routing calibration were measured on),
 # else this one. In another project Terraform adds only this member, never managing that project.
+# The daily job reads the databases' own list of backups to check the newest is recent
+# (operations.cloud_backups): on whichever account the job runs as.
+resource "google_project_iam_member" "backup_reader" {
+  for_each = merge(
+    { public = google_service_account.public.member },
+    var.database_logins_ready ? { jobs = google_service_account.jobs[0].member } : {},
+  )
+  project = var.project_id
+  role    = "roles/cloudsql.viewer"
+  member  = each.value
+}
+
 resource "google_project_iam_member" "document_ai" {
   count   = var.ingestion_image != "" ? 1 : 0
   project = lookup(var.document_ai, "ALVARY_DOCAI_PROJECT", var.project_id)

@@ -128,16 +128,17 @@ resource "google_monitoring_alert_policy" "site_down" {
   }
 }
 
-# A scheduled job failed (a broken audit seal fails the daily run), as today.
+# Any job failed: the daily run (a broken audit seal, or no recent database backup), the worker, the
+# nightly publish, the retrieval sync, and any job added later. A named list missed half of them.
 resource "google_monitoring_alert_policy" "job_failed" {
   count        = local.public_enabled && var.accounts_enabled ? 1 : 0
   display_name = "Open Alvary: a scheduled job failed (${var.environment})"
   combiner     = "OR"
 
   conditions {
-    display_name = "A run of the daily or worker job failed"
+    display_name = "A run of a scheduled job failed"
     condition_threshold {
-      filter          = "resource.type = \"cloud_run_job\" AND metric.type = \"run.googleapis.com/job/completed_execution_count\" AND metric.labels.result = \"failed\" AND (resource.labels.job_name = \"${local.name_prefix}-daily\" OR resource.labels.job_name = \"${local.name_prefix}-worker\")"
+      filter          = "resource.type = \"cloud_run_job\" AND metric.type = \"run.googleapis.com/job/completed_execution_count\" AND metric.labels.result = \"failed\""
       comparison      = "COMPARISON_GT"
       threshold_value = 0
       duration        = "0s"
@@ -159,7 +160,7 @@ resource "google_monitoring_alert_policy" "job_failed" {
   }
   documentation {
     mime_type = "text/markdown"
-    content   = "A scheduled job failed. For the daily job, look first for an ERROR line 'audit seal check' (docs/deployment/runbook.md, Audit log seals); for the worker, see Monitors and webhooks."
+    content   = "A scheduled job failed; its name is in the incident. For the daily job, look first for an ERROR line 'audit seal check' (docs/deployment/runbook.md, Audit log seals) or 'backup check' (no recent Cloud SQL backup); for the worker, see Monitors and webhooks; for publish, the Publishing page in the workbench."
   }
 }
 

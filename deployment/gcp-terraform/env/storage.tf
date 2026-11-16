@@ -43,6 +43,11 @@ resource "google_storage_bucket" "collection" {
   uniform_bucket_level_access = true
   public_access_prevention    = "enforced"
 
+  # deployment/gcp/workbench.sh upload replaces what is here: an upload by mistake can be undone.
+  versioning {
+    enabled = true
+  }
+
   depends_on = [google_project_service.main]
 }
 
