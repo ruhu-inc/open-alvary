@@ -1545,3 +1545,28 @@ def test_an_unconfirmed_approval_keeps_a_record_with_names_withheld_from_the_cat
     case_named.docs["rw-case"]["unconfirmed"] = False
     case_named.run(store)
     assert public_records(store) == ["rw-case"] and "Bello" not in title_of(store)
+
+
+def test_the_records_command_takes_down_a_text_naming_someone_now_withheld_as_a_run_does(
+    decisions, store, tmp_path
+):
+    """Consolidated findings item 34: two passes of `records` after a name was withheld left its text
+    public, where a run takes it down."""
+    publish.decide("rw", "Ada Reviewer", 12, [], "", "")
+    publish.decide_text("rw", "Ada Reviewer", 12, EVIDENCE, **{**TEXT_DECISION, "types": ["act", "judgment"]})
+    collection = Collection(tmp_path)
+    collection.add("rw-case", "rw-case", record=named_judgment())
+    collection.run(store)
+    assert public_records(store) == ["rw-case"] and public_texts(store) == [("rw-case", "en")]
+    collection.docs["rw-case"].update(anonymisation="partial", record=named_judgment(True))
+    decision = publish.current_decision("rw")
+
+    def records():
+        return publish.records_only(collection, collection, collection, store, "rw", decision)
+
+    first = records()
+    assert public_records(store) == [] and public_texts(store) == []
+    assert first["texts_taken_down"] and first["taken_down"] == ["rw-case"]
+    records()
+    assert public_records(store) == ["rw-case"] and "Bello" not in title_of(store)
+    assert public_texts(store) == []  # the text stays withheld

@@ -1880,6 +1880,44 @@ def _structure_of(corpus: Corpus, version: SourceVersion) -> list[tuple]:
     return [(n.kind, n.locator, n.label, n.heading, n.start_byte, n.end_byte, n.cell_states) for n in ordered]
 
 
+def records_only(
+    review,
+    library,
+    review_store,
+    store,
+    jurisdiction: str,
+    decision: dict,
+    *,
+    allow_take_downs=0,
+    dry_run=False,
+) -> dict:
+    """One country's records, without a run (python -m operations.publish records). What a run takes down
+    comes down here too, its texts included: a public record that now withholds a name, with every text
+    of it (findings 2026-11-16, item 34: a text stayed public here where a run took it down)."""
+    texts = Texts()
+    approved, waiting = from_workbench(review, library, review_store, jurisdiction, into=texts)
+    corpus = store.load()
+    # As in a run: a public record that still names someone now withheld comes down, in confidence.
+    naming = still_naming(corpus, approved, told_by(store))
+    waiting |= naming
+    texts.withheld |= naming
+    approved = [item for item in approved if item.work not in naming]
+    inferred, public = planned_take_downs(corpus, {a.work for a in approved}, waiting, texts)
+    del corpus
+    refusal = refused_take_downs(jurisdiction, inferred, public, allow_take_downs, command="records")
+    if refusal:
+        take_down(store, jurisdiction, waiting, texts, dry_run, recorded_only=True)
+        raise Refused(refusal)
+    taken = take_down(store, jurisdiction, waiting, texts, dry_run)
+    report = publish_records(
+        store, jurisdiction, approved, waiting, decision, dry_run, confidential=texts.withheld
+    )
+    return report | {
+        "taken_down": sorted({*taken["taken_down"], *report["taken_down"]}),
+        "texts_taken_down": sorted(taken["withdrawn"]),
+    }
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
@@ -1997,26 +2035,10 @@ def main(argv=None) -> int:
         review_store = ReviewStore(create_engine(os.environ["ALVARY_REVIEW_DATABASE_URL"]))  # read only
         library = Library()
         review = Review(review_store, library, registry())
-        texts = Texts()
-        approved, waiting = from_workbench(review, library, review_store, args.jurisdiction, into=texts)
-        store = Store(engine_for())
-        corpus = store.load()
-        # As in a run: a public record that still names someone now withheld comes down, in confidence.
-        naming = still_naming(corpus, approved, told_by(store))
-        waiting |= naming
-        texts.withheld |= naming
-        approved = [item for item in approved if item.work not in naming]
-        inferred, public = planned_take_downs(corpus, {a.work for a in approved}, waiting, texts)
-        del corpus
-        refusal = refused_take_downs(
-            args.jurisdiction, inferred, public, args.allow_take_downs, command="records"
-        )
-        if refusal:
-            take_down(store, args.jurisdiction, waiting, texts, args.dry_run, recorded_only=True)
-            raise Refused(refusal)
-        report = publish_records(
-            store, args.jurisdiction, approved, waiting, decision, args.dry_run, confidential=texts.withheld
-        )
+        report = records_only(
+            review, library, review_store, Store(engine_for()), args.jurisdiction, decision,
+            allow_take_downs=args.allow_take_downs, dry_run=args.dry_run,
+        )  # fmt: skip
         print(json.dumps(report, indent=2))
         return 0
     except Refused as refused:
