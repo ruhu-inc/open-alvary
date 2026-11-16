@@ -175,10 +175,8 @@ def apply(document: dict, final: list[dict], instructions: list[Instruction], as
         elif instruction.operation == "repeal":
             head = entries[first].unit
             marker = head.get("marker") or LEADING_NUMBER.match(head.get("text", "")).group(1).strip()
-            note = {
-                "kind": head.get("kind", "paragraph"),
-                "text": f"[Repealed by {instruction.amending.citation}.]",
-            }
+            # Always a paragraph: a table or a heading needs rows or a level a note does not have.
+            note = {"kind": "paragraph", "text": f"[Repealed by {instruction.amending.citation}.]"}
             if marker:
                 note["marker"] = marker
             entries[first : last + 1] = [Entry(page, note, _origin(instruction, "repealed"))]
@@ -188,8 +186,9 @@ def apply(document: dict, final: list[dict], instructions: list[Instruction], as
             if unit.get("marker", "").startswith(instruction.label_from):
                 unit["marker"] = instruction.label_to + unit["marker"][len(instruction.label_from) :]
             elif unit.get("text", "").lstrip().startswith(instruction.label_from):
-                words = unit["text"].lstrip()
-                unit["text"] = instruction.label_to + words[len(instruction.label_from) :]
+                start = len(unit["text"]) - len(unit["text"].lstrip())
+                unit = _edit(unit, start, start + len(instruction.label_from), instruction.label_to)
+                unit = _edit(unit, 0, start, "")
             else:
                 raise Refused(
                     instruction.id, f"{instruction.target} is not numbered {instruction.label_from}"
@@ -206,9 +205,14 @@ def apply(document: dict, final: list[dict], instructions: list[Instruction], as
                 )
             for n in held:
                 unit = dict(entries[n].unit)
-                changed = pattern.sub(instruction.words_insert, unit.get("text", ""))
-                if changed != unit.get("text", ""):
-                    unit["text"] = " ".join(changed.split()) if not instruction.words_insert else changed
+                found = list(pattern.finditer(unit.get("text", "")))
+                for match in reversed(found):  # from the end, so the earlier positions stay true
+                    start, end = match.span()
+                    words = unit["text"]
+                    if not instruction.words_insert and start and words[start - 1] == " ":
+                        start -= 1  # a deletion takes the space before it, not every space in the unit
+                    unit = _edit(unit, start, end, instruction.words_insert)
+                if found:
                     entries[n] = Entry(entries[n].page, unit, _origin(instruction, "amended"))
         applied.append(instruction.id)
     pages = _pages(entries)
@@ -218,6 +222,27 @@ def apply(document: dict, final: list[dict], instructions: list[Instruction], as
         for key, n in sorted(positions.items(), key=lambda x: x[1])
     ]
     return Result(pages, provenance, applied, pending)
+
+
+def _edit(unit: dict, start: int, end: int, words: str) -> dict:
+    """The unit with text[start:end] replaced by ``words``, taken literally (never as a pattern: a
+    backslash, a line feed or a tab in them is kept as written); its marks keep their letters, those after
+    the edit move by its length, and one the edit cuts into is dropped (findings 2026-11-16, item 52)."""
+    unit = dict(unit)
+    text = unit.get("text", "")
+    unit["text"] = text[:start] + words + text[end:]
+    if unit.get("marks"):
+        shift = len(words) - (end - start)
+        kept = [
+            m if m["end"] <= start else {**m, "start": m["start"] + shift, "end": m["end"] + shift}
+            for m in unit["marks"]
+            if m["end"] <= start or m["start"] >= end
+        ]
+        if kept:
+            unit["marks"] = kept
+        else:
+            del unit["marks"]
+    return unit
 
 
 def main(argv=None) -> int:

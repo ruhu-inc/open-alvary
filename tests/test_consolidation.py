@@ -111,3 +111,40 @@ def test_what_does_not_match_exactly_is_refused():
         apply(DOCUMENT, shared, [instruction("x4", "repeal", "sec_5__subsec_1")], date(2025, 1, 1))
     with pytest.raises(ValueError, match="missing what it needs"):
         instruction("x5", "insert", "sec_1", units=[{"kind": "paragraph", "text": "x"}])
+
+
+def test_inserted_words_are_literal_marks_keep_their_letters_and_a_repealed_table_stays_valid():
+    """Consolidated findings item 52."""
+    final = [
+        {
+            "page": 1,
+            "units": [
+                {"kind": "heading", "text": "EXAMPLE ACT, 2023"},
+                {"kind": "paragraph", "text": "1. The levy is due on the 1st of May each year.", "notes": ["Levy"],
+                 "marks": [{"type": "superscript", "start": 27, "end": 29}]},
+                {"kind": "paragraph", "text": "2. The rate is set in the Schedule.", "notes": ["Rate"]},
+                {"kind": "table", "header_rows": 1, "rows": [["Rate"], ["1%"]]},
+            ],
+        }
+    ]  # fmt: skip
+    assert final[0]["units"][1]["text"][27:29] == "st"
+    literal = r"the C:\fees\1 file"
+    result = apply(
+        DOCUMENT,
+        final,
+        [
+            instruction(
+                "i1", "amend_words", "sec_1", words_delete="The levy", words_insert="The annual levy"
+            ),
+            instruction("i2", "amend_words", "sec_2", words_delete="the Schedule", words_insert=literal),
+            instruction("i3", "amend_words", "sec_1", words_delete="each year", words_insert=""),
+        ],
+        date(2024, 6, 1),
+    )
+    first, second = result.pages[0]["units"][1], result.pages[0]["units"][2]
+    assert first["text"] == "1. The annual levy is due on the 1st of May."
+    assert [first["text"][m["start"] : m["end"]] for m in first["marks"]] == ["st"]
+    assert second["text"] == f"2. The rate is set in {literal}."
+    repealed = apply(DOCUMENT, final, [instruction("i4", "repeal", "sec_2")], date(2024, 6, 1))
+    assert all(u["kind"] != "table" or u.get("rows") for u in repealed.pages[0]["units"])
+    assert text_of(repealed)  # the result still builds
