@@ -276,12 +276,20 @@ def test_a_judgment_is_verified_in_its_own_words_under_the_same_keys():
     assert content.materials_for({"type": "law"}) is content.MATERIALS
 
 
+def shown(browser) -> dict:
+    """The hashes the document's page displays, which an approval sends back."""
+    page = browser.get(f"/api/documents/{ACT}").json()
+    text = page["text_check"] or {}
+    return {k: page.get(k) or text.get(k) for k in ("content_sha256", "details_sha256", "text_sha256")}
+
+
 def approve(browser, expected=0, **overrides):
     body = {
         "expected_revision": expected,
         "decision": "approved",
         "rights_basis": "s.3(b)",
         "materials": MATERIALS,
+        "shown": shown(browser),
         **overrides,
     }
     return browser.post(f"/api/documents/{ACT}/approval", json=body)
@@ -329,6 +337,25 @@ def test_approval_waits_for_every_page_and_high_flag_and_binds_the_content(world
     assert listed["approval"] == "out_of_date" and listed["status"] == "Approval out of date"
     actions = [e["action"] for e in approver.get(f"/api/audit?act={ACT}").json()]
     assert "act_approved" in actions and actions.count("page_saved") == 4 and "details_saved" in actions
+
+
+def test_an_approval_covers_what_the_approver_was_shown_not_what_is_stored_when_pressed(world):
+    """Consolidated findings item 3: a page saved after the approver opened the document is refused."""
+    approver = signed_in(world, "approver@example.org")
+    reviewer = signed_in(world, "reviewer@example.org")
+    save(approver, resolutions={flag_id(): {"decision": "use_check", "reader": "mineru"}})
+    save(approver, page=2, units=[{"kind": "paragraph", "text": "2. Citation."}])
+    confirm_details(approver)
+    opened = shown(approver)
+    save(reviewer, page=2, expected=1, units=[{"kind": "paragraph", "text": "2. Citation, changed."}])
+    refused = approve(approver, shown=opened)
+    assert refused.status_code == 409 and refused.json()["changed"] == ["content_sha256", "text_sha256"]
+    assert "changed after you opened it" in refused.json()["message"]
+    assert approve(approver, shown={}).status_code == 409
+    assert approver.get(f"/api/documents/{ACT}").json()["approvals"] == []
+    assert approve(approver).json() == {"revision": 1}  # looked at again: what is shown now
+    revoked = {"expected_revision": 1, "decision": "revoked", "rights_basis": "", "materials": {}}
+    assert approver.post(f"/api/documents/{ACT}/approval", json=revoked).json() == {"revision": 2}
 
 
 def test_approval_covers_the_details_and_changing_them_voids_it(world):

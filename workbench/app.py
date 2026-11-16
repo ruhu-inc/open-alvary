@@ -705,6 +705,24 @@ def create_app(
                 raise HTTPException(422, "Confirm every verification check")
             if not basis:
                 raise HTTPException(422, "State the rights basis")
+            # An approval covers what the approver was shown, not whatever is stored when the button is
+            # pressed: the page sends the hashes it displayed, and a change since then is refused. A save
+            # landing after this comparison leaves the approval out of date, as any later save does.
+            shown = body.get("shown") if isinstance(body.get("shown"), dict) else {}
+            current = {
+                "content_sha256": now["content_sha256"],
+                "details_sha256": now["details_sha256"],
+                "text_sha256": now["text"].text_sha256,
+            }
+            if any(shown.get(key) != value for key, value in current.items()):
+                raise HTTPException(
+                    409,
+                    {
+                        "message": "This document changed after you opened it. Look at it again before "
+                        "approving: reload the page to see the current text and details.",
+                        "changed": sorted(key for key, value in current.items() if shown.get(key) != value),
+                    },
+                )
         note = str(body.get("note", ""))[:2000]
         try:
             revision = store.record_approval(

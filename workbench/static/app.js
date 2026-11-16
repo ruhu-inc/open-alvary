@@ -950,7 +950,9 @@ function approvalPanel(actId, data, current) {
     const expected = data.approvals.length ? data.approvals[0].revision : 0;
     const send = async (decision) => {
       const materials = Object.fromEntries(boxes.map(({ key, box }) => [key, box.checked]));
-      const result = await api(`/api/documents/${encodeURIComponent(actId)}/approval`, { method: "POST", body: { expected_revision: expected, decision, rights_basis: basis.value, materials, note: note.value } });
+      // What this page showed: the server approves only if the document is still exactly that.
+      const shown = { content_sha256: data.content_sha256, details_sha256: data.details_sha256, text_sha256: data.text_check && data.text_check.text_sha256 };
+      const result = await api(`/api/documents/${encodeURIComponent(actId)}/approval`, { method: "POST", body: { expected_revision: expected, decision, rights_basis: basis.value, materials, note: note.value, ...(decision === "approved" ? { shown } : {}) } });
       if (!result.ok) return toast(message(result));
       toast(decision === "approved" ? "Approved and recorded" : "Approval revoked");
       if (location.hash === address) actView(actId);
