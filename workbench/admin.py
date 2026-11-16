@@ -2,6 +2,7 @@
 
 python -m workbench.admin add reviewer@example.org --name "Ada Reviewer" --roles reviewer,approver
 python -m workbench.admin deactivate someone@example.org
+python -m workbench.admin reactivate someone@example.org
 python -m workbench.admin list
 python -m workbench.admin enrol someone@example.org   a one-time code (24 hours) to register a passkey
 python -m workbench.admin enrol someone@example.org --replace   ...after revoking their passkeys (one lost)
@@ -28,6 +29,8 @@ def main(argv=None) -> int:
     )
     off = sub.add_parser("deactivate")
     off.add_argument("email")
+    on = sub.add_parser("reactivate", help="bring back an operator deactivated earlier")
+    on.add_argument("email")
     sub.add_parser("list")
     enrol = sub.add_parser("enrol")
     enrol.add_argument("email")
@@ -61,6 +64,8 @@ def main(argv=None) -> int:
         store.add_operator(args.email, args.name, {r.strip() for r in args.roles.split(",") if r.strip()})
     elif args.action == "deactivate":
         store.deactivate(args.email)
+    elif args.action == "reactivate":
+        store.reactivate(args.email)
     elif args.action == "impact":
         import json
 

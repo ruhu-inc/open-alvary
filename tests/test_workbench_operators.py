@@ -141,3 +141,23 @@ def test_bad_input_is_refused(bench):
     ):
         assert boss.post("/api/operators", json=body).status_code == 400
     assert boss.post("/api/operators/nobody@example.org/active", json={"active": True}).status_code == 404
+
+
+def test_editing_a_deactivated_operator_leaves_them_deactivated_until_reactivated(tmp_path, monkeypatch):
+    """Consolidated findings item 24: saving a deactivated operator's name or roles made them active again."""
+    from workbench import admin
+
+    store = workbench_store.Store(workbench_store.connect(f"sqlite:///{tmp_path / 'w.db'}"))
+    store.add_operator("ada@example.org", "Ada", {"reviewer"})
+    store.deactivate("ada@example.org")
+    store.add_operator("ada@example.org", "Ada Reviewer", {"reviewer", "approver"})
+
+    def active():
+        return next(o["active"] for o in store.operators() if o["email"] == "ada@example.org")
+
+    assert not active()
+    monkeypatch.setattr(admin, "Store", lambda engine: store)
+    monkeypatch.setattr(admin, "engine_from_environment", lambda: None)
+    monkeypatch.setattr(admin.settings, "load", lambda: None)
+    admin.main(["reactivate", "ada@example.org"])
+    assert active()

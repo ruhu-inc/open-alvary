@@ -378,11 +378,13 @@ class Store:
         email = email.strip().lower()
         with self.engine.begin() as db:
             existing = db.execute(select(operator).where(operator.c.email == email)).first()
-            values = {"name": name, "roles": ",".join(sorted(roles)), "active": True}
+            values = {"name": name, "roles": ",".join(sorted(roles))}
             if existing:
+                # An edit of name or roles leaves a deactivated operator deactivated: only reactivate
+                # brings one back (findings 2026-11-16, item 24).
                 db.execute(update(operator).where(operator.c.email == email).values(**values))
             else:
-                db.execute(insert(operator).values(email=email, created_at=now(), **values))
+                db.execute(insert(operator).values(email=email, created_at=now(), active=True, **values))
             self._audit(db, actor, "operator_saved", detail={"email": email, "roles": sorted(roles)})
 
     def deactivate(self, email: str, actor: str = "admin-cli") -> None:
