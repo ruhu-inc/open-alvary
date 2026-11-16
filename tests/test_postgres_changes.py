@@ -701,10 +701,10 @@ def test_a_withdrawn_text_version_is_named_with_what_to_do_and_why(feed, cleared
 
 
 def test_an_expired_rights_review_withdraws_its_text_within_one_worker_run(feed, cleared):
-    from sqlalchemy import select, update
+    from sqlalchemy import select, text, update
 
     from api.store import tables
-    from changes.record import expired
+    from changes.record import expired, namespace
 
     store, client = feed
     store.save(cleared)
@@ -723,8 +723,23 @@ def test_an_expired_rights_review_withdraws_its_text_within_one_worker_run(feed,
     assert withdrawn["version"]["id"] == "test-version"
     assert withdrawn["withdrawal"]["action"] == "stop_serving"
     assert withdrawn["withdrawal"]["reason_code"] == "rights_changed"
+
+    def state_written():
+        with store.engine.connect() as conn:
+            published = namespace(conn).qualified(conn, "changes", "published_state")
+            return conn.scalar(text(f"SELECT updated_at FROM {published} WHERE work_id = :w"), {"w": work})
+
+    written = state_written()
     with store.engine.begin() as conn:
         assert expired(conn) == 0  # already compared: nothing new
+    assert state_written() == written  # and nothing rewritten (findings 2026-11-16, item 12)
+    with store.engine.begin() as conn:  # renewed, and that review has passed too: compared again
+        payload = conn.scalar(select(rights.c.payload).where(rights.c.source_id == work))
+        payload["expires_at"] = "2021-01-01T00:00:00+00:00"
+        conn.execute(update(rights).where(rights.c.source_id == work).values(payload=payload))
+    with store.engine.begin() as conn:
+        assert expired(conn) == 1  # the rights record's revision
+    assert state_written() > written
 
 
 def test_a_published_text_says_when_its_official_file_was_retrieved_and_nothing_else_invents_a_time(

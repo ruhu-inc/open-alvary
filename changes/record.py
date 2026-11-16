@@ -1274,13 +1274,34 @@ def sweep(conn: Connection) -> int:
 def expired(conn: Connection, now: datetime | None = None) -> int:
     """Compare the works whose rights review has expired, so what an expiry took out of public view
     is in the change log within one worker run (every five minutes), not at the next daily sweep.
-    Works already compared since they expired add nothing."""
+    A work whose expiry was already compared is skipped: nothing is written for it again (findings
+    2026-11-16, item 12; before, every run rewrote every expired work's state, a whole country once a
+    decision lapsed). A renewed review is compared when its new expiry passes."""
     if conn.dialect.name != "postgresql":
         return 0
     rights, now = tables["rights"], now or datetime.now(UTC)
+    published = namespace(conn).qualified(conn, "changes", "published_state")
+    if conn.scalar(text("SELECT to_regclass(:t)"), {"t": published}) is None:
+        return 0  # a database before migration 0023 has no change log
+    seen = dict(
+        conn.execute(
+            text(f"SELECT work_id, expiry_compared FROM {published} WHERE expiry_compared IS NOT NULL")
+        ).all()
+    )
     rows = conn.execute(select(rights.c.source_id, rights.c.payload["expires_at"].as_string().label("until")))
-    ids = [row.source_id for row in rows if row.until and datetime.fromisoformat(row.until) <= now]
-    return publish(conn, ids) if ids else 0
+    due = {
+        row.source_id: row.until
+        for row in rows
+        if row.until and datetime.fromisoformat(row.until) <= now and seen.get(row.source_id) != row.until
+    }
+    if not due:
+        return 0
+    added = publish(conn, list(due))
+    conn.execute(
+        text(f"UPDATE {published} SET expiry_compared = :until WHERE work_id = :w"),
+        [{"w": work, "until": until} for work, until in due.items()],
+    )
+    return added
 
 
 def _withdrawn_because(conn: Connection, work_id: str, version_id: str) -> str:
