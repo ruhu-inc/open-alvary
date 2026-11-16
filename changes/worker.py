@@ -54,11 +54,18 @@ def match(accounts: Accounts) -> int:
             raise EpochChanged("The change feed was reset: run `python -m changes.worker confirm-epoch`")
         position = (checkpoint["publication_revision"], checkpoint["event_id"], checkpoint["event_revision"])
         high = feed.high()
+        # Monitors of an organisation that is suspended or deleted match nothing, nor does a private
+        # monitor whose owner has left the organisation (findings 2026-11-16, item 9).
         watches = [
             dict(w)
             for w in conn.execute(
                 text(
-                    f"SELECT id, filters, start_revision FROM {accounts._t(conn, 'watch')} WHERE state = 'active'"
+                    f"SELECT w.id, w.filters, w.start_revision FROM {accounts._t(conn, 'watch')} w"
+                    f" JOIN {accounts._t(conn, 'organisation')} o ON o.id = w.organisation_id"
+                    f" WHERE w.state = 'active' AND o.state IN {MONITORING}"
+                    " AND (w.visibility = 'organisation' OR EXISTS (SELECT 1 FROM"
+                    f" {accounts._t(conn, 'membership')} c WHERE c.organisation_id = w.organisation_id"
+                    " AND c.person_id = w.owner_person_id))"
                 )
             ).mappings()
         ]
@@ -159,6 +166,19 @@ def last_send(zone: ZoneInfo, minute: int, weekday: int, cadence: str, now: date
     raise ValueError("No scheduled send found")
 
 
+MONITORING = webhooks.MONITORING
+
+
+def _still_members(accounts: Accounts, conn) -> str:
+    """Joins that keep a monitor's matches (watch w, member m) to people still in its organisation, while
+    that organisation is neither suspended nor deleted: a removed member gets no digest (item 9)."""
+    return (
+        f" JOIN {accounts._t(conn, 'organisation')} o ON o.id = w.organisation_id AND o.state IN {MONITORING}"
+        f" JOIN {accounts._t(conn, 'membership')} c ON c.organisation_id = w.organisation_id"
+        " AND c.person_id = m.person_id"
+    )
+
+
 def digests(accounts: Accounts, mailer: mail.Mailer, base: str, now: datetime | None = None) -> int:
     """Send each person's closed digest windows; returns how many emails were sent."""
     now = now or datetime.now(UTC)
@@ -168,7 +188,8 @@ def digests(accounts: Accounts, mailer: mail.Mailer, base: str, now: datetime | 
         people = conn.execute(
             text(
                 f"SELECT DISTINCT m.person_id, m.email AS cadence FROM {accounts._t(conn, 'watch_member')} m"
-                f" JOIN {accounts._t(conn, 'watch')} w ON w.id = m.watch_id WHERE m.email <> 'off' AND w.state = 'active'"
+                f" JOIN {accounts._t(conn, 'watch')} w ON w.id = m.watch_id{_still_members(accounts, conn)}"
+                " WHERE m.email <> 'off' AND w.state = 'active'"
             )
         ).all()
     for person_id, cadence in people:
@@ -215,6 +236,7 @@ def _digest(accounts, watches, conn, mailer, base, person_id, cadence, now) -> i
             f" FROM {accounts._t(conn, 'inbox_item')} i"
             f" JOIN {accounts._t(conn, 'watch')} w ON w.id = i.watch_id"
             f" JOIN {accounts._t(conn, 'watch_member')} m ON m.watch_id = w.id AND m.person_id = :p"
+            f"{_still_members(accounts, conn)}"
             f" JOIN {accounts.namespace.qualified(conn, 'changes', 'change_event')} e"
             " ON e.event_id = i.event_id AND e.event_revision = i.event_revision"
             " WHERE m.email = :c AND w.state = 'active' AND i.matched_at >= :s AND i.matched_at < :end"

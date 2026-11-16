@@ -176,6 +176,27 @@ def test_a_match_is_delivered_signed_once(world):
     assert deliver(accounts, hooks, Mailer(), BASE)["delivered"] == 0  # nothing twice
 
 
+def test_a_suspended_organisations_queued_delivery_waits_and_goes_once_it_is_restored(world):
+    """Findings 2026-11-16, item 9: a suspended organisation's endpoints received deliveries."""
+    endpoint_with_monitor(world)
+    store, accounts, hooks, receiver, owner, organisation = world
+    change(store, "Queued.")
+    worker.match(accounts)  # queued before the suspension
+
+    def organisation_state(state):
+        with accounts.engine.begin() as conn:
+            conn.execute(
+                text(f"UPDATE {accounts._t(conn, 'organisation')} SET state = :s WHERE id = :o"),
+                {"s": state, "o": organisation},
+            )
+
+    organisation_state("suspended")
+    assert deliver(accounts, hooks, Mailer(), BASE)["delivered"] == 0 and receiver.deliveries() == []
+    assert delivery(accounts)["state"] == "pending"
+    organisation_state("active")
+    assert deliver(accounts, hooks, Mailer(), BASE)["delivered"] == 1
+
+
 def test_failures_retry_on_schedule_and_rejections_stop(world):
     endpoint_with_monitor(world)
     store, accounts, hooks, receiver, owner, organisation = world

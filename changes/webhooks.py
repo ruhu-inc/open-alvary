@@ -846,6 +846,11 @@ def enqueue(conn, accounts: Accounts, watch_id: str, event: dict, endpoints: dic
         )
 
 
+# The organisation states in which monitors match, mail and deliver: not while it is suspended or deleted
+# (findings 2026-11-16, item 9). An organisation without an owner keeps them for its members.
+MONITORING = "('active', 'ownerless')"
+
+
 def attached(conn, accounts: Accounts) -> dict[str, list[str]]:
     """Monitor ID -> the endpoints that receive its matches (active or failing ones)."""
     found: dict[str, list[str]] = {}
@@ -853,7 +858,8 @@ def attached(conn, accounts: Accounts) -> dict[str, list[str]]:
         text(
             f"SELECT w.watch_id, w.endpoint_id FROM {accounts._t(conn, 'webhook_endpoint_watch')} w"
             f" JOIN {accounts._t(conn, 'webhook_endpoint')} e ON e.id = w.endpoint_id"
-            " WHERE e.state IN ('active', 'failing')"
+            f" JOIN {accounts._t(conn, 'organisation')} o ON o.id = e.organisation_id"
+            f" WHERE e.state IN ('active', 'failing') AND o.state IN {MONITORING}"
         )
     )
     for watch_id, endpoint_id in rows:
@@ -896,8 +902,11 @@ def deliver(
             conn.execute(
                 text(
                     f"UPDATE {table} SET next_attempt_at = :lease WHERE id IN (SELECT d.id FROM {table} d"
-                    f" JOIN {accounts._t(conn, 'webhook_endpoint')} e ON e.id = d.endpoint_id WHERE d.state = 'pending'"
-                    " AND d.next_attempt_at <= :now AND e.state IN ('active', 'failing') ORDER BY d.next_attempt_at"
+                    f" JOIN {accounts._t(conn, 'webhook_endpoint')} e ON e.id = d.endpoint_id"
+                    f" JOIN {accounts._t(conn, 'organisation')} o ON o.id = e.organisation_id"
+                    " WHERE d.state = 'pending' AND d.next_attempt_at <= :now AND e.state IN ('active', 'failing')"
+                    # Held while its organisation is suspended or deleted (item 9); in time, abandoned.
+                    f" AND o.state IN {MONITORING} ORDER BY d.next_attempt_at"
                     " LIMIT :n FOR UPDATE OF d SKIP LOCKED) RETURNING id"
                 ),
                 {"now": now, "lease": now + timedelta(minutes=15), "n": limit},

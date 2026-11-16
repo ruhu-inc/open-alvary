@@ -179,6 +179,46 @@ def test_a_digest_groups_matches_carries_one_click_unsubscribe_and_never_repeats
     assert watch["email"] == "weekly"
 
 
+def test_a_member_who_left_and_a_suspended_organisation_get_nothing_from_its_monitors(world):
+    """Findings 2026-11-16, item 9: a removed member kept getting digests and their private monitors kept
+    matching; a suspended organisation kept all its monitoring."""
+    store, accounts, watches = world
+    owner, organisation = person(accounts, "amina")
+    grant(accounts, organisation, "team")
+    shared = watches.create(
+        owner,
+        organisation,
+        {"name": "Ours", "filters": NIGERIA, "visibility": "organisation", "email": "weekly"},
+    )
+    colleague, _ = person(accounts, "chidi")
+    accounts.accept_invitation(
+        colleague, accounts.invite(owner, organisation, "chidi@example.org", "developer")
+    )
+    watches.set_email(colleague, organisation, shared["id"], "weekly")
+    private = watches.create(colleague, organisation, {"name": "Chidi's", "filters": NIGERIA})
+    worker.match(accounts)
+    members = {m["display_name"]: m["id"] for m in accounts.members(owner, organisation)["members"]}
+    accounts.remove_member(owner, organisation, members["Chidi"])
+    change(store, "One.")
+    assert worker.match(accounts) == 1  # the shared monitor; not the private one of a member who left
+    with accounts.engine.connect() as conn:
+        inbox = accounts._t(conn, "inbox_item")
+        matched = set(conn.scalars(text(f"SELECT watch_id FROM {inbox}")))
+    assert matched == {shared["id"]} and private["id"] not in matched
+    mailer = Mailer()
+    later = datetime.now(UTC) + timedelta(days=8)
+    assert worker.digests(accounts, mailer, BASE, now=later) == 1
+    assert [m.to for m in mailer.sent] == ["amina@example.org"]  # not chidi, who left
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(f"UPDATE {accounts._t(conn, 'organisation')} SET state = 'suspended' WHERE id = :o"),
+            {"o": organisation},
+        )
+    change(store, "Two.")
+    assert worker.match(accounts) == 0  # suspended: its monitors match nothing
+    assert worker.digests(accounts, mailer, BASE, now=later + timedelta(days=7)) == 0
+
+
 def test_scheduled_sends_survive_clock_changes():
     london = ZoneInfo("Europe/London")
     skipped = worker.local_instant(london, date(2026, 3, 29), 90)  # 01:30 does not exist that day
