@@ -113,6 +113,35 @@ def _locators(conn, work_id: str) -> set[str]:
     return found
 
 
+def superseding_order(events: list) -> list:
+    """The events in an order that writes each after the one it supersedes in the same file, a chain of
+    any length included (e3 supersedes e2, which supersedes e1); otherwise by id."""
+    by_id = {e.id: e for e in events}
+    placed, out = set(), []
+
+    def place(event, seen=()):
+        if event.id in placed:
+            return
+        if event.id in seen:
+            raise Refused(f"{event.id}: its supersessions go round in a circle")
+        if event.supersedes in by_id:
+            place(by_id[event.supersedes], (*seen, event.id))
+        placed.add(event.id)
+        out.append(event)
+
+    for event in sorted(events, key=lambda e: e.id):
+        place(event)
+    return out
+
+
+def _same_evidence(held, given: dict) -> bool:
+    """Whether the evidence stored for an event is the evidence the file gives, compared as JSON."""
+    stored = json.loads(held) if isinstance(held, str) else held
+    return json.loads(json.dumps(stored, sort_keys=True, default=str)) == json.loads(
+        json.dumps(given, sort_keys=True, default=str)
+    )
+
+
 def publish(engine, events: EventFile, *, dry_run: bool = False) -> dict:
     """Write the file's profiles and events and announce them, in one transaction; refuse the whole file
     on any problem. Returns what was (or, in a dry run, would be) written."""
@@ -161,8 +190,8 @@ def publish(engine, events: EventFile, *, dry_run: bool = False) -> dict:
                  "at": profile.reviewed_at},
             )  # fmt: skip
             report["profiles"] += 1
-        # An event that supersedes another in the same file is written after it.
-        ordered = sorted(events.events, key=lambda e: (e.supersedes in ids, e.id))
+        # An event that supersedes another in the same file is written after it, however long the chain.
+        ordered = superseding_order(events.events)
         for event in ordered:
             values = {
                 "id": event.id, "type": event.type, "work": event.affected_work, "by": event.asserting_work,
@@ -203,6 +232,8 @@ def publish(engine, events: EventFile, *, dry_run: bool = False) -> dict:
                 and held.precision == event.precision
                 and held.conditions == event.conditions
                 and held.supersedes_event_id == event.supersedes
+                # The evidence too: an edited quote is an edit, never "unchanged" (findings 2026-11-16, item 48).
+                and _same_evidence(held.evidence, event.evidence.model_dump(mode="json"))
             )
             if not same:
                 raise Refused(

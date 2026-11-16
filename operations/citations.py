@@ -175,14 +175,43 @@ def _candidates(words: str) -> list[tuple[int, int, list[str]]]:
         pin = words[cited.start() : cited.end()].strip()
         if any(a <= cited.start() < b for a, b in neutral):
             continue  # "[2019] NGSC 4, para. 12" is a judgment's paragraph, read above
-        # Clause boundaries: the work is read up to the end of the sentence or clause it is in.
-        before = re.split(r"[;:.!?]\s", words[: cited.start()])[-1].split()[-MAX_WORDS:]
-        after = re.split(r"[;:!?]\s|\.\s(?=[A-Z])", words[cited.end() :])[0].split()[:MAX_WORDS]
+        # Clause boundaries: the work is read up to the end of the sentence or clause it is in, never cut
+        # at an abbreviation's stop ("Cap. C38", "No. 3"; findings 2026-11-16, item 48).
+        before = _clauses(words[: cited.start()])[-1].split()[-MAX_WORDS:]
+        after = _clauses(words[cited.end() :], before_capital=True)[0].split()[:MAX_WORDS]
         readings = [_trimmed(f"{pin} {' '.join(after[:n])}") for n in range(len(after), 0, -1)]
         readings += [_trimmed(f"{' '.join(before[n:])} {pin}") for n in range(len(before))]
         end = cited.end() + len(" ".join(after)) + 1 if after else cited.end()
         found.append((cited.start(), min(end, len(words)), [r for r in readings if r != pin]))
     return found
+
+
+# Abbreviations a citation carries whose stop ends no sentence: "Cap. C38", "No. 3", "s. 4", "Laws of the
+# Federation of Nigeria, Vol. 2".
+ABBREVIATIONS = frozenset(
+    "cap caps no nos s ss sec secs art arts para paras vol vols ch pt pts sch scheds reg regs ord r rr p pp "
+    "cf v vs ed eds lfn".split()
+)
+STOP = re.compile(r"[;:.!?]\s")
+
+
+def _clauses(words: str, before_capital: bool = False) -> list[str]:
+    """The words split at the ends of clauses: a semicolon, a colon or a question or exclamation mark, or
+    a full stop that does not close an abbreviation or an initial ("A. Obi"). ``before_capital``: a full
+    stop ends a clause only before a capital letter, as a sentence's does."""
+    pieces, start = [], 0
+    for stop in STOP.finditer(words):
+        if words[stop.start()] == ".":
+            word = re.findall(r"[\w.]+$", words[: stop.start()])
+            last = word[0].lower().replace(".", "") if word else ""
+            if last in ABBREVIATIONS or (len(last) == 1 and last.isalpha()):
+                continue
+            if before_capital and not words[stop.end() : stop.end() + 1].isupper():
+                continue
+        pieces.append(words[start : stop.start()])
+        start = stop.end()
+    pieces.append(words[start:])
+    return pieces
 
 
 def propose_from(text: bytes, nodes, work_id: str, url: str, resolve) -> list[dict]:

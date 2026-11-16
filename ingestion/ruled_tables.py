@@ -80,7 +80,22 @@ def rules(page) -> list[tuple[float, float, float, float]]:
             pending.clear()
         elif operator == b"n":  # a clipping path, or one never painted
             pending.clear()
-    return found
+    return [turned(rule, page.rotation, float(page.mediabox.width), height) for rule in found]
+
+
+def turned(rule: tuple, rotation: int, width: float, height: float) -> tuple:
+    """A rule found on the page as drawn (top-left origin), placed on the page as it is shown, turned by
+    its /Rotate clockwise: where the text layer's words are (pdftotext places a turned page's words as it
+    is shown; findings 2026-11-16, item 48: a rotated page's tables came out empty)."""
+    x0, top0, x1, top1 = rule
+    turn = rotation % 360
+    if turn == 90:
+        return (height - top1, x0, height - top0, x1)
+    if turn == 180:
+        return (width - x1, height - top1, width - x0, height - top0)
+    if turn == 270:
+        return (top0, width - x1, top1, width - x0)
+    return rule
 
 
 def _horizontal(rule) -> bool:
@@ -257,8 +272,16 @@ def image_coverage(page) -> float:
     contents = page.get_contents()
     if contents is None or not width or not height:
         return 0.0
-    matrix, saved, area = [1.0, 0.0, 0.0, 1.0, 0.0, 0.0], [], 0.0
-    for operands, operator in ContentStream(contents, page.pdf).operations:
+    area = _image_area(contents, images, page.pdf, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0], 0)
+    return min(1.0, area / (width * height))
+
+
+def _image_area(contents, images, pdf, matrix: list[float], depth: int) -> float:
+    """The area the images drawn by a content stream cover, those inside its form objects included
+    (a scan wrapped in a form is still a scan; findings 2026-11-16, item 48), forms nested four deep at
+    most."""
+    saved, area = [], 0.0
+    for operands, operator in ContentStream(contents, pdf).operations:
         if operator == b"q":
             saved.append(matrix)
         elif operator == b"Q":
@@ -268,9 +291,15 @@ def image_coverage(page) -> float:
         elif operator == b"Do":
             found = images.get(operands[0])
             found = found.get_object() if found is not None else None
-            if found is not None and found.get("/Subtype") == "/Image":
+            if found is None:
+                continue
+            if found.get("/Subtype") == "/Image":
                 area += abs(matrix[0] * matrix[3] - matrix[1] * matrix[2])
-    return min(1.0, area / (width * height))
+            elif found.get("/Subtype") == "/Form" and depth < 4:
+                own = [float(v) for v in found.get("/Matrix", [1, 0, 0, 1, 0, 0])]
+                inner = ((found.get("/Resources") or {}).get("/XObject")) or images
+                area += _image_area(found, inner, pdf, _times(own, matrix), depth + 1)
+    return area
 
 
 def image_pages(pdf: Path, threshold: float = 0.6) -> set[int]:

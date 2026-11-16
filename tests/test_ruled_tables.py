@@ -72,3 +72,61 @@ def test_the_frame_of_the_language_columns_is_not_a_table(tmp_path):
     page = drawn(frame, tmp_path)
     words = [word("Ingingo", 10, 20), word("Article", 75, 20), word("Article", 135, 20)]
     assert ruled_tables.page_tables(page, words, 200, language_columns=3) == []
+
+
+def test_a_table_on_a_turned_page_is_read_where_the_text_layer_places_its_words(tmp_path):
+    """Consolidated findings item 48: a page with /Rotate gave its rules unturned and its words turned
+    (pdftotext places a turned page's words as it is shown), so its tables came out empty."""
+    rules = " ".join(
+        ["20 179.75 120 0.5 re f", "20 159.75 120 0.5 re f", "20 139.75 120 0.5 re f",
+         "19.75 140 0.5 40 re f", "79.75 140 0.5 40 re f", "139.75 140 0.5 40 re f"]
+    )  # fmt: skip
+    writer = PdfWriter()
+    writer.append(PdfReader(drawn(rules, tmp_path).pdf.stream))
+    writer.pages[0].rotate(90)
+    path = tmp_path / "turned.pdf"
+    with open(path, "wb") as handle:
+        writer.write(handle)
+    page = PdfReader(path).pages[0]
+
+    def shown(text, x, top):  # where pdftotext puts a word drawn at (x, top) on a page turned 90°
+        return {
+            "xmin": 200 - (top + 8),
+            "ymin": x,
+            "xmax": 200 - top,
+            "ymax": x + 5 * len(text),
+            "text": text,
+        }
+
+    words = [shown("Year", 30, 25), shown("Rate", 90, 25), shown("2024", 30, 45), shown("5%", 90, 45)]
+    [table] = ruled_tables.page_tables(page, words, 200)
+    assert sorted(w["text"] for w in table["words"]) == ["2024", "5%", "Rate", "Year"]
+
+
+def test_a_scan_wrapped_in_a_form_object_counts_as_a_scan(tmp_path):
+    from pypdf.generic import ArrayObject, DictionaryObject, FloatObject, NumberObject
+
+    writer = PdfWriter()
+    page = writer.add_blank_page(200, 200)
+    image = DecodedStreamObject()
+    image.set_data(b"\\x00")
+    image.update({NameObject("/Type"): NameObject("/XObject"), NameObject("/Subtype"): NameObject("/Image"),
+                  NameObject("/Width"): NumberObject(1), NameObject("/Height"): NumberObject(1),
+                  NameObject("/ColorSpace"): NameObject("/DeviceGray"), NameObject("/BitsPerComponent"): NumberObject(8)})  # fmt: skip
+    form = DecodedStreamObject()
+    form.set_data(b"q 200 0 0 200 0 0 cm /Im1 Do Q")
+    form.update({NameObject("/Type"): NameObject("/XObject"), NameObject("/Subtype"): NameObject("/Form"),
+                 NameObject("/BBox"): ArrayObject([FloatObject(0), FloatObject(0), FloatObject(200), FloatObject(200)]),
+                 NameObject("/Resources"): DictionaryObject({NameObject("/XObject"): DictionaryObject(
+                     {NameObject("/Im1"): writer._add_object(image)})})})  # fmt: skip
+    page[NameObject("/Resources")] = DictionaryObject(
+        {NameObject("/XObject"): DictionaryObject({NameObject("/Fm1"): writer._add_object(form)})}
+    )
+    content = DecodedStreamObject()
+    content.set_data(b"/Fm1 Do")
+    page[NameObject("/Contents")] = writer._add_object(content)
+    path = tmp_path / "wrapped.pdf"
+    with open(path, "wb") as handle:
+        writer.write(handle)
+    assert ruled_tables.image_coverage(PdfReader(path).pages[0]) == 1.0
+    assert ruled_tables.image_pages(path) == {1}

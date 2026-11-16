@@ -156,3 +156,24 @@ def test_commencement_and_repeal_are_proposed_from_the_text(store):
     )
     repealed = next(p for p in found if p["type"] == "repealed")
     assert repealed["affected_title"] == "Old Loans Act" and repealed["affected_work"] is None
+
+
+def test_an_event_given_again_with_an_edited_quote_is_refused_and_a_chain_is_written_in_order(store):
+    """Consolidated findings item 48: an edited quote was reported "unchanged", and a chain of three
+    superseding events in one file could be written out of order."""
+    publish_act(store, UNITS)
+    quoted = an_event("commenced", "2023-06-12")
+    quoted["evidence"] = {**quoted["evidence"], "quote": "This Act commences on 12 June 2023."}
+    publish(store, quoted)
+    assert publish(store, quoted)["unchanged"] == 1
+    edited = {**quoted, "evidence": {**quoted["evidence"], "quote": "This Act commences on 12 July 2023."}}
+    with pytest.raises(events.Refused, match="not edited"):
+        publish(store, edited)
+    # Ids chosen so that sorting by id alone puts the chain backwards: c <- b <- a.
+    ids = [f"evt_{c * 8}-0000-4000-8000-000000000000" for c in "cba"]
+    first = an_event("repealed", "2024-01-01", id=ids[0])
+    second = an_event("repealed", "2024-02-01", id=ids[1], supersedes=ids[0])
+    third = an_event("repealed", "2024-03-01", id=ids[2], supersedes=ids[1])
+    file = events.EventFile.model_validate({"events": [third, second, first]})
+    assert [e.id for e in events.superseding_order(file.events)] == ids
+    assert publish(store, third, second, first)["events_added"] == 3

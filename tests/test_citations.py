@@ -221,3 +221,15 @@ def test_a_citations_file_holds_reviewed_citations_one_live_treatment_each():
     withdrawn = a_citation(review_state="withdrawn", treatments=[a_treatment()])
     with pytest.raises(ValidationError, match="withdrawn too"):
         citations.CitationFile.model_validate({"citations": [withdrawn]})
+
+
+def test_a_citation_is_read_past_the_stops_of_cap_no_and_initials():
+    """Consolidated findings item 48: citations after "Cap." or "No." were cut short at the stop."""
+    from operations.citations import _candidates, _clauses
+
+    words = "[2] Under section 7 of the Companies and Allied Matters Act, Cap. C20, the company was wound up."
+    readings = [r for _, _, found in _candidates(words) for r in found]
+    assert "section 7 of the Companies and Allied Matters Act, Cap. C20" in readings
+    assert _clauses("By Decree No. 3 of 1999, as A. Obi held; the court agreed. Then", before_capital=True) == [
+        "By Decree No. 3 of 1999, as A. Obi held", "the court agreed", "Then",
+    ]  # fmt: skip
