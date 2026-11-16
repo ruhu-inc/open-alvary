@@ -173,7 +173,7 @@ function caret(flag, title, symbol) {
   };
 }
 
-function initialDecorations(doc, flags, machineUnits, units) {
+export function initialDecorations(doc, flags, machineUnits, units) {
   const map = tokenMap(machineUnits);
   const decorations = [];
   for (const flag of flags) {
@@ -200,7 +200,9 @@ function initialDecorations(doc, flags, machineUnits, units) {
     const start = fieldStart(doc, anchor.u, anchor.field);
     if (start === null) continue;
     if (from === to || flag.kind === "missing_from_primary") {
-      const at = from < map.length ? start + anchor.start : start + (machineUnits[anchor.u].text || "").length;
+      // Past the last word: at the end of that word's own field (a margin note's, say), never past the
+      // document (findings 2026-11-16, item 26).
+      const at = Math.min(doc.content.size, from < map.length ? start + anchor.start : start + map[map.length - 1].end);
       decorations.push(Decoration.widget(at, caret(flag, "Words only the check readings have here", "⁁"), { ...spec, side: -1 }));
       continue;
     }
@@ -655,7 +657,17 @@ const pastePlugin = new Plugin({
         slice.content.forEach((node) => blocks.push(node));
         if (!blocks.every((node) => node.type === N.unit || node.type === N.table_unit)) return pasteWords(view, (parent) => pastedWords(blocks, parent), spaces);
         const inline = blocks.length === 1 && blocks[0].type === N.unit && blocks[0].childCount === 1 && slice.openStart >= 2 && slice.openEnd >= 2;
-        if (inline && $from.parent.type === N.body) return pasteWords(view, () => blocks[0].firstChild.content, spaces);
+        if (inline && $from.parent.type === N.body) {
+          // A unit holds one number, at its start: a copied number goes in as one only there, in a unit
+          // that has none; anywhere else it becomes words, as in a paste of several units (findings
+          // 2026-11-16, item 26: the second number was dropped when the unit was saved).
+          const body = blocks[0].firstChild;
+          let chip = false, held = false;
+          body.forEach((node) => { if (node.type === N.marker) chip = true; });
+          $from.parent.forEach((node) => { if (node.type === N.marker) held = true; });
+          const asWords = chip && (held || $from.parentOffset > 0);
+          return pasteWords(view, (parent) => (asWords ? pastedWords([body], parent) : body.content), spaces);
+        }
         open = { start: slice.openStart >= 2, end: slice.openEnd >= 2 };
       } else {
         const unit = $from.depth ? state.doc.child($from.index(0)) : null;

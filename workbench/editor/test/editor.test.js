@@ -7,7 +7,7 @@ import { Fragment, Slice } from "prosemirror-model";
 import { EditorState, TextSelection, NodeSelection } from "prosemirror-state";
 import { baseKeymap } from "prosemirror-commands";
 import { CellSelection, TableMap, handlePaste as tablePaste } from "prosemirror-tables";
-import { schema, toDoc, fromDoc, commands, keyCommands, plugins, pasteUnits, pastedWords, unitNode, unitsFromText, tableLayout } from "../src/editor.js";
+import { schema, toDoc, fromDoc, commands, keyCommands, plugins, pasteUnits, pastedWords, unitNode, unitsFromText, tableLayout, initialDecorations } from "../src/editor.js";
 import { formatted } from "../src/schema.js";
 import { cellStateAt } from "../src/tables.js";
 import { findKey } from "../src/find.js";
@@ -812,4 +812,34 @@ test("a number chip pasted into words becomes words; at the start of an empty un
   state = select(state, inWords(state.doc, 1));
   state = state.apply(pasteUnits(state, [unitNode({ kind: "paragraph", text: "The Commission", marker: "6." })]));
   assert.deepEqual(fromDoc(state.doc)[1], { kind: "paragraph", text: "The Commission", marker: "6." });
+});
+
+// --- findings 2026-11-16, item 26 ----------------------------------------------------------------------
+
+test("a copied numbered unit pasted inside another unit keeps its number, as words", () => {
+  let state = stateOf([{ kind: "paragraph", text: "The levy is due.", marker: "1." }]);
+  state = select(state, inWords(state.doc, 0, 11));
+  const copied = new Slice(Fragment.from(unitNode({ kind: "paragraph", text: "A fee is paid", marker: "2." })), 2, 2);
+  state = paste(state, copied, { "text/html": '<p data-pm-slice="2 2 []">2. A fee is paid</p>' });
+  const [unit] = fromDoc(state.doc);
+  assert.equal(unit.marker, "1.");
+  assert.match(unit.text, /2\. A fee is paid/); // the second number is kept, as words
+});
+
+test("a flag past a final margin note's last word stays inside the document", () => {
+  const units = [{ kind: "paragraph", text: "The levy is due.", notes: ["Levy"] }];
+  const state = stateOf(units);
+  const flag = { id: "f1", severity: "medium", kind: "missing_from_primary", tokens: [99, 99] };
+  const found = initialDecorations(state.doc, [flag], units, units).find();
+  assert.ok(found.length >= 1);
+  for (const decoration of found) assert.ok(decoration.from <= state.doc.content.size);
+});
+
+test("table commands on a selection from a paragraph into a table do nothing rather than throw", () => {
+  let state = stateOf([PAGE[4], TAX_TABLE]);
+  const into = inBlock(state.doc, N.table_cell, 4, 1);
+  state = state.apply(state.tr.setSelection(TextSelection.create(state.doc, inWords(state.doc, 0, 2), into)));
+  for (const name of ["addRowAfter", "addRowBefore", "toggleHeaderRow"]) {
+    assert.doesNotThrow(() => apply(state, commands[name]), name);
+  }
 });

@@ -118,13 +118,20 @@ export const headerRows = new Plugin({
   },
 });
 
+// The table a selection is in: by its head, where isInTable looks, else by its start. A selection from a
+// paragraph into a table has its start outside it (findings 2026-11-16, item 26: the commands threw).
+function selectedTable(state) {
+  return tableUnitAt(state.selection.$head) || tableUnitAt(state.selection.$from);
+}
+
 // A row command that keeps the header rows where they were: `change` gives the new count.
 function keepingHeader(command, change) {
   return (state, dispatch) => {
     if (!isInTable(state) || !command(state)) return false;
     if (!dispatch) return true;
+    const unit = selectedTable(state);
+    if (!unit) return false;
     const rect = selectedRect(state);
-    const unit = tableUnitAt(state.selection.$from);
     let tr = null;
     command(state, (result) => { tr = result; });
     if (!tr) return false;
@@ -143,17 +150,18 @@ export { addColumnBefore, addColumnAfter, splitCell };
 
 // The row under the cursor (and those below it) leave the header rows, or it (and those above it) join them.
 export function toggleHeaderRow(state, dispatch) {
-  if (!isInTable(state)) return false;
+  const unit = isInTable(state) && selectedTable(state);
+  if (!unit) return false;
   const rect = selectedRect(state);
-  const unit = tableUnitAt(state.selection.$from);
   const header = rect.top < unit.node.attrs.header_rows ? rect.top : rect.bottom;
   if (dispatch) dispatch(state.tr.setNodeMarkup(unit.pos, null, { header_rows: header }));
   return true;
 }
 
 export function inHeaderRow(state) {
-  if (!isInTable(state)) return false;
-  return selectedRect(state).top < tableUnitAt(state.selection.$from).node.attrs.header_rows;
+  const unit = isInTable(state) && selectedTable(state);
+  if (!unit) return false;
+  return selectedRect(state).top < unit.node.attrs.header_rows;
 }
 
 // --- tables, rows and columns ----------------------------------------------------------------------
