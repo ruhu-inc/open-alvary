@@ -2,6 +2,7 @@
 
 import base64
 import json
+import secrets
 import threading
 import time
 from datetime import timedelta
@@ -381,6 +382,7 @@ def hand_off(sub="google-oauth2|amina", **extra):
 
     payload = {
         "sub": sub,
+        "hid": secrets.token_urlsafe(18),  # one-use, as deployment/auth0/post_login.js sets it
         "email": "amina@example.org",
         "exp": time.time() + 600,
         "client_id": "https://claude.ai/oauth/mcp-oauth-client-metadata",
@@ -437,6 +439,67 @@ def test_approving_an_app_creates_a_grant_the_credential_check_accepts(console):
             "subject": "google-oauth2|amina",
         }
     )["ok"]
+
+
+def test_a_hand_off_decides_once_and_the_answer_is_no_hand_off(console):
+    """Consolidated findings item 7: one approval link could insert grants and audit rows without limit."""
+    accounts, fake, app = console
+    consent_app = create_console_app(accounts, app_provider(fake), consent_secret=CONSENT_SECRET)
+    browser = client(consent_app)
+    organisation, _, _ = onboard(browser, fake)
+    accounts.grant_access(
+        "op", organisation, tier="pilot", scope={"all": True}, source="manual", ends_at=None, reason="Pilot"
+    )
+
+    def decide(token, state="s1"):
+        return browser.post(
+            "/oauth/api/decision",
+            json={"session_token": token, "state": state, "decision": "allow", "organisation": organisation},
+        )
+
+    token = hand_off()
+    first = decide(token)
+    assert first.status_code == 200
+    again = decide(token)
+    assert again.status_code == 400 and again.json()["error"]["code"] == "consent_expired"
+    answer = parse_qs(urlparse(first.json()["redirect"]).query)["consent_token"][0]
+    assert decide(answer).status_code == 400  # the console's own answer is not a hand-off
+    assert browser.get("/oauth/api/session", params={"session_token": answer}).status_code == 400
+    assert decide(hand_off(hid=None)).status_code == 400  # a hand-off from before one-use IDs
+    second = decide(hand_off(), state="s2")  # the same app approved again for the same organisation
+    person = accounts.person_for_identity(ISSUER, "google-oauth2|amina")
+    grants = [g for g in accounts.list_grants(person, organisation) if not g.get("revoked_at")]
+    assert len(grants) == 1
+    from api.console import verify_hs256
+
+    granted = [
+        verify_hs256(parse_qs(urlparse(r.json()["redirect"]).query)["consent_token"][0], CONSENT_SECRET)[
+            "grant"
+        ]
+        for r in (first, second)
+    ]
+    assert granted == [grants[0]["id"]] * 2
+
+
+def test_no_app_is_approved_while_new_terms_wait(console):
+    accounts, fake, app = console
+    consent_app = create_console_app(accounts, app_provider(fake), consent_secret=CONSENT_SECRET)
+    browser = client(consent_app)
+    organisation, _, _ = onboard(browser, fake)
+    accounts.grant_access(
+        "op", organisation, tier="pilot", scope={"all": True}, source="manual", ends_at=None, reason="Pilot"
+    )
+    person = accounts.person_for_identity(ISSUER, "google-oauth2|amina")
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(f"DELETE FROM {accounts._t(conn, 'policy_acceptance')} WHERE person_id = :p"), {"p": person}
+        )
+    refused = browser.post(
+        "/oauth/api/decision",
+        json={"session_token": hand_off(), "state": "s1", "decision": "allow", "organisation": organisation},
+    )
+    assert refused.status_code == 409 and refused.json()["error"]["code"] == "policies_pending"
+    assert accounts.list_grants(person, organisation) == []
 
 
 def test_denying_and_bad_hand_offs(console):

@@ -65,6 +65,8 @@ exports.onExecutePostLogin = async (event, api) => {
     secret: event.secrets.CONSENT_SECRET,
     expiresInSeconds: 600,
     payload: {
+      // One-use: the console records it when the person decides, and refuses the link a second time.
+      hid: require("crypto").randomBytes(24).toString("base64url"),
       // The tool's own identifier (its metadata document address), not Auth0's internal ID for it.
       client_id: query(event).client_id || event.client.client_id,
       client_name: event.client.name,

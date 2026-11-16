@@ -1693,6 +1693,20 @@ class Accounts:
             ).first()
         return (row.name, row.publisher) if row else None
 
+    def use_handoff(self, handoff_id: str) -> bool:
+        """Records an app-approval hand-off as used: True the first time, False ever after (MAC-07; a
+        hand-off lives ten minutes, its record a day)."""
+        with self.engine.begin() as conn:
+            table = self._t(conn, "consent_handoff")
+            conn.execute(
+                text(f"DELETE FROM {table} WHERE used_at < statement_timestamp() - interval '1 day'")
+            )
+            first = conn.execute(
+                text(f"INSERT INTO {table} (id) VALUES (:id) ON CONFLICT (id) DO NOTHING RETURNING id"),
+                {"id": handoff_id},
+            ).first()
+            return first is not None
+
     def create_grant(
         self,
         person_id: str,
@@ -1714,6 +1728,16 @@ class Accounts:
                     409,
                     "Apps can be connected only while the organisation has access.",
                 )
+            # Approving an app again for the same organisation and resource keeps the grant already held.
+            held = conn.execute(
+                text(
+                    f"SELECT id FROM {self._t(conn, 'client_grant')} WHERE person_id = :p AND organisation_id = :o"
+                    " AND client_id = :cid AND resource = :resource AND revoked_at IS NULL"
+                ),
+                {"p": person_id, "o": organisation_id, "cid": client_id, "resource": resource},
+            ).scalar()
+            if held is not None:
+                return held
             grant_id = new_id("grt")
             conn.execute(
                 text(

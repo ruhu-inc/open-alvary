@@ -942,11 +942,19 @@ def create_console_app(
 
     # ---------- approving an app (MAC-07) ----------
     def hand_off(token: str) -> dict:
-        """The provider's signed hand-off: who signed in, which app, for which resource."""
+        """The provider's signed hand-off: who signed in, which app, for which resource. The console's
+        own answer is signed with the same secret, so it is told apart (its issuer is the console, and
+        it carries the decision) and refused here; a hand-off without its one-use ID is refused too."""
         if consent_secret is None or provider is None:
             raise AccountError("unavailable", 503, "Connecting apps isn't available right now.")
         payload = verify_hs256(token, consent_secret)
-        if payload is None or not payload.get("sub"):
+        if (
+            payload is None
+            or not payload.get("sub")
+            or payload.get("iss") == provider.config.base_url
+            or "decision" in payload
+            or not re.fullmatch(r"[A-Za-z0-9_-]{16,64}", str(payload.get("hid") or ""))
+        ):
             raise AccountError(
                 "consent_expired", 400, "This approval link has expired. Start again from your app."
             )
@@ -1018,16 +1026,31 @@ def create_console_app(
                 "invalid_input", 400, "This approval link is incomplete. Start again from your app."
             )
         person_id = accounts.person_for_identity(provider.config.issuer, payload["sub"])
+        person = accounts.person(person_id) if person_id else None
+        if person and person["policies_pending"]:
+            raise AccountError(
+                "policies_pending",
+                409,
+                "Accept the updated terms in the console first, then start again from your app.",
+            )
         client = app_label(payload)
         decision, organisation, grant = "deny", None, None
-        if data.get("decision") == "allow" and person_id:
-            chosen = str(data.get("organisation") or "")
-            if not any(o["id"] == chosen and o["eligible"] for o in eligible(person_id, client["resource"])):
-                raise AccountError(
-                    "organisation_not_eligible",
-                    409,
-                    "Choose an organisation with access where you may connect apps.",
-                )
+        allow = data.get("decision") == "allow" and person_id
+        chosen = str(data.get("organisation") or "")
+        if allow and not any(
+            o["id"] == chosen and o["eligible"] for o in eligible(person_id, client["resource"])
+        ):
+            raise AccountError(
+                "organisation_not_eligible",
+                409,
+                "Choose an organisation with access where you may connect apps.",
+            )
+        # Each hand-off decides once: a second use of the same link is refused, as an expired one is.
+        if not accounts.use_handoff(str(payload["hid"])):
+            raise AccountError(
+                "consent_expired", 400, "This approval link has already been used. Start again from your app."
+            )
+        if allow:
             grant = accounts.create_grant(
                 person_id,
                 chosen,

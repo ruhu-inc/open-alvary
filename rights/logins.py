@@ -183,6 +183,7 @@ SERVICE = Login(
             "api_key": f"SELECT ({KEY_COLUMNS}), INSERT, UPDATE (expires_at, revoked_at, revoked_reason, rotated_from)",
             "audit_event": "SELECT, INSERT",
             "client_grant": "SELECT, INSERT, UPDATE (revoked_at, revoked_reason)",
+            "consent_handoff": "SELECT, INSERT, DELETE",
             # A session is looked up by its token's hash, the only copy held of it.
             "console_session": "SELECT, INSERT, UPDATE (last_seen_at, authenticated_at, second_factor_at, revoked_at)",
             "digest": READ,
