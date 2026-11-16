@@ -1888,3 +1888,29 @@ def built_record(store, library, act_id):
     review = Review(store, library, registry())
     act = library.act(act_id)
     return review.built(act, review.state(act)["view"])
+
+
+def test_a_replace_keeps_a_page_read_again_unchecked_and_is_held_to_a_page_saves_limits(world, tmp_path):
+    """Consolidated findings item 23: a replace marked a page whose reading had changed as checked again,
+    and skipped the size limits a page save enforces."""
+    browser = signed_in(world, "reviewer@example.org")
+    assert save(browser).status_code == 200  # page 1 checked against today's reading
+    store, library = world
+    changed = reading()
+    changed["pages"][0]["nodes"].append(node("A word the machine reads now."))  # the reading changed
+    (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(changed))
+    assert browser.get(f"/api/documents/{ACT}").json()["pages"][0]["stale"]
+    revisions = browser.get(f"/api/documents/{ACT}/search", params={"q": "Accounts"}).json()["revisions"]
+    done = browser.post(
+        f"/api/documents/{ACT}/replace", json={"find": "Accounts", "replace": "Account", "pages": revisions}
+    )
+    assert done.status_code == 200 and done.json()["changed"]
+    latest = browser.get(f"/api/documents/{ACT}/pages/1").json()["latest"]
+    assert latest["status"] == "edited"  # read again since it was checked: still to look at
+    long = [{"kind": "paragraph", "text": "x " * 4000}]
+    assert save(browser, page=2, units=long).status_code == 200
+    revisions = browser.get(f"/api/documents/{ACT}/search", params={"q": "x"}).json()["revisions"]
+    grown = browser.post(
+        f"/api/documents/{ACT}/replace", json={"find": "x", "replace": "xyz", "pages": revisions}
+    )
+    assert grown.status_code == 422 and "page 2" in grown.json()["message"]

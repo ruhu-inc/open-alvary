@@ -830,20 +830,27 @@ def create_app(
                 raise HTTPException(422, f"no page {number}")
             try:
                 units, count = content.replace_in(final[number]["units"], find, replacement, case, word)
+                # The same checks as a page save: no unit past its size, nothing the corpus cannot hold.
+                units = content.validate_units(units) if count else units
             except ValueError as error:
-                raise HTTPException(422, str(error)) from error
+                raise HTTPException(422, f"page {number}: {error}") from error
             if not count:
                 continue
             previous = latest.get(number)
+            reading = content.reading_sha256(pages[number])
+            # A page checked against an earlier reading is not checked against this one: a replace saves it
+            # unchecked, so "the reading changed, check again" stays until someone looks (findings
+            # 2026-11-16, item 23). A page checked against this reading keeps its status.
+            stale = previous is not None and previous["reading_sha256"] != reading
             try:
                 revision = store.save_page(
                     act_id,
                     number,
                     int(expected),
                     who["email"],
-                    reading_sha256=content.reading_sha256(pages[number]),
+                    reading_sha256=reading,
                     units=units,
-                    status=previous["status"] if previous else "edited",
+                    status="edited" if stale or not previous else previous["status"],
                     resolutions=previous["resolutions"] if previous else {},
                     comment=f"Replaced {find!r} with {replacement!r} ({count}×) across the Act"[:2000],
                 )
