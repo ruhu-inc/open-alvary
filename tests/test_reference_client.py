@@ -287,3 +287,51 @@ def test_the_client_never_logs_query_text_even_through_httpx(caplog):
         started(client, server)
     assert any("/retrieve" in m for m in caplog.messages)
     assert not any("controller" in m or U1["text"] in m for m in caplog.messages)
+
+
+# --- findings 2026-11-16, item 50 ----------------------------------------------------------------------
+
+
+def test_a_past_dates_currentness_never_replaces_todays(monkeypatch):
+    client, server, _ = scripted()
+    started(client, server)
+    past = PACK | {
+        "query": PACK["query"] | {"as_of": "1990-01-01"},
+        "evidence": [
+            u | {"currentness": u["currentness"] | {"state": "not_in_force"}} for u in PACK["evidence"]
+        ],
+    }
+    asked = exchange("GET", "/retrieve", past, params={"q": Q, "as_of": "1990-01-01"})
+    then = step(server, [asked], lambda: client.retrieve(Q, jurisdiction="ng", as_of="1990-01-01"))
+    assert {u.unit["currentness"]["state"] for u in then.units} == {"not_in_force"}
+    now = step(server, [], lambda: client.retrieve(Q, jurisdiction="ng"))  # from the cache
+    assert now.from_cache
+    assert [u.unit["currentness"] for u in now.units] == [u["currentness"] for u in PACK["evidence"]]
+
+
+def test_a_sync_stopped_at_its_page_limit_does_not_mark_the_feed_read(monkeypatch):
+    from open_alvary_client import client as module
+
+    monkeypatch.setattr(module, "FEED_PAGES", 2)
+    client, server, clock = scripted()
+    step(
+        server, [exchange("GET", "/changes", "$changes_start", params={"start": "now"})], client.sync_changes
+    )
+    read = client.cache.feed()["read_at"]
+    clock.advance(3600)
+    more = changes() | {"has_more": True, "next_cursor": "c2"}
+    pages = [exchange("GET", "/changes", more), exchange("GET", "/changes", more)]
+    result = step(server, pages, client.sync_changes)
+    assert result.more and client.cache.feed()["read_at"] == read  # not read to its end: not read
+
+
+def test_out_of_reach_a_pack_flagged_for_a_check_is_not_served():
+    client, server, clock = scripted()
+    started(client, server)
+    withdrawn = event("withdrawal", withdrawal={"scope_disclosure": "revalidate_releases"})
+    step(server, [exchange("GET", "/changes", changes(withdrawn))], client.sync_changes)
+    assert all(flags(client).values())
+    # The check it needs cannot be made (three tries): the flagged pack is not served from the cache.
+    check_down = [exchange("POST", "/currentness", "$problem_unavailable", 503) for _ in range(3)]
+    with pytest.raises(oa.Unavailable, match="checked before it is used"):
+        step(server, check_down, lambda: client.retrieve(Q, jurisdiction="ng"))

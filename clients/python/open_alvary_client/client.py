@@ -26,7 +26,7 @@ from email.utils import parsedate_to_datetime
 
 import httpx
 
-from .cache import Cache, MemoryCache, unit_key
+from .cache import Cache, MemoryCache, currentness_for, unit_key
 from .errors import CacheExpired, OpenAlvaryError, RateLimited, Refused, Unavailable
 
 API = "https://api.open.alvary.ai/api/v1"
@@ -313,7 +313,9 @@ class Client:
             params = {"cursor": page["next_cursor"], "limit": FEED_PAGE}
         else:
             result.more = True
-        self.cache.save_feed(read_at=self.clock.now().isoformat())
+        if not result.more:
+            # Read to its end: only then is the cache as current as the feed (findings 2026-11-16, item 50).
+            self.cache.save_feed(read_at=self.clock.now().isoformat())
         return result
 
     def _start(self) -> None:
@@ -420,10 +422,11 @@ class Client:
         now = self.clock.now()
         if response.status_code == 304 and entry is not None:
             # The same pack Open Alvary would send now, rechecked by it before answering.
+            asked = entry["pack"].get("query", {}).get("as_of")
             with self.cache.transaction():
                 for unit in entry["pack"]["evidence"]:
                     self.cache.confirm(
-                        unit_key(unit["anchor_id"], unit["content_hash"]), unit["currentness"], now
+                        unit_key(unit["anchor_id"], unit["content_hash"]), unit["currentness"], now, asked
                     )
             return self._served(entry, self.cache.units_of(entry), checked=True)
         pack = self._json(response)
@@ -437,6 +440,11 @@ class Client:
         units = self.cache.units_of(entry) if entry is not None else []
         if entry is None or any(u is None or self.cache.withdrawn(u["version_id"]) for u in units):
             raise Unavailable("Open Alvary could not be reached and nothing cached answers this.") from outage
+        if any(u["flags"] for u in units):
+            # Flagged to be checked before reuse, and nothing can check it now: not served.
+            raise Unavailable(
+                "Open Alvary could not be reached, and the cached answer must be checked before it is used."
+            ) from outage
         self._within_offline_limit(outage)
         return self._served(entry, units, checked=False, offline=True)
 
@@ -451,8 +459,9 @@ class Client:
     def _served(entry: dict, units: list[dict], *, checked: bool, offline: bool = False) -> Answer:
         """A cached pack as served now: each unit with its latest known currentness and its label."""
         evidence, cited = [], []
+        asked = entry["pack"].get("query", {}).get("as_of")
         for unit, stored in zip(entry["pack"]["evidence"], units, strict=True):
-            shown = unit | {"currentness": stored["currentness"]}
+            shown = unit | {"currentness": currentness_for(stored, unit, asked)}
             evidence.append(shown)
             cited.append(
                 Cited(
@@ -498,7 +507,8 @@ class Client:
             for result in results:
                 for key in cached.get(anchors[result["index"]], ()):
                     if result["result"] == "unchanged":
-                        self.cache.confirm(key, result.get("currentness"), now)
+                        asked = items[result["index"]].get("as_of")
+                        self.cache.confirm(key, result.get("currentness"), now, asked)
                     elif result["result"] == "newer_version":
                         record = self.cache.get("unit", key)
                         if record is not None and "newer_version" not in record["flags"]:

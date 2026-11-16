@@ -77,9 +77,17 @@ class Cache(ABC):
         dataset = revisions.pop("dataset")
         profiles = ";".join(f"{name}={value}" for name, value in sorted(revisions.items()))
         at = now.isoformat()
+        asked = pack.get("query", {}).get("as_of") or ""
         with self.transaction():
             before = self.get("pack", request)
             for unit in pack["evidence"]:
+                key = unit_key(unit["anchor_id"], unit["content_hash"])
+                # A unit's currentness is an answer for a date: kept for each date asked, so a pack asked
+                # for 1990 never replaces what today's says (findings 2026-11-16, item 50).
+                dated = {
+                    **((self.get("unit", key) or {}).get("currentness_at") or {}),
+                    asked: unit["currentness"],
+                }
                 record = {
                     "anchor_id": unit["anchor_id"],
                     "content_hash": unit["content_hash"],
@@ -87,12 +95,13 @@ class Cache(ABC):
                     "source_id": unit["source_id"],
                     "expression_id": unit["expression_id"],
                     "unit": unit,
-                    "currentness": unit["currentness"],
+                    "currentness": dated.get("", unit["currentness"]),
+                    "currentness_at": dated,
                     "flags": [],
                     "cached_at": at,
                     "checked_at": at,
                 }
-                self.put("unit", unit_key(unit["anchor_id"], unit["content_hash"]), record)
+                self.put("unit", key, record)
                 self.delete("withdrawn", unit["version_id"])  # Open Alvary has just served it: public again
             entry = {"request": request, "dataset": dataset, "profiles": profiles, "etag": etag}
             self.put(
@@ -131,12 +140,25 @@ class Cache(ABC):
                     count += 1
         return count
 
-    def confirm(self, key: str, currentness: dict | None, now: datetime) -> None:
-        """Open Alvary has just confirmed a unit: its flags go and its currentness is the one it gave."""
+    def confirm(self, key: str, currentness: dict | None, now: datetime, as_of: str | None = None) -> None:
+        """Open Alvary has just confirmed a unit: its flags go and its currentness, for the date asked
+        (``as_of``; today when None), is the one it gave."""
         record = self.get("unit", key)
         if record is not None:
-            fresh = currentness or record["currentness"]
-            self.put("unit", key, record | {"flags": [], "currentness": fresh, "checked_at": now.isoformat()})
+            dated = dict(record.get("currentness_at") or {"": record["currentness"]})
+            if currentness:
+                dated[as_of or ""] = currentness
+            self.put(
+                "unit",
+                key,
+                record
+                | {
+                    "flags": [],
+                    "currentness": dated.get("", record["currentness"]),
+                    "currentness_at": dated,
+                    "checked_at": now.isoformat(),
+                },
+            )
 
     def purge(
         self, *, version: str | None = None, source: str | None = None, unit: str | None = None
@@ -255,3 +277,11 @@ class SQLiteCache(Cache):
 
     def close(self) -> None:
         self._db.close()
+
+
+def currentness_for(stored: dict, unit: dict, as_of: str | None) -> dict:
+    """What a cached unit's currentness is for the date a pack asked: the one known for that date, else the
+    pack's own (a pack for a past date never takes today's, nor today's a past one)."""
+    return (stored.get("currentness_at") or {}).get(as_of or "") or (
+        stored["currentness"] if not as_of else unit["currentness"]
+    )
