@@ -1136,6 +1136,43 @@ def test_on_a_database_owned_by_an_ordinary_login_as_on_cloud_sql(capability_rol
         answer = accounts.check_credential({"kind": "key", "key_id": "0" * 32, "secret_hash": "0" * 64})
         assert answer == {"ok": False, "code": "invalid_credentials"}
         publish_act(Store(world.engine(PUBLISH)), UNITS)
+        # A reviewed legal event is published, and withdrawn, under the publish login (findings item 40).
+        from operations import events as legal_events
+
+        commenced = {
+            "id": f"evt_{uuid4()}", "type": "commenced", "affected_work": WORK, "scope": "whole",
+            "date_from": "2023-06-12", "evidence": {"url": "https://www.nass.gov.ng/x.pdf", "locator": "sec_1"},
+            "reviewed_by": "Editor", "reviewed_at": "2026-10-19T09:00:00+00:00",
+        }  # fmt: skip
+        file = legal_events.EventFile.model_validate({"events": [commenced]})
+        assert legal_events.publish(world.engine(PUBLISH), file)["events_added"] == 1
+        withdrawn = legal_events.EventFile.model_validate(
+            {"events": [commenced | {"review_state": "withdrawn"}]}
+        )
+        assert legal_events.publish(world.engine(PUBLISH), withdrawn)["events_withdrawn"] == 1
+        # The change log's purge, which the jobs login may run though it may not delete: events past 400
+        # days go, the rest stay.
+        with owner.begin() as conn:
+            log = namespace.qualified(conn, "changes", "change_event")
+            conn.execute(text(f"ALTER TABLE {log} DISABLE TRIGGER USER"))
+            first = conn.scalar(text(f"SELECT min(publication_revision) FROM {log}"))
+            conn.execute(
+                text(
+                    f"UPDATE {log} SET committed_at = now() - interval '500 days' WHERE publication_revision = :r"
+                ),
+                {"r": first},
+            )
+            conn.execute(text(f"ALTER TABLE {log} ENABLE TRIGGER USER"))
+            before = conn.scalar(text(f"SELECT count(*) FROM {log}"))
+        with world.engine(JOBS).begin() as conn:
+            assert (
+                conn.scalar(text(f"SELECT {namespace.qualified(conn, 'changes', 'purge_change_log')}(400)"))
+                >= 1
+            )
+        with pytest.raises(DBAPIError, match="400 days at least"), world.engine(JOBS).begin() as conn:
+            conn.execute(text(f"SELECT {namespace.qualified(conn, 'changes', 'purge_change_log')}(30)"))
+        with owner.begin() as conn:
+            assert 0 < conn.scalar(text(f"SELECT count(*) FROM {log}")) < before
         assert traffic.maintain(world.engine(JOBS), namespace)["months_dropped"] == 0
         # What the migrate job's last step does, and the owner keeps what it had.
         assert set(logins.grants(owner)) == set(logins.LOGINS)

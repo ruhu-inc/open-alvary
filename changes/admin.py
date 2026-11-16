@@ -115,27 +115,11 @@ def main(argv=None) -> int:
             )
             print("New feed epoch started; clients will be told to reconcile")
         elif args.command == "purge":
-            conn.execute(text("SELECT set_config('open_alvary.retention_purge', 'on', true)"))
-            through = conn.scalar(
-                text(
-                    f"SELECT max(publication_revision) FROM {events} WHERE publication_revision < ALL("
-                    f"SELECT publication_revision FROM {events} WHERE committed_at >= statement_timestamp()"
-                    " - interval '400 days')"
-                )
-            )
-            if through:
-                removed = conn.execute(
-                    text(f"DELETE FROM {events} WHERE publication_revision <= :r"), {"r": through}
-                ).rowcount
-                conn.execute(
-                    text(
-                        f"UPDATE {state} SET purged_through_revision = greatest(purged_through_revision, :r)"
-                    ),
-                    {"r": through},
-                )
-                print(f"Purged {removed} events through revision {through}")
-            else:
-                print("Nothing past retention")
+            # The purge is one function (migration 0055), so the daily job's restricted login, which may
+            # not delete from the log, may run it; the database checks the 400 days are kept.
+            purge = ns.qualified(conn, "changes", "purge_change_log")
+            removed = conn.scalar(text(f"SELECT {purge}(400)"))
+            print(f"Purged {removed} events past retention" if removed else "Nothing past retention")
         else:
             row = conn.execute(text(f"SELECT * FROM {state}")).mappings().one()
             count, high = conn.execute(

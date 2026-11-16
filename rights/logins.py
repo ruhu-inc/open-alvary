@@ -268,6 +268,7 @@ JOBS = Login(
         "policy.accounts_access(text)",
         "policy.allocate_publication_revision()",
         "accounts.traffic_months(date, integer, integer)",
+        "changes.purge_change_log(integer)",  # the change log's purge, its only delete (migration 0055)
     ),
     vectors=None,
     never_reads=(KEY_HASH, SESSION_TOKEN, SESSION_CSRF, *FLOW_SECRETS, UNSUBSCRIBE_TOKEN),
@@ -296,7 +297,16 @@ PUBLISH = Login(
         "base": dict.fromkeys(CATALOGUE_TABLES, WRITE),
         "changes": {**LOG_WRITES, **INDEX_WRITES},
         # privacy_hold: records an operator held back before they were public (changes.admin), never published.
-        "corpus": {**_reading(RECORDED_FACTS), "privacy_hold": READ},
+        # Reviewed legal events, currentness profiles, citations and treatments are published by this login
+        # too (operations.events, operations.citations): added, and only ever withdrawn, never deleted.
+        "corpus": {
+            **_reading(RECORDED_FACTS),
+            "privacy_hold": READ,
+            "legal_event": "SELECT, INSERT, UPDATE (review_state)",
+            "currentness_profile": "SELECT, INSERT, UPDATE",
+            "citation": "SELECT, INSERT, UPDATE (review_state)",
+            "judicial_treatment": "SELECT, INSERT, UPDATE (review_state)",
+        },
     },
     ("policy.allocate_publication_revision()",),
     never_reads=(KEY_HASH, SESSION_TOKEN, SEALED_SECRET, PROVIDER_SUBJECT),
@@ -474,6 +484,8 @@ def _close_to_public(conn: Connection, namespace: PolicyNamespace) -> None:
     conn.exec_driver_sql(
         f"REVOKE ALL ON FUNCTION {months}.traffic_months(date, integer, integer) FROM PUBLIC"
     )
+    log = _quote(conn, namespace.schema("changes"))
+    conn.exec_driver_sql(f"REVOKE ALL ON FUNCTION {log}.purge_change_log(integer) FROM PUBLIC")
     schema = _quote(conn, namespace.base)
     owner_is_mine = conn.scalar(
         text("SELECT pg_has_role(current_user, nspowner, 'USAGE') FROM pg_namespace WHERE nspname = :s"),

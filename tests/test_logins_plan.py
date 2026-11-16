@@ -46,7 +46,8 @@ def test_every_grant_is_on_a_kind_of_schema_the_namespace_knows_and_every_functi
         assert set(login.tables) <= {"base", "accounts", "changes", "corpus"}
         for function in login.functions:
             kind, signature = function.split(".", 1)
-            assert kind in {"accounts", "policy"} and signature.endswith(")")
+            # changes: the change log's purge (migration 0055), beside the table it deletes from.
+            assert kind in {"accounts", "policy", "changes"} and signature.endswith(")")
 
 
 def test_the_search_path_bundle_covers_what_a_login_can_run_and_changes_only_the_path():

@@ -57,9 +57,10 @@ locals {
         secrets = {}
         reads   = ["ALVARY_WEBHOOK_KEYS", "RESEND_API_KEY"]
       }
-      # daily: the backup check runs whatever the steps before it do, and the run fails if either did.
+      # daily: each step runs whatever the others do (a failed purge never skips the seal check or the
+      # backup check), and the run fails if any did, so its alert fires.
       daily = {
-        command = ["sh", "-c", "(python -m accounts.seals seal && python -m changes.admin sweep && python -m changes.admin purge && python -m accounts.privacy purge && python -m accounts.seals verify && python -m api.traffic maintain); steps=$?; python -m operations.cloud_backups check; backups=$?; exit $((steps | backups))"]
+        command = ["sh", "-c", "failed=0; for step in 'accounts.seals seal' 'changes.admin sweep' 'changes.admin purge' 'accounts.privacy purge' 'accounts.seals verify' 'api.traffic maintain' 'operations.cloud_backups check'; do python -m $step || failed=1; done; exit $failed"]
         args    = []
         cron    = "15 3 * * *"
         timeout = 600
