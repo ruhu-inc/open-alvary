@@ -705,3 +705,37 @@ def test_look_alike_letters_line_end_hyphens_the_won_sign_and_page_furniture_are
     # A number that truly differs is still flagged high.
     (flag,) = compare("The sum of N1,500", {"ocr": "The sum of N1,800"})
     assert flag.severity == "high" and flag.kind == "differs"
+
+
+def marked(text, *marks):
+    """A unit with superscript marks over these words, each found in the text."""
+    found = node(text, "paragraph")
+    found["marks"] = []
+    for word in marks:
+        start = text.index(word)
+        found["marks"].append({"type": "superscript", "start": start, "end": start + len(word)})
+    return found
+
+
+def words_marked(unit):
+    return [unit["text"][m["start"] : m["end"]] for m in unit.get("marks", [])]
+
+
+def test_marks_move_with_their_letters_when_a_unit_is_split_or_a_note_cut_out():
+    """Consolidated findings item 46: marks were copied unchanged onto every piece, so they landed on
+    other letters or on nothing."""
+    text = "(2) The rate is 10 per cent. (3) A fee of 5 is paid on the 31st of March, the 2nd year."
+    out = structure.split_units([marked(text, "st", "nd")])
+    assert [n["text"][:3] for n in out] == ["(2)", "(3)"]
+    assert words_marked(out[0]) == [] and "marks" not in out[0]
+    assert words_marked(out[1]) == ["st", "nd"] and out[1]["text"][
+        out[1]["marks"][0]["start"] - 2 :
+    ].startswith("31st")
+    # A margin note cut out of the words: the marks after it move up by what was cut.
+    noted = marked("Fees 81. (1) The fee is due on the 1st of May.", "st")
+    out = structure.restructure([noted], azure_page(("81. (1) The fee is due", 0.05), ("Fees", 0.8)))
+    assert out[0]["text"] == "81. (1) The fee is due on the 1st of May." and words_marked(out[0]) == ["st"]
+    # A mark that no longer lies in its unit's words is dropped, never shown on other letters.
+    stray = marked("Short.")
+    stray["marks"] = [{"type": "subscript", "start": 3, "end": 40}]
+    assert "marks" not in structure.checked_marks([stray])[0]

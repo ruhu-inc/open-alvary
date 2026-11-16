@@ -119,6 +119,35 @@ def margin_notes(check_pages: dict[str, dict]) -> list[Note]:
     return notes
 
 
+def marks_in(marks: list[dict] | None, start: int, end: int, at: int = 0) -> list[dict]:
+    """The superscript and subscript marks lying wholly in text[start:end], placed from ``at`` in the piece
+    that takes those characters. A mark cut across by the piece's edge says nothing true of either side
+    and is dropped (findings 2026-11-16, item 46: marks were copied unchanged onto every piece)."""
+    return [
+        {**mark, "start": mark["start"] - start + at, "end": mark["end"] - start + at}
+        for mark in marks or ()
+        if start <= mark["start"] and mark["end"] <= end
+    ]
+
+
+def _with_marks(unit: dict, marks: list[dict]) -> dict:
+    """The unit with these marks, or none at all when none is left."""
+    unit = {k: v for k, v in unit.items() if k != "marks"}
+    if marks:
+        unit["marks"] = marks
+    return unit
+
+
+def checked_marks(nodes: list[dict]) -> list[dict]:
+    """Every mark inside its unit's words: one that is not is dropped rather than shown on other letters."""
+    out = []
+    for node in nodes:
+        size = len(node.get("text") or "")
+        kept = [m for m in node.get("marks") or () if 0 <= m["start"] < m["end"] <= size]
+        out.append(_with_marks(node, kept) if "marks" in node else node)
+    return out
+
+
 def _remove(text: str, note: str) -> tuple[str, str, int] | None:
     """Cut the note's words out, matching tolerantly; return (rest, words as read, cut offset)."""
     tokens = list(TOKEN.finditer(text))
@@ -147,6 +176,17 @@ def place_notes(nodes: list[dict], notes: list[Note]) -> list[dict]:
             if rest:
                 shrink = len(node["text"]) - len(rest)
                 cuts = [(at - shrink if at > cut else at, n) for at, n in node.get("_cuts", [])]
+                if node.get("marks"):
+                    # The words before the note keep their places; those after it move up by what was cut.
+                    old, kept = node["text"], rest[:cut]
+                    tail = old[old.index(as_read, cut) + len(as_read) :].lstrip()
+                    at = len(rest) - len(tail.rstrip())
+                    marks = marks_in(node["marks"], 0, len(kept))
+                    marks += marks_in(node["marks"], len(old) - len(tail), len(old), at)
+                    if marks:
+                        node["marks"] = marks
+                    else:
+                        node.pop("marks")
                 node["text"], node["_cuts"] = rest, [*cuts, (cut, Note(as_read, note.anchor))]
             else:
                 # The whole block is the note (emitted as a heading): it belongs to a following unit.
@@ -191,6 +231,8 @@ def split_units(nodes: list[dict]) -> list[dict]:
                 }
             )
             unit["text"] = part
+            start = spans[index][0]
+            unit = _with_marks(unit, marks_in(node.get("marks"), start, start + len(part)))
             units.append(unit)
         for at, note in cuts:
             # Cut inside a unit: that unit. Cut on the space between two units: the one after it.
@@ -245,16 +287,20 @@ def split_at_boundaries(nodes: list[dict], check_pages: dict[str, dict]) -> list
             continue
         edges = [0, *sorted(cuts[index]), len(node["text"])]
         for number, (left, right) in enumerate(zip(edges, edges[1:], strict=False)):
-            part = node["text"][left:right].strip()
+            piece = node["text"][left:right]
+            part = piece.strip()
             if not part:
                 continue
+            start = left + len(piece) - len(piece.lstrip())
+            marks = marks_in(node.get("marks"), start, start + len(part))
             if number == 0:
-                out.append({**node, "text": part})
+                out.append(_with_marks({**node, "text": part}, marks))
                 continue
             unit = {
                 k: v for k, v in node.items() if k not in {"marker", "marker_source", "notes", "_pending"}
             }
             unit.update(text=part, split=True)
+            unit = _with_marks(unit, marks)
             if PART.match(part):
                 unit["kind"] = "heading"
             out.append(unit)
@@ -303,4 +349,4 @@ def depth(node: dict) -> int | None:
 
 def restructure(nodes: list[dict], check_pages: dict[str, dict]) -> list[dict]:
     nodes = split_units(place_notes(nodes, margin_notes(check_pages)))
-    return attach_notes(split_at_boundaries(nodes, check_pages))
+    return checked_marks(attach_notes(split_at_boundaries(nodes, check_pages)))

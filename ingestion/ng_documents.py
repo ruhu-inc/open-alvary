@@ -610,7 +610,9 @@ def sc_details(listed: dict, kind: str, url: str) -> tuple[dict, dict]:
 # over two rows one supplement, and one the file does not hold left out.
 # 2026-11-06.1: a Statutory Instrument a front page lists typed rules or an order where its title is one
 # (si_kind), its id unchanged.
-PIPELINE = "ng-pdf-2026-11-06.1"
+# 2026-11-16.1: superscript and subscript marks move with their letters when a unit is split or a margin
+# note cut out of it, and a mark outside its unit's words is dropped (ingestion.structure.marks_in).
+PIPELINE = "ng-pdf-2026-11-16.1"
 # The sources whose stored files are PDFs read by the scan-reader job (their other files, the Supreme
 # Court's data records and SEC's circular pages, have no reader here yet).
 PDF_SOURCES = {
