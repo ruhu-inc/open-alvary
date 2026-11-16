@@ -23,6 +23,8 @@ from ingestion.filelist import Refused, user_agent
 
 BOT_NAME = "OpenAlvaryBot"
 MAX_REDIRECTS = 5
+# The most of a robots.txt read (RFC 9309, 2.5: at least 500 KiB, and what follows ignored).
+ROBOTS_BYTES = 500 * 1024
 LEAST_DELAY = 2.0
 LONGEST_CRAWL_DELAY = 60.0  # a Crawl-delay above this is read as this (we wait, but not for hours)
 
@@ -74,7 +76,8 @@ class Robots:
                 if current is None or not last_was_agent:
                     current = ([], [], [])
                     groups.append(current)
-                current[0].append(value.lower())
+                if value:  # a blank User-agent names no one, least of all us
+                    current[0].append(value.lower())
                 last_was_agent = True
                 continue
             last_was_agent = False
@@ -250,12 +253,26 @@ class PoliteClient:
         if host in self.windows:
             self.recent.setdefault(host, deque()).append(self.clock())
 
-    def _robots(self, scheme: str, host: str) -> Robots:
-        if host in self.robots:
-            return self.robots[host]
-        url = f"{scheme}://{host}/robots.txt"
+    def _robots(self, scheme: str, host: str, port: int | None = None) -> Robots:
+        """The robots.txt of one origin: scheme, host and port (RFC 9309, 2.3), read once, at most
+        ROBOTS_BYTES of it, following up to MAX_REDIRECTS redirects (2.3.1.2: the rules found there apply
+        here); past them, or unreachable, the host is left alone."""
+        origin = f"{host}:{port}" if port else host
+        key = origin  # kept answers and crawl delays are by host, a port only where one is given
+        if key in self.robots:
+            return self.robots[key]
+        url = f"{scheme}://{origin}/robots.txt"
         try:
-            status, headers, body, _ = self._send(host, url, None, None)
+            for _ in range(MAX_REDIRECTS + 1):
+                status, headers, body, _ = self._send(urlsplit(url).hostname or host, url, None, ROBOTS_BYTES)
+                if status in (301, 302, 303, 307, 308) and headers.get("location"):
+                    url = urljoin(url, headers["location"])
+                    if urlsplit(url).scheme not in ("https", "http"):
+                        raise Unreachable(f"robots.txt redirected to {url}")
+                    continue
+                break
+            else:
+                raise Unreachable(f"more than {MAX_REDIRECTS} redirects")
         except Unreachable as error:
             robots = Robots(disallow_all=True, note=f"robots.txt unreachable ({error}): host left alone")
         else:
@@ -270,8 +287,8 @@ class PoliteClient:
             else:
                 robots = Robots.parse(body.decode("utf-8", "replace"))
                 robots.note = "robots.txt read"
-        self.robots[host] = robots
-        self.log(f"{host}: {robots.note}")
+        self.robots[key] = robots
+        self.log(f"{origin}: {robots.note}")
         return robots
 
     def permits(self, url: str) -> bool:
@@ -292,7 +309,7 @@ class PoliteClient:
         if parts.scheme not in ("https", "http") or host not in allowed:
             raise OffHost(f"{url} is not on an allowed host")
         path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
-        if not self._robots(parts.scheme, host).allowed(path):
+        if not self._robots(parts.scheme, host, parts.port).allowed(path):
             if note:
                 self.refused_paths.append(url)
             raise Disallowed(f"robots.txt of {host} disallows {path}")

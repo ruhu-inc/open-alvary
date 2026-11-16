@@ -244,3 +244,58 @@ def test_kept_answers_are_served_again_without_the_site(tmp_path):
     )
     with pytest.raises(polite.Unreachable):
         replay.get("https://example.gov.ng/feed?page=2")  # never read: not invented
+
+
+def test_robots_txt_follows_its_redirects_reads_a_bounded_part_ignores_a_blank_agent_and_knows_ports():
+    """Consolidated findings item 47."""
+    rules = b"User-agent: *\nDisallow: /private/\n"
+    moved = "https://example.gov.ng/static/robots.txt"
+    made, seen = client(
+        {
+            ROBOTS: (301, {"location": "/static/robots.txt"}, b""),
+            moved: (200, {"content-type": "text/plain"}, rules),
+            "https://example.gov.ng/a": (200, {}, b"a"),
+        }
+    )
+    assert made.get("https://example.gov.ng/a").status == 200
+    with pytest.raises(polite.Disallowed):  # the rules where it was redirected apply here
+        made.get("https://example.gov.ng/private/x")
+    loop = {ROBOTS: (302, {"location": ROBOTS}, b""), "https://example.gov.ng/a": (200, {}, b"a")}
+    made, _ = client(loop)
+    with pytest.raises(polite.Disallowed):  # redirected for ever: the host is left alone
+        made.get("https://example.gov.ng/a")
+    # A robots.txt past 500 KiB is read only that far, not refused or read whole.
+    big = b"User-agent: *\nDisallow: /private/\n" + b"#" * (2 * polite.ROBOTS_BYTES)
+    made, _ = client({ROBOTS: (200, {"content-type": "text/plain"}, big)})
+    assert not made.permits("https://example.gov.ng/private/x")
+    # A blank User-agent line names nobody: the group under it is no rule of ours.
+    blank = polite.Robots.parse("User-agent:\nDisallow: /\n\nUser-agent: *\nDisallow: /private/\n")
+    assert blank.allowed("/laws/") and not blank.allowed("/private/x")
+    # Another port is another origin, with its own robots.txt.
+    made, seen = client(
+        {
+            ROBOTS: (200, {"content-type": "text/plain"}, b"User-agent: *\nDisallow: /\n"),
+            "https://example.gov.ng:8443/robots.txt": (404, {}, b""),
+            "https://example.gov.ng:8443/a": (200, {}, b"a"),
+        }
+    )
+    assert made.get("https://example.gov.ng:8443/a").status == 200
+    assert not made.permits("https://example.gov.ng/a")
+
+
+def test_the_file_list_fetcher_obeys_robots_txt_and_reads_a_bounded_page():
+    from ingestion import filelist
+
+    made, seen = client(
+        {
+            ROBOTS: (200, {"content-type": "text/plain"}, b"User-agent: *\nDisallow: /private/\n"),
+            "https://example.gov.ng/files/": (200, {}, b"<html>listing</html>"),
+            "https://example.gov.ng/huge/": (200, {}, b"x" * (filelist.LISTING_BYTES + 1)),
+        }
+    )
+    fetch = filelist.fetcher("https://example.gov.ng", client=made)
+    assert fetch("https://example.gov.ng/files/") == "<html>listing</html>"
+    for refused in ("https://example.gov.ng/private/list", "https://example.gov.ng/huge/"):
+        with pytest.raises(filelist.Refused):
+            fetch(refused)
+    assert "https://example.gov.ng/private/list" not in [url for _, url, _ in seen]

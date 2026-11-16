@@ -14,9 +14,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from html.parser import HTMLParser
-from urllib.error import HTTPError, URLError
+from urllib.error import HTTPError
 from urllib.parse import parse_qs, urljoin, urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 PATH_KEY = "tx_filelist_filelist[path]"
 PAGE_KEY = "tx_filelist_filelist[currentPage]"
@@ -122,37 +121,29 @@ def parse_listing(html: str, url: str) -> Listing:
     return listing
 
 
-def fetcher(host: str, timeout: int = 60) -> Callable[[str], str]:
-    """GET a listing page from one host; refusals raise Refused, redirects off the host are refused."""
+# The most of one listing page read: a directory listing is a few hundred kilobytes at most.
+LISTING_BYTES = 20 * 1024 * 1024
 
-    class SameHost(HTTPRedirectHandler):
-        def redirect_request(self, req, fp, code, msg, headers, newurl):
-            if urlsplit(newurl).netloc != urlsplit(host).netloc:
-                raise Refused(f"redirected off {urlsplit(host).netloc}: {newurl}")
-            return super().redirect_request(req, fp, code, msg, headers, newurl)
 
-    opener = build_opener(SameHost)
+def fetcher(host: str, timeout: int = 60, client=None) -> Callable[[str], str]:
+    """GET a listing page from one host through the polite client (findings 2026-11-16, item 47: this
+    fetcher read robots.txt never and a page of any size): its robots.txt obeyed, requests spaced, at most
+    LISTING_BYTES read, redirects off the host refused. Refusals raise Refused."""
+    from ingestion import polite
+
+    name = (urlsplit(host).hostname or host).lower()
+    client = client or polite.PoliteClient({name}, timeout=timeout)
 
     def fetch(url: str) -> str:
-        for attempt in range(2):
-            try:
-                with opener.open(
-                    Request(url, headers={"User-Agent": user_agent()}), timeout=timeout
-                ) as response:
-                    return response.read().decode("utf-8", "replace")
-            except HTTPError as error:
-                if error.code in (401, 403, 429):
-                    raise Refused(f"{error.code} at {url}") from error
-                if attempt == 0 and error.code >= 500:
-                    time.sleep(30)
-                    continue
-                raise
-            except URLError:
-                if attempt == 0:
-                    time.sleep(30)
-                    continue
-                raise
-        raise RuntimeError("unreachable")
+        try:
+            answer = client.get(url, limit=LISTING_BYTES)
+        except (polite.Disallowed, polite.OffHost, polite.TooLarge) as refused:
+            raise Refused(str(refused)) from refused
+        if answer.status in (401, 403, 429):
+            raise Refused(f"{answer.status} at {url}")
+        if answer.status >= 400:
+            raise HTTPError(url, answer.status, f"HTTP {answer.status}", None, None)
+        return answer.content.decode("utf-8", "replace")
 
     return fetch
 
