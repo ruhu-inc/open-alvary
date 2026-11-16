@@ -170,6 +170,17 @@ EDGES_PER_PAGE, MAX_EDGES_PER_PAGE, EDGE_BUDGET, MAX_SUCCESSION = 25, 100, 300, 
 LOCATOR = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,299}")
 
 
+def _withholds_names(source) -> bool:
+    """Whether a record gives a party as NAME_WITHHELD in its title or citation: the marker as a whole word,
+    compared exactly (a record's own marker, not a search of its words)."""
+    words = {
+        word.rstrip(".,;:)'’s").lstrip("(")
+        for value in (source.title, source.citation)
+        for word in (value or "").split()
+    }
+    return NAME_WITHHELD in words
+
+
 def _asserted(row: dict, public_texts: set[str], names_withheld: bool = False) -> dict:
     """A judgment's reviewed citation or treatment as a relationship's fields: its paragraph, the part it
     cites, the review, and its words only while the very text of the citing judgment they were taken from
@@ -526,11 +537,7 @@ class LegacyCatalogue:
         }
         # A case whose names are withheld shows NAME_WITHHELD in its title or citation (operations.publish).
         cited = {link["cited_work"] for _, _, link in edges if isinstance(link, dict)}
-        withheld = {
-            work
-            for work, (found, _) in self._public(cited).items()
-            if NAME_WITHHELD in f"{found.title} {found.citation}"
-        }
+        withheld = {work for work, (found, _) in self._public(cited).items() if _withholds_names(found)}
         items = tuple(
             RelatedSource(
                 kind=seen,
