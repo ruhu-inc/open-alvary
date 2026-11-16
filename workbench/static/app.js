@@ -106,6 +106,7 @@ async function api(path, { method = "GET", body } = {}) {
     return api(path, { method, body });
   }
   if (response.status === 401 && path !== "/api/me") {
+    rememberForms();
     app.me = null;
     await showSignIn();
     throw new Error("signed out");
@@ -255,6 +256,50 @@ function rememberPlace() {
   try {
     if (location.hash.startsWith("#/") && location.hash.length > 2) sessionStorage.setItem(SIGN_IN_PLACE, location.hash);
   } catch { /* no storage here: sign-in ends on the documents page */ }
+}
+
+// What was typed into a form and not saved when the session ended (after an idle hour) comes back after
+// signing in again: the fields a person touched are kept in this tab's storage with the place and their
+// position, and put back when that place is drawn again (findings 2026-11-16, item 28). Page text has its
+// own draft; this is for details, event and citation cards, approval notes and the like.
+const SIGN_IN_FORMS = "signin-forms";
+for (const kind of ["input", "change"]) {
+  document.addEventListener(kind, (event) => {
+    if (event.isTrusted && event.target.closest && event.target.closest("#main")) event.target.dataset.touched = "1";
+  }, true);
+}
+const formFields = () => [...document.querySelectorAll("#main input, #main textarea, #main select")]
+  .filter((field) => !["hidden", "file", "password"].includes(field.type));
+const fieldId = (field, index) => [index, field.tagName, field.type, field.name || field.getAttribute("aria-label") || field.placeholder || ""].join("|");
+
+function rememberForms() {
+  try {
+    const kept = formFields().flatMap((field, index) => field.dataset.touched
+      ? [{ id: fieldId(field, index), value: field.value, checked: field.checked }] : []);
+    if (kept.length && location.hash.startsWith("#/")) sessionStorage.setItem(SIGN_IN_FORMS, JSON.stringify({ place: location.hash, kept }));
+  } catch { /* no storage here: the typing is lost, as before */ }
+}
+
+function restoreForms() {
+  let saved = null;
+  try {
+    saved = JSON.parse(sessionStorage.getItem(SIGN_IN_FORMS) || "null");
+    if (saved && saved.place === location.hash) sessionStorage.removeItem(SIGN_IN_FORMS);
+  } catch { return; }
+  if (!saved || saved.place !== location.hash) return;
+  const fields = formFields();
+  let put = 0;
+  for (const { id, value, checked } of saved.kept) {
+    const index = parseInt(id, 10), field = fields[index];
+    if (!field || fieldId(field, index) !== id) continue; // the form is not the one it was typed into
+    if (field.type === "checkbox" || field.type === "radio") field.checked = checked;
+    else field.value = value;
+    field.dataset.touched = "1";
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    field.dispatchEvent(new Event("change", { bubbles: true }));
+    put += 1;
+  }
+  if (put) toast(`Put back ${put} field${put === 1 ? "" : "s"} you had filled in before signing in again: check before saving`);
 }
 
 function returnToPlace() {
@@ -621,6 +666,13 @@ function approvalChecklist(actId, data, current, head) {
     el("li", { class: done ? "done" : tone || "todo" },
       el("span", { class: "tick", "aria-hidden": "true", text: done ? "✓" : tone === "warn" ? "!" : "" }),
       el("span", {}, label, action ? el("span", { class: "muted" }, " · ", action) : null));
+  // Confirmed, and making a valid record: the publishing run skips a document whose record does not build.
+  const detailsStep = () => {
+    const fix = el("a", { href: `#/doc/${encodeURIComponent(actId)}/details`, text: "review the details" });
+    const { confirmed, status, record_problem: problem } = ready.details;
+    if (confirmed && problem) return step(false, `Details confirmed but not a valid record: ${problem}`, fix, "warn");
+    return step(confirmed, confirmed ? "Details confirmed" : status ? "Details not yet confirmed" : "Details not yet reviewed", confirmed ? null : fix);
+  };
   const checked = ready.pages - ready.unchecked_pages.length;
   const highPages = unique(ready.open_high_flags.map((f) => f.page));
   const toApproval = el("button", { class: "small", text: "Go to approval", on: { click: () => document.getElementById("approval")?.scrollIntoView({ block: "start" }) } });
@@ -630,8 +682,7 @@ function approvalChecklist(actId, data, current, head) {
   if (ready.text_held) { // approved on its details alone: no page waits for review
     return el("ol", { class: "checklist", "aria-label": "Steps to approval" },
       step(true, "Text held: its pages need no review, and its text will not be published"),
-      step(ready.details.confirmed, ready.details.confirmed ? "Details confirmed" : ready.details.status ? "Details not yet confirmed" : "Details not yet reviewed",
-        ready.details.confirmed ? null : el("a", { href: `#/doc/${encodeURIComponent(actId)}/details`, text: "review the details" })),
+      detailsStep(),
       current ? step(true, "Details approved", null)
         : head && head.decision === "approved" ? step(false, "Approval out of date: the details changed after they were approved", toApproval, "warn")
         : step(false, ready.ready ? "Ready to approve the details" : "Approval of the details", ready.ready ? toApproval : el("span", { text: "after the details are confirmed" })));
@@ -655,8 +706,7 @@ function approvalChecklist(actId, data, current, head) {
       !text.rules ? "No structure rules for this kind of document: it cannot be approved until they are written"
         : text.errors.length ? `${text.errors.length} problem${text.errors.length === 1 ? "" : "s"} in the text's structure to fix` : `Text and structure: ${describeCounts(text.counts)}`,
       text.errors.length ? toText("See them") : text.warnings.length ? toText(`${text.warnings.length} to look at`) : null) : null,
-    step(ready.details.confirmed, ready.details.confirmed ? "Details confirmed" : ready.details.status ? "Details not yet confirmed" : "Details not yet reviewed",
-      ready.details.confirmed ? null : el("a", { href: `#/doc/${encodeURIComponent(actId)}/details`, text: "review the details" })),
+    detailsStep(),
     current ? step(true, "Approved", null)
       : head && head.decision === "approved" ? step(false, "Approval out of date: the text or details changed after it was approved", toApproval, "warn")
       : step(false, ready.ready ? "Ready for approval" : "Approval", ready.ready ? toApproval : el("span", { text: "after the steps above" })),
@@ -938,6 +988,7 @@ function approvalPanel(actId, data, current) {
   if (ready.stale_pages.length) blockers.append(el("li", { text: `Pages to recheck because the reading changed: ${summarise(ready.stale_pages)}` }));
   if (ready.missing_checks.length) blockers.append(el("li", { text: `Check readings missing: ${ready.missing_checks.join(", ")} — rerun the batch` }));
   if (!ready.details.confirmed) blockers.append(el("li", {}, "Document details ", el("a", { href: `#/doc/${encodeURIComponent(actId)}/details`, text: ready.details.status ? "not yet confirmed" : "not yet reviewed" })));
+  if (ready.details.confirmed && ready.details.record_problem) blockers.append(el("li", {}, `Document details do not make a valid record (${ready.details.record_problem}): `, el("a", { href: `#/doc/${encodeURIComponent(actId)}/details`, text: "review the details" })));
   if (ready.text && ready.text.errors) blockers.append(el("li", { text: `${ready.text.errors} problem${ready.text.errors === 1 ? "" : "s"} in the text's structure: see Text and structure above` }));
   panel.append(ready.ready ? el("p", {}, pill("ok", "Ready for approval")) : el("div", {}, el("p", { text: "Before approval:" }), blockers));
   if (canApprove) {
@@ -1436,6 +1487,18 @@ function provisionSelect(provisions, value) {
   return select;
 }
 
+// After one card is saved, that card alone is drawn again from a fresh listing, so what is typed and unsaved
+// in the others stays (findings 2026-11-16, item 28); the page's counts catch up on the next visit. Answers
+// false when the card cannot be found again (the caller then redraws the whole view).
+async function redrawCard(node, path, list, key, wanted, card, address) {
+  const fresh = await api(path);
+  if (!fresh.ok || location.hash !== address || !node || !node.isConnected) return location.hash !== address;
+  const next = fresh.data[list].find((item) => item[key] === wanted);
+  if (!next) return false;
+  node.replaceWith(card(next));
+  return true;
+}
+
 async function eventsView(actId) {
   const id = encodeURIComponent(actId);
   const turn = ++app.turn, address = location.hash;
@@ -1449,10 +1512,12 @@ async function eventsView(actId) {
   const canPropose = app.me.roles.includes("reviewer"), canReview = app.me.roles.includes("approver");
   const pageOf = Object.fromEntries(data.provisions.map((p) => [p.locator, p.page]));
   const cards = el("div");
+  const unsaved = new Set(); // the cards with edits not yet saved
   const card = (item) => {
     const e = item ? item.event : { type: "commenced", affected_work: data.work, scope: "whole", locators: [], precision: "day", evidence: { url: data.source_url } };
     let locators = [...(e.locators || [])];
-    const touched = () => { app.dirty = true; };
+    let node = null;
+    const touched = () => { unsaved.add(node); app.dirty = true; };
     const type = el("select", { on: { change: touched } }, data.types.map((t) => el("option", { value: t, text: spaced(t) })));
     type.value = e.type;
     const affected = el("input", { type: "text", value: e.affected_work || "", placeholder: "the affected law's record id", on: { input: () => { touched(); drawScope(); } } });
@@ -1492,12 +1557,13 @@ async function eventsView(actId) {
       if (!result.ok) return toast(message(result));
       toast(status === "reviewed" ? "Reviewed and recorded in your name" : status === "rejected" ? "Rejected" : "Saved");
       if (location.hash !== address) return;
-      app.dirty = false;
-      eventsView(actId);
+      unsaved.delete(node);
+      app.dirty = unsaved.size > 0;
+      if (!(await redrawCard(node, `/api/documents/${id}/events`, "events", "event_id", result.data.event_id, card, address))) eventsView(actId);
     };
     drawScope();
     const [tone, label] = item ? EVENT_STATUS[item.status] : ["medium", "new"];
-    return el("div", { class: `card editor-card status-${item ? item.status : "new"}` },
+    return node = el("div", { class: `card editor-card status-${item ? item.status : "new"}` },
       el("div", { class: "editor-head" }, pill(tone, label),
         el("span", { class: "muted", text: item ? `revision ${item.revision} by ${operatorName(item.author)}, ${ago(item.at)}${item.comment ? ` — ${item.comment}` : ""}` : "not saved yet" })),
       el("div", { class: "editor-grid" },
@@ -1555,9 +1621,11 @@ async function instructionsView(actId) {
   const isReviewer = app.me.roles.includes("reviewer"), isApprover = app.me.roles.includes("approver");
   const pageOf = Object.fromEntries(data.provisions.map((p) => [p.locator, p.page]));
   const cards = el("div");
+  const unsaved = new Set(); // the cards with edits not yet saved
   const card = (item) => {
     const i = item ? item.instruction : { operation: "amend_words", occurrences: 1, amending: {} };
-    const touched = () => { app.dirty = true; };
+    let node = null;
+    const touched = () => { unsaved.add(node); app.dirty = true; };
     const target = el("input", { type: "text", value: item ? item.target_work : "", placeholder: "the amended law's record id", on: { input: touched } });
     const operation = el("select", { on: { change: () => { touched(); show(); } } }, Object.entries(OPERATION_LABEL).map(([value, text]) => el("option", { value, text })));
     operation.value = i.operation;
@@ -1615,8 +1683,9 @@ async function instructionsView(actId) {
       if (!result.ok) return toast(message(result));
       toast(status === "second_reviewed" ? "Second review recorded: it now exports" : status === "reviewed" ? "Reviewed: another editor confirms it next" : status === "rejected" ? "Rejected" : "Saved");
       if (location.hash !== address) return;
-      app.dirty = false;
-      instructionsView(actId);
+      unsaved.delete(node);
+      app.dirty = unsaved.size > 0;
+      if (!(await redrawCard(node, `/api/documents/${id}/instructions`, "instructions", "instruction_id", result.data.instruction_id, card, address))) instructionsView(actId);
     };
     show();
     // The second review confirms the instruction exactly as the first editor saved it (EDT-04).
@@ -1624,7 +1693,7 @@ async function instructionsView(actId) {
     const mine = item && item.author === app.me.email;
     const [tone, label] = item ? INSTRUCTION_STATUS[item.status] : ["medium", "new"];
     const held = item && data.targets[item.target_work];
-    return el("div", { class: `card editor-card status-${item ? item.status : "new"}` },
+    return node = el("div", { class: `card editor-card status-${item ? item.status : "new"}` },
       el("div", { class: "editor-head" }, pill(tone, label),
         el("span", { class: "muted", text: item ? `revision ${item.revision} by ${operatorName(item.author)}, ${ago(item.at)}${item.comment ? ` — ${item.comment}` : ""}` : "not saved yet" }),
         held ? el("a", { href: `#/doc/${encodeURIComponent(held)}`, text: "Open the amended law" }) : null),
@@ -1696,6 +1765,11 @@ async function citationsView(actId) {
   const paragraphOf = Object.fromEntries(data.paragraphs.map((p) => [p.locator, p]));
   const card = (item) => {
     const c = item.citation;
+    let node = null;
+    const again = async () => {
+      if (location.hash !== address) return;
+      if (!(await redrawCard(node, `/api/documents/${id}/citations`, "citations", "citation_id", item.citation_id, card, address))) citationsView(actId);
+    };
     const paragraph = paragraphOf[c.citing_locator] || {};
     const role = el("input", { type: "text", placeholder: "such as owner or Nigerian advocate" });
     const comment = el("textarea", { rows: 1, placeholder: "Note for the record (optional)" });
@@ -1706,7 +1780,7 @@ async function citationsView(actId) {
       const result = await api(`/api/documents/${id}/citations`, { method: "POST", body });
       if (!result.ok) return toast(message(result));
       toast(status === "confirmed" ? "Confirmed and recorded in your name" : status === "rejected" ? "Rejected" : "Withdrawn");
-      if (location.hash === address) citationsView(actId);
+      await again();
     };
     const treatments = c.treatments || [];
     const live = treatments.find((t) => t.review_state === "reviewed");
@@ -1719,7 +1793,7 @@ async function citationsView(actId) {
         const result = await api(`/api/documents/${id}/citations/${encodeURIComponent(item.citation_id)}/treatment`, { method: "POST", body: { expected_revision: item.revision, ...body } });
         if (!result.ok) return toast(message(result));
         toast(body.action === "record" ? "Treatment recorded in your name" : "Treatment withdrawn");
-        if (location.hash === address) citationsView(actId);
+        await again();
       };
       if (live) {
         return el("div", { class: "editor-field" },
@@ -1750,7 +1824,7 @@ async function citationsView(actId) {
       ? `${c.cited_pinpoint || c.cited_locator} of ${c.cited_title || c.cited_work}`
       : `${c.cited_title || c.cited_work}, as a whole${c.unresolved_pinpoint ? ` (its pinpoint names no part: ${spaced(c.unresolved_pinpoint)})` : ""}`;
     const [tone, label] = CITATION_STATUS[item.status];
-    return el("div", { class: `card editor-card status-${item.status}` },
+    return node = el("div", { class: `card editor-card status-${item.status}` },
       el("div", { class: "editor-head" }, pill(tone, label),
         el("span", { class: "muted", text: `revision ${item.revision} by ${operatorName(item.author)}, ${ago(item.at)}${item.comment ? ` — ${item.comment}` : ""}` })),
       el("p", {}, el("strong", { text: c.citing_pinpoint || paragraph.label || c.citing_locator }),
@@ -2784,7 +2858,8 @@ async function start() {
   if (signedOut) return showSignIn(signedOut);
   returnToPlace();
   if (!start.listening) { window.addEventListener("hashchange", route); start.listening = true; }
-  route();
+  await route();
+  restoreForms();
 }
 
 start();

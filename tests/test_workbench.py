@@ -358,6 +358,29 @@ def test_an_approval_covers_what_the_approver_was_shown_not_what_is_stored_when_
     assert approver.post(f"/api/documents/{ACT}/approval", json=revoked).json() == {"revision": 2}
 
 
+def test_confirmed_details_that_do_not_make_a_record_hold_approval_and_say_why(world, monkeypatch):
+    """Findings 2026-11-16, item 28: the publishing run skips a document whose record does not build, so
+    the workbench no longer approves one (it said "public at the next run" and nothing went out)."""
+    from workbench import record_view
+
+    approver = signed_in(world, "approver@example.org")
+    save(approver, resolutions={flag_id(): {"decision": "use_check", "reader": "mineru"}})
+    save(approver, page=2, units=[{"kind": "paragraph", "text": "2. Citation."}])
+    confirm_details(approver)
+    builds = record_view.to_record
+
+    def refuses(*args, **kwargs):
+        raise ValueError("expressions: no version in this document's language")
+
+    monkeypatch.setattr(record_view, "to_record", refuses)
+    refused = approve(approver)
+    assert refused.status_code == 409
+    details = refused.json()["readiness"]["details"]
+    assert details["confirmed"] and "no version in this document's language" in details["record_problem"]
+    monkeypatch.setattr(record_view, "to_record", builds)
+    assert approve(approver).json() == {"revision": 1}
+
+
 def test_approval_covers_the_details_and_changing_them_voids_it(world):
     approver = signed_in(world, "approver@example.org")
     save(approver, resolutions={flag_id(): {"decision": "use_check", "reader": "mineru"}})

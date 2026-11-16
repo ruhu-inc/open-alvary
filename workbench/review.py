@@ -2,6 +2,8 @@
 (operations.publish): its pages, its details (shared by a work's language versions) and whether
 the latest approval still covers both exactly."""
 
+from pydantic import ValidationError
+
 from ingestion import cited_names
 from workbench import content, details, publication, record_view, routing
 
@@ -120,16 +122,31 @@ class Review:
 
     def built(self, act: dict, view: dict):
         """The validated record (document-record-1), or None while details are incomplete."""
+        return self.record_and_problem(act, view)[0]
+
+    def record_and_problem(self, act: dict, view: dict):
+        """The validated record and None, or None and why the details do not make one (the publishing
+        run skips a document whose record does not build, so approval waits for it: findings
+        2026-11-16, item 28)."""
         try:
-            return record_view.to_record(
-                view["values"],
-                view["absent"],
-                view["place"],
-                view["profile"],
-                record_view.slugify(act["id"][3:]),
+            return (
+                record_view.to_record(
+                    view["values"],
+                    view["absent"],
+                    view["place"],
+                    view["profile"],
+                    record_view.slugify(act["id"][3:]),
+                ),
+                None,
             )
-        except (ValueError, KeyError):
-            return None
+        except ValidationError as error:
+            first = error.errors()[0]
+            where = ".".join(str(part) for part in first.get("loc", ()))
+            return None, f"{where}: {first.get('msg', 'not valid')}" if where else first.get(
+                "msg", "not valid"
+            )
+        except (ValueError, KeyError) as error:
+            return None, str(error) or type(error).__name__
 
     def state(self, document: dict, text: bool = False) -> dict:
         """Everything that decides a document's review status, read once: its pages, its details,
@@ -207,6 +224,11 @@ class Review:
                 text_held=held,
                 ready=readiness["details"]["confirmed"],
             )
+        if record and record["status"] == "confirmed":
+            # Confirmed details that still do not make a valid record are never published: say why here.
+            problem = self.record_and_problem(document, view)[1]
+            readiness["details"] = {**readiness["details"], "record_problem": problem}
+            readiness["ready"] = readiness["ready"] and problem is None
         return {
             "reading": reading,
             "latest": latest,
