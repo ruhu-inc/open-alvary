@@ -1967,3 +1967,19 @@ def test_a_work_holding_another_works_pages_in_one_file_is_reported_and_its_own_
     ]
     [problem] = enclosed_works(documents)
     assert problem.startswith("rw-law-1-en (pages 1-20) holds the pages of rw-order-2-en (5-8)")
+
+
+def test_kinyarwandas_no_is_a_word_and_a_titles_apostrophe_is_kept():
+    # "NO" is Kinyarwanda's "and" unless a number follows it.
+    assert RG.sentence_case("AMASEZERANO YEREKEYE GUKUMIRA NO GUHANA IBYAHA") == (
+        "Amasezerano yerekeye gukumira no guhana ibyaha"
+    )
+    assert (
+        RG.sentence_case("ITEGEKO NO 4/2010 RYO KU WA 01/02/2010") == "Itegeko n° 4/2010 ryo ku wa 01/02/2010"
+    )
+    assert RG.sentence_case("PRIME MINISTER’S ORDER N° 121/03 OF 30/04/2013") == (
+        "Prime Minister’s Order n° 121/03 of 30/04/2013"
+    )
+    assert RG.cited_title(
+        "DECLARATION RECOGNISING THE RIGHT TO A FLAG OF STATES HAVING NO SEA-COAST", {}, "en", True
+    ) == ("Declaration Recognising the Right to a Flag of States Having No Sea-Coast")

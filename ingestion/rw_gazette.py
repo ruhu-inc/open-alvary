@@ -31,7 +31,8 @@ from schema.jurisdictions import registry
 # 2026-11-16.1: titles as each language cites them, with the names their texts write; full title as printed.
 # 2026-11-16.2: instruments of different kinds printed with the same number in one issue are two works
 # (Law n° 009/2026 and an Order n° 009/2026), as are two known by the same date that each have a body.
-PIPELINE = "2026-11-16.2"
+# 2026-11-16.3: Kinyarwanda's "NO" ("and") is a word, not a number sign; a title's apostrophe is kept.
+PIPELINE = "2026-11-16.3"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -1786,20 +1787,26 @@ CITED_AS = (
 )
 
 
+def _as_printed_apostrophe(name: str, printed: str) -> str:
+    """A name in its cited capitals with the apostrophe the title prints: "Prime Minister’s Order"."""
+    return "".join(printed[k] if c in "'’" else c for k, c in enumerate(name))
+
+
 def sentence_case(title: str) -> str:
     """A capitalised printed title as a citation is written: "Organic Law n° 002/2018.OL of
     04/04/2018 establishing the Court of Appeal"; the number keeps its printed capitals."""
     if not title:
         return title
-    # "N°", "Nº", "NO 12", "N o 82/03"; never the "NO" a word begins with ("NORMALISATION").
-    number = re.search(r"\bN\s?(?:[°º]|O(?![A-Za-z]))\.?\s*(\S+)", title)
+    # "N°", "Nº", "NO 12", "N o 82/03"; never the "NO" a word begins with ("NORMALISATION"), nor
+    # Kinyarwanda's "NO" ("and": "GUKUMIRA NO GUHANA"), which no number follows (2026-11-16).
+    number = re.search(r"\bN\s?(?:[°º]\.?\s*|O(?![A-Za-z])\.?\s*(?=\S*\d))(\S+)", title)
     sentence = title[0] + title[1:].lower()
     for name in CITED_AS:
         if sentence.lower().replace("’", "'").startswith(name.lower().replace("’", "'") + " "):
-            sentence = name + sentence[len(name) :]
+            sentence = _as_printed_apostrophe(name, sentence[: len(name)]) + sentence[len(name) :]
             break
     sentence = re.sub(
-        r"\bn\s?(?:[°º]|o(?![a-zà-ÿ]))\.?\s*(\S+)",
+        r"\bn\s?(?:[°º]\.?\s*|o(?![a-zà-ÿ])\.?\s*(?=\S*\d))(\S+)",
         lambda m: "n° " + (number.group(1) if number else m.group(1)),
         sentence,
         count=1,
@@ -1977,6 +1984,8 @@ def cited_title(printed: str, names: dict[str, str], language: str, treaty: bool
         title = cited_names.cited(printed)[0]
         title = _TREATY_SMALL.sub(lambda m: m.group(1).lower(), title)
         title = re.sub(r"\bCo-O", "Co-o", title)
+        # An article after a small word is no initial: "the Right to a Flag" (cited keeps a lone capital).
+        title = re.sub(r"(\s[a-z]+\s)(An?)(?=\s)", lambda m: m.group(1) + m.group(2).lower(), title)
         for key, written in names.items():
             if written.isupper():
                 title = _named(key).sub(lambda _, w=written: w, title)
@@ -1989,7 +1998,7 @@ def cited_title(printed: str, names: dict[str, str], language: str, treaty: bool
         title = _named(key).sub(lambda _, w=names[key]: w, title)
     if language != "fr":  # another instrument cited by its number: "amending Law n° 066/2024"
         for name in CITED_AS:  # (French writes "modifiant la loi n° 066/2024")
-            title = _cited_by_number(name).sub(lambda _, w=name: w, title)
+            title = _cited_by_number(name).sub(lambda m, w=name: _as_printed_apostrophe(w, m.group(0)), title)
     if language == "en":
         title = _MONTHS_EN.sub(lambda m: m.group(0).capitalize(), title)
         title = re.sub(r"\barticle(?=\s+\d)", "Article", title)
