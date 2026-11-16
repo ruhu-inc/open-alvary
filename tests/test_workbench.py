@@ -1914,3 +1914,18 @@ def test_a_replace_keeps_a_page_read_again_unchecked_and_is_held_to_a_page_saves
         f"/api/documents/{ACT}/replace", json={"find": "x", "replace": "xyz", "pages": revisions}
     )
     assert grown.status_code == 422 and "page 2" in grown.json()["message"]
+
+
+def test_two_writes_of_one_cached_file_never_cut_each_other_short(tmp_path):
+    """Consolidated findings item 25: two requests for one uncached file wrote to one temporary name."""
+    import threading
+
+    path = tmp_path / "issue.pdf"
+    bodies = [bytes([n]) * 2_000_000 for n in range(8)]
+    threads = [threading.Thread(target=content.write_whole, args=(path, body)) for body in bodies]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert path.read_bytes() in bodies  # one whole write, never a mixture or a part
+    assert [p.name for p in tmp_path.iterdir()] == ["issue.pdf"]  # no temporary file left behind

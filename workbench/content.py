@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 from ingestion import cited_names, first_collection, layout_parser, native, render
@@ -167,6 +168,20 @@ def render_fonts() -> list[str]:
     return ["-v", f"{folder}:/usr/share/fonts/lent:ro"] if Path(folder).is_dir() else []
 
 
+def write_whole(path: Path, data: bytes) -> None:
+    """Write a file so no reader ever sees part of it: into a temporary file of this write's own in the
+    same folder, then moved into place in one step. Two requests fetching the same file each write their
+    own (findings 2026-11-16, item 25: they shared one name and cut each other's file short)."""
+    handle, name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".part")
+    try:
+        with os.fdopen(handle, "wb") as file:
+            file.write(data)
+        os.replace(name, path)
+    except BaseException:
+        Path(name).unlink(missing_ok=True)
+        raise
+
+
 class Library:
     """The collections' documents and their reconciled readings in private staging."""
 
@@ -244,9 +259,7 @@ class Library:
                     store.get(source) if source else store.get(f"{remote['prefix']}{objects}{act_id}{suffix}")
                 )
                 path.parent.mkdir(parents=True, exist_ok=True)
-                tmp = path.with_suffix(path.suffix + ".part")
-                tmp.write_bytes(data)
-                tmp.replace(path)
+                write_whole(path, data)
                 trim_cache()
         return path
 
