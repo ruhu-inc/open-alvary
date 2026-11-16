@@ -78,6 +78,7 @@ export const CODES: [number, string, string][] = [
   ],
   [410, "replay_window_expired", "Changes after this position are no longer kept. Reconcile from a current release."],
   [413, "result_too_large", "The answer is too large for one response."],
+  [413, "request_too_large", "The request body is larger than this address accepts. Send less at once."],
   [
     429,
     "rate_limited",

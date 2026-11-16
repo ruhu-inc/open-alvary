@@ -53,6 +53,7 @@ from starlette.routing import Route
 
 from accounts.store import TIERS, Accounts
 from api.admission import AdmissionConfig, AdmissionStore, AdmissionUnavailable
+from api.bodylimit import BodyLimit
 from api.catalogue import LegacyCatalogue
 from api.console import ConsoleConfig, Provider, create_console_app
 from api.credentials import CredentialGate, FailedKeys, GateConfig, TokenVerifier
@@ -332,6 +333,8 @@ def create_service(
     if frontend is not None:
         website = WebsiteFiles(directory=frontend, html=True, check_dir=False, traffic=traffic)
         service.mount("/", website, name="website")
+    # Outermost of the service's own layers: no route reads more of a body than its limit.
+    service.add_middleware(BodyLimit)
     return service
 
 

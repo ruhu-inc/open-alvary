@@ -58,6 +58,7 @@ STATUS = {
     "not_found_route": 404,
     "withdrawn": 410,
     "result_too_large": 413,
+    "request_too_large": 413,
     "credential_not_accepted": 400,
     "credential_required": 401,
     "invalid_credentials": 401,
