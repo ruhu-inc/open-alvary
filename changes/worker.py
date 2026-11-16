@@ -328,15 +328,32 @@ def expire(accounts: Accounts) -> int:
         return expired(conn)
 
 
+class StepsFailed(RuntimeError):
+    """Raised after every step has had its turn, so the job is marked failed (and alerts) while one
+    step's failure never stops the others."""
+
+
 def run(accounts: Accounts, mailer: mail.Mailer, base: str, hooks: "webhooks.Webhooks | None" = None) -> dict:
     hooks = hooks or webhooks.Webhooks(accounts)
-    result = {"expired": expire(accounts)}
-    result |= {"matched": match(accounts), "digests": digests(accounts, mailer, base)}
+    steps = [
+        ("expired", lambda: expire(accounts)),
+        ("matched", lambda: match(accounts)),
+        ("digests", lambda: digests(accounts, mailer, base)),
+    ]
     if webhooks.Sealer.from_environment() is not None or hooks._sealer is not None:
-        result["webhooks"] = webhooks.deliver(accounts, hooks, mailer, base)
+        steps.append(("webhooks", lambda: webhooks.deliver(accounts, hooks, mailer, base)))
     else:
         log.warning("Webhook delivery is off: ALVARY_WEBHOOK_KEYS is not set")
-    result |= {"paused": enforce_limits(accounts, mailer, base), "purged": purge(accounts)}
+    steps += [("paused", lambda: enforce_limits(accounts, mailer, base)), ("purged", lambda: purge(accounts))]
+    result, failed = {}, []
+    for name, step in steps:
+        try:
+            result[name] = step()
+        except Exception:
+            log.exception("The worker's %s step failed", name)
+            failed.append(name)
+    if failed:
+        raise StepsFailed(f"Steps failed: {', '.join(failed)}; the others ran: {result}")
     return result
 
 

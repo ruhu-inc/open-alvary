@@ -30,6 +30,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from urllib.parse import urlsplit
 
 import httpcore
@@ -168,9 +169,10 @@ def _send(url: str, address: str, body: bytes, headers: dict) -> tuple[int, dict
                 answer += chunk
                 if len(answer) > MAX_ANSWER:
                     break
+            # Header bytes are Latin-1 on the wire (RFC 9110): any byte decodes, so no answer can fail here.
             return (
                 response.status,
-                {k.decode().lower(): v.decode() for k, v in response.headers},
+                {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in response.headers},
                 answer[:MAX_ANSWER],
             )
     finally:
@@ -198,6 +200,23 @@ def _within(limit: float, work, *args):
     return outcome["value"]
 
 
+def retry_after_seconds(value: str | None, now: datetime | None = None) -> int | None:
+    """Retry-After as RFC 9110 writes it: a run of ASCII digits, or an HTTP date. Anything else is
+    ignored, never an error."""
+    if not value:
+        return None
+    value = value.strip()
+    if re.fullmatch(r"[0-9]{1,9}", value):
+        return int(value)
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError, IndexError, OverflowError):
+        return None
+    if when is None or when.tzinfo is None:
+        return None
+    return max(0, math.ceil((when - (now or datetime.now(UTC))).total_seconds()))
+
+
 class Sender:
     """POSTs to an endpoint after vetting every address its host resolves to, at each attempt."""
 
@@ -205,28 +224,43 @@ class Sender:
         self.resolver, self.transport = resolver, transport
 
     def post(self, url: str, body: bytes, headers: dict, limit: float | None = None) -> Outcome:
-        """``limit``: seconds for the whole attempt, the name lookup aside; TIMEOUT when not given."""
+        """``limit``: seconds for the whole attempt, the name lookup included; TIMEOUT when not given.
+        Each vetted address is tried in turn until one takes the connection. Whatever the endpoint or
+        the network does, the answer is an Outcome: nothing it sends can raise here."""
         limit = TIMEOUT if limit is None else limit
+        deadline = time.monotonic() + limit
         host = urlsplit(url).hostname or ""
         try:
             check_url(url)
-            addresses = self.resolver(host)
+            addresses = _within(limit, self.resolver, host)
         except Refused as refused:
             return Outcome(None, error=str(refused))
+        except TimeoutError:
+            return Outcome(None, error=f"The host name could not be resolved within {int(limit)} seconds.")
         except OSError:
             return Outcome(None, error="The host name could not be resolved.")
         if not addresses or not all(public(a) for a in addresses):
             return Outcome(None, error="That address is not reachable from the internet.")
-        try:
-            status, answer_headers, answer = _within(limit, self.transport, url, addresses[0], body, headers)
-        except (httpcore.TimeoutException, TimeoutError):
-            return Outcome(None, error=f"No answer within {int(limit)} seconds.")
-        except (httpcore.ConnectError, ConnectionError):
-            return Outcome(None, error="The connection was refused or could not be made.")
-        except (httpcore.NetworkError, httpcore.ProtocolError, OSError):
-            return Outcome(None, error="The connection failed (network or TLS).")
-        retry_after = answer_headers.get("retry-after")
-        return Outcome(status, answer, int(retry_after) if (retry_after or "").isdigit() else None)
+        refused = Outcome(None, error="The connection was refused or could not be made.")
+        for address in addresses:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return Outcome(None, error=f"No answer within {int(limit)} seconds.")
+            try:
+                status, answer_headers, answer = _within(
+                    remaining, self.transport, url, address, body, headers
+                )
+            except (httpcore.ConnectError, ConnectionError):
+                continue  # nothing was sent to this address: the next may take it
+            except (httpcore.TimeoutException, TimeoutError):
+                return Outcome(None, error=f"No answer within {int(limit)} seconds.")
+            except (httpcore.NetworkError, httpcore.ProtocolError, OSError):
+                return Outcome(None, error="The connection failed (network or TLS).")
+            except Exception:
+                log.warning("An endpoint's answer could not be read", exc_info=True)
+                return Outcome(None, error="The endpoint's answer could not be read.")
+            return Outcome(status, answer, retry_after_seconds(answer_headers.get("retry-after")))
+        return refused
 
 
 # ---------- signing ----------
@@ -827,12 +861,27 @@ def attached(conn, accounts: Accounts) -> dict[str, list[str]]:
     return found
 
 
+# Seconds the delivery step may spend sending in one run of the worker (whose job is stopped at 280 s,
+# deployment/gcp-terraform/env/jobs.tf): room is left for the steps after it. A delivery not reached
+# in time goes back to the queue for the next run.
+BUDGET = 150.0
+
+
 def deliver(
-    accounts: Accounts, hooks: Webhooks, mailer, base: str, now: datetime | None = None, limit: int = 100
+    accounts: Accounts,
+    hooks: Webhooks,
+    mailer,
+    base: str,
+    now: datetime | None = None,
+    limit: int = 100,
+    budget: float = BUDGET,
+    clock: Callable[[], float] = time.monotonic,
 ) -> dict:
     """Attempt due deliveries. Each is claimed in a short transaction, sent outside it, then
-    recorded, so a slow endpoint holds no database locks."""
+    recorded, so a slow endpoint holds no database locks. One delivery that fails in any way is
+    recorded against it and the rest go on; once the time budget is spent, the rest wait."""
     now = now or datetime.now(UTC)
+    started = clock()
     counts = {"delivered": 0, "failed": 0, "withheld": 0, "abandoned": 0}
     with accounts.engine.begin() as conn:
         table = accounts._t(conn, "webhook_delivery")
@@ -856,10 +905,68 @@ def deliver(
             .scalars()
             .all()
         )
-    for delivery_id in claimed:
-        result = _attempt(accounts, hooks, mailer, base, delivery_id, now)
+    for at, delivery_id in enumerate(claimed):
+        if clock() - started > budget - TIMEOUT:
+            _release(accounts, claimed[at:], now)
+            counts["deferred"] = len(claimed) - at
+            break
+        try:
+            result = _attempt(accounts, hooks, mailer, base, delivery_id, now)
+        except Exception:
+            log.exception("Delivery %s failed in the worker", delivery_id)
+            result = _attempt_failed(accounts, delivery_id, now)
         counts[result] = counts.get(result, 0) + 1
     return counts
+
+
+def _release(accounts, delivery_ids: list[str], now) -> None:
+    """Deliveries claimed but not reached in this run: due again at once, for the next run."""
+    with accounts.engine.begin() as conn:
+        conn.execute(
+            text(
+                f"UPDATE {accounts._t(conn, 'webhook_delivery')} SET next_attempt_at = :now"
+                " WHERE id = ANY(:ids) AND state = 'pending'"
+            ),
+            {"now": now, "ids": delivery_ids},
+        )
+
+
+def _attempt_failed(accounts, delivery_id, now) -> str:
+    """An attempt the worker itself could not complete counts as an attempt, so a delivery that always
+    fails this way is retried on the usual schedule and then abandoned, not tried for ever."""
+    try:
+        with accounts.engine.begin() as conn:
+            row = (
+                conn.execute(
+                    text(
+                        f"UPDATE {accounts._t(conn, 'webhook_delivery')} SET attempts = attempts + 1,"
+                        " last_error = :err WHERE id = :d AND state = 'pending' RETURNING attempts, created_at"
+                    ),
+                    {"d": delivery_id, "err": "The delivery could not be completed; it will be tried again."},
+                )
+                .mappings()
+                .first()
+            )
+            if row is None:
+                return "failed"
+            if row["attempts"] > len(RETRIES) or now - row["created_at"] >= TERMINAL:
+                conn.execute(
+                    text(
+                        f"UPDATE {accounts._t(conn, 'webhook_delivery')} SET state = 'abandoned', finished_at = :now"
+                        " WHERE id = :d"
+                    ),
+                    {"d": delivery_id, "now": now},
+                )
+                return "abandoned"
+            conn.execute(
+                text(
+                    f"UPDATE {accounts._t(conn, 'webhook_delivery')} SET next_attempt_at = :next WHERE id = :d"
+                ),
+                {"d": delivery_id, "next": now + timedelta(seconds=RETRIES[row["attempts"] - 1])},
+            )
+    except Exception:
+        log.exception("Delivery %s could not be recorded as failed", delivery_id)
+    return "failed"
 
 
 def _attempt(accounts, hooks, mailer, base, delivery_id, now) -> str:

@@ -12,6 +12,7 @@ from changes.webhooks import (
     _send,
     check_url,
     public,
+    retry_after_seconds,
     signature_headers,
     verify_signature,
 )
@@ -128,3 +129,101 @@ def test_a_delivery_has_one_deadline_for_the_whole_attempt(monkeypatch):
         "https://hooks.example.org/x", b"{}", {}
     )
     assert outcome.status is None and "No answer" in outcome.error and time.monotonic() - started < 0.8
+
+
+def serve_once(raw: bytes):
+    """A local endpoint that answers one request with these exact bytes."""
+    import socket
+    import threading
+
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+
+    def answer():
+        conn, _ = server.accept()
+        conn.recv(65536)
+        conn.sendall(raw)
+        conn.close()
+        server.close()
+
+    threading.Thread(target=answer, daemon=True).start()
+    return server.getsockname()[1]
+
+
+@pytest.mark.parametrize(
+    "header",
+    [b"X-Note: caf\xe9\xff", "Retry-After: ²".encode(), b"Retry-After: 99999999999999999999"],
+    ids=["non-utf8-byte", "unicode-digit", "huge"],
+)
+def test_whatever_an_endpoint_answers_is_an_outcome_never_an_error(header):
+    """Consolidated findings item 6: one endpoint's answer used to stop the whole delivery step."""
+    port = serve_once(b"HTTP/1.1 429 Too Many\r\n" + header + b"\r\nContent-Length: 0\r\n\r\n")
+
+    def to_local(url, address, body, headers):
+        local = httpcore.ConnectionPool(retries=0, max_connections=1)
+        with local.stream(
+            "POST", f"http://127.0.0.1:{port}/", headers=list(headers.items()), content=body
+        ) as r:
+            r.read()
+            return r.status, {k.decode("latin-1").lower(): v.decode("latin-1") for k, v in r.headers}, b""
+
+    outcome = Sender(resolver=lambda host: ["93.184.216.34"], transport=to_local).post(
+        "https://hooks.example.org/x", b"{}", {}
+    )
+    assert outcome.status == 429
+
+
+def test_the_real_transport_reads_any_header_byte(monkeypatch):
+    port = serve_once(b"HTTP/1.1 429 Too Many\r\nRetry-After: \xb2\r\nX: \xff\r\nContent-Length: 0\r\n\r\n")
+    real = httpcore.ConnectionPool.stream
+
+    def plain(self, method, url, **kwargs):  # the same request, over plain HTTP to the local endpoint
+        return real(self, method, f"http://127.0.0.1:{port}/", **kwargs)
+
+    monkeypatch.setattr(httpcore.ConnectionPool, "stream", plain)
+    status, headers, _ = _send("https://hooks.example.org/x", "127.0.0.1", b"{}", {})
+    assert status == 429 and headers["x"] == "ÿ" and retry_after_seconds(headers["retry-after"]) is None
+
+
+def test_retry_after_is_digits_or_an_http_date_and_anything_else_is_ignored():
+    from datetime import UTC, datetime
+
+    now = datetime(2026, 11, 16, 12, 0, tzinfo=UTC)
+    assert retry_after_seconds("120", now) == 120
+    assert retry_after_seconds("Mon, 16 Nov 2026 12:05:00 GMT", now) == 300
+    assert retry_after_seconds("Mon, 16 Nov 2026 11:00:00 GMT", now) == 0
+    for odd in ("²", "-5", "1.5", "soon", "", None, "9" * 30):
+        assert retry_after_seconds(odd, now) is None
+
+
+def test_a_dead_first_address_is_passed_over_for_the_next():
+    tried = []
+
+    def transport(url, address, body, headers):
+        tried.append(address)
+        if address == "2001:4860:4860::8888":
+            raise httpcore.ConnectError("unreachable")
+        return 200, {}, b""
+
+    sender = Sender(resolver=lambda host: ["2001:4860:4860::8888", "93.184.216.34"], transport=transport)
+    assert sender.post("https://hooks.example.org/x", b"{}", {}).status == 200
+    assert tried == ["2001:4860:4860::8888", "93.184.216.34"]
+    every = Sender(
+        resolver=lambda host: ["93.184.216.34"], transport=lambda *a: (_ for _ in ()).throw(ConnectionError())
+    )
+    assert "refused" in every.post("https://hooks.example.org/x", b"{}", {}).error
+
+
+def test_the_name_lookup_is_inside_the_deadline(monkeypatch):
+    monkeypatch.setattr("changes.webhooks.TIMEOUT", 0.2)
+
+    def slow_lookup(host):
+        time.sleep(1)
+        return ["93.184.216.34"]
+
+    started = time.monotonic()
+    outcome = Sender(resolver=slow_lookup, transport=lambda *a: (200, {}, b"")).post(
+        "https://hooks.example.org/x", b"{}", {}
+    )
+    assert outcome.status is None and "resolved within" in outcome.error and time.monotonic() - started < 0.8

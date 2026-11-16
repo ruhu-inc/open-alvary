@@ -374,3 +374,70 @@ def test_a_test_gives_up_on_a_silent_endpoint_well_before_a_delivery_would(world
     answer = hooks.test(owner, organisation, created["endpoint"]["id"])
     assert time.monotonic() - started < 4
     assert not answer["delivered"] and answer["error"] == "No answer within 2 seconds."
+
+
+def deliveries(accounts):
+    with accounts.engine.connect() as conn:
+        rows = conn.execute(
+            text(f"SELECT * FROM {accounts._t(conn, 'webhook_delivery')} ORDER BY created_at")
+        ).mappings()
+        return [dict(r) for r in rows]
+
+
+def test_one_delivery_that_fails_in_the_worker_is_recorded_and_the_rest_go_on(world, monkeypatch):
+    """Consolidated findings item 6: one bad delivery used to stop the step, every 15 minutes for a day."""
+    endpoint_with_monitor(world)
+    store, accounts, hooks, receiver, owner, organisation = world
+    for summary in ("First.", "Second.", "Third."):
+        change(store, summary)
+    worker.match(accounts)
+    first = deliveries(accounts)[0]["id"]
+    real = webhooks._attempt
+
+    def poisoned(accounts_, hooks_, mailer, base, delivery_id, now):
+        if delivery_id == first:
+            raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+        return real(accounts_, hooks_, mailer, base, delivery_id, now)
+
+    monkeypatch.setattr(webhooks, "_attempt", poisoned)
+    now = datetime.now(UTC)
+    counts = deliver(accounts, hooks, Mailer(), BASE, now=now)
+    assert counts["delivered"] == 2 and counts["failed"] == 1
+    bad = next(d for d in deliveries(accounts) if d["id"] == first)
+    assert bad["state"] == "pending" and bad["attempts"] == 1 and "tried again" in bad["last_error"]
+    assert abs((bad["next_attempt_at"] - now).total_seconds() - RETRIES[0]) < 2
+    for _ in range(len(RETRIES)):  # always failing, it is abandoned on the usual schedule
+        deliver(
+            accounts,
+            hooks,
+            Mailer(),
+            BASE,
+            now=next(d for d in deliveries(accounts) if d["id"] == first)["next_attempt_at"],
+        )
+    assert next(d for d in deliveries(accounts) if d["id"] == first)["state"] == "abandoned"
+
+
+def test_deliveries_not_reached_within_the_time_budget_wait_for_the_next_run(world):
+    endpoint_with_monitor(world)
+    store, accounts, hooks, receiver, owner, organisation = world
+    for summary in ("One.", "Two.", "Three."):
+        change(store, summary)
+    worker.match(accounts)
+    ticks = iter([0.0, 0.0, 200.0, 200.0, 200.0])  # the first delivery takes the whole budget
+    now = datetime.now(UTC)
+    counts = deliver(accounts, hooks, Mailer(), BASE, now=now, budget=100.0, clock=lambda: next(ticks))
+    assert counts["delivered"] == 1 and counts["deferred"] == 2
+    waiting = [d for d in deliveries(accounts) if d["state"] == "pending"]
+    assert len(waiting) == 2 and all(d["next_attempt_at"] == now and d["attempts"] == 0 for d in waiting)
+    assert deliver(accounts, hooks, Mailer(), BASE, now=now)["delivered"] == 2
+
+
+def test_a_failing_worker_step_does_not_stop_the_others_and_the_run_still_fails(world, monkeypatch):
+    store, accounts, hooks, receiver, owner, organisation = world
+    ran = []
+    monkeypatch.setattr(worker, "digests", lambda *a: (_ for _ in ()).throw(RuntimeError("mail down")))
+    monkeypatch.setattr(worker, "enforce_limits", lambda *a: ran.append("limits") or 0)
+    monkeypatch.setattr(worker, "purge", lambda *a: ran.append("purge") or 0)
+    with pytest.raises(worker.StepsFailed, match="digests"):
+        worker.run(accounts, Mailer(), BASE, hooks)
+    assert ran == ["limits", "purge"]
