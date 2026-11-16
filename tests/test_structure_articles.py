@@ -1151,3 +1151,28 @@ def test_each_ecowas_class_is_read_only_in_the_languages_it_was_calibrated_in():
     assert list(structure.ARTICLE_STYLES[structure.ECOWAS_ACT].editions) == ["en"]
     assert list(structure.ARTICLE_STYLES[structure.ECOWAS_DIRECTIVE].editions) == ["en", "pt"]
     assert list(structure.ARTICLE_STYLES[structure.ECOWAS_REGULATION].editions) == ["en", "fr"]
+
+
+def test_a_stamp_glued_to_an_article_gives_neither_its_label_nor_its_first_words_and_stops_approval():
+    """Consolidated findings item 45: "CEDEAO ECOWAS Article 2: 1. …" gave the label "CEDEAO EC" and
+    started the first paragraph inside the stamp ("AS Article 2: 1. …")."""
+    pages = [
+        [
+            head("SUPPLEMENTARY ACT A/SA.1/01/10 ON FOTZIWEV BUNI CNAGEHFUIS WITHIN ECOWAS"),
+            para(
+                "THE TETD SULWHOTHOJL RAZZEEN, JUJZMUB of Articles 7, 8 and 9 of the ECOWAS Treaty as qoditib"
+            ),
+            head("KADARD EQMII AS FOLLOWS:"),
+            head("CHAPTER I"),
+            head("GENERAL PROVISIONS"),
+            head("Article 1: Mohejipuivj"),
+            para("For the gospetah of this Supplementary Act:"),
+        ],
+        [para("CEDEAO ECOWAS Article 2: 1. The Act applies to every Member State.")],
+    ]
+    text, result = build(pages, structure.ECOWAS_ACT, "en")
+    nodes = by_locator(result)
+    assert nodes["art_2"].label == "Article 2"
+    assert span(text, nodes["art_2__para_1"]).startswith("1. The Act applies")
+    stamp = [i for i in result.issues if i.code == "running_head"]
+    assert stamp and all(i.level == "error" for i in stamp)

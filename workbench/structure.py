@@ -2363,8 +2363,10 @@ class ArticleBuilder(Builder):
             self.table(index, leaf)
             return
         if self.style.running_head and (stamp := self.style.running_head.match(text)):
+            # An error: the stamp's words are in the unit's text until the reviewer removes them, and a label
+            # or offset read past them is only as good as that guess (findings 2026-11-16, item 45).
             self.issue(
-                "warning",
+                "error",
                 "running_head",
                 leaf,
                 f"“{text[: stamp.end()][:60]}” is the stamp printed on every page: remove it, or it is part of "
@@ -2410,7 +2412,7 @@ class ArticleBuilder(Builder):
         if division:
             self.division(index, leaf, division)
         elif provision:
-            self.open_provision(index, leaf, provision, heading_unit)
+            self.open_provision(index, leaf, provision, heading_unit, text)
         elif awaiting is not None and (heading_unit or unit.get("align") == "center"):
             awaiting.heading = text  # "CHAPTER I" then "HUMAN AND PEOPLES' RIGHTS"
             self.named.add(index)
@@ -2635,14 +2637,19 @@ class ArticleBuilder(Builder):
             return found if ordinal else None
         return found
 
-    def open_provision(self, index: int, leaf: Leaf, found: re.Match, heading_unit: bool) -> None:
+    def open_provision(self, index: int, leaf: Leaf, found: re.Match, heading_unit: bool, text: str) -> None:
+        """``found`` matched ``text``: the leaf's words, past any page stamp. Its label and the offset of its
+        first words are read from that same text, placed in the leaf where it ends."""
         raw = found.group(1)
+        # Where ``text`` starts in the leaf: it is the leaf's own words, edges trimmed and a stamp cut off.
+        at = leaf.text.rfind(text)
+        at = at if at >= 0 else max(0, len(leaf.text.rstrip()) - len(text))
         number = "1" if folded(raw) in [folded(w) for w in ONE] else raw
         kind = self.edition.provision
         token = "sec" if kind == "section" else "art"
         # A section's label is its printed number, as the Commonwealth Acts' are ("8": cited s. 8); an
         # article's, its printed opening ("ARTICLE 7", "Art. 2"), as OHADA's.
-        label = raw if kind == "section" else clean(leaf.text)[: found.end(1)].strip()
+        label = raw if kind == "section" else text[: found.end(1)].strip()
         parent = self.open[-1][1] if self.open else self.base
         own = f"{token}_{number}"  # an annex's articles restart: annex_1__art_1
         locator = own if self.base is self.root else f"{self.base.locator}__{own}"
@@ -2656,7 +2663,7 @@ class ArticleBuilder(Builder):
             self.hold(node, index)
             self.heading_due = None if node.heading else node
         else:  # "Art. 2. — La présente loi …": the article's first words, after its number
-            offset = len(leaf.text[: found.start(3)].encode())
+            offset = len(leaf.text[: at + found.start(3)].encode())
             if self.style.ordinal_opens and (bracket := BRACKETED_HEADING.match(rest)):
                 # "Artigo 44.º (Finalidades) Os códigos …": its heading, then the article's first words
                 node.heading, rest = bracket.group(1).strip(), rest[bracket.end() :].lstrip()
