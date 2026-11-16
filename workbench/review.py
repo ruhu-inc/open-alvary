@@ -153,7 +153,11 @@ class Review:
         )
         readiness = content.readiness(reading, latest, content.details_state(record, view["missing"]))
         policy = routing.load_policy()
-        built = publication.build(document, final, reading) if text or policy else None
+        built = (
+            publication.build(publication.as_confirmed(document, self.store), final, reading)
+            if text or policy
+            else None
+        )
         if built is not None:
             readiness["text"] = {"errors": len(built.errors), "warnings": len(built.warnings)}
             readiness["ready"] = readiness["ready"] and not built.errors

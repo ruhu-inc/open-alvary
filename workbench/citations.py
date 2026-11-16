@@ -155,7 +155,8 @@ def install(app: FastAPI, store, library, review) -> None:
     def text_of(act: dict) -> publication.Text:
         """The judgment's text as it now stands: what proposals and passages are checked against."""
         return publication.build(
-            act, content.final_pages(library.reading(act["id"]), store.latest_pages(act["id"]))
+            publication.as_confirmed(act, store),
+            content.final_pages(library.reading(act["id"]), store.latest_pages(act["id"])),
         )
 
     def save(citation_id, body, who, act_id, work, citation, status, proposed_from=None):

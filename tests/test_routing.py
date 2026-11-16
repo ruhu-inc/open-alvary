@@ -414,6 +414,9 @@ class FakeStore:
     def latest_pages(self, document_id):
         return self.latest
 
+    def latest_details(self, key):
+        return None
+
 
 def test_calibration_reports_what_reviews_changed_on_each_route():
     found = reading(page(1, "1. Short title."), page(2, "2. Plain."), page(3, "3. Plain."))

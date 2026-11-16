@@ -237,7 +237,8 @@ def install(app: FastAPI, store, library, review) -> None:
     def text_of(act: dict) -> publication.Text:
         """The work's text as it now stands: what proposals are read from and provisions picked in."""
         return publication.build(
-            act, content.final_pages(library.reading(act["id"]), store.latest_pages(act["id"]))
+            publication.as_confirmed(act, store),
+            content.final_pages(library.reading(act["id"]), store.latest_pages(act["id"])),
         )
 
     def provisions(text: publication.Text) -> list[dict]:

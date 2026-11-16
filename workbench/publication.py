@@ -48,6 +48,37 @@ class Text:
         return self.structure.rules_id
 
 
+# Kinds a record names (schema.record.FAMILIES) whose rules some jurisdictions write under another name;
+# tried when no rules are written under the record's own name.
+RULES_KIND = {
+    "statutory_instrument": "instrument",
+    "legislative_instrument": "instrument",
+    "rules_of_court": "rules",
+    "regulations": "regulation",
+    "by_law": "bye_laws",
+}
+
+
+def as_confirmed(document: dict, store) -> dict:
+    """The document as its structure rules see it: of the kind a reviewer confirmed in its details
+    (identity.type), where rules are written for that kind in its jurisdiction; else of its collection's
+    type. Every place that builds a text asks here, so approval, routing, citations, editorial work and
+    consolidation all read it by the same rules (findings 2026-11-16, item 27: the confirmed kind never
+    reached the rules, so a document filed "other" could never be approved, and one reclassified kept the
+    rules of the kind it was filed as)."""
+    record = store.latest_details(document.get("work") or document["id"])
+    if not record or record.get("status") != "confirmed":
+        return document
+    kind = (record.get("details") or {}).get("identity.type")
+    if not kind:
+        return document
+    for name in (kind, RULES_KIND.get(kind)):
+        typed = {**document, "document_type": name}
+        if name and structure.rules_for(typed):
+            return typed
+    return document
+
+
 def build(document: dict, final: list[dict], reading: dict | None = None) -> Text:
     pages = [{"page": page["page"], "units": page["units"]} for page in final]
     serialized = serialize.serialize(pages)

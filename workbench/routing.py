@@ -259,7 +259,7 @@ def calibrate(library, store, document_ids: list[str]) -> dict:
     for document_id in document_ids:
         reading, latest = library.reading(document_id), store.latest_pages(document_id)
         final = content.final_pages(reading, latest)
-        built = publication.build(library.act(document_id), final, reading)
+        built = publication.build(publication.as_confirmed(library.act(document_id), store), final, reading)
         issues: dict[int, int] = {}
         for issue in [*built.errors, *built.warnings]:
             if issue.page is not None:

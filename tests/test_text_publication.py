@@ -2,7 +2,7 @@
 
 import hashlib
 
-from workbench import serialize, structure
+from workbench import publication, serialize, structure
 
 
 def para(text, kind="paragraph", **extra):
@@ -456,3 +456,38 @@ def test_rules_follow_the_jurisdiction_and_type():
     assert structure.rules_for({"id": "rw-law-2024-1", "type": "law"}) == structure.RW_LAW
     assert structure.rules_for({"id": "rw-po-2024-1", "type": "presidential_order"}) == structure.RW_LAW
     assert structure.rules_for({"id": "ng-electricity-act-2023", "type": "act"}) == structure.NG_FEDERAL_ACT
+
+
+class _Details:
+    """A store that answers latest_details with one record."""
+
+    def __init__(self, record):
+        self.record = record
+
+    def latest_details(self, key):
+        return self.record
+
+
+def test_the_kind_a_reviewer_confirms_chooses_the_structure_rules():
+    """Findings 2026-11-16, item 27: a document filed under a type with no rules is built by the rules of
+    the kind its confirmed details name, and one reclassified by the rules of its new kind; a draft, no
+    record, or a kind with no rules leaves the collection's type in charge."""
+    filed = {"id": "ng-x-1", "jurisdiction": "ng", "type": "other"}
+    assert structure.rules_for(filed) is None
+
+    def given(document, kind, status="confirmed"):
+        record = {"status": status, "details": {"identity.type": kind}}
+        return publication.as_confirmed(document, _Details(record))
+
+    assert structure.rules_key(given(filed, "act")) == ("ng", "act")
+    assert structure.rules_for(given(filed, "act"))
+    assert structure.rules_key(given(filed, "statutory_instrument")) == ("ng", "instrument")
+    assert structure.rules_key(given(filed, "regulations")) == ("ng", "regulation")
+    assert structure.rules_key(given(filed, "by_law")) == ("ng", "bye_laws")
+    assert given(filed, "act", status="draft") is filed
+    assert given(filed, "bill") is filed  # no rules for bills
+    assert publication.as_confirmed(filed, _Details(None)) is filed
+    act = {"id": "ng-act-1", "jurisdiction": "ng", "type": "act"}
+    assert structure.rules_key(given(act, "order")) == ("ng", "order")
+    rwanda = {"id": "rw-x-1", "jurisdiction": "rw", "type": "law"}
+    assert structure.rules_key(given(rwanda, "regulations")) == ("rw", "regulations")  # its own name
