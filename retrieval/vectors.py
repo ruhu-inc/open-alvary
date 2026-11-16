@@ -293,7 +293,14 @@ class Store:
             self.conn.execute(text("SET LOCAL hnsw.iterative_scan = relaxed_order"))
             self.conn.execute(text("SET LOCAL hnsw.ef_search = 200"))
             q = f"CAST(:q AS halfvec({self.dims}))"
-            pruned = " AND v.jurisdiction_id = ANY(:f_jurisdictions)" if "f_jurisdictions" in params else ""
+            # Partition pruning by jurisdiction, as the filters' own clause is (api.text_index.Filters.where):
+            # the works an applicable-law scope admits from elsewhere (regional instruments, treaties) too.
+            if "f_admitted" in params:
+                pruned = " AND (v.jurisdiction_id = ANY(:f_jurisdictions) OR u.work_id = ANY(:f_admitted))"
+            elif "f_jurisdictions" in params:
+                pruned = " AND v.jurisdiction_id = ANY(:f_jurisdictions)"
+            else:
+                pruned = ""
             rows = self.conn.execute(
                 text(
                     f"SELECT {_COLUMNS}, best.distance FROM (SELECT DISTINCT ON (w.version_id, w.unit_start)"

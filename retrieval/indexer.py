@@ -228,16 +228,39 @@ def _batch() -> int:
     return min(BATCH, max(1, int(value))) if value else BATCH
 
 
+def requeue(engine: Engine, generation: str | None = None) -> int:
+    """Queue again every failed embedding job (of one generation, or all), its attempts counted afresh:
+    once its cause is put right, a job that failed MAX_ATTEMPTS times is never retried otherwise."""
+    with engine.begin() as conn:
+        jobs = _t(conn, "index_job")
+        mine = " AND generation_id = :g" if generation else ""
+        return conn.execute(
+            text(
+                f"UPDATE {jobs} SET state = 'queued', attempts = 0, lease_until = NULL,"
+                f" updated_at = statement_timestamp() WHERE state = 'failed'{mine}"
+            ),
+            {"g": generation} if generation else {},
+        ).rowcount
+
+
 def _lease(engine: Engine, batch: int) -> list[tuple[str, str]]:
     with engine.begin() as conn:
         jobs = _t(conn, "index_job")
+        # A job whose worker died with its lease out has used an attempt: past MAX_ATTEMPTS it is failed,
+        # not leased for ever (findings 2026-11-16, item 42). requeue gives such jobs their attempts back.
+        conn.execute(
+            text(
+                f"UPDATE {jobs} SET state = 'failed', updated_at = statement_timestamp() WHERE state = 'running'"
+                f" AND lease_until < statement_timestamp() AND attempts >= {MAX_ATTEMPTS}"
+            )
+        )
         rows = conn.execute(
             text(
                 f"UPDATE {jobs} j SET state = 'running', attempts = j.attempts + 1,"
                 f" lease_until = statement_timestamp() + interval '{LEASE_SECONDS} seconds',"
                 " updated_at = statement_timestamp() WHERE (j.generation_id, j.version_id) IN ("
                 f" SELECT generation_id, version_id FROM {jobs} WHERE state = 'queued'"
-                " OR (state = 'running' AND lease_until < statement_timestamp())"
+                f" OR (state = 'running' AND lease_until < statement_timestamp() AND attempts < {MAX_ATTEMPTS})"
                 f" OR (state = 'failed' AND attempts < {MAX_ATTEMPTS}"
                 " AND updated_at < statement_timestamp() - attempts * interval '1 minute')"
                 " ORDER BY updated_at, generation_id, version_id LIMIT :n FOR UPDATE SKIP LOCKED)"
@@ -585,6 +608,8 @@ def main(argv=None) -> int:
     back.add_argument("generation")
     commands.add_parser("purge")
     commands.add_parser("status")
+    again = commands.add_parser("requeue", help="Give failed embedding jobs their attempts back")
+    again.add_argument("generation", nargs="?")
     args = parser.parse_args(argv)
     from api.store import engine_for
 
@@ -604,6 +629,8 @@ def main(argv=None) -> int:
         print(json.dumps(rollback(engine, args.profile_id, args.generation), indent=2))
     elif args.command == "purge":
         print(f"{purge(engine)} vectors removed")
+    elif args.command == "requeue":
+        print(f"{requeue(engine, args.generation)} jobs queued again")
     else:
         print(json.dumps(status(engine), indent=2, default=str))
     return 0

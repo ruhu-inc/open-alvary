@@ -99,7 +99,8 @@ class Candidate:
 
     @property
     def key(self) -> tuple:
-        return (self.hit.version_id, self.hit.node_id or "", self.hit.unit)
+        # With where it starts: the two pieces of a section over 64 KiB are two units, never one.
+        return (self.hit.version_id, self.hit.node_id or "", self.hit.unit, self.hit.start_byte)
 
     @property
     def order(self) -> tuple:

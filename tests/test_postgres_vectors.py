@@ -220,3 +220,42 @@ def test_with_a_reranker_a_referenced_provision_joins_and_says_where_it_came_fro
         )
     assert nodes["sec_3"].id not in {u.anchor_id for u in plain.evidence if u.ranking.arms.get("expansion")}
     assert [r.locator for r in plain.evidence[0].context.references] == ["sec_3"]  # context only
+
+
+def test_the_vector_arm_admits_the_works_an_applicable_law_scope_admits(store):
+    """Consolidated findings item 42: the pruning clause dropped regional and treaty works admitted from
+    another jurisdiction."""
+    from dataclasses import replace
+
+    from test_v1_text import WORK
+
+    publish_act(store, UNITS)
+    generation, embedders = build(store, "pgvector")
+    assert indexer.validate(store.engine, generation, embedder=embedders[PROFILE.id])["passed"]
+    indexer.activate(store.engine, generation, allow_test=True)
+    scope = Filters(jurisdictions=("rw",), admitted=(WORK,))
+    with store.engine.begin() as conn:
+        retriever = Retriever(LegacyCatalogue(LegacyRepository(conn)), vector_profile=PROFILE.id,
+                              embedder=HashingEmbedder(PROFILE))  # fmt: skip
+        found = retriever._dense("repaid salary", scope, [])
+        assert found and {h.work_id for h in found} == {WORK}
+        assert retriever._dense("repaid salary", replace(scope, admitted=()), []) == []
+
+
+def test_an_embedding_job_whose_lease_ran_out_counts_its_attempts_and_requeue_gives_them_back(store):
+    from sqlalchemy import text
+
+    publish_act(store, UNITS)
+    generation = indexer.prepare(store.engine, PROFILE, backend="exact")
+    with store.engine.begin() as conn:
+        jobs = indexer._t(conn, "index_job")
+        conn.execute(text(f"UPDATE {jobs} SET state = 'running', attempts = {indexer.MAX_ATTEMPTS},"
+                          " lease_until = statement_timestamp() - interval '1 hour'"))  # fmt: skip
+    embedders = {PROFILE.id: HashingEmbedder(PROFILE)}
+    assert indexer.work(store.engine, batches=2, embedders=embedders)["done"] == 0  # never leased for ever
+    with store.engine.connect() as conn:
+        assert set(conn.scalars(text(f"SELECT state FROM {jobs}"))) == {"failed"}
+    assert indexer.requeue(store.engine, generation) >= 1
+    assert indexer.work(store.engine, batches=2, embedders=embedders)["failed"] == 0
+    with store.engine.connect() as conn:
+        assert set(conn.scalars(text(f"SELECT state FROM {jobs}"))) == {"done"}

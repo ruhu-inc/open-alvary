@@ -703,3 +703,12 @@ def test_adding_a_stopping_event_never_moves_an_answer_towards_in_force():
         after = provision_state([*events, any_event(9, chance.choice(stops))], "sec_1", at, profile, outer)[0]
         assert after != "in_force" or before == "in_force", (case, events, at, before, after)
         assert before != "not_in_force" or after in ("not_in_force", "contested"), (case, events, at, after)
+
+
+def test_the_two_pieces_of_a_long_section_are_two_candidates():
+    """Consolidated findings item 42: both pieces of a section over 64 KiB shared one ranking key."""
+    from retrieval.ranking import Candidate
+
+    first, second = hit(start=0, end=65000, node="n_sec_9"), hit(start=65001, end=90000, node="n_sec_9")
+    assert Candidate(first).key != Candidate(second).key
+    assert len(fuse({"lexical": [first, second]})) == 2
