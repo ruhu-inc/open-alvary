@@ -12,6 +12,7 @@ import hashlib
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 
+from api import text_index
 from api.catalogue import LegacyCatalogue, SourceUnavailable, expression_id
 from retrieval.legal_time import Events
 from retrieval.pack import dataset_revision
@@ -31,6 +32,7 @@ class Checker:
         self.withdrawn = withdrawn
         self.today = today or datetime.now(UTC).date()
         self._nodes: dict[str, list[NodeViewRecord]] = {}
+        self._spans: dict[str, dict[str, set[tuple[int, int]]]] = {}
         self.jurisdictions: set[str] = set()  # of the parts found, for the plan's admission
         self.served: set[tuple[str, str]] = set()  # (version, content hash) of every text read
         self.events = Events(service.repository.connection)
@@ -40,6 +42,28 @@ class Checker:
         if version.id not in self._nodes:
             self._nodes[version.id] = self.service._ordered_nodes(version)
         return self._nodes[version.id]
+
+    def _quoted(self, version, node, span_hash: str) -> bool:
+        """Whether ``span_hash`` is the hash of words /retrieve quotes for this node: the node whole, or a
+        unit the search index made of it (the words a container holds between its children, a piece of a
+        long provision, all without their outer whitespace), or the text's document unit when it rests
+        on this node. They are found with the functions that built the index, so the two always agree."""
+        raw = version.canonical_text.encode()
+        if hashlib.sha256(raw[node.start_byte : node.end_byte]).hexdigest() == span_hash:
+            return True
+        if version.id not in self._spans:
+            nodes = self._structure(version)
+            spans: dict[str, set[tuple[int, int]]] = {}
+            for unit in text_index.units(version, nodes, None):  # the type moves pinpoints, never bounds
+                spans.setdefault(unit.node.id, set()).add((unit.start, unit.end))
+            whole = text_index.document_unit(version, nodes)
+            if whole.node_id is not None:
+                spans.setdefault(whole.node_id, set()).add((whole.start, whole.end))
+            self._spans[version.id] = spans
+        return any(
+            hashlib.sha256(raw[a:b]).hexdigest() == span_hash
+            for a, b in self._spans[version.id].get(node.id, ())
+        )
 
     def _locate(self, item: CheckItem):
         """The item's (version, source, node), all public now; None otherwise."""
@@ -144,7 +168,7 @@ class Checker:
             raw = version.canonical_text.encode()
             span = raw[node.start_byte : node.end_byte]
             base = {"index": index, "anchor_id": node.id, "version_id": version.id, "locator": node.locator}
-            if item.span_hash is not None and hashlib.sha256(span).hexdigest() != item.span_hash:
+            if item.span_hash is not None and not self._quoted(version, node, item.span_hash):
                 results.append(CheckResult(result="span_mismatch", **base))
                 continue
             within = [n.locator for n in self._structure(version) if node.start_byte <= n.start_byte

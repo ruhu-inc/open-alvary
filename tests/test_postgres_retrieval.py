@@ -476,3 +476,46 @@ def test_a_ccja_decision_binds_member_states_courts_on_the_uniform_acts_only(
     assert courts.relation(register, "aa-ohada-ccja", "sn", matter="uniform-acts") == "binding"
     assert courts.relation(register, "aa-ohada-ccja", "sn") == "unknown"
     assert courts.relation(register, "aa-ohada-ccja", "ke", matter="uniform-acts") == "unknown"
+
+
+def test_every_span_retrieve_can_quote_passes_the_check(store, client):
+    """Consolidated findings item 4: /retrieve's span_hash, sent to /currentness as the docs say, was
+    refused as span_mismatch for container units, long sections' pieces, schedule headings and the
+    document unit of a text with no preamble."""
+    from api import text_index
+    from schema.public import NodeViewRecord
+
+    long_words = " ".join(f"word{n}" for n in range(11000))  # about 75 KB: two pieces
+    units = [
+        {"kind": "heading", "text": "PART I — GENERAL"},
+        {"kind": "paragraph", "text": "1. The Fund shall lend to students.", "notes": ["Loans"]},
+        {"kind": "paragraph", "text": f"2. The Fund shall keep records: {long_words}."},
+        {"kind": "heading", "text": "PART II — REPAYMENT"},
+        {"kind": "paragraph", "text": "3. A loan is repaid after study."},
+        {"kind": "heading", "text": "SCHEDULES"},
+        {"kind": "heading", "text": "First Schedule"},
+        {"kind": "list_item", "marker": "1.", "text": "Lagos office"},
+    ]
+    _, version, _ = publish_act(store, units)
+    page = client.get(f"/sources/{WORK}/versions").json()
+    nodes = [NodeViewRecord.model_validate(n) for n in page["structure"]]
+    raw = version.canonical_text.encode()
+    spans = [(u.node.id, u.start, u.end) for u in text_index.units(version, nodes, "act")]
+    whole = text_index.document_unit(version, nodes)
+    assert whole.node_id is not None
+    spans.append((whole.node_id, whole.start, whole.end))
+    kinds = {next(n.kind for n in nodes if n.id == anchor) for anchor, _, _ in spans}
+    assert {"part", "schedule", "document"} <= kinds  # the shapes that were refused are all here
+    assert sum(1 for anchor, *_ in spans if anchor == next(n.id for n in nodes if n.locator == "sec_2")) == 2
+    items = [{"anchor_id": a, "span_hash": hashlib.sha256(raw[s:e]).hexdigest()} for a, s, e in spans]
+    results = client.post("/currentness", json={"items": items}).json()["results"]
+    assert [r["result"] for r in results] == ["unchanged"] * len(items)
+    # And as a caller does it: each piece of evidence /retrieve gives, posted back as it came.
+    evidence = retrieve(client, "Fund records students")["evidence"]
+    assert evidence
+    back = [{"anchor_id": e["anchor_id"], "span_hash": e["span_hash"]} for e in evidence]
+    assert {r["result"] for r in client.post("/currentness", json={"items": back}).json()["results"]} == {
+        "unchanged"
+    }
+    wrong = client.post("/currentness", json={"items": [{**items[0], "span_hash": "0" * 64}]}).json()
+    assert wrong["results"][0]["result"] == "span_mismatch"
