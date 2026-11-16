@@ -359,6 +359,15 @@ class LegacyRepository:
         )
         return set(self.connection.scalars(statement))
 
+    def public_sources(self, source_ids) -> dict[str, dict]:
+        """The whole record, as stored, of each of these that is public now."""
+        statement = (
+            select(self._sources.c.id, self._sources.c.payload)
+            .select_from(self._sources.join(self._rights, self._sources.c.id == self._rights.c.source_id))
+            .where(self._public_gate(), self._sources.c.id.in_(source_ids))
+        )
+        return {row.id: row.payload for row in self.connection.execute(statement)}
+
     def public_rights(self, source_ids) -> dict[str, dict]:
         """The whole rights record, as stored, of each of these that is public now, by source."""
         statement = (

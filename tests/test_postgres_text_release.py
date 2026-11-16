@@ -68,7 +68,7 @@ def test_every_answer_is_the_one_the_whole_corpus_gives(
     store.save(cleared)
     answers = set()
     for number, changes in enumerate(RIGHTS_CHANGES):
-        store.save(cleared)
+        store.save(cleared, lift_privacy_block=True)  # the test's reset, which may lift the last case's block
         path = write_release(cleared, tmp_path / str(number), "2026-10-05", "ng")
         changed = with_rights(cleared, **changes)
         store.save(changed)

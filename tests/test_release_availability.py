@@ -81,6 +81,7 @@ def asked_at(monkeypatch, moment):
 @pytest.fixture(autouse=True)
 def nothing_validated_yet(monkeypatch):
     monkeypatch.setattr(verify, "_validated", {})
+    monkeypatch.setattr(verify, "_hashed", {})
 
 
 @pytest.fixture
@@ -322,3 +323,30 @@ def test_a_database_that_cannot_answer_is_no_withdrawal(cleared, store, tmp_path
     down["from_check"] = 2  # the first check passes; the one just before the first byte cannot answer
     response = client.get(METADATA)
     assert response.status_code == 503 and b"ng-" not in response.content
+
+
+@pytest.mark.parametrize("metadata_only", [True, False])
+def test_a_release_whose_record_was_corrected_in_place_is_refused(cleared, store, tmp_path, metadata_only):
+    """Consolidated findings item 39: a title or citation corrected without touching the rights row was
+    still served from an old release."""
+    store.save(cleared)
+    path = write_release(cleared, tmp_path, "2026-10-05", "ng", metadata_only=metadata_only)
+    assert release_available(path, store)
+    corrected = store.load()
+    corrected.sources[0] = corrected.sources[0].model_copy(
+        update={"title": corrected.sources[0].title + " (corrected)"}
+    )
+    store.save(corrected)
+    assert not release_available(path, store)
+
+
+def test_a_release_that_leaves_a_field_empty_is_not_contradicted_when_the_record_fills_it_in(
+    cleared, store, tmp_path
+):
+    store.save(cleared)
+    path = write_release(cleared, tmp_path, "2026-10-05", "ng", metadata_only=True)
+    sources = [json.loads(line) for line in (path / "sources.jsonl").read_text().splitlines()]
+    rewrite(path, "sources.jsonl", [{**sources[0], "summary": None}, *sources[1:]])  # made before summaries
+    assert release_available(path, store)
+    rewrite(path, "sources.jsonl", [{**sources[0], "summary": "Another summary."}, *sources[1:]])
+    assert not release_available(path, store)  # one it states otherwise is

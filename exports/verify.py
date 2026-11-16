@@ -16,7 +16,7 @@ from api.repositories import LegacyRepository
 from api.store import Store, check_legacy_authority
 from exports import integrity
 from rights.policy import decide, told_rights
-from schema.models import Corpus, RightsRecord
+from schema.models import Corpus, RightsRecord, Source
 
 BATCH = 500
 # Whether a release's bytes form a valid Corpus, by the hash of its manifest, which pins every file that
@@ -32,7 +32,28 @@ def _rows(directory: Path, name: str) -> Iterator[dict]:
             yield json.loads(line)
 
 
+# Whether a release's files match its manifest, by the files as they lie on disk (path, size, time
+# written): a listing asks of every release, and its files never change once written, so each is hashed
+# once, and again only if it changes. What the rows ask of current records is never cached: a rights
+# record can lapse by the clock alone.
+_hashed: dict[tuple, bool] = {}
+
+
 def _intact(directory: Path, manifest: dict) -> bool:
+    try:
+        key = (
+            str(directory.resolve()),
+            json.dumps(manifest, sort_keys=True),
+            tuple(sorted((p.name, p.stat().st_size, p.stat().st_mtime_ns) for p in directory.iterdir())),
+        )
+    except OSError:
+        return False
+    if key not in _hashed:
+        _hashed[key] = _hashed_intact(directory, manifest)
+    return _hashed[key]
+
+
+def _hashed_intact(directory: Path, manifest: dict) -> bool:
     required = {f"{key}.jsonl" for key in Corpus.model_fields} | {
         "README.md",
         "coverage.json",
@@ -68,11 +89,31 @@ def _valid(directory: Path, manifest: bytes) -> bool:
         return _validated[key]
 
 
+# What a reader takes from a record: a release that tells any of these otherwise than the catalogue does
+# now is stale, and withdrawn (findings 2026-11-16, item 39: a title corrected in place was still served
+# from an old release until its rights row changed). A field the release leaves empty tells nothing, so a
+# release made before a field was filled in (summaries and years came later) is not contradicted by it.
+RECORD_FIELDS = (
+    "title", "citation", "summary", "year", "legal_status", "document_type", "jurisdiction_id",
+    "authority_id", "canonical_url", "language",
+)  # fmt: skip
+
+
+def _told(row: dict) -> dict:
+    found = Source.model_validate(row).model_dump(mode="json")
+    return {name: found.get(name) for name in RECORD_FIELDS}
+
+
 def _still_public(directory: Path, repository: LegacyRepository) -> bool:
     for rows in batched(_rows(directory, "sources"), BATCH):
-        public = repository.public_among([row["id"] for row in rows])
-        if any(row["id"] not in public for row in rows):
-            return False
+        public = repository.public_sources([row["id"] for row in rows])
+        for row in rows:
+            current = public.get(row["id"])
+            if current is None:
+                return False
+            told, now = _told(row), _told(current)
+            if any(value is not None and value != now[name] for name, value in told.items()):
+                return False
     # Review corrections invalidate bundles containing stale rights assertions: what a release tells of each
     # rights record, against what would be told of it now. (A release made before privacy reviews stopped
     # being released still has that field; it is not what is compared.)
