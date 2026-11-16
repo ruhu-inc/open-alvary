@@ -74,16 +74,37 @@ function toast(message) {
   toast.timer = setTimeout(() => box.classList.remove("show"), 3500);
 }
 
+// Google's Identity-Aware Proxy checks every request before it reaches the workbench. When the proxy's
+// own session ends it redirects a request to Google's sign-in, which this page's CSP blocks, leaving a bare
+// network failure. Marked as a background request, it answers 401 instead (Google's "Expired session
+// responses"). That 401 is the proxy's, not ours: every answer the workbench gives is JSON.
+const BACKGROUND = { "X-Requested-With": "XMLHttpRequest" };
+const RENEW_URL = "/?gcp-iap-mode=DO_SESSION_REFRESH";
+const proxy = { renewed: null, resolve: null, poll: null, window: null };
+
 async function api(path, { method = "GET", body } = {}) {
-  const options = { method, credentials: "same-origin", headers: {} };
+  const options = { method, credentials: "same-origin", headers: { ...BACKGROUND } };
   if (body !== undefined) {
     options.headers["Content-Type"] = "application/json";
     options.body = JSON.stringify(body);
   }
   if (method !== "GET") options.headers["X-CSRF-Token"] = app.csrf;
-  const response = await fetch(path, options);
+  let response;
+  try {
+    response = await fetch(path, options);
+  } catch {
+    // Unreachable, or a proxy redirect the CSP blocked. The request may have arrived, so it is not sent
+    // again by itself: the person tries again once the notice has gone.
+    offerRenewal(false);
+    throw new Error("The workbench could not be reached. Nothing more was sent; try again once it is back.");
+  }
   let data = null;
   try { data = await response.json(); } catch { data = null; }
+  if (response.status === 401 && (data === null || typeof data !== "object")) {
+    // The proxy's session ended and the request never reached the workbench: send it again once renewed.
+    await proxyRenewed();
+    return api(path, { method, body });
+  }
   if (response.status === 401 && path !== "/api/me") {
     app.me = null;
     await showSignIn();
@@ -95,6 +116,73 @@ async function api(path, { method = "GET", body } = {}) {
 function message(result) {
   const detail = result.data || {};
   return detail.message || (typeof detail === "string" ? detail : `Request failed (${result.status})`);
+}
+
+// Resolves once the proxy lets requests through again, with the notice shown meanwhile. Every request
+// that met the expired session waits on the same renewal.
+function proxyRenewed() {
+  if (!proxy.renewed) proxy.renewed = new Promise((resolve) => { proxy.resolve = resolve; });
+  offerRenewal(true);
+  return proxy.renewed;
+}
+
+// The notice, with a button opening the proxy's own session refresh in a small window. The page checks
+// every two seconds whether requests pass again, so a session renewed in another tab counts as well.
+function offerRenewal(waiting) {
+  let notice = document.getElementById("session");
+  if (!notice) {
+    notice = el("div", { id: "session", class: "session-notice", role: "alert" });
+    document.body.prepend(notice);
+  }
+  const blocked = el("span", {
+    hidden: true,
+    text: "The browser blocked the window: open the workbench in a new tab and sign in there. This page carries on by itself.",
+  });
+  notice.replaceChildren(
+    el("span", {
+      text: waiting || proxy.renewed
+        ? "Your Google session for the workbench has ended. Renew it to carry on: what you were doing is kept, and sent once it is renewed."
+        : "The workbench could not be reached. If your Google session ended, renew it. Unsaved changes stay on this page.",
+    }),
+    el("button", {
+      class: "primary small",
+      text: "Renew Google session",
+      on: { click: () => {
+        proxy.window = window.open(RENEW_URL, "iap-session", "popup,width=520,height=680");
+        blocked.hidden = Boolean(proxy.window);
+      } },
+    }),
+    blocked,
+  );
+  notice.hidden = false;
+  if (!proxy.poll) proxy.poll = setInterval(checkRenewed, 2000);
+}
+
+async function checkRenewed() {
+  if (proxy.checking) return;
+  proxy.checking = true;
+  let passed = false;
+  try {
+    const response = await fetch("/api/me", { credentials: "same-origin", headers: { ...BACKGROUND } });
+    const data = await response.json().catch(() => null);
+    passed = response.status !== 401 || (data !== null && typeof data === "object");
+  } catch {
+    passed = false;
+  } finally {
+    proxy.checking = false;
+  }
+  if (!passed) return;
+  clearInterval(proxy.poll);
+  proxy.poll = null;
+  if (proxy.window && !proxy.window.closed) proxy.window.close();
+  proxy.window = null;
+  const notice = document.getElementById("session");
+  if (notice) notice.hidden = true;
+  const resolve = proxy.resolve;
+  proxy.renewed = null;
+  proxy.resolve = null;
+  if (resolve) resolve();
+  else toast("The workbench is back: try again.");
 }
 
 function setCrumbs(...parts) {
