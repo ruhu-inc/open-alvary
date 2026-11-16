@@ -84,6 +84,14 @@ resource "azurerm_key_vault_secret" "review_database_url" {
   depends_on = [azurerm_role_assignment.vault_operator]
 }
 
+resource "azurerm_management_lock" "review_postgres" {
+  count      = local.workbench_enabled ? 1 : 0
+  name       = "keep-${azurerm_postgresql_flexible_server.review[0].name}"
+  scope      = azurerm_postgresql_flexible_server.review[0].id
+  lock_level = "CanNotDelete"
+  notes      = "The review database: remove this lock on purpose before deleting the server."
+}
+
 resource "azurerm_container_app" "workbench" {
   count                        = local.workbench_enabled ? 1 : 0
   name                         = "${local.name_prefix}-workbench"
@@ -92,6 +100,15 @@ resource "azurerm_container_app" "workbench" {
   revision_mode                = "Single"
   workload_profile_name        = "Consumption"
   tags                         = local.common_tags
+
+  lifecycle {
+    # Its ingress is external: never without Entra ID in front of it (findings 2026-11-16, item 41), as
+    # Google's identity-aware proxy is in front of it on Google Cloud.
+    precondition {
+      condition     = var.workbench_entra_client_id != ""
+      error_message = "The workbench is reachable from the internet: set workbench_entra_client_id so Entra ID stands in front of it."
+    }
+  }
 
   identity {
     type         = "UserAssigned"

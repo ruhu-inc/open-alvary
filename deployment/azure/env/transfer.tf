@@ -55,8 +55,9 @@ locals {
 }
 
 resource "azurerm_container_app_job" "restore" {
-  for_each                     = local.restores
-  name                         = "${local.short_prefix}-restore-${each.key}"
+  for_each = local.restores
+  # Container Apps job names are 32 characters at most: "open-alvary-stg-sc-restore-public" was 33.
+  name                         = "${local.short_prefix}-rst-${each.key}"
   location                     = azurerm_resource_group.main.location
   resource_group_name          = azurerm_resource_group.main.name
   container_app_environment_id = azurerm_container_app_environment.main.id
@@ -64,6 +65,13 @@ resource "azurerm_container_app_job" "restore" {
   replica_timeout_in_seconds   = 3600
   replica_retry_limit          = 0
   tags                         = local.common_tags
+
+  lifecycle {
+    precondition {
+      condition     = length("${local.short_prefix}-rst-${each.key}") <= 32
+      error_message = "A Container Apps job name is 32 characters at most."
+    }
+  }
 
   manual_trigger_config {
     parallelism              = 1

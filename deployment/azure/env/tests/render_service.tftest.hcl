@@ -26,19 +26,21 @@ override_resource {
 }
 
 variables {
-  subscription_id      = "00000000-0000-0000-0000-000000000000"
-  environment          = "staging"
-  operator_email       = "operator@example.org"
-  public_domain        = "open.example.org"
-  api_domain           = "api.open.example.org"
-  operator_ip_ranges   = ["203.0.113.1"]
-  workbench_image      = "registry.example.org/workbench:1"
-  workbench_domain     = "review.example.org"
-  public_image         = ""
-  public_settings      = {}
-  admin_ssh_public_key = "unused: the standby has no machines"
-  engine_enabled       = false
-  inference_enabled    = false
+  subscription_id    = "00000000-0000-0000-0000-000000000000"
+  environment        = "staging"
+  operator_email     = "operator@example.org"
+  public_domain      = "open.example.org"
+  api_domain         = "api.open.example.org"
+  operator_ip_ranges = ["203.0.113.1"]
+  workbench_image    = "registry.example.org/workbench:1"
+  workbench_domain   = "review.example.org"
+  # Entra ID in front of the workbench, which a plan with a workbench must have (workbench.tf).
+  workbench_entra_client_id = "11111111-1111-1111-1111-111111111111"
+  public_image              = ""
+  public_settings           = {}
+  admin_ssh_public_key      = "unused: the standby has no machines"
+  engine_enabled            = false
+  inference_enabled         = false
 }
 
 run "off_by_default" {

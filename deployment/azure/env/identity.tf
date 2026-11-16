@@ -38,11 +38,32 @@ resource "azurerm_role_assignment" "pull" {
   principal_id         = each.value
 }
 
+# Each identity reads the secrets it uses and no other (findings 2026-11-16, item 41: every workload could
+# read the whole vault). A grant is on the secret itself, so a secret added later is read by nobody until
+# it is named here.
+locals {
+  secret_reads = {
+    public = toset(concat(
+      local.secret_names,
+      values(local.service_database_env),
+      flatten([for name, job in local.jobs : concat(values(job.secrets), [local.job_database[name]])]),
+      try(values(local.restores.public.secrets), []),
+    ))
+    workbench = toset(concat(values(local.workbench_secret_env), try(values(local.restores.review.secrets), [])))
+    ingestion = toset(["google-wif-config"])
+  }
+  secret_grants = {
+    for pair in flatten([
+      for workload, names in local.secret_reads : [for name in names : { workload = workload, name = name }]
+    ]) : "${pair.workload}/${pair.name}" => pair
+  }
+}
+
 resource "azurerm_role_assignment" "secrets" {
-  for_each             = local.workloads
-  scope                = azurerm_key_vault.main.id
+  for_each             = local.secret_grants
+  scope                = "${azurerm_key_vault.main.id}/secrets/${each.value.name}"
   role_definition_name = "Key Vault Secrets User"
-  principal_id         = each.value
+  principal_id         = local.workloads[each.value.workload]
 }
 
 resource "azurerm_role_assignment" "corpus_read" {

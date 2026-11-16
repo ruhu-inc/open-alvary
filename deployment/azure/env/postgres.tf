@@ -32,6 +32,15 @@ resource "azurerm_postgresql_flexible_server" "main" {
   }
 }
 
+# A lock against deletion, as Cloud SQL's deletion protection on Google Cloud: removing a database server
+# takes removing this lock first, on purpose (findings 2026-11-16, item 41).
+resource "azurerm_management_lock" "postgres" {
+  name       = "keep-${azurerm_postgresql_flexible_server.main.name}"
+  scope      = azurerm_postgresql_flexible_server.main.id
+  lock_level = "CanNotDelete"
+  notes      = "The public database: remove this lock on purpose before deleting the server."
+}
+
 resource "azurerm_postgresql_flexible_server_database" "main" {
   name      = local.database
   server_id = azurerm_postgresql_flexible_server.main.id
