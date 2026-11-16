@@ -48,7 +48,7 @@ import copy
 import json
 import re
 
-from ingestion import layout_parser, reconcile
+from ingestion import cited_names, layout_parser, reconcile
 
 COUNTRY = "ng"
 # The kinds of instrument the stored files hold (ledger types) and the document type each is reviewed as.
@@ -594,7 +594,8 @@ def sc_details(listed: dict, kind: str, url: str) -> tuple[dict, dict]:
     if bench:
         values["profile.bench"] = bench
     evidence = {key: {"value": value, "page": None, "evidence": catalogue} for key, value in values.items()}
-    return values, evidence
+    # The names as cases are cited; the catalogue's own words stay the evidence, the full case name as printed.
+    return cited_names.cited_suggestions(values, evidence)
 
 
 # --- preparing the files whose readings have arrived -------------------------------------------------

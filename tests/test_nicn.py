@@ -277,17 +277,18 @@ def test_the_details_are_suggested_from_the_header_each_with_its_words_and_page(
     assert values["profile.case_numbers"] == ["NICN/LA/123/2020"]
     assert values["identity.number.printed"] == "SUIT NO. NICN/LA/123/2020"
     assert (values["event:decided.date"], values["identity.year"]) == ("2026-01-08", "2026")
-    assert values["profile.bench"] == [{"name": "C. D. EXAMPLE", "role": "sole"}]
-    # The parties as printed, each with its role and the counsel the representation names for it.
+    assert values["profile.bench"] == [{"name": "C. D. Example", "role": "sole"}]
+    # The parties as cases are cited (2026-11-16), each with its role and the counsel the representation
+    # names for it; the full case name keeps the names as printed.
     assert values["profile.parties"] == [
         {
-            "name": "ADA EXAMPLE",
+            "name": "Ada Example",
             "role": "claimant",
             "anonymised": "no",
             "represented_by": "A. B. Counsel Esq., with E. F. Junior Esq.",
         },
         {
-            "name": "EXAMPLE SERVICES LIMITED",
+            "name": "Example Services Limited",
             "role": "defendant",
             "anonymised": "no",
             "represented_by": "G. H. Advocate Esq.",
@@ -334,7 +335,7 @@ def test_the_portals_catalogue_stands_in_where_the_page_prints_no_header():
     )
     assert evidence["event:decided.date"]["evidence"] == "The portal's summary: Date Delivered: 2013-02-14"
     assert [p["role"] for p in values["profile.parties"]] == ["claimant", "defendant"]
-    assert values["profile.bench"] == [{"name": "C. D. EXAMPLE", "role": "sole"}]
+    assert values["profile.bench"] == [{"name": "C. D. Example", "role": "sole"}]
     assert evidence["profile.court.division"]["absent"] == "not_in_source"
 
 
@@ -669,6 +670,105 @@ def test_the_workbench_lists_and_opens_the_ng_collection(tmp_path, monkeypatch):
     assert page_one.status_code == 200, page_one.text
 
 
+def test_a_collection_prepared_before_names_were_cited_is_read_as_cited(tmp_path, monkeypatch):
+    """A collection prepared before 2026-11-16 holds the names in the capitals they are printed in: the
+    workbench lists and drafts them as cases are cited, the full case name as printed; details saved in
+    capitals are offered the cited form beside the field, never changed."""
+    from fastapi.testclient import TestClient
+
+    from workbench import content
+    from workbench.app import create_app
+    from workbench.store import Store, connect
+
+    folder = tmp_path / "ng"
+    collection = nicn.FolderCollection(folder)
+    sha = hashlib.sha256(page("word")).hexdigest()
+    items = {"nicn-judgments:9001": record(9001, sha=sha, suit="NICN/LA/123/2020", date="2026-01-08")}
+    items["nicn-judgments:9001"]["listed"]["title"] = "ADA EXAMPLE -VS- EXAMPLE SERVICES LIMITED & ORS"
+
+    def fetch(found):
+        return page("word"), {
+            "url": found["url"],
+            "retrieved_at": "2026-10-23T00:28:42Z",
+            "listed": found["listed"],
+        }
+
+    assert nicn.prepare_items(items, list(items), fetch, collection)["prepared"] == 1
+    collection.save_manifest()
+    doc_id = "ng-nicn-la-123-2020-2026-01-08"
+    # As the reader before 2026-11-16 left it: the names as printed.
+    (path,) = folder.rglob(f"{doc_id}.document.json")
+    document = json.loads(path.read_text())
+    printed = "ADA EXAMPLE -VS- EXAMPLE SERVICES LIMITED & ORS"
+    for group in (
+        document["suggested"],
+        {k: v["value"] for k, v in document["suggested_evidence"].items() if "value" in v},
+    ):
+        group["identity.title"] = printed
+        group["profile.bench"] = [{"name": "C. D. EXAMPLE", "role": "sole"}]
+        for row, name in zip(
+            group["profile.parties"], ("ADA EXAMPLE", "EXAMPLE SERVICES LIMITED"), strict=True
+        ):
+            row["name"] = name
+    for key in ("identity.title", "profile.bench", "profile.parties"):
+        document["suggested_evidence"][key]["value"] = document["suggested"][key]
+    path.write_text(json.dumps(document))
+    manifest = json.loads((folder / "manifest.json").read_text())
+    for entry in manifest["documents"]:
+        entry["title"] = printed
+    (folder / "manifest.json").write_text(json.dumps(manifest))
+
+    monkeypatch.setenv("ALVARY_REVIEW_COLLECTIONS", str(folder))
+    first = tmp_path / "first"
+    first.mkdir()
+    store = Store(connect(f"sqlite:///{tmp_path / 'workbench.db'}"))
+    store.add_operator("reviewer@example.org", "Rev", {"reviewer"})
+    browser = TestClient(
+        create_app(store, content.Library(first), None, dev_login=True), base_url="http://127.0.0.1"
+    )
+    assert browser.post("/auth/dev", json={"email": "reviewer@example.org"}).status_code == 200
+    browser.headers["X-CSRF-Token"] = browser.get("/api/me").json()["csrf"]
+
+    # One defendant read from the page, "& ORS" printed: the reader may have missed one, so the printed
+    # word stands ("& Anor" or "& Ors" follows the count only where a side has two or more).
+    cited = "Ada Example v. Example Services Limited & Ors"
+    listed = {d["id"]: d for d in browser.get("/api/documents?limit=200").json()["documents"]}
+    assert listed[doc_id]["title"] == cited
+    details = browser.get(f"/api/documents/{doc_id}/details").json()
+    draft = details["record"]["details"]
+    assert draft["identity.title"] == cited
+    assert [p["name"] for p in draft["profile.parties"]] == ["Ada Example", "Example Services Limited"]
+    assert draft["profile.bench"] == [{"name": "C. D. Example", "role": "sole"}]
+    assert draft["identity.full_title"].startswith("ADA EXAMPLE (Claimant)")
+    assert draft["expressions"][0]["title"] == cited
+    assert details["suggestions"]["identity.title"]["value"] == cited
+    assert details["suggestions"]["identity.title"]["evidence"].startswith(
+        "The page's title: ADA EXAMPLE -VS-"
+    )
+
+    # Saved in capitals by a reviewer: kept, with the cited form offered beside each field.
+    capitals = {
+        **draft,
+        "identity.title": printed,
+        "profile.parties": [{**p, "name": p["name"].upper()} for p in draft["profile.parties"]],
+    }
+    saved = browser.post(
+        f"/api/documents/{doc_id}/details",
+        json={
+            "expected_revision": 0,
+            "status": "draft",
+            "details": capitals,
+            "absent": details["record"]["absent"],
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    again = browser.get(f"/api/documents/{doc_id}/details").json()
+    assert again["record"]["details"]["identity.title"] == printed
+    assert again["record"]["details"]["profile.parties"][0]["name"] == "ADA EXAMPLE"
+    assert again["suggestions"]["identity.title"]["value"] == cited
+    assert again["suggestions"]["profile.parties"]["value"][0]["name"] == "Ada Example"
+
+
 def test_a_judgment_whose_text_is_held_waits_for_its_details_alone(tmp_path, monkeypatch):
     """Words masked in the source: no page waits for review, the queue asks for the details, the
     approval confirms the details alone, and publishing never takes the text."""
@@ -841,7 +941,7 @@ def test_a_court_of_appeal_judgment_on_the_portal_gives_its_case_number_date_and
     )
     assert values["profile.case_numbers"] == ["CA/I/195/06"]
     assert values["event:decided.date"] == "2012-05-03"
-    assert [j["name"] for j in values["profile.bench"]] == ["STANLEY SHENKO ALAGOA", "MODUPE FASANMI"]
+    assert [j["name"] for j in values["profile.bench"]] == ["Stanley Shenko Alagoa", "Modupe Fasanmi"]
 
 
 def test_other_courts_and_older_case_numbers_and_dates_are_read():

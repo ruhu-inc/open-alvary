@@ -26,7 +26,7 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from ingestion import render, settings
+from ingestion import cited_names, render, settings
 from schema import record as R
 from schema.jurisdictions import registry as jurisdiction_registry
 from workbench import access as access_section
@@ -284,7 +284,7 @@ def create_app(
     def listed(document: dict) -> dict:
         return {
             "id": document["id"],
-            "title": document["title"],
+            "title": review.prepared_title(document),
             "type": document.get("type", "act"),
             "year": document.get("year"),
             "jurisdiction": document.get("jurisdiction"),
@@ -954,6 +954,10 @@ def create_app(
             if view["place"].code == "ng" and not record_view.reader_suggested(act)
             else record_view.suggestions(act)
         )
+        title = suggestions.get("identity.title")
+        if cited_names.is_cited_here(act) and isinstance((title or {}).get("value"), str):
+            # A Nigerian Act's short title as laws are cited; its words as printed stay its evidence.
+            suggestions["identity.title"] = {**title, "value": cited_names.cited(title["value"])[0]}
         links = act.get("relations") or []
         if links:  # the laws it affects, as the collection's texts say: suggested, never filled in
             suggestions["relations"] = {

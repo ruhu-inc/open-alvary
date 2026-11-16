@@ -14,7 +14,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from ingestion import first_collection, layout_parser, native, render
+from ingestion import cited_names, first_collection, layout_parser, native, render
 from workbench.store import canonical_json
 
 KINDS = {"heading", "paragraph", "list_item", "table"}
@@ -260,7 +260,9 @@ class Library:
             if len(self._details) >= 2000:  # a bounded cache: drop the oldest
                 self._details.pop(next(iter(self._details)))
             self._details[act_id] = details
-        return {**found, **self._details[act_id]}
+        # The names its reader suggested as cases and laws are cited (Nigeria's, in English): collections
+        # prepared before 2026-11-16 hold them in the capitals they are printed in.
+        return cited_names.cited_document({**found, **self._details[act_id]})
 
     def provenance(self, act_id: str) -> dict:
         """How and when the original file was retrieved (written by the fetch step)."""

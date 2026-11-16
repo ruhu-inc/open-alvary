@@ -1060,7 +1060,9 @@ async function detailsView(actId) {
       el("option", { value: "", text: "given" }), Object.entries(standard.absent).map(([k, label]) => el("option", { value: k, text: label })));
     why.value = absent[field.key] || "";
     const hint = field.kind === "rows" ? null : suggestions[field.key];
-    let note = null;
+    let note = field.kind === "rows" && CASED[field.key] && canEdit
+      ? casedNames(field.key, () => values[field.key], suggestions[field.key], () => { rows.get(field.key).replaceWith(row(field)); touched(); })
+      : null;
     if (hint) {
       const label = (value) => field.kind === "choice" ? (field.choices.find((c) => c.value === value) || { label: String(value) }).label : String(value);
       const shown = hint.absent ? standard.absent[hint.absent]
@@ -1080,7 +1082,8 @@ async function detailsView(actId) {
           else { values[field.key] = structuredClone(hint.value); delete absent[field.key]; why.value = ""; }
           rows.get(field.key).replaceWith(row(field)); touched();
         } } }) : null,
-        hint.secondary ? el("div", { class: "muted small", text: `Secondary source: ${label(hint.secondary.value)} — “${hint.secondary.evidence}”` }) : null);
+        hint.secondary ? el("div", { class: "muted small", text: `Secondary source: ${label(hint.secondary.value)} — “${hint.secondary.evidence}”` }) : null,
+        doubtfulNote(hint));
     }
     return { input, why, note };
   };
@@ -1206,6 +1209,45 @@ function relationsEditor(standard, links, onChange, related = {}) {
 }
 
 // A small table of rows (language versions, parties, bench): one input per column. A column may have
+// The parties' and judges' names as cases are cited (ingestion/cited_names.py), where a reviewer saved them
+// in the capitals they are printed in: a cell is offered only where it is the suggestion but for its
+// capitals, so a name or counsel the reviewer changed otherwise is never touched, nor any other column.
+const CASED = { "profile.parties": ["name", "represented_by"], "profile.bench": ["name"] };
+
+function casedCells(key, rows, suggested) {
+  const out = [];
+  if (!Array.isArray(rows) || !Array.isArray(suggested) || rows.length !== suggested.length) return out;
+  rows.forEach((row, i) => CASED[key].forEach((column) => {
+    const saved = row && row[column], cited = suggested[i] && suggested[i][column];
+    if (typeof saved === "string" && typeof cited === "string" && saved !== cited && saved.toLowerCase() === cited.toLowerCase()) {
+      out.push([i, column, cited]);
+    }
+  }));
+  return out;
+}
+
+function doubtfulNote(hint) {
+  return hint && hint.doubtful && hint.doubtful.length
+    ? el("div", { class: "muted small", text: `Capitals kept as printed: ${hint.doubtful.join(", ")}. Check them against the page.` })
+    : null;
+}
+
+function casedNames(key, current, hint, redraw) {
+  if (!hint || !Array.isArray(hint.value)) return null;
+  const cells = casedCells(key, current(), hint.value);
+  const doubtful = doubtfulNote(hint);
+  if (!cells.length) return doubtful;
+  const names = hint.value.map((r) => r && r.name).filter(Boolean).join("; ");
+  return el("div", { class: "hint" },
+    el("span", { text: "As cases are cited: " }), el("span", { class: "evidence", text: names.length > 80 ? names.slice(0, 80) + "…" : names }), " ",
+    el("button", { class: "small", text: "Use these capitals", title: "Changes only the capitals of the names and counsel shown; nothing else", on: { click: () => {
+      const rows = current();  // as the reviewer has it now, edits since the form was drawn included
+      casedCells(key, rows, hint.value).forEach(([i, column, cited]) => { rows[i][column] = cited; });
+      redraw();
+    } } }),
+    doubtful);
+}
+
 // suggestions by row (a version's authority, by its language): each is shown under its row with the
 // words that state it and their page, and is applied only when the reviewer presses "Use suggestion".
 function rowsEditor(columns, rows, onChange, { suggested = {}, pageLink = null, canEdit = false } = {}) {

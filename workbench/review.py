@@ -2,6 +2,7 @@
 (operations.publish): its pages, its details (shared by a work's language versions) and whether
 the latest approval still covers both exactly."""
 
+from ingestion import cited_names
 from workbench import content, details, publication, record_view, routing
 
 
@@ -35,9 +36,19 @@ class Review:
         """The title a language version of this work was prepared with ("" where it has none here)."""
         # A document that names no language and no other versions (a Nigerian Act) is its one version.
         if language and (language == act.get("language") or not (act.get("language") or act.get("versions"))):
-            return act.get("title") or ""
+            return self.prepared_title(act)
         other = (act.get("versions") or {}).get(language or "")
         return self.library.listed(other).get("title", "") if other and self.library.has(other) else ""
+
+    def prepared_title(self, act: dict) -> str:
+        """The title a document was prepared with; a Nigerian one as cases and laws are cited, where its
+        collection holds it in the capitals it is printed in (prepared before 2026-11-16)."""
+        title = act.get("title") or ""
+        if not cited_names.is_cited_here(act):
+            return title
+        if "suggested" not in act:  # as its manifest lists it
+            return cited_names.listed_title(title)
+        return cited_names.title_of(title, act["suggested"])[0]
 
     def shown_title(self, act: dict) -> str:
         """A document's title as the workbench heads and lists it: its version's title given in the
@@ -50,7 +61,7 @@ class Review:
         given = next(
             ((row.get("title") or "").strip() for row in rows if row.get("language") == language), ""
         )
-        return given or act.get("title") or act["id"]
+        return given or self.prepared_title(act) or act["id"]
 
     def described(self, act: dict, record: dict | None, reading: dict) -> dict:
         """The document's details in the record view: values, what is accounted for, its fields."""
@@ -67,6 +78,8 @@ class Review:
                     *details.initial(details.suggest(reading, act, self.library.manifest_for(act["id"])))
                 )
             )
+            if isinstance(values.get("identity.title"), str):
+                values = {**values, "identity.title": cited_names.cited(values["identity.title"])[0]}
         else:  # nothing marked absent by inference: suggested beside its field (record_view.suggestions)
             values = record_view.base_values(act, self.library.manifest_for(act["id"]))
             shown = record_view.fields(values["identity.family"], values["identity.type"], profile)

@@ -62,12 +62,14 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup, Comment, Doctype, NavigableString, ProcessingInstruction, Tag
 
+from ingestion import cited_names
+
 COUNTRY = "ng"
 SOURCE = "nicn-judgments"
 COURT = "National Industrial Court of Nigeria"
 PUBLICATION = "National Industrial Court of Nigeria: judgment portal"
 # The reader's version: a page prepared by an earlier one is prepared again (BucketCollection.done).
-READER = "nicn-html-2026-10-31.1"
+READER = "nicn-html-2026-11-16.1"  # 2026-11-16: names as cases are cited
 WORDS_PER_PAGE = 700  # a review page: about one printed page of a judgment
 UNITS_PER_PAGE = 120  # well under the workbench's 400 units a page
 UNIT_CHARACTERS = 6000  # a unit longer than this is cut at a sentence end (the workbench takes 8192)
@@ -2076,7 +2078,9 @@ def details(
             "page": None,
             "evidence": "The header names no judicial division",
         }
-    return values, evidence
+    # The case name, parties and judges as cases are cited, their words as printed kept as evidence; the
+    # full case name, built above from the names as printed, keeps them so.
+    return cited_names.cited_suggestions(values, evidence)
 
 
 # --- document ids, collections and preparing the stored pages -----------------------------------------
