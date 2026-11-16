@@ -4,7 +4,7 @@
 #   corpus-fetcher   python -m ingestion.fetch_job    fetches an approved work list from official sites
 # Built from the commit itself (git archive); .gcloudignore keeps private material out regardless.
 # pdftotext reads each PDF's text layer here: the job's container is its sandbox.
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
 RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app

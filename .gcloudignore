@@ -27,3 +27,11 @@ scripts/spec_models.py
 scripts/verify_spec.py
 tests/test_planning_execution.py
 tests/test_spec_contracts.py
+
+# Terraform working files: state (it can hold keys), saved plans, settings and backend configuration. Releases
+# build from `git archive`, but a hand-run build or upload from this tree must not carry them either.
+**/.terraform/
+**/*.tfstate*
+**/*.plan
+**/*.tfvars
+**/backend.hcl

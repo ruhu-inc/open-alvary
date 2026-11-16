@@ -21,8 +21,10 @@ jobs:
         with:
           node-version: '22'
       - run: pip install pip-audit
-      - name: Python dependencies, as pinned (service, workbench and ingestion jobs)
-        run: pip-audit --strict --no-deps --disable-pip -r requirements.lock -r deployment/ingestion-jobs.requirements.lock
+      - name: Python dependencies, as pinned (service, workbench, ingestion jobs and page renderer)
+        run: |
+          pip-audit --strict --no-deps --disable-pip -r requirements.lock -r deployment/ingestion-jobs.requirements.lock
+          pip-audit --strict --no-deps --disable-pip -r deployment/render.requirements.lock
       - name: Website and workbench editor, what ships to browsers
         run: |
           npm --prefix web audit --omit=dev --audit-level=high

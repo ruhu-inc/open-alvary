@@ -524,7 +524,8 @@ def test_ghanaian_contents_preamble_and_the_body_after_passed_by_parliament():
     assert span(text, nodes["preamble"]).endswith("PASSED by Parliament and ofbamgel to by the Kporoqivj:")
     # After the enacting words the first group heading opens the body: a leaf of the document, before
     # section 1, not the preamble's.
-    assert "Buni Cnagehfuis Cibnidloiv\n\pIvbitwiglnufw" not in span(text, nodes["preamble"])
+    preamble = span(text, nodes["preamble"])
+    assert "Apcohqugfkunf" not in preamble and not preamble.endswith("Cibnidloiv")
     assert nodes["sec_1"].parent is result.root
     assert span(text, nodes["notice_1"]) == "Date of Gazette notification: 18th May, 2012"
     assert codes(result) == []

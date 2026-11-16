@@ -58,3 +58,13 @@ jobs:
           untracked=$(git ls-files --others --exclude-standard -- workbench/static/public-preview)
           if [ -n "$untracked" ]; then echo "Files the preview build makes are not committed: $untracked"; exit 1; fi
       - run: scripts/container_smoke.sh
+  released-images:
+    # Each image the release scripts ship, built and started: the compose smoke test above runs other images.
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [public, workbench, render, ingestion, restore]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - run: scripts/released_images.sh ${{ matrix.image }}

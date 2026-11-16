@@ -16,6 +16,14 @@ web/node_modules
 web/dist
 public
 
+# Terraform working files: state (it can hold keys), saved plans, settings and backend configuration. Releases
+# build from `git archive`, but a hand-run build or upload from this tree must not carry them either.
+**/.terraform/
+**/*.tfstate*
+**/*.plan
+**/*.tfvars
+**/backend.hcl
+
 # Local design material must not enter deployment bundles
 docs/
 scripts/planning_contracts.py

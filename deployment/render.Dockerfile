@@ -3,7 +3,7 @@
 # three modules it runs are in it. Liberation and DejaVu stand in for the Times New Roman and Arial that
 # Gazette PDFs use without embedding, as in the workbench's image: without them such pages come out
 # almost blank. Built from the commit by release.sh render.
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:5e2bdb1b0d542d5039cffb8181c65930093949194a65c365dfb1b0fe13a4fa5b
 RUN apt-get update && apt-get install -y --no-install-recommends poppler-utils fonts-liberation fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app

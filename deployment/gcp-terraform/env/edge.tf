@@ -210,11 +210,21 @@ resource "google_compute_url_map" "public" {
   default_service = google_compute_backend_service.public[0].id
 }
 
+# TLS 1.2 at least, with the MODERN profile's ciphers: the platform default still accepts TLS 1.0 and 1.1
+# (findings 2026-11-16, item 31). Browsers and clients from the last decade all speak 1.2.
+resource "google_compute_ssl_policy" "edge" {
+  count           = local.public_enabled ? 1 : 0
+  name            = "${local.name_prefix}-tls"
+  profile         = "MODERN"
+  min_tls_version = "TLS_1_2"
+}
+
 resource "google_compute_target_https_proxy" "public" {
   count           = local.public_enabled ? 1 : 0
   name            = "${local.name_prefix}-https"
   url_map         = google_compute_url_map.public[0].id
   certificate_map = "//certificatemanager.googleapis.com/${google_certificate_manager_certificate_map.edge.id}"
+  ssl_policy      = google_compute_ssl_policy.edge[0].id
 }
 
 resource "google_compute_global_forwarding_rule" "https" {
