@@ -22,6 +22,7 @@ import json
 import logging
 import math
 import os
+import re
 import secrets
 import socket
 import threading
@@ -266,7 +267,7 @@ def svix_valid(secret: str | None, headers, body: bytes, tolerance: int = 300) -
         not ident
         or not stamp
         or not given
-        or not stamp.isdigit()
+        or not re.fullmatch(r"[0-9]{1,12}", stamp)
         or abs(time.time() - int(stamp)) > tolerance
     ):
         return False

@@ -691,3 +691,57 @@ def test_liveness_needs_no_database_and_health_still_reads_it(catalogue, store, 
     live = client.get("/livez")
     assert live.status_code == 200 and live.headers["cache-control"] == "no-store"
     assert client.get("/healthz").status_code == 503
+
+
+# Values a caller can send by mistake or on purpose: a digit that is not 0-9, a negative, a number no
+# database integer holds, a stray %, and a very long word.
+ODD = ("²", "-1", "9" * 40, "%", "a" * 4000)
+# Parameters the website's data path reads for itself rather than declaring.
+READ_BY_HAND = ("page", "offset", "limit", "cursor", "q", "jurisdiction", "access", "type", "language")
+
+
+def _get_routes(routes, prefix=""):
+    from fastapi.routing import APIRoute
+    from starlette.routing import Mount
+
+    for route in routes:
+        if isinstance(route, Mount):
+            yield from _get_routes(route.app.routes, prefix + route.path)
+        elif isinstance(route, APIRoute) and "GET" in route.methods:
+            yield prefix + route.path, [q.name for q in route.dependant.query_params]
+
+
+def test_odd_values_in_any_parameter_or_path_never_answer_a_server_error(client):
+    """Consolidated findings item 11: every input is refused or answered, never a 500 or a long hold."""
+    routes = list(_get_routes(client.app.routes))
+    assert any(path.startswith("/site/v1/") for path, _ in routes)
+    failures = []
+    for path, declared in routes:
+        names = [*declared, *(READ_BY_HAND if path.startswith("/site/") else ())]
+        holes = re.findall(r"\{[^}]+\}", path)
+        for value in ODD:
+            shaped = path
+            for hole in holes:
+                shaped = shaped.replace(hole, quote(value, safe="") if ":path" not in hole else quote(value))
+            if holes:
+                started = time.perf_counter()
+                answer = client.get(shaped)
+                if answer.status_code >= 500 or time.perf_counter() - started > 1:
+                    failures.append((shaped[:80], answer.status_code))
+            for name in names:
+                answer = client.get(re.sub(r"\{[^}]+\}", SOURCE, path), params={name: value})
+                if answer.status_code >= 500:
+                    failures.append((path, name, value[:10], answer.status_code))
+    assert failures == []
+
+
+def test_a_citation_of_repeated_annexes_is_read_at_once_and_the_rest_api_bounds_its_length(client):
+    from api import pinpoint
+
+    started = time.perf_counter()
+    assert pinpoint.read("annex " * 2000) is None
+    assert pinpoint.split("annex " * 50 + "NDPA") is not None
+    assert time.perf_counter() - started < 1
+    assert pinpoint.read("Annex 2, article 4") == ("annex:2", "art:4")
+    assert client.get("/api/citations/" + quote("annex " * 60)).status_code == 422
+    assert client.get("/site/v1/search", params={"page": "²"}).status_code == 400

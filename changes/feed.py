@@ -278,7 +278,7 @@ class Tokens:
 
     def open(self, kind: str, token: str) -> dict:
         try:
-            if not token.startswith(f"{kind}1.") or len(token) > 2000:
+            if not isinstance(token, str) or not token.startswith(f"{kind}1.") or len(token) > 2000:
                 raise ValueError
             raw = base64.urlsafe_b64decode(token[3:] + "=" * (-len(token[3:]) % 4))
             size = raw[0]

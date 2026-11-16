@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, Query, Request, Response
+from fastapi import Path as PathParam
 from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.utils import get_openapi
@@ -36,7 +37,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api import courts, text_index
 from api.admission import AdmissionUnavailable
-from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable
+from api.catalogue import MAX_CITATION, MAX_OFFSET, InvalidSearch, LegacyCatalogue, SourceUnavailable
 from api.credentials import NOT_INCLUDED, problem
 from api.emission import MAX_SINGLE_RESPONSE_BYTES, CheckedFileResponse, CheckedResponse, CheckedText
 from api.openapi_docs import describe
@@ -315,7 +316,7 @@ def create_v1_app(
         jurisdiction: str | None = None,
         access: Literal["all", "open", "metadata"] = "all",
         limit: int = Query(50, ge=1, le=100),
-        offset: int = Query(0, ge=0),
+        offset: int = Query(0, ge=0, le=MAX_OFFSET),
         service: LegacyCatalogue = Depends(catalogue),
     ) -> SourcePage:
         return service.sources(
@@ -453,7 +454,7 @@ def create_v1_app(
         jurisdiction: str | None = None,
         access: Literal["all", "open", "metadata"] = "all",
         limit: int = Query(25, ge=1, le=100),
-        offset: int = Query(0, ge=0),
+        offset: int = Query(0, ge=0, le=MAX_OFFSET),
         service: LegacyCatalogue = Depends(catalogue),
     ) -> SearchPage:
         return service.search(
@@ -600,7 +601,7 @@ def create_v1_app(
     @app.get("/citations/{citation:path}")
     def citations(
         request: Request,
-        citation: str,
+        citation: str = PathParam(max_length=MAX_CITATION),
         as_of: date | None = None,
         language: str | None = LANGUAGE,
         service: LegacyCatalogue = Depends(catalogue),

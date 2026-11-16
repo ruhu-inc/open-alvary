@@ -154,7 +154,7 @@ def _offset(cursor: str | None, expected: str = "edges") -> int:
         return 0
     try:
         kind, _, offset = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)).decode().partition(":")
-        if kind == expected and offset.isdigit() and int(offset) <= 100_000:
+        if kind == expected and re.fullmatch(r"[0-9]{1,6}", offset) and int(offset) <= 100_000:
             return int(offset)
     except (ValueError, UnicodeDecodeError):
         pass
@@ -197,6 +197,10 @@ def _asserted(row: dict, readable: bool) -> dict:
 MAX_ANCHOR_BYTES = 900 * 1024
 # A text search serves its first 1,000 hits, 25 a page by default and 100 at most (API-03).
 MAX_HIT_OFFSET = 1000
+# Bounds on what a caller may ask for, checked before any work: a listing's offset (an integer the
+# database can hold), and a citation's length (as MCP's resolve_citation already refuses longer).
+MAX_OFFSET = 100_000
+MAX_CITATION = 300
 # Where the catalogue is read record by record (browse's _walk), a search finds at most this many records by
 # their published text (else 413, as before).
 MAX_TEXT_WORKS = 10_000

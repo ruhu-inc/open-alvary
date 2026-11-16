@@ -93,7 +93,7 @@ def _only(request: Request, *allowed: str) -> None:
 def _page(value: str | None) -> int:
     if value is None:
         return 1
-    if not value.isdigit() or int(value) < 1:
+    if not re.fullmatch(r"[0-9]{1,9}", value) or int(value) < 1:
         raise SiteProblem(400, "invalid_input", "page must be a whole number from 1")
     if int(value) > MAX_PAGES:
         raise SiteProblem(

@@ -1943,6 +1943,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 100000,
               "minimum": 0,
               "default": 0,
               "title": "Offset"
@@ -3764,6 +3765,7 @@
             "required": false,
             "schema": {
               "type": "integer",
+              "maximum": 100000,
               "minimum": 0,
               "default": 0,
               "title": "Offset"
@@ -4911,6 +4913,7 @@
             "required": true,
             "schema": {
               "type": "string",
+              "maxLength": 300,
               "title": "Citation"
             },
             "description": "The citation, such as `Act No. 4 of 2011` or `FOI Act 2011, s. 1(1)`."

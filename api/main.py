@@ -8,13 +8,14 @@ from typing import Literal
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Path as PathParam
 from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from api.admission import AdmissionConfig, AdmissionMiddleware, AdmissionStore, published_policy
-from api.catalogue import InvalidSearch, LegacyCatalogue, SourceUnavailable
+from api.catalogue import MAX_CITATION, MAX_OFFSET, InvalidSearch, LegacyCatalogue, SourceUnavailable
 from api.catalogue import normalize_citation as normalize_citation
 from api.emission import CheckedFileResponse, CheckedResponse
 from api.mcp import create_router as create_mcp_router
@@ -168,7 +169,7 @@ def create_app(
         jurisdiction: str | None = None,
         access: Literal["all", "open", "metadata"] = "all",
         limit: int = Query(50, ge=1, le=100),
-        offset: int = Query(0, ge=0),
+        offset: int = Query(0, ge=0, le=MAX_OFFSET),
         service: LegacyCatalogue = Depends(catalogue),
     ) -> SourcePage:
         return service.sources(jurisdiction=jurisdiction, limit=limit, offset=offset, access=access)
@@ -221,13 +222,15 @@ def create_app(
         jurisdiction: str | None = None,
         access: Literal["all", "open", "metadata"] = "all",
         limit: int = Query(25, ge=1, le=100),
-        offset: int = Query(0, ge=0),
+        offset: int = Query(0, ge=0, le=MAX_OFFSET),
         service: LegacyCatalogue = Depends(catalogue),
     ) -> SearchPage:
         return service.search(q, jurisdiction=jurisdiction, limit=limit, offset=offset, access=access)
 
     @app.get("/citations/{citation:path}")
-    def citations(citation: str, service: LegacyCatalogue = Depends(catalogue)) -> CitationView:
+    def citations(
+        citation: str = PathParam(max_length=MAX_CITATION), service: LegacyCatalogue = Depends(catalogue)
+    ) -> CitationView:
         return service.citations(citation)
 
     @app.get("/coverage")

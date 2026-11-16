@@ -253,8 +253,9 @@ def cite(chain: list[Part], document_type: str | None = None) -> tuple[tuple[str
     return (tuple(key), shown) if key and named else None
 
 
-def read(pinpoint: str) -> tuple[str, ...] | None:
-    """The key of a cited pinpoint, or None when it is not one this module reads."""
+def read(pinpoint: str, *, annexed: bool = False) -> tuple[str, ...] | None:
+    """The key of a cited pinpoint, or None when it is not one this module reads. An annex holds
+    articles, sections, parts or chapters, never another annex (``annexed``), so reading stops there."""
     value = unicodedata.normalize("NFC", " ".join(pinpoint.split())).strip(" ,;")
     subs = lambda group: [_plain(s) for s in re.findall(r"\(\s*([0-9a-z]{1,5})\s*\)", group or "", re.I)]  # noqa: E731
     found = SECTION.match(value)
@@ -288,8 +289,10 @@ def read(pinpoint: str) -> tuple[str, ...] | None:
         return tuple(key)
     found = ANNEX.match(value)
     if found:
+        if annexed:
+            return None
         number = (found.group(1) or "").casefold()
-        within = read(found.group(2)) if found.group(2) else ()
+        within = read(found.group(2), annexed=True) if found.group(2) else ()
         if within is None or (within and within[0].split(":")[0] not in ("art", "s", "part", "chap")):
             return None
         return (f"annex:{'1' if number in ('', 'único', 'unico') else _ordinal(number)}", *within)
