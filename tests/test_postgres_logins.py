@@ -428,7 +428,7 @@ def test_the_console_works_for_a_person_on_the_services_login(signed):
 
     other, _ = person(accounts, "bola")
     assert privacy.close_account(accounts, other, None)["email"] == "bola@example.org"
-    assert browser.post("/auth/sign-out", headers=headers).status_code == 204
+    assert browser.post("/auth/sign-out", headers=headers).status_code == 200
     assert browser.get("/api/v1/me").status_code == 401
 
 

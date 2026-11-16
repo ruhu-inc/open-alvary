@@ -6,7 +6,7 @@ import secrets
 import threading
 import time
 from datetime import timedelta
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 import pytest
@@ -358,7 +358,12 @@ def test_sign_out_ends_the_session_and_dev_login_stays_off(console, tmp_path):
     accounts, fake, app = console
     browser = client(app)
     _, headers, _ = onboard(browser, fake)
-    assert browser.post("/auth/sign-out", headers=headers).status_code == 204
+    signed_out = browser.post("/auth/sign-out", headers=headers)
+    # On to the provider's logout, which ends its session and comes back to the sign-in page (item 10).
+    assert signed_out.status_code == 200
+    assert signed_out.json()["next"] == f"{ISSUER}v2/logout?" + urlencode(
+        {"client_id": "console", "returnTo": f"{BASE}/console/sign-in"}
+    )
     assert browser.get("/api/v1/me").status_code == 401
     assert browser.get("/auth/dev", params={"email": "x@example.org"}).status_code == 404
     (tmp_path / "console.html").write_text("<!doctype html><title>Console</title>")

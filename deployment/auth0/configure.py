@@ -78,7 +78,12 @@ def plan(
                     )
                 )
 
-    clients = m.call("GET", "clients", fields="name,client_id,app_type,callbacks", include_fields="true")
+    clients = m.call(
+        "GET",
+        "clients",
+        fields="name,client_id,app_type,callbacks,allowed_logout_urls",
+        include_fields="true",
+    )
     tools = [c for c in clients if c["name"] in TOOLS and c["client_id"].startswith(("tpc_", "https://"))]
     grants = {(g["client_id"], g["audience"]) for g in m.call("GET", "client-grants")}
     for tool in tools:
@@ -101,6 +106,8 @@ def plan(
                 )
 
     callbacks = [site + "/console/auth/callback", *local]
+    # Signing out of the console also signs out of Auth0 and comes back here (api.console.Provider.logout_url).
+    logout_urls = [site + "/console/sign-in"]
     console = next((c for c in clients if c["name"] == CONSOLE), None)
     if console is None:
 
@@ -112,7 +119,7 @@ def plan(
                     "name": CONSOLE,
                     "app_type": "regular_web",
                     "callbacks": callbacks,
-                    "allowed_logout_urls": [site + "/console/sign-in"],
+                    "allowed_logout_urls": logout_urls,
                     "web_origins": [],
                     "grant_types": ["authorization_code"],
                     "token_endpoint_auth_method": "client_secret_post",
@@ -154,11 +161,18 @@ def plan(
         steps.append(
             ("create the account-deletion client (Management API, delete:users only)", create_deletion)
         )
-    elif sorted(console.get("callbacks") or []) != sorted(callbacks):
+    if console is not None and (
+        sorted(console.get("callbacks") or []) != sorted(callbacks)
+        or sorted(console.get("allowed_logout_urls") or []) != sorted(logout_urls)
+    ):
         steps.append(
             (
-                "update the console's callbacks",
-                lambda c=console: m.call("PATCH", f"clients/{c['client_id']}", {"callbacks": callbacks}),
+                "update the console's callbacks and logout address",
+                lambda c=console: m.call(
+                    "PATCH",
+                    f"clients/{c['client_id']}",
+                    {"callbacks": callbacks, "allowed_logout_urls": logout_urls},
+                ),
             )
         )
 

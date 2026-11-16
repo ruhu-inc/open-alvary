@@ -86,13 +86,22 @@ export function go(to: string) {
   window.scrollTo(0, 0);
 }
 
+// Ends the console's session, then the sign-in provider's (its logout page comes back to the sign-in page),
+// so the next person on this computer is not offered the account.
 export async function signOut() {
-  await fetch("/console/auth/sign-out", {
-    method: "POST",
-    credentials: "same-origin",
-    headers: { "X-CSRF-Token": csrf },
-  }).catch(() => undefined);
-  location.assign("/console/sign-in");
+  let next = "/console/sign-in";
+  try {
+    const response = await fetch("/console/auth/sign-out", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "X-CSRF-Token": csrf },
+    });
+    const answer = response.ok ? await response.json() : null;
+    if (typeof answer?.next === "string" && /^(https:\/\/|\/console\/)/.test(answer.next)) next = answer.next;
+  } catch {
+    // Unreachable: the sign-in page, as before.
+  }
+  location.assign(next);
 }
 
 export function here(): string {

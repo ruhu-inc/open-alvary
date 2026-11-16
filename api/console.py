@@ -109,6 +109,15 @@ class Provider:
             self._discovery = response.json()
         return self._discovery
 
+    def logout_url(self) -> str:
+        """Where signing out sends the browser: the provider's logout (Auth0's /v2/logout) ends the
+        provider's own session too, so "Continue as …" no longer hands the next person on this computer
+        the account, and it comes back to the console's sign-in page, an address the console application
+        lists as an allowed logout URL (deployment/auth0/configure.py). It does not end a session the person
+        has with Google or another identity provider behind it."""
+        query = {"client_id": self.config.client_id, "returnTo": f"{self.config.base_url}/console/sign-in"}
+        return f"{self.config.issuer}v2/logout?{urlencode(query)}"
+
     def authorize_url(
         self, flow: dict, purpose: str, method: str | None, login_hint: str | None = None
     ) -> str:
@@ -514,7 +523,8 @@ def create_console_app(
     def sign_out(request: Request):
         guard(request, write=True)
         accounts.end_session(request.cookies.get(SESSION_COOKIE, ""))
-        response = Response(status_code=204)
+        # Then the provider's session (findings 2026-11-16, item 10); with no provider, the sign-in page.
+        response = JSONResponse({"next": provider.logout_url() if provider else "/console/sign-in"})
         response.delete_cookie(SESSION_COOKIE, path="/console")
         return response
 
