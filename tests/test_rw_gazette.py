@@ -2024,3 +2024,46 @@ def test_kinyarwandas_no_is_a_word_and_a_titles_apostrophe_is_kept():
     assert RG.cited_title(
         "DECLARATION RECOGNISING THE RIGHT TO A FLAG OF STATES HAVING NO SEA-COAST", {}, "en", True
     ) == ("Declaration Recognising the Right to a Flag of States Having No Sea-Coast")
+
+
+def test_an_instrument_an_amending_title_names_on_its_next_line_does_not_begin_there():
+    """Gazette n° Special of 21/05/2020: over the contents, Instructions n° 001/INSTR/MOJ/AG/20 are
+    titled without "N°", and the instructions they amend are named on a line of their own. Taken
+    for an opening, that line made a two-page "612/08.11" in every language, which took the place of
+    the real one (83 pages, another file) and left 001/INSTR/MOJ/AG/20 one page in Kinyarwanda."""
+    header = "Official Gazette nº 21 of 21/05/2020"  # shorter than printed, to sit over one column
+    contents = page(
+        [
+            "AMABWIRIZA YA MINISITIRI Nº",
+            "001/INSTR/MOJ/AG/20 YO KU WA",
+            "20/05/2020 AHINDURA AMABWIRIZA",
+            "YA MINISITIRI N° 612/08.11 YO KU WA",
+            "ISHAKIRO",
+        ],
+        [
+            "MINISTERIAL INSTRUCTIONS",
+            "001/INSTR/MOJ/AG/20 OF 20/05/2020",
+            "AMENDING MINISTERIAL",
+            "INSTRUCTIONS N° 612/08.11 OF",
+            "16/04/2014 SETTING UP MODALITIES",
+            "TABLE OF CONTENTS",
+        ],
+        [
+            "INSTRUCTIONS MINISTÉRIELLES",
+            "001/INSTR/MOJ/AG/20 DU 20/05/2020",
+            "PORTANT MODIFICATION DES",
+            "INSTRUCTIONS MINISTÉRIELLES N°",
+            "612/08.11 DU 16/04/2014 PORTANT",
+            "TABLE DES MATIÈRES",
+        ],
+        header=header,
+    )
+    body = page(
+        ["AMABWIRIZA YA MINISITIRI Nº", "001/INSTR/MOJ/AG/20 YO KU WA", "20/05/2020 AHINDURA", *RW],
+        ["MINISTERIAL INSTRUCTIONS Nº", "001/INSTR/MOJ/AG/20 OF 20/05/2020", "AMENDING", *EN],
+        ["INSTRUCTIONS MINISTÉRIELLES Nº", "001/INSTR/MOJ/AG/20 DU 20/05/2020", "PORTANT", *FR],
+        header=header,
+    )
+    found = RG.instruments(RG.streams(RG.split_issue([contents, body])))
+    assert [(f["kind"], f["number"]) for f in found] == [("instructions", "001/INSTR/MOJ/AG/20")]
+    assert set(found[0]["versions"]) == {"rw", "en", "fr"}

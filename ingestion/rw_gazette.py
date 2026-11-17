@@ -34,7 +34,9 @@ from schema.jurisdictions import registry
 # 2026-11-16.3: Kinyarwanda's "NO" ("and") is a word, not a number sign; a title's apostrophe is kept.
 # 2026-11-16.4: one instrument its languages name by different kinds stays one ("AMABWIRIZA", "INSTRUCTIONS"),
 # an instruction as English and French say; French instructions named by who gives them are recognised.
-PIPELINE = "2026-11-16.4"
+# 2026-11-17.1: an instrument an amending title names on its next line ("… PORTANT MODIFICATION DES /
+# INSTRUCTIONS MINISTÉRIELLES N° 612/08.11") is not one that begins there.
+PIPELINE = "2026-11-17.1"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -202,6 +204,16 @@ BODY = re.compile(
     r"|^(?:ATEGETSE|YEMEJE|ITANGAJE|ARR[ÊE]TE|ADOPTE|D[ÉE]CR[ÈE]TE|PROMULGUE)\s*:\s*$"
     r"|^(?:Kigali|Bikorewe\s+i\s+Kigali|Fait\s+[àa]\s+Kigali|Done\s+(?:in|at)\s+Kigali)\s*,?\s+(?:on|ku\s?wa|le)\b",
     re.I,
+)
+# A capitals line ending in these words goes on over the next: "AMENDING MINISTERIAL / INSTRUCTIONS N°
+# 612/08.11 OF …", "PORTANT MODIFICATION DES / INSTRUCTIONS MINISTÉRIELLES N° …". What the next line
+# names is the instrument this title amends or cites, not one beginning there.
+TITLE_GOES_ON = re.compile(
+    r"(?:\b(?:OF|THE|TO|AND|DES|DU|DE|ET|LA|LES)"
+    # an amending word, and the first words of the kind it names ("AMENDING MINISTERIAL")
+    r"|\b(?:AMENDING|MODIFYING|REPEALING|COMPLEMENTING|SUPPLEMENTING|REPLACING"
+    r"|MODIFIANT|COMPL[ÉE]TANT|ABROGEANT|REMPLA[ÇC]ANT"
+    r"|AHINDURA|RIHINDURA|AYUZUZA|RYUZUZA|AVANAHO|RIVANAHO|ASIMBURA|RISIMBURA)(?:\s+[^\s\d]+){0,2})\s*$"
 )
 # A title never runs on to another page, nor past this length (the longest printed is about 300
 # characters): beyond either, the body has begun even where nothing above recognised its start.
@@ -810,6 +822,19 @@ def shortened(text: str, limit: int) -> str:
     return cut.rstrip(" ,;:") + "…"
 
 
+def _title_goes_on(lines: list[dict], i: int) -> bool:
+    """Whether line i goes on a title begun above it on the same page (TITLE_GOES_ON)."""
+    if i == 0 or lines[i - 1].get("page") != lines[i].get("page"):
+        return False
+    text = lines[i - 1]["text"].strip()
+    letters = [c for c in text if c.isalpha()]
+    return (
+        bool(letters)
+        and sum(c.isupper() for c in letters) >= 0.8 * len(letters)
+        and bool(TITLE_GOES_ON.search(text))
+    )
+
+
 def openings(lines: list[dict], language: str) -> list[dict]:
     """Where each instrument begins in one language: its heading, kind, number, date and title."""
     found = []
@@ -836,7 +861,7 @@ def openings(lines: list[dict], language: str) -> list[dict]:
                 if match or constitution:
                     joined = more
                     break
-        if not (match or constitution):
+        if not (match or constitution) or _title_goes_on(lines, i):
             i += 1
             continue
         heading = [line["text"].strip() for line in lines[i : i + joined]]
