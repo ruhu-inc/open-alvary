@@ -621,7 +621,7 @@ def create_app(
                 "revision": latest["revision"],
                 "units": latest["units"],
                 "status": latest["status"],
-                "resolutions": latest["resolutions"],
+                "resolutions": content.standing(found, latest["resolutions"]),
                 "comment": latest["comment"],
                 "author": latest["author"],
                 "created_at": latest["created_at"].isoformat(),
@@ -674,7 +674,15 @@ def create_app(
             raise HTTPException(422, "status must be checked, attention or edited")
         known = {f["id"] for f in content.page_flags(found)}
         resolutions = body.get("resolutions") or {}
-        if not isinstance(resolutions, dict) or not set(resolutions) <= known:
+        if not isinstance(resolutions, dict):
+            raise HTTPException(422, "resolutions must refer to this page's flags")
+        # A draft kept in a browser, or a page loaded before the page was read again, still carries the
+        # last revision's decisions for flags the new reading no longer has: those go with the flags.
+        # Any other decision about a flag the page does not have is refused as before.
+        earlier = store.page_history(act_id, page)[:1]
+        gone = set(earlier[0]["resolutions"]) - known if earlier else set()
+        resolutions = {flag: value for flag, value in resolutions.items() if flag not in gone}
+        if not set(resolutions) <= known:
             raise HTTPException(422, "resolutions must refer to this page's flags")
         clean = {}
         for flag, value in resolutions.items():
@@ -851,7 +859,7 @@ def create_app(
                     reading_sha256=reading,
                     units=units,
                     status="edited" if stale or not previous else previous["status"],
-                    resolutions=previous["resolutions"] if previous else {},
+                    resolutions=content.standing(pages[number], previous["resolutions"]) if previous else {},
                     comment=f"Replaced {find!r} with {replacement!r} ({count}×) across the Act"[:2000],
                 )
             except Conflict:
@@ -880,7 +888,7 @@ def create_app(
                     "units": final[page["page"]]["units"],
                     "revision": final[page["page"]]["revision"],
                     "status": revision["status"] if revision else None,
-                    "resolutions": revision["resolutions"] if revision else {},
+                    "resolutions": content.standing(page, revision["resolutions"]) if revision else {},
                     "open_high": sum(
                         1
                         for f in content.page_flags(page)

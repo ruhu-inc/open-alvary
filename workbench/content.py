@@ -733,6 +733,15 @@ def page_flags(page: dict) -> list[dict]:
     return out
 
 
+def standing(page: dict, resolutions: dict | None) -> dict:
+    """The saved decisions that are still about one of the page's flags. A page read again can lose a
+    flag or change its words, and so its id: a decision about it is then about nothing on the page, and
+    a browser that sent it back with the next save was refused (review of 2026-11-16: no page reviewed
+    before a re-read could be saved)."""
+    known = {flag["id"] for flag in page_flags(page)}
+    return {flag: decision for flag, decision in (resolutions or {}).items() if flag in known}
+
+
 def reading_sha256(page: dict) -> str:
     return hashlib.sha256(
         canonical_json({"nodes": page["nodes"], "flags": page["flags"]}).encode()

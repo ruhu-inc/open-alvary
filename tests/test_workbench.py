@@ -265,6 +265,34 @@ def test_unit_shapes_and_flag_resolutions_are_validated(world):
     assert save(browser, units=table).status_code == 200
 
 
+def test_a_page_read_again_can_be_saved_and_its_decisions_about_flags_now_gone_go_with_them(world, tmp_path):
+    """Review of 2026-11-16: after a re-read changed a flag (and so its id), the browser sent the last
+    revision's decision back with the next save and every save was refused: no page reviewed before a
+    re-read could be saved, by a reviewer or the owner."""
+    browser = signed_in(world, "reviewer@example.org")
+    old = flag_id()
+    assert save(browser, resolutions={old: {"decision": "use_check", "reader": "azure"}}).status_code == 200
+    changed = reading()
+    again = {**FLAG, "primary": "189"}  # the same place read differently: another flag, another id
+    changed["pages"][0]["flags"] = [again]
+    (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(changed))
+    new = content.flag_id(1, again)
+    assert new != old
+    page = browser.get(f"/api/documents/{ACT}/pages/1").json()
+    assert page["latest"]["stale"] and page["latest"]["resolutions"] == {}  # the old decision is not offered
+    assert [f["id"] for f in page["flags"]] == [new]
+    # What a browser holding the page from before the re-read (or a draft it kept) sends: both decisions.
+    both = {old: {"decision": "use_check", "reader": "azure"}, new: {"decision": "keep"}}
+    assert save(browser, expected=1, resolutions=both).json() == {"revision": 2}
+    assert browser.get(f"/api/documents/{ACT}/pages/1").json()["latest"]["resolutions"] == {
+        new: {"decision": "keep", "reader": "", "note": ""}
+    }
+    stream = browser.get(f"/api/documents/{ACT}/stream").json()["pages"][0]
+    assert set(stream["resolutions"]) == {new}
+    # A decision about a flag the page never had is still refused.
+    assert save(browser, expected=2, resolutions={"nope": {"decision": "keep"}}).status_code == 422
+
+
 # --- approval ----------------------------------------------------------------------------------------
 
 MATERIALS = dict.fromkeys(content.MATERIALS, True)
