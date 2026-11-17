@@ -743,3 +743,43 @@ def test_a_gazette_of_many_issues_is_held_not_reviewed():
         "Example Regional Gazette 1960",
         ng_documents.GAZETTE_HELD,
     )
+
+
+def test_a_law_keeps_what_it_repeals_and_the_manifest_links_it_to_the_law_repealed():
+    """Each law's index entry keeps the instruments its text repeals, with the provision's words and page,
+    and the name it may be cited as (ingestion.ng_cited); the manifest links them, as Rwanda's does."""
+    store = MemoryStore()
+    repealing = "24. The Example Markets Act, 2004 is repealed. 25. This Act may be cited as the Example Markets Act, 2011."
+    files = [
+        ("a", "Example Markets Act, 2004", "EXAMPLE MARKETS ACT, 2004", f"1. Markets are regulated. {LONG}"),
+        ("b", "Example Markets Act, 2011", "EXAMPLE MARKETS ACT, 2011", f"{repealing} {LONG}"),
+    ]
+    items = stored_files(store, files, source="nass-acts", kind="act")
+    counts, manifest = prepared_manifest(store, items)
+    assert counts["documents"] == 2
+    index = json.loads(store.objects[f"collections/ng/issues/{'b' * 64}.json"])
+    assert index["pipeline"] == ng_documents.PIPELINE == "ng-pdf-2026-11-17.1"
+    provision = {"words": "24. The Example Markets Act, 2004 is repealed.", "page": 1}
+    assert index["documents"][0]["cited_as"] == "Example Markets Act, 2011"
+    assert index["documents"][0]["cites"] == [
+        {
+            "kind": "repeals",
+            "target": "Example Markets Act, 2004",
+            "title": "Example Markets Act",
+            "year": 2004,
+        }
+        | provision
+    ]
+    earlier, later = manifest["documents"]
+    assert earlier["currency"] == {
+        "status": "repealed",
+        "basis": "text",
+        "repealed_by": [{"work": later["id"], "title": "Example Markets Act, 2011"} | provision],
+    }
+    assert earlier["relations"] == [
+        {"kind": "repealed_by", "target": "Example Markets Act, 2011", "target_id": later["id"]}
+    ]
+    assert later["relations"] == [
+        {"kind": "repeals", "target": "Example Markets Act, 2004", "target_id": earlier["id"]}
+    ]
+    assert later["currency"] == {"status": "unknown"}  # never in force by this: Nigeria has no listing

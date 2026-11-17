@@ -32,6 +32,11 @@ same layout:
   ng-si-<number>-<year>, a notice ng-gn-<number>-<year>; else the type and its title's slug; a
   Supreme Court judgment ng-sc-<suit number>-<date delivered>. Different texts that come to one id
   are told apart when the manifest is built (nicn.BucketCollection._keep_apart);
+- what it does to earlier laws: the instruments a law repeals, revokes or amends, and the Act it is made
+  under, each by its citation as printed with the words of the provision and their page, and the name its
+  own text says it may be cited as (ingestion.ng_cited.evidence). When the manifest is built these are
+  found among the collection's documents, and each law is given its links and whether a later text repeals
+  it (ng_cited.link_works). Nothing is ever in force by this: Nigeria has no official listing of its laws;
 - a file the Layout Parser read only in part is held, not filed as one: its first heading says nothing
   of the rest. A bound volume of many instruments (VOLUMES) is cut into them (ingestion.ng_volumes), each
   its own document; what cannot be cut with confidence is held, and the pages of no instrument (title
@@ -48,7 +53,7 @@ import copy
 import json
 import re
 
-from ingestion import cited_names, layout_parser, reconcile
+from ingestion import cited_names, layout_parser, ng_cited, reconcile
 
 COUNTRY = "ng"
 # The kinds of instrument the stored files hold (ledger types) and the document type each is reviewed as.
@@ -612,7 +617,10 @@ def sc_details(listed: dict, kind: str, url: str) -> tuple[dict, dict]:
 # (si_kind), its id unchanged.
 # 2026-11-16.1: superscript and subscript marks move with their letters when a unit is split or a margin
 # note cut out of it, and a mark outside its unit's words is dropped (ingestion.structure.marks_in).
-PIPELINE = "ng-pdf-2026-11-16.1"
+# 2026-11-17.1: each law keeps the instruments it repeals, amends or is made under, with the provision's
+# words and page, and the name its text says it may be cited as (ingestion.ng_cited), for its links and
+# whether a later text repeals it.
+PIPELINE = "ng-pdf-2026-11-17.1"
 # The sources whose stored files are PDFs read by the scan-reader job (their other files, the Supreme
 # Court's data records and SEC's circular pages, have no reader here yet).
 PDF_SOURCES = {
@@ -858,7 +866,13 @@ def prepare_pdfs(store, items: dict, chosen: list[str], collection, log=print) -
                     "listing": record.get("listed"),
                     "pages": document.get("pages"),
                 }
-                document = {**document, "summary": part_reading["summary"], "source_object": source_object}
+                document = {
+                    **document,
+                    "summary": part_reading["summary"],
+                    "source_object": source_object,
+                    # What it does to earlier laws, as its text says: linked when the manifest is built.
+                    **ng_cited.evidence(part_reading, document),
+                }
                 entries.append(collection.write(document, part_reading, provenance, sha))
             readings = {**used, "docai_pages": read} if volume and whole > read else used
             collection.finish(

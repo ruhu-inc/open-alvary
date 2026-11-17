@@ -2272,9 +2272,11 @@ class FolderCollection:
         self.held += held or []
 
     def save_manifest(self) -> None:
+        from ingestion import ng_cited
+
         manifest = {
             **new_manifest(),
-            "documents": sorted(self.documents.values(), key=lambda d: d["id"]),
+            "documents": ng_cited.link_works(sorted(self.documents.values(), key=lambda d: d["id"])),
             "held": sorted(self.held, key=lambda d: d["id"]),
             "held_note": HELD_NOTE,
         }
@@ -2340,7 +2342,11 @@ class BucketCollection:
         """The manifest from every index (any source of the collection), one document per id: of one
         judgment's records, the earliest; of one law found in two files (a Gazette issue and an agency's
         copy), the first, the others named on it (other_sources). Different texts that came to one id
-        are kept apart (_keep_apart)."""
+        are kept apart (_keep_apart). Each law is then given its links to the laws it repeals, amends or
+        is made under and to those that repeal or amend it, and whether a later text of the collection
+        repeals it (ingestion.ng_cited.link_works); a judgment has none."""
+        from ingestion import ng_cited
+
         documents: dict[str, dict] = {}
         partial: dict[str, dict] = {}
         shared: dict[str, list[dict]] = {}
@@ -2363,7 +2369,7 @@ class BucketCollection:
             documents.update((document["id"], document) for document in self._keep_apart(group))
         manifest = {
             **new_manifest(),
-            "documents": sorted(documents.values(), key=lambda d: d["id"]),
+            "documents": ng_cited.link_works(sorted(documents.values(), key=lambda d: d["id"])),
             "skipped_files": skipped,
             # Never listed for review: the workbench and publishing read "documents" only.
             "held": sorted((e for i, e in partial.items() if i not in documents), key=lambda d: d["id"]),
