@@ -161,6 +161,29 @@ def test_the_long_title_the_memorandum_a_list_and_a_schedule_say_what_is_repeale
     )
 
 
+def test_a_title_with_etc_and_a_name_whose_bracket_was_never_closed_are_still_read():
+    found = cites(
+        "ng-act-x",
+        "Sample Crimes (Prohibition, Prevention, etc.) (Amendment) Act, 2024",
+        "An Act to amend Sample Crimes (Prohibition, Prevention, etc.) Act, No. 17, 2015 to insert words; and "
+        "for related matters.",
+        # As printed: the bracket is opened and never closed.
+        '1. The Sample Crimes (Prohibition, Prevention, etc.) Act, No. 17, 2015 (in this Act referred to as "the '
+        'Principal Act" is amended as set out in this Act.',
+        "2. Section 17 of the Principal Act is amended —",
+    )
+    assert [(c["kind"], c["target"], c["year"], c["number"], c["note"]) for c in found] == [
+        (
+            "amends",
+            "Sample Crimes (Prohibition, Prevention, etc.) Act, No. 17, 2015",
+            2015,
+            "17",
+            "Section 17",
+        )
+    ]
+    assert found[0]["words"].startswith("1. The Sample Crimes")  # the provision before the long title
+
+
 def test_subsidiary_legislation_names_the_act_it_is_made_under():
     (found,) = cites(
         "ng-si-23-2024",

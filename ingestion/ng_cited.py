@@ -95,7 +95,9 @@ CHANGED_BY = re.compile(
 # What may stand between an instrument's citation and what is done to it: a name given it in brackets
 # ("(in this Act referred to as "the Principal Act")"), "as amended".
 _FILLER = r"\s+|,|\([^()]{0,300}\)|\bas\s+amended\b"
-FILLER = re.compile(rf"(?:{_FILLER})*")
+# … and such a name whose bracket the printer never closed: '(in this Act referred to as "the Principal Act" is'.
+_UNCLOSED = r"\([^()]{0,200}\b(?:referred\s+to|hereinafter|called)\b[^()]{0,100}"
+FILLER = re.compile(rf"(?:{_FILLER})*(?:{_UNCLOSED})?")
 BETWEEN = re.compile(rf"(?:{_FILLER})*(?:;|\band\b|\bor\b)?\s*")
 # What is done: "is repealed", "are hereby revoked", "is amended as set out in this Act".
 ACTION = re.compile(r"\b(?:is|are)\s+(?:hereby\s+)?(repealed|revoked|amended)\b")
@@ -134,7 +136,7 @@ STATED = re.compile(
     re.I,
 )
 NAMED_NEXT = re.compile(
-    rf"(?:the\s+)?(?P<title>[^.;:]{{2,160}}?\b(?:{_KIND}))"
+    rf"(?:the\s+)?(?P<title>(?:[^.;:]|(?<=[Ee]tc)\.|(?<=ETC)\.){{2,160}}?\b(?:{_KIND}))"
     rf"(?=\s*(?:,|\(|No\b|Cap\b|Laws\b|L\.?F\.?N|{_YEAR}|and\s+(?:to\s+)?(?:re-?)?enacts?\b|and\s+for\b"
     r"|to\s+\w|;|\.|$))",
     re.I,
