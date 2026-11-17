@@ -36,7 +36,9 @@ from schema.jurisdictions import registry
 # an instruction as English and French say; French instructions named by who gives them are recognised.
 # 2026-11-17.1: an instrument an amending title names on its next line ("… PORTANT MODIFICATION DES /
 # INSTRUCTIONS MINISTÉRIELLES N° 612/08.11") is not one that begins there.
-PIPELINE = "2026-11-17.1"
+# 2026-11-17.2: so too where the amending line is letter-spaced ("CO MP LE ME NTING O RG ANIC"); each
+# document records its articles, and of copies sharing an id one with articles is kept (rwanda.one_per_id).
+PIPELINE = "2026-11-17.2"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -214,6 +216,12 @@ TITLE_GOES_ON = re.compile(
     r"|\b(?:AMENDING|MODIFYING|REPEALING|COMPLEMENTING|SUPPLEMENTING|REPLACING"
     r"|MODIFIANT|COMPL[ÉE]TANT|ABROGEANT|REMPLA[ÇC]ANT"
     r"|AHINDURA|RIHINDURA|AYUZUZA|RYUZUZA|AVANAHO|RIVANAHO|ASIMBURA|RISIMBURA)(?:\s+[^\s\d]+){0,2})\s*$"
+)
+# The same, on a letter-spaced line read with its spaces taken out ("CO MP LE ME NTING O RG ANIC").
+AMENDS_SPACED = re.compile(
+    r"(?:AMENDING|MODIFYING|REPEALING|COMPLEMENTING|SUPPLEMENTING|REPLACING"
+    r"|MODIFIANT|COMPL[ÉE]TANT|ABROGEANT|REMPLA[ÇC]ANT"
+    r"|AHINDURA|RIHINDURA|AYUZUZA|RYUZUZA|AVANAHO|RIVANAHO|ASIMBURA|RISIMBURA)[^\W\d]{0,12}$"
 )
 # A title never runs on to another page, nor past this length (the longest printed is about 300
 # characters): beyond either, the body has begun even where nothing above recognised its start.
@@ -828,11 +836,13 @@ def _title_goes_on(lines: list[dict], i: int) -> bool:
         return False
     text = lines[i - 1]["text"].strip()
     letters = [c for c in text if c.isalpha()]
-    return (
-        bool(letters)
-        and sum(c.isupper() for c in letters) >= 0.8 * len(letters)
-        and bool(TITLE_GOES_ON.search(text))
-    )
+    if not letters or sum(c.isupper() for c in letters) < 0.8 * len(letters):
+        return False
+    if TITLE_GOES_ON.search(text):
+        return True
+    pieces = text.split()
+    spaced = sum(len(piece) <= 2 for piece in pieces) * 2 >= len(pieces) >= 4
+    return spaced and bool(AMENDS_SPACED.search("".join(pieces)))
 
 
 def openings(lines: list[dict], language: str) -> list[dict]:

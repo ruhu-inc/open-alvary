@@ -2067,3 +2067,22 @@ def test_an_instrument_an_amending_title_names_on_its_next_line_does_not_begin_t
     found = RG.instruments(RG.streams(RG.split_issue([contents, body])))
     assert [(f["kind"], f["number"]) for f in found] == [("instructions", "001/INSTR/MOJ/AG/20")]
     assert set(found[0]["versions"]) == {"rw", "en", "fr"}
+
+
+def test_a_letter_spaced_amending_line_goes_on_over_the_next():
+    """Gazette n° 11 of 01/06/2008: the title of Organic Law n° 13/2008, begun on the cover, goes on
+    "CO MP LE ME NTING O RG ANIC / LAW N° 16/2004 OF 19/06/2004 …" over its contents. The law it
+    amends does not begin there."""
+    lines = [
+        {"text": text, "page": 2}
+        for text in (
+            "CO MP LE ME NTING O RG ANIC",
+            "LAW N° 16/2004 OF 19/06/2004",
+            "ESTABLISHING THE",
+            "TABLE OF CONTENTS",
+        )
+    ]
+    assert RG.openings(lines, "en") == []
+    # A letter-spaced line that does not amend is no reason: the law below it begins there.
+    lines[0]["text"] = "RE P UB L I C O F RWANDA"
+    assert [o["number"] for o in RG.openings(lines, "en")] == ["16/2004"]

@@ -962,6 +962,36 @@ def test_an_order_numbered_again_each_year_takes_its_year_and_one_document_is_ke
     assert second["id"] == "rw-law-056-2024-en" and "other_sources" not in second
 
 
+def test_a_copy_with_no_articles_never_stands_for_one_with_them():
+    """Gazette n° 11 of 01/06/2008 named Organic Law n° 16/2004 in another law's title, over its
+    contents: three pages with no articles, which, as the Official Gazette's, took the place of the
+    law's 41 pages filed by RLRC."""
+    rlrc = {
+        "id": "rw-organic-law-16-2004-en",
+        "url": "https://www.rlrc.gov.rw/x.pdf",
+        "source_object": "sources/rw/rlrc-laws/b.pdf",
+        "objects": "files/b/",
+        "scanned_pages": [],
+        "flag_counts": {"high": 0},
+        "articles": 39,
+    }
+    gazette = {
+        **rlrc,
+        "url": "https://www.minijust.gov.rw/y.pdf",
+        "source_object": "sources/rw/minijust-gazette/g.pdf",
+        "objects": "files/g/",
+        "articles": 0,
+    }
+    [kept] = rwanda.one_per_id([gazette, rlrc])
+    assert kept["objects"] == "files/b/"
+    assert [o["objects"] for o in kept["other_sources"]] == ["files/g/"]
+    # With articles in both, or a count not recorded (before 2026-11-17), the Gazette's is kept.
+    [kept] = rwanda.one_per_id([{**gazette, "articles": 12}, rlrc])
+    assert kept["objects"] == "files/g/"
+    [kept] = rwanda.one_per_id([{k: v for k, v in gazette.items() if k != "articles"}, rlrc])
+    assert kept["objects"] == "files/g/"
+
+
 def test_each_source_files_documents_are_kept_in_its_own_folder():
     import json
 
