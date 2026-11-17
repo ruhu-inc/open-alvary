@@ -745,9 +745,10 @@ def test_a_gazette_of_many_issues_is_held_not_reviewed():
     )
 
 
-def test_a_law_keeps_what_it_repeals_and_the_manifest_links_it_to_the_law_repealed():
-    """Each law's index entry keeps the instruments its text repeals, with the provision's words and page,
-    and the name it may be cited as (ingestion.ng_cited); the manifest links them, as Rwanda's does."""
+def test_the_manifest_links_a_law_to_the_law_it_repeals_and_writes_nothing_else():
+    """When the manifest is built each law's stored reading is read for what it repeals (ingestion.ng_cited)
+    and the laws are linked, as Rwanda's are. Nothing prepared before is written again: no reading,
+    provenance, details or index, and the pipeline's version stands, so no file is prepared again."""
     store = MemoryStore()
     repealing = "24. The Example Markets Act, 2004 is repealed. 25. This Act may be cited as the Example Markets Act, 2011."
     files = [
@@ -755,13 +756,25 @@ def test_a_law_keeps_what_it_repeals_and_the_manifest_links_it_to_the_law_repeal
         ("b", "Example Markets Act, 2011", "EXAMPLE MARKETS ACT, 2011", f"{repealing} {LONG}"),
     ]
     items = stored_files(store, files, source="nass-acts", kind="act")
-    counts, manifest = prepared_manifest(store, items)
-    assert counts["documents"] == 2
+    collection = nicn.BucketCollection(store, pipeline=ng_documents.PIPELINE)
+    assert ng_documents.prepare_pdfs(store, items, list(items), collection)["documents"] == 2
+    assert ng_documents.PIPELINE == "ng-pdf-2026-11-16.1"  # as the staged collection was prepared
+    prepared = {name: data for name, data in store.objects.items() if name != "collections/ng/manifest.json"}
+    assert (
+        sum(name.endswith((".reading.json", ".provenance.json", ".document.json")) for name in prepared) == 6
+    )
     index = json.loads(store.objects[f"collections/ng/issues/{'b' * 64}.json"])
-    assert index["pipeline"] == ng_documents.PIPELINE == "ng-pdf-2026-11-17.1"
+    assert "cites" not in index["documents"][0] and "cited_as" not in index["documents"][0]
+    collection.save_manifest()
+    collection.save_manifest()  # built again: the same
+    rest = {name: data for name, data in store.objects.items() if name != "collections/ng/manifest.json"}
+    assert rest == prepared  # byte for byte: every reading, provenance, details and index as it was
+    assert ng_documents.prepare_pdfs(store, items, list(items), collection)["skipped_done"] == 2
+    manifest = json.loads(store.objects["collections/ng/manifest.json"])
     provision = {"words": "24. The Example Markets Act, 2004 is repealed.", "page": 1}
-    assert index["documents"][0]["cited_as"] == "Example Markets Act, 2011"
-    assert index["documents"][0]["cites"] == [
+    earlier, later = manifest["documents"]
+    assert later["cited_as"] == "Example Markets Act, 2011"
+    assert later["cites"] == [
         {
             "kind": "repeals",
             "target": "Example Markets Act, 2004",
@@ -770,7 +783,6 @@ def test_a_law_keeps_what_it_repeals_and_the_manifest_links_it_to_the_law_repeal
         }
         | provision
     ]
-    earlier, later = manifest["documents"]
     assert earlier["currency"] == {
         "status": "repealed",
         "basis": "text",
@@ -783,3 +795,10 @@ def test_a_law_keeps_what_it_repeals_and_the_manifest_links_it_to_the_law_repeal
         {"kind": "repeals", "target": "Example Markets Act, 2004", "target_id": earlier["id"]}
     ]
     assert later["currency"] == {"status": "unknown"}  # never in force by this: Nigeria has no listing
+    # A reading that cannot be read leaves its law unlinked and the manifest built.
+    store.objects[f"collections/ng/files/{'b' * 64}/{later['id']}.reading.json"] = b"{"
+    said = []
+    documents = nicn.linked_laws([earlier, later], collection._stored_reading, said.append)
+    assert documents[0]["currency"] == {"status": "unknown"} and said[0].startswith(
+        f"not linked {later['id']}"
+    )
