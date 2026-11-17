@@ -952,9 +952,8 @@ def separate_instruments(documents: list[dict]) -> tuple[list[dict], dict[str, s
 
 
 def one_per_id(documents: list[dict]) -> list[dict]:
-    """The manifest's documents, one per id, the others it was found in recorded on it: one with
-    articles before one without, then the Official Gazette's before RLRC's, then the fewest scanned
-    pages and high flags."""
+    """The manifest's documents, one per id, the others it was found in recorded on it: the Official
+    Gazette's before RLRC's, then the fewest scanned pages and high flags."""
     groups: dict[str, list[dict]] = {}
     for document in documents:
         groups.setdefault(document["id"], []).append(document)
@@ -962,10 +961,6 @@ def one_per_id(documents: list[dict]) -> list[dict]:
     def rank(document: dict) -> tuple:
         source = (document.get("source_object") or "").split("/")[2:3]
         return (
-            # A copy with no articles of its own (a title over a contents list) never stands for one
-            # with them: Organic Law n° 16/2004 (41 pages) gave way to three pages of Gazette n° 11 of
-            # 01/06/2008, which named it in another law's title (2026-11-17). Unknown counts as having them.
-            document.get("articles", 1) == 0,
             SOURCE_RANK.get(source[0] if source else "", 9),
             len(document.get("scanned_pages") or []),
             (document.get("flag_counts") or {}).get("high", 0),
@@ -1506,7 +1501,6 @@ def prepare_selection(
                     "source_object": source_object,
                     "issue": {"name": record["listed"]["name"], **issue},
                     "pages": entry["versions"][language]["pages"],
-                    "articles": check["articles"].get(language, 0),  # one_per_id
                     "scanned_pages": sorted(
                         p
                         for p in scanned

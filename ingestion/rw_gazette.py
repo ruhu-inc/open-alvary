@@ -40,7 +40,9 @@ from schema.jurisdictions import registry
 # document records its articles, and of copies sharing an id one with articles is kept (rwanda.one_per_id).
 # 2026-11-17.3: only the line just above, in the same column, goes on (not another language's beside
 # it); the Constitution's heading under "AMENDMENT N° 04 … OF" still begins the amendment.
-PIPELINE = "2026-11-17.3"
+# 2026-11-17.4: the copy kept for an id is chosen as before .2 (the Gazette's first): a reading's
+# article count cannot tell a contents list from a body whose headings were read as a list.
+PIPELINE = "2026-11-17.4"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
