@@ -1276,9 +1276,10 @@ AUTHORITY = ("authority", "authority_page", "authority_words", "authority_url")
 # (Nigeria publishes no listing of its laws in force), so its laws are repealed where a later text of the
 # collection says so and otherwise not yet known, never in force by what was prepared.
 LISTINGS = {"rw": "RLRC's listing"}
+# What was looked for is said as that: none found among the texts read, not that there is none.
 NO_LISTING = (
-    "No later text in the collection repeals it, and there is no official listing of the laws in force to "
-    "check it against: whether it is in force is not yet known."
+    "No later text in the collection was found to repeal it, and there is no official listing of the laws "
+    "in force to check it against: whether it is in force is not yet known."
 )
 
 
@@ -1299,7 +1300,7 @@ def first_draft(values: dict, absent: dict) -> tuple[dict, dict]:
     return draft, {key: reason for key, reason in absent.items() if not is_legal(key)}
 
 
-def suggestions(document: dict) -> dict:
+def suggestions(document: dict, latest_in_force: bool = False) -> dict:
     """The legal facts suggested for a document, keyed as its fields are, each with the words that state
     it and their page, or where else it was read: when it commences and what each language version is
     worth (under "expressions", the authority by language), read from its text; whether it is current,
@@ -1316,16 +1317,18 @@ def suggestions(document: dict) -> dict:
         **(document.get("suggested_inferred") or {}),
         **(document.get("suggested_legal") or {}),
     }
-    return standing_suggestions(document, out)
+    return standing_suggestions(document, out, latest_in_force)
 
 
-def standing_suggestions(document: dict, suggested: dict) -> dict:
+def standing_suggestions(document: dict, suggested: dict, latest_in_force: bool = False) -> dict:
     """``suggested`` with whether the document is current, as its collection was prepared to tell
     ("currency", "relations"): repealed where a later text says so, with the words of the provision that
     does and where they are printed; a law it was made under that is since repealed. Where no later text
-    repeals it and its country has no official listing of the laws in force (LISTINGS), its status is
-    suggested as unknown, with that for its reason, and no date is suggested for a check not yet made.
-    A suggestion with its basis, never a value."""
+    was found to repeal it and its country has no official listing of the laws in force (LISTINGS), its
+    status is suggested as unknown, with that for its reason, and no date is suggested for a check not yet
+    made. The last law of a line of repeals is called the law in force now only where its listing files it
+    so (``latest_in_force``): otherwise it is the latest the collection holds. A suggestion with its
+    basis, never a value."""
     out = dict(suggested)
     # A country known to have no listing of its laws in force (Nigeria): nothing of it is in force by this.
     unlisted = bool(document.get("jurisdiction")) and document["jurisdiction"] not in LISTINGS
@@ -1354,12 +1357,12 @@ def standing_suggestions(document: dict, suggested: dict) -> dict:
             else:
                 said.append(f"A secondary source says otherwise: {listing.get('evidence')}")
                 said.append("Check which is right.")
-        if current.get("latest") and not unlisted:
+        if current.get("latest") and latest_in_force:
             said.append(
                 f"That law was repealed in turn; the law in force now is {current['latest']['title']}."
             )
         elif current.get("latest"):
-            # No listing says the last of the line is in force: only that the collection holds none later.
+            # Nothing says the last of the line is in force: only that the collection holds none later.
             said.append(
                 f"That law was repealed in turn; the latest in its line that the collection holds is "
                 f"{current['latest']['title']}."

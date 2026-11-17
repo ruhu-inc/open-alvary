@@ -1678,7 +1678,7 @@ def test_a_document_says_where_it_stands_and_opens_the_laws_that_repealed_or_wer
         document["relations"] = [
             {"kind": "repealed_by", "target": later["title"], "target_id": later["work"]}
         ]
-        document["currency"] = {"status": "repealed", "basis": "text", "repealed_by": [later],
+        document["currency"] = {"status": "repealed", "basis": "text", "repealed_by": [later], "latest": order,
                                 "disagrees": "RLRC's listing files it among the laws in force"}  # fmt: skip
         document["enables"] = [order["work"]]
     (folder / "manifest.json").write_text(json.dumps(manifest))
@@ -1704,6 +1704,24 @@ def test_a_document_says_where_it_stands_and_opens_the_laws_that_repealed_or_wer
     assert details["suggestions"]["relations"]["value"][0]["kind"] == "repealed_by"
     assert reviewer.get("/api/documents/rw-law-010-2027-en").json()["standing"] is None  # not linked yet
     assert standing["listing"] == "RLRC's listing"  # the listing Rwanda's collection is prepared with, named
+    # The last law of its line is "the law in force now" only where the listing files it in force: here it
+    # files nothing of it (of Rwanda's such laws, most), so it is the latest the collection holds.
+    last = {"title": order["title"], "id": f"{order['work']}-en"}
+    assert standing["latest"] == last | {"in_force": False}
+    assert (
+        "the latest in its line that the collection holds is"
+        in details["suggestions"]["status.note"]["value"]
+    )
+    manifest["documents"][-1]["currency"] = {"status": "in_force", "basis": "listing"}
+    (folder / "manifest.json").write_text(json.dumps(manifest))
+    filed = signed_in((store, content.Library(tmp_path)), "reviewer@example.org")
+    assert filed.get("/api/documents/rw-law-009-2026-fr").json()["standing"]["latest"] == last | {
+        "in_force": True
+    }
+    note = filed.get("/api/documents/rw-law-009-2026-en/details").json()["suggestions"]["status.note"][
+        "value"
+    ]
+    assert f"the law in force now is {order['title']}." in note
 
 
 def test_a_nigerian_law_says_where_it_stands_and_names_no_listing_for_it_has_none(tmp_path, monkeypatch):
@@ -1726,15 +1744,38 @@ def test_a_nigerian_law_says_where_it_stands_and_names_no_listing_for_it_has_non
         "title": "Example Markets Act",
         "year": 2004,
     }
+    earlier = cite | {"target": "Example Markets Act, 1999", "year": 1999}
+    amending = cite | {
+        "kind": "amends",
+        "target": "Sample Fund Act, 2019",
+        "title": "Sample Fund Act",
+        "year": 2019,
+    }
     documents = ng_cited.link_works(
         [
-            law("ng-act-4-2004", "Example Markets Act, 2004"),
+            law("ng-act-1-1999", "Example Markets Act, 1999"),
+            law("ng-act-4-2004", "Example Markets Act, 2004", cites=[earlier]),
             law("ng-act-9-2011", "Example Markets Act, 2011", cites=[cite | provision]),
             law("ng-act-2-2019", "Sample Fund Act, 2019"),
+            law("ng-act-3-2020", "Sample Fund (Amendment) Act, 2020", cites=[amending]),
+            # A Gazette's copy: its text is as published.
+            law("ng-act-5-2019", "Sample Levy Act, 2019", issue={"name": "Official Gazette", "number": "12"}),
+            law(
+                "ng-act-6-2020",
+                "Sample Levy (Amendment) Act, 2020",
+                cites=[amending | {"target": "Sample Levy Act, 2019", "title": "Sample Levy Act"}],
+            ),  # fmt: skip
         ]
     )
+    long_title = (
+        "An Act to repeal the Example Markets Act, 2004 and to amend the Sample Levy Act, 2001; and for related "
+        "matters. ENACTED by the National Assembly of the Federal Republic of Nigeria—"
+    )
     for document in documents:
-        (folder / f"{document['id']}.reading.json").write_text(json.dumps(reading()))
+        read = reading()
+        if document["id"] == "ng-act-9-2011":
+            read["pages"][0] |= {"text": long_title, "nodes": [node(long_title)]}
+        (folder / f"{document['id']}.reading.json").write_text(json.dumps(read))
     (folder / "manifest.json").write_text(
         json.dumps({"collection": "ng", "jurisdiction": "ng", "documents": documents})
     )
@@ -1769,14 +1810,29 @@ def test_a_nigerian_law_says_where_it_stands_and_names_no_listing_for_it_has_non
         "Repealed by Example Markets Act, 2011, as its text says (p. 2)."
     )
     assert details["suggestions"]["relations"]["value"] == [
-        {"kind": "repealed_by", "target": "Example Markets Act, 2011", "target_id": "ng-act-9-2011"}
+        {"kind": "repeals", "target": "Example Markets Act, 1999", "target_id": "ng-act-1-1999"},
+        {"kind": "repealed_by", "target": "Example Markets Act, 2011", "target_id": "ng-act-9-2011"},
     ]
-    assert details["related"] == {"ng-act-9-2011": "ng-act-9-2011"}  # the page of the later law opens from it
+    # What its long title names is kept, with its page, and what the collection's texts say is added to
+    # it: each link once, the long title's own (a law the collection lacks) not lost.
+    merged = reviewer.get("/api/documents/ng-act-9-2011/details").json()["suggestions"]["relations"]
+    assert merged == {
+        "value": [
+            {"kind": "repeals", "target": "Example Markets Act, 2004", "target_id": "ng-act-4-2004"},
+            {"kind": "amends", "target": "Sample Levy Act, 2001"},
+        ],
+        "page": 1,
+        "evidence": "Long title; and the laws this text repeals or amends, and the later ones that repeal or amend it",
+    }
+    assert details["related"] == {
+        "ng-act-9-2011": "ng-act-9-2011",  # the page of the later law opens from it
+        "ng-act-1-1999": "ng-act-1-1999",
+    }
     assert "status.as_of" not in details["suggestions"]  # the date is the reviewer's own check's
     # A law no later text repeals: not yet known, and said to be so for want of a listing.
-    other = reviewer.get("/api/documents/ng-act-2-2019").json()["standing"]
+    other = reviewer.get("/api/documents/ng-act-3-2020").json()["standing"]
     assert other == {"status": "unknown", "listing": None}
-    unknown = reviewer.get("/api/documents/ng-act-2-2019/details").json()
+    unknown = reviewer.get("/api/documents/ng-act-3-2020/details").json()
     assert unknown["suggestions"]["status.legal"] == {
         "value": "unknown",
         "page": None,
@@ -1785,23 +1841,31 @@ def test_a_nigerian_law_says_where_it_stands_and_names_no_listing_for_it_has_non
     assert unknown["record"]["details"]["status.legal"] == "unknown"
     shown = json.dumps([standing, other, details["suggestions"], unknown["suggestions"]])
     assert "RLRC" not in shown and "listing files" not in shown
-    # A law repealed in turn: the last of its line is the latest the collection holds, not "in force".
-    chained = {"jurisdiction": "ng", "currency": {"status": "repealed", "basis": "text",
-               "repealed_by": [{"work": "b", "title": "B Act, 2004"}], "latest": {"work": "c", "title": "C Act, 2011"}}}  # fmt: skip
-    said = record_view.standing_suggestions(chained, {})["status.note"]["value"]
-    assert (
-        said.endswith("the latest in its line that the collection holds is C Act, 2011.")
-        and "in force" not in said
+    # A law repealed in turn: the last of its line is the latest the collection holds, never "in force".
+    first = reviewer.get("/api/documents/ng-act-1-1999").json()["standing"]
+    assert first["repealed_by"] == [{"title": "Example Markets Act, 2004", "id": "ng-act-4-2004"}]
+    assert first["latest"] == later | {"in_force": False}
+    said = reviewer.get("/api/documents/ng-act-1-1999/details").json()["suggestions"]["status.note"]["value"]
+    assert said == (
+        "Repealed by Example Markets Act, 2004, as its text says. That law was repealed in turn; the latest in "
+        "its line that the collection holds is Example Markets Act, 2011."
     )
-    assert (
-        "the law in force now is"
-        in record_view.standing_suggestions(chained | {"jurisdiction": "rw"}, {})["status.note"]["value"]
-    )
+    # An amended law's text is said to be as published only where it is a Gazette's.
+    amended = reviewer.get("/api/documents/ng-act-2-2019").json()["standing"]
+    assert amended["amended_by"] == [{"title": "Sample Fund (Amendment) Act, 2020", "id": "ng-act-3-2020"}]
+    assert amended["as_published"] is False
+    assert reviewer.get("/api/documents/ng-act-5-2019").json()["standing"]["as_published"] is True
     # The repealing law is not itself in force by this: nothing is, without a listing.
     assert reviewer.get("/api/documents/ng-act-9-2011").json()["standing"]["status"] == "unknown"
     # The panel's words for a country without a listing name none (the page is drawn from standing.listing).
     panel = (STATIC / "app.js").read_text().split("function standingPanel")[1].split("\nfunction ")[0]
     assert "RLRC" not in panel and "no official listing of the laws in force" in panel
+    # It says no more than was read: a repeal is what a later text says, to be confirmed; none "was found to"
+    # repeal it; "in force now" and "as published" only where the data say so.
+    assert "A later text says it is" in panel and "not yet confirmed" in panel
+    assert "was found to repeal it" in panel and "collection repeals it" not in panel
+    assert "standing.latest.in_force ?" in panel and "standing.as_published ?" in panel
+    assert "was found to repeal it" in record_view.NO_LISTING
 
 
 # --- the text publishing will write (TXP-01) ----------------------------------------------------------
