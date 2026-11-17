@@ -581,6 +581,39 @@ test("a table inserted after the cursor has a header row and the cursor in its f
   assert.equal(state.selection.$from.parent.type, N.table_header);
 });
 
+test("a paragraph is started below a table that ends the page, above one that begins it, and between two; the cursor goes in it", () => {
+  // A gazette cover: its last unit is the table listing the Act, and the printer's imprint is printed below.
+  const LIST = { kind: "table", caption: "", header_rows: 1, rows: [["Act No.", "Short Title", "Page"], ["13", "An Act", "A305-307"]] };
+  const COVER = [{ kind: "paragraph", text: "The following is published as supplement to this Gazette :" }, LIST];
+  const imprint = "Printed and Published by The Federal Government Printer, Lagos, Nigeria";
+  let state = stateOf(COVER);
+  state = select(state, inBlock(state.doc, N.table_cell, 2, 8)); // the end of the last cell
+  state = apply(state, commands.addParagraphAfter).state;
+  assert.equal(state.selection.$from.parent.type, N.body);
+  state = state.apply(state.tr.insertText(imprint));
+  assert.deepEqual(fromDoc(state.doc), [...COVER, { kind: "paragraph", text: imprint }]);
+
+  // Above a table that begins the page, with cells selected.
+  state = stateOf([LIST]);
+  state = state.apply(state.tr.setSelection(CellSelection.create(state.doc, inBlock(state.doc, N.table_header, 0) - 1, inBlock(state.doc, N.table_header, 1) - 1)));
+  state = apply(state, commands.addParagraphBefore).state;
+  state = state.apply(state.tr.insertText("SCHEDULE"));
+  assert.deepEqual(fromDoc(state.doc), [{ kind: "paragraph", text: "SCHEDULE" }, LIST]);
+
+  // Between two tables, where no unit stands to press Enter in.
+  state = stateOf([LIST, TAX_TABLE]);
+  state = select(state, inBlock(state.doc, N.table_cell, 0));
+  state = apply(state, commands.addParagraphAfter).state;
+  state = state.apply(state.tr.insertText("between"));
+  assert.deepEqual(fromDoc(state.doc), [LIST, { kind: "paragraph", text: "between" }, TAX_TABLE]);
+
+  // Outside a table there is Enter: the commands do nothing.
+  state = stateOf([PAGE[4]]);
+  state = select(state, inWords(state.doc, 0, 3));
+  assert.equal(apply(state, commands.addParagraphAfter).done, false);
+  assert.equal(apply(state, commands.addParagraphBefore).done, false);
+});
+
 // --- pasting ------------------------------------------------------------------------------------------
 
 test("plain text from a PDF: wrapped lines join; numbered lines and sentence ends start units", () => {

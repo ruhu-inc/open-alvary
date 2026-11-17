@@ -765,6 +765,8 @@ export const commands = {
     return true;
   },
   insertTable: tables.insertTable,
+  addParagraphBefore: tables.paragraphBesideTable(-1),
+  addParagraphAfter: tables.paragraphBesideTable(1),
   addRowBefore: tables.addRowBefore,
   addRowAfter: tables.addRowAfter,
   addColumnBefore: tables.addColumnBefore,
@@ -927,7 +929,7 @@ export function createEditor(mount, { units, machineUnits, flags, onChange, onFl
         inTable: isInTable(st) || st.selection instanceof CellSelection,
         headerRow: tables.inHeaderRow(st),
         cellState: tables.cellStateAt(st),
-        can: Object.fromEntries(["addRowBefore", "addRowAfter", "addColumnBefore", "addColumnAfter", "deleteRow", "deleteColumn", "mergeCells", "splitCell", "toggleHeaderRow", "markIllegible", "markUnsupported", "clearCellState", "deleteTable", "addNote", "insertTable"]
+        can: Object.fromEntries(["addParagraphBefore", "addParagraphAfter", "addRowBefore", "addRowAfter", "addColumnBefore", "addColumnAfter", "deleteRow", "deleteColumn", "mergeCells", "splitCell", "toggleHeaderRow", "markIllegible", "markUnsupported", "clearCellState", "deleteTable", "addNote", "insertTable"]
           .map((name) => [name, can(commands[name])])),
         find: findStatus(st),
       };

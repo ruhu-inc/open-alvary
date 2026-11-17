@@ -178,6 +178,24 @@ export function deleteTable(state, dispatch) {
   return true;
 }
 
+// A paragraph beside the table holding the cursor, with the cursor put in it: the only way to write
+// before a table that begins the page, after one that ends it, or between two tables, where there is no
+// unit to press Enter in (review runs of 2026-11-16: the printer's imprint under the last table of a
+// gazette cover could not be typed; what was typed went into the table's last cell).
+export function paragraphBesideTable(side) {
+  return (state, dispatch) => {
+    const unit = selectedTable(state);
+    if (!unit) return false;
+    if (dispatch) {
+      const at = side < 0 ? unit.pos : unit.pos + unit.node.nodeSize;
+      const tr = state.tr.insert(at, N.unit.create(null, [N.body.create()]));
+      tr.setSelection(TextSelection.create(tr.doc, at + 2));
+      dispatch(tr.scrollIntoView());
+    }
+    return true;
+  };
+}
+
 // Removing every row (or every column) removes the table.
 export function deleteRow(state, dispatch) {
   if (!isInTable(state)) return false;
