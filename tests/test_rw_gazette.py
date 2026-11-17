@@ -2086,3 +2086,61 @@ def test_a_letter_spaced_amending_line_goes_on_over_the_next():
     # A letter-spaced line that does not amend is no reason: the law below it begins there.
     lines[0]["text"] = "RE P UB L I C O F RWANDA"
     assert [o["number"] for o in RG.openings(lines, "en")] == ["16/2004"]
+
+
+def test_only_the_line_just_above_in_its_column_goes_on():
+    """Gazette of 2008 with Laws n° 26–28/2008, its three columns read as one: the English "AUTHORISING
+    THE" sits beside the French "LOI N° 28/2008", a little higher, not above it. The French law begins
+    there; only a line overlapping it, just above, would carry the title on."""
+
+    def line(text, x0, y0):
+        return {"text": text, "page": 9, "x0": x0, "x1": x0 + 157, "y0": y0, "y1": y0 + 9}
+
+    lines = [
+        line("AUTHORISING THE", 242.0, 699.7),
+        line("LOI N° 28/2008 DU 23/07/2008", 409.0, 705.7),
+        line("AUTORISANT LE RETRAIT", 409.0, 716.7),
+        line("TABLE DES MATIERES", 409.0, 727.7),
+    ]
+    assert [o["number"] for o in RG.openings(lines, "fr")] == ["28/2008"]
+    lines[0] = line("PORTANT RATIFICATION DE LA", 409.0, 694.7)  # just above, in the same column
+    assert RG.openings(lines, "fr") == []
+
+
+def test_an_amendment_of_the_constitution_begins_at_the_constitution_heading():
+    """Gazette of 17/06/2010: "AMENDMENT N° 04 OF 17/06/2010 OF / THE CONSTITUTION OF THE REPUBLIC …".
+    The amendment is read from the Constitution's heading, which begins it although the line above
+    ends in "OF". The same heading in an enacting formula ("… PROMULGUONS LA REVISION DE LA /
+    CONSTITUTION …") begins nothing."""
+
+    def lines(*texts):
+        return [{"text": text, "page": 2} for text in texts]
+
+    amendment = lines(
+        "AMENDMENT N° 04 OF 17/06/2010 OF",
+        "THE CONSTITUTION OF THE",
+        "REPUBLIC OF RWANDA OF 04 JUNE",
+        "2003",
+        "TABLE OF CONTENTS",
+    )
+    assert [o["kind"] for o in RG.openings(amendment, "en")] == ["constitution"]
+    revision = lines(
+        "REVISION DU 13/8/2008 DE", "LA CONSTITUTION DE LA", "REPUBLIQUE DU RWANDA du", "04 JUIN 2003"
+    )
+    assert [o["kind"] for o in RG.openings(revision, "fr")] == ["constitution"]
+    # Headed on one line, in each language (Gazette of 08/12/2005; the RLRC copy of revision n° 1
+    # reads "RYO" as "RVO"). Before, only the French was found, by the enacting formula under it.
+    for language, heading in (
+        ("en", "AMENDMENT N° 02 OF 08/12/2005 OF THE CONSTITUTION OF THE REPUBLIC OF RWANDA OF"),
+        ("fr", "REVISION N° 02 DU 08/12/2005 DE LA CONSTITUTION DE LA REPUBLIQUE DU RWANDA DU 04"),
+        ("rw", "IVUGURURA N° 02 RYO KUWA 08/12/2005 RY’ITEGEKO NSHINGA RYA REPUBULIKA Y’U"),
+        ("rw", "IVUGURURA N° 1 RVO KU WA 02/12/2003 RY’ITEGEKO NSHINGA RYA REPUBULIKA Y’U"),
+    ):
+        found = RG.openings(lines(heading, "JUIN 2003", "Nous, KAGAME Paul,"), language)
+        assert [(o["kind"], o["page"]) for o in found] == [("constitution", 2)], heading
+    formula = lines(
+        "LE PARLEMENT A ADOPTE ET NOUS SANCTIONNONS, PROMULGUONS LA REVISION DE LA",
+        "CONSTITUTION DE LA REPUBLIQUE DU RWANDA DU 04 JUIN 2003 TELLE QUE REVISEE A",
+        "CE JOUR",
+    )
+    assert RG.openings(formula, "fr") == []

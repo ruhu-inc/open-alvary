@@ -38,7 +38,9 @@ from schema.jurisdictions import registry
 # INSTRUCTIONS MINISTÉRIELLES N° 612/08.11") is not one that begins there.
 # 2026-11-17.2: so too where the amending line is letter-spaced ("CO MP LE ME NTING O RG ANIC"); each
 # document records its articles, and of copies sharing an id one with articles is kept (rwanda.one_per_id).
-PIPELINE = "2026-11-17.2"
+# 2026-11-17.3: only the line just above, in the same column, goes on (not another language's beside
+# it); the Constitution's heading under "AMENDMENT N° 04 … OF" still begins the amendment.
+PIPELINE = "2026-11-17.3"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -109,10 +111,18 @@ KIND_HEAD = re.compile(
 KIND_ALONE = {language: re.compile(rf"^(?:{words})\s*$") for language, words in KIND_WORDS.items()}
 # A constitution is printed without a number, its heading sometimes over two lines ("THE CONSTITUTION
 # OF THE" then "REPUBLIC OF RWANDA OF 2003 REVISED IN 2015").
+# An amendment of it is headed so on one line ("AMENDMENT N° 02 OF 08/12/2005 OF THE CONSTITUTION OF THE
+# REPUBLIC …", "IVUGURURA N° 02 RYO KUWA 08/12/2005 RY’ITEGEKO NSHINGA …").
 CONSTITUTION = {
-    "rw": re.compile(r"^ITEGEKO NSHINGA\b"),
-    "en": re.compile(r"^(?:THE\s+)?CONSTITUTION OF THE\s+REPUBLIC\b"),
-    "fr": re.compile(r"^(?:LA\s+)?CONSTITUTION DE LA\s+R[ÉE]PUBLIQUE\b"),
+    "rw": re.compile(
+        r"^(?:IVUGURURW?A\s+N\s?[°º]\s*\S+\s+\S+\s+KU\s?WA\s+\S+\s+RY[’'‟]\s?)?ITEGEKO NSHINGA\b"
+    ),
+    "en": re.compile(
+        r"^(?:AMENDMENT\s+N\s?[°º]\s*\S+\s+OF\s+\S+\s+OF\s+)?(?:THE\s+)?CONSTITUTION OF THE\s+REPUBLIC\b"
+    ),
+    "fr": re.compile(
+        r"^(?:R[ÉE]VISION\s+N\s?[°º]\s*\S+\s+DU\s+\S+\s+DE\s+)?(?:LA\s+)?CONSTITUTION DE LA\s+R[ÉE]PUBLIQUE\b"
+    ),
 }
 CONSTITUTION_BEGUN = {
     "rw": re.compile(r"^ITEGEKO\s*$"),
@@ -223,6 +233,9 @@ AMENDS_SPACED = re.compile(
     r"|MODIFIANT|COMPL[ÉE]TANT|ABROGEANT|REMPLA[ÇC]ANT"
     r"|AHINDURA|RIHINDURA|AYUZUZA|RYUZUZA|AVANAHO|RIVANAHO|ASIMBURA|RISIMBURA)[^\W\d]{0,12}$"
 )
+# An amendment of the Constitution is read from the Constitution's heading under it ("AMENDMENT N° 04
+# OF 17/06/2010 OF / THE CONSTITUTION OF THE REPUBLIC …"), so that heading begins it all the same.
+CONSTITUTION_AMENDED = re.compile(r"^(?:AMENDMENT|R[ÉE]VISION|IVUGURURW?A)\b")
 # A title never runs on to another page, nor past this length (the longest printed is about 300
 # characters): beyond either, the body has begun even where nothing above recognised its start.
 HEADING_MAX = 600
@@ -831,10 +844,19 @@ def shortened(text: str, limit: int) -> str:
 
 
 def _title_goes_on(lines: list[dict], i: int) -> bool:
-    """Whether line i goes on a title begun above it on the same page (TITLE_GOES_ON)."""
-    if i == 0 or lines[i - 1].get("page") != lines[i].get("page"):
+    """Whether line i goes on a title begun on the line just above it, in its column (TITLE_GOES_ON)."""
+    above, line = (lines[i - 1], lines[i]) if i else (None, None)
+    if above is None or above.get("page") != line.get("page"):
         return False
-    text = lines[i - 1]["text"].strip()
+    # Where the page's columns were not told apart, the line before can be another language's, beside
+    # it ("AUTHORISING THE" left of "LOI N° 28/2008"): only the line above, overlapping it, goes on.
+    if all(key in row for row in (above, line) for key in ("x0", "x1", "y0", "y1")):
+        height = max(above["y1"] - above["y0"], 1.0)
+        if above["x1"] <= line["x0"] or line["x1"] <= above["x0"]:
+            return False
+        if not 0 < line["y0"] - above["y0"] <= 2.5 * height:
+            return False
+    text = above["text"].strip()
     letters = [c for c in text if c.isalpha()]
     if not letters or sum(c.isupper() for c in letters) < 0.8 * len(letters):
         return False
@@ -871,7 +893,8 @@ def openings(lines: list[dict], language: str) -> list[dict]:
                 if match or constitution:
                     joined = more
                     break
-        if not (match or constitution) or _title_goes_on(lines, i):
+        amended = bool(constitution) and i > 0 and CONSTITUTION_AMENDED.match(lines[i - 1]["text"].strip())
+        if not (match or constitution) or (not amended and _title_goes_on(lines, i)):
             i += 1
             continue
         heading = [line["text"].strip() for line in lines[i : i + joined]]
