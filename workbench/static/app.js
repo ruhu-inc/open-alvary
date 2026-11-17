@@ -1035,7 +1035,9 @@ function approvalPanel(actId, data, current) {
       `${a.created_at.slice(0, 16).replace("T", " ")} · ${a.decision} by ${a.author} · content ${a.content_sha256.slice(0, 12)}… `,
       a.content_sha256 !== data.content_sha256 ? pill("warn", "text changed since")
         : a.details_sha256 !== data.details_sha256 ? pill("warn", a.details_sha256 ? "details changed since" : "details not part of this approval")
-        : pill("ok", "matches current text and details")))));
+        : pill("ok", "matches current text and details"),
+      // The approver's note was stored and shown nowhere: it belongs beside the decision it explains.
+      a.note ? ` — ${a.note}` : null))));
   }
   panel.append(el("p", {},
     el("a", { href: `/api/documents/${encodeURIComponent(actId)}/export`, target: "_blank", rel: "noopener", text: "Reviewed content (JSON)" }), " · ",
