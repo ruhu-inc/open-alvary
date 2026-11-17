@@ -1174,7 +1174,10 @@ async function detailsView(actId) {
   };
 
   const counter = el("span");
-  const comment = el("textarea", { rows: 2, placeholder: "Note for the record (optional)" });
+  // A note belongs to one save, so the box is empty again after each: say where the note went, or the
+  // reviewer takes it for lost and saves again (owner, 2026-11-17).
+  const comment = el("textarea", { rows: 2, placeholder: "Note for this save (optional)" });
+  const commentHelp = el("div", { class: "muted small", text: "The note is kept with this save and listed under “Details record” at the foot of this page, so this box is empty again after each save. Notes stay in the workbench: they are not published." });
   const save = async (status) => {
     const result = await api(`/api/documents/${encodeURIComponent(actId)}/details`, { method: "POST",
       body: { expected_revision: record.revision, status, details: values, absent, comment: comment.value } });
@@ -1203,7 +1206,8 @@ async function detailsView(actId) {
           el("p", {}, pill(record.status === "confirmed" ? "ok" : record.status === "draft" ? "warn" : "medium", DETAIL_STATUS[record.status] + (record.revision ? ` · revision ${record.revision} by ${record.author}` : "")), " ", counter),
           ...(data.notices || []).map((notice) => el("div", { class: "hint", text: notice })),
           canEdit ? el("p", {}, el("button", { text: "Save draft", on: { click: () => save("draft") } }), " ", confirmButton, " ", previewLink(actId)) : el("p", { class: "muted", text: "Editing needs the reviewer role." }),
-          canEdit ? comment : null),
+          canEdit ? comment : null,
+          canEdit ? commentHelp : null),
         ...groups,
         history),
       original.panel),
