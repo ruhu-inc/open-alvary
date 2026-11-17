@@ -691,6 +691,43 @@ test("cells copied from the page, and words pasted over selected cells, still go
   assert.deepEqual(fromDoc(pasted.doc)[0].rows, [["x", "x"], ["c", "d"]]);
 });
 
+// A cell printed on two lines (two parties, one under the other) comes from the reading with a line
+// break in it, and the published text keeps it. ProseMirror reads typed changes back from the page
+// with a node type's own white-space rule: "pre" keeps line breaks, the default turns each into a
+// space. With the default, a letter typed anywhere in such a cell joined its lines (review run of
+// 2026-11-17). There is no page here to type on, so the rule itself is checked, and that a cell
+// keeps its lines through the editor and through a change made in it.
+test("a cell keeps the line breaks it holds, in the editor and when words are put in", () => {
+  assert.equal(N.table_cell.whitespace, "pre");
+  assert.equal(N.table_header.whitespace, "pre");
+  const parties = { kind: "table", caption: "", header_rows: 1, rows: [["Between", "And"], ["A. B. Ltd\nC. D.", "The Bank Plc"]] };
+  let state = stateOf([parties]);
+  assert.deepEqual(fromDoc(state.doc)[0].rows, parties.rows);
+  state = select(state, inBlock(state.doc, N.table_cell, 0));
+  state = state.apply(state.tr.insertText("1. "));
+  assert.deepEqual(fromDoc(state.doc)[0].rows[1], ["1. A. B. Ltd\nC. D.", "The Bank Plc"]);
+});
+
+test("a table pasted from another site has each cell's words on one line; one copied from the page keeps its lines", () => {
+  const state = stateOf([{ kind: "table", caption: "", header_rows: 0, rows: [["a", "b"], ["A. B. Ltd\nC. D.", "d"]] }]);
+  const html = state.plugins.find((plugin) => plugin.props.transformPastedHTML).props.transformPastedHTML;
+  const a = inBlock(state.doc, N.table_cell, 0) - 1, b = inBlock(state.doc, N.table_cell, 1) - 1;
+  const top = state.apply(state.tr.setSelection(CellSelection.create(state.doc, a, b)));
+  // As the clipboard parser now reads `<td>\n      Offence\n    </td>`: the HTML's own line breaks and indentation.
+  const outside = new Slice(Fragment.from([N.table_cell.create(null, schema.text("\n      Offence  and\n      fine\n    ")), N.table_cell.create(null, schema.text("N5m"))]), 0, 0);
+  html("<table><tr><td>\n      Offence  and\n      fine\n    </td><td>N5m</td></tr></table>");
+  assert.deepEqual(fromDoc(paste(top, outside).doc)[0].rows[0], ["Offence and fine", "N5m"]);
+  // Cells copied here: ProseMirror marks its own copies, and their lines are theirs.
+  const c = inBlock(state.doc, N.table_cell, 2) - 1, d = inBlock(state.doc, N.table_cell, 3) - 1;
+  const copied = CellSelection.create(state.doc, c, d).content();
+  html('<table data-pm-slice="0 0 []"><tr><td>A. B. Ltd\nC. D.</td><td>d</td></tr></table>');
+  assert.deepEqual(fromDoc(paste(top, copied).doc)[0].rows[0], ["A. B. Ltd\nC. D.", "d"]);
+  // The mark is read once: a later paste that brings no HTML (plain text, a drag within the page) is not taken for outside.
+  html("<p>from a website</p>");
+  transformed(state, Slice.empty);
+  assert.deepEqual(fromDoc(paste(top, copied).doc)[0].rows[0], ["A. B. Ltd\nC. D.", "d"]);
+});
+
 // Spaces where pasted words meet the words around them. The plain text is what the page's paste
 // reads; the clipboard parser's slice only matters in a cell (wordsForCell).
 const TAX = { kind: "paragraph", text: "Small enterprises must pay tax.", notes: ["Lump sum for enterprises"] };

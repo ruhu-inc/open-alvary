@@ -62,12 +62,18 @@ export const cellState = (value) => (CELL_STATES.includes(value) ? value : null)
 
 // A merged cell, as printed, keeps its extent in rows and columns; the cells it covers are not
 // there, as in an HTML table. Cells hold words, with bold, italic and the rest (footnote markers,
-// m², 10⁶), on one line, or a mark saying why they hold none.
+// m², 10⁶), or a mark saying why they hold none. A cell's words may come from the reading on more
+// than one line (two parties, one printed under the other), and the published text keeps a cell's
+// line breaks as they are (TXP-02 rule 6): `whitespace: "pre"` has the editor read a cell back with
+// them. Without it, a letter typed anywhere in such a cell turned its line breaks into spaces
+// (review run of 2026-11-17). No line break can be typed or pasted in: Enter moves on, and pasted
+// words go in on one line.
 function cellSpec(tag, role) {
   return {
     tableRole: role,
     content: "text*",
     marks: "_",
+    whitespace: "pre",
     isolating: true,
     attrs: { colspan: { default: 1 }, rowspan: { default: 1 }, colwidth: { default: null }, state: { default: null } },
     parseDOM: [{ tag, getAttrs: (dom) => ({ colspan: span(dom.getAttribute("colspan")), rowspan: span(dom.getAttribute("rowspan")), state: cellState(dom.dataset.state) }) }],

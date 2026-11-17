@@ -641,9 +641,38 @@ function wordsForCell(slice, state) {
 // wordsForCell). Wherever words go in, the spaces where they meet the words around them follow the
 // copied text (spacedWords): the clipboard's plain text says whether it had a space (or a line
 // break) at either end, which the cleaned units no longer show.
+//
+// A cell is read with its white space as it stands, so that its own line breaks survive (schema.js).
+// The clipboard parser therefore also keeps, in cells of a table copied from another site or program,
+// the line breaks and indentation of the HTML they arrive in, which nobody printed: those cells get
+// their words on one line, as they always did (cellsOnOneLine). Cells copied from a page here are
+// left as they are. ProseMirror hands the HTML over before it parses it, and only for a paste or
+// drop that came as HTML.
+let htmlFromOutside = false;
+
+function cellsOnOneLine(slice) {
+  const tidy = (fragment) => {
+    const nodes = [];
+    fragment.forEach((node) => {
+      if (isCell(node)) nodes.push(node.copy(pastedWords([node], node.type)));
+      else nodes.push(node.isText || node.isLeaf ? node : node.copy(tidy(node.content)));
+    });
+    return Fragment.from(nodes);
+  };
+  return new Slice(tidy(slice.content), slice.openStart, slice.openEnd);
+}
+
 const pastePlugin = new Plugin({
   props: {
-    transformPasted: (slice, view) => wordsForCell(slice, view.state),
+    transformPastedHTML(html) {
+      htmlFromOutside = !/data-pm-slice/.test(html);
+      return html;
+    },
+    transformPasted(slice, view) {
+      const outside = htmlFromOutside;
+      htmlFromOutside = false;
+      return wordsForCell(outside ? cellsOnOneLine(slice) : slice, view.state);
+    },
     handlePaste(view, event, slice) {
       const data = event.clipboardData;
       const html = data ? data.getData("text/html") : "";
