@@ -563,6 +563,29 @@ def test_details_are_suggested_from_the_gazette_the_certificate_and_the_assent()
     assert details.initial(found)[0]["gazette_issue"] == "extraordinary"  # printed: in the first draft
 
 
+@pytest.mark.parametrize("word", ["Commence-ment", "Commence- ment", "Commence ment", "COMMENCE-MENT"])
+def test_a_commencement_date_is_found_where_the_margin_word_is_broken_over_two_lines(word):
+    """Review runs of 2026-11-16 (Fifth Alteration Acts Nos. 6 and 9): the margin is narrow, the word is
+    printed "Commence-" over "ment", and the reading keeps the break. The date beside it was then not
+    found, the form offered "not stated in this copy" for a date the page prints, and an Act with no
+    Schedule to the Bill was offered a long title ending in the date and the margin word."""
+    body = {
+        "page": 1,
+        "text": "An Act to alter the Constitution of the Federal Republic of Nigeria, 1999 ; and for related "
+        f"matters. [3rd day of March, 2023] {word} ENACTED BY THE National Assembly of the Federal "
+        "Republic of Nigeria— 1. This Act may be cited as the Constitution (Alteration) Act, 2023.",
+        "tables": [],
+        "nodes": [],
+    }
+    found = details.suggest({"pages": [body]}, {"id": "x", "type": "act"}, {"jurisdiction": "ng"})
+    assert found["commencement_date"]["value"] == "2023-03-03" and found["commencement_date"]["page"] == 1
+    assert found["long_title"]["value"].endswith("; and for related matters.")
+    blank = {**body, "text": body["text"].replace("3rd day of March, 2023", " ")}
+    if word[1].islower():  # a date left blank is recognised as before, with the word broken too
+        left = details.suggest({"pages": [blank]}, {"id": "x", "type": "act"}, {"jurisdiction": "ng"})
+        assert left["commencement_date"]["evidence"].startswith("The commencement date is left blank")
+
+
 def test_an_issue_inferred_to_be_ordinary_is_suggested_not_filled_in():
     """An ordinary gazette does not print "Ordinary": inferred from the absence of "Extraordinary", it is
     suggested beside its field and left out of the first draft, which keeps what the front page prints."""

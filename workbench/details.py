@@ -247,6 +247,10 @@ def missing(details: dict, absent: dict, document_type: str) -> list[str]:
 MONTHS = {m: i for i, m in enumerate("jan feb mar apr may jun jul aug sep oct nov dec".split(), 1)}
 # "3rd day of March, 2023", "08 Day of June, 2023", "18TH.... Day of FEBRUARY, 2026", "24 May, 2023"
 DATE = r"(\d{1,2})(?i:st|nd|rd|th)?\.*\s+(?i:day\s+of\s+)?([A-Za-z]+),?\s+(\d{4})"
+# The margin word beside the commencement date. A narrow margin breaks it over two lines and the reading
+# keeps the break ("Commence-ment"): read as one word, or the date printed beside it is not found and the
+# form offers "not stated in this copy" (review runs of 2026-11-16: Fifth Alteration Acts Nos. 6 and 9).
+COMMENCEMENT = r"Commence-?\s*ment"
 POST_NOMINALS = {"gcfr", "gcon", "fcna", "fnia", "fcia", "cfr", "con", "san", "mfr", "ofr", "esq"}
 STOP_WORDS = {"i", "ls", "assent", "assent."}
 
@@ -423,12 +427,12 @@ def _short_title(flats, document, out):
 def _enacting(flats, out):
     for number, text in flats:
         long_title = re.search(
-            r"\b(An Act to .+?)\s*(?:\[[^\]]*\]\s*Commencement|\[\s*ENACTED|ENACTED by)", text, re.I
+            rf"\b(An Act to .+?)\s*(?:\[[^\]]*\]\s*{COMMENCEMENT}|\[\s*ENACTED|ENACTED by)", text, re.I
         )
         if long_title and "long_title" not in out:
             out["long_title"] = _suggest(long_title.group(1).strip(), number, long_title.group(0))
-        commenced = re.search(r"\[\s*" + DATE + r"\s*\]\s*Commencement", text, re.I)
-        blank = re.search(r"\[\s*\]\s*Commencement", text)
+        commenced = re.search(r"\[\s*" + DATE + r"\s*\]\s*" + COMMENCEMENT, text, re.I)
+        blank = re.search(r"\[\s*\]\s*" + COMMENCEMENT, text)
         if commenced and "commencement_date" not in out:
             when = parse_date(*commenced.groups())
             if when:
