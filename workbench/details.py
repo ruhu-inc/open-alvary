@@ -457,12 +457,27 @@ def _schedule(pages, flats, out):
     for page in reversed(pages[-3:]):
         for table in page.get("tables", []):
             rows = table if isinstance(table, list) else table.get("rows", [])
-            if len(rows) < 2:
+            # The head is one row, "(4) Date Passed by the Senate", or read as two: the column numbers
+            # "(1) … (5)" in a row of their own above or below the column titles. Without its number a
+            # numbers row is empty, so the titles are the row naming the Senate and the values are the
+            # first row with words after it.
+            heads = [[re.sub(r"^\(\d+\)\s*", "", str(cell)).strip().lower() for cell in row] for row in rows]
+            at = next(
+                (
+                    i
+                    for i, head in enumerate(heads[:3])
+                    if any("passed by the senate" in cell for cell in head)
+                ),
+                None,
+            )
+            if at is None:
                 continue
-            header = [re.sub(r"^\(\d\)\s*", "", str(cell)).strip().lower() for cell in rows[0]]
-            if not any("passed by the senate" in cell for cell in header):
+            row = next(
+                (r for r, head in zip(rows[at + 1 :], heads[at + 1 :], strict=True) if any(head)), None
+            )
+            if row is None:
                 continue
-            row = rows[1]
+            header = heads[at]
             evidence = "Schedule to the Bill"
             for index, cell in enumerate(header):
                 if index >= len(row):
@@ -481,9 +496,12 @@ def _schedule(pages, flats, out):
             return
     for number, text in reversed(flats[-3:]):  # no table: the two dates before the certificate
         start = text.lower().find("passed by the senate")
-        end = text.find("I certify", start)
-        if start < 0 or end < 0:
+        certified = (
+            re.search(r"\bI,? certify\b", text[start:]) if start >= 0 else None
+        )  # some print "I, certify"
+        if not certified:
             continue
+        end = start + certified.start()
         dates = [parse_date(*m.groups()) for m in re.finditer(DATE, text[start:end], re.I)]
         dates = [d for d in dates if d]
         if len(dates) >= 2:

@@ -586,6 +586,76 @@ def test_a_commencement_date_is_found_where_the_margin_word_is_broken_over_two_l
         assert left["commencement_date"]["evidence"].startswith("The commencement date is left blank")
 
 
+SCHEDULE_TITLES = [
+    "Short Title of the Bill",
+    "Long Title of the Bill",
+    "Summary of the Contents of the Bill",
+    "Date Passed by the Senate",
+    "Date Passed by the House of Representatives",
+]
+SCHEDULE_VALUES = [
+    "Constitution of The Federal Republic of Nigeria, 1999 (Fifth Alteration, No. 3) Bill, 2023.",
+    "An Act to alter the Constitution of the Federal Republic of Nigeria, 1999 to change the names of "
+    "Egbado North and Egbado South Local Government Areas ; and for related matters.",
+    "This Bill alters the Constitution of the Federal Republic of Nigeria, 1999.",
+    "24th January, 2023.",
+    "25th January, 2023.",
+]
+SCHEDULE_NUMBERS = ["(1)", "(2)", "(3)", "(4)", "(5)"]
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [SCHEDULE_NUMBERS, SCHEDULE_TITLES, SCHEDULE_VALUES],  # as the Fifth Alteration (No. 3) Act was read
+        [SCHEDULE_TITLES, SCHEDULE_NUMBERS, SCHEDULE_VALUES],
+        [
+            [f"{n} {t}" for n, t in zip(SCHEDULE_NUMBERS, SCHEDULE_TITLES, strict=True)],
+            SCHEDULE_VALUES,
+        ],  # one row, as before
+        [[t.upper() for t in SCHEDULE_TITLES], SCHEDULE_VALUES],
+    ],
+)
+def test_the_schedule_is_read_when_its_column_numbers_are_a_row_of_their_own(rows):
+    """Review run of 2026-11-17 (Fifth Alteration (No. 3) Act, page 6): the table's head was read as two
+    rows, "(1) … (5)" above the column titles. The titles were looked for in the first row only and the
+    values in the second, so the Bill's title and the dates each House passed it were not offered, and
+    the long title was taken from the Act's first page."""
+    body = {
+        "page": 5,
+        "text": "AN ACT TO ALTER THE CONSTITUTION ; AND FOR RELATED MATTERS. [3rd day of March, 2023] "
+        "Commencement ENACTED by the National Assembly of the Federal Republic of Nigeria—",
+        "tables": [],
+        "nodes": [],
+    }
+    end = {"page": 6, "text": "SCHEDULE TO THE BILL", "tables": [rows], "nodes": []}
+    found = details.suggest({"pages": [body, end]}, {"id": "x", "type": "act"}, {"jurisdiction": "ng"})
+    assert found["passed_senate"]["value"] == "2023-01-24" and found["passed_house"]["value"] == "2023-01-25"
+    assert found["passed_senate"]["page"] == 6
+    assert found["bill_title"]["value"] == SCHEDULE_VALUES[0].rstrip(".")
+    assert found["long_title"]["value"] == SCHEDULE_VALUES[1] and found["long_title"]["page"] == 6
+
+
+def test_a_table_with_no_values_under_its_titles_offers_no_schedule_details():
+    end = {"page": 2, "text": "SCHEDULE", "tables": [[SCHEDULE_NUMBERS, SCHEDULE_TITLES]], "nodes": []}
+    found = details.suggest({"pages": [end]}, {"id": "x", "type": "act"}, {"jurisdiction": "ng"})
+    assert "passed_senate" not in found and "bill_title" not in found
+
+
+def test_the_passage_dates_are_found_before_a_certificate_printed_with_a_comma():
+    """The same Act prints "I, certify that this Bill…": with no table read, the two dates before the
+    certificate are the Houses' dates."""
+    end = {
+        "page": 3,
+        "text": "Date Passed by the Senate Date Passed by the House of Representatives 24th January, 2023. "
+        "25th January, 2023. I, certify that this Bill has been carefully compared by me",
+        "tables": [],
+        "nodes": [],
+    }
+    found = details.suggest({"pages": [end]}, {"id": "x", "type": "act"}, {"jurisdiction": "ng"})
+    assert found["passed_senate"]["value"] == "2023-01-24" and found["passed_house"]["value"] == "2023-01-25"
+
+
 def test_an_issue_inferred_to_be_ordinary_is_suggested_not_filled_in():
     """An ordinary gazette does not print "Ordinary": inferred from the absence of "Extraordinary", it is
     suggested beside its field and left out of the first draft, which keeps what the front page prints."""
@@ -1816,6 +1886,41 @@ def test_a_page_says_how_the_page_before_it_ends(world):
     save(reviewer, units=[{"kind": "paragraph", "text": "1. Accounts prepared under sec-"}])
     before = reviewer.get(f"/api/documents/{ACT}/pages/2").json()["previous_end"]
     assert before["hyphen"] and not before["ends_sentence"]
+
+
+def test_a_paragraph_can_be_joined_across_a_page_with_no_words(tmp_path, monkeypatch):
+    """Review run of 2026-11-17 (a Supreme Court judgment): a paragraph ran from one page to the next but
+    one, with a page between that held only the court's seal. The page after was told nothing of how the
+    text before it ended, so the join was never offered, though the published text would have made it."""
+    read = reading()
+    one, two = read["pages"]
+    one = {**one, "nodes": [node("The appeal was heard and the court then")], "flags": [], "text": "x"}
+    seal = {**two, "nodes": [node("SUPREME COURT SEAL", page=2)], "text": "SUPREME COURT SEAL"}
+    three = {**two, "page": 3, "nodes": [node("dismissed it with costs.", page=3)], "text": "x"}
+    read["pages"] = [one, seal, three]
+    (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(read))
+    store = Store(connect(f"sqlite:///{tmp_path / 'workbench.db'}"))
+    store.add_operator("reviewer@example.org", "Rev", {"reviewer"})
+    reviewer = signed_in((store, content.Library(tmp_path)), "reviewer@example.org")
+    ends = lambda: reviewer.get(f"/api/documents/{ACT}/pages/3").json()["previous_end"]  # noqa: E731
+    assert ends()["page"] == 2 and ends()["text"] == "SUPREME COURT SEAL"  # as read: the seal's letters
+    save(reviewer, page=2, units=[{"kind": "paragraph", "text": ""}])  # the reviewer removes them
+    assert ends() == {
+        "page": 1,
+        "text": "The appeal was heard and the court then",
+        "hyphen": False,
+        "ends_sentence": False,
+    }
+    joined = [{"kind": "paragraph", "text": "dismissed it with costs.", "continues_previous": True}]
+    assert save(reviewer, page=3, units=joined).status_code == 200
+    check = reviewer.get(f"/api/documents/{ACT}").json()["text_check"]
+    assert not [issue for issue in check["errors"] if issue["code"] == "join"]
+    # A table ends the paragraph before it: the published text refuses a join across one, so none is offered.
+    table = {"kind": "table", "caption": "", "header_rows": 0, "rows": [["Party", "Counsel"]]}
+    save(reviewer, page=2, expected=1, units=[table])
+    assert ends() is None
+    save(reviewer, page=2, expected=2, units=[{"kind": "paragraph", "text": "Before"}, table])
+    assert ends() is None
 
 
 def test_join_marks_are_validated_and_words_doubled_in_editing_are_reported(world):

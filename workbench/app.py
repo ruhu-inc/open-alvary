@@ -227,25 +227,28 @@ def create_app(
         return reading, found
 
     def previous_end(act_id: str, reading: dict, page: int) -> dict | None:
-        """How the page before ends, as now reviewed: whether this page's first paragraph may
-        continue it (TXP-02 rule 8)."""
+        """How the text before this page ends, as now reviewed: whether this page's first paragraph may
+        continue it (TXP-02 rule 8). The paragraph is found as the published text finds it
+        (serialize.serialize): a page with no words is passed over (a blank page, or one that holds only
+        a seal once its letters are removed), and a table ends the paragraph before it, so nothing
+        after one can be joined."""
         numbers = [p["page"] for p in reading["pages"]]
-        if page not in numbers or numbers.index(page) == 0:
+        if page not in numbers:
             return None
-        before = reading["pages"][numbers.index(page) - 1]
-        revision = store.latest_pages(act_id).get(before["page"])
-        units = revision["units"] if revision else content.units_from(before)
-        words = next(
-            (w for u in reversed(units) if u.get("kind") != "table" and (w := serialize.unit_words(u))), ""
-        )
-        if not words:
-            return None
-        return {
-            "page": before["page"],
-            "text": words[-160:],
-            "hyphen": words.endswith("-"),
-            "ends_sentence": bool(SENTENCE_END.search(words)),
-        }
+        latest = store.latest_pages(act_id)
+        for before in reversed(reading["pages"][: numbers.index(page)]):
+            revision = latest.get(before["page"])
+            for unit in reversed(revision["units"] if revision else content.units_from(before)):
+                if unit.get("kind") == "table":
+                    return None
+                if words := serialize.unit_words(unit):
+                    return {
+                        "page": before["page"],
+                        "text": words[-160:],
+                        "hyphen": words.endswith("-"),
+                        "ends_sentence": bool(SENTENCE_END.search(words)),
+                    }
+        return None
 
     profiles = jurisdiction_registry()
     review = Review(store, library, profiles)
