@@ -2552,11 +2552,14 @@ function flagList(view) {
       text: `${flag.severity}: ${(flag.primary || Object.values(flag.checks).find(Boolean) || "missing words").slice(0, 24)}`,
       on: { click: (event) => openFlag(view, flag.id, event.currentTarget.getBoundingClientRect()) } }));
   }
-  bar.append(el("span", { class: "spacer" }));
-  if (openLow) bar.append(el("button", { class: "small", text: `Keep ${openLow} punctuation-only (${FLAG_KEYS}L)`, on: { click: () => resolveLow(view) } }));
+  // The tick box that shows the punctuation-only flags stands with the flags, and the button that keeps
+  // them all, seen or not, alone at the far end: a click meant for the box once pressed the button
+  // beside it (review run of 2026-11-17).
   if (all.some((f) => f.severity === "low")) {
     bar.append(el("label", { class: "muted small" }, el("input", { type: "checkbox", checked: view.showLow, on: { change: (e) => { view.showLow = e.target.checked; currentUnits(view); view.showTab("edit"); } } }), " show punctuation-only"));
   }
+  bar.append(el("span", { class: "spacer" }));
+  if (openLow) bar.append(el("button", { class: "small keep-low", text: `Keep ${openLow} punctuation-only (${FLAG_KEYS}L)`, on: { click: () => resolveLow(view) } }));
   return bar;
 }
 

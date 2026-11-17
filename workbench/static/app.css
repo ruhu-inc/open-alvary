@@ -231,6 +231,7 @@ ul.plain li:first-child { border-top: 0; }
 /* --- flag bar ---------------------------------------------------------------------------------- */
 .flag-bar { display: flex; gap: .45rem; align-items: center; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: .45rem .6rem; margin-bottom: .5rem; }
 .flag-bar .spacer { flex: 1; }
+.flag-bar .keep-low { margin-left: 1.5rem; }  /* never beside the tick box, however narrow the bar */
 .flag-bar .chip { border-left: 3px solid var(--medium); }
 .flag-bar .chip.high { border-left-color: var(--high); }
 
