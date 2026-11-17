@@ -419,10 +419,312 @@ def test_rwanda_and_nigeria_share_what_follows_from_the_links():
         {"id": "a", "title": "A", "listed": "in_force"},
         {"id": "b", "title": "B", "cites": [{"kind": "repeals", "target": "A as printed", "to": "a"}] * 2},
     ]
-    out = linked.link(documents, lambda whole: lambda cite, source: [cite["to"]], listing="The listing")
+    find = lambda whole: lambda cite, source: [cite["to"]]  # noqa: E731
+    out = linked.link(documents, find, listing="The listing", once=True)
     assert out[0]["currency"] == {
         "status": "repealed",
         "basis": "text",
-        "repealed_by": [{"work": "b", "title": "B"}],  # said twice by one text: one link
+        "repealed_by": [{"work": "b", "title": "B"}],  # said twice by one text: one link, where asked
         "disagrees": "The listing files it among the laws in force",
     }
+    # Without a listing what an entry carries as "listed" is not read: nothing is in force, nor disagrees.
+    assert linked.link(documents, find)[0]["currency"]["repealed_by"] == [{"work": "b", "title": "B"}] * 2
+    assert "disagrees" not in linked.link(documents, find)[0]["currency"]
+    assert linked.link(documents[:1], find)[0]["currency"] == {"status": "unknown"}
+
+
+# --- the review of 2026-11-17: a missed link is acceptable, a false one is not -------------------------
+
+
+def read_as(*sentences, kind="act", title="Example Markets (Prohibition) Act, 2011"):
+    """What each sentence, alone in a document, is read as: (kind, citation as printed, note)."""
+    found = cites("ng-act-9-2011", title, *sentences, kind=kind)
+    return [(c["kind"], c["target"], c.get("note")) for c in found]
+
+
+def test_an_instrument_named_in_a_lead_in_is_not_the_thing_repealed():
+    # What it was made under is not what is revoked.
+    assert read_as(
+        "The Sample Tariff Order, 1965 made under the Sample Tariff Act, 1965 is hereby revoked."
+    ) == [("repeals", "Sample Tariff Order, 1965", None)]
+    assert read_as(
+        "The Sample Supply Regulations 1995 issued under the Sample Power Act CAP 106 LFN 1990 are hereby repealed."
+    ) == [("repeals", "Sample Supply Regulations 1995", None)]
+    # A thing held under an instrument is not the instrument.
+    assert read_as("Any licence granted under the Sample Regulations, 2005 is revoked.") == []
+    # An instrument a lead-in names is not acted on; the one after the lead-in is.
+    repealed = [("repeals", "Example Markets Act, 2004", None)]
+    assert (
+        read_as(
+            "Notwithstanding the provisions of the Sample Levy Act, 2001, the Example Markets Act, 2004 is repealed."
+        )
+        == repealed
+    )
+    assert (
+        read_as(
+            "Subject to section 6 of the Interpretation Act, 1964, the Example Markets Act, 2004 is repealed."
+        )
+        == repealed
+    )
+    assert read_as(
+        "Pursuant to section 10 of the Sample Act, 2004, the Sample Regulations, 2005 are revoked."
+    ) == [("repeals", "Sample Regulations, 2005", None)]
+    # A lead-in that names no instrument leaves the whole list after it.
+    assert read_as(
+        "From the commencement of this Act, the Example Markets Act, 2004 and the Sample Levy Act, 2001 are repealed."
+    ) == [*repealed, ("repeals", "Sample Levy Act, 2001", None)]
+    assert read_as(
+        "Except as otherwise provided in this Act, the Example Markets Act, No. 6, 2004 is repealed."
+    ) == [("repeals", "Example Markets Act, No. 6, 2004", None)]
+
+
+def test_a_partial_a_limited_a_quoted_or_a_negated_repeal_is_no_repeal():
+    # A bracket that limits it, and words after it that do: an amendment, with the limit.
+    assert read_as("The Example Markets Act, 2004 (other than sections 4 and 5) is repealed.") == [
+        ("amends", "Example Markets Act, 2004", "Other than sections 4 and 5")
+    ]
+    assert read_as("The Example Markets Act, 2004 is repealed in relation to Lagos State.") == [
+        ("amends", "Example Markets Act, 2004", "In relation to Lagos State")
+    ]
+    # A bracket that is neither its name nor a limit: not read.
+    assert read_as("The Example Markets Act, 2004 (a copy of which is annexed) is repealed.") == []
+    # What another provision says, and what is denied.
+    assert (
+        read_as(
+            "Section 24 of the Principal Act, which provides that the Sample Levy Act, 1990 is repealed, is deleted."
+        )
+        == []
+    )
+    assert (
+        read_as(
+            "Nothing in this Act shall be construed as meaning that the Example Markets Act, 2004 is repealed."
+        )
+        == []
+    )
+    # Words an amending Act puts into another: that Act's, not this one's.
+    assert read_as("“(2) The Sample Levy Act, 1990 is repealed.”") == []
+    # Said of another law's doing, not done here.
+    assert read_as("The Sample Levy Act, 1990 is repealed by the Example Markets Act, 2004.") == []
+    assert read_as("The Sample Levy Act, 1990 is amended by the Example Markets Act, 2004.") == []
+    assert read_as("The Sample Levy Act, 1990 is amended by inserting a new section 4.") == [
+        ("amends", "Sample Levy Act, 1990", None)
+    ]
+    # Words after a repeal that are neither its end nor a known limit: not read.
+    assert read_as("The Sample Levy Act, 1990 is repealed for the purposes of Part II.") == []
+
+
+def test_a_condition_in_the_paragraph_that_opens_a_list_governs_its_items():
+    def listed(opening):
+        nodes = [
+            node(7, opening),
+            node(7, "(a) the Example Markets Act, 2004 is repealed ;", "list_item"),
+            node(7, "(b) the Sample Levy Act, 2001 is amended by deleting section 3.", "list_item"),
+        ]
+        found = ng_cited.cited(reading(page(7, nodes)), act("ng-act-9-2011", "Example Markets Act, 2011"))
+        return [(c["kind"], c["target"]) for c in found]
+
+    assert listed("5. Where the President so directs—") == []
+    assert listed("5. Nothing in this section shall mean that—") == []
+    assert listed("5. On the commencement of this Act—") == [
+        ("repeals", "Example Markets Act, 2004"),
+        ("amends", "Sample Levy Act, 2001"),
+    ]
+
+
+def test_plain_provisions_as_the_staged_acts_print_them_are_still_read():
+    """What the stricter rules must not lose: provisions worded as the staged collection's are."""
+    amended = [("amends", "Sample Levy Act No. 2 of 2006", None)]
+    assert (
+        read_as(
+            '1. The Sample Levy Act No. 2 of 2006, (in this Act referred to as the "Principal Act") is amended as set out below.'
+        )
+        == amended
+    )
+    assert (
+        read_as(
+            'The Sample Levy Act No. 2 of 2006 (hereinafter in this Act referred to as "the Principal Act") is amended as set out in this Act.'
+        )
+        == amended
+    )
+    assert (
+        read_as(
+            'The Sample Levy Act No. 2 of 2006 (in this Act referred as "the Principal Act") is amended as set out in this Act.'
+        )
+        == amended
+    )
+    assert read_as(
+        "The Sample Market Rules, 1953, hereinafter referred to as the principal rules, are hereby amended as follows."
+    ) == [("amends", "Sample Market Rules, 1953", None)]
+    # An Act's first section, read on from its enacting words; a section's number printed without its stop.
+    assert (
+        read_as(
+            "A Bill For An Act to make provision that is not otherwise made. ENACTED by the National Assembly of the "
+            'Federal Republic of Nigeria - The Sample Levy Act No. 2 of 2006 (in this Act referred to as the "Principal Act") '
+            "is amended as set out in this Act."
+        )
+        == amended
+    )
+    assert read_as("314 (1) The Sample Levy Act No 45, 1999 is repealed.") == [
+        ("repeals", "Sample Levy Act No 45, 1999", None)
+    ]
+    # A repeal with what else is done by it, and with a saving, is a repeal.
+    repealed = [("repeals", "Sample Areas Commission Decree 1998", None)]
+    assert (
+        read_as(
+            "28.—(1) The Sample Areas Commission Decree 1998 is hereby repealed and accordingly the Commission established "
+            'under that Decree (in this section referred to as "the dissolved Commission") is consequentially dissolved.'
+        )
+        == repealed
+    )
+    assert (
+        read_as(
+            "The Sample Areas Commission Decree 1998 is hereby revoked without prejudice to the recovery of any amounts due."
+        )
+        == repealed
+    )
+    # The whole of the part named, from its first word.
+    assert read_as(
+        "3. The proviso to paragraph (e) of section 28 of the Sample Board Law, 1954, is hereby amended by the "
+        "substitution of a word."
+    ) == [("amends", "Sample Board Law, 1954", "Proviso to paragraph (e) of section 28")]
+    assert read_as("Bye-law 4 of the Sample Council (Market) Bye-laws, 1956 is hereby revoked.") == [
+        ("amends", "Sample Council (Market) Bye-laws, 1956", "Bye-law 4")
+    ]
+
+
+def test_a_bracket_the_printer_never_closed_must_end_in_the_name_it_gives():
+    assert (
+        read_as(
+            "The Sample Levy Act, 2001 (referred to in section 5 as amended from time to time, and no part of it "
+            "is repealed."
+        )
+        == []
+    )
+    assert read_as(
+        'The Sample Levy Act, 2001 (in this Act referred to as "the Principal Act" is amended as set out below.'
+    ) == [("amends", "Sample Levy Act, 2001", None)]
+
+
+def test_a_title_with_a_small_word_in_it_is_read_whole_not_from_its_last_words():
+    assert read_as("The Carriage of Goods by Sea Act, 2005 is repealed.") == [
+        ("repeals", "Carriage of Goods by Sea Act, 2005", None)
+    ]
+
+
+def test_a_compendium_of_many_instruments_repeals_nothing_as_itself():
+    nodes = [
+        node(7, "5. The Sample Levy Regulations, 1940 are hereby revoked."),
+        node(7, "6. These Regulations may be cited as the Sample Defence (Levy) Regulations, 1942."),
+        node(8, "4. These Regulations may be cited as the Sample Defence (Finance) Regulations, 1943."),
+        node(9, "9. These Regulations may be cited as the Sample Defence (Trade) Regulations, 1944."),
+    ]
+    compendium = act("ng-regulation-sample-defence-regulations", "SAMPLE DEFENCE REGULATIONS", "regulation")
+    assert ng_cited.cited(reading(page(7, nodes)), compendium) == []
+    # One instrument that quotes another's citation is not one: an amending Act and its principal Act.
+    amending = [
+        node(7, "2. The Sample Levy Act, 1990 is repealed."),
+        node(7, '"30. This Act may be cited as the Example Markets Act, 2004".'),
+        node(7, "4. This Act may be cited as the Example Markets (Amendment) Act, 2011."),
+    ]
+    found = ng_cited.cited(
+        reading(page(7, amending)), act("ng-act-y", "EXAMPLE MARKETS (AMENDMENT) ACT, 2011")
+    )
+    assert [c["target"] for c in found] == ["Sample Levy Act, 1990"]
+
+
+def test_the_long_title_is_an_acts_own_and_stands_at_its_head():
+    said = "The Commission notes that a Bill for an Act to repeal the Example Markets Act, 2004 is before the Assembly."
+    assert read_as(said, kind="guideline", title="Sample Guidelines, 2011") == []
+    assert read_as(said) == []
+
+
+def linked_to(source, cite, *held):
+    """The target a citation of ``source`` is given among the documents ``held``, or None."""
+    out = ng_cited.link_works([*held, {**source, "cites": [cite]}])
+    return out[-1]["relations"][0].get("target_id")
+
+
+def test_subsidiary_legislation_does_not_repeal_or_amend_an_act():
+    earlier = act("ng-act-4-2004", "Example Markets Act, 2004")
+    cite = repeal("Example Markets Act, 2004", "Example Markets Act", 2004)
+    regulations = act("ng-si-9-2011", "Sample Regulations, 2011", "regulation")
+    assert linked_to(regulations, cite, earlier) is None
+    assert linked_to(regulations, cite | {"kind": "amends"}, earlier) is None
+    assert linked_to(regulations, cite | {"kind": "made_under"}, earlier) == "ng-act-4-2004"
+    assert linked_to(act("ng-act-9-2011", "Example Markets Act, 2011"), cite, earlier) == "ng-act-4-2004"
+
+
+def test_a_name_two_instruments_share_singles_out_neither_unless_its_number_does():
+    five = act("ng-si-5-1965", "Sample Tariff Order, 1965", "order")
+    eighty = act("ng-si-80-1965", "Sample Tariff Order, 1965", "order")
+    later = act("ng-si-9-1970", "Sample Tariff Order, 1970", "order")
+    cite = repeal("Sample Tariff Order, 1965", "Sample Tariff Order", 1965)
+    out = {d["id"]: d for d in ng_cited.link_works([five, eighty, {**later, "cites": [cite]}])}
+    assert out["ng-si-9-1970"]["relations"] == [{"kind": "repeals", "target": "Sample Tariff Order, 1965"}]
+    assert out["ng-si-5-1965"]["currency"] == out["ng-si-80-1965"]["currency"] == {"status": "unknown"}
+    # Its number singles one out, whichever comes first.
+    numbered = cite | {"target": "Sample Tariff Order, No. 80, 1965", "number": "80"}
+    for held in ([five, eighty], [eighty, five]):
+        out = {d["id"]: d for d in ng_cited.link_works([*held, {**later, "cites": [numbered]}])}
+        assert out["ng-si-80-1965"]["currency"]["status"] == "repealed"
+        assert out["ng-si-5-1965"]["currency"] == {"status": "unknown"}
+    # Two files under one name, neither numbered: subsidiary legislation is not known to be one instrument.
+    copies = [
+        act("ng-order-a", "Sample Tariff Order, 1965", "order"),
+        act("ng-order-b", "SAMPLE TARIFF ORDER, 1965", "order"),
+    ]
+    assert linked_to(later, cite, *copies) is None
+    assert linked_to(later, cite, copies[0]) == "ng-order-a"
+    # An Act has one short title a year: two copies of it are one Act, unless their numbers differ.
+    acts = [act("ng-act-a", "Example Markets Act, 2004"), act("ng-act-b", "EXAMPLE MARKETS ACT, 2004")]
+    of_act = repeal("Example Markets Act, 2004", "Example Markets Act", 2004)
+    repealing = act("ng-act-9-2011", "Example Markets Act, 2011")
+    out = {d["id"]: d for d in ng_cited.link_works([*acts, {**repealing, "cites": [of_act]}])}
+    assert {out[i]["currency"]["status"] for i in ("ng-act-a", "ng-act-b")} == {"repealed"}
+    differing = [
+        act("ng-act-4-2004", "Example Markets Act, 2004"),
+        act("ng-act-7-2004", "Example Markets Act, 2004"),
+    ]
+    assert linked_to(repealing, of_act, *differing) is None
+
+
+def test_nothing_is_in_force_without_a_listing_whatever_an_entry_carries():
+    stray = {**act("ng-act-4-2004", "Example Markets Act, 2004"), "listed": "in_force"}
+    assert ng_cited.link_works([stray])[0]["currency"] == {"status": "unknown"}
+
+
+def test_a_text_citing_one_work_twice_links_back_twice_in_rwanda_as_before_and_once_in_nigeria():
+    from ingestion import rwanda
+
+    twice = [
+        {
+            "kind": "repeals",
+            "target": "Law n° 1/2001",
+            "instrument": "law",
+            "number": "1/2001",
+            "year": "2001",
+        }
+    ] * 2
+    documents = [
+        {"id": "rw-law-1-2001-en", "work": "rw-law-1-2001", "language": "en", "title": "A"},
+        {"id": "rw-law-2-2010-en", "work": "rw-law-2-2010", "language": "en", "title": "B", "cites": twice},
+    ]
+    back = {"kind": "repealed_by", "target": "B", "target_id": "rw-law-2-2010"}
+    assert rwanda.link_works(documents)[0]["relations"] == [back, back]  # as it was before 2026-11-17
+    cite = repeal("Example Markets Act, 2004", "Example Markets Act", 2004)
+    out = ng_cited.link_works(
+        [
+            act("ng-act-4-2004", "Example Markets Act, 2004"),
+            act(
+                "ng-act-9-2011",
+                "Example Markets Act, 2011",
+                cites=[cite, cite | {"target": "the Example Markets Act 2004"}],
+            ),
+        ]
+    )
+    assert out[0]["relations"] == [
+        {"kind": "repealed_by", "target": "Example Markets Act, 2011", "target_id": "ng-act-9-2011"}
+    ]
+    assert out[0]["currency"]["repealed_by"] == [
+        {"work": "ng-act-9-2011", "title": "Example Markets Act, 2011"}
+    ]

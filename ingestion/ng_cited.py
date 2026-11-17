@@ -18,18 +18,40 @@ Nigeria has no official listing of the laws in force, so nothing is ever in forc
 repealed where a later text of the collection says so, and otherwise not yet known. These are suggestions
 for a reviewer, with the words they rest on; none is a record's value until a reviewer chooses it.
 
-A wrong link would tell a reviewer that a law in force is repealed, so a link is made only where little
-can go wrong, and a citation in doubt stays as printed, without a target:
+A wrong link would tell a reviewer that a law in force is repealed, so a missed link is accepted and a
+false one is not. A sentence is read only where the instruments acted on stand as its subject, and a
+citation is linked only where little can go wrong; anything in doubt stays as printed, without a target,
+or is not read at all:
+- the subject: the instruments listed just before "is repealed", with nothing before them but the
+  provision's number or a lead-in that leaves the repeal standing ("Subject to section 6 of the
+  Interpretation Act, 1964, the … Act, 2004 is repealed": the Interpretation Act is not acted on). Not
+  what an instrument was made under ("The … Order, 1965 made under the … Act, 1965 is hereby revoked"),
+  not a thing held under one ("Any licence granted under the … Regulations, 2005 is revoked"), not what
+  another provision is said to provide, not what is denied, not words in quotation marks (an amending
+  Act's insertion), not an item of a list a condition opens ("Where the President so directs— (a) …");
+- between a citation and what is done to it: only a name given it in brackets, "as amended", or a limit
+  in brackets; after a repeal: only its sentence's end, what else is done with it, a saving, or a limit.
+  A part ("section 13 of …") and a limit ("(other than sections 4 and 5)", "in so far as it applies to
+  …", "in relation to Lagos State") make an amendment; "… is repealed by the … Act, 2004" is said of
+  another law's doing and is not read;
+- an Act's long title and explanatory memorandum are read only at the head of their paragraph, in an Act;
+- a file of several instruments (three citation clauses or more) repeals nothing as itself; a draft or a
+  Bill answers to no name and repeals nothing;
 - an instrument is found by its title and year together, and by its number where both print one. A
   citation by chapter of a revised edition ("Cap. E14 Laws of the Federation of Nigeria, 2004") gives the
-  edition's year, not the instrument's: it has no target;
-- a document answers to the name its own text says it may be cited as, else to its title or its listing's
-  where that is a title of its own kind and year; a draft or a Bill answers to none and repeals nothing;
+  edition's year, not the instrument's: it has no target. A title is read whole, small words and all
+  ("Carriage of Goods by Sea Act"), since one cut short could be another instrument's;
+- a document answers to the name its own text says it may be cited as and to its title, where they agree
+  on its year, else to its listing's; where the name does not single out one instrument, none is found
+  (two Statutory Instruments of one title and year; an Act's copies are one Act unless their numbers
+  differ);
 - an Act is found only among Acts and subsidiary legislation among subsidiary legislation, each within
-  its own legislature (a Region's law is not the Federation's), and never a text later than the one citing it;
-- a citation's name and year must be read the same by the check reading of its page, where there is one;
-- a conditional mention ("where … is repealed"), a part ("section 13 of …") and a repeal with a limit
-  ("in so far as it applies to …") repeal nothing: the last two are amendments.
+  its own legislature (a Region's law is not the Federation's), never a text later than the one citing
+  it; and subsidiary legislation repeals and amends no Act;
+- a citation's name and year must be read the same by the check reading of its page, where there is one.
+
+The readings are read when the manifest is built (ingestion.nicn.linked_laws), not when a file is
+prepared: the links change with the manifest alone, and no document prepared before is written again.
 """
 
 import re
@@ -72,12 +94,17 @@ CHAPTER = re.compile(
 # A title's words, walked back from its last: capitalised words, a part in brackets, and the small words
 # between them.
 TOKEN = re.compile(r"\([^()]{0,120}\)|[A-Za-z][A-Za-z'’-]*\.?|\d[\w./-]*|\S")
-SMALL = {"of", "and", "the", "for", "in", "on", "to", "&", "etc.", "etc", "other"}
+# A title cut short could be another instrument's ("Carriage of Goods by Sea Act" read as "Sea Act"); one
+# read too long is found by none. So the small words a title may hold are many.
+SMALL = {
+    *("of", "and", "the", "for", "in", "on", "to", "&", "etc.", "etc", "other", "by", "with", "from"),
+    *("against", "at", "or", "a", "an", "between", "under", "upon", "into", "within"),
+}
 JOINED = {"of", "for", "in", "on", "to", "and"}  # before "the" inside a title: "Court of the Federal …"
 _PART = (
     r"sections?|sub-?sections?|paragraphs?|sub-?paragraphs?|parts?|schedules?|regulations?|rules?|orders?"
     r"|clauses?|articles?|chapters?|items?|forms?|tables?|appendi(?:x|ces)|annex(?:es|ures?)?|provisos?"
-    r"|definitions?"
+    r"|definitions?|bye-?laws?"
 )
 # A part of the instrument named after it: "Section 12 of the", "The First Schedule to the".
 PART_OF = re.compile(rf"\b(?:{_PART})\b[^.;:]{{0,100}}?\b(?:of|to|in)\s+(?:the\s+)?$", re.I)
@@ -92,23 +119,81 @@ CHANGED_BY = re.compile(
     r"(?:\bas\s+)?\b(?:amended|modified|replaced|substituted|inserted|affected|extended)\s+by\s+(?:the\s+)?$",
     re.I,
 )
-# What may stand between an instrument's citation and what is done to it: a name given it in brackets
-# ("(in this Act referred to as "the Principal Act")"), "as amended".
-_FILLER = r"\s+|,|\([^()]{0,300}\)|\bas\s+amended\b"
-# … and such a name whose bracket the printer never closed: '(in this Act referred to as "the Principal Act" is'.
-_UNCLOSED = r"\([^()]{0,200}\b(?:referred\s+to|hereinafter|called)\b[^()]{0,100}"
-FILLER = re.compile(rf"(?:{_FILLER})*(?:{_UNCLOSED})?")
-BETWEEN = re.compile(rf"(?:{_FILLER})*(?:;|\band\b|\bor\b)?\s*")
+# An instrument named only as what the one acted on was made under: "The … Order, 1965 made under the …
+# Act, 1965 is hereby revoked", "Any licence granted under the … Regulations, 2005 is revoked".
+RELATED = re.compile(
+    r"\b(?:(?:made|issued|granted|given|published|established|constituted|prescribed|provided|conferred|imposed"
+    r"|specified|contained|mentioned|defined|set\s+out|referred\s+to)\s+(?:under|pursuant\s+to|by\s+virtue\s+of"
+    r"|in\s+accordance\s+with|by|in)|under|pursuant\s+to|by\s+virtue\s+of|in\s+accordance\s+with)"
+    r"\s+(?:the\s+)?$",
+    re.I,
+)
+# What may stand between an instrument's citation and what is done to it, and nothing else: a name given
+# it in brackets ('(in this Act referred to as "the Principal Act")', '("the repealed Act")'), "as
+# amended", and a limit in brackets ("(other than sections 4 and 5)": a repeal so limited is an amendment).
+# Any other bracket may change what is said, and the sentence is not read.
+_NAMING = r"(?:(?:herein(?:after)?|hereafter)\s+)?(?:in\s+this\s+\w+\s+)?(?:referred(?:\s+to)?|called|known)"
+_NAMED = (
+    rf"\({_NAMING}(?:\s+in\s+this\s+\w+)?(?:\s+as)?\s*[\"“'‘]?\s*the\s+[^()]{{1,60}}\)"
+    r"|\(\s*[\"“'‘]?the\s+[A-Za-z ]{1,40}?[\"”'’]?\s*\)"
+)
+_LIMIT = r"\((?:other\s+than|except|save|excluding|apart\s+from|with\s+the\s+exception\s+of)\b[^()]{1,200}\)"
+_FILLER = (
+    rf"\s+|,|{_NAMED}|{_LIMIT}|\(as\s+(?:subsequently\s+)?amended[^()]{{0,80}}\)"
+    r"|\bas\s+amended\b(?:\s+from\s+time\s+to\s+time)?"
+    # … or without brackets: "The … Rules, 1953, hereinafter referred to as the principal rules, are …".
+    r"|\bherein(?:after)?\s+(?:referred\s+to\s+as|called)\s+[\"“'‘]?the\s+principal\s+\w+[\"”'’]?"
+)
+# … and such a name whose bracket the printer never closed, where the bracket ends in the name it gives:
+# '(in this Act referred to as "the Principal Act" is amended'.
+_UNCLOSED = (
+    rf"\({_NAMING}(?:\s+in\s+this\s+\w+)?(?:\s+as)?\s*(?:the\s+)?[\"“'‘][^\"“”'‘’()]{{1,60}}[\"”'’]\s*"
+)
+FILLER = re.compile(rf"(?:{_FILLER})*(?:{_UNCLOSED})?", re.I)
+BETWEEN = re.compile(rf"(?:{_FILLER})*(?:;|\band\b|\bor\b)?\s*", re.I)
+LIMIT = re.compile(_LIMIT, re.I)
+# What may stand before the instruments acted on, and nothing else: the provision's number, and a lead-in
+# that does not take the repeal away ("Subject to section 6 of the Interpretation Act, 1964, the …"). A
+# lead-in ends at a comma; one that sets a condition or denies is none.
+NUMBERED = re.compile(r"\s*(?:\d{1,3}[A-Z]?(?:\.\s*(?:[—–-]+\s*)?|\s+))?(?:\(\w{1,4}\)\s*)*")
+LEAD_IN = re.compile(
+    r"(?:Subject\s+to|Notwithstanding|Pursuant\s+to|Without\s+prejudice\s+to|In\s+accordance\s+with"
+    r"|(?:Except|Save)\s+as(?:\s+otherwise)?\s+provided|(?:As\s+)?[Ff]rom\s+the(?:\s+date\s+of)?\s+commencement"
+    r"|(?:On|Upon)\s+the\s+commencement|On\s+the\s+coming\s+into\s+(?:force|operation)|With\s+effect\s+from"
+    r"|For\s+the\s+avoidance\s+of\s+doubt)\b[^.;:]*,\s*(?:the\s+)?|Accordingly,?\s*(?:the\s+)?"
+)
+DENIED = re.compile(r"\b(?:not|nothing|no|neither|nor|never|that)\b", re.I)
 # What is done: "is repealed", "are hereby revoked", "is amended as set out in this Act".
 ACTION = re.compile(r"\b(?:is|are)\s+(?:hereby\s+)?(repealed|revoked|amended)\b")
 # Said of a case, not done: "where a provision of the tax law … is repealed or amended".
 CONDITION = re.compile(r"\b(?:where|if|when|whenever|until|unless|whether|as\s+if|in\s+the\s+event)\b", re.I)
-# A repeal with a limit is an amendment: "… is hereby revoked, in so far as it applies to Iseyin Town."
+# A repeal with a limit is an amendment: "… is hereby revoked, in so far as it applies to Iseyin Town.",
+# "… is repealed in relation to Lagos State."
 LIMITED = re.compile(
-    r"\s*,?\s*(?:in\s+so\s+far\s+as|insofar\s+as|to\s+the\s+extent|except|save\b|other\s+than"
-    r"|with\s+the\s+exception|in\s+(?:its|their)\s+application|as\s+(?:it|they)\s+appl|only\b)",
+    r"\s*,?\s*(?:in\s+so\s+far\s+as|insofar\s+as|so\s+far\s+as|to\s+the\s+extent|except|save\b|other\s+than"
+    r"|with\s+the\s+exception|in\s+(?:its|their)\s+application|as\s+(?:it|they)\s+appl|only\b"
+    r"|in\s+relation\s+to|in\s+respect\s+of|with\s+respect\s+to|as\s+respects|as\s+regards)",
     re.I,
 )
+# What may follow a whole repeal: its sentence's end, or what else is done with it ("… is hereby repealed
+# and accordingly the Commission … is dissolved"). Anything else ("… is repealed by the … Act, 2004", said
+# of another law's doing; "… for the purposes of Part II") and the sentence is not read.
+WHOLE_END = re.compile(
+    r"\s*(?:$|[:—–-]|,?\s*and\b|,?\s*but\b|with\s+effect\s+from\b|accordingly\b|without\s+prejudice\b)", re.I
+)
+# How an amendment is made, where "by" follows: "by inserting …", "by the substitution of …"; "amended by
+# the … Act, 2004" is said of another law's doing.
+AMENDED_BY = re.compile(
+    r"\s+by\s*(?:\w+ing\b|the\s+(?:deletion|insertion|substitution|addition|omission|repeal|removal|inclusion)\b|[:—–-]|$)",
+    re.I,
+)
+# A paragraph that opens a list ends in a dash or a colon, and governs its items: "Where the President so
+# directs—", "(a) the … Act is repealed ;". Its items end in a semicolon, "and" or "or" until the last.
+OPENS = re.compile(r"[:—–-]\s*$")
+ITEM_GOES_ON = re.compile(r"(?:[;,]|\band\b|\bor\b)\s*$", re.I)
+ITEM = re.compile(r"\s*\(?[a-z]{1,4}\)\s", re.I)  # "(a) …", "(ii) …": not a section's "24." or "(1)"
+# An Act's sections begin after its enacting words, which are no part of the first of them.
+ENACTED = re.compile(r"\bENACTED\s+by\b[^.;:]{0,120}?[—–-]+\s*", re.I)
 # Where a sentence begins ("No. 5", "Cap. E14" and "etc. Act" do not end one).
 _NOT_END = (
     r"(?<!\bNo)(?<!Nos)(?<!Cap)(?<!CAP)(?<!etc)(?<!Etc)(?<!ETC)(?<!\bs)(?<!\bss)(?<!\bL)(?<!\bF)(?<!\bN)"
@@ -168,6 +253,7 @@ NUMBERED_ID = re.compile(r"^ng-(?:act|si)-(\d+)-(?:18|19|20)\d\d(?:-[0-9a-f]{8})
 SCHEDULE_HEAD = re.compile(r"extent\s+of\s+(repeal|amendment)", re.I)
 WHOLE = re.compile(r"^\W*(?:the\s+whole(?:\s+\w+)?|all)\W*$", re.I)
 WORDS = 400  # the most of a provision quoted
+COMPENDIUM = 3  # a text that says three instruments may be cited is a file of several, not one
 
 
 def _key(title: str) -> str:
@@ -203,15 +289,21 @@ def _texts(reading: dict):
             yield " ".join(f"{marker}{node['text']}".split()), page, node.get("kind")
 
 
-def cited_as(reading: dict, document: dict) -> str | None:
-    """The name the document's own text says it may be cited as, as printed; where its text gives several
-    (an amending Act quotes the principal Act's), the one its title or listing bears out, else none."""
+def _citation_names(reading: dict) -> dict[tuple, str]:
+    """Every name the text says an instrument may be cited as, as printed, by its key and year."""
     found: dict[tuple, str] = {}
     for text, _, _ in _texts(reading):
         for match in CITED_AS.finditer(text):
             name = named(match.group(1))
             if name:
                 found.setdefault((name["key"], name["year"]), " ".join(match.group(1).split()))
+    return found
+
+
+def cited_as(reading: dict, document: dict) -> str | None:
+    """The name the document's own text says it may be cited as, as printed; where its text gives several
+    (an amending Act quotes the principal Act's), the one its title or listing bears out, else none."""
+    found = _citation_names(reading)
     if len(found) == 1:
         return next(iter(found.values()))
     for held in (document.get("title"), document.get("listed_title")):
@@ -297,14 +389,13 @@ def citations(text: str) -> list[dict]:
 
 
 def _part_of(before: str):
-    """The part named just before an instrument's title, where there is one: of several ("section 4 of
-    the … Act 1969 and section 7 of …"), the last, which is this instrument's."""
-    found = None
+    """The part named just before an instrument's title, where there is one, from its first word; of
+    several instruments' parts ("section 4 of the … Act 1969 and section 7 of …"), this instrument's."""
     for word in PART_WORD.finditer(before):
         match = PART_OF.match(before, word.start())
         if match and not KIND_WORD.search(before, word.end(), match.end()):
-            found = match
-    return found
+            return match  # the whole of it: "proviso to paragraph (e) of section 28 of the …"
+    return None
 
 
 def _part(words: str | None) -> str | None:
@@ -329,24 +420,62 @@ def _parts(refs: list[str]) -> str | None:
 
 
 def _acted(subject: str) -> list[tuple[dict, str | None]]:
-    """The instruments a sentence's subject says something is done to, each with the part of it named
-    (None for the whole): those listed before what is done, but not one named only as having changed
-    another, nor any where other words stand between."""
+    """The instruments a sentence's subject says something is done to, each with the part of it named or
+    the limit set on it (None for the whole): those that stand as its subject, listed just before what is
+    done. Not one named only as what changed another or as what it was made under; not one a lead-in
+    names; and none where anything else stands before them, between them or after them (a relative clause,
+    "any licence granted under …", a bracket that is neither a name nor a limit): the sentence may then
+    say something else, and is not read."""
     found = citations(subject)
-    out: list[tuple[dict, str | None]] = []
+    members: list[tuple[dict, str | None, int]] = []  # with where each one's words begin
     boundary, gap = len(subject), FILLER
     for cite in reversed(found):
-        if not gap.fullmatch(subject[cite["end"] : boundary]):
+        between = subject[cite["end"] : boundary]
+        if not gap.fullmatch(between):
             break
         before = subject[: cite["start"]]
-        changer = CHANGED_BY.search(subject[: cite["run"]]) or CHANGED_BY.search(before)
-        if changer:
-            boundary, gap = changer.start(), FILLER
+        attached = next(
+            (
+                m
+                for m in (
+                    p.search(t) for p in (CHANGED_BY, RELATED) for t in (subject[: cite["run"]], before)
+                )
+                if m
+            ),
+            None,
+        )
+        if attached:
+            if members:
+                break  # a lead-in's instrument, not one of those acted on
+            boundary, gap = attached.start(), FILLER
             continue
         part = _part_of(before) if not cite["part"] else None
-        out.append((cite, _part(cite["part"] or (part.group(0) if part else None))))
-        boundary, gap = (part.start() if part else cite["run"]), BETWEEN
-    return out[::-1]
+        limit = LIMIT.search(between)
+        named = (
+            cite["part"]
+            or (part.group(0) if part else None)
+            or (limit.group(0).strip("()") if limit else None)
+        )
+        begins = part.start() if part else cite["run"]
+        members.append((cite, _part(named), begins))
+        boundary, gap = begins, BETWEEN
+    members.reverse()
+    if not members:
+        return []
+
+    def lead(begins: int) -> str:
+        return subject[NUMBERED.match(subject).end() : begins]
+
+    first = lead(members[0][2])
+    if re.fullmatch(r"(?:the\s+)?", first, re.I) or (
+        LEAD_IN.fullmatch(first) and not DENIED.search(first) and not CONDITION.search(first)
+    ):
+        return [(cite, part) for cite, part, _ in members]
+    # A lead-in that names instruments of its own: only the one after its last comma is acted on.
+    last = lead(members[-1][2])
+    if LEAD_IN.fullmatch(last) and not DENIED.search(last) and not CONDITION.search(last):
+        return [members[-1][:2]]
+    return []
 
 
 def _provision(text: str, begin: int, action_end: int) -> str:
@@ -484,16 +613,42 @@ def cited(reading: dict, document: dict, passed: list | None = None) -> list[dic
             link["refs"].append(part)
         return key
 
+    # A file of many instruments (a compilation of regulations, each with its own citation): what one of
+    # them revokes is not the file's doing.
+    if len(_citation_names(reading)) >= COMPENDIUM:
+        passed.append(("a compendium of several instruments", document.get("title")))
+        return []
     units = list(_texts(reading))
+
+    def opening(at: int) -> str | None:
+        """The paragraph that opens the list a unit is an item of, where it is one."""
+        for text, _, _ in reversed(units[max(0, at - 40) : at]):
+            if OPENS.search(text):
+                return text
+            if not ITEM_GOES_ON.search(text):
+                return None
+        return None
+
     for at, (text, page, _) in enumerate(units):
+        governs = opening(at) if ITEM.match(text) else None
+        if governs and (CONDITION.search(governs) or DENIED.search(governs)):
+            if ACTION.search(text):
+                passed.append(("under a condition or a denial that opens its list", text[:160]))
+            continue
         for action in ACTION.finditer(text):
             starts = [m.end() for m in SENTENCE_START.finditer(text, 0, action.start())]
             begin = starts[-1] if starts else 0
             numbered = [m.start() for m in SECTION_START.finditer(text, begin, action.start())]
             begin = numbered[-1] if numbered else begin
+            enacted = [m.end() for m in ENACTED.finditer(text, begin, action.start())]
+            begin = enacted[-1] if enacted else begin
             subject = text[begin : action.start()]
             words = _provision(text, begin, action.end())
+            stop = SENTENCE_END.search(text, action.end())
+            after = text[action.end() : stop.start() if stop else len(text)]
             if LISTED.search(subject) and OPENS_LIST.fullmatch(text[action.end() :]):
+                if CONDITION.search(subject) or DENIED.search(subject):
+                    continue
                 # "The following enactments are repealed —": each item after it that is one instrument.
                 for item, item_page, kind in units[at + 1 : at + 41]:
                     if kind != "list_item":
@@ -519,24 +674,37 @@ def cited(reading: dict, document: dict, passed: list | None = None) -> list[dic
                         )
                 continue
             acted = _acted(subject)
-            limited = LIMITED.match(text, action.end())
             if not acted:
                 ref = re.search(
                     rf"\b((?:{_PART})\s+[\w()]+)[^.;:]{{0,60}}?\bof\s+the\s+[Pp]rincipal\s+(\w+)\W*$",
                     subject,
                     re.I,
                 )
-                if ref:
+                if ref and NUMBERED.match(subject).end() == ref.start():
                     loose.append((ref.group(2).lower(), _part(ref.group(1))))
+                elif citations(subject):
+                    passed.append(
+                        (
+                            "not the subject of what is done, or other words stand by it",
+                            subject.strip()[-160:],
+                        )
+                    )
                 continue
-            if CONDITION.search(subject[: acted[0][0]["run"]]):
-                passed.append(("said of a case, not done", subject.strip()[-160:]))
+            repeal = action.group(1) != "amended"
+            limited = LIMITED.match(after) if repeal else None
+            if repeal and not limited and not WHOLE_END.match(after):
+                # "… is repealed by the … Act, 2004", "… for the purposes of Part II": not this text's whole repeal.
+                passed.append(
+                    ("words after the repeal that are neither its end nor a known limit", after.strip()[:120])
+                )
                 continue
-            stop = SENTENCE_END.search(text, action.end())
-            limit = _part(text[action.end() : stop.start() if stop else len(text)]) if limited else None
+            if not repeal and re.match(r"\s+by\b", after) and not AMENDED_BY.match(after):
+                passed.append(("amended by another law, not here", after.strip()[:120]))
+                continue
+            limit = _part(after) if limited else None
             for cite, part in acted:
-                whole = action.group(1) in ("repealed", "revoked") and not part and not limited
-                if not whole and action.group(1) != "amended":
+                whole = repeal and not part and not limited
+                if not whole and repeal:
                     passed.append(("a part or a limited repeal: an amendment", cite["target"]))
                 key = add(cite, "repeals" if whole else "amends", page, words, part or limit)
                 called = re.match(r"[\s,]*\([^()]{0,200}\bprincipal\s+(\w+)", subject[cite["end"] :], re.I)
@@ -550,9 +718,13 @@ def cited(reading: dict, document: dict, passed: list | None = None) -> list[dic
                 part = _part_of(clause[: under[0]["start"]])
                 words = text[enacting.start() : enacting.end() + under[0]["end"]]
                 add(under[0], "made_under", page, words, _part(part.group(0)) if part else None)
-    # Its long title and its explanatory memorandum, where no provision was read to say the same.
-    for text, page, _ in units:
+    # An Act's long title and its explanatory memorandum, where no provision was read to say the same: at
+    # the head of their paragraph, under nothing but a heading in capitals ("… notes that a Bill for an Act
+    # to repeal … is before the Assembly" is someone's account of a Bill).
+    for text, page, _ in units if document.get("type") in PRIMARY_TYPES else ():
         for stated in STATED.finditer(text):
+            if re.search(r"[a-z]", re.sub(r"\([^()]*\)", "", text[: stated.start()])):
+                continue
             verb = (stated.group("long") or stated.group("memo")).lower()
             at = stated.end()
             while True:
@@ -566,10 +738,7 @@ def cited(reading: dict, document: dict, passed: list | None = None) -> list[dic
                 end, year, number = _tail(text, name.end())
                 begins, part = name.start("title"), None
                 while of := PART_FIRST.match(text[begins : name.end()]):
-                    part, begins = (
-                        of,
-                        begins + of.end(),
-                    )  # "… amends Parts A to D of the Schedule to the … Act"
+                    part, begins = of, begins + of.end()  # "… amends Parts A to D of the Schedule to the …"
                 cite = {
                     "title": " ".join(text[begins : name.end()].split()),
                     "target": " ".join(text[begins:end].split()).rstrip(" ,("),
@@ -669,9 +838,12 @@ def earliest(document: dict) -> int | None:
 def _by_name(whole: list[dict], passed: list | None = None):
     """How a citation's documents are found among Nigeria's: by title and year together, within the same
     legislature, an Act among Acts and subsidiary legislation among subsidiary legislation, never one
-    later than the text citing it, and not where both print a number and the numbers differ. Every copy of
-    the instrument the collection holds is found; none where any of this is in doubt (noted in ``passed``
-    with the reason)."""
+    later than the text citing it. Subsidiary legislation repeals and amends no Act. Where the name does
+    not single out one instrument, none is found: an Act has one short title a year, so the copies of it
+    the collection holds are all found unless their numbers differ; subsidiary legislation of one name and
+    year is one instrument only where it is one document, or its copies bear one number; and a number the
+    citation prints finds the documents of that number alone. None where any of this is in doubt (noted
+    in ``passed`` with the reason)."""
     passed = [] if passed is None else passed
     index: dict[tuple, list[tuple[str, dict, dict]]] = {}
     for d in whole:
@@ -682,33 +854,46 @@ def _by_name(whole: list[dict], passed: list | None = None):
     def find(cite: dict, source: dict) -> list[str]:
         if not cite.get("year") or not cite.get("title"):
             return []
-        this = earliest(source)
         held = index.get((_key(cite["title"]), int(cite["year"]), issuer(source)), [])
-        out = []
-        for work, found, document in held:
-            if work == source["work"]:
-                return [work]  # itself: no link (ingestion.linked.link)
-            if cite.get("number") and found["number"] and str(cite["number"]) != found["number"]:
-                # Perhaps another instrument of that name and year.
-                passed.append(("the numbers differ", source["id"], cite["target"], work))
-                return []
-            if _primary(cite["title"].split()[-1]) != (document.get("type") in PRIMARY_TYPES):
-                # An Act's name at the head of a regulation made under it, or the like.
-                passed.append(
-                    ("an Act's name on another kind of document", source["id"], cite["target"], work)
-                )
-                continue
-            if this is None or found["year"] > this:
-                # The text citing it must be the later one, and its own year known.
-                reason = (
-                    "the citing text's own year is not known"
-                    if this is None
-                    else "the cited text is the later"
-                )
-                passed.append((reason, source["id"], cite["target"], work))
-                return []
-            out.append(work)
-        return out
+        if any(work == source["work"] for work, _, _ in held):
+            return [source["work"]]  # itself: no link (ingestion.linked.link)
+        if not held:
+            return []
+
+        def no(reason: str) -> list[str]:
+            passed.append((reason, source["id"], cite["target"], [work for work, _, _ in held]))
+            return []
+
+        primary = _primary(cite["title"].split()[-1])
+        if primary and cite.get("kind") != "made_under" and source.get("type") not in PRIMARY_TYPES:
+            return no("subsidiary legislation does not repeal or amend an Act")
+        # An Act's name at the head of a regulation made under it, or the like, is not the Act.
+        alike = [(work, found) for work, found, d in held if primary == (d.get("type") in PRIMARY_TYPES)]
+        if not alike:
+            return no("an Act's name on another kind of document")
+        this = earliest(source)
+        if this is None:
+            return no("the citing text's own year is not known")
+        if int(cite["year"]) > this:
+            return no("the cited text is the later")
+        numbers = {found["number"] for _, found in alike if found["number"]}
+        printed = str(cite["number"]) if cite.get("number") else None
+        if len(numbers) > 1 and printed not in numbers:
+            return no("two instruments of one name and year, and no number to tell which")
+        if printed and numbers and printed not in numbers:
+            return no("the numbers differ")
+        if printed in numbers:
+            # The documents of that number; an Act's unnumbered copies with them, where no other number is held.
+            chosen = [
+                work
+                for work, found in alike
+                if found["number"] == printed or (primary and len(numbers) == 1 and not found["number"])
+            ]
+        elif len(alike) == 1 or primary or (numbers and all(found["number"] for _, found in alike)):
+            chosen = [work for work, _ in alike]
+        else:
+            return no("several documents of one name and year, not known to be one instrument")
+        return chosen
 
     return find
 
@@ -726,4 +911,5 @@ def link_works(documents: list[dict]) -> list[dict]:
         # Named as its own text says it may be cited, else by its title as laws are cited (not in capitals).
         title_of=lambda d: d.get("cited_as") or cited_names.cited(d.get("title") or "")[0],
         year_of=lambda d: (identity(d) or {}).get("year") or d.get("year"),
+        once=True,
     )

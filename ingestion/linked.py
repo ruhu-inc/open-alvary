@@ -27,6 +27,7 @@ def link(
     title_of=lambda d: d.get("title"),
     year_of=lambda d: d.get("year"),
     listing: str | None = None,
+    once: bool = False,
 ) -> list[dict]:
     """Each document that ``applies`` with its links ("relations") to the earlier instruments it repeals,
     amends or is made under, found in the collection by their citations (``finder`` of the documents gives
@@ -36,7 +37,10 @@ def link(
     does, and their page), else as the country's ``listing`` files it ("listed" on the document), else
     unknown, with the latest law in its line, what has amended it, and any law it was made under that is
     since repealed. A citation of an instrument the collection lacks stays as printed, without a target.
-    A country without a listing has none named, and nothing of it is ever in force by this step."""
+    A country without a listing has none named, and nothing of it is ever in force by this step: what
+    a document carries as "listed" is then left unread. A text that names one instrument twice links back
+    to it twice, as Rwanda's manifests have it; with ``once``, once (a Nigerian instrument answers to the
+    name on its heading and the name in its citation clause, and a text may use both)."""
     whole = [{**d, "work": d.get("work") or d["id"]} for d in documents if applies(d)]
     find = finder(whole)
     titles: dict[str, str] = {}
@@ -47,7 +51,7 @@ def link(
             titles[d["work"]] = title_of(d) or d["work"]
         if year_of(d):
             years[d["work"]] = year_of(d)
-        if d.get("listed"):
+        if listing and d.get("listed"):
             listed[d["work"]] = d["listed"]
     forward: dict[str, list[dict]] = {}
     backward: dict[str, list[dict]] = {}
@@ -82,8 +86,8 @@ def link(
                     "target_id": d["work"],
                     **note,
                 }
-                if back not in backward.setdefault(target, []):  # said twice by one text: one link
-                    backward[target].append(back)
+                if not once or back not in backward.get(target, []):
+                    backward.setdefault(target, []).append(back)
                 if cite["kind"] == "repeals" and cite.get("words"):
                     provisions[target, d["work"]] = {k: cite[k] for k in ("words", "page") if cite.get(k)}
         forward[d["work"]] = links
