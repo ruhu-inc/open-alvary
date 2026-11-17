@@ -909,29 +909,28 @@ def create_app(
         return FileResponse(STATIC / "public-preview" / "preview.html")
 
     def document_of(work: str, language: str | None) -> str | None:
-        """The workbench's document for a work: in this language if it has it, else another."""
-        return next(
-            (
-                f"{work}-{lang}"
-                for lang in (language, "en", "fr", "rw")
-                if lang and library.has(f"{work}-{lang}")
-            ),
-            None,
-        )
+        """The workbench's document for a work: in this language if it has it, else another; the work
+        itself where it is one document (a Nigerian law has one text, under its own id)."""
+        named = [f"{work}-{lang}" for lang in (language, "en", "fr", "rw") if lang]
+        return next((found for found in [*named, work] if library.has(found)), None)
 
     def standing(act: dict) -> dict | None:
         """Whether the document is current, as its collection was prepared to tell: repealed by a later
-        text (and the law in force now), as RLRC's listing files it, or not yet known; what amends
-        it; a law it was made under that is since repealed; and the instruments made under it."""
+        text (with the words of its provision that does, their page, and the law in force now), as its
+        country's official listing files it (named, where it has one: record_view.LISTINGS), or not yet
+        known; what amends it; a law it was made under that is since repealed; and the instruments made
+        under it."""
         current = act.get("currency")
         if not current:
             return None
         language = act.get("language")
 
         def named(item: dict) -> dict:
-            return {"title": item["title"], "id": document_of(item["work"], language)}
+            quoted = {k: item[k] for k in ("words", "page") if item.get(k)}
+            return {"title": item["title"], "id": document_of(item["work"], language), **quoted}
 
         out = {k: current[k] for k in ("status", "basis", "disagrees") if k in current}
+        out["listing"] = record_view.LISTINGS.get(act.get("jurisdiction"))
         for key in ("repealed_by", "amended_by"):
             if current.get(key):
                 out[key] = [named(item) for item in current[key]]
@@ -1013,7 +1012,11 @@ def create_app(
         # Each detail as read, with its page and words, beside its field; the legal facts are only ever
         # here, never in the first draft, until the reviewer chooses them.
         suggestions = (
-            record_view.suggestions_view(details.suggest(reading, act, library.manifest_for(act_id)))
+            # A Nigerian law's details as read from its text, and whether a later text of its collection
+            # repeals it, with that provision's words: suggested, as Rwanda's are.
+            record_view.standing_suggestions(
+                act, record_view.suggestions_view(details.suggest(reading, act, library.manifest_for(act_id)))
+            )
             if view["place"].code == "ng" and not record_view.reader_suggested(act)
             else record_view.suggestions(act)
         )

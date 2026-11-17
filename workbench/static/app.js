@@ -614,24 +614,35 @@ async function actView(actId) {
   );
 }
 
-// Whether the document is current, as the collection's texts and RLRC's listing tell: repealed (and by
-// what, and the law in force now), in force, or not yet known; what amends it; a law it was made under
-// that is since repealed; the instruments made under it. Each other document opens from its name.
+// Whether the document is current, as the collection's texts and its country's official listing of the
+// laws in force tell (standing.listing names it: "RLRC's listing"; a country with none, as Nigeria, has
+// none named, and nothing of it is in force by this): repealed (and by what, with the words of the
+// provision that does, and the law in force now), in force, or not yet known; what amends it; a law it was
+// made under that is since repealed; the instruments made under it. Each other document opens from its name.
 function standingPanel(standing) {
   if (!standing) return null;
   const doc = (item) => (item.id ? el("a", { href: `#/doc/${encodeURIComponent(item.id)}`, text: item.title }) : el("span", { text: item.title }));
   const list = (items) => items.flatMap((item, i) => [i ? "; " : "", doc(item)]);
+  const listing = standing.listing;
   const lines = [];
   if (standing.status === "repealed" && standing.repealed_by) {
     lines.push(el("p", {}, el("strong", { text: "Repealed" }), " by ", ...list(standing.repealed_by), "."));
-    if (standing.latest) lines.push(el("p", {}, "That law was repealed in turn. The law in force now: ", doc(standing.latest), "."));
+    // The provision that repeals it, as printed in the later law, and the page it is on there.
+    for (const item of standing.repealed_by.filter((by) => by.words)) {
+      const at = item.page ? (item.id ? el("a", { href: `#/doc/${encodeURIComponent(item.id)}/page/${item.page}`, text: `p. ${item.page}`, title: "Open that page of the later law" }) : `p. ${item.page}`) : null;
+      lines.push(el("p", { class: "muted" }, el("span", { class: "evidence", text: `“${item.words}”` }), at ? " (" : "", at, at ? ")" : ""));
+    }
+    // Without a listing nothing says the last law of the line is in force: only that the collection holds none later.
+    if (standing.latest) lines.push(el("p", {}, listing ? "That law was repealed in turn. The law in force now: " : "That law was repealed in turn. The latest in its line that the collection holds: ", doc(standing.latest), "."));
     if (standing.disagrees) lines.push(el("p", { class: "warn", text: `But ${standing.disagrees}: check which is right before confirming the status.` }));
   } else if (standing.status === "repealed") {
-    lines.push(el("p", {}, el("strong", { text: "Repealed" }), ", as RLRC's listing files it. No later text in the collection names it as repealed."));
+    lines.push(el("p", {}, el("strong", { text: "Repealed" }), `, as ${listing || "its listing"} files it. No later text in the collection names it as repealed.`));
   } else if (standing.status === "in_force") {
-    lines.push(el("p", {}, el("strong", { text: "In force" }), ", as RLRC's listing files it; no later text in the collection repeals it."));
+    lines.push(el("p", {}, el("strong", { text: "In force" }), `, as ${listing || "its listing"} files it; no later text in the collection repeals it.`));
+  } else if (listing) {
+    lines.push(el("p", {}, el("strong", { text: "Not yet known" }), ` whether it is in force: no later text in the collection repeals it, and ${listing} does not file it.`));
   } else {
-    lines.push(el("p", {}, el("strong", { text: "Not yet known" }), " whether it is in force: no later text in the collection repeals it, and RLRC's listing does not file it."));
+    lines.push(el("p", {}, el("strong", { text: "Not yet known" }), " whether it is in force: no later text in the collection repeals it, and there is no official listing of the laws in force to check it against."));
   }
   if (standing.amended_by) lines.push(el("p", {}, "Amended by ", ...list(standing.amended_by), ". The text here is as published, before those amendments."));
   for (const parent of standing.parents_repealed || []) {

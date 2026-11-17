@@ -8,8 +8,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import update
 
-from workbench import auth, content, details, record_view
-from workbench.app import create_app
+from workbench import auth, content, details, queue, record_view
+from workbench.app import STATIC, create_app
 from workbench.store import Store, connect, session
 
 ACT = "ng-cybercrimes-amendment-act-2024"
@@ -1703,6 +1703,105 @@ def test_a_document_says_where_it_stands_and_opens_the_laws_that_repealed_or_wer
     assert details["related"] == {later["work"]: "rw-law-010-2027-en"}
     assert details["suggestions"]["relations"]["value"][0]["kind"] == "repealed_by"
     assert reviewer.get("/api/documents/rw-law-010-2027-en").json()["standing"] is None  # not linked yet
+    assert standing["listing"] == "RLRC's listing"  # the listing Rwanda's collection is prepared with, named
+
+
+def test_a_nigerian_law_says_where_it_stands_and_names_no_listing_for_it_has_none(tmp_path, monkeypatch):
+    """Nigeria publishes no listing of its laws in force: a law is repealed where a later text of the
+    collection says so, with that provision's words and page, and otherwise not yet known; the panel and
+    the suggestion name no listing, and the status is suggested, never filled in."""
+    from ingestion import ng_cited
+
+    folder = tmp_path / "ng-laws"
+    folder.mkdir()
+    provision = {"words": "24. The Example Markets Act, 2004 is repealed.", "page": 2}
+
+    def law(doc_id, title, **more):
+        return {"id": doc_id, "type": "act", "title": title, "jurisdiction": "ng", "language": "en",
+                "url": "https://example.org/a.pdf", **more}  # fmt: skip
+
+    cite = {
+        "kind": "repeals",
+        "target": "Example Markets Act, 2004",
+        "title": "Example Markets Act",
+        "year": 2004,
+    }
+    documents = ng_cited.link_works(
+        [
+            law("ng-act-4-2004", "Example Markets Act, 2004"),
+            law("ng-act-9-2011", "Example Markets Act, 2011", cites=[cite | provision]),
+            law("ng-act-2-2019", "Sample Fund Act, 2019"),
+        ]
+    )
+    for document in documents:
+        (folder / f"{document['id']}.reading.json").write_text(json.dumps(reading()))
+    (folder / "manifest.json").write_text(
+        json.dumps({"collection": "ng", "jurisdiction": "ng", "documents": documents})
+    )
+    monkeypatch.setenv("ALVARY_REVIEW_COLLECTIONS", str(folder))
+    (tmp_path / "first").mkdir()
+    store = Store(connect(f"sqlite:///{tmp_path / 'workbench.db'}"))
+    store.add_operator("reviewer@example.org", "Rev", {"reviewer"})
+    reviewer = signed_in((store, content.Library(tmp_path / "first")), "reviewer@example.org")
+    # Among documents nobody has opened, the queue takes the repealed law after those not known to be.
+    assert [d["id"] for d in sorted(documents, key=queue.importance)][-1] == "ng-act-4-2004"
+    later = {"title": "Example Markets Act, 2011", "id": "ng-act-9-2011"}  # one text, under its own id
+    standing = reviewer.get("/api/documents/ng-act-4-2004").json()["standing"]
+    assert standing == {
+        "status": "repealed",
+        "basis": "text",
+        "listing": None,
+        "repealed_by": [later | provision],
+    }
+    details = reviewer.get("/api/documents/ng-act-4-2004/details").json()
+    # Suggested with the words of the provision that repeals it and where they are printed; never filled in.
+    assert details["record"]["details"]["status.legal"] == "unknown"
+    assert (
+        "relations" not in details["record"]["details"] and "status.note" not in details["record"]["details"]
+    )
+    assert details["suggestions"]["status.legal"] == {
+        "value": "repealed",
+        "page": None,
+        "evidence": provision["words"],
+        "source": {"work": "ng-act-9-2011", "title": "Example Markets Act, 2011", "page": 2},
+    }
+    assert details["suggestions"]["status.note"]["value"] == (
+        "Repealed by Example Markets Act, 2011, as its text says (p. 2)."
+    )
+    assert details["suggestions"]["relations"]["value"] == [
+        {"kind": "repealed_by", "target": "Example Markets Act, 2011", "target_id": "ng-act-9-2011"}
+    ]
+    assert details["related"] == {"ng-act-9-2011": "ng-act-9-2011"}  # the page of the later law opens from it
+    assert "status.as_of" not in details["suggestions"]  # the date is the reviewer's own check's
+    # A law no later text repeals: not yet known, and said to be so for want of a listing.
+    other = reviewer.get("/api/documents/ng-act-2-2019").json()["standing"]
+    assert other == {"status": "unknown", "listing": None}
+    unknown = reviewer.get("/api/documents/ng-act-2-2019/details").json()
+    assert unknown["suggestions"]["status.legal"] == {
+        "value": "unknown",
+        "page": None,
+        "evidence": record_view.NO_LISTING,
+    }
+    assert unknown["record"]["details"]["status.legal"] == "unknown"
+    shown = json.dumps([standing, other, details["suggestions"], unknown["suggestions"]])
+    assert "RLRC" not in shown and "listing files" not in shown
+    # A law repealed in turn: the last of its line is the latest the collection holds, not "in force".
+    chained = {"jurisdiction": "ng", "currency": {"status": "repealed", "basis": "text",
+               "repealed_by": [{"work": "b", "title": "B Act, 2004"}], "latest": {"work": "c", "title": "C Act, 2011"}}}  # fmt: skip
+    said = record_view.standing_suggestions(chained, {})["status.note"]["value"]
+    assert (
+        said.endswith("the latest in its line that the collection holds is C Act, 2011.")
+        and "in force" not in said
+    )
+    assert (
+        "the law in force now is"
+        in record_view.standing_suggestions(chained | {"jurisdiction": "rw"}, {})["status.note"]["value"]
+    )
+    # The repealing law is not itself in force by this: nothing is, without a listing.
+    assert reviewer.get("/api/documents/ng-act-9-2011").json()["standing"]["status"] == "unknown"
+    # The panel's words for a country without a listing name none (the page is drawn from standing.listing).
+    panel = (STATIC / "app.js").read_text().split("function standingPanel")[1].split("\nfunction ")[0]
+    assert "RLRC" not in panel and "no official listing of the laws in force" in panel
 
 
 # --- the text publishing will write (TXP-01) ----------------------------------------------------------
