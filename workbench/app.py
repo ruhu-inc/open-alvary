@@ -912,34 +912,43 @@ def create_app(
         return FileResponse(STATIC / "public-preview" / "preview.html")
 
     def document_of(work: str, language: str | None) -> str | None:
-        """The workbench's document for a work: in this language if it has it, else another."""
-        return next(
-            (
-                f"{work}-{lang}"
-                for lang in (language, "en", "fr", "rw")
-                if lang and library.has(f"{work}-{lang}")
-            ),
-            None,
-        )
+        """The workbench's document for a work: in this language if it has it, else another; the work
+        itself where it is one document (a Nigerian law has one text, under its own id)."""
+        named = [f"{work}-{lang}" for lang in (language, "en", "fr", "rw") if lang]
+        return next((found for found in [*named, work] if library.has(found)), None)
+
+    def latest_in_force(act: dict) -> bool:
+        """Whether the last law of the document's line of repeals is filed in force by its listing: a law
+        no later text repeals is not thereby in force (of Rwanda's, most are not filed at all)."""
+        latest = (act.get("currency") or {}).get("latest")
+        found = document_of(latest["work"], act.get("language")) if latest else None
+        return bool(found) and (library.listed(found).get("currency") or {}).get("status") == "in_force"
 
     def standing(act: dict) -> dict | None:
         """Whether the document is current, as its collection was prepared to tell: repealed by a later
-        text (and the law in force now), as RLRC's listing files it, or not yet known; what amends
-        it; a law it was made under that is since repealed; and the instruments made under it."""
+        text (with the words of its provision that does, their page, and the last law of its line, said
+        to be in force only where its listing files it so), as its country's official listing files it
+        (named, where it has one: record_view.LISTINGS), or not yet known; what amends it, and whether
+        the text here is known to be as published (a Gazette's; an agency's copy may be brought up to
+        date); a law it was made under that is since repealed; and the instruments made under it."""
         current = act.get("currency")
         if not current:
             return None
         language = act.get("language")
 
         def named(item: dict) -> dict:
-            return {"title": item["title"], "id": document_of(item["work"], language)}
+            quoted = {k: item[k] for k in ("words", "page") if item.get(k)}
+            return {"title": item["title"], "id": document_of(item["work"], language), **quoted}
 
         out = {k: current[k] for k in ("status", "basis", "disagrees") if k in current}
+        out["listing"] = record_view.LISTINGS.get(act.get("jurisdiction"))
         for key in ("repealed_by", "amended_by"):
             if current.get(key):
                 out[key] = [named(item) for item in current[key]]
+        if current.get("amended_by"):
+            out["as_published"] = bool(act.get("issue"))
         if current.get("latest"):
-            out["latest"] = named(current["latest"])
+            out["latest"] = named(current["latest"]) | {"in_force": latest_in_force(act)}
         if current.get("parents_repealed"):
             out["parents_repealed"] = [
                 {**named(p), "repealed_by": [named(r) for r in p["repealed_by"]]}
@@ -1016,9 +1025,15 @@ def create_app(
         # Each detail as read, with its page and words, beside its field; the legal facts are only ever
         # here, never in the first draft, until the reviewer chooses them.
         suggestions = (
-            record_view.suggestions_view(details.suggest(reading, act, library.manifest_for(act_id)))
+            # A Nigerian law's details as read from its text, and whether a later text of its collection
+            # repeals it, with that provision's words: suggested, as Rwanda's are.
+            record_view.standing_suggestions(
+                act,
+                record_view.suggestions_view(details.suggest(reading, act, library.manifest_for(act_id))),
+                latest_in_force(act),
+            )
             if view["place"].code == "ng" and not record_view.reader_suggested(act)
-            else record_view.suggestions(act)
+            else record_view.suggestions(act, latest_in_force(act))
         )
         title = suggestions.get("identity.title")
         if cited_names.is_cited_here(act) and isinstance((title or {}).get("value"), str):
@@ -1026,10 +1041,21 @@ def create_app(
             suggestions["identity.title"] = {**title, "value": cited_names.cited(title["value"])[0]}
         links = act.get("relations") or []
         if links:  # the laws it affects, as the collection's texts say: suggested, never filled in
-            suggestions["relations"] = {
-                "value": links,
-                "evidence": "the laws this text repeals or amends, and the later ones that repeal or amend it",
-            }
+            said = "the laws this text repeals or amends, and the later ones that repeal or amend it"
+            read = suggestions.get("relations") or {}
+            if view["place"].code == "ng" and isinstance(read.get("value"), list):
+                # A Nigerian Act's long title names what it repeals too, with its page: kept, and what
+                # the collection's texts say added to it, each link once.
+                plain = lambda link: re.sub(r"[^a-z0-9]+", "", str(link.get("target", "")).lower())  # noqa: E731
+                same = lambda a, b: a["kind"] == b["kind"] and (plain(a) in plain(b) or plain(b) in plain(a))  # noqa: E731
+                more = [link for link in read["value"] if not any(same(link, held) for held in links)]
+                suggestions["relations"] = {
+                    **read,
+                    "value": [*links, *more],
+                    "evidence": f"{read.get('evidence') or 'Its text'}; and {said}",
+                }
+            else:
+                suggestions["relations"] = {"value": links, "evidence": said}
         # The related documents the workbench holds, each opened in this document's language if it can.
         related = {}
         for link in [*(view["values"].get("relations") or []), *links]:

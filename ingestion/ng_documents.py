@@ -32,6 +32,10 @@ same layout:
   ng-si-<number>-<year>, a notice ng-gn-<number>-<year>; else the type and its title's slug; a
   Supreme Court judgment ng-sc-<suit number>-<date delivered>. Different texts that come to one id
   are told apart when the manifest is built (nicn.BucketCollection._keep_apart);
+- what it does to earlier laws is not read here: when the manifest is built (nicn.BucketCollection.
+  save_manifest), each law's stored reading is read for the instruments it repeals, revokes or amends and
+  the Act it is made under (ingestion.ng_cited), and the laws are linked. So the links change with the
+  manifest alone, and no document prepared and reviewed is written again;
 - a file the Layout Parser read only in part is held, not filed as one: its first heading says nothing
   of the rest. A bound volume of many instruments (VOLUMES) is cut into them (ingestion.ng_volumes), each
   its own document; what cannot be cut with confidence is held, and the pages of no instrument (title

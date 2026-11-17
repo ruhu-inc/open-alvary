@@ -2272,9 +2272,13 @@ class FolderCollection:
         self.held += held or []
 
     def save_manifest(self) -> None:
+        def stored(document: dict) -> dict | None:
+            path = self.folder / f"{document['id']}.reading.json"
+            return json.loads(path.read_text()) if path.exists() else None
+
         manifest = {
             **new_manifest(),
-            "documents": sorted(self.documents.values(), key=lambda d: d["id"]),
+            "documents": linked_laws(sorted(self.documents.values(), key=lambda d: d["id"]), stored),
             "held": sorted(self.held, key=lambda d: d["id"]),
             "held_note": HELD_NOTE,
         }
@@ -2340,7 +2344,10 @@ class BucketCollection:
         """The manifest from every index (any source of the collection), one document per id: of one
         judgment's records, the earliest; of one law found in two files (a Gazette issue and an agency's
         copy), the first, the others named on it (other_sources). Different texts that came to one id
-        are kept apart (_keep_apart)."""
+        are kept apart (_keep_apart). Each law is then given its links to the laws it repeals, amends or
+        is made under and to those that repeal or amend it, and whether a later text of the collection
+        repeals it, read from its stored reading (linked_laws); a judgment has none. Only the manifest is
+        written: no reading, provenance or details of a document prepared before is touched."""
         documents: dict[str, dict] = {}
         partial: dict[str, dict] = {}
         shared: dict[str, list[dict]] = {}
@@ -2363,13 +2370,22 @@ class BucketCollection:
             documents.update((document["id"], document) for document in self._keep_apart(group))
         manifest = {
             **new_manifest(),
-            "documents": sorted(documents.values(), key=lambda d: d["id"]),
+            "documents": linked_laws(sorted(documents.values(), key=lambda d: d["id"]), self._stored_reading),
             "skipped_files": skipped,
             # Never listed for review: the workbench and publishing read "documents" only.
             "held": sorted((e for i, e in partial.items() if i not in documents), key=lambda d: d["id"]),
             "held_note": HELD_NOTE,
         }
         self._put(f"{self.prefix}manifest.json", manifest)
+
+    def _stored_reading(self, document: dict) -> dict | None:
+        """A document's reading as stored, under its id (a document renamed by _keep_apart: under the id
+        its files were first written with, where they were not copied)."""
+        for doc_id in (document["id"], document.get("stored_as")):
+            name = f"{self.prefix}{document.get('objects', '')}{doc_id}.reading.json"
+            if doc_id and self.store.exists(name):
+                return json.loads(self.store.get(name))
+        return None
 
     def _words(self, document: dict) -> Counter:
         from ingestion.layout_parser import page_text
@@ -2418,6 +2434,27 @@ class BucketCollection:
                 title = document.get("listed_title") or title
             out.append({**document, "title": title, "shares_id_with": [n for n in names if n != name]})
         return out
+
+
+def linked_laws(documents: list[dict], stored, log=print) -> list[dict]:
+    """The collection's documents with each law's links to the laws it repeals, amends or is made under and
+    to those that repeal or amend it, and whether a later text of the collection repeals it
+    (ingestion.ng_cited): what each law's text says is read here from its reading as stored (``stored``
+    gives it for a document, None where there is none), when the manifest is built, so that nothing
+    prepared before is written again. A reading that cannot be read leaves its law unlinked, and is said."""
+    from ingestion import ng_cited
+
+    out = []
+    for document in documents:
+        document = {k: v for k, v in document.items() if k not in ("cited_as", "cites")}
+        if document.get("type") not in ng_cited.NOT_LAW:
+            try:
+                reading_ = stored(document)
+                document |= ng_cited.evidence(reading_, document) if reading_ else {}
+            except Exception as error:  # noqa: BLE001 - one unreadable text must not stop the manifest
+                log(f"not linked {document['id']}: {type(error).__name__}: {str(error)[:200]}")
+        out.append(document)
+    return ng_cited.link_works(out)
 
 
 def _numbers(words: Counter) -> dict[str, int]:

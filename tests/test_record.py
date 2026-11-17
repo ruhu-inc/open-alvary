@@ -454,12 +454,17 @@ def test_a_rwandan_organic_law_follows_rwandas_procedure_into_a_complete_record(
         "latest": {"work": "rw-law-3-2030", "title": "Law n° 3/2030 of 01/01/2030"},
         "parents_repealed": [{"work": "rw-law-5-2020", "title": "Law n° 5/2020", "repealed_by": [{"work": "rw-law-9-2025", "title": "Law n° 9/2025"}]}],
     }  # fmt: skip
-    chain = V.suggestions({**document, "relations": [repealer], "currency": line})
+    chain = V.suggestions({**document, "relations": [repealer], "currency": line}, latest_in_force=True)
     assert chain["status.note"]["value"] == (
         "Repealed by Law n° 1/2027 of 01/01/2027, as its text says. That law was repealed in turn; the law in "
         "force now is Law n° 3/2030 of 01/01/2030. Made under Law n° 5/2020, which Law n° 9/2025 has since "
         "repealed: check it is still in force."
     )
+    # Where the listing does not file the last law of the line in force (2026-11-17: of 121 such works in a
+    # sample, 46 were), it is the latest the collection holds, not the law in force now.
+    unfiled = V.suggestions({**document, "relations": [repealer], "currency": line})["status.note"]["value"]
+    assert "the latest in its line that the collection holds is Law n° 3/2030 of 01/01/2030." in unfiled
+    assert "in force now" not in unfiled
     # Where the listing disagrees, the repealing law, a primary source, leads; the listing is noted beside it.
     disagree = V.suggestions({**document, "suggested_legal": listed, "relations": [repealer]})
     noted = f"{repealed} A secondary source says otherwise: Listed in force. Check which is right."
