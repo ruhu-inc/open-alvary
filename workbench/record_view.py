@@ -1310,13 +1310,14 @@ def is_legal(key: str) -> bool:
 def first_draft(values: dict, absent: dict) -> tuple[dict, dict]:
     """A first draft from what a reader filled in: the details as printed, for the reviewer to check;
     the legal facts, a version's authority among them, left for the reviewer to choose; the legal
-    status not yet checked (unknown, which states nothing)."""
+    status not yet checked (unknown, which states nothing). A judgment is decided: that says only what
+    its family does, and nobody checks whether it was later appealed or overruled (owner, 2026-11-18)."""
     draft = {key: value for key, value in values.items() if not is_legal(key)}
     if isinstance(draft.get("expressions"), list):
         draft["expressions"] = [
             {key: cell for key, cell in row.items() if key not in AUTHORITY} for row in draft["expressions"]
         ]
-    draft["status.legal"] = "unknown"
+    draft["status.legal"] = "decided" if draft.get("identity.family") == "judgment" else "unknown"
     return draft, {key: reason for key, reason in absent.items() if not is_legal(key)}
 
 

@@ -4,7 +4,7 @@
 // is not given says why ("Not stated in this copy"), never blank.
 
 import type { ReactNode } from "react";
-import type { Source } from "./site";
+import { JUDGMENT_NOTE, type Source } from "./site";
 
 export type Absence =
   "not_in_source" | "not_applicable" | "unknown" | "withheld";
@@ -303,10 +303,21 @@ function Languages({ view }: { view: View }) {
   );
 }
 
+// A judgment is decided, not in force or repealed: its legal status is not asked or shown unless a
+// reviewer recorded one, and its later treatment is said to be untracked unless one is recorded.
+const asDelivered = (view: View) =>
+  view.family === "judgment" &&
+  ["", "unknown", "decided"].includes(text(view, "status.legal"));
+const untracked = (view: View) =>
+  asDelivered(view) &&
+  ["", "unknown"].includes(text(view, "profile.treatment"));
+
 function Status({ view }: { view: View }) {
   const fields = view.fields.filter(
     (f) =>
-      (f.group === "status" && !HIDDEN.has(f.key)) ||
+      (f.group === "status" &&
+        !HIDDEN.has(f.key) &&
+        !(f.key === "status.legal" && asDelivered(view))) ||
       f.key === "text.version.label" ||
       f.key === "text.version.consolidated",
   );
@@ -319,6 +330,9 @@ function Status({ view }: { view: View }) {
   return (
     <Panel title="Status and related documents">
       <Details view={view} fields={fields} />
+      {untracked(view) ? (
+        <p className="doc-panel-note">{JUDGMENT_NOTE}</p>
+      ) : null}
       {links.length ? (
         <ul className="doc-relations">
           {links.map((link, i) => (
@@ -586,9 +600,11 @@ export function KeyFacts({
       : consolidated === "yes"
         ? "Consolidated"
         : "",
-    status && status !== "unknown"
-      ? humanise(status)
-      : "Currentness not yet checked",
+    asDelivered(view)
+      ? ""
+      : status && status !== "unknown"
+        ? humanise(status)
+        : "Currentness not yet checked",
     made ? `${made.label.replace(/ by .*$/, "")} ${longDate(made.date)}` : "",
     decided ? `Decided ${longDate(decided)}` : "",
     commenced ? `In effect from ${longDate(commenced)}` : "",

@@ -135,6 +135,14 @@ export const LEGAL_STATUS: Record<string, string> = {
   repealed: "Repealed",
   superseded: "Replaced by a later law",
 };
+// A judgment is decided, not in force or repealed, and nobody here follows what later courts did with
+// it: its status says the one and its note the other (owner, 2026-11-18).
+export const JUDGMENT_NOTE =
+  "Published as delivered. Later appeals or overruling are not tracked here.";
+export const statusLabel = (s: { document_type: string; legal_status: string }) =>
+  s.document_type === "judgment" && s.legal_status === "unknown"
+    ? "Decided"
+    : (LEGAL_STATUS[s.legal_status] ?? s.legal_status);
 export const RIGHTS_STATUS: Record<string, string> = {
   OPEN: "Open to reuse",
   OPEN_WITH_CONDITIONS: "Open to reuse, with conditions",
@@ -337,9 +345,11 @@ export function SourceRow({
 export function SourceRecord({
   source: s,
   rights,
+  alone,
 }: {
   source: Source;
   rights?: RightsRecord;
+  alone?: boolean; // no document view beside it, whose status panel carries a judgment's note
 }) {
   const cleared = s.has_full_text;
   return (
@@ -372,7 +382,7 @@ export function SourceRecord({
           <dt>Citation</dt>
           <dd>{s.citation}</dd>
           <dt>Status</dt>
-          <dd>{LEGAL_STATUS[s.legal_status] ?? s.legal_status}</dd>
+          <dd>{statusLabel(s)}</dd>
           <dt>Text on this site</dt>
           <dd>
             {cleared ? "Full text available" : "Not yet: use the official source"}
@@ -399,6 +409,9 @@ export function SourceRecord({
           ) : null}
         </dl>
         {s.catalogue_note ? <p className="record-note">{s.catalogue_note}</p> : null}
+        {alone && s.document_type === "judgment" && s.legal_status === "unknown" ? (
+          <p className="record-note">{JUDGMENT_NOTE}</p>
+        ) : null}
       </div>
       <div className="notice">
         {cleared

@@ -572,6 +572,20 @@ def test_a_repealing_laws_own_words_lead_the_status_suggestion_over_a_listing():
     assert V.base_values(document, {})["status.legal"] == "unknown"
 
 
+def test_a_judgment_is_drafted_as_decided_and_a_law_as_not_yet_checked():
+    """A judgment's status says only that it was decided: nobody checks whether it was later appealed or
+    overruled (owner, 2026-11-18). A law's stays not yet checked until a reviewer has checked it."""
+    from workbench import record_view as V
+
+    assert V.base_values({"type": "judgment", "title": "A v. B"}, {})["status.legal"] == "decided"
+    assert V.base_values({"type": "act", "title": "An Act"}, {})["status.legal"] == "unknown"
+    # Whatever a reader filled in: a status is a legal fact, never taken from it.
+    drafted, _ = V.first_draft({"identity.family": "judgment", "status.legal": "in_force"}, {})
+    assert drafted["status.legal"] == "decided"
+    drafted, _ = V.first_draft({"identity.family": "legislation", "status.legal": "in_force"}, {})
+    assert drafted["status.legal"] == "unknown"
+
+
 def test_a_suggested_family_that_does_not_go_with_its_kind_is_put_right_not_dropped():
     """Rwanda's reader filed agreements, regulations and ordinances as executive instruments; the first
     draft kept none of their suggestions until 2026-10-29. Now the family is put right from the kind,
