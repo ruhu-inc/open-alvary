@@ -1155,6 +1155,30 @@ LIMITS = {"text": 300, "long": 4000}
 DATE_ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
+def _link_problem(link) -> str | None:
+    """Why one row of Related documents cannot be saved, to follow "<label>, row N"; None when it can.
+
+    The boxes are named as the form shows them. The refusal used to list every kind the record knows,
+    which told a reviewer whose titles sat in the catalogue id box nothing about what to change (owner's
+    screenshot, 2026-11-17).
+    """
+    if not isinstance(link, dict):
+        return ": it is not a link"
+    if link.get("kind") not in R.RELATIONS:
+        return ": choose how the two documents are related from the row's list"
+    if str(link.get("target") or "").strip():
+        return None
+    kind = f' ("{label_of(link["kind"])}")'
+    elsewhere = str(link.get("target_id") or "").strip()
+    if elsewhere:
+        shown = elsewhere if len(elsewhere) <= 80 else elsewhere[:77].rstrip() + "…"
+        return (
+            f'{kind}: the title box is empty, and "{shown}" is in the catalogue id box. Move it to the title'
+            " box: the catalogue id box takes only the other document's id and may be left empty."
+        )
+    return f"{kind}: the title box is empty. Type the other document's title or citation, or remove the row."
+
+
 def validate(values: dict, absent: dict, specs: list[FieldSpec]) -> tuple[dict, dict]:
     """Clean submitted values against this document's fields; ValueError names the first problem."""
     from datetime import date
@@ -1197,13 +1221,9 @@ def validate(values: dict, absent: dict, specs: list[FieldSpec]) -> tuple[dict, 
         elif spec.kind == "relations":
             if not isinstance(value, list) or len(value) > 100:
                 raise ValueError(f"{label}: a list of at most 100 links")
-            for link in value:
-                if (
-                    not isinstance(link, dict)
-                    or link.get("kind") not in R.RELATIONS
-                    or not str(link.get("target", "")).strip()
-                ):
-                    raise ValueError(f"{label}: each link has a kind ({', '.join(R.RELATIONS)}) and a target")
+            for row, link in enumerate(value, start=1):
+                if problem := _link_problem(link):
+                    raise ValueError(f"{label}, row {row}{problem}")
         elif spec.kind == "rows":
             columns = {c["key"]: c for c in spec.columns}
             if not isinstance(value, list) or len(value) > 200:

@@ -463,6 +463,28 @@ def test_details_are_validated_and_confirming_needs_every_detail_accounted_for(w
     assert gap.status_code == 422
     bad_link = {**act, "relations": [{"kind": "inspires", "target": "Another Act"}]}
     assert post(status="draft", details=bad_link).status_code == 422
+    # A refused link is named by its row and by the form's own boxes, never by the record's list of kinds.
+    held = {"kind": "amends", "target": "Advertising Practitioners Act, 1988"}
+    in_the_id_box = {
+        "kind": "repealed_by",
+        "target": "",
+        "target_id": "Advertising Regulatory Council Act, 2022",
+    }
+    refused = post(status="draft", details={**act, "relations": [held, in_the_id_box]})
+    assert refused.status_code == 422
+    assert refused.json()["message"] == (
+        'Related documents, row 2 ("Repealed by"): the title box is empty, and "Advertising Regulatory'
+        ' Council Act, 2022" is in the catalogue id box. Move it to the title box: the catalogue id box'
+        " takes only the other document's id and may be left empty."
+    )
+    empty = post(status="draft", details={**act, "relations": [held, {"kind": "amends", "note": "s. 4"}]})
+    assert empty.json()["message"] == (
+        'Related documents, row 2 ("Amends"): the title box is empty. Type the other document\'s title or'
+        " citation, or remove the row."
+    )
+    unknown = post(status="draft", details=bad_link).json()["message"]
+    assert unknown == "Related documents, row 1: choose how the two documents are related from the row's list"
+    assert "repealed_by" not in refused.json()["message"] + empty.json()["message"] + unknown
     rows = {**act, "expressions": [{"language": "en", "authority": "sometimes"}]}
     assert post(status="draft", details=rows).status_code == 422
     assert post(status="draft", details={**act, "identity.title": "Act, 2015"}).json() == {"revision": 1}

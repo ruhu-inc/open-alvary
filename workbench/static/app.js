@@ -1187,10 +1187,13 @@ async function detailsView(actId) {
   };
   const row = (field) => {
     const { input, why, note } = control(field);
-    const line = el("div", { class: "detail-row", "data-key": field.key },
+    const accounted = (field.required || field.accountable) && !field.essential;
+    // Related documents hold titles, which are long: where the row's last column would be empty, they take it.
+    const wide = field.kind === "relations" && !accounted && !field.essential;
+    const line = el("div", { class: wide ? "detail-row wide" : "detail-row", "data-key": field.key },
       el("label", {}, field.label, field.required ? null : el("span", { class: "muted", text: " (optional)" })),
       el("div", { class: "detail-input" }, input, field.help ? el("div", { class: "muted small", text: field.help }) : null, note),
-      (field.required || field.accountable) && !field.essential ? why : el("span", { class: "muted small", text: field.essential ? "must be given" : "" }));
+      wide ? null : accounted ? why : el("span", { class: "muted small", text: field.essential ? "must be given" : "" }));
     rows.set(field.key, line);
     return line;
   };
@@ -1293,16 +1296,21 @@ function relationsEditor(standard, links, onChange, related = {}) {
   const draw = () => {
     box.replaceChildren(
       ...links.map((link, i) => {
-        const kind = el("select", { on: { change: () => { link.kind = kind.value; onChange(links); } } }, standard.relations.map((r) => el("option", { value: r.value, text: r.label })));
+        const kind = el("select", { "aria-label": "How the two documents are related", on: { change: () => { link.kind = kind.value; onChange(links); } } }, standard.relations.map((r) => el("option", { value: r.value, text: r.label })));
         kind.value = link.kind;
-        const target = el("input", { type: "text", placeholder: "Title or citation of the other law", value: link.target || "", on: { input: () => { link.target = target.value; onChange(links); } } });
-        const id = el("input", { type: "text", class: "narrow", placeholder: "catalogue id (if any)", value: link.target_id || "", on: { input: () => { if (id.value) link.target_id = id.value; else delete link.target_id; onChange(links); } } });
-        const note = el("input", { type: "text", class: "narrow", placeholder: "note", value: link.note || "", on: { input: () => { if (note.value) link.note = note.value; else delete link.note; onChange(links); } } });
+        const target = el("input", { type: "text", class: "target", placeholder: "Title or citation of the other law", "aria-label": "Title or citation of the other law", value: link.target || "", on: { input: () => { link.target = target.value; onChange(links); } } });
+        const id = el("input", { type: "text", class: "id", placeholder: "Catalogue id, if known", "aria-label": "Catalogue id of the other law, if known", title: "The other document's id in the catalogue. Leave it empty if you do not have it: a title does not go here.", value: link.target_id || "", on: { input: () => { if (id.value) link.target_id = id.value; else delete link.target_id; onChange(links); } } });
+        const note = el("input", { type: "text", class: "note", placeholder: "Note (optional)", "aria-label": "Note on this link", value: link.note || "", on: { input: () => { if (note.value) link.note = note.value; else delete link.note; onChange(links); } } });
         const other = related[link.target_id];  // the other law, if the workbench holds it
-        return el("div", { class: "relation" }, kind, target, id, note,
-          el("span", { class: "relation-actions" },
-            other ? el("a", { href: `#/doc/${encodeURIComponent(other)}/details`, text: "Open", title: "Open the other law's details" }) : null,
-            el("button", { class: "small", text: "Remove", on: { click: () => { links.splice(i, 1); onChange(links); draw(); } } })));
+        // Two lines a row: the title has a line to itself beside the kind, so no window width leaves it
+        // without room. On one line it had none between about 1,200 and 2,100 px, and titles were typed
+        // into the id box (owner's screenshot, 2026-11-17).
+        return el("div", { class: "relation" },
+          el("div", { class: "relation-line" }, kind, target),
+          el("div", { class: "relation-line" }, id, note,
+            el("span", { class: "relation-actions" },
+              other ? el("a", { href: `#/doc/${encodeURIComponent(other)}/details`, text: "Open", title: "Open the other law's details" }) : null,
+              el("button", { class: "small", text: "Remove", on: { click: () => { links.splice(i, 1); onChange(links); draw(); } } }))));
       }),
       el("button", { class: "small", text: "+ Add a related law", on: { click: () => { links.push({ kind: "amends", target: "" }); onChange(links); draw(); } } }));
   };
