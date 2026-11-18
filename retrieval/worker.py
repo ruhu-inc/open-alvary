@@ -8,16 +8,23 @@
 A step that fails is reported and the next still runs; the job fails when any did, so the platform
 shows it. Runs may overlap: embedding jobs are leased and the engine's writes are by unit.
 
+The report says how long each step took, in seconds, and the run in all ("setup" is loading the code
+and reading the settings; the first connection to the database is in the first step). A slow run
+then shows where its time went: on 2026-11-18 runs at the top of an hour took twice as long as the
+rest and nothing recorded said which part.
+
     python -m retrieval.worker run
 """
 
 import json
 import sys
+import time
 
 BATCHES = 5  # of ten texts each: a run ends well inside a minute on the GPU
 
 
 def run(db=None, search=None) -> dict:
+    started = time.monotonic()
     from api import text_index
     from api.store import engine_for
     from retrieval import indexer, projector
@@ -28,12 +35,15 @@ def run(db=None, search=None) -> dict:
     if search is None and (config := config_from_env()) is not None:
         search = SearchEngine(*config)
     report: dict = {}
+    seconds = {"setup": round(time.monotonic() - started, 1)}
 
     def step(name, action):
+        began = time.monotonic()
         try:
             report[name] = action()
         except Exception as error:  # reported, never the texts or queries
             report[name] = {"error": type(error).__name__}
+        seconds[name] = round(time.monotonic() - began, 1)
 
     def build():
         with db.begin() as conn:
@@ -51,6 +61,7 @@ def run(db=None, search=None) -> dict:
     if search is not None:
         step("engine", follow)
     step("embeddings", lambda: indexer.work(db, batches=BATCHES, searcher=search))
+    report["seconds"] = {**seconds, "total": round(time.monotonic() - started, 1)}
     return report
 
 

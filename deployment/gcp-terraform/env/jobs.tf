@@ -33,7 +33,11 @@ locals {
         command = ["python", "-m", "retrieval.worker", "run"]
         args    = []
         cron    = "* * * * *"
-        timeout = 55
+        # Not the minute between runs: a run with nothing to do takes about 30 seconds from start to
+        # end, and in the first minutes of an hour, when the platform is busiest, about twice that, so a
+        # limit of 55 seconds failed a run every few days with nothing wrong (2026-11-18). Runs may
+        # overlap (retrieval/worker.py): the limit only stops one that hangs.
+        timeout = 280
         secrets = {}
         reads   = []
       }

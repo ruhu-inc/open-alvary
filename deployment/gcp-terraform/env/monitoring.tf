@@ -128,8 +128,20 @@ resource "google_monitoring_alert_policy" "site_down" {
   }
 }
 
-# Any job failed: the daily run (a broken audit seal, or no recent database backup), the worker, the
-# nightly publish, the retrieval sync, and any job added later. A named list missed half of them.
+# The jobs that run every few minutes, by the name Cloud Run gives each. A failed run of one is made
+# good by its next run, minutes later, so one failure is not news: the retrieval job, at 1,440 runs a
+# day, sent a false alarm every few days (2026-11-18). What matters for these is that runs keep
+# succeeding (frequent_job, below). A job whose schedule is paused is not watched.
+locals {
+  frequent_jobs = local.public_enabled && var.accounts_enabled ? {
+    for name, job in local.scheduled_jobs : name => "${local.name_prefix}-${name}"
+    if contains(["retrieval", "worker"], name) && !(name == "worker" && !var.domain_live)
+  } : {}
+}
+
+# Any job failed: the daily run (a broken audit seal, or no recent database backup), the nightly
+# publish, and any job added later. A named list missed half of them, so this names only the ones it
+# leaves out: the frequent jobs, which have their own alert.
 resource "google_monitoring_alert_policy" "job_failed" {
   count        = local.public_enabled && var.accounts_enabled ? 1 : 0
   display_name = "Open Alvary: a scheduled job failed (${var.environment})"
@@ -138,7 +150,10 @@ resource "google_monitoring_alert_policy" "job_failed" {
   conditions {
     display_name = "A run of a scheduled job failed"
     condition_threshold {
-      filter          = "resource.type = \"cloud_run_job\" AND metric.type = \"run.googleapis.com/job/completed_execution_count\" AND metric.labels.result = \"failed\""
+      filter = join("", concat(
+        ["resource.type = \"cloud_run_job\" AND metric.type = \"run.googleapis.com/job/completed_execution_count\" AND metric.labels.result = \"failed\""],
+        [for job in values(local.frequent_jobs) : " AND resource.labels.job_name != \"${job}\""],
+      ))
       comparison      = "COMPARISON_GT"
       threshold_value = 0
       duration        = "0s"
@@ -160,7 +175,62 @@ resource "google_monitoring_alert_policy" "job_failed" {
   }
   documentation {
     mime_type = "text/markdown"
-    content   = "A scheduled job failed; its name is in the incident. For the daily job, look first for an ERROR line 'audit seal check' (docs/deployment/runbook.md, Audit log seals) or 'backup check' (no recent Cloud SQL backup); for the worker, see Monitors and webhooks; for publish, the Publishing page in the workbench."
+    content   = "A scheduled job failed; its name is in the incident. For the daily job, look first for an ERROR line 'audit seal check' (docs/deployment/runbook.md, Audit log seals) or 'backup check' (no recent Cloud SQL backup); for publish, the Publishing page in the workbench. The retrieval job and the worker are not in this alert: one failed run of theirs is made good by the next, and 'a frequent job is not succeeding' watches them."
+  }
+}
+
+# A frequent job is not succeeding: none of its runs has succeeded for 15 minutes (the job is broken,
+# or its schedule has stopped: no failed run is needed for this to fire), or three or more of its runs
+# failed within 15 minutes (it is failing on and off).
+resource "google_monitoring_alert_policy" "frequent_job" {
+  count        = length(local.frequent_jobs) > 0 ? 1 : 0
+  display_name = "Open Alvary: a frequent job is not succeeding (${var.environment})"
+  combiner     = "OR"
+
+  dynamic "conditions" {
+    for_each = local.frequent_jobs
+    content {
+      display_name = "No run of the ${conditions.key} job has succeeded for 15 minutes"
+      condition_absent {
+        filter   = "resource.type = \"cloud_run_job\" AND resource.labels.job_name = \"${conditions.value}\" AND metric.type = \"run.googleapis.com/job/completed_execution_count\" AND metric.labels.result = \"succeeded\""
+        duration = "900s"
+        aggregations {
+          alignment_period   = "300s"
+          per_series_aligner = "ALIGN_SUM"
+        }
+        trigger {
+          count = 1
+        }
+      }
+    }
+  }
+
+  conditions {
+    display_name = "Three or more runs of a frequent job failed within 15 minutes"
+    condition_threshold {
+      filter          = "resource.type = \"cloud_run_job\" AND metric.type = \"run.googleapis.com/job/completed_execution_count\" AND metric.labels.result = \"failed\" AND resource.labels.job_name = one_of(${join(", ", [for job in values(local.frequent_jobs) : "\"${job}\""])})"
+      comparison      = "COMPARISON_GT"
+      threshold_value = 2
+      duration        = "0s"
+      aggregations {
+        alignment_period     = "900s"
+        per_series_aligner   = "ALIGN_SUM"
+        cross_series_reducer = "REDUCE_SUM"
+        group_by_fields      = ["resource.label.job_name"]
+      }
+      trigger {
+        count = 1
+      }
+    }
+  }
+
+  notification_channels = [google_monitoring_notification_channel.operator.id]
+  alert_strategy {
+    auto_close = "86400s"
+  }
+  documentation {
+    mime_type = "text/markdown"
+    content   = "The retrieval job (every minute) or the worker (every five minutes) is not succeeding; which one is in the incident. Look at its last runs in Cloud Run: none at all means its Cloud Scheduler job has stopped; failed ones have an ERROR line. A run prints one line with what each step did and, under 'seconds', how long each took: a step with an 'error' names the fault's kind. See docs/deployment/runbook.md, Monitoring and alerts."
   }
 }
 

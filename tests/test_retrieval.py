@@ -478,6 +478,16 @@ def test_the_retrieval_job_runs_each_step_and_reports_one_that_fails(monkeypatch
     # The application changed, so it is deployed; the failing sync is reported; embedding still runs.
     assert calls == ["ensure", "deploy", "work"]
     assert report["engine"] == {"error": "ConnectionError"} and report["embeddings"] == {"done": 0}
+    # How long each step took, the failed one too, and the run in all: a slow run shows where.
+    took = report["seconds"]
+    assert list(took) == ["setup", "section_index", "engine", "embeddings", "total"]
+    assert all(isinstance(value, float) and value >= 0 for value in took.values())
+    assert took["total"] >= max(value for name, value in took.items() if name != "total")
+    # The times are no step: a run whose steps all worked still ends well, and one that failed does not.
+    monkeypatch.setattr(worker, "run", lambda: {"embeddings": {"done": 0}, "seconds": took})
+    assert worker.main(["run"]) == 0
+    monkeypatch.setattr(worker, "run", lambda: report)
+    assert worker.main(["run"]) == 1
 
 
 def test_the_engine_analyses_each_config_as_the_section_index_does():

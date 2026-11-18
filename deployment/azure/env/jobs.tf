@@ -26,7 +26,7 @@ locals {
       retrieval = {
         command = ["python", "-m", "retrieval.worker", "run"]
         cron    = "* * * * *"
-        timeout = 55
+        timeout = 280 # not the minute between runs: see deployment/gcp-terraform/env/jobs.tf
         secrets = {}
         env     = {}
       }
