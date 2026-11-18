@@ -1670,12 +1670,16 @@ def contents_before_first(streams: dict[str, list[dict]], found: list[dict]) -> 
     Gazette n° 11 of 01/06/2008's front page, the rest of its title and its contents on pages 2 to 4. No
     opening is read there, so before 2026-11-18 those pages were in no document. In each language they
     open the first instrument, which prints its title again over its body, where it prints no contents
-    of its own and no notice stands between."""
+    of its own and no notice stands between. A version reaches back only to a page where another
+    language of the same instrument begins (as it is or so reaching back): in -i (2026-11-18) a
+    Kinyarwanda order whose English and French begin on page 34 reached back to page 3 over pages no
+    instrument was read in."""
+    reach: dict[tuple[int, str], int] = {}  # (instrument, language): the page its version would begin
     for language in rw_gazette.LANGUAGES:
-        firsts = [e["versions"][language] for e in found if language in e["versions"]]
+        firsts = [(k, e["versions"][language]) for k, e in enumerate(found) if language in e["versions"]]
         if not firsts:
             continue
-        first = min(firsts, key=lambda v: v["start"])
+        k, first = min(firsts, key=lambda kv: kv[1]["start"])
         before = streams.get(language, [])[: first["start"]]
         own = streams.get(language, [])[first["start"] : first["end"]]
         if (
@@ -1684,8 +1688,17 @@ def contents_before_first(streams: dict[str, list[dict]], found: list[dict]) -> 
             and not any(rw_gazette.CONTENTS.match(line["text"].strip()) for line in own)
             and not any(rw_gazette.notice_kind(line["text"]) for line in before)
         ):
-            first["start"] = 0
-            first["pages"][0] = before[0]["page"]
+            reach[(k, language)] = before[0]["page"]
+    for (k, language), page in reach.items():
+        others = [
+            reach.get((k, other), version["pages"][0])
+            for other, version in found[k]["versions"].items()
+            if other != language
+        ]
+        if any(start <= page for start in others):
+            version = found[k]["versions"][language]
+            version["start"] = 0
+            version["pages"][0] = page
 
 
 def annex_title(annex: dict, language: str, nodes: list[dict], kind: str | None) -> str:

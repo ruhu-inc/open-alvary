@@ -1417,17 +1417,30 @@ def test_a_gazette_instruments_title_and_contents_begun_on_the_front_page_open_i
     def line(text, page):
         return {"text": text, "page": page}
 
-    streams = {
-        "en": [
-            line("COMPLEMENTING ORGANIC LAW N° 16/2004", 2),
-            line("TABLE OF CONTENTS", 2),
+    def stream(word, contents):
+        return [
+            line(f"COMPLEMENTING {word} N° 16/2004", 2),
+            line(contents, 2),
             line("Article One: Crimes", 2),
-            line("ORGANIC LAW N° 13/2008 OF 19/05/2008", 5),
+            line(f"{word} N° 13/2008 OF 19/05/2008", 5),
             line("Article One: Crimes", 5),
-        ],
-        "fr": [line("LOI ORGANIQUE N° 13/2008", 5)],
+        ]
+
+    def found():
+        return [{"versions": {lang: {"start": 3, "end": 5, "pages": [5, 5]} for lang in ("en", "fr")}}]
+
+    streams = {
+        "en": stream("ORGANIC LAW", "TABLE OF CONTENTS"),
+        "fr": stream("LOI ORGANIQUE", "TABLE DES MATIÈRES"),
     }
-    found = [
+    both = found()
+    rwanda.contents_before_first(streams, both)
+    assert [both[0]["versions"][lang]["pages"] for lang in ("en", "fr")] == [[2, 5], [2, 5]]
+    assert both[0]["versions"]["en"]["start"] == 0
+    # One language alone reaching back over pages where no other begins keeps its start (-i, 2026-11-18:
+    # a Kinyarwanda order whose English and French begin on page 34 reached back to page 3).
+    alone = {"en": streams["en"], "fr": [line("LOI ORGANIQUE N° 13/2008", 5)]}
+    one = [
         {
             "versions": {
                 "en": {"start": 3, "end": 5, "pages": [5, 5]},
@@ -1435,11 +1448,21 @@ def test_a_gazette_instruments_title_and_contents_begun_on_the_front_page_open_i
             }
         }
     ]
-    rwanda.contents_before_first(streams, found)
-    assert found[0]["versions"]["en"]["start"] == 0 and found[0]["versions"]["en"]["pages"] == [2, 5]
-    assert found[0]["versions"]["fr"]["start"] == 0 and found[0]["versions"]["fr"]["pages"] == [5, 5]
+    rwanda.contents_before_first(alone, one)
+    assert one[0]["versions"]["en"]["start"] == 3 and one[0]["versions"]["en"]["pages"] == [5, 5]
+    # Where another language already begins on that page, it reaches back.
+    one[0]["versions"]["fr"]["pages"] = [2, 5]
+    rwanda.contents_before_first(alone, one)
+    assert one[0]["versions"]["en"]["pages"] == [2, 5]
     # An instrument that prints its own contents keeps its start: what stands before it is another's.
     own = {"en": streams["en"][:3] + [line("LAW N° 1/2008", 5), line("TABLE OF CONTENTS", 5)]}
-    found = [{"versions": {"en": {"start": 3, "end": 5, "pages": [5, 5]}}}]
-    rwanda.contents_before_first(own, found)
-    assert found[0]["versions"]["en"]["start"] == 3
+    kept = [
+        {
+            "versions": {
+                "en": {"start": 3, "end": 5, "pages": [5, 5]},
+                "fr": {"start": 0, "end": 1, "pages": [2, 5]},
+            }
+        }
+    ]
+    rwanda.contents_before_first(own, kept)
+    assert kept[0]["versions"]["en"]["start"] == 3

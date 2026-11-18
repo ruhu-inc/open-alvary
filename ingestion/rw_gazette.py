@@ -42,6 +42,8 @@ from schema.jurisdictions import registry
 # it); the Constitution's heading under "AMENDMENT N° 04 … OF" still begins the amendment.
 # 2026-11-17.4: the copy kept for an id is chosen as before .2 (the Gazette's first): a reading's
 # article count cannot tell a contents list from a body whose headings were read as a list.
+# 2026-11-18.3: a version reaches back over contents only to a page where another language of its
+# instrument begins (rwanda.contents_before_first).
 # 2026-11-18.2: a version leaves its contents list where the column wraps the minister's line or the
 # title printed again, or at its enacting words (_wrapped); a Kinyarwanda constitution names the Republic;
 # a Gazette instrument's title and contents begun on the front page open it (rwanda.contents_before_first);
@@ -49,7 +51,7 @@ from schema.jurisdictions import registry
 # lowers small words a mixed-case title printed and writes "No."; a UN resolution's two title lines are one.
 # 2026-11-18.1: a constitution in RLRC's extract is named by the Gazette issue it prints in its header or
 # masthead, then the date in RLRC's name (rwanda.constitution_date), so it shares the Gazette copy's id.
-PIPELINE = "2026-11-18.2"
+PIPELINE = "2026-11-18.3"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
