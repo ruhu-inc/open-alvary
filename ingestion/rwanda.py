@@ -1286,6 +1286,8 @@ def prepare_selection(
                     if before and all(line["page"] in cover_pages for line in before):
                         first["start"] = 0
                         first["pages"][0] = before[0]["page"]
+        if found and record["source"] == "minijust-gazette":
+            contents_before_first(streams, found)
         issue_notices = rw_gazette.notices(streams, found, record["listed"]["name"]) + [
             {"kind": "front_matter", "language": None, "start": 0, "end": 0, "pages": [page, page]}
             for page in sorted(front_pages)
@@ -1515,12 +1517,13 @@ def prepare_selection(
                     reading = rw_gazette.reading(
                         nodes, furniture, sha, {"annex_of": None}, sizes, scanned, one_reading
                     )
+                    title = annex_title(annex, language, nodes, None)
                     write_document(doc_id, reading, [annex["pages"][0], annex["pages"][-1]])
                     documents[doc_id] = {
                         "id": doc_id,
                         "summary": reading["summary"],
                         "type": "other",
-                        "title": f"Annex: {rw_gazette.shortened(annex['title'], 200)}",
+                        "title": title,
                         "jurisdiction": "rw",
                         "language": language,
                         "work": work,
@@ -1548,12 +1551,13 @@ def prepare_selection(
                 reading = rw_gazette.reading(
                     nodes, furniture, sha, {"annex_of": work}, sizes, scanned, one_reading
                 )
+                title = annex_title(annex, language, nodes, parent["kind"])
                 write_document(doc_id, reading, [annex["pages"][0], annex["pages"][-1]])
                 documents[doc_id] = {
                     "id": doc_id,
                     "summary": reading["summary"],
                     "type": parent["kind"],
-                    "title": f"Annex: {rw_gazette.shortened(annex['title'], 200)}",
+                    "title": title,
                     "jurisdiction": "rw",
                     "language": language,
                     "work": work,
@@ -1658,6 +1662,45 @@ def document_title(entry: dict, language: str, lines: dict, values: dict, nodes:
             return values["identity.title"]
     treaty = values.get("identity.family") == "treaty"
     return rw_gazette.cited_title(title, rw_gazette.names_in(list(nodes), language), language, treaty)
+
+
+def contents_before_first(streams: dict[str, list[dict]], found: list[dict]) -> None:
+    """A Gazette instrument whose title begins at the foot of the front page (kept out of the
+    instruments' text) goes on over the next page, above its contents: "ORGANIC LAW N° 13/2008 OF" on
+    Gazette n° 11 of 01/06/2008's front page, the rest of its title and its contents on pages 2 to 4. No
+    opening is read there, so before 2026-11-18 those pages were in no document. In each language they
+    open the first instrument, which prints its title again over its body, where it prints no contents
+    of its own and no notice stands between."""
+    for language in rw_gazette.LANGUAGES:
+        firsts = [e["versions"][language] for e in found if language in e["versions"]]
+        if not firsts:
+            continue
+        first = min(firsts, key=lambda v: v["start"])
+        before = streams.get(language, [])[: first["start"]]
+        own = streams.get(language, [])[first["start"] : first["end"]]
+        if (
+            before
+            and any(rw_gazette.CONTENTS.match(line["text"].strip()) for line in before)
+            and not any(rw_gazette.CONTENTS.match(line["text"].strip()) for line in own)
+            and not any(rw_gazette.notice_kind(line["text"]) for line in before)
+        ):
+            first["start"] = 0
+            first["pages"][0] = before[0]["page"]
+
+
+def annex_title(annex: dict, language: str, nodes: list[dict], kind: str | None) -> str:
+    """An annex's title in one language: its own heading (rw_gazette.annex_heading), written as its
+    instrument's title is cited (a treaty's in English in title case), with the names its text writes."""
+    heading = annex["headings"].get(language) or rw_gazette.shortened(annex["title"], 200)
+    treaty = rw_gazette.FAMILY.get(kind or "") == "treaty"
+    cited = rw_gazette.cited_title(heading, rw_gazette.names_in(list(nodes), language), language, treaty)
+    # "ANNEX I:" is no "Annex i:": the numeral of an annex keeps its capitals (cited_title keeps two or more).
+    cited = re.sub(
+        r"(?i)^((?:annex(?:e|ure)?|appendix|schedule|umugereka)\s+)([ivxlc]{1,6})\b",
+        lambda m: m.group(1) + m.group(2).upper(),
+        cited,
+    )
+    return cited if rw_gazette.ANNEX_WORD.match(cited) else f"Annex: {cited}"
 
 
 def listing_title(name: str) -> str:

@@ -42,9 +42,14 @@ from schema.jurisdictions import registry
 # it); the Constitution's heading under "AMENDMENT N° 04 … OF" still begins the amendment.
 # 2026-11-17.4: the copy kept for an id is chosen as before .2 (the Gazette's first): a reading's
 # article count cannot tell a contents list from a body whose headings were read as a list.
+# 2026-11-18.2: a version leaves its contents list where the column wraps the minister's line or the
+# title printed again, or at its enacting words (_wrapped); a Kinyarwanda constitution names the Republic;
+# a Gazette instrument's title and contents begun on the front page open it (rwanda.contents_before_first);
+# each annex is titled by its own heading in its language (annex_heading); a treaty's title in English
+# lowers small words a mixed-case title printed and writes "No."; a UN resolution's two title lines are one.
 # 2026-11-18.1: a constitution in RLRC's extract is named by the Gazette issue it prints in its header or
 # masthead, then the date in RLRC's name (rwanda.constitution_date), so it shares the Gazette copy's id.
-PIPELINE = "2026-11-18.1"
+PIPELINE = "2026-11-18.2"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -117,9 +122,12 @@ KIND_ALONE = {language: re.compile(rf"^(?:{words})\s*$") for language, words in 
 # OF THE" then "REPUBLIC OF RWANDA OF 2003 REVISED IN 2015").
 # An amendment of it is headed so on one line ("AMENDMENT N° 02 OF 08/12/2005 OF THE CONSTITUTION OF THE
 # REPUBLIC …", "IVUGURURA N° 02 RYO KUWA 08/12/2005 RY’ITEGEKO NSHINGA …").
+# In every language it names the Republic: "ITEGEKO NSHINGA RYA LETA ZISHYIZE HAMWE …" is a treaty's
+# article on federal states, "ITEGEKO NSHINGA N'ANDI MATEGEKO" a treaty's "constitution and other laws";
+# before 2026-11-18 each was read as a constitution (a UNESCO convention, an agreement with Mozambique).
 CONSTITUTION = {
     "rw": re.compile(
-        r"^(?:IVUGURURW?A\s+N\s?[°º]\s*\S+\s+\S+\s+KU\s?WA\s+\S+\s+RY[’'‟]\s?)?ITEGEKO NSHINGA\b"
+        r"^(?:IVUGURURW?A\s+N\s?[°º]\s*\S+\s+\S+\s+KU\s?WA\s+\S+\s+RY[’'‟]\s?)?ITEGEKO NSHINGA\s+RYA\s+REPUBU?LIKA\b"
     ),
     "en": re.compile(
         r"^(?:AMENDMENT\s+N\s?[°º]\s*\S+\s+OF\s+\S+\s+OF\s+)?(?:THE\s+)?CONSTITUTION OF THE\s+REPUBLIC\b"
@@ -129,7 +137,7 @@ CONSTITUTION = {
     ),
 }
 CONSTITUTION_BEGUN = {
-    "rw": re.compile(r"^ITEGEKO\s*$"),
+    "rw": re.compile(r"^ITEGEKO(?:\s+NSHINGA(?:\s+RYA)?)?\s*$"),
     "en": re.compile(r"^(?:THE\s+)?CONSTITUTION OF THE\s*$"),
     "fr": re.compile(r"^(?:LA\s+)?CONSTITUTION DE LA\s*$"),
 }
@@ -797,11 +805,46 @@ def annexes(split: list[dict], roles: dict[int, int]) -> list[dict]:
     for annex in found.values():
         first = next(iter(annex["versions"].values()), [])
         annex["title"] = shortened(" ".join(line["text"] for line in first[:6] if line["text"]), 300)
+        annex["headings"] = {language: annex_heading(lines) for language, lines in annex["versions"].items()}
         annex["refers_to"] = next(
             (m.group(1) for line in first[:8] if (m := re.search(r"N\s?[°ºO0]\.?\s*(\S+)", line["text"]))),
             None,
         )
     return list(found.values())
+
+
+# A running head printed over two lines, without its date or with the date alone ("Official Gazette n°
+# Special", "of 30/06/2023"), above an annex's heading.
+_ANNEX_RUNNING = re.compile(
+    r"(?i)^(?:(?:official\s+gazette|journal\s+officiel|igazeti\s+ya\s+leta)\b"
+    r"|(?:of|du|ryo\s+ku\s?wa|yo\s+ku\s?wa)\s+\d{1,2}\s*/\s*\d{1,2}\s*/\s*\d{4}\s*$)"
+)
+# The word an annex's heading may open with, so its title does not say it twice ("Annex: Annex IV: …").
+ANNEX_WORD = re.compile(r"(?i)^(?:annex(?:e|es|ure)?|appendix|schedule|umugereka|imigereka)\b")
+
+
+def annex_heading(lines: list[dict]) -> str:
+    """An annex's heading in one language, as its own lines print it: its first lines in capitals
+    ("UMUGEREKA WA IV" / "UBURYO BWO GUTANGA IBIREGO NO GUKEMURA IMPAKA", "ANNEXE TABLEAU DE ROUTES"),
+    past a running head and never into the text under it; else its first line. Before 2026-11-18 each
+    language's annex was titled with the first language's first six lines, text and all: 2,210 French
+    annexes carried a Kinyarwanda title."""
+    heading: list[str] = []
+    for line in lines[:12]:
+        text = line["text"].strip()
+        if not text or (not heading and (RUNNING_HEAD.search(text) or _ANNEX_RUNNING.match(text))):
+            continue
+        letters = [c for c in text if c.isalpha()]
+        if (
+            len(letters) < 2
+            or sum(c.isupper() for c in letters) < 0.8 * len(letters)
+            or (heading and (PREAMBLE.match(text) or CONTENTS.match(text)))
+        ):
+            break
+        heading.append(text)
+    if not heading:
+        heading = [next((line["text"].strip() for line in lines if line["text"].strip()), "")]
+    return shortened(" ".join(heading), 200)
 
 
 def streams(split: list[dict], skip: set[int] | frozenset = frozenset()) -> dict[str, list[dict]]:
@@ -1286,6 +1329,22 @@ def _number(word: str) -> str:
     return word
 
 
+def _wrapped(lines: list[dict], at: int, test) -> bool:
+    """Whether line `at` passes `test` alone or read with the next line or two of its page: a narrow
+    column wraps the minister's line ("The Minister of Finance and Economic" / "Planning;") and the
+    title printed again after the contents ("MINISTERIAL ORDER Nº" / "008/26/10/TC OF 24/09/2026").
+    Before 2026-11-18 such a version never left its contents list, and each article of its body was
+    read as one more entry of it (the English and French of Ministerial Order 008/26/10/TC)."""
+    for more in (1, 2, 3):
+        if at + more > len(lines) or any(
+            line.get("page") != lines[at].get("page") or line.get("table") for line in lines[at : at + more]
+        ):
+            return False
+        if test(" ".join(line["text"].strip() for line in lines[at : at + more])):
+            return True
+    return False
+
+
 def structure(lines: list[dict], language: str, part: str = "heading") -> list[dict]:
     """Nodes of one language version: the heading, the contents, the preamble, divisions, articles
     and their paragraphs (a paragraph ends where the line spacing opens up). An annex starts in its
@@ -1294,7 +1353,7 @@ def structure(lines: list[dict], language: str, part: str = "heading") -> list[d
     cover: list[dict] = []  # the blocks of a cover opening the version, one of which is its title
     previous = None
     signing = False  # from the date above the signatures, each line its own: "(sé)", a name, an office
-    for line in lines:
+    for at, line in enumerate(lines):
         if line.get("table"):
             nodes.append(
                 {"kind": "table", "caption": "", **line["table"], "page": line["page"], "lines": [line]}
@@ -1372,9 +1431,14 @@ def structure(lines: list[dict], language: str, part: str = "heading") -> list[d
             # The title cannot go on: whatever opened the body was not recognised (a treaty's "The
             # State Parties", an order without a minister's line). Read the rest as the body.
             part = "body"
-        if part in ("heading", "contents") and PREAMBLE.match(text):
+        if part in ("heading", "contents") and _wrapped(lines, at, lambda t: PREAMBLE.match(t)):
             part = "body"
-        if part == "contents" and (OPENING[language].match(text) or CONSTITUTION[language].match(text)):
+        if part == "contents" and BODY.match(text):
+            # Its enacting words ("ORDERS:", "ARRÊTE :"): no contents list goes on past them.
+            part = "body"
+        if part == "contents" and _wrapped(
+            lines, at, lambda t: OPENING[language].match(t) or CONSTITUTION[language].match(t)
+        ):
             # The title printed again after the contents opens the body (orders have no "We, …").
             nodes.append(
                 {"kind": "heading", "level": "heading-1", "text": text, "page": line["page"], "lines": [line]}
@@ -1963,6 +2027,13 @@ _TREATY_SMALL = re.compile(
 )
 
 
+_TREATY_SMALL_MIXED = re.compile(
+    r"((?<![-:(–—])\s)("
+    + "|".join(word.capitalize() for word in sorted(cited_names.SMALL - {"de"}))
+    + r")(?=\s)(?!\s+Hague\b)"
+)
+
+
 @cache
 def _cited_by_number(name: str) -> re.Pattern:
     return re.compile(r"(?<!\w)" + _APOSTROPHE.sub("[’']", re.escape(name)) + r"(?=\s+n\s?[°º])", re.I)
@@ -2085,6 +2156,14 @@ def cited_title(printed: str, names: dict[str, str], language: str, treaty: bool
         title = re.sub(r"\bCo-O", "Co-o", title)
         # An article after a small word is no initial: "the Right to a Flag" (cited keeps a lone capital).
         title = re.sub(r"(\s[a-z]+\s)(An?)(?=\s)", lambda m: m.group(1) + m.group(2).lower(), title)
+        # A title printed in mixed case (an RLRC file's name or cover) keeps its capitals through cited:
+        # "Agreement between The Government … And The Government", "Protocol On Marks within The
+        # Framework Of The …". A small word inside it is lower case, but at the start, after a dash, colon
+        # or bracket, and in "The Hague".
+        title = _TREATY_SMALL_MIXED.sub(lambda m: m.group(1) + m.group(2).lower(), title)
+        # The number sign as an English title writes it: "Convention Nº 155", "(Nº. 52)" are "No. 155",
+        # "(No. 52)", as the ILO cites its conventions.
+        title = re.sub(r"\bN\s?[º°]\.?\s*(?=\d)", "No. ", title)
         for key, written in names.items():
             if written.isupper():
                 title = _named(key).sub(lambda _, w=written: w, title)
@@ -2862,6 +2941,30 @@ def is_title(text: str) -> bool:
     return bool(re.match(r"^[^\W_]", text or "")) and len(text) >= 12
 
 
+# A United Nations resolution printed over two lines, its session's numeral over the first and its
+# number over the second: "XX. RESOLUTION ADOPTED BY THE GENERAL ASSEMBLY" / "2101. AMENDMENT TO
+# ARTICLE 109 OF THE CHARTER OF THE UNITED NATIONS".
+_SESSION_RESOLUTION = re.compile(r"^([IVXLC]{1,6})\.\s+((?:R[ÉE]SOLUTION|UMWANZURO)\b.*)$", re.I)
+_NUMBERED_SUBJECT = re.compile(r"^(\d{2,5})\.\s+(\S.*)$")
+
+
+def _resolution_title(nodes: list[dict], at: int) -> str | None:
+    """The two lines of a resolution's title as one, cited as the UN cites it: "RESOLUTION 2101 (XX)
+    ADOPTED BY THE GENERAL ASSEMBLY: AMENDMENT TO ARTICLE 109 …". Before 2026-11-18 English and French
+    took the first line ("XX. Resolution adopted by the General Assembly") and Kinyarwanda the second."""
+    pairs = [(at, at + 1), (at - 1, at)]
+    for first, second in pairs:
+        if first < 0 or second >= len(nodes):
+            continue
+        session = _SESSION_RESOLUTION.match(nodes[first]["text"].strip())
+        numbered = _NUMBERED_SUBJECT.match(nodes[second]["text"].strip())
+        if session and numbered:
+            word, _, rest = session.group(2).partition(" ")
+            adopted = f" {rest}" if rest else ""
+            return f"{word} {numbered.group(1)} ({session.group(1)}){adopted}: {numbered.group(2)}"
+    return None
+
+
 def printed_title(
     versions: dict[str, list[dict]], languages: tuple[str, ...] = ("en", "fr", "rw")
 ) -> tuple[str, int | None] | None:
@@ -2871,11 +2974,10 @@ def printed_title(
     With its page."""
     for language in languages:
         cover = [line for line in versions.get(language, []) if line.get("cover")]
-        title = (
-            next((n for n in structure(cover, language) if n["kind"] == "heading"), None) if cover else None
-        )
-        if title:
-            return title["text"], title["page"]
+        nodes = structure(cover, language) if cover else []
+        at = next((k for k, n in enumerate(nodes) if n["kind"] == "heading"), None)
+        if at is not None:
+            return _resolution_title(nodes, at) or nodes[at]["text"], nodes[at]["page"]
     for language in languages:
         lines = [line for line in versions.get(language, [])[:80] if not line.get("cover")]
         first = (

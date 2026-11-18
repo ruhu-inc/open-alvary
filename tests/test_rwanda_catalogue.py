@@ -1408,3 +1408,38 @@ def test_shared_number_instruments_whose_printed_titles_read_alike_stay_apart():
         "rw-ordinance-441-fr",
     ]
     assert len(rwanda.one_per_id(out)) == 3
+
+
+def test_a_gazette_instruments_title_and_contents_begun_on_the_front_page_open_it():
+    # Gazette n° 11 of 01/06/2008: Organic Law n° 13/2008's title begins at the foot of the front page
+    # (kept out of the instruments' text); the rest of it and its contents on pages 2 to 4 were in no
+    # document before 2026-11-18.
+    def line(text, page):
+        return {"text": text, "page": page}
+
+    streams = {
+        "en": [
+            line("COMPLEMENTING ORGANIC LAW N° 16/2004", 2),
+            line("TABLE OF CONTENTS", 2),
+            line("Article One: Crimes", 2),
+            line("ORGANIC LAW N° 13/2008 OF 19/05/2008", 5),
+            line("Article One: Crimes", 5),
+        ],
+        "fr": [line("LOI ORGANIQUE N° 13/2008", 5)],
+    }
+    found = [
+        {
+            "versions": {
+                "en": {"start": 3, "end": 5, "pages": [5, 5]},
+                "fr": {"start": 0, "end": 1, "pages": [5, 5]},
+            }
+        }
+    ]
+    rwanda.contents_before_first(streams, found)
+    assert found[0]["versions"]["en"]["start"] == 0 and found[0]["versions"]["en"]["pages"] == [2, 5]
+    assert found[0]["versions"]["fr"]["start"] == 0 and found[0]["versions"]["fr"]["pages"] == [5, 5]
+    # An instrument that prints its own contents keeps its start: what stands before it is another's.
+    own = {"en": streams["en"][:3] + [line("LAW N° 1/2008", 5), line("TABLE OF CONTENTS", 5)]}
+    found = [{"versions": {"en": {"start": 3, "end": 5, "pages": [5, 5]}}}]
+    rwanda.contents_before_first(own, found)
+    assert found[0]["versions"]["en"]["start"] == 3

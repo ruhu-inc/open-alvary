@@ -134,8 +134,62 @@ def test_an_issue_gives_each_instrument_once_with_its_title_number_date_and_page
     assert (law_found["kind"], law_found["number"], law_found["date"]) == ("law", "009/2026", "2026-03-12")
     assert law_found["versions"]["en"]["title"] == "LAW N° 009/2026 OF 12/03/2026 GOVERNING EXAMPLES"
     assert law_found["versions"]["fr"]["pages"] == [1, 2]
-    constitution = {"rw": [{"text": "ITEGEKO NSHINGA RYA", "page": 2, "x0": 0, "x1": 1, "y0": 0, "y1": 1}]}
-    assert RG.openings(constitution["rw"], "rw")[0]["kind"] == "constitution"
+    constitution = [
+        {"text": "ITEGEKO NSHINGA RYA", "page": 2, "x0": 0, "x1": 1, "y0": 0, "y1": 1},
+        {"text": "REPUBULIKA Y’U RWANDA RYO MU", "page": 2, "x0": 0, "x1": 1, "y0": 1, "y1": 2},
+    ]
+    assert RG.openings(constitution, "rw")[0]["kind"] == "constitution"
+
+
+def test_a_constitution_heading_names_the_republic_in_kinyarwanda_as_in_english_and_french():
+    def lines(*texts):
+        return [{"text": t, "page": 1, "x0": 0, "x1": 1, "y0": k, "y1": k + 1} for k, t in enumerate(texts)]
+
+    assert RG.openings(lines("ITEGEKO NSHINGA RYA REPUBULIKA Y’U RWANDA"), "rw")[0]["kind"] == "constitution"
+    assert (
+        RG.openings(lines("ITEGEKO NSHINGA", "RYA REPUBULIKA Y’U RWANDA"), "rw")[0]["kind"] == "constitution"
+    )
+    # A treaty's article on federal states, and a treaty's "constitution and other laws" (a UNESCO
+    # convention, an agreement with Mozambique) were read as constitutions before 2026-11-18.
+    assert RG.openings(lines("ITEGEKO NSHINGA RYA LETA ZISHYIZE", "HAMWE CYANGWA ZITANDUKANYE"), "rw") == []
+    assert RG.openings(lines("ITEGEKO NSHINGA N'ANDI MATEGEKO", "KU RUHANDE RWA REPUBULIKA YA"), "rw") == []
+    amendment = "IVUGURURA N° 02 RYO KUWA 08/12/2005 RY’ITEGEKO NSHINGA RYA REPUBULIKA Y’U"
+    assert RG.openings(lines(amendment, "RWANDA RYO KUWA 04 KAMENA 2003"), "rw")[0]["kind"] == "constitution"
+
+
+def test_a_version_leaves_its_contents_where_a_narrow_column_wraps_its_preamble_or_title():
+    # Ministerial Order n° 008/26/10/TC (Gazette n° Special of 25/09/2026): in the English and French
+    # columns the title printed again and the minister's line each wrap; before 2026-11-18 neither was
+    # read, the version never left its contents, and each article of its body was one more entry of it.
+    def lines(*texts, page=1):
+        return [
+            {"text": t, "page": page, "x0": 0, "x1": 1, "y0": 20 * k, "y1": 20 * k + 10}
+            for k, t in enumerate(texts)
+        ]
+
+    head = lines("MINISTERIAL ORDER Nº 008/26/10/TC OF 24/09/2026 ON EXAMPLES", "TABLE OF CONTENTS")
+    contents = lines("Article One: Purpose", "Article 2: Entry into force", page=1)
+    wrapped_title = lines(
+        "MINISTERIAL ORDER Nº",
+        "008/26/10/TC OF 24/09/2026",
+        "ON EXAMPLES",
+        "The Minister of Finance and Economic",
+        "Planning;",
+        "ORDERS:",
+        page=2,
+    )
+    body = lines("Article One: Purpose", "This Order sets examples.", "Article 2: Entry into force", page=3)
+    nodes = RG.structure(head + contents + wrapped_title + body, "en")
+    articles = [(n["kind"], n["page"]) for n in nodes if n.get("article")]
+    assert articles == [("list_item", 1), ("list_item", 1), ("heading", 3), ("heading", 3)]
+
+    no_title = lines("The Minister of Finance and Economic", "Planning;", "ORDERS:", page=2)
+    nodes = RG.structure(head + contents + no_title + body, "en")
+    assert [n["kind"] for n in nodes if n.get("article") and n["page"] == 3] == ["heading", "heading"]
+
+    enacting_only = lines("Having regard to the examples;", "ORDERS:", page=2)
+    nodes = RG.structure(head + contents + enacting_only + body, "en")
+    assert [n["kind"] for n in nodes if n.get("article") and n["page"] == 3] == ["heading", "heading"]
 
 
 def test_each_language_version_has_its_contents_preamble_and_articles_and_they_align():
@@ -1857,6 +1911,103 @@ def test_an_english_treaty_is_cited_in_title_case_and_keeps_its_texts_acronyms()
     assert RG.cited_title(
         "AMENDMENT TO ARTICLE 109 OF THE CHARTER OF THE UNITED NATIONS", {}, "en", True
     ) == ("Amendment to Article 109 of the Charter of the United Nations")
+
+
+def test_a_treaty_title_printed_in_mixed_case_lowers_its_small_words_and_writes_no():
+    # RLRC's file names and covers print these in mixed case, which kept their capitals before 2026-11-18.
+    assert (
+        RG.cited_title(
+            "Protocol On Cooperation between The Government of the Republic of Rwanda And The Government of Egypt",
+            {},
+            "en",
+            treaty=True,
+        )
+        == "Protocol on Cooperation between the Government of the Republic of Rwanda and the Government of Egypt"
+    )
+    assert (
+        RG.cited_title(
+            "Protocol On Marks within The Framework Of The African Regional Intellectual Property Organisation (ARIPO)",
+            {},
+            "en",
+            treaty=True,
+        )
+        == "Protocol on Marks within the Framework of the African Regional Intellectual Property Organisation (ARIPO)"
+    )
+    assert RG.cited_title("Convention Nº 155 concerning Occupational Safety", {}, "en", True) == (
+        "Convention No. 155 concerning Occupational Safety"
+    )
+    assert RG.cited_title("Holidays with Pay Convention, 1936 (Nº. 52)", {}, "en", True) == (
+        "Holidays with Pay Convention, 1936 (No. 52)"
+    )
+    # At the start, after a dash or colon, and in "The Hague", a capital stays.
+    assert RG.cited_title("Convention on Disputes signed at The Hague", {}, "en", True) == (
+        "Convention on Disputes signed at The Hague"
+    )
+    assert RG.cited_title("C062 - The Safety Provisions Convention", {}, "en", True) == (
+        "C062 - The Safety Provisions Convention"
+    )
+
+
+def test_a_un_resolution_printed_over_two_lines_is_titled_by_its_number_session_and_subject():
+    def cover(*texts):
+        return [
+            {"text": t, "page": 1, "x0": 0, "x1": 1, "y0": 30 * k, "y1": 30 * k + 10, "cover": True}
+            for k, t in enumerate(texts)
+        ]
+
+    versions = {
+        "en": cover(
+            "XX. RESOLUTION ADOPTED BY THE GENERAL ASSEMBLY",
+            "2101. AMENDMENT TO ARTICLE 109 OF THE CHARTER OF THE UNITED NATIONS",
+            "Adopted in New York, on 20 December 1965",
+        ),
+        "rw": cover(
+            "XX. UMWANZURO WEMEJWE N’INTEKO RUSANGE",
+            "2101. IVUGURURWA KU NGINGO YA 109 Y'AMASEZERANO MPUZAMAHANGA",
+        ),
+    }
+    assert RG.printed_title(versions, ("en",))[0] == (
+        "RESOLUTION 2101 (XX) ADOPTED BY THE GENERAL ASSEMBLY: AMENDMENT TO ARTICLE 109 OF THE CHARTER OF "
+        "THE UNITED NATIONS"
+    )
+    title = RG.printed_title(versions, ("rw",))[0]
+    assert title.startswith("UMWANZURO 2101 (XX) WEMEJWE N’INTEKO RUSANGE: IVUGURURWA KU NGINGO YA 109")
+
+
+def test_each_language_of_an_annex_is_titled_by_its_own_heading_not_its_text():
+    def lines(*texts):
+        return [{"text": t, "page": 9, "x0": 0, "x1": 1, "y0": k, "y1": k + 1} for k, t in enumerate(texts)]
+
+    assert (
+        RG.annex_heading(
+            lines("UMUGEREKA WA IV", "UBURYO BWO GUTANGA IBIREGO", "1. Igihugu kiri muri aya Masezerano")
+        )
+        == "UMUGEREKA WA IV UBURYO BWO GUTANGA IBIREGO"
+    )
+    # a running head over two lines, its date alone on the second, is no heading
+    assert RG.annex_heading(
+        lines("Official Gazette n° Special", "of 30/06/2023", "STATE REVENUES", "Item")
+    ) == ("STATE REVENUES")
+    assert RG.annex_heading(lines("ANNEX THE MANIFESTO", "PREAMBLE", "We, the Heads of State,")) == (
+        "ANNEX THE MANIFESTO"
+    )
+    assert RG.annex_heading(lines("lowercase text first", "MORE")) == "lowercase text first"
+    from ingestion import rwanda
+
+    annex = {
+        "title": "UMUGEREKA WA IV …",
+        "headings": {
+            "en": "ANNEX IV: COMPLAINTS PROCEDURE AND SETTLEMENT OF DISPUTES",
+            "fr": "PROCEDURE DE PLAINTES",
+        },
+    }
+    assert rwanda.annex_title(annex, "en", [], "agreement") == (
+        "Annex IV: Complaints Procedure and Settlement of Disputes"
+    )
+    assert rwanda.annex_title(annex, "fr", [], "agreement") == "Annex: Procedure de plaintes"
+    assert rwanda.annex_title({"title": "ANNEX I: 2023/2024", "headings": {}}, "en", [], "law") == (
+        "Annex I: 2023/2024"
+    )
 
 
 def test_french_and_kinyarwanda_titles_keep_the_capitals_their_own_texts_write():
