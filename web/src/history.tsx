@@ -5,7 +5,7 @@
 // a qualified reviewer recorded it; and the instruments made under it. Only links between public
 // records that a reviewer has checked against the official text (GET /site/v1/sources/{id}/relationships).
 import { ArrowRight, ExternalLink } from "lucide-react";
-import { LEGAL_STATUS, Link } from "./site";
+import { LEGAL_STATUS, Link, statusLabel } from "./site";
 
 export type Related = {
   kind: string;
@@ -89,6 +89,10 @@ function paragraph(item: Related) {
   return ` · paragraph ${item.citing_pinpoint}${on}${opinion}`;
 }
 
+// A judgment named by another's treatment of it is decided: no status is said of it unless one was
+// recorded, where a law named here says whether it is in force.
+const BETWEEN_JUDGMENTS = /^(overrul|doubt|distinguish|appli|follow)/;
+
 function Item({ item }: { item: Related }) {
   return (
     <li>
@@ -96,7 +100,9 @@ function Item({ item }: { item: Related }) {
       <span className="history-meta">
         {paragraph(item)}
         {item.effective_date ? ` · from ${day(item.effective_date)}` : ""}
-        {item.kind !== "repealed_by" && item.kind !== "superseded_by"
+        {item.kind !== "repealed_by" &&
+        item.kind !== "superseded_by" &&
+        !(item.legal_status === "unknown" && BETWEEN_JUDGMENTS.test(item.kind))
           ? ` · ${LEGAL_STATUS[item.legal_status] ?? item.legal_status}`
           : ""}
         {" · "}
@@ -123,7 +129,13 @@ export function CurrentLaw({ history }: { history?: History }) {
   );
 }
 
-export function RecordHistory({ history }: { history?: History }) {
+export function RecordHistory({
+  history,
+  source,
+}: {
+  history?: History;
+  source: { document_type: string }; // a judgment is decided, where a law's status is not yet confirmed
+}) {
   if (!history) return null;
   const groups = KINDS.map(
     ([kind, label]) =>
@@ -137,7 +149,10 @@ export function RecordHistory({ history }: { history?: History }) {
     >
       <h3 id="record-history">History</h3>
       <p>
-        {LEGAL_STATUS[history.legal_status] ?? history.legal_status}
+        {statusLabel({
+          document_type: source.document_type,
+          legal_status: history.legal_status,
+        })}
         {history.current ? (
           <>
             . In force in its place now:{" "}

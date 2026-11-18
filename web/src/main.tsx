@@ -840,7 +840,7 @@ function Reader({ id }: { id: string }) {
         </article>
         <aside>
           <SourceRecord source={s} rights={rights.data?.record} alone />
-          <RecordHistory history={history.data} />
+          <RecordHistory history={history.data} source={s} />
           <RecordChanges id={s.id} />
         </aside>
       </div>
