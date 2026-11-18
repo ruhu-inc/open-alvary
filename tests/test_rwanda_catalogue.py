@@ -175,6 +175,71 @@ def test_file_names_give_the_subject_status_kind_number_and_year():
     )
 
 
+def test_a_constitution_is_named_by_the_printing_that_carries_it_in_every_source():
+    def page(furniture=(), lines=()):
+        return {
+            "furniture": [{"text": text} for text in furniture],
+            "columns": [{"lines": [{"text": text} for text in lines]}],
+        }
+
+    # RLRC's extract of the Gazette issue of 8 December 2005: its masthead names the issue, with the
+    # month in words; its file name says March, in words, which is not read.
+    masthead = [
+        page(
+            lines=[
+                "Umwaka wa 44 n° idasanzwe Year 44 n° special",
+                "yo kuwa 08 Ukuboza 2005 of 08 December 2005",
+            ]
+        )
+    ]
+    printed = rwanda.printed_issue_date(masthead)
+    rlrc = rwanda.constitution_date(
+        {"parsed": False},
+        {"date": "2005-12-08"},
+        "1.1.1.21._CONSTITUTION_AMENDMENT_OF_THE_CONSTITUTION-_OG_NO_SP_OF_08_MARCH_2005.pdf",
+        printed,
+    )
+    gazette = rwanda.constitution_date(
+        {"date": "2005-12-08"}, {"date": "2005-12-08"}, "Special_of_08.12.2005.pdf"
+    )
+    assert gazette == rlrc == "2005-12-08"
+    # The text "as amended to date" is headed with the Constitution's own date: its running header
+    # names the printing.
+    header = [page(furniture=["Official Gazette n° Special of 17 June 2010", "1"]) for _ in range(3)]
+    assert rwanda.printed_issue_date(header) == "2010-06-17"
+    assert (
+        rwanda.constitution_date(
+            {"special": True, "parsed": False}, {"date": "2003-06-04"}, "x.pdf", "2010-06-17"
+        )
+        == "2010-06-17"
+    )
+    assert rwanda.printed_issue_date([page(furniture=["-3- J.O. n° special du 02/12/2003"])]) == "2003-12-02"
+    # Nothing printed: the date in RLRC's name, never its leading section number ("1.1.1.22._").
+    assert (
+        rwanda.constitution_date(
+            {"parsed": False},
+            {"date": None},
+            "1.1.1.22._Amendment_of_13-8-2008_of_the_Constitution_of_the_Republic_of_Rwanda_of_4_June-_OG_N0_SP_OF_13_AUG_2008.pdf",
+        )
+        == "2008-08-13"
+    )
+    assert (
+        rwanda.constitution_date(
+            {"parsed": False},
+            {},
+            "1.1.1.6._CONSTITUTION_DE_LA_REPUBLIQUE_RWANDAISE_-J.O._O_24BIS_-20.12.1978.pdf",
+        )
+        == "1978-12-20"
+    )
+    # Then the date its heading prints, and nothing where nothing is printed.
+    assert (
+        rwanda.constitution_date({"parsed": False}, {"date": "2003-12-02"}, "1.1.1.1._Constitution.pdf")
+        == "2003-12-02"
+    )
+    assert rwanda.constitution_date({"parsed": False}, {}, "Conv_protection_fn2.pdf") == ""
+    assert rwanda.printed_issue_date([page(lines=["IVUGURURA N° 02 RYO KUWA 08/12/2005"])]) is None
+
+
 def test_gazette_file_names_give_the_issue_number_date_and_kind():
     assert rwanda.parse_gazette("52_bis_of_25.12.2017.pdf") == {
         "date": "2017-12-25",

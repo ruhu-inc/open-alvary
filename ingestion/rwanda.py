@@ -700,6 +700,42 @@ def work_id(kind: str, number: str, year: str | None) -> str:
     return f"rw-{kind.replace('_', '-')}-{_slug(number)}"
 
 
+# What names the Gazette issue an RLRC extract reproduces: a running header ("Official Gazette n°
+# Special of 17 June 2010", "J.O. n° special du 02/12/2003") or the masthead on its first page
+# ("Umwaka wa 44 n° idasanzwe Year 44 n° special / yo kuwa 08 Ukuboza 2005 of 08 December 2005").
+GAZETTE_LINE = re.compile(r"(?i)official gazette|journal officiel|igazeti ya leta|(?<!\w)J\.\s?O\.")
+MASTHEAD = re.compile(r"(?i)\b(?:year|umwaka\s+wa)\s+\d+\s*n\s?[°º]")
+
+
+def printed_issue_date(split: list[dict]) -> str | None:
+    """The date of the Gazette issue an extract prints in its running header or on its masthead,
+    in figures or with the month in words; the most often printed where they differ."""
+    texts = [
+        line["text"] for page in split for line in page["furniture"] if GAZETTE_LINE.search(line["text"])
+    ]
+    if split:
+        first = [line["text"] for column in split[0]["columns"] for line in column["lines"][:2]]
+        if first and MASTHEAD.search(first[0]):
+            texts.append(" ".join(first[:2]))
+    dates = Counter(
+        date for text in texts if (date := parse_gazette(text).get("date") or rw_gazette.spoken_date(text))
+    )
+    return dates.most_common(1)[0][0] if dates else None
+
+
+def constitution_date(issue: dict, entry: dict, listed_name: str, printed: str | None = None) -> str:
+    """The date a constitution, or an amendment of it, is named by: that of the Gazette issue
+    printing it, so that the Gazette's copy and RLRC's extract of the same issue share one id and
+    one is kept. For RLRC's extract: the issue its header or masthead prints, then the date in
+    RLRC's file name, then the date its heading prints. The heading comes last, because a text
+    "as amended to date" is headed with the Constitution's own date (04 June 2003) rather than its
+    printing's; RLRC's names can be wrong too ("…_OF_08_MARCH_2005" for the issue of 8 December
+    2005), but only where written in words, which are not read."""
+    # The name's leading section number ("1.1.1.22._") is not a date.
+    named = parse_gazette(re.sub(r"^[\d.]+_+", "", listed_name)).get("date")
+    return issue.get("date") or printed or named or entry.get("date") or ""
+
+
 def work_key(work: str) -> str:
     """A work id as a citation finds it, however the number was printed: "rw-law-028-2023" and
     "rw-law-28-2023" alike, "rw-law-53bis-2013" and "rw-law-53-bis-2013" alike."""
@@ -1215,6 +1251,8 @@ def prepare_selection(
                 if re.match(r"(?i)official gazette", text)
             )
             issue = parse_gazette(headers.most_common(1)[0][0]) if headers else {"parsed": False}
+        # The issue an RLRC extract reproduces, as it prints it, names a constitution (constitution_date).
+        printed = None if record["source"] == "minijust-gazette" else printed_issue_date(split)
         sizes = {page["page"]: (page["width"], page["height"]) for page in split}
         found = rw_gazette.instruments(streams)
         if not found and record["source"] == "rlrc-laws":
@@ -1367,7 +1405,11 @@ def prepare_selection(
                 for k in LISTED_STATUS
                 if listing.get(k)
             }
-            number = issue.get("date", "") if entry["number"] == "constitution" else entry["number"]
+            number = (
+                constitution_date(issue, entry, record["listed"]["name"], printed)
+                if entry["number"] == "constitution"
+                else entry["number"]
+            )
             work = work_id(entry["kind"], number, (entry.get("date") or issue.get("date") or "")[:4])
             if work in taken and taken[work] != entry.get("date"):
                 # Two instruments of one issue printed with one number: the second takes its date,
@@ -1491,7 +1533,11 @@ def prepare_selection(
                     }
                 continue
             written_annexes.add(annex["annex"])
-            number = issue.get("date", "") if parent["number"] == "constitution" else parent["number"]
+            number = (
+                constitution_date(issue, parent, record["listed"]["name"], printed)
+                if parent["number"] == "constitution"
+                else parent["number"]
+            )
             work = assigned.get(id(parent)) or work_id(
                 parent["kind"], number, (parent.get("date") or issue.get("date") or "")[:4]
             )

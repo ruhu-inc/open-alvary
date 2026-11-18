@@ -42,7 +42,9 @@ from schema.jurisdictions import registry
 # it); the Constitution's heading under "AMENDMENT N° 04 … OF" still begins the amendment.
 # 2026-11-17.4: the copy kept for an id is chosen as before .2 (the Gazette's first): a reading's
 # article count cannot tell a contents list from a body whose headings were read as a list.
-PIPELINE = "2026-11-17.4"
+# 2026-11-18.1: a constitution in RLRC's extract is named by the Gazette issue it prints in its header or
+# masthead, then the date in RLRC's name (rwanda.constitution_date), so it shares the Gazette copy's id.
+PIPELINE = "2026-11-18.1"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
