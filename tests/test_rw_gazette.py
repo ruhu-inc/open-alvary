@@ -2415,6 +2415,67 @@ def test_a_regulation_names_its_issuer_before_its_number_and_a_dated_law_stays_d
     assert dated.group(2) is None
 
 
+def test_the_capital_market_authoritys_regulations_open_in_each_language():
+    """Gazette n° 53 bis of 31/12/2012: regulation 13 was found in Kinyarwanda only, 12 not at all."""
+    for language, title, number in (
+        ("en", "CAPITAL MARKET REGULATION Nº11 ESTABLISHING THE COMPENSATION", "11"),
+        ("en", "CAPITAL MARKET REGULATION Nº 12 ON INSTITUTIONS", "12"),
+        ("fr", "DIRECTIVES Nº13 REGISSANT L’EMISSION DES TITRE A REVENU FIXE", "13"),
+        ("rw", "AMABWIRIZA AGENGA ISOKO RY’IMIGABANE Nº 11 ASHYIRAHO IKIGEGA", "11"),
+    ):
+        match = RG.OPENING[language].match(title)
+        assert match and match.group(2) == number, title
+        assert RG.KIND[match.group(1).replace("Nº", "").strip()] == "regulations"
+    # A practice direction stays one: "DIRECTIVES PRATIQUES" is matched first.
+    pratiques = RG.OPENING["fr"].match("DIRECTIVES PRATIQUES N° 01/2019 DU 05/12/2019")
+    assert RG.KIND[pratiques.group(1)] == "practice_direction"
+    # Kinyarwanda's "AGENGA" names what the rules govern only where a number follows.
+    assert not RG.OPENING["rw"].match("AMABWIRIZA AGENGA ISOKO RY’IMARI N’IMIGABANE")
+    # Its guidelines (Gazette of 2023: the French alone was found, and the other languages' regulation ran
+    # on over them), and the Financial Intelligence Unit's directive.
+    for language, title in (
+        ("en", "GUIDELINES N° 002/CMA_G/2023 OF 27/04/2023 GOVERNING"),
+        ("fr", "DIRECTIVES N° 002/CMA_G/2023 DU 27/04/2023 RÉGISSANT"),
+        ("rw", "IMIRONGO NGENDERWAHO N° 002/CMA_G/2023 YO KU WA 27/04/2023"),
+        ("en", "DIRECTIVE N O 01/2017 OF 02/10/2017 OF"),
+    ):
+        match = RG.OPENING[language].match(title)
+        assert match and RG.KIND[match.group(1)] == "regulations", title
+
+
+def test_a_heading_printed_with_a_reversed_apostrophe_or_none_opens_its_instrument():
+    """Gazette n° 08 of 24/02/2014 printed "PRIME MINISTER‟S ORDER" and "W‟INTEBE" (U+201F), and "PRIME MINISTER
+    ORDER": its Prime Minister's orders were found in French only."""
+
+    def line(text, k):
+        return {
+            "text": text,
+            "page": 1 + k // 20,
+            "x0": 0,
+            "y0": 20 * (k % 20),
+            "x1": 200,
+            "y1": 20 * (k % 20) + 10,
+        }
+
+    for language, title in (
+        ("en", "PRIME MINISTER‟S ORDER N°17/03 OF 12/02/2014 APPOINTING A DIRECTOR"),
+        ("en", "PRIME MINISTER ORDER N° 29/03 OF 19/02/2014 DETERMINING SUBSCRIPTION"),
+        ("rw", "ITEKA RYA MINISITIRI W‟INTEBE N°17/03 RYO KU WA 12/02/2014 RISHYIRAHO"),
+    ):
+        found = RG.openings([line(title, 0), line("The Prime Minister;", 1)], language)
+        assert [(f["kind"], f["number"]) for f in found] == [
+            ("prime_ministers_order", title.split("N°")[1].split()[0])
+        ]
+        assert found[0]["title"].startswith(title[:20])  # the title as printed
+
+
+def test_of_a_number_printed_twice_the_one_with_more_figures_is_kept():
+    """Iteka rya Perezida n° 56/01 (2014) printed again over its body "N°56/RYO KU": it stays 56/01."""
+    assert RG._number_weight("56/01") > RG._number_weight("56/RYO")
+    assert RG._number_weight("007/03") > RG._number_weight("07/03")
+    assert RG._number_weight("004/MININTER/11") > RG._number_weight("04/MININTER/11")
+
+
 def test_an_accented_arrete_and_a_minister_ended_by_a_comma_begin_the_body():
     """Arrêté ministériel n° 2093/08.25 (2015) printed "ARRÊTÉ :" and "Le Ministre de la Justice/Garde des
     Sceaux," and its title over the body without spaces: its articles stayed contents entries."""

@@ -49,6 +49,13 @@ from schema.jurisdictions import registry
 # ("REGULATION OF THE NATIONAL BANK OF RWANDA N O 03/2017"); a page measured with fewer columns than the three
 # languages printed around it is read by the nearest such page's columns whose gutter lies where its own does
 # (_fewer_columns); "ARRÊTÉ :" and a minister's line ended by a comma begin the body.
+# 2026-11-19.2: the Capital Market Authority's regulations open "CAPITAL MARKET REGULATION Nº11", "DIRECTIVES Nº13"
+# and "AMABWIRIZA AGENGA ISOKO RY'IMIGABANE Nº 11" (Gazette n° 53 bis of 31/12/2012 gave regulation 13 in
+# Kinyarwanda only, its English and French in regulation 11's), and its guidelines "GUIDELINES N°", "DIRECTIVES N°"
+# and "IMIRONGO NGENDERWAHO N°", and the Financial Intelligence Unit's "DIRECTIVE N O 01/2017" (so that the French
+# alone did not end the other languages' regulation before them);
+# a heading printed with "‟" for its apostrophe ("PRIME MINISTER‟S ORDER") or without it ("PRIME MINISTER ORDER")
+# opens its instrument; of a number printed twice the one with more figures is kept ("56/01", not "56/RYO").
 # 2026-11-18.3: a version reaches back over contents only to a page where another language of its
 # instrument begins (rwanda.contents_before_first).
 # 2026-11-18.2: a version leaves its contents list where the column wraps the minister's line or the
@@ -58,7 +65,7 @@ from schema.jurisdictions import registry
 # lowers small words a mixed-case title printed and writes "No."; a UN resolution's two title lines are one.
 # 2026-11-18.1: a constitution in RLRC's extract is named by the Gazette issue it prints in its header or
 # masthead, then the date in RLRC's name (rwanda.constitution_date), so it shares the Gazette copy's id.
-PIPELINE = "2026-11-19.1"
+PIPELINE = "2026-11-19.2"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -96,17 +103,18 @@ _NUMBER = r"\s+N\s?[°ºO0\uf0b0]\.?\s*(\S+?(?:\s*(?i:BIS|TER)\b)?(?:\s*/\s*\S+)
 KIND_WORDS = {
     "rw": r"ITEGEKO NGENGA|ITEGEKO-TEKA|ITEGEKO|ITEKA RYA PEREZIDA|ITEKA RYA MINISITIRI W[’']INTEBE"
     r"|ITEKA RYA MINISITIRI|ITEKA RYA MINISTRI|AMABWIRIZA YA MINISITIRI W[’']INTEBE"
-    r"|AMABWIRIZA YA PEREZIDA W[’']URUKIKO RW[’']IKIRENGA|AMABWIRIZA YA MINISITIRI|AMABWIRIZA RUSANGE|AMABWIRIZA",
-    "en": r"ORGANIC LAW|DECREE-LAW|LAW|PRESIDENTIAL ORDER|PRIME MINISTER[’']S ORDER"
+    r"|AMABWIRIZA YA PEREZIDA W[’']URUKIKO RW[’']IKIRENGA|AMABWIRIZA YA MINISITIRI|AMABWIRIZA RUSANGE|AMABWIRIZA"
+    r"|IMIRONGO NGENDERWAHO",
+    "en": r"ORGANIC LAW|DECREE-LAW|LAW|PRESIDENTIAL ORDER|PRIME MINISTER[’']S ORDER|PRIME MINISTER ORDER"
     r"|PRIME MINISTER[’']S INSTRUCTIONS?|MINISTERIAL ORDER|MINISTERIAL INSTRUCTIONS?"
     r"|PRACTICE DIRECTIONS? OF THE PRESIDENT OF THE SUPREME COURT"
-    r"|PRACTICE DIRECTIONS?|REGULATIONS?|INSTRUCTIONS?|DECREE|ORDINANCE",
+    r"|PRACTICE DIRECTIONS?|CAPITAL MARKETS? REGULATIONS?|REGULATIONS?|GUIDELINES|DIRECTIVES?|INSTRUCTIONS?|DECREE|ORDINANCE",
     "fr": r"LOI ORGANIQUE|D[ÉE]CRET-LOI|ORDONNANCE-LOI|ORDONNANCE L[ÉE]GISLATIVE|LOI|ARR[ÊE]T[ÉE] PR[ÉE]SIDENTIEL"
     r"|ARR[ÊE]T[ÉE] DU PREMIER MINISTRE|ARR[ÊE]T[ÉE] MINIST[ÉE]RIEL|ARR[ÊE]T[ÉE] ROYAL"
     r"|INSTRUCTIONS? DU PREMIER MINISTRE|INSTRUCTIONS? DU PR[ÉE]SIDENT DE LA COUR SUPR[ÊE]ME"
     r"|INSTRUCTIONS? MINIST[ÉE]RIELLES?|INSTRUCTIONS? DU MINISTRE"
     r"|INSTRUCTIONS? DU REGISTRAIRE G[ÉE]N[ÉE]RAL|INSTRUCTIONS? DE L[’']AUDITEUR G[ÉE]N[ÉE]RAL"
-    r"|DIRECTIVES? PRATIQUES?|R[ÈE]GLEMENTS?|INSTRUCTIONS?|ORDONNANCE|D[ÉE]CRET",
+    r"|DIRECTIVES? PRATIQUES?|R[ÈE]GLEMENTS?|INSTRUCTIONS?|DIRECTIVES?|ORDONNANCE|D[ÉE]CRET",
 }
 _DATED = {"rw": r"\s+R?YO\s+KU\s?WA\s+(.*\d{4})", "en": r"\s+OF\s+(.*\d{4})", "fr": r"\s+DU\s+(.*\d{4})"}
 # Kinyarwanda names whose instruction or regulation it is between the kind and its number ("AMABWIRIZA
@@ -114,12 +122,16 @@ _DATED = {"rw": r"\s+R?YO\s+KU\s?WA\s+(.*\d{4})", "en": r"\s+OF\s+(.*\d{4})", "f
 # English and French name a regulation's issuer the same way ("REGULATION OF THE NATIONAL BANK OF RWANDA N O
 # 03/2017", "RÈGLEMENT DE LA BANQUE NATIONALE DU RWANDA N° 03/2017", "RÈGLEMENTS DU DIRECTEUR GÉNÉRAL EN CHEF N°
 # 006/MINES/RMB/2019"; 2026-11-19: read as a date alone, so a version was its own document or another's), only
-# where a number follows.
+# where a number follows. The Capital Market Authority's Kinyarwanda says what its rules govern there
+# ("AMABWIRIZA AGENGA ISOKO RY'IMIGABANE Nº 11"), likewise only where a number follows.
 _QUALIFIER = {
-    "rw": r"(?:\s+(?:YA|Y[’'])\s*[A-ZÀ-Ý’' -]{2,60}?)?",
+    "rw": r"(?:\s+(?:YA|Y[’'])\s*[A-ZÀ-Ý’' -]{2,60}?|\s+AGENGA\s+[A-ZÀ-Ý’' -]{2,60}?(?=\s+N\s?[°ºO0\uf0b0]\.?\s*\d))?",
     "en": r"(?:\s+OF\s+THE\s+[A-Z’' -]{2,60}?(?=\s+N\s?[°ºO0\uf0b0]\.?\s*\d))?",
     "fr": r"(?:\s+(?:DE\s+LA|DE\s+L[’']|DU|DES)\s*[A-ZÀ-Ý’' -]{2,60}?(?=\s+N\s?[°ºO0\uf0b0]\.?\s*\d))?",
 }
+# Some issues print the apostrophe as "‟" ("PRIME MINISTER‟S ORDER", "ITEKA RYA MINISITIRI W‟INTEBE"; Gazette n° 08
+# of 24/02/2014 gave its fourteen Prime Minister's orders in French only): read as "’" where a heading is matched.
+_HEADING_APOSTROPHE = str.maketrans({"‟": "’"})
 OPENING = {
     language: re.compile(rf"^({words}){_QUALIFIER[language]}(?:{_NUMBER}|{_DATED[language]})")
     for language, words in KIND_WORDS.items()
@@ -170,6 +182,7 @@ KIND = {
     "ARRÊTÉ PRÉSIDENTIEL": "presidential_order",
     "ITEKA RYA MINISITIRI W’INTEBE": "prime_ministers_order",
     "PRIME MINISTER’S ORDER": "prime_ministers_order",
+    "PRIME MINISTER ORDER": "prime_ministers_order",
     "ARRÊTÉ DU PREMIER MINISTRE": "prime_ministers_order",
     "ITEKA RYA MINISITIRI": "ministerial_order",
     "MINISTERIAL ORDER": "ministerial_order",
@@ -209,6 +222,17 @@ KIND = {
     "DIRECTIVE PRATIQUE": "practice_direction",
     "REGULATION": "regulations",
     "REGULATIONS": "regulations",
+    "CAPITAL MARKET REGULATION": "regulations",
+    "CAPITAL MARKET REGULATIONS": "regulations",
+    "CAPITAL MARKETS REGULATION": "regulations",
+    "CAPITAL MARKETS REGULATIONS": "regulations",
+    # The Capital Market Authority's French names its regulations "DIRECTIVES" (a practice direction
+    # is "DIRECTIVES PRATIQUES", and another language's kind wins over regulations).
+    "DIRECTIVE": "regulations",
+    "DIRECTIVES": "regulations",
+    # Its guidelines: "GUIDELINES N° 002/CMA_G/2023", "IMIRONGO NGENDERWAHO N° 002/CMA_G/2023".
+    "GUIDELINES": "regulations",
+    "IMIRONGO NGENDERWAHO": "regulations",
     "RÈGLEMENT": "regulations",
     "RÈGLEMENTS": "regulations",
     "INSTRUCTION": "instructions",
@@ -981,7 +1005,7 @@ def openings(lines: list[dict], language: str) -> list[dict]:
     found = []
     i = 0
     while i < len(lines):
-        text = lines[i]["text"].strip()
+        text = lines[i]["text"].strip().translate(_HEADING_APOSTROPHE)
         joined = 1
         match = OPENING[language].match(text)
         constitution = CONSTITUTION[language].match(text)
@@ -996,7 +1020,9 @@ def openings(lines: list[dict], language: str) -> list[dict]:
                     line.get("page") != lines[i].get("page") for line in lines[i : i + more]
                 ):
                     break
-                text = " ".join(line["text"].strip() for line in lines[i : i + more])
+                text = " ".join(line["text"].strip() for line in lines[i : i + more]).translate(
+                    _HEADING_APOSTROPHE
+                )
                 match = OPENING[language].match(text)
                 constitution = CONSTITUTION[language].match(text)
                 if match or constitution:
@@ -1081,6 +1107,11 @@ def _real_number(number: str, date: str | None) -> bool:
     return any(c.isdigit() for c in number) and number != date
 
 
+def _number_weight(number: str) -> tuple[int, int]:
+    """Which of two printings of a number is the fuller: the more figures, then the longer."""
+    return sum(c.isdigit() for c in number), len(number)
+
+
 def _continued_openings(lines: list[dict], found: list[dict]) -> list[dict]:
     """A language's openings without the reprints the key cannot join: an opening that holds only its title
     over a contents list, and no body, goes on under the next opening of its kind whose title has the same
@@ -1109,10 +1140,11 @@ def _continued_openings(lines: list[dict], found: list[dict]) -> list[dict]:
                     before["has_body"] = before["has_body"] or opening["has_body"]
                     if _real_number(opening["number"], opening.get("date")) and (
                         not _real_number(before["number"], before.get("date"))
-                        or len(opening["number"]) > len(before["number"])
+                        or _number_weight(opening["number"]) > _number_weight(before["number"])
                     ):
                         # of two that agree, the one printed whole: "N007/03" over the contents read
-                        # "07/03" and "007/03" over the body; "004/Mininter/11" then "04/Mininter/11"
+                        # "07/03" and "007/03" over the body; "004/Mininter/11" then "04/Mininter/11";
+                        # never a reprint that lost its figures ("N° 56/01 RYO KU WA" then "N°56/RYO KU")
                         before["number"] = opening["number"]
                     continue
         out.append(opening)
