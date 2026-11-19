@@ -2476,6 +2476,39 @@ def test_of_a_number_printed_twice_the_one_with_more_figures_is_kept():
     assert RG._number_weight("004/MININTER/11") > RG._number_weight("04/MININTER/11")
 
 
+def test_the_commissioner_generals_rules_and_directives_open_over_two_lines():
+    """Official Gazette of 2020 (Rwanda Revenue Authority, n° 001 to 005/2020): "COMMISSIONER GENERAL RULES Nº
+    004/2020" and "DIRECTIVES DU COMMISSAIRE GENERAL" over two lines were not read, so the English and French of
+    n° 003/2020 held n° 004 and n° 005 as well."""
+
+    def line(text, k):
+        return {"text": text, "page": 1, "x0": 0, "y0": 20 * k, "x1": 200, "y1": 20 * k + 10}
+
+    for language, heading in (
+        ("en", ("COMMISSIONER GENERAL RULES Nº", "00 4/2020 OF 05/08/2020 DETERMINING")),
+        ("en", ("COMMISSIONER GENERAL", "DIRECTIVES Nº 003/2020 OF 05/08/2020")),
+        ("fr", ("DIRECTIVES DU COMMISSAIRE", "GENERAL Nº 00 4/2020 OF 05/08/2020")),
+        ("rw", ("IMIRONGO NGENDERWAHO", "N° 002/CMA_G/2023 YO KU WA 27/04/2023")),
+    ):
+        found = RG.openings(
+            [line(heading[0], 0), line(heading[1], 1), line("Article One: Objective", 2)], language
+        )
+        assert [f["kind"] for f in found] == ["regulations"], heading
+        assert found[0]["title"].startswith(heading[0])
+
+
+def test_a_numbers_sign_printed_twice_is_read_once():
+    """A sign printed twice, "N° N°23bis/03" (2008), "Nº Nº03/03" (2010), "N° N° 013/03" (2024): the second was read into the
+    number, so the languages' numbers differed and one version was split in two."""
+    for language, title, number in (
+        ("en", "PRIME MINISTER’S ORDER N° N°23bis/03 OF 22/07/2008 APPOINTING", "N°23bis/03"),
+        ("rw", "ITEKA RYA MINISITIRI W’INTEBE Nº Nº03/03 RYO KUWA 26/02/2010", "Nº03/03"),
+        ("rw", "ITEKA RYA MINISITIRI W’INTEBE N° N° 013/03 RYO KU WA 25/03/2024", "N° 013/03"),
+    ):
+        match = RG.OPENING[language].match(title)
+        assert match and match.group(2) == number.split("°")[-1].split("º")[-1].strip(), title
+
+
 def test_an_accented_arrete_and_a_minister_ended_by_a_comma_begin_the_body():
     """Arrêté ministériel n° 2093/08.25 (2015) printed "ARRÊTÉ :" and "Le Ministre de la Justice/Garde des
     Sceaux," and its title over the body without spaces: its articles stayed contents entries."""

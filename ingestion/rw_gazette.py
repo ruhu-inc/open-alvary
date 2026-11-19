@@ -56,6 +56,9 @@ from schema.jurisdictions import registry
 # alone did not end the other languages' regulation before them);
 # a heading printed with "‟" for its apostrophe ("PRIME MINISTER‟S ORDER") or without it ("PRIME MINISTER ORDER")
 # opens its instrument; of a number printed twice the one with more figures is kept ("56/01", not "56/RYO").
+# 2026-11-19.3: the Rwanda Revenue Authority's "COMMISSIONER GENERAL RULES" and "… DIRECTIVES", and a heading
+# begun "DIRECTIVES", "GUIDELINES", "IMIRONGO" or "COMMISSIONER" and going on over the next line, open their
+# instrument; a number's sign printed twice ("N° N°23bis/03") is read once.
 # 2026-11-18.3: a version reaches back over contents only to a page where another language of its
 # instrument begins (rwanda.contents_before_first).
 # 2026-11-18.2: a version leaves its contents list where the column wraps the minister's line or the
@@ -65,7 +68,7 @@ from schema.jurisdictions import registry
 # lowers small words a mixed-case title printed and writes "No."; a UN resolution's two title lines are one.
 # 2026-11-18.1: a constitution in RLRC's extract is named by the Gazette issue it prints in its header or
 # masthead, then the date in RLRC's name (rwanda.constitution_date), so it shares the Gazette copy's id.
-PIPELINE = "2026-11-19.2"
+PIPELINE = "2026-11-19.3"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -96,7 +99,11 @@ CONTENTS_WORDS = re.compile(r"(?i)^(?:i?birimo|amashakiro|table\s+des\s+contents
 # 19 GASHYANTARE 1964"). Older kinds: decree-laws, ordinances, decrees, royal orders. A number
 # printed "N° 001 BIS /2021" is the whole of it, not "001" (which is another law).
 # Some PDFs print the sign with a symbol font's private character (U+F0B0): "LAW N\uf0b042/2011".
-_NUMBER = r"\s+N\s?[°ºO0\uf0b0]\.?\s*(\S+?(?:\s*(?i:BIS|TER)\b)?(?:\s*/\s*\S+)?)(?=\s|$)"
+# A sign printed twice ("N° N°23bis/03", "N° Nº03/03", "N° N° 013/03") is read once (2026-11-19: the second was
+# read into the number, so one version's number was "N°23bis/0" and another's "03/03" was split from it).
+_NUMBER = (
+    r"\s+N\s?[°ºO0\uf0b0]\.?\s*(?:N\s?[°º\uf0b0]\.?\s*)?(\S+?(?:\s*(?i:BIS|TER)\b)?(?:\s*/\s*\S+)?)(?=\s|$)"
+)
 # The kinds' words in each language, longest first where one begins another. A general regulation of
 # the central bank is printed "AMABWIRIZA RUSANGE" and the Prime Minister's instructions "AMABWIRIZA YA
 # MINISITIRI W'INTEBE" (2026-10-29: neither was recognised).
@@ -108,7 +115,7 @@ KIND_WORDS = {
     "en": r"ORGANIC LAW|DECREE-LAW|LAW|PRESIDENTIAL ORDER|PRIME MINISTER[’']S ORDER|PRIME MINISTER ORDER"
     r"|PRIME MINISTER[’']S INSTRUCTIONS?|MINISTERIAL ORDER|MINISTERIAL INSTRUCTIONS?"
     r"|PRACTICE DIRECTIONS? OF THE PRESIDENT OF THE SUPREME COURT"
-    r"|PRACTICE DIRECTIONS?|CAPITAL MARKETS? REGULATIONS?|REGULATIONS?|GUIDELINES|DIRECTIVES?|INSTRUCTIONS?|DECREE|ORDINANCE",
+    r"|PRACTICE DIRECTIONS?|COMMISSIONER GENERAL RULES|COMMISSIONER GENERAL DIRECTIVES?|CAPITAL MARKETS? REGULATIONS?|REGULATIONS?|GUIDELINES|DIRECTIVES?|INSTRUCTIONS?|DECREE|ORDINANCE",
     "fr": r"LOI ORGANIQUE|D[ÉE]CRET-LOI|ORDONNANCE-LOI|ORDONNANCE L[ÉE]GISLATIVE|LOI|ARR[ÊE]T[ÉE] PR[ÉE]SIDENTIEL"
     r"|ARR[ÊE]T[ÉE] DU PREMIER MINISTRE|ARR[ÊE]T[ÉE] MINIST[ÉE]RIEL|ARR[ÊE]T[ÉE] ROYAL"
     r"|INSTRUCTIONS? DU PREMIER MINISTRE|INSTRUCTIONS? DU PR[ÉE]SIDENT DE LA COUR SUPR[ÊE]ME"
@@ -139,7 +146,8 @@ OPENING = {
 # A line that begins a kind's words, in capitals, with no number: the heading may go on over the next
 # line or two ("ARRETE" / "PRESIDENTIEL N°21/01 DU 12/7/2003 …").
 KIND_HEAD = re.compile(
-    r"^(?:ITEGEKO|ITEKA|AMABWIRIZA|ORGANIC|DECREE|LAW|PRESIDENTIAL|PRIME|MINISTERIAL|PRACTICE|REGULATIONS?|INSTRUCTIONS?"
+    r"^(?:ITEGEKO|ITEKA|AMABWIRIZA|IMIRONGO|ORGANIC|DECREE|LAW|PRESIDENTIAL|PRIME|MINISTERIAL|PRACTICE|REGULATIONS?"
+    r"|INSTRUCTIONS?|DIRECTIVES?|GUIDELINES|CAPITAL|COMMISSIONER"
     r"|ORDINANCE|LOI|D[ÉE]CRET|ORDONNANCE|ARR[ÊE]T[ÉE]|R[ÈE]GLEMENTS?|THE CONSTITUTION|CONSTITUTION"
     r"|LA CONSTITUTION)\b[A-ZÀ-Ý’' -]*$"
 )
@@ -232,6 +240,12 @@ KIND = {
     "DIRECTIVES": "regulations",
     # Its guidelines: "GUIDELINES N° 002/CMA_G/2023", "IMIRONGO NGENDERWAHO N° 002/CMA_G/2023".
     "GUIDELINES": "regulations",
+    # The Rwanda Revenue Authority's: "COMMISSIONER GENERAL RULES Nº 004/2020", "COMMISSIONER GENERAL DIRECTIVES Nº
+    # 003/2020", in French "DIRECTIVES DU COMMISSAIRE GENERAL" (2026-11-19: neither opened where its heading went on
+    # over two lines, so the English and French of n° 003/2020 held n° 004 and n° 005 too).
+    "COMMISSIONER GENERAL RULES": "regulations",
+    "COMMISSIONER GENERAL DIRECTIVE": "regulations",
+    "COMMISSIONER GENERAL DIRECTIVES": "regulations",
     "IMIRONGO NGENDERWAHO": "regulations",
     "RÈGLEMENT": "regulations",
     "RÈGLEMENTS": "regulations",
