@@ -161,55 +161,37 @@ def _approve_doc(browser: TestClient, act_id: str):
 # --- Phase 0: Constitution Details first draft (§6) --------------------------------------------------
 
 
-def test_constitution_base_values_filters_unknown_keys_and_surfaces_unshown():
+def test_constitution_form_keeps_its_own_keys_and_names_what_it_has_no_field_for():
     rwanda = registry()["rw"]
     doc = _rwanda_constitution_doc()
-
-    values = record_view.base_values(doc, {}, profile=rwanda)
-    specs = record_view.fields("constitution", "constitution", rwanda)
-    allowed = {spec.key for spec in specs}
-
-    assert set(values) <= allowed
-    for dropped_key in (
-        "step:promulgated.date",
-        "step:promulgated.person",
-        "step:countersigned.person",
-        "step:sealed.person",
-        "step:published.date",
-    ):
-        assert dropped_key not in values
-
-    # Dropped reader-suggested keys are surfaced as suggestions beside the form.
-    unshown = record_view.unshown_suggestions(doc, {}, profile=rwanda)
-    assert set(unshown) == {
+    steps = {
         "step:promulgated.date",
         "step:promulgated.person",
         "step:countersigned.person",
         "step:sealed.person",
         "step:published.date",
     }
-    assert unshown["step:promulgated.date"]["page"] == 1
-    assert unshown["step:promulgated.date"]["evidence"] == "Kigali, on 04/08/2023"
-    assert unshown["step:sealed.person"]["value"] == (
-        "Dr. UGIRASHEBUJA Emmanuel, Minister of Justice and Attorney General"
-    )
 
-    all_suggestions = record_view.suggestions(doc, profile=rwanda)
-    assert "step:countersigned.person" in all_suggestions
-    assert all_suggestions["step:countersigned.person"]["value"] == "Dr. NGIRENTE Edouard, Prime Minister"
+    # The first draft keeps what the reader read, whatever the form: other code counts on it
+    # (details_audit reports on a first draft's signing steps).
+    draft = record_view.base_values(doc, {})
+    assert steps <= set(draft)
 
-    notice = record_view.unshown_notice(unshown)
+    # The form holds only keys it has fields for, and what it leaves out is named, never dropped in silence.
+    specs = record_view.fields("constitution", "constitution", rwanda)
+    values, absent, left_out = record_view.for_form(draft, {}, specs)
+    assert set(values) <= {spec.key for spec in specs}
+    assert set(left_out) == steps
+    notice = record_view.left_out_notice(left_out, rwanda, doc.get("suggested_evidence"))
     assert notice is not None
-    assert notice.startswith("The reader also read, with no field for it in this form:")
-    assert "2023-08-04" in notice
-    assert "KAGAME Paul" in notice
-    assert "Dr. NGIRENTE Edouard" in notice
-    assert "Dr. UGIRASHEBUJA Emmanuel" in notice
+    assert notice.startswith("The reader also read these, which this form has no field for:")
+    for words in ("KAGAME Paul", "Dr. NGIRENTE Edouard", "Dr. UGIRASHEBUJA Emmanuel"):
+        assert words in notice
 
-    # Validation succeeds with no "unknown details" error.
-    clean, absent = record_view.validate(values, {}, specs)
+    # What is left validates with no "unknown details" refusal.
+    clean, still_absent = record_view.validate(values, absent, specs)
     assert clean["identity.family"] == "constitution"
-    assert absent == {}
+    assert still_absent == {}
 
 
 def test_organic_law_keeps_rwanda_making_steps_in_first_draft():
@@ -230,13 +212,36 @@ def test_organic_law_keeps_rwanda_making_steps_in_first_draft():
             "step:published.date": "2023-08-04",
         },
     }
-    values = record_view.base_values(law, {}, profile=rwanda)
+    values = record_view.base_values(law, {})
     assert values["step:promulgated.date"] == "2023-08-04"
     assert values["step:countersigned.person"] == "Dr. NGIRENTE Edouard, Prime Minister"
     assert (
         values["step:sealed.person"] == "Dr. UGIRASHEBUJA Emmanuel, Minister of Justice and Attorney General"
     )
-    assert record_view.unshown_suggestions(law, {}, profile=rwanda) == {}
+    # A law's form has the signing steps, so nothing is left out of it.
+    specs = record_view.fields("legislation", "organic_law", rwanda)
+    assert record_view.for_form(values, {}, specs)[2] == {}
+
+
+def test_details_audit_still_sees_a_first_draft_signing_steps():
+    """The first-draft report read by ingestion (details_audit) calls base_values with no profile: the
+    steps the reader read must be in it, or every law is reported as missing them."""
+    law = {
+        "id": "rw-ol-001-2023-en",
+        "jurisdiction": "rw",
+        "type": "organic_law",
+        "title": "Organic Law n° 001/2023.OL",
+        "suggested": {
+            "identity.family": "legislation",
+            "identity.type": "organic_law",
+            "identity.title": "Organic Law n° 001/2023.OL",
+            "step:promulgated.date": "2023-08-04",
+            "step:published.date": "2023-08-04",
+        },
+    }
+    values = record_view.base_values(law, {})
+    assert values["step:promulgated.date"] == "2023-08-04"
+    assert values["step:published.date"] == "2023-08-04"
 
 
 def test_constitution_first_draft_saves_and_confirms_end_to_end(tmp_path, monkeypatch):

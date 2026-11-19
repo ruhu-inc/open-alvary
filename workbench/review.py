@@ -107,7 +107,6 @@ class Review:
     def described(self, act: dict, record: dict | None, reading: dict) -> dict:
         """The document's details in the record view: values, what is accounted for, its fields."""
         place, profile = record_view.place_for(act, self.library.manifest_for(act["id"]), self.profiles)
-        dropped: dict = {}
         if record:
             values, absent = record["details"], record["absent"]
             if not record_view.is_view(values):  # saved under the Nigerian DETAILS-1: read it in this view
@@ -122,25 +121,8 @@ class Review:
             )
             if isinstance(values.get("identity.title"), str):
                 values = {**values, "identity.title": cited_names.cited(values["identity.title"])[0]}
-            allowed = {
-                spec.key
-                for spec in record_view.fields(values["identity.family"], values["identity.type"], profile)
-            }
-            dropped = {
-                key: {
-                    "value": value,
-                    "page": None,
-                    "evidence": "Read from the document; no field for it in this form.",
-                }
-                for key, value in values.items()
-                if key not in allowed
-            }
-            values = {key: value for key, value in values.items() if key in allowed}
-            absent = {key: reason for key, reason in absent.items() if key in allowed}
         else:  # nothing marked absent by inference: suggested beside its field (record_view.suggestions)
-            manifest = self.library.manifest_for(act["id"])
-            values = record_view.base_values(act, manifest, profile)
-            dropped = record_view.unshown_suggestions(act, manifest, profile)
+            values = record_view.base_values(act, self.library.manifest_for(act["id"]))
             shown = record_view.fields(values["identity.family"], values["identity.type"], profile)
             absent = record_view.first_absent(values, {spec.key for spec in shown})
         if isinstance(values.get("expressions"), list):
@@ -164,11 +146,7 @@ class Review:
             }
         family, kind = values["identity.family"], values["identity.type"]
         specs = record_view.fields(family, kind, profile)
-        values, absent, extra_left_out = record_view.for_form(values, absent, specs)
-        left_out = {
-            **{k: (v["value"] if isinstance(v, dict) else v) for k, v in dropped.items()},
-            **extra_left_out,
-        }
+        values, absent, left_out = record_view.for_form(values, absent, specs)
         notices = [] if record else list(record_view.usable_suggestions(act)[1])
         if note := record_view.left_out_notice(
             left_out,
@@ -187,7 +165,6 @@ class Review:
             "kind": kind,
             "missing": record_view.missing(values, absent, specs),
             "left_out": left_out,
-            "unshown": dropped,
             # What was put right in the reader's suggestions, and any values this form has no field for.
             "notices": notices,
         }

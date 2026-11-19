@@ -1436,14 +1436,7 @@ def first_draft(values: dict, absent: dict) -> tuple[dict, dict]:
     return draft, {key: reason for key, reason in absent.items() if not is_legal(key)}
 
 
-_UNSET = object()
-
-
-def suggestions(
-    document: dict,
-    latest_in_force: bool = False,
-    profile: JurisdictionProfile | None = _UNSET,  # type: ignore[assignment]
-) -> dict:
+def suggestions(document: dict, latest_in_force: bool = False) -> dict:
     """The legal facts suggested for a document, keyed as its fields are, each with the words that state
     it and their page, or where else it was read: when it commences and what each language version is
     worth (under "expressions", the authority by language), read from its text; whether it is current,
@@ -1460,9 +1453,6 @@ def suggestions(
         **(document.get("suggested_inferred") or {}),
         **(document.get("suggested_legal") or {}),
     }
-    if profile is not _UNSET:
-        for key, hint in unshown_suggestions(document, {}, profile).items():
-            out.setdefault(key, hint)
     return standing_suggestions(document, out, latest_in_force)
 
 
@@ -1546,8 +1536,9 @@ def reader_suggested(document: dict) -> bool:
     return family in R.FAMILIES and suggested.get("identity.type") in R.FAMILIES[family][1]
 
 
-def _draft_values(document: dict, manifest: dict) -> dict:
-    """First-draft values before dropping keys the form does not show for this family, kind and profile."""
+def base_values(document: dict, manifest: dict) -> dict:
+    """A first draft for a document from a jurisdiction we have no extractor for yet, with the details
+    its collection's reader filled in, if any (Rwanda's gazette reader); never its legal facts."""
     kind = document.get("type", "act")
     family = family_for(kind) or "official_document"
     kinds = R.FAMILIES[family][1]
@@ -1570,71 +1561,6 @@ def _draft_values(document: dict, manifest: dict) -> dict:
             for row in values["expressions"]
         ]
     return first_draft({k: v for k, v in values.items() if v}, {})[0]
-
-
-def base_values(
-    document: dict,
-    manifest: dict,
-    profile: JurisdictionProfile | None = None,
-) -> dict:
-    """A first draft for a document from a jurisdiction we have no extractor for yet, with the details
-    its collection's reader filled in, if any (Rwanda's gazette reader); never its legal facts, and
-    only keys the form shows for this family, kind and jurisdiction profile."""
-    draft = _draft_values(document, manifest)
-    allowed = {spec.key for spec in fields(draft["identity.family"], draft["identity.type"], profile)}
-    return {key: value for key, value in draft.items() if key in allowed}
-
-
-def unshown_suggestions(
-    document: dict,
-    manifest: dict,
-    profile: JurisdictionProfile | None = None,
-) -> dict:
-    """Reader-suggested details dropped from the first draft because this family, kind and profile have
-    no field for them (for example, a Rwandan constitution's promulgation, countersignature and seal).
-    Returned as suggestion entries so no fact is lost from sight."""
-    draft = _draft_values(document, manifest)
-    allowed = {spec.key for spec in fields(draft["identity.family"], draft["identity.type"], profile)}
-    evidence = document.get("suggested_evidence") or {}
-    out = {}
-    for key, value in draft.items():
-        if key in allowed:
-            continue
-        hint = evidence.get(key)
-        if isinstance(hint, dict):
-            out[key] = {"value": value, **hint}
-        else:
-            out[key] = {
-                "value": value,
-                "page": None,
-                "evidence": "Read from the document; no field for it in this form.",
-            }
-    return out
-
-
-def _unshown_label(key: str) -> str:
-    if key.startswith(("step:", "event:")):
-        body, _, suffix = key.split(":", 1)[1].partition(".")
-        name = label_of(body.replace(":", " "))
-        if suffix == "person":
-            return f"{name} (signed by)"
-        if suffix:
-            return f"{name} ({suffix})"
-        return name
-    return label_of(key.replace(".", " "))
-
-
-def unshown_notice(dropped: dict) -> str | None:
-    """A plain-language note listing reader-suggested values that have no field in this form."""
-    if not dropped:
-        return None
-    items = []
-    for key in sorted(dropped):
-        entry = dropped[key]
-        value = entry.get("value") if isinstance(entry, dict) else entry
-        shown = ", ".join(str(v) for v in value) if isinstance(value, list) else str(value)
-        items.append(f"{_unshown_label(key)}: {shown}")
-    return f"The reader also read, with no field for it in this form: {'; '.join(items)}."
 
 
 def first_absent(values: dict, keys=()) -> dict:

@@ -66,8 +66,12 @@ def install(app: FastAPI, store: Store, relying: RelyingParty | None) -> None:
         existing = next((o for o in store.operators() if o["email"] == email), None)
         if existing and ROLE in existing["roles"] and ROLE not in roles and not other_admins(email):
             refuse(409, "last_admin", "This is the last administrator: make someone else one first.")
-        agent = bool(body["agent"]) if "agent" in body else None
-        may_change_approved = bool(body["may_change_approved"]) if "may_change_approved" in body else None
+        # Only true or false: the word "false", or "no", is not false to bool(), and would mark a person
+        # as an agent or let an agent change approved documents.
+        flags = {key: body[key] for key in ("agent", "may_change_approved") if key in body}
+        if not all(isinstance(value, bool) for value in flags.values()):
+            refuse(400, "invalid_input", "agent and may_change_approved must be true or false.")
+        agent, may_change_approved = flags.get("agent"), flags.get("may_change_approved")
         try:
             store.add_operator(
                 email,

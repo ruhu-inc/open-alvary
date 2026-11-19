@@ -22,6 +22,7 @@ import hashlib
 import hmac
 import math
 import os
+import unicodedata
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from statistics import median
@@ -39,28 +40,46 @@ VERDICTS = {"clean", "minor", "material"}
 
 
 def audit_config() -> dict[str, Any]:
-    """Read audit draw settings from environment variables."""
-    rate_raw = os.environ.get(RATE_ENV)
-    min_raw = os.environ.get(MINIMUM_ENV)
-    return {
-        "salt": os.environ.get(SALT_ENV, ""),
-        "rate": DEFAULT_RATE if rate_raw in (None, "") else float(rate_raw),
-        "minimum": DEFAULT_MINIMUM if min_raw in (None, "") else int(min_raw),
-    }
+    """The audit's draw settings. A rate that is no number between 0 and 1, or a minimum that is no
+    whole number of 0 or more, is refused in words (the workbench checks them when it starts)."""
+    rate_raw = (os.environ.get(RATE_ENV) or "").strip()
+    min_raw = (os.environ.get(MINIMUM_ENV) or "").strip()
+    try:
+        rate = float(rate_raw) if rate_raw else DEFAULT_RATE
+    except ValueError:
+        rate = math.nan
+    if not 0.0 <= rate <= 1.0:  # false for nan as well
+        raise ValueError(f"{RATE_ENV} must be a number from 0 to 1, not {rate_raw!r}")
+    try:
+        minimum = int(min_raw) if min_raw else DEFAULT_MINIMUM
+    except ValueError:
+        minimum = -1
+    if minimum < 0:
+        raise ValueError(f"{MINIMUM_ENV} must be a whole number of 0 or more, not {min_raw!r}")
+    return {"salt": os.environ.get(SALT_ENV, ""), "rate": rate, "minimum": minimum}
 
 
 def _norm_text(text: str | None) -> str:
-    return " ".join((text or "").split())
+    """Words as they are compared: one space between them, and one way of writing an accented letter,
+    so the same word typed with a combining accent is not a changed word."""
+    return " ".join(unicodedata.normalize("NFC", text or "").split())
 
 
 def _unit_content(unit: dict[str, Any]) -> tuple:
-    """Content signature of a unit: normalized text for prose/headings/lists, or
-    normalized caption + cell grid for tables."""
+    """What a unit puts into the published text: a table's caption, cells and merged cells; for anything
+    else what it is (a heading, a paragraph, a list item: the published structure is built from these),
+    its words, its number or letter (a list or heading marker is printed text: "12." for "13." is a
+    changed number), and whether it is joined to the page before, which moves a paragraph's boundary
+    and can remove a hyphen. Alignment, emphasis, notes and a heading's rank are not here: they differ
+    as "minor"."""
     if unit.get("kind") == "table":
         caption = _norm_text(unit.get("caption"))
         rows = tuple(tuple(_norm_text(cell) for cell in row) for row in (unit.get("rows") or []))
-        return ("table", caption, rows)
-    return ("text", _norm_text(unit.get("text")))
+        spans = tuple(sorted(tuple(span) for span in unit.get("spans") or []))  # [row, column, rows, columns]
+        return ("table", caption, rows, spans)
+    joined = tuple(bool(unit.get(key)) for key in ("continues_previous", "dehyphenate", "keep_hyphen"))
+    kind = str(unit.get("kind") or "paragraph")
+    return (kind, _norm_text(unit.get("text")), _norm_text(unit.get("marker")), joined)
 
 
 def _unit_words(units: Sequence[dict[str, Any]]) -> list[str]:
@@ -190,21 +209,21 @@ def draw_pages(
 def evaluate_window(
     verdicts: Sequence[str],
     *,
-    pass_rate: float = 0.02,
+    max_material: int = 2,
     window: int = 100,
     min_sample: int = 25,
     early_stop: int = 3,
 ) -> dict[str, Any]:
-    """Evaluate a label's chronological audit verdicts against the pass mark.
+    """Evaluate a label's chronological audit verdicts against the pass mark (design 7.4).
 
-    - Rolling window of the most recent ``window`` audited pages (default 100).
-    - Requires at least ``min_sample`` audited pages (default 25) before a normal
-      rate breach triggers.
-    - Early-stop triggers if ``early_stop`` or more ``material`` pages appear within
-      the first ``min_sample`` audited pages (default 3).
+    - Over the mark: more than ``max_material`` material pages (default 2) among the most recent
+      ``window`` audited pages (default 100), once ``min_sample`` pages (default 25) have been audited.
+    - Before that, only ``early_stop`` or more material pages (default 3) is over the mark.
+
+    The caller leaves out pages the owner decided for the reviewer: there the auditor was the one wrong.
     """
-    if not 0.0 <= pass_rate <= 1.0:
-        raise ValueError("pass_rate must be between 0 and 1")
+    if max_material < 0:
+        raise ValueError("max_material must be 0 or more")
     if window < 1:
         raise ValueError("window must be at least 1")
     if min_sample < 1:
@@ -235,7 +254,7 @@ def evaluate_window(
         else:
             status = "insufficient_sample"
     else:
-        if material_count > (pass_rate * sample_size) + 1e-12:
+        if material_count > max_material:
             breached = True
             status = "breached"
         else:

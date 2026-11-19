@@ -192,3 +192,129 @@ def test_a_lapsed_claim_is_taken_over_by_exactly_one_agent(scratch_url):
     held = live_claims(store.engine)
     assert len(held) == 1 and held[0].label != "claude-m4-00"
     store.engine.dispose()
+
+
+# --- the races the independent review found (2026-11-19), each forced into its bad order -------------
+
+
+def _lapse(engine, work_id: str) -> None:
+    with engine.begin() as db:
+        db.execute(
+            text("UPDATE work_claim SET expires_at = :past WHERE work_id = :work_id"),
+            {"past": datetime.now(UTC) - timedelta(minutes=5), "work_id": work_id},
+        )
+
+
+def _agent(email: str) -> dict:
+    return {"email": email, "operator": {"roles": {"reviewer"}, "agent": True}}
+
+
+def _waits(action, seconds: float = 0.6):
+    """Start ``action`` on its own thread; say whether it is still waiting after ``seconds``."""
+    pool = ThreadPoolExecutor(max_workers=1)
+    future = pool.submit(action)
+    try:
+        future.result(timeout=seconds)
+        waiting = False
+    except TimeoutError:
+        waiting = True
+    return future, waiting, pool
+
+
+def test_a_save_on_a_lapsed_claim_holds_the_row_so_no_takeover_slips_in(scratch_url, monkeypatch):
+    monkeypatch.setenv("ALVARY_REVIEW_CLAIMS", "enforce")
+    store = Store(connect(scratch_url))
+    first = claims.claim_work(store, "rw-law-race", ACCOUNT, "claude-m5-01", check_limit=False)
+    _lapse(store.engine, "rw-law-race")
+
+    with store.engine.connect() as saving:
+        held = saving.begin()
+        allowed = claims.guard(saving, "rw-law-race", _agent(ACCOUNT), token=first["token"])
+        assert allowed["label"] == "claude-m5-01"  # the lapsed claim is taken up again by its own token
+        # Before this save commits, another agent wants the work: it waits for the row.
+        future, waiting, pool = _waits(
+            lambda: claims.claim_next(store, ["rw-law-race"], "codex@example.org", "codex-m5-01")
+        )
+        assert waiting
+        held.commit()
+        with pytest.raises(claims.ClaimError) as refused:
+            future.result(timeout=10)
+        pool.shutdown()
+    assert refused.value.status_code == 404  # the claim was live again by the time it looked
+    assert [(r.account, r.label) for r in live_claims(store.engine)] == [(ACCOUNT, "claude-m5-01")]
+    store.engine.dispose()
+
+
+def test_a_save_after_a_takeover_is_refused_and_says_who_holds_the_work(scratch_url, monkeypatch):
+    monkeypatch.setenv("ALVARY_REVIEW_CLAIMS", "enforce")
+    store = Store(connect(scratch_url))
+    first = claims.claim_work(store, "rw-law-race", ACCOUNT, "claude-m5-02", check_limit=False)
+    _lapse(store.engine, "rw-law-race")
+    claims.claim_next(store, ["rw-law-race"], "codex@example.org", "codex-m5-02")
+
+    with store.engine.begin() as saving, pytest.raises(claims.ClaimError) as refused:
+        claims.guard(saving, "rw-law-race", _agent(ACCOUNT), token=first["token"])
+    assert refused.value.status_code == 409 and refused.value.code == "claim_held"
+    assert "codex-m5-02" in refused.value.message
+
+
+def test_a_renewal_or_a_release_never_acts_on_a_claim_taken_over_meanwhile(scratch_url):
+    store = Store(connect(scratch_url))
+    first = claims.claim_work(store, "rw-law-race", ACCOUNT, "claude-m5-03", check_limit=False)
+    _lapse(store.engine, "rw-law-race")
+    taken = claims.claim_next(store, ["rw-law-race"], "codex@example.org", "codex-m5-03")
+
+    with pytest.raises(claims.ClaimError) as renewal:
+        claims.renew_claim(store, "rw-law-race", ACCOUNT, first["token"])
+    assert renewal.value.code == "claim_held"
+    owner_of_old = {"email": ACCOUNT, "operator": {"roles": {"reviewer"}, "agent": True}}
+    with pytest.raises(claims.ClaimError) as release:
+        claims.release_claim(store, "rw-law-race", owner_of_old, outcome="done", token=first["token"])
+    assert release.value.status_code == 403
+    assert [(r.account, r.label) for r in live_claims(store.engine)] == [("codex@example.org", "codex-m5-03")]
+    assert (
+        claims.renew_claim(store, "rw-law-race", "codex@example.org", taken["token"])["label"]
+        == "codex-m5-03"
+    )
+
+
+def test_a_release_holds_the_row_so_a_takeover_waits_and_then_finds_it_free(scratch_url):
+    store = Store(connect(scratch_url))
+    first = claims.claim_work(store, "rw-law-race", ACCOUNT, "claude-m5-04", check_limit=False)
+    _lapse(store.engine, "rw-law-race")
+
+    with store.engine.connect() as releasing:
+        held = releasing.begin()
+        locked = releasing.execute(
+            text("SELECT token_hash FROM work_claim WHERE work_id = 'rw-law-race' FOR UPDATE")
+        ).scalar()
+        future, waiting, pool = _waits(
+            lambda: claims.claim_next(store, ["rw-law-race"], "codex@example.org", "codex-m5-04")
+        )
+        assert waiting  # the takeover queues behind the release, as it does behind release_claim's lock
+        releasing.execute(
+            text("DELETE FROM work_claim WHERE work_id = 'rw-law-race' AND token_hash = :hash"),
+            {"hash": locked},
+        )
+        held.commit()
+        assert future.result(timeout=10)["work_id"] == "rw-law-race"
+        pool.shutdown()
+    assert [(r.account, r.label) for r in live_claims(store.engine)] == [("codex@example.org", "codex-m5-04")]
+    assert first["token"]  # the old holder's token now matches nothing
+    store.engine.dispose()
+
+
+def test_starting_on_an_up_to_date_database_waits_for_no_open_transaction(scratch_url):
+    """Each copy of the workbench that starts used to issue ADD COLUMN and CREATE INDEX ... IF NOT EXISTS,
+    which lock the table before they look: one open reader held the start, and the start held every save."""
+    connect(scratch_url).dispose()
+    engine = create_engine(scratch_url)
+    with engine.connect() as reader:
+        reader.begin()
+        reader.execute(text("SELECT count(*) FROM page_revision")).scalar()
+        reader.execute(text("SELECT count(*) FROM audit_event")).scalar()
+        future, waiting, pool = _waits(lambda: connect(scratch_url).dispose(), seconds=5)
+        assert not waiting, "the start waited for an open reader"
+        future.result()
+        pool.shutdown()
+    engine.dispose()

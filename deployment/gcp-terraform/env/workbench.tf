@@ -17,8 +17,10 @@
 # The switches for claims, the guard on approved documents, the status gate and the audit are ordinary
 # settings: put them in workbench_settings (ALVARY_REVIEW_CLAIMS = "warn" or "enforce",
 # ALVARY_REVIEW_APPROVED_GUARD = "enforce", ALVARY_REVIEW_STATUS_GATE = "on",
-# ALVARY_REVIEW_AUDIT_RATE = "0.05"). Unset, each is off. The audit also needs its salt as a secret
-# (OPEN_ALVARY_REVIEW_AUDIT_SALT); nothing here provides it yet, and without it no audit is drawn.
+# ALVARY_REVIEW_AUDIT_RATE = "0.05"). Unset, claims, the guard and the gate are off. The audit's rate
+# defaults to 0.05, but no audit is drawn without its salt (OPEN_ALVARY_REVIEW_AUDIT_SALT), which must be
+# a secret and which nothing here provides yet, nor while claims are not "enforce". A value a switch
+# cannot take stops the workbench at start, so a mistyped switch is never read as "off".
 variable "review_postgres_tier" {
   description = "The review database's Cloud SQL tier. A shared-core tier allows about 25 connections; six workbench copies at eight each need a tier with its own core."
   type        = string

@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import update
 from test_passkeys import ORIGIN, SoftKey
 
-from workbench import content
+from workbench import claims, content
 from workbench.app import create_app
 from workbench.passkeys import RelyingParty
 from workbench.store import Store, connect, now, work_claim
@@ -413,17 +413,23 @@ def test_shared_details_approved_sibling_guard(env):
     owner = _browser(app, "owner@example.org")
     claude = _browser(app, "claude@example.org")
 
-    # Owner reviews and approves DOC_EN (leaving sibling DOC_FR unapproved).
+    # The agent holds the work before any of it is approved.
+    claimed = claude.post(f"/api/claims/{WORK_LAW}", json={"label": "claude-m1-02", "task": "status"})
+    assert claimed.status_code == 200
+    token = claimed.json()["token"]
+
+    # The owner reviews and approves DOC_EN over that claim (leaving sibling DOC_FR unapproved).
     _save_all_pages(owner, DOC_EN)
     det_payload = _confirm_details_payload(owner, DOC_EN)
     assert owner.post(f"/api/documents/{DOC_EN}/details", json=det_payload).status_code == 200
     assert _approve_doc(owner, DOC_EN).status_code == 200
 
-    # Release owner's implicit claim on WORK_LAW so agent can claim it explicitly.
-    owner.post(f"/api/claims/{WORK_LAW}/release", json={"outcome": "abandoned"})
-    claimed = claude.post(f"/api/claims/{WORK_LAW}", json={"label": "claude-m1-02", "task": "status"})
-    assert claimed.status_code == 200
-    token = claimed.json()["token"]
+    # By name, an agent account is refused a work with an approved document, as "Claim next" would not
+    # hand it one: at once, not ten seconds later.
+    codex = _browser(app, "codex@example.org")
+    named = codex.post(f"/api/claims/{WORK_LAW}", json={"label": "codex-m1-09", "task": "review"})
+    assert named.status_code == 403
+    assert named.json() == {"code": "approved_guard", "message": claims.MSG_APPROVED}
 
     # Agent tries to edit shared Details through UNAPPROVED sibling DOC_FR -> 403!
     det_update = _confirm_details_payload(claude, DOC_FR)

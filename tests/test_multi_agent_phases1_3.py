@@ -238,14 +238,14 @@ def test_approved_guard_and_shared_details_sibling(store, monkeypatch):
         with pytest.raises(claims.ClaimError) as exc:
             claims.guard(db, "rw-law-1", claude, act_id="rw-law-1-en")
         assert exc.value.status_code == 403
-        assert exc.value.detail == claims.MSG_APPROVED
+        assert exc.value.message == claims.MSG_APPROVED
 
     # Shared Details edit via unapproved sibling rw-law-1-fr is ALSO refused when sibling rw-law-1-en is approved.
     with store.engine.begin() as db:
         with pytest.raises(claims.ClaimError) as exc:
             claims.guard(db, "rw-law-1", claude, approved_act_ids=["rw-law-1-fr", "rw-law-1-en"])
         assert exc.value.status_code == 403
-        assert exc.value.detail == claims.MSG_APPROVED
+        assert exc.value.message == claims.MSG_APPROVED
 
     # Human reviewer is not blocked by approved guard.
     with store.engine.begin() as db:
@@ -300,7 +300,7 @@ def test_one_claim_per_label_and_lost_token_recovery(store, monkeypatch):
     with pytest.raises(claims.ClaimError) as exc:
         claims.claim_work(store, "work-b", "claude@example.org", "claude-m1-01")
     assert exc.value.status_code == 409
-    assert exc.value.detail == "claude-m1-01 already holds work-a. Release it before claiming another."
+    assert exc.value.message == "claude-m1-01 already holds work-a. Release it before claiming another."
 
     # Lost-token recovery: same (account, label) re-claiming work-a rotates token.
     c2 = claims.claim_work(store, "work-a", "claude@example.org", "claude-m1-01")
@@ -346,7 +346,7 @@ def test_lapsed_claim_revival_takeover_and_blocked_label(store, monkeypatch):
     with pytest.raises(claims.ClaimError) as exc:
         claims.renew_claim(store, "work-lapsed", "claude@example.org", c1["token"])
     assert exc.value.status_code == 403
-    assert exc.value.detail == "The label claude-m1-02 has been paused by the owner. Stop and report."
+    assert exc.value.message == "The label claude-m1-02 has been paused by the owner. Stop and report."
 
     claude = _who(store, "claude@example.org")
     with store.engine.begin() as db:
@@ -379,7 +379,7 @@ def test_claim_rate_limit_per_account_and_label(store):
     with pytest.raises(claims.ClaimError) as exc:
         claims.claim_work(store, "w-6", "claude@example.org", "claude-m1-05")
     assert exc.value.status_code == 429
-    assert exc.value.detail == "Too many claim requests for claude-m1-05. Wait a minute and try again."
+    assert exc.value.message == "Too many claim requests for claude-m1-05. Wait a minute and try again."
 
     # Different label under same account is unaffected.
     ok = claims.claim_work(store, "w-6", "claude@example.org", "claude-m1-06")
@@ -398,7 +398,7 @@ def test_guard_modes_human_implicit_owner_override_and_warn(store, monkeypatch):
         with pytest.raises(claims.ClaimError) as exc:
             claims.guard(db, "work-free", claude)
         assert exc.value.status_code == 409
-        assert exc.value.detail == claims.MSG_AGENT_NEEDS_CLAIM
+        assert exc.value.message == claims.MSG_AGENT_NEEDS_CLAIM
 
     # Human on free work -> takes implicit 'unlabelled' claim; can hold multiple unlabelled works.
     with store.engine.begin() as db:
@@ -413,8 +413,8 @@ def test_guard_modes_human_implicit_owner_override_and_warn(store, monkeypatch):
         with pytest.raises(claims.ClaimError) as exc:
             claims.guard(db, "work-free", claude)
         assert exc.value.status_code == 409
-        assert "This work is being reviewed by unlabelled (human@example.org) until " in exc.value.detail
-        assert " UTC. Nothing was saved. Claim another work." in exc.value.detail
+        assert "This work is being reviewed by unlabelled (human@example.org) until " in exc.value.message
+        assert " UTC. Nothing was saved. Claim another work." in exc.value.message
 
     # Owner (approver/admin) can save over a claim, logged as saved_over_claim with act_id=None.
     with store.engine.begin() as db:

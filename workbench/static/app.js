@@ -126,6 +126,25 @@ function formatClock(iso) {
   return `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`;
 }
 
+// Claim times are read in Lagos, Kigali and elsewhere: say which clock they are on.
+function formatClockUtc(iso) {
+  const clock = formatClock(iso);
+  return clock ? `${clock} UTC` : "";
+}
+
+// The server's claims setting from /api/me: "off" (the default), "warn" or "enforce". With claims off
+// nothing about claims is shown or sent.
+function claimsOn() {
+  const mode = app.me && app.me.claims;
+  return mode === "warn" || mode === "enforce";
+}
+
+// A refusal from the claim code carries {code, message}; a save refused because someone else saved the
+// page first is a 409 with no code.
+function claimRefusal(result) {
+  return Boolean(result && !result.ok && result.data && typeof result.data === "object" && result.data.code);
+}
+
 function pruneClaimTokens(nowMs = Date.now()) {
   try {
     const keys = [];
@@ -249,22 +268,37 @@ function stopClaimHeartbeat() {
   app.heartbeatWorkId = null;
 }
 
-function startClaimHeartbeat(workId, onRenew) {
+// Renews the lease every five minutes while the document is open. A refusal (the token is no longer
+// valid, the label is blocked, the claim is gone) stops it and is told through onLost; so does signing
+// out. An answer that arrives after this heartbeat was replaced or stopped changes nothing.
+function startClaimHeartbeat(workId, onRenew, onLost) {
   stopClaimHeartbeat();
-  if (!workId) return;
-  app.heartbeatWorkId = workId;
-  app.heartbeatTimer = setInterval(async () => {
-    if (app.heartbeatWorkId !== workId) return stopClaimHeartbeat();
+  if (!workId || !claimsOn()) return;
+  let busy = false;
+  const timer = setInterval(async () => {
+    if (app.heartbeatTimer !== timer) return clearInterval(timer);
+    if (busy) return; // the last renewal is still waiting (on a proxy sign-in, say): do not stack another
+    busy = true;
     try {
       const result = await api(`/api/claims/${encodeURIComponent(workId)}/renew`, { method: "POST", body: {} });
+      if (app.heartbeatTimer !== timer) return;
       if (result.ok && result.data && result.data.expires_at) {
         updateClaimExpiry(workId, result.data.expires_at);
         if (onRenew) onRenew(result.data.expires_at);
-      } else if (result.status === 403 || result.status === 404 || result.status === 409) {
+      } else if (!result.ok && result.status >= 400 && result.status < 500 && result.status !== 429) {
         stopClaimHeartbeat();
+        if (onLost) onLost(result);
       }
-    } catch { /* transient network error: retry next interval */ }
+    } catch {
+      // Signed out (api() answered a 401 by showing the sign-in page): stop. Otherwise a network error:
+      // try again at the next interval.
+      if (!app.me && app.heartbeatTimer === timer) stopClaimHeartbeat();
+    } finally {
+      busy = false;
+    }
   }, HEARTBEAT_MS);
+  app.heartbeatTimer = timer;
+  app.heartbeatWorkId = workId;
 }
 
 async function api(path, { method = "GET", body } = {}) {
@@ -274,7 +308,7 @@ async function api(path, { method = "GET", body } = {}) {
     options.body = JSON.stringify(body);
   }
   if (method !== "GET") options.headers["X-CSRF-Token"] = app.csrf;
-  const claimToken = claimTokenForPath(path);
+  const claimToken = claimsOn() ? claimTokenForPath(path) : null;
   if (claimToken) options.headers["X-Claim-Token"] = claimToken;
   let response;
   try {
@@ -309,7 +343,8 @@ async function api(path, { method = "GET", body } = {}) {
       storeClaimTokens({
         work_id: workId,
         token: data.claim_token,
-        label: data.claim_label || data.label || getTabLabel() || "unlabelled",
+        // A person's save takes the claim as "unlabelled" (claim_label), whatever this tab's label is.
+        label: data.claim_label || (actId ? "unlabelled" : data.label || getTabLabel() || "unlabelled"),
         expires_at: data.claim_expires_at || data.expires_at || "",
         documents: docs,
       });
@@ -435,11 +470,10 @@ async function loadMe() {
   app.me = result.data;
   app.csrf = result.data.csrf;
   const who = document.getElementById("who");
-  const isAdmin = Boolean(result.data.agents || (result.data.roles || []).includes("admin"));
   who.replaceChildren(
     el("a", { class: "nav-link", href: "#/", text: "Documents" }),
     el("a", { class: "nav-link", href: "#/queue", text: "Work queue" }),
-    isAdmin ? el("a", { class: "nav-link", href: "#/agents", text: "Agents" }) : "",
+    result.data.agents ? el("a", { class: "nav-link", href: "#/agents", text: "Agents" }) : "",
     result.data.access ? el("a", { class: "nav-link", href: "#/access", text: "Access" }) : "",
     result.data.operators ? el("a", { class: "nav-link", href: "#/operators", text: "Operators" }) : "",
     result.data.traffic ? el("a", { class: "nav-link", href: "#/traffic", text: "Traffic" }) : "",
@@ -452,6 +486,7 @@ async function loadMe() {
 
 async function signOut() {
   if (app.dirty && !confirm("Discard unsaved changes and sign out?")) return;
+  stopClaimHeartbeat();
   await api("/auth/logout", { method: "POST" });
   app.dirty = false;
   location.replace("/?signed_out=1");
@@ -545,6 +580,7 @@ function brandMark(size = 36) {
 
 async function showSignIn(info) {
   ++app.turn; // nothing still on its way draws over this page
+  stopClaimHeartbeat(); // signed out: no lease is renewed behind the sign-in page
   info = info || (await api("/api/me")).data || {};
   document.getElementById("who").replaceChildren();
   setCrumbs("");
@@ -775,53 +811,54 @@ async function dashboard() {
 
 // --- claim banner and release UI (§4.5, §4.8) ----------------------------------------------------
 
+// Whose claim this is, as this tab sees it:
+//  - mine, with a token: this browser holds the token (or the server shows no claim and the token may
+//    still revive a lapsed one); the heartbeat renews it.
+//  - mine, a person's own "unlabelled" claim: theirs whether or not a token is stored, because their next
+//    save is never refused and brings a fresh token (contract 5). No heartbeat without a token.
+//  - lost: the claim is this account's under this tab's label, but this browser has no token for it.
+//  - someone else's.
 function resolveClaimState(actId, serverClaim) {
   const local = getClaimForDoc(actId);
   const myEmail = app.me && app.me.email;
+  const isAgent = Boolean(app.me && app.me.agent);
   const tabLabel = getTabLabel();
+  const from = (claim, extra) => ({
+    workId: (claim && claim.work_id) || (local && local.work_id) || actId,
+    label: (claim && claim.label) || (local && local.label) || "",
+    account: (claim && claim.account) || myEmail || "",
+    expiresAt: (claim && claim.expires_at) || (local && local.expires_at) || "",
+    task: (claim && claim.task) || "review",
+    ...extra,
+  });
   if (local) {
     const serverMatches = !serverClaim
       || (serverClaim.work_id === local.work_id
         && (!myEmail || serverClaim.account === myEmail)
         && serverClaim.label === local.label);
-    if (serverMatches) {
-      return {
-        mine: true,
-        workId: (serverClaim && serverClaim.work_id) || local.work_id || actId,
-        label: (serverClaim && serverClaim.label) || local.label,
-        account: (serverClaim && serverClaim.account) || myEmail || "",
-        expiresAt: (serverClaim && serverClaim.expires_at) || local.expires_at,
-      };
-    }
+    if (serverMatches) return from(serverClaim, { mine: true, hasToken: true, lost: false });
   }
-  if (serverClaim && myEmail && serverClaim.account === myEmail && tabLabel && serverClaim.label === tabLabel) {
-    return {
-      mine: true,
-      workId: serverClaim.work_id || actId,
-      label: serverClaim.label,
-      account: serverClaim.account,
-      expiresAt: serverClaim.expires_at,
-    };
+  const ownAccount = Boolean(serverClaim && myEmail && serverClaim.account === myEmail);
+  if (ownAccount && serverClaim.label === "unlabelled" && !isAgent) {
+    // A token stored under the work counts only if it is this unlabelled claim's.
+    const ownToken = Boolean(local && local.label === "unlabelled" && local.work_id === serverClaim.work_id);
+    return from(serverClaim, { mine: true, hasToken: ownToken, lost: false });
   }
-  if (serverClaim) {
-    return {
-      mine: false,
-      workId: serverClaim.work_id || actId,
-      label: serverClaim.label,
-      account: serverClaim.account,
-      expiresAt: serverClaim.expires_at,
-    };
+  if (ownAccount && tabLabel && serverClaim.label === tabLabel) {
+    return from(serverClaim, { mine: true, hasToken: false, lost: true });
   }
+  if (serverClaim) return from(serverClaim, { mine: false, hasToken: false, lost: false });
   return null;
 }
 
-function claimBanner(actId, serverClaim, onReleased) {
+function claimBanner(actId, serverClaim, redraw) {
+  if (!claimsOn()) return null;
   const state = resolveClaimState(actId, serverClaim);
   if (!state) return null;
-  const expiresSpan = el("span", { class: "claim-expires", text: formatClock(state.expiresAt), title: state.expiresAt || "" });
+  const expiresSpan = el("span", { class: "claim-expires", text: formatClockUtc(state.expiresAt), title: state.expiresAt || "" });
   const roles = (app.me && app.me.roles) || [];
   const canForceRelease = !state.mine && (roles.includes("admin") || roles.includes("approver"));
-  const banner = el("div", { class: `claim-banner ${state.mine ? "mine" : "other"}` });
+  const banner = el("div", { class: `claim-banner ${state.lost ? "lost" : state.mine ? "mine" : "other"}` });
   const releaseForm = el("div", { class: "claim-release-form", hidden: true });
   const outcome = el("select", { "aria-label": "Release outcome" },
     el("option", { value: "done", text: "done — finished reviewing" }),
@@ -843,7 +880,7 @@ function claimBanner(actId, serverClaim, onReleased) {
       removeClaimTokensForWork(state.workId);
       toast(`Released (${selected})`);
       banner.remove();
-      if (onReleased) onReleased();
+      if (redraw) redraw();
     } finally {
       confirmBtn.disabled = false;
     }
@@ -851,26 +888,62 @@ function claimBanner(actId, serverClaim, onReleased) {
   const cancelBtn = el("button", { class: "small", text: "Cancel", on: { click: () => { releaseForm.hidden = true; } } });
   releaseForm.append(outcome, reason, confirmBtn, cancelBtn);
 
+  if (state.lost) {
+    // Same account and label hold the work, but this browser has no token: claiming it again re-issues one.
+    const status = el("span", { class: "claim-status", role: "status" });
+    const takeUp = el("button", { class: "small primary", text: "Take it up again", on: { click: async () => {
+      takeUp.disabled = true;
+      try {
+        const result = await api(`/api/claims/${encodeURIComponent(state.workId)}`, { method: "POST", body: { label: state.label, task: state.task } });
+        if (!result.ok) {
+          status.textContent = message(result);
+          return toast(message(result));
+        }
+        storeClaimTokens({
+          work_id: result.data.work_id || state.workId,
+          token: result.data.token,
+          label: state.label,
+          expires_at: result.data.expires_at,
+          documents: result.data.documents,
+        });
+        toast("You hold this work again.");
+        // Only the banner is drawn again, so nothing typed on the page is lost.
+        banner.replaceWith(claimBanner(actId, { ...serverClaim, expires_at: result.data.expires_at || serverClaim.expires_at }, redraw));
+      } finally {
+        takeUp.disabled = false;
+      }
+    } } });
+    banner.append(el("div", { class: "claim-line" },
+      el("span", { text: "This work is claimed under your label, but this browser has no claim token for it." }),
+      takeUp, status));
+    return banner;
+  }
+
   const releaseBtn = (state.mine || canForceRelease)
     ? el("button", { class: "small", text: "Release", on: { click: () => { releaseForm.hidden = !releaseForm.hidden; if (!releaseForm.hidden) outcome.focus(); } } })
     : null;
 
   if (state.mine) {
-    banner.append(
-      el("div", { class: "claim-line" },
-        el("span", {}, "You hold this work until ", expiresSpan, ` (${state.label})`),
-        releaseBtn),
-      releaseForm);
-    startClaimHeartbeat(state.workId, (nextExpires) => {
-      expiresSpan.textContent = formatClock(nextExpires);
-      expiresSpan.title = nextExpires;
-    });
+    const line = el("div", { class: "claim-line" },
+      el("span", {}, "You hold this work until ", expiresSpan, state.label && state.label !== "unlabelled" ? ` (${state.label})` : null),
+      releaseBtn);
+    banner.append(line, releaseForm);
+    // A person's own unlabelled claim with no token here is renewed by their next save, not by a heartbeat.
+    if (state.hasToken) {
+      startClaimHeartbeat(state.workId, (nextExpires) => {
+        expiresSpan.textContent = formatClockUtc(nextExpires);
+        expiresSpan.title = nextExpires;
+      }, (refused) => {
+        line.replaceChildren(el("span", { text: message(refused) }));
+        releaseForm.hidden = true;
+      });
+    }
   } else {
-    banner.append(
-      el("div", { class: "claim-line" },
-        el("span", {}, `Held by ${state.label} (${state.account}) until `, expiresSpan),
-        releaseBtn),
-      canForceRelease ? releaseForm : null);
+    // Element.append(null) would write "null": only the form that is offered is appended.
+    banner.append(el("div", { class: "claim-line" },
+      el("span", {}, `Held by ${state.label} (${state.account}) until `, expiresSpan),
+      releaseBtn));
+    if (canForceRelease) banner.append(releaseForm);
   }
   return banner;
 }
@@ -1011,10 +1084,15 @@ function approvalChecklist(actId, data, current, head) {
   const text = data.text_check;
   const toText = (label) => el("button", { class: "small", text: label, on: { click: () => document.getElementById("text-check")?.scrollIntoView({ block: "start" }) } });
   const toReview = ready.unchecked_pages, toResolve = ready.unresolved_flag_pages;
+  // With the status gate on, a document may wait only for its legal status research.
+  const statusStep = () => (ready.status_pending
+    ? step(false, ready.status_pending_message || "Legal status: research pending.", el("a", { href: `#/doc/${encodeURIComponent(actId)}/details`, text: "the details" }), "warn")
+    : null);
   if (ready.text_held) { // approved on its details alone: no page waits for review
     return el("ol", { class: "checklist", "aria-label": "Steps to approval" },
       step(true, "Text held: its pages need no review, and its text will not be published"),
       detailsStep(),
+      statusStep(),
       current ? step(true, "Details approved", null)
         : head && head.decision === "approved" ? step(false, "Approval out of date: the details changed after they were approved", toApproval, "warn")
         : step(false, ready.ready ? "Ready to approve the details" : "Approval of the details", ready.ready ? toApproval : el("span", { text: "after the details are confirmed" })));
@@ -1039,6 +1117,7 @@ function approvalChecklist(actId, data, current, head) {
         : text.errors.length ? `${text.errors.length} problem${text.errors.length === 1 ? "" : "s"} in the text's structure to fix` : `Text and structure: ${describeCounts(text.counts)}`,
       text.errors.length ? toText("See them") : text.warnings.length ? toText(`${text.warnings.length} to look at`) : null) : null,
     detailsStep(),
+    statusStep(),
     current ? step(true, "Approved", null)
       : head && head.decision === "approved" ? step(false, "Approval out of date: the text or details changed after it was approved", toApproval, "warn")
       : step(false, ready.ready ? "Ready for approval" : "Approval", ready.ready ? toApproval : el("span", { text: "after the steps above" })),
@@ -1286,8 +1365,11 @@ function readPage(actId, page, canEdit) {
   const mark = canEdit && page.status !== "checked" && !page.open_high
     ? el("button", { class: "small", text: "Mark checked", on: { click: async (event) => {
         const result = await api(`/api/documents/${encodeURIComponent(actId)}/pages/${page.page}`, { method: "POST", body: { expected_revision: page.revision, units: page.units, status: "checked", resolutions: page.resolutions || {}, comment: "Checked while reading the whole document" } });
+        // A refusal from the claim code says why in its own words; only a 409 without a code means the page changed.
+        if (claimRefusal(result)) return toast(message(result));
         if (result.status === 409) return toast(`Page ${page.page} changed meanwhile; open it to check`);
         if (!result.ok) return toast(message(result));
+        if (result.data.audited) return toast("Audit saved");
         page.revision = result.data.revision; page.status = "checked";
         event.currentTarget.replaceWith(pill("ok", "checked"));
       } } })
@@ -1322,6 +1404,7 @@ function approvalPanel(actId, data, current) {
   if (!ready.details.confirmed) blockers.append(el("li", {}, "Document details ", el("a", { href: `#/doc/${encodeURIComponent(actId)}/details`, text: ready.details.status ? "not yet confirmed" : "not yet reviewed" })));
   if (ready.details.confirmed && ready.details.record_problem) blockers.append(el("li", {}, `Document details do not make a valid record (${ready.details.record_problem}): `, el("a", { href: `#/doc/${encodeURIComponent(actId)}/details`, text: "review the details" })));
   if (ready.text && ready.text.errors) blockers.append(el("li", { text: `${ready.text.errors} problem${ready.text.errors === 1 ? "" : "s"} in the text's structure: see Text and structure above` }));
+  if (ready.status_pending) blockers.append(el("li", { text: ready.status_pending_message || "Legal status: research pending." }));
   panel.append(ready.ready ? el("p", {}, pill("ok", "Ready for approval")) : el("div", {}, el("p", { text: "Before approval:" }), blockers));
   if (canApprove) {
     const basis = el("textarea", { rows: 3, value: (data.approvals[0] && data.approvals[0].rights_basis) || data.act.rights_basis || "" });
@@ -1814,7 +1897,8 @@ function taskLine(t) {
 function claimNextPanel({ standalone = false } = {}) {
   const { query } = parseHash(location.hash);
   const initialLabel = captureTabLabel();
-  const initialTask = ["review", "status", "audit"].includes(query.get("task")) ? query.get("task") : "review";
+  // No "audit" task yet: the audit screens (the drawn pages, the auditor's reading) are not built.
+  const initialTask = ["review", "status"].includes(query.get("task")) ? query.get("task") : "review";
   const labelInput = el("input", {
     type: "text",
     name: "label",
@@ -1826,8 +1910,7 @@ function claimNextPanel({ standalone = false } = {}) {
   });
   const taskSelect = el("select", { name: "task", "aria-label": "Task" },
     el("option", { value: "review", text: "review — pages and printed details" }),
-    el("option", { value: "status", text: "status — legal status research" }),
-    el("option", { value: "audit", text: "audit — second-reviewer sample" }));
+    el("option", { value: "status", text: "status — legal status research" }));
   taskSelect.value = initialTask;
   const jurisdictionInput = el("input", {
     type: "text",
@@ -1927,6 +2010,11 @@ async function claimView() {
   if (!app.me.roles.includes("reviewer")) {
     return main(el("div", { class: "card" }, el("h2", { text: "Claim next" }), el("p", { class: "muted", text: "Claiming work needs the reviewer role." })));
   }
+  if (!claimsOn()) {
+    return main(el("div", { class: "card" }, el("h2", { text: "Claim next" }),
+      el("p", { text: "Claims are switched off on this workbench: take work from the work queue instead." }),
+      el("p", {}, el("a", { href: "#/queue", text: "Open the work queue" }))));
+  }
   main(claimNextPanel({ standalone: true }));
 }
 
@@ -1946,8 +2034,8 @@ async function queueView() {
     const c = data.counts;
     for (const option of kind.options) option.textContent = `${TASK_KINDS.find(([v]) => v === option.value)[1]}${option.value ? ` (${c[option.value]})` : ""}`;
     rows.replaceChildren(...(data.tasks.length ? data.tasks.map((t) => {
-      const claimPill = t.claim
-        ? el("span", { class: "pill medium", title: t.claim.account || "", text: `held by ${t.claim.label} until ${formatClock(t.claim.expires_at)}` })
+      const claimPill = t.claim && claimsOn()
+        ? el("span", { class: "pill medium", title: [t.claim.account, t.claim.expires_at].filter(Boolean).join(" · "), text: `held by ${t.claim.label} until ${formatClockUtc(t.claim.expires_at)}` })
         : null;
       return el("tr", {},
         el("td", {}, pill(...TASK_PRIORITY[t.priority])),
@@ -1964,7 +2052,7 @@ async function queueView() {
   };
   kind.addEventListener("input", () => { offset = 0; load(); });
   main(
-    app.me.roles.includes("reviewer") ? claimNextPanel() : null,
+    app.me.roles.includes("reviewer") && claimsOn() ? claimNextPanel() : null,
     el("div", { class: "card" },
       el("div", { class: "doc-tools" }, el("h3", { text: "Work queue" }), kind),
       summary,
@@ -3263,9 +3351,21 @@ function saveBar(view) {
     }
     // The old page stays up while the next one loads, so the address may have moved on before this save was sent.
     const left = location.hash !== view.address;
+    // A refusal from the claim code (claim held, lost or required, label blocked, approved document) is
+    // not a revision conflict: say why in the server's words and keep the text, the draft and the
+    // unsaved mark as they are.
+    if (claimRefusal(result)) return toast(message(result));
     if (result.status === 409 && left) return toast(`Page ${view.pageNumber} was not saved: someone saved it first.`);
     if (result.status === 409) { toast("Someone saved this page first. Reloading their version."); app.dirty = false; return pageView(view.actId, view.pageNumber); }
     if (!result.ok) return toast(message(result));
+    if (result.data.audited) {
+      // An audit is recorded beside the reviewer's revision, not as a new one: the page keeps the
+      // auditor's reading on screen. (The audit screens themselves are not built yet.)
+      clearDraft(view);
+      toast("Audit saved");
+      if (!left) { app.dirty = false; if (view.dirtyBadge) view.dirtyBadge.hidden = true; }
+      return;
+    }
     if (!left && (view.edits || 0) !== sent) {
       // Words typed while the save was on its way are newer than what was saved: they stay on screen,
       // unsaved, and the next save builds on the revision just made.
@@ -3721,7 +3821,7 @@ async function route() {
     if (parts[0] === "audit" && parts[1]) return await auditView(parts[1]);
     if (parts[0] === "access" && app.me.access) return await accessView(parts.slice(1));
     if (parts[0] === "operators" && app.me.operators) return await agentsOperatorsView();
-    if (parts[0] === "agents" && (app.me.agents || (app.me.roles || []).includes("admin"))) return await agentsView();
+    if (parts[0] === "agents" && app.me.agents) return await agentsView();
     if (parts[0] === "traffic" && app.me.traffic) return await trafficView();
     if (parts[0] === "publishing" && app.me.publishing) return await publishingView();
     return await dashboard();

@@ -26,6 +26,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
+    false,
     func,
     insert,
     inspect,
@@ -51,8 +52,10 @@ operator = Table(
     Column("name", String(200), nullable=False),
     Column("roles", String(100), nullable=False),
     Column("active", Boolean, nullable=False, default=True),
-    Column("agent", Boolean, nullable=False, default=False),
-    Column("may_change_approved", Boolean, nullable=False, default=False),
+    # The database's own default too: a copy of the release before, which does not know these columns,
+    # can then still add an operator to a database this code made.
+    Column("agent", Boolean, nullable=False, default=False, server_default=false()),
+    Column("may_change_approved", Boolean, nullable=False, default=False, server_default=false()),
     Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
@@ -462,7 +465,14 @@ def _make_schema(engine: Engine) -> None:
 
 
 def _upgrade(engine: Engine) -> None:
-    """Columns and indexes added after a database was first created (create_all adds only missing tables)."""
+    """Columns and indexes added after a database was first created (create_all adds only missing tables).
+
+    The catalogue is read first and a statement is issued only for what is missing. On PostgreSQL even
+    ``ADD COLUMN IF NOT EXISTS`` and ``CREATE INDEX IF NOT EXISTS`` take their lock on the table before
+    they look, so issued at every start they queue every reader and writer of the table behind whatever
+    transaction is in flight, and the start with them. What does have to be added goes one statement to
+    a transaction and waits five seconds for its lock at most: a start that cannot get it fails, and is
+    tried again, rather than hold the others up."""
     added = {
         "approval": {
             "details_sha256": "VARCHAR(64)",
@@ -491,36 +501,57 @@ def _upgrade(engine: Engine) -> None:
             "task": "VARCHAR(20)",
         },
     }
-    if engine.dialect.name == "postgresql":
+    indexes = {
+        "work_claim": {
+            "work_claim_account_label_uq": "CREATE UNIQUE INDEX IF NOT EXISTS work_claim_account_label_uq "
+            "ON work_claim (account, label) WHERE label <> 'unlabelled'",
+            "work_claim_expires_at_idx": "CREATE INDEX IF NOT EXISTS work_claim_expires_at_idx "
+            "ON work_claim (expires_at)",
+        },
+        "work_release": {
+            "work_release_work_id_id_idx": "CREATE INDEX IF NOT EXISTS work_release_work_id_id_idx "
+            "ON work_release (work_id, id)",
+        },
+        "page_revision": {
+            "page_revision_author_label_idx": "CREATE INDEX IF NOT EXISTS page_revision_author_label_idx "
+            "ON page_revision (author, label)",
+        },
+        "detail_revision": {
+            "detail_revision_author_label_idx": "CREATE INDEX IF NOT EXISTS detail_revision_author_label_idx "
+            "ON detail_revision (author, label)",
+        },
+        "audit_event": {
+            "audit_event_actor_at_idx": "CREATE INDEX IF NOT EXISTS audit_event_actor_at_idx "
+            "ON audit_event (actor, at)",
+            "audit_event_act_id_id_idx": "CREATE INDEX IF NOT EXISTS audit_event_act_id_id_idx "
+            "ON audit_event (act_id, id)",
+        },
+        "review_audit": {
+            "review_audit_work_id_audited_at_idx": "CREATE INDEX IF NOT EXISTS "
+            "review_audit_work_id_audited_at_idx ON review_audit (work_id, audited_at)",
+            "review_audit_reviewer_label_audited_at_idx": "CREATE INDEX IF NOT EXISTS "
+            "review_audit_reviewer_label_audited_at_idx ON review_audit (reviewer, reviewer_label, audited_at)",
+            "review_audit_reviewer_revision_idx": "CREATE INDEX IF NOT EXISTS "
+            "review_audit_reviewer_revision_idx ON review_audit (reviewer_revision)",
+        },
+    }
+    found = inspect(engine)
+    wanted: list[str] = []
+    for table, columns in added.items():
+        present = {column["name"] for column in found.get_columns(table)}
+        wanted += [
+            f"ALTER TABLE {table} ADD COLUMN {name} {kind}"
+            for name, kind in columns.items()
+            if name not in present
+        ]
+    for table, named in indexes.items():
+        present = {index["name"] for index in found.get_indexes(table)}
+        wanted += [statement for name, statement in named.items() if name not in present]
+    for statement in wanted:
         with engine.begin() as db:
-            for table, columns in added.items():
-                for name, kind in columns.items():
-                    db.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {name} {kind}"))
-    else:
-        for table, columns in added.items():
-            present = {column["name"] for column in inspect(engine).get_columns(table)}
-            for name, kind in columns.items():
-                if name not in present:
-                    with engine.begin() as db:
-                        db.execute(text(f"ALTER TABLE {table} ADD COLUMN {name} {kind}"))
-
-    indexes = (
-        "CREATE UNIQUE INDEX IF NOT EXISTS work_claim_account_label_uq "
-        "ON work_claim (account, label) WHERE label <> 'unlabelled'",
-        "CREATE INDEX IF NOT EXISTS work_claim_expires_at_idx ON work_claim (expires_at)",
-        "CREATE INDEX IF NOT EXISTS work_release_work_id_id_idx ON work_release (work_id, id)",
-        "CREATE INDEX IF NOT EXISTS page_revision_author_label_idx ON page_revision (author, label)",
-        "CREATE INDEX IF NOT EXISTS detail_revision_author_label_idx ON detail_revision (author, label)",
-        "CREATE INDEX IF NOT EXISTS audit_event_actor_at_idx ON audit_event (actor, at)",
-        "CREATE INDEX IF NOT EXISTS audit_event_act_id_id_idx ON audit_event (act_id, id)",
-        "CREATE INDEX IF NOT EXISTS review_audit_work_id_audited_at_idx ON review_audit (work_id, audited_at)",
-        "CREATE INDEX IF NOT EXISTS review_audit_reviewer_label_audited_at_idx "
-        "ON review_audit (reviewer, reviewer_label, audited_at)",
-        "CREATE INDEX IF NOT EXISTS review_audit_reviewer_revision_idx ON review_audit (reviewer_revision)",
-    )
-    with engine.begin() as db:
-        for stmt in indexes:
-            db.execute(text(stmt))
+            if db.dialect.name == "postgresql":
+                db.execute(text("SET LOCAL lock_timeout = '5s'"))
+            db.execute(text(statement))
 
 
 class Store:
@@ -887,6 +918,18 @@ class Store:
                 detail={"email": email, "count": int(done or 0)},
             )
         return int(done or 0)
+
+    def has_agent_accounts(self) -> bool:
+        """Whether any active account is marked as an agent's."""
+        with self.engine.connect() as db:
+            return (
+                db.execute(
+                    select(operator.c.email)
+                    .where(operator.c.agent.is_(True), operator.c.active.is_(True))
+                    .limit(1)
+                ).first()
+                is not None
+            )
 
     def pause_all_agents(self, actor: str = "admin-cli") -> list[str]:
         """Deactivate every active agent account and end all of their live sessions."""
@@ -1424,6 +1467,25 @@ class Store:
                     .limit(1)
                 ).first()
                 expected = latest.revision if latest else 0
+                if expected != int(row.reviewer_revision or 0):
+                    # The auditor's text would go over an edit made after the audit was drawn.
+                    raise Conflict(
+                        f"Page {row.page} has been changed since this audit was drawn (it is at revision "
+                        f"{expected}, the audit read revision {row.reviewer_revision}). Nothing was changed: "
+                        "correct the page itself, or keep the reviewer's text."
+                    )
+                approved = conn.execute(
+                    select(approval.c.decision)
+                    .where(approval.c.act_id == row.act_id)
+                    .order_by(approval.c.revision.desc())
+                    .limit(1)
+                ).scalar()
+                if approved == "approved":
+                    # Changing an approved document's text ends its approval, and its publication that night.
+                    raise Conflict(
+                        "This document has been approved since the audit was drawn. Nothing was changed: "
+                        "correct the page itself if it must change, or keep the reviewer's text."
+                    )
                 sha = reading_sha256 or (latest.reading_sha256 if latest else "")
                 new_revision = self.save_page(
                     row.act_id,

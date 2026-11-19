@@ -111,6 +111,9 @@ def test_claim_load_parse_args_defaults_and_overrides() -> None:
     assert default_cfg.include_images is True
     assert default_cfg.p90_limit_s == 1.0
     assert default_cfg.json_output is False
+    assert default_cfg.allow_empty is False
+    assert default_cfg.allow_mode is False
+    assert default_cfg.target_is_scratch is False
 
     custom_cfg = claim_load.parse_args(
         [
@@ -124,6 +127,9 @@ def test_claim_load_parse_args_defaults_and_overrides() -> None:
             "--p90-limit",
             "0.75",
             "--json",
+            "--allow-empty",
+            "--allow-mode",
+            "--target-is-scratch",
         ]
     )
     assert custom_cfg.url == "http://127.0.0.1:9090"
@@ -132,6 +138,9 @@ def test_claim_load_parse_args_defaults_and_overrides() -> None:
     assert custom_cfg.include_images is False
     assert custom_cfg.p90_limit_s == 0.75
     assert custom_cfg.json_output is True
+    assert custom_cfg.allow_empty is True
+    assert custom_cfg.allow_mode is True
+    assert custom_cfg.target_is_scratch is True
 
 
 @pytest.mark.parametrize(
@@ -174,8 +183,12 @@ def test_claim_load_percentile_and_report_thresholds() -> None:
 
     bad = claim_load.LoadReport(
         agents=4,
+        claims_acquired=4,
         double_claims=1,
         lost_saves=2,
+        misattributed_saves=1,
+        unclaimed_saves_accepted=3,
+        server_double_claims=["work-007"],
         errors=["boom"],
         latencies_s=[0.2, 1.5],
         p90_limit_s=1.0,
@@ -183,17 +196,53 @@ def test_claim_load_percentile_and_report_thresholds() -> None:
     assert bad.passed is False
     failures = bad.failures()
     assert any("double_claims=1" in f for f in failures)
+    assert any("server_double_claims=1" in f and "work-007" in f for f in failures)
     assert any("lost_saves=2" in f for f in failures)
+    assert any("misattributed_saves=1" in f for f in failures)
+    assert any("unclaimed_saves_accepted=3" in f for f in failures)
     assert any("errors=1" in f for f in failures)
     assert any("p90=" in f for f in failures)
     assert "FAIL" in claim_load.format_report(bad)
 
 
+def test_claim_load_report_fails_when_agents_get_no_work_unless_allowed() -> None:
+    idle = claim_load.LoadReport(agents=150, claims_acquired=50, nothing_to_claim=100)
+    assert idle.passed is False
+    assert idle.agents_without_work == 100
+    assert any("agents_without_work=100" in f for f in idle.failures())
+    assert any("nothing_to_claim=100" in f for f in idle.failures())
+    assert "agents_without_work=100" in claim_load.format_report(idle)
+
+    allowed = claim_load.LoadReport(agents=150, claims_acquired=50, nothing_to_claim=100, allow_empty=True)
+    assert allowed.passed is True
+    assert allowed.to_dict()["agents_without_work"] == 100
+
+
+@pytest.mark.parametrize(
+    ("url", "loopback"),
+    [
+        ("http://127.0.0.1:8000", True),
+        ("http://127.3.4.5", True),
+        ("http://[::1]:8000", True),
+        ("http://localhost:8000", True),
+        ("https://review.example.org", False),
+        ("http://10.0.0.5:8000", False),
+        ("http://192.168.1.2", False),
+    ],
+)
+def test_claim_load_loopback_detection(url: str, loopback: bool) -> None:
+    assert claim_load.is_loopback_url(url) is loopback
+
+
 # --- claim_load.py concurrent harness behavior ----------------------------------------------------
+
+LOCAL = "http://127.0.0.1:8000"
+EMAIL = "load-agent@example.org"
 
 
 class _FakeWorkbench:
-    """Thread-safe in-memory fake workbench for exercising claim_load end to end."""
+    """Thread-safe in-memory fake workbench for exercising claim_load end to end. Claims are enforced
+    unless ``claims_mode`` says otherwise: a save needs a token the fake gave for that work."""
 
     def __init__(
         self,
@@ -203,6 +252,11 @@ class _FakeWorkbench:
         force_double_claim: bool = False,
         drop_saves: bool = False,
         overlap_barrier: threading.Barrier | None = None,
+        claims_mode: str | None = "enforce",
+        accept_unclaimed: bool = False,
+        author_override: str | None = None,
+        show_label: bool = True,
+        claims_listing: str = "admin",
     ) -> None:
         self._lock = threading.Lock()
         self._available = [f"work-{i:03d}" for i in range(1, work_count + 1)]
@@ -210,8 +264,20 @@ class _FakeWorkbench:
         self._force_double_claim = force_double_claim
         self._drop_saves = drop_saves
         self._overlap_barrier = overlap_barrier
-        self._revisions: dict[tuple[str, int], int] = {}
-        self._claimed: dict[str, str] = {}
+        self._claims_mode = claims_mode
+        self._accept_unclaimed = accept_unclaimed
+        self._author_override = author_override
+        self._show_label = show_label
+        self._claims_listing = claims_listing
+        self._latest: dict[tuple[str, int], dict] = {}
+        self._tokens: dict[str, dict[str, str]] = {}  # work -> token -> label
+        self.statuses: list[str] = []
+        self.outcomes: list[str] = []
+        self.claims_reads = 0
+
+    @staticmethod
+    def _work_of(act_id: str) -> str:
+        return act_id.rsplit("-", 1)[0]
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
@@ -221,7 +287,24 @@ class _FakeWorkbench:
             return httpx.Response(200, json={"ok": True}, headers={"Set-Cookie": "oa_review_session=tok"})
 
         if method == "GET" and path == "/api/me":
-            return httpx.Response(200, json={"signed_in": True, "csrf": "csrf-secret"})
+            me = {"signed_in": True, "csrf": "csrf-secret", "email": EMAIL}
+            if self._claims_mode is not None:
+                me["claims"] = self._claims_mode
+            return httpx.Response(200, json=me)
+
+        if method == "GET" and path == "/api/claims":
+            if self._claims_listing == "forbidden":
+                return httpx.Response(403, json={"message": "This needs the admin role"})
+            with self._lock:
+                self.claims_reads += 1
+                listed = [
+                    {"work_id": work, "label": label}
+                    for work, tokens in sorted(self._tokens.items())
+                    for label in tokens.values()
+                ]
+            if self._claims_listing == "twice" and listed:
+                listed.append(dict(listed[0]))
+            return httpx.Response(200, json={"claims": listed})
 
         if method == "POST" and path == "/api/queue/claim-next":
             assert request.headers.get("X-CSRF-Token") == "csrf-secret"
@@ -231,11 +314,11 @@ class _FakeWorkbench:
                 if self._force_double_claim:
                     work_id = "work-shared"
                 elif not self._available:
-                    return httpx.Response(404, json={"detail": "Nothing to claim under these limits."})
+                    return httpx.Response(404, json={"message": "Nothing to claim under these limits."})
                 else:
                     work_id = self._available.pop(0)
                 token = f"tok-{label}-{work_id}"
-                self._claimed[work_id] = token
+                self._tokens.setdefault(work_id, {})[token] = label
             return httpx.Response(
                 200,
                 json={
@@ -253,12 +336,10 @@ class _FakeWorkbench:
                 self._overlap_barrier.wait()
             act_id, page_num = page_match.group(1), int(page_match.group(2))
             with self._lock:
-                rev = self._revisions.get((act_id, page_num))
-            latest = (
-                {"revision": rev, "units": [{"kind": "paragraph", "text": "ok"}], "resolutions": {}}
-                if rev is not None
-                else None
-            )
+                latest = self._latest.get((act_id, page_num))
+                latest = dict(latest) if latest else None
+            if latest and not self._show_label:
+                latest.pop("label", None)
             return httpx.Response(
                 200,
                 json={
@@ -276,12 +357,26 @@ class _FakeWorkbench:
 
         if page_match and method == "POST":
             assert request.headers.get("X-CSRF-Token") == "csrf-secret"
-            assert request.headers.get("X-Claim-Token")
             act_id, page_num = page_match.group(1), int(page_match.group(2))
+            body = json.loads(request.content.decode())
+            token = request.headers.get("X-Claim-Token") or ""
             with self._lock:
-                new_rev = self._revisions.get((act_id, page_num), 0) + 1
+                label = self._tokens.get(self._work_of(act_id), {}).get(token)
+                if label is None and not self._accept_unclaimed:
+                    return httpx.Response(
+                        409, json={"code": "claim", "message": "This work is claimed by another reviewer."}
+                    )
+                self.statuses.append(body["status"])
+                new_rev = (self._latest.get((act_id, page_num)) or {}).get("revision", 0) + 1
                 if not self._drop_saves:
-                    self._revisions[(act_id, page_num)] = new_rev
+                    self._latest[(act_id, page_num)] = {
+                        "revision": new_rev,
+                        "units": body["units"],
+                        "status": body["status"],
+                        "resolutions": {},
+                        "author": self._author_override or EMAIL,
+                        "label": label or "unlabelled",
+                    }
             return httpx.Response(200, json={"revision": new_rev})
 
         if re.fullmatch(r"/api/claims/[^/]+/renew", path) and method == "POST":
@@ -289,24 +384,37 @@ class _FakeWorkbench:
             assert request.headers.get("X-Claim-Token")
             return httpx.Response(200, json={"ok": True})
 
-        if re.fullmatch(r"/api/claims/[^/]+/release", path) and method == "POST":
+        release = re.fullmatch(r"/api/claims/([^/]+)/release", path)
+        if release and method == "POST":
             assert request.headers.get("X-CSRF-Token") == "csrf-secret"
-            assert request.headers.get("X-Claim-Token")
+            token = request.headers.get("X-Claim-Token")
+            assert token
+            body = json.loads(request.content.decode())
+            with self._lock:
+                self.outcomes.append(body["outcome"])
+                self._tokens.get(release.group(1), {}).pop(token, None)
             return httpx.Response(200, json={"ok": True})
 
-        return httpx.Response(404, json={"detail": f"Unhandled {method} {path}"})
+        return httpx.Response(404, json={"message": f"Unhandled {method} {path}"})
+
+
+def _run(fake: _FakeWorkbench, **settings) -> claim_load.LoadReport:
+    config = claim_load.LoadConfig(**{"url": LOCAL, **settings})
+    return claim_load.run_load_test(
+        config,
+        client_factory=lambda: httpx.Client(base_url=config.url, transport=httpx.MockTransport(fake.handler)),
+    )
 
 
 def test_claim_load_concurrent_happy_path_with_images() -> None:
     fake = _FakeWorkbench(work_count=6, pages_per_doc=3)
-    config = claim_load.LoadConfig(url="http://test.local", agents=6, pages=2, include_images=True)
-    report = claim_load.run_load_test(
-        config,
-        client_factory=lambda: httpx.Client(base_url=config.url, transport=httpx.MockTransport(fake.handler)),
-    )
+    report = _run(fake, agents=6, pages=2, include_images=True)
     assert report.passed is True, report.failures()
+    assert report.claims_mode == "enforce"
+    assert report.mode_overridden is False
     assert report.claims_acquired == 6
     assert report.nothing_to_claim == 0
+    assert report.agents_without_work == 0
     assert report.pages_loaded == 12
     assert report.images_fetched == 12
     assert report.pages_saved == 12
@@ -314,21 +422,50 @@ def test_claim_load_concurrent_happy_path_with_images() -> None:
     assert report.releases == 6
     assert report.double_claims == 0
     assert report.lost_saves == 0
+    assert report.misattributed_saves == 0
+    assert report.labels_unverified == 0
+    # One save with a wrong token and one with none per worker, each refused.
+    assert report.refusals_checked == 12
+    assert report.unclaimed_saves_accepted == 0
+    # Read while all six held their claims; nothing listed twice.
+    assert fake.claims_reads == 1
+    assert report.server_claims == "read (6 live claims)"
+    assert report.server_double_claims == []
     assert report.p90_s < 1.0
+    # Never marks a page checked or a work done.
+    assert set(fake.statuses) == {"edited"}
+    assert fake.outcomes == ["abandoned"] * 6
 
 
-def test_claim_load_no_images_and_queue_exhaustion() -> None:
-    fake = _FakeWorkbench(work_count=2, pages_per_doc=2)
-    config = claim_load.LoadConfig(url="http://test.local", agents=4, pages=2, include_images=False)
-    report = claim_load.run_load_test(
-        config,
-        client_factory=lambda: httpx.Client(base_url=config.url, transport=httpx.MockTransport(fake.handler)),
-    )
-    assert report.passed is True, report.failures()
+def test_claim_load_queue_exhaustion_fails_unless_allowed() -> None:
+    report = _run(_FakeWorkbench(work_count=2, pages_per_doc=2), agents=4, pages=2, include_images=False)
+    assert report.passed is False
     assert report.claims_acquired == 2
     assert report.nothing_to_claim == 2
-    assert report.images_fetched == 0
+    assert report.agents_without_work == 2
     assert report.pages_saved == 4
+    assert "agents_without_work=2" in claim_load.format_report(report)
+
+    allowed = _run(
+        _FakeWorkbench(work_count=2, pages_per_doc=2),
+        agents=4,
+        pages=2,
+        include_images=False,
+        allow_empty=True,
+    )
+    assert allowed.passed is True, allowed.failures()
+    assert allowed.images_fetched == 0
+    assert allowed.agents_without_work == 2
+
+
+def test_claim_load_all_claims_404_fails() -> None:
+    report = _run(_FakeWorkbench(work_count=0), agents=3, pages=1, include_images=False)
+    assert report.claims_acquired == 0
+    assert report.nothing_to_claim == 3
+    assert report.passed is False
+    text = claim_load.format_report(report)
+    assert "FAIL" in text
+    assert "agents_without_work=3" in text
 
 
 def test_claim_load_detects_double_claim() -> None:
@@ -339,21 +476,139 @@ def test_claim_load_detects_double_claim() -> None:
         force_double_claim=True,
         overlap_barrier=threading.Barrier(4),
     )
-    config = claim_load.LoadConfig(url="http://test.local", agents=4, pages=1, include_images=False)
-    report = claim_load.run_load_test(
-        config,
-        client_factory=lambda: httpx.Client(base_url=config.url, transport=httpx.MockTransport(fake.handler)),
-    )
+    report = _run(fake, agents=4, pages=1, include_images=False)
     assert report.double_claims >= 1
     assert report.passed is False
 
 
+def test_claim_load_reports_works_the_server_lists_twice() -> None:
+    report = _run(
+        _FakeWorkbench(work_count=2, pages_per_doc=1, claims_listing="twice"),
+        agents=2,
+        pages=1,
+        include_images=False,
+    )
+    assert report.server_double_claims == ["work-001"]
+    assert report.passed is False
+    assert any("server_double_claims=1" in f for f in report.failures())
+
+
+def test_claim_load_skips_claims_listing_quietly_without_admin() -> None:
+    report = _run(
+        _FakeWorkbench(work_count=2, pages_per_doc=1, claims_listing="forbidden"),
+        agents=2,
+        pages=1,
+        include_images=False,
+    )
+    assert report.passed is True, report.failures()
+    assert report.server_claims.startswith("skipped")
+    assert report.errors == []
+
+
 def test_claim_load_detects_lost_save() -> None:
-    fake = _FakeWorkbench(work_count=2, pages_per_doc=1, drop_saves=True)
-    config = claim_load.LoadConfig(url="http://test.local", agents=2, pages=1, include_images=False)
-    report = claim_load.run_load_test(
-        config,
-        client_factory=lambda: httpx.Client(base_url=config.url, transport=httpx.MockTransport(fake.handler)),
+    report = _run(
+        _FakeWorkbench(work_count=2, pages_per_doc=1, drop_saves=True),
+        agents=2,
+        pages=1,
+        include_images=False,
     )
     assert report.lost_saves == 2
     assert report.passed is False
+
+
+def test_claim_load_detects_save_by_another_account() -> None:
+    report = _run(
+        _FakeWorkbench(work_count=2, pages_per_doc=1, author_override="someone@example.org"),
+        agents=2,
+        pages=1,
+        include_images=False,
+    )
+    assert report.misattributed_saves == 2
+    assert report.passed is False
+
+
+def test_claim_load_notes_when_the_label_cannot_be_checked() -> None:
+    report = _run(
+        _FakeWorkbench(work_count=2, pages_per_doc=1, show_label=False),
+        agents=2,
+        pages=1,
+        include_images=False,
+    )
+    assert report.passed is True, report.failures()
+    assert report.labels_unverified == 2
+    assert any("labels_unverified=2" in w for w in report.warnings())
+
+
+def test_claim_load_fails_when_unclaimed_saves_are_accepted() -> None:
+    report = _run(
+        _FakeWorkbench(work_count=2, pages_per_doc=1, accept_unclaimed=True),
+        agents=2,
+        pages=1,
+        include_images=False,
+    )
+    assert report.refusals_checked == 4
+    assert report.unclaimed_saves_accepted == 4
+    assert report.passed is False
+
+
+def test_claim_load_refusal_needs_a_code() -> None:
+    def answer(status: int, body: dict) -> httpx.Response:
+        return httpx.Response(status, json=body)
+
+    assert claim_load._claim_refusal(answer(409, {"code": "claim", "message": "held"}))
+    assert claim_load._claim_refusal(answer(403, {"code": "blocked_label", "message": "blocked"}))
+    assert claim_load._claim_refusal(answer(409, {"detail": {"code": "claim", "message": "held"}}))
+    # Someone saved first: a 409 with no code is not a claim refusal.
+    assert not claim_load._claim_refusal(answer(409, {"message": "This page was saved by someone else"}))
+    assert not claim_load._claim_refusal(answer(200, {"revision": 3}))
+    assert not claim_load._claim_refusal(answer(422, {"code": "x"}))
+
+
+@pytest.mark.parametrize("mode", ["off", "warn", None])
+def test_claim_load_refuses_a_target_without_enforced_claims(mode: str | None) -> None:
+    fake = _FakeWorkbench(work_count=2, pages_per_doc=1, claims_mode=mode)
+    report = _run(fake, agents=2, pages=1, include_images=False)
+    assert report.passed is False
+    assert "not 'enforce'" in report.refused
+    assert report.claims_acquired == 0
+    assert fake.statuses == []
+    assert "REFUSED" in claim_load.format_report(report)
+
+
+def test_claim_load_allow_mode_runs_and_says_so_loudly() -> None:
+    report = _run(
+        _FakeWorkbench(work_count=2, pages_per_doc=1, claims_mode="off"),
+        agents=2,
+        pages=1,
+        include_images=False,
+        allow_mode=True,
+    )
+    assert report.passed is True, report.failures()
+    assert report.mode_overridden is True
+    assert report.to_dict()["mode_overridden"] is True
+    text = claim_load.format_report(report)
+    assert "CLAIMS ARE NOT ENFORCED" in text
+    assert "OVERRIDDEN" in text
+
+
+def test_claim_load_refuses_a_remote_target_unless_scratch() -> None:
+    fake = _FakeWorkbench(work_count=2, pages_per_doc=1)
+    report = _run(fake, url="https://review.example.org", agents=2, pages=1, include_images=False)
+    assert report.passed is False
+    assert "not on this machine" in report.refused
+    assert fake.statuses == []
+
+    scratch = _run(
+        _FakeWorkbench(work_count=2, pages_per_doc=1),
+        url="https://scratch.example.org",
+        agents=2,
+        pages=1,
+        include_images=False,
+        target_is_scratch=True,
+    )
+    assert scratch.passed is True, scratch.failures()
+
+
+def test_claim_load_main_exits_non_zero_when_refused(capsys: pytest.CaptureFixture[str]) -> None:
+    assert claim_load.main(["--url", "https://review.example.org"]) == 1
+    assert "REFUSED" in capsys.readouterr().out

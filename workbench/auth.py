@@ -152,6 +152,9 @@ def current(request: Request, store: Store, *, write: bool = False, role: str | 
         raise HTTPException(403, "Missing or wrong CSRF token")
     if role and role not in found["operator"]["roles"]:
         raise HTTPException(403, f"This needs the {role} role")
+    # For what runs after the route (renewing the person's claim because they are at work): who they are,
+    # without resolving the session a second time.
+    request.state.account = found["email"]
     return found
 
 

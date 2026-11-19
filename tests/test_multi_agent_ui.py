@@ -71,10 +71,28 @@ class FakeNode {
   getAttribute(k) { return this.attrs[k] ?? null; }
   addEventListener(ev, fn) { (this.listeners[ev] = this.listeners[ev] || []).push(fn); }
   append(...nodes) {
+    // As the real Element.append: a string becomes text, and so do null and undefined ("null").
     for (const n of nodes) {
-      if (typeof n === "string") this.children.push({ textContent: n, children: [] });
-      else if (n) this.children.push(n);
+      if (n === null || n === undefined) this.children.push({ textContent: String(n), children: [] });
+      else if (typeof n === "string") this.children.push({ textContent: n, children: [] });
+      else { n.parentNode = this; this.children.push(n); }
     }
+  }
+  replaceWith(node) {
+    this.replacedWith = node;
+    if (this.parentNode) {
+      const at = this.parentNode.children.indexOf(this);
+      if (at >= 0) this.parentNode.children[at] = node;
+    }
+  }
+  get options() { return this.children.filter((c) => c && c.tagName === "OPTION"); }
+  findLinks() {
+    const out = [];
+    if (this.tagName === "A") out.push(this);
+    for (const c of this.children) {
+      if (c && typeof c.findLinks === "function") out.push(...c.findLinks());
+    }
+    return out;
   }
   replaceChildren(...nodes) {
     this.children = [];
@@ -351,7 +369,8 @@ def test_claim_tokens_grace_window_and_api_header_wiring():
     docOld: sandbox.getClaimForDoc("doc-old"),
   };
 
-  // api() attaches X-Claim-Token for /api/documents/{act_id}... and /api/claims/{work_id}...
+  // api() attaches X-Claim-Token for /api/documents/{act_id}... and /api/claims/{work_id}... (claims on)
+  sandbox.app.me = { email: "claude@example.org", roles: ["reviewer"], claims: "warn" };
   sandbox.app.csrf = "csrf-123";
   fetchHandler = async (path) => {
     if (path === "/api/documents/doc-b/pages/1") {
@@ -403,7 +422,7 @@ def test_lightweight_claim_view_skips_queue_and_banner_starts_heartbeat():
         _harness_preamble()
         + """
 (async () => {
-  sandbox.app.me = { email: "claude@example.org", roles: ["reviewer"], name: "Claude" };
+  sandbox.app.me = { email: "claude@example.org", roles: ["reviewer"], name: "Claude", claims: "enforce", agent: true };
   sandbox.location.hash = "#/claim?label=claude-m1-07";
   await sandbox.route();
   const pathsCalledOnClaimRoute = fetchCalls.map((c) => c.path);
@@ -446,10 +465,11 @@ def test_lightweight_claim_view_skips_queue_and_banner_starts_heartbeat():
     )
     assert result["pathsCalledOnClaimRoute"] == []  # NO GET /api/queue call!
     assert result["prefilledLabel"] == "claude-m1-07"
-    assert "You hold this work until 14:32 (claude-m1-07)" in result["mineText"]
+    assert "You hold this work until 14:32 UTC (claude-m1-07)" in result["mineText"]
     assert "Release" in result["mineButtons"]
     assert result["heartbeatIntervalMs"] == 300_000  # 5 minutes
-    assert "Held by codex-m2-01 (codex@example.org) until 15:10" in result["otherText"]
+    assert "Held by codex-m2-01 (codex@example.org) until 15:10 UTC" in result["otherText"]
+    assert "null" not in result["otherText"]
 
 
 def test_admin_agents_and_operators_wiring():
@@ -467,4 +487,379 @@ def test_admin_agents_and_operators_wiring():
     assert "/sessions/${encodeURIComponent(s.id)}/end" in src
     # Work queue claim badge & claim-next endpoint
     assert "/api/queue/claim-next" in src
-    assert "held by ${t.claim.label} until ${formatClock(t.claim.expires_at)}" in src
+    assert "held by ${t.claim.label} until ${formatClockUtc(t.claim.expires_at)}" in src
+
+
+def _json_response(status: int, body: str) -> str:
+    """A fetch answer for the harness: {ok, status, json}."""
+    return f"({{ ok: {str(200 <= status < 300).lower()}, status: {status}, json: async () => ({body}) }})"
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_claims_off_shows_nothing_about_claims_and_sends_no_token():
+    result = _run_node(
+        _harness_preamble()
+        + """
+(async () => {
+  const me = { csrf: "c", name: "Owner", email: "owner@example.org", roles: ["reviewer", "admin"], claims: "off", agent: false, agents: false };
+  fetchHandler = async (path) => {
+    if (path === "/api/me") return { ok: true, status: 200, json: async () => me };
+    if (path.startsWith("/api/queue")) return { ok: true, status: 200, json: async () => ({ counts: {}, tasks: [
+      { id: "rw-1", title: "Law 1", priority: "full", kind: "review", started: true, pages: [1], count: 1,
+        claim: { work_id: "rw-1", account: "codex@example.org", label: "codex-m2-01", expires_at: "2026-11-20T15:10:00Z" } },
+    ], offset: 0, total: 1 }) };
+    return { ok: true, status: 200, json: async () => ({}) };
+  };
+
+  // Agents link follows /api/me's "agents", not the admin role.
+  await sandbox.loadMe();
+  const navWithoutAgents = whoEl.findLinks().map((a) => a.attrs.href);
+  me.agents = true;
+  await sandbox.loadMe();
+  const navWithAgents = whoEl.findLinks().map((a) => a.attrs.href);
+
+  fetchCalls.length = 0;
+  await sandbox.queueView();
+  const queueText = mainEl.allText();
+  const queuePaths = fetchCalls.map((c) => c.path);
+
+  sandbox.location.hash = "#/claim";
+  await sandbox.claimView();
+  const claimText = mainEl.allText();
+  const claimLinks = mainEl.findLinks().map((a) => a.attrs.href);
+
+  // A token left over from when claims were on: no banner, no heartbeat, no header.
+  sandbox.storeClaimTokens({ work_id: "rw-1", token: "tok-old", label: "claude-m1-07", expires_at: "2026-11-20T14:32:00Z", documents: ["rw-1"] });
+  const banner = sandbox.claimBanner("rw-1", { work_id: "rw-1", account: "owner@example.org", label: "claude-m1-07", expires_at: "2026-11-20T14:32:00Z" });
+  sandbox.startClaimHeartbeat("rw-1");
+  fetchCalls.length = 0;
+  await sandbox.api("/api/documents/rw-1/pages/1", { method: "POST", body: {} });
+
+  console.log(JSON.stringify({
+    navWithoutAgents, navWithAgents, queueText, queuePaths, claimText, claimLinks,
+    banner: banner === null,
+    intervals: intervals.length,
+    headerSent: fetchCalls[0].options.headers["X-Claim-Token"] || null,
+  }));
+})();
+"""
+    )
+    assert "#/agents" not in result["navWithoutAgents"]
+    assert "#/agents" in result["navWithAgents"]
+    assert "Claim next" not in result["queueText"]
+    assert "held by" not in result["queueText"]
+    assert len(result["queuePaths"]) == 1 and result["queuePaths"][0].startswith("/api/queue?")
+    assert "Claims are switched off on this workbench" in result["claimText"]
+    assert "Label" not in result["claimText"]
+    assert "#/queue" in result["claimLinks"]
+    assert result["banner"] is True
+    assert result["intervals"] == 0
+    assert result["headerSent"] is None
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_claim_refusal_on_save_is_shown_and_keeps_the_text():
+    result = _run_node(
+        _harness_preamble()
+        + """
+(async () => {
+  sandbox.app.me = { email: "ada@example.org", roles: ["reviewer"], claims: "enforce", agent: false };
+  sandbox.app.csrf = "c";
+  sandbox.location.hash = "#/doc/rw-1/page/2";
+
+  const makeView = () => ({
+    actId: "rw-1", pageNumber: 2, address: "#/doc/rw-1/page/2",
+    page: { flags: [] }, units: [{ kind: "paragraph", text: "My corrected words" }], join: null,
+    resolutions: {}, comment: "", expected: 3,
+    detail: { pages: [{ page: 2 }], readiness: { routed: false } },
+    dirtyBadge: new FakeNode("span"),
+  });
+  const press = async (view, answer) => {
+    fetchCalls.length = 0;
+    fetchHandler = async (path, options) => (options && options.method === "POST") ? answer : { ok: true, status: 200, json: async () => ({}) };
+    sandbox.localStorage.setItem("oa-draft:rw-1:2", "{\\"units\\":[]}");
+    sandbox.app.dirty = true;
+    const bar = sandbox.saveBar(view);
+    const button = bar.findButtons().find((b) => b.textContent === "Save as checked");
+    try { await button.listeners.click[0](); } catch { /* the reload draws into an empty fake */ }
+    return {
+      toast: toastEl.textContent,
+      dirty: sandbox.app.dirty,
+      draft: sandbox.localStorage.getItem("oa-draft:rw-1:2") !== null,
+      reloaded: fetchCalls.some((c) => (c.options.method || "GET") === "GET"),
+      units: view.units.map((u) => u.text),
+    };
+  };
+
+  const held = await press(makeView(), ANSWER_HELD);
+  const blocked = await press(makeView(), ANSWER_BLOCKED);
+  const conflict = await press(makeView(), ANSWER_CONFLICT);
+
+  // Mark checked in the whole-document view.
+  const markChecked = async (answer) => {
+    fetchHandler = async () => answer;
+    const section = sandbox.readPage("rw-1", { page: 5, revision: 2, units: [], status: "edited", open_high: 0 }, true);
+    const button = section.findButtons().find((b) => b.textContent === "Mark checked");
+    await button.listeners.click[0]({ currentTarget: { replaceWith() {} } });
+    return toastEl.textContent;
+  };
+  const markHeld = await markChecked(ANSWER_HELD);
+  const markConflict = await markChecked(ANSWER_CONFLICT);
+
+  console.log(JSON.stringify({ held, blocked, conflict, markHeld, markConflict }));
+})();
+""".replace(
+            "ANSWER_HELD",
+            _json_response(
+                409, '{ code: "claim_held", message: "Another reviewer holds this work until 14:32 UTC." }'
+            ),
+        )
+        .replace(
+            "ANSWER_BLOCKED",
+            _json_response(403, '{ code: "label_blocked", message: "This label is blocked." }'),
+        )
+        .replace("ANSWER_CONFLICT", _json_response(409, '{ message: "Someone saved this page first." }'))
+    )
+    for key, words in (
+        ("held", "Another reviewer holds this work until 14:32 UTC."),
+        ("blocked", "This label is blocked."),
+    ):
+        refused = result[key]
+        assert refused["toast"] == words
+        assert refused["dirty"] is True
+        assert refused["draft"] is True
+        assert refused["reloaded"] is False
+        assert refused["units"] == ["My corrected words"]
+    # A 409 with no code is still the revision conflict, reloaded as before.
+    assert result["conflict"]["toast"] == "Someone saved this page first. Reloading their version."
+    assert result["conflict"]["dirty"] is False
+    assert result["conflict"]["reloaded"] is True
+    assert result["markHeld"] == "Another reviewer holds this work until 14:32 UTC."
+    assert result["markConflict"] == "Page 5 changed meanwhile; open it to check"
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_claim_banner_writes_no_null_and_says_utc():
+    result = _run_node(
+        _harness_preamble()
+        + """
+(async () => {
+  const other = { work_id: "rw-2", account: "codex@example.org", label: "codex-m2-01", expires_at: "2026-11-20T15:10:00Z" };
+  sandbox.app.me = { email: "ada@example.org", roles: ["reviewer"], claims: "warn" };
+  const plain = sandbox.claimBanner("rw-2-en", other);
+  sandbox.app.me = { email: "boss@example.org", roles: ["reviewer", "approver"], claims: "warn" };
+  const approver = sandbox.claimBanner("rw-2-en", other);
+  const expires = approver.children[0].children[0].children.find((c) => c.className === "claim-expires");
+
+  fetchHandler = async () => ({ ok: true, status: 200, json: async () => ({ counts: {}, tasks: [
+    { id: "rw-2", title: "Law 2", priority: "full", kind: "review", started: true, pages: [1], count: 1, claim: other },
+  ], offset: 0, total: 1 }) });
+  await sandbox.queueView();
+
+  console.log(JSON.stringify({
+    plain: plain.allText(),
+    approver: approver.allText(),
+    approverButtons: approver.findButtons().map((b) => b.textContent),
+    title: expires.attrs.title,
+    queue: mainEl.allText(),
+  }));
+})();
+"""
+    )
+    assert "null" not in result["plain"]
+    assert result["plain"].endswith("until 15:10 UTC")
+    assert "null" not in result["approver"]
+    assert "Confirm release" in result["approverButtons"]
+    assert result["title"] == "2026-11-20T15:10:00Z"
+    assert "held by codex-m2-01 until 15:10 UTC" in result["queue"]
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_lost_token_take_up_again_and_heartbeat_stops_on_refusal_or_sign_out():
+    result = _run_node(
+        _harness_preamble()
+        + """
+(async () => {
+  sandbox.app.me = { email: "claude@example.org", roles: ["reviewer"], claims: "enforce", agent: true };
+  sandbox.app.csrf = "c";
+  sandbox.setTabLabel("claude-m1-07");
+  const serverClaim = { work_id: "rw-3", account: "claude@example.org", label: "claude-m1-07", task: "status", expires_at: "2026-11-20T14:32:00Z" };
+
+  // (1) No token stored: say so, offer to take it up again, and start no heartbeat.
+  const lost = sandbox.claimBanner("rw-3-en", serverClaim);
+  const parent = new FakeNode("div");
+  parent.append(lost);
+  const lostText = lost.allText();
+  const lostIntervals = intervals.length;
+  fetchHandler = async () => ({ ok: true, status: 200, json: async () => ({
+    work_id: "rw-3", task: "status", token: "tok-new", expires_at: "2026-11-20T15:32:00Z",
+    documents: [{ id: "rw-3-en" }, { id: "rw-3-fr" }], rotated: true }) });
+  fetchCalls.length = 0;
+  await lost.findButtons().find((b) => b.textContent === "Take it up again").listeners.click[0]();
+  const takeUpCall = { path: fetchCalls[0].path, body: JSON.parse(fetchCalls[0].options.body) };
+  const stored = [sandbox.getClaimForDoc("rw-3-en"), sandbox.getClaimForDoc("rw-3-fr")].map((c) => c && c.token);
+  const redrawn = parent.children[0].allText();
+  const heartbeatAfterTakeUp = intervals.length > lostIntervals && !intervals[intervals.length - 1].cleared;
+
+  // (2) A refused renewal stops the heartbeat and puts the server's words in the banner.
+  const mine = sandbox.claimBanner("rw-3-en", { ...serverClaim, expires_at: "2026-11-20T15:32:00Z" });
+  const beat = intervals[intervals.length - 1];
+  fetchHandler = async () => ({ ok: false, status: 409, json: async () => ({ code: "claim_lost", message: "Your claim on this work has ended: claim it again." }) });
+  await beat.fn();
+  const afterRefusal = { cleared: beat.cleared, text: mine.allText(), timer: sandbox.app.heartbeatTimer };
+
+  // (3) Signed out (a 401 from the workbench): the heartbeat stops.
+  sandbox.claimBanner("rw-3-en", { ...serverClaim, expires_at: "2026-11-20T15:32:00Z" });
+  const beat2 = intervals[intervals.length - 1];
+  fetchHandler = async (path) => path === "/api/me"
+    ? { ok: false, status: 401, json: async () => ({ oidc: true }) }
+    : { ok: false, status: 401, json: async () => ({ message: "Sign in again." }) };
+  await beat2.fn();
+  const afterSignOut = { cleared: beat2.cleared, timer: sandbox.app.heartbeatTimer };
+
+  // Leaving the document: route() stops it.
+  sandbox.app.me = { email: "claude@example.org", roles: ["reviewer"], claims: "enforce", agent: true };
+  sandbox.claimBanner("rw-3-en", { ...serverClaim, expires_at: "2026-11-20T15:32:00Z" });
+  const beat3 = intervals[intervals.length - 1];
+  fetchHandler = async () => ({ ok: true, status: 200, json: async () => ({ counts: {}, tasks: [], offset: 0, total: 0 }) });
+  sandbox.location.hash = "#/queue";
+  await sandbox.route();
+
+  console.log(JSON.stringify({
+    lostText, lostIntervals, takeUpCall, stored, redrawn, heartbeatAfterTakeUp,
+    afterRefusal, afterSignOut, leftCleared: beat3.cleared,
+  }));
+})();
+"""
+    )
+    assert (
+        "This work is claimed under your label, but this browser has no claim token for it."
+        in result["lostText"]
+    )
+    assert "You hold this work" not in result["lostText"]
+    assert result["lostIntervals"] == 0
+    assert result["takeUpCall"] == {
+        "path": "/api/claims/rw-3",
+        "body": {"label": "claude-m1-07", "task": "status"},
+    }
+    assert result["stored"] == ["tok-new", "tok-new"]
+    assert "You hold this work until 15:32 UTC (claude-m1-07)" in result["redrawn"]
+    assert result["heartbeatAfterTakeUp"] is True
+    assert result["afterRefusal"]["cleared"] is True
+    assert result["afterRefusal"]["timer"] is None
+    assert "Your claim on this work has ended: claim it again." in result["afterRefusal"]["text"]
+    assert "You hold this work" not in result["afterRefusal"]["text"]
+    assert result["afterSignOut"] == {"cleared": True, "timer": None}
+    assert result["leftCleared"] is True
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_a_persons_unlabelled_claim_is_their_own_whatever_the_tab_label():
+    result = _run_node(
+        _harness_preamble()
+        + """
+(async () => {
+  sandbox.app.me = { email: "ada@example.org", roles: ["reviewer"], claims: "warn", agent: false };
+  sandbox.app.csrf = "c";
+  sandbox.setTabLabel("claude-m1-07"); // typed in the Claim next panel
+  const serverClaim = { work_id: "rw-4", account: "ada@example.org", label: "unlabelled", expires_at: "2026-11-20T14:32:00Z" };
+
+  // No token stored: still hers, with Release, and no heartbeat (her next save brings a token).
+  const noToken = sandbox.claimBanner("rw-4-en", serverClaim);
+  const intervalsNoToken = intervals.length;
+
+  // A save takes the claim by itself: the token is stored under "unlabelled", not the tab's label.
+  fetchHandler = async () => ({ ok: true, status: 200, json: async () => ({
+    revision: 4, claim_token: "tok-u", claim_expires_at: "2026-11-20T15:00:00Z", claim_work_id: "rw-4",
+    claim_documents: ["rw-4-en", "rw-4-fr"], claim_label: "unlabelled" }) });
+  await sandbox.api("/api/documents/rw-4-en/pages/1", { method: "POST", body: {} });
+  const stored = sandbox.getClaimForDoc("rw-4-fr");
+  const withToken = sandbox.claimBanner("rw-4-en", serverClaim);
+  const intervalsWithToken = intervals.length;
+
+  console.log(JSON.stringify({
+    noToken: noToken.allText(),
+    noTokenButtons: noToken.findButtons().map((b) => b.textContent),
+    intervalsNoToken,
+    storedLabel: stored && stored.label,
+    withToken: withToken.allText(),
+    intervalsWithToken,
+  }));
+})();
+"""
+    )
+    assert "You hold this work until 14:32 UTC" in result["noToken"]
+    assert "no claim token" not in result["noToken"]
+    assert "Held by" not in result["noToken"]
+    assert "Release" in result["noTokenButtons"]
+    assert result["intervalsNoToken"] == 0
+    assert result["storedLabel"] == "unlabelled"
+    assert "You hold this work until 14:32 UTC" in result["withToken"]
+    assert result["intervalsWithToken"] == 1
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_no_audit_task_offered_and_audit_save_says_so():
+    result = _run_node(
+        _harness_preamble()
+        + """
+(async () => {
+  sandbox.app.me = { email: "claude@example.org", roles: ["reviewer"], claims: "enforce", agent: true };
+  sandbox.app.csrf = "c";
+  sandbox.location.hash = "#/claim?task=audit";
+  const panel = sandbox.claimNextPanel({ standalone: true });
+  const task = panel.findInputs().find((i) => i.attrs.name === "task");
+
+  sandbox.location.hash = "#/doc/rw-5/page/1";
+  const view = {
+    actId: "rw-5", pageNumber: 1, address: "#/doc/rw-5/page/1",
+    page: { flags: [] }, units: [{ kind: "paragraph", text: "The auditor's reading" }], join: null,
+    resolutions: {}, comment: "", expected: 7,
+    detail: { pages: [{ page: 1 }], readiness: { routed: false } },
+    dirtyBadge: new FakeNode("span"),
+  };
+  fetchHandler = async () => ({ ok: true, status: 200, json: async () => ({ audit_id: 12, audited: true, verdict: "minor", diff: {} }) });
+  fetchCalls.length = 0;
+  sandbox.app.dirty = true;
+  const bar = sandbox.saveBar(view);
+  await bar.findButtons().find((b) => b.textContent === "Save as checked").listeners.click[0]();
+
+  console.log(JSON.stringify({
+    taskOptions: task.children.map((o) => o.value),
+    taskValue: task.value,
+    toast: toastEl.textContent,
+    calls: fetchCalls.length,
+    units: view.units.map((u) => u.text),
+    expected: view.expected,
+  }));
+})();
+"""
+    )
+    assert result["taskOptions"] == ["review", "status"]
+    assert result["taskValue"] == "review"
+    assert result["toast"] == "Audit saved"
+    assert "undefined" not in result["toast"]
+    assert result["calls"] == 1  # the page is not reloaded over the auditor's reading
+    assert result["units"] == ["The auditor's reading"]
+    assert result["expected"] == 7
+
+
+@pytest.mark.skipif(NODE is None, reason="node not installed")
+def test_pending_status_research_is_listed_before_approval():
+    result = _run_node(
+        _harness_preamble()
+        + """
+sandbox.app.me = { email: "ada@example.org", roles: ["reviewer"], claims: "off" };
+const readiness = {
+  ready: false, routed: false, pages: 3, unchecked_pages: [], unresolved_flag_pages: [], open_high_flags: [],
+  stale_pages: [], missing_checks: [], details: { confirmed: true, status: "confirmed" }, text: { errors: 0 },
+  status_pending: true, status_pending_message: "Legal status: research pending.",
+};
+const data = { readiness, approvals: [], materials: {}, act: { type: "law" }, text_check: null };
+const panel = sandbox.approvalPanel("rw-6", data, false);
+const checklist = sandbox.approvalChecklist("rw-6", data, false, null);
+console.log(JSON.stringify({ panel: panel.allText(), checklist: checklist.allText() }));
+"""
+    )
+    assert "Before approval: Legal status: research pending." in result["panel"]
+    assert "Legal status: research pending." in result["checklist"]

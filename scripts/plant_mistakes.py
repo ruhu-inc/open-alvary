@@ -1,12 +1,23 @@
 """Deterministic mistake planter for the multi-agent review qualifying test (section 7.1).
 
-Plants known mistakes into reading JSON files and writes a manifest key describing
-each planted mistake alongside the clean reference units for every page, so
-``python -m workbench.qualify score --label ...`` can measure mistakes found,
-mistakes missed, and correct text changed wrongly.
+Plants known mistakes into a practice copy of some reviewed readings and writes an answer key
+describing each planted mistake beside the clean units of every page, so
+``python -m workbench.qualify score --label ...`` can measure mistakes found, mistakes missed,
+and correct text changed wrongly.
+
+The practice copy gives nothing away. On every page of it (planted or not, so planted pages
+cannot be told apart):
+  - "nodes" are the planted units;
+  - "text" is the page's text made again from those nodes, as the reconciler makes it;
+  - "flags" is empty: a flag's token positions point into the clean text and its readings show the
+    clean words;
+  - "checks" keeps each check reader's name with empty text: their texts are the clean words;
+  - "regions" and "lines", when the reading carries them, keep their boxes but not their words.
+The reading's summary counts no flags. The key is written outside the practice copy and outside
+the clean readings, and the practice copy carries a marker file so a later run can recognise it.
 
 Usage:
-    python scripts/plant_mistakes.py --input DIR --output DIR [--key PATH] [--seed 42]
+    python scripts/plant_mistakes.py --input DIR --output DIR --key PATH [--seed 42] [--overwrite]
 """
 
 from __future__ import annotations
@@ -27,7 +38,17 @@ _ROOT = Path(__file__).resolve().parents[1]
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from ingestion import layout_parser  # noqa: E402
 from workbench import content  # noqa: E402
+
+# The file that marks a folder as a practice copy this script wrote.
+MARKER_NAME = ".plant-mistakes-output.json"
+
+# Working tags on nodes and records while planting; never written out.
+_CLEAN_AT = "_plant_clean_at"  # the node's unit index on the clean page
+_NEW = "_plant_new"  # the node was made or changed by the planter that just ran
+_MISTAKE = "_plant_mistake"  # the id of the mistake that made or changed the node
+_CONSUMED = "_consumed"  # the clean unit indices the mistake replaced
 
 # Ordered from most specific (rarest eligible nodes) to most general so one planter
 # does not consume the only eligible node for a rarer kind.
@@ -50,6 +71,10 @@ _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
 def _norm(text: str | None) -> str:
     return " ".join((text or "").split())
+
+
+class PlantError(Exception):
+    """A plain-sentence reason the planter refuses to run."""
 
 
 def _strip_accents(word: str) -> str:
@@ -80,9 +105,11 @@ def _plant_merged_paragraphs(
     first_text = _norm(nodes[idx]["text"])
     second_text = _norm(nodes[idx + 1]["text"])
     merged_text = f"{first_text} {second_text}"
+    consumed = [nodes[idx].get(_CLEAN_AT), nodes[idx + 1].get(_CLEAN_AT)]
     merged = copy.deepcopy(nodes[idx])
     merged["text"] = merged_text
     merged.pop("marks", None)
+    merged[_NEW] = True
     nodes[idx : idx + 2] = [merged]
     new_used = _shift_used(used, idx + 2, -1)
     new_used.add(idx)
@@ -93,6 +120,7 @@ def _plant_merged_paragraphs(
             "description": "Two adjacent paragraphs were merged into one.",
             "before_texts": [first_text, second_text],
             "after_text": merged_text,
+            _CONSUMED: consumed,
         },
         new_used,
     )
@@ -121,10 +149,12 @@ def _plant_split_paragraph(
         part_a = " ".join(words[:mid])
         part_b = " ".join(words[mid:])
 
+    consumed = [nodes[idx].get(_CLEAN_AT)]
     first = copy.deepcopy(nodes[idx])
     first["text"] = part_a
     first.pop("marks", None)
-    second = {"kind": "paragraph", "text": part_b}
+    first[_NEW] = True
+    second = {"kind": "paragraph", "text": part_b, _NEW: True}
     nodes[idx : idx + 1] = [first, second]
     new_used = _shift_used(used, idx + 1, 1)
     new_used.update({idx, idx + 1})
@@ -135,6 +165,7 @@ def _plant_split_paragraph(
             "description": "A single paragraph was split into two paragraphs.",
             "before_text": orig_text,
             "after_texts": [part_a, part_b],
+            _CONSUMED: consumed,
         },
         new_used,
     )
@@ -159,10 +190,12 @@ def _plant_heading_run_into_paragraph(
     heading_text = _norm(nodes[idx]["text"])
     para_text = _norm(nodes[idx + 1]["text"])
     merged_text = f"{heading_text} {para_text}"
+    consumed = [nodes[idx].get(_CLEAN_AT), nodes[idx + 1].get(_CLEAN_AT)]
     merged = copy.deepcopy(nodes[idx + 1])
     merged["kind"] = "paragraph"
     merged["text"] = merged_text
     merged.pop("marks", None)
+    merged[_NEW] = True
     nodes[idx : idx + 2] = [merged]
     new_used = _shift_used(used, idx + 2, -1)
     new_used.add(idx)
@@ -173,6 +206,7 @@ def _plant_heading_run_into_paragraph(
             "description": "A heading was merged into the following paragraph.",
             "before_texts": [heading_text, para_text],
             "after_text": merged_text,
+            _CONSUMED: consumed,
         },
         new_used,
     )
@@ -197,8 +231,10 @@ def _plant_line_end_hyphen(
     mid = len(word) // 2
     hyphenated = f"{word[:mid]}-{word[mid:]}"
     mutated = orig_text[: match.start()] + hyphenated + orig_text[match.end() :]
+    consumed = [nodes[idx].get(_CLEAN_AT)]
     nodes[idx]["text"] = mutated
     nodes[idx].pop("marks", None)
+    nodes[idx][_NEW] = True
     used = set(used) | {idx}
     return (
         {
@@ -209,6 +245,7 @@ def _plant_line_end_hyphen(
             "after_text": mutated,
             "before_token": word,
             "after_token": hyphenated,
+            _CONSUMED: consumed,
         },
         used,
     )
@@ -221,7 +258,7 @@ def _plant_dropped_accent(
     for i, node in enumerate(nodes):
         if i in used or node.get("kind") not in {"paragraph", "heading", "list_item"}:
             continue
-        text = _norm(node.get("text"))
+        text = unicodedata.normalize("NFC", _norm(node.get("text")))
         for match in _WORD_RE.finditer(text):
             word = match.group(0)
             stripped = _strip_accents(word)
@@ -230,11 +267,13 @@ def _plant_dropped_accent(
     if not candidates:
         return None, used
     idx, match, stripped = rng.choice(candidates)
-    orig_text = _norm(nodes[idx]["text"])
+    orig_text = unicodedata.normalize("NFC", _norm(nodes[idx]["text"]))
     word = match.group(0)
     mutated = orig_text[: match.start()] + stripped + orig_text[match.end() :]
+    consumed = [nodes[idx].get(_CLEAN_AT)]
     nodes[idx]["text"] = mutated
     nodes[idx].pop("marks", None)
+    nodes[idx][_NEW] = True
     used = set(used) | {idx}
     return (
         {
@@ -245,6 +284,7 @@ def _plant_dropped_accent(
             "after_text": mutated,
             "before_token": word,
             "after_token": stripped,
+            _CONSUMED: consumed,
         },
         used,
     )
@@ -255,7 +295,7 @@ def _plant_running_head_in_text(
 ) -> tuple[dict[str, Any] | None, set[int]]:
     del rng
     header_text = f"Official Gazette — Page {page_num}"
-    nodes.insert(0, {"kind": "paragraph", "text": header_text})
+    nodes.insert(0, {"kind": "paragraph", "text": header_text, _NEW: True})
     new_used = _shift_used(used, 0, 1)
     new_used.add(0)
     return (
@@ -265,6 +305,7 @@ def _plant_running_head_in_text(
             "description": "A running page header was left in the body text.",
             "before_text": "",
             "after_text": header_text,
+            _CONSUMED: [],
         },
         new_used,
     )
@@ -289,8 +330,10 @@ def _plant_changed_digit(
     last_digit = str((int(token[-1]) + 1) % 10)
     mutated_token = token[:-1] + last_digit
     mutated = orig_text[: match.start()] + mutated_token + orig_text[match.end() :]
+    consumed = [nodes[idx].get(_CLEAN_AT)]
     nodes[idx]["text"] = mutated
     nodes[idx].pop("marks", None)
+    nodes[idx][_NEW] = True
     used = set(used) | {idx}
     return (
         {
@@ -301,6 +344,7 @@ def _plant_changed_digit(
             "after_text": mutated,
             "before_token": token,
             "after_token": mutated_token,
+            _CONSUMED: consumed,
         },
         used,
     )
@@ -335,7 +379,8 @@ def _plant_flattened_list(
         for item in items
     ]
     flattened_text = _norm(" ".join(parts))
-    nodes[start:end] = [{"kind": "paragraph", "text": flattened_text}]
+    consumed = [item.get(_CLEAN_AT) for item in items]
+    nodes[start:end] = [{"kind": "paragraph", "text": flattened_text, _NEW: True}]
     removed = (end - start) - 1
     new_used = _shift_used(used, end, -removed)
     new_used.add(start)
@@ -345,7 +390,9 @@ def _plant_flattened_list(
             "page": page_num,
             "description": f"{len(items)} list items were flattened into a single paragraph.",
             "before_texts": before_texts,
+            "before_markers": [str(item.get("marker") or "") for item in items],
             "after_text": flattened_text,
+            _CONSUMED: consumed,
         },
         new_used,
     )
@@ -363,6 +410,33 @@ _PLANTERS = {
 }
 
 
+def _unit_positions(nodes: list[dict[str, Any]]) -> list[int | None]:
+    """Each node's index among the page's units (``content.units_from`` leaves out furniture)."""
+    out: list[int | None] = []
+    at = 0
+    for node in nodes:
+        if node.get("kind") == "furniture":
+            out.append(None)
+        else:
+            out.append(at)
+            at += 1
+    return out
+
+
+def _practice_page(page: dict[str, Any]) -> None:
+    """Make a planted page consistent and give nothing away (see the module docstring)."""
+    page_num = int(page["page"])
+    page["text"] = layout_parser.page_text(
+        [{**node, "page": node.get("page", page_num)} for node in page["nodes"]], page_num
+    )
+    page["flags"] = []
+    if isinstance(page.get("checks"), dict):
+        page["checks"] = {name: "" for name in page["checks"]}
+    for key in ("regions", "lines"):
+        if isinstance(page.get(key), list):
+            page[key] = [{**item, "text": ""} if isinstance(item, dict) else item for item in page[key]]
+
+
 def plant_on_reading(
     act_id: str,
     reading: dict[str, Any],
@@ -372,8 +446,11 @@ def plant_on_reading(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Plant up to one mistake of each requested kind across ``reading`` deterministically.
 
-    Returns ``(mutated_reading, doc_key)`` where ``doc_key`` maps string page numbers to
-    ``{"clean_units": [...], "planted_units": [...], "mistakes": [...]}``.
+    Returns ``(practice_reading, doc_key)`` where ``doc_key`` maps string page numbers to
+    ``{"clean_units": [...], "planted_units": [...], "mistakes": [...]}``. Each mistake holds, beside
+    what was changed, ``clean_range`` (the clean units it replaced, ``[start, end)`` into
+    ``clean_units``) and ``planted_range`` (the units standing there instead, into
+    ``planted_units``).
     """
     selected = list(MISTAKE_KINDS if kinds is None else kinds)
     unknown = set(selected) - set(MISTAKE_KINDS)
@@ -385,6 +462,10 @@ def plant_on_reading(
     mutated = copy.deepcopy(reading)
 
     pages = mutated.get("pages", [])
+    for page in pages:
+        for node, at in zip(page["nodes"], _unit_positions(page["nodes"]), strict=True):
+            if at is not None:
+                node[_CLEAN_AT] = at
     used_by_page: dict[int, set[int]] = {p["page"]: set() for p in pages}
     mistakes_by_page: dict[int, list[dict[str, Any]]] = {p["page"]: [] for p in pages}
 
@@ -401,79 +482,156 @@ def plant_on_reading(
             if record is not None:
                 counter += 1
                 used_by_page[page_num] = new_used
-                mistakes_by_page[page_num].append(
-                    {
-                        "id": f"{act_id}:p{page_num}:{kind}:{counter}",
-                        "act_id": act_id,
-                        **record,
-                    }
-                )
+                mistake_id = f"{act_id}:p{page_num}:{kind}:{counter}"
+                consumed = [int(at) for at in record.pop(_CONSUMED) if at is not None]
+                dated = any("page" in node for node in page["nodes"])
+                for node in page["nodes"]:
+                    if node.pop(_NEW, False):
+                        node[_MISTAKE] = mistake_id
+                        if dated:
+                            node.setdefault("page", page_num)
+                record["clean_range"] = [min(consumed), max(consumed) + 1] if consumed else [0, 0]
+                mistakes_by_page[page_num].append({"id": mistake_id, "act_id": act_id, **record})
                 break
 
     doc_key: dict[str, Any] = {}
     for page in pages:
         page_num = int(page["page"])
+        spans: dict[str, list[int]] = {}
+        for node, at in zip(page["nodes"], _unit_positions(page["nodes"]), strict=True):
+            mistake_id = node.pop(_MISTAKE, None)
+            node.pop(_CLEAN_AT, None)
+            if mistake_id is not None and at is not None:
+                spans.setdefault(mistake_id, []).append(at)
+        for mistake in mistakes_by_page[page_num]:
+            planted = spans.get(mistake["id"], [])
+            mistake["planted_range"] = [min(planted), max(planted) + 1] if planted else [0, 0]
         doc_key[str(page_num)] = {
             "clean_units": original_pages[page_num],
             "planted_units": content.units_from(page),
             "mistakes": mistakes_by_page[page_num],
         }
+        _practice_page(page)
+
+    summary = mutated.get("summary")
+    if isinstance(summary, dict) and isinstance(summary.get("flags"), dict):
+        summary["flags"] = {level: 0 for level in summary["flags"]}
     return mutated, doc_key
+
+
+def _inside(path: Path, folder: Path) -> bool:
+    return path == folder or folder in path.parents
+
+
+def _check_places(input_dir: Path, output_dir: Path, key_path: Path, *, overwrite: bool) -> None:
+    """Refuse an output or key that could overwrite real readings or leave the answers readable."""
+    source = input_dir.resolve()
+    target = output_dir.resolve()
+    key = key_path.resolve()
+    if not source.is_dir():
+        raise PlantError(f"The input {source} is not a folder of readings.")
+    if _inside(target, source) or _inside(source, target):
+        raise PlantError(
+            "The output must be a folder of its own, neither the input nor inside it nor holding it."
+        )
+    if _inside(key, target) or _inside(key, source):
+        raise PlantError(
+            "The key must be written outside the practice copy and outside the clean readings, "
+            "or anyone who can read those folders can read the answers."
+        )
+    if target.exists() and not target.is_dir():
+        raise PlantError(f"The output {target} exists and is not a folder.")
+    if target.is_dir():
+        held = sorted(p.name for p in target.glob("*.reading.json"))
+        if (target / "manifest.json").exists():
+            held.append("manifest.json")
+        ours = (target / MARKER_NAME).is_file()
+        if held and not ours:
+            raise PlantError(
+                f"The output {target} already holds readings this script did not write; "
+                "choose an empty folder."
+            )
+        if ours and not overwrite:
+            raise PlantError(
+                f"The output {target} holds an earlier practice copy; pass --overwrite to replace it."
+            )
+    if key.exists() and not overwrite:
+        raise PlantError(f"The key {key} exists already; pass --overwrite to replace it.")
 
 
 def plant_directory(
     input_dir: Path,
     output_dir: Path,
     *,
-    key_path: Path | None = None,
+    key_path: Path,
     seed: int = 42,
     kinds: Sequence[str] | None = None,
+    overwrite: bool = False,
 ) -> dict[str, Any]:
     """Plant mistakes across every ``*.reading.json`` file in ``input_dir``.
 
-    Writes mutated readings to ``output_dir`` (copying ``manifest.json`` if present)
-    and writes the manifest key JSON to ``key_path`` (default ``output_dir / 'qualify-key.json'``).
+    Writes the practice readings to ``output_dir`` (copying ``manifest.json`` if present) with a
+    marker file, and the answer key JSON to ``key_path``, which must lie outside both folders.
+    Refuses (``PlantError``) an output that is, holds or lies in the input, or that already holds
+    readings it did not write; an earlier practice copy is replaced only with ``overwrite``.
     """
-    output_dir.mkdir(parents=True, exist_ok=True)
-    key_target = key_path or (output_dir / "qualify-key.json")
+    _check_places(input_dir, output_dir, key_path, overwrite=overwrite)
 
-    manifest_src = input_dir / "manifest.json"
-    if manifest_src.exists():
-        shutil.copy2(manifest_src, output_dir / "manifest.json")
-
+    reading_paths = sorted(input_dir.glob("*.reading.json"))
+    practice: dict[str, str] = {}
     documents: dict[str, Any] = {}
     total_mistakes = 0
-    reading_paths = sorted(input_dir.glob("*.reading.json"))
     for path in reading_paths:
         act_id = path.name.removesuffix(".reading.json")
         reading = json.loads(path.read_text(encoding="utf-8"))
         mutated, doc_key = plant_on_reading(act_id, reading, seed=seed, kinds=kinds)
-        (output_dir / path.name).write_text(
-            json.dumps(mutated, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        practice[path.name] = json.dumps(mutated, ensure_ascii=False, indent=2) + "\n"
         documents[act_id] = doc_key
         total_mistakes += sum(len(entry["mistakes"]) for entry in doc_key.values())
 
+    output_dir.mkdir(parents=True, exist_ok=True)
+    marker = output_dir / MARKER_NAME
+    marker.write_text(
+        json.dumps({"written_by": "scripts/plant_mistakes.py", "seed": seed}) + "\n", encoding="utf-8"
+    )
+    for stale in output_dir.glob("*.reading.json"):
+        if stale.name not in practice:
+            stale.unlink()
+    (output_dir / "manifest.json").unlink(missing_ok=True)
+    manifest_src = input_dir / "manifest.json"
+    if manifest_src.exists():
+        shutil.copy2(manifest_src, output_dir / "manifest.json")
+    for name, body in practice.items():
+        (output_dir / name).write_text(body, encoding="utf-8")
+
     key_data = {
-        "version": 1,
+        "version": 2,
         "seed": seed,
         "kinds": list(MISTAKE_KINDS if kinds is None else kinds),
         "total_mistakes": total_mistakes,
         "documents": documents,
     }
-    key_target.parent.mkdir(parents=True, exist_ok=True)
-    key_target.write_text(json.dumps(key_data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    key_path.parent.mkdir(parents=True, exist_ok=True)
+    key_path.write_text(json.dumps(key_data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return key_data
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument(
         "--input", required=True, type=Path, help="Directory holding clean *.reading.json files"
     )
-    parser.add_argument("--output", required=True, type=Path, help="Directory to write mutated readings")
-    parser.add_argument("--key", type=Path, default=None, help="Path for the manifest key JSON")
+    parser.add_argument(
+        "--output", required=True, type=Path, help="Directory to write the practice readings (a new folder)"
+    )
+    parser.add_argument(
+        "--key",
+        required=True,
+        type=Path,
+        help="Path for the answer key JSON, outside both the input and the output folders",
+    )
     parser.add_argument("--seed", type=int, default=42, help="Deterministic RNG seed (default: 42)")
     parser.add_argument(
         "--kinds",
@@ -482,8 +640,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=None,
         help="Subset of mistake kinds to plant (default: all)",
     )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace an earlier practice copy this script wrote, and its key",
+    )
     args = parser.parse_args(argv)
-    key_data = plant_directory(args.input, args.output, key_path=args.key, seed=args.seed, kinds=args.kinds)
+    try:
+        key_data = plant_directory(
+            args.input,
+            args.output,
+            key_path=args.key,
+            seed=args.seed,
+            kinds=args.kinds,
+            overwrite=args.overwrite,
+        )
+    except PlantError as error:
+        print(f"plant_mistakes: {error}", file=sys.stderr)
+        return 2
     print(json.dumps({"documents": len(key_data["documents"]), "total_mistakes": key_data["total_mistakes"]}))
     return 0
 

@@ -10,6 +10,7 @@ import hmac
 import html
 import os
 import re
+import sys
 import threading
 import time
 from datetime import UTC, datetime, timedelta
@@ -26,8 +27,9 @@ from fastapi.responses import (
     Response,
 )
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy import text as sql_text
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from ingestion import cited_names, render, settings
@@ -60,7 +62,6 @@ from workbench.store import (
     approval,
     blocked_label,
     detail_revision,
-    digest,
     engine_from_environment,
     page_revision,
     review_audit,
@@ -68,6 +69,7 @@ from workbench.store import (
     work_release,
 )
 from workbench.store import now as store_now
+from workbench.store import said as error_said
 
 STATIC = Path(__file__).with_name("static")
 DECISIONS = {"keep", "use_check", "edited", "dismissed"}
@@ -114,19 +116,31 @@ def create_app(
     @app.middleware("http")
     async def headers(request: Request, call_next):
         response = await call_next(request)
+        account = getattr(request.state, "account", None)
         if (
-            response.status_code < 400
+            account
+            and response.status_code < 400
             and request.url.path.startswith("/api/documents/")
             and request.headers.get("X-Claim-Token")
-            and request.cookies.get(auth.COOKIE)
+            and claims.claims_mode() != "off"
         ):
             parts = request.url.path.split("/")
             if len(parts) >= 4 and parts[3]:
-                _touch_claim_on_activity(
-                    unquote(parts[3]),
-                    request.cookies[auth.COOKIE],
-                    request.headers["X-Claim-Token"],
-                )
+                # Off the event loop: this talks to the database, and the loop serves every other request
+                # of this copy. And never at the cost of the answer: the route's work is done and saved.
+                try:
+                    await run_in_threadpool(
+                        _touch_claim_on_activity,
+                        unquote(parts[3]),
+                        account,
+                        request.headers["X-Claim-Token"],
+                    )
+                except Exception as error:  # noqa: BLE001 - a renewal that failed is tried at the next request
+                    print(
+                        f"workbench: claim not renewed on activity: {error_said(error)}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
         for name, value in SECURITY_HEADERS.items():
             response.headers.setdefault(name, value)
         if request.url.scheme == "https":
@@ -249,6 +263,13 @@ def create_app(
             "traffic": access is not None and traffic_section.ROLE in person["roles"],
             "operators": relying is not None and operators_section.ROLE in person["roles"],
             "publishing": bool(person["roles"] & publishing_section.READERS),
+            # Many agents at once (docs: multi-agent-review-design): whether works are claimed, whether
+            # this account is an agent's, and whether this person is shown the Agents screen, which has
+            # nothing to show until claims are on or an agent account exists.
+            "claims": claims.claims_mode(),
+            "agent": bool(person.get("agent")),
+            "agents": "admin" in person["roles"]
+            and (claims.claims_mode() != "off" or store.has_agent_accounts()),
         }
 
     # --- review ----------------------------------------------------------------------------------
@@ -307,6 +328,8 @@ def create_app(
         return ids
 
     def current_claim(work_id: str) -> dict | None:
+        if claims.claims_mode() == "off":
+            return None
         with store.engine.connect() as db:
             cutoff = sql_text("CURRENT_TIMESTAMP") if db.dialect.name == "postgresql" else store_now()
             row = db.execute(
@@ -324,42 +347,11 @@ def create_app(
             "expires_at": _aware(row.expires_at).isoformat(),
         }
 
-    def _touch_claim_on_activity(act_id: str, session_cookie: str, claim_token: str) -> None:
+    def _touch_claim_on_activity(act_id: str, account: str, claim_token: str) -> None:
         """Renew an active claim on signed-in /api/documents/{act_id}/... activity (at most once/min)."""
         if not claim_token or not library.has(act_id):
             return
-        who = store.resume(session_cookie)
-        if not who:
-            return
-        account = who["email"].strip().lower()
-        work_id = details_key(library.listed(act_id))
-        token_hash = digest(claim_token)
-        minutes = claims.claim_minutes()
-        with store.engine.begin() as db:
-            row = db.execute(select(work_claim).where(work_claim.c.work_id == work_id)).first()
-            if row is None or row.account != account or not hmac.compare_digest(row.token_hash, token_hash):
-                return
-            if claims.is_label_blocked(db, account, row.label):
-                return
-            moment = store_now()
-            if _aware(row.expires_at) > moment and moment - _aware(row.renewed_at) < timedelta(seconds=60):
-                return
-            if db.dialect.name == "postgresql":
-                db.execute(
-                    sql_text(
-                        "UPDATE work_claim "
-                        "   SET renewed_at = CURRENT_TIMESTAMP, "
-                        "       expires_at = CURRENT_TIMESTAMP + make_interval(mins => :minutes) "
-                        " WHERE work_id = :work_id AND token_hash = :token_hash"
-                    ),
-                    {"minutes": minutes, "work_id": work_id, "token_hash": token_hash},
-                )
-            else:
-                db.execute(
-                    update(work_claim)
-                    .where(work_claim.c.work_id == work_id, work_claim.c.token_hash == token_hash)
-                    .values(renewed_at=moment, expires_at=moment + timedelta(minutes=minutes))
-                )
+        claims.touch(store.engine, details_key(library.listed(act_id)), account, claim_token)
 
     work_cache_lock = threading.Lock()
     work_cache: dict = {"at": 0.0, "snapshot": None, "evicted": set()}
@@ -489,6 +481,38 @@ def create_app(
             work_cache["snapshot"] = snapshot
             work_cache["evicted"] = set()
             return snapshot, set()
+
+    def _work_standing(work_id: str) -> tuple[bool, bool]:
+        """Whether any document of the work is approved, and whether the work was last left for the owner:
+        as the database has it now, not as the ten-second list "Claim next" works from had it."""
+        with store.engine.connect() as db:
+            approved = any(
+                db.execute(
+                    select(approval.c.decision)
+                    .where(approval.c.act_id == doc["id"])
+                    .order_by(approval.c.revision.desc())
+                    .limit(1)
+                ).scalar()
+                == "approved"
+                for doc in work_documents(work_id)
+            )
+            last = db.execute(
+                select(work_release.c.outcome)
+                .where(work_release.c.work_id == work_id)
+                .order_by(work_release.c.id.desc())
+                .limit(1)
+            ).scalar()
+        return approved, last == "parked"
+
+    def _claims_open(task: str = "review") -> None:
+        """Works are claimed only while the switch is on, and audited only while claims are enforced: with
+        claims off or only logged, a save is not held to its claim, and an auditor's would go into the live
+        page instead of the audit's record."""
+        mode = claims.claims_mode()
+        if mode == "off":
+            raise claims.ClaimError(409, claims.MSG_CLAIMS_OFF, "claims_off")
+        if task == "audit" and mode != "enforce":
+            raise claims.ClaimError(409, claims.MSG_AUDIT_NEEDS_ENFORCE, "audit_needs_enforce")
 
     def _claim_response(claimed: dict, *, pages_drawn_by_doc: dict[str, list[int]] | None = None) -> dict:
         wid = claimed["work_id"]
@@ -901,6 +925,7 @@ def create_app(
                 "resolutions": content.standing(found, latest["resolutions"]),
                 "comment": latest["comment"],
                 "author": latest["author"],
+                "label": latest.get("label"),  # which of an account's agents saved it
                 "created_at": latest["created_at"].isoformat(),
                 "stale": latest["reading_sha256"] != content.reading_sha256(found),
             }
@@ -1057,6 +1082,7 @@ def create_app(
                 {
                     "revision": revision,
                     "claim_token": claim_info["claim_token"],
+                    "claim_label": claim_info["label"],
                     "claim_expires_at": claim_info["claim_expires_at"],
                     "claim_work_id": wid,
                     "claim_documents": sorted(sibling_act_ids(act)),
@@ -1265,6 +1291,7 @@ def create_app(
             wid = details_key(act)
             _evict_work(wid)
             payload["claim_token"] = claim_info["claim_token"]
+            payload["claim_label"] = claim_info["label"]
             payload["claim_expires_at"] = claim_info["claim_expires_at"]
             payload["claim_work_id"] = wid
             payload["claim_documents"] = sorted(sibling_act_ids(act))
@@ -1564,6 +1591,7 @@ def create_app(
                 {
                     "revision": revision,
                     "claim_token": claim_info["claim_token"],
+                    "claim_label": claim_info["label"],
                     "claim_expires_at": claim_info["claim_expires_at"],
                     "claim_work_id": wid,
                     "claim_documents": sorted(sibling_act_ids(act)),
@@ -1706,10 +1734,11 @@ def create_app(
         """Claim the next eligible work for review, status research, or audit (§4.6)."""
         who = auth.current(request, store, write=True, role="reviewer")
         account = who["email"].strip().lower()
-        label = str(body.get("label") or "")
         task = str(body.get("task") or "review").strip().lower()
         if task not in claims.TASKS:
             raise HTTPException(422, f"task must be one of {sorted(claims.TASKS)}")
+        _claims_open(task)
+        label = claims.validate_label(body.get("label"))
         jurisdiction = str(body.get("jurisdiction") or "").strip().lower()
         kind = str(body.get("kind") or "").strip().lower()
         raw_max_pages = body.get("max_pages")
@@ -1926,9 +1955,29 @@ def create_app(
         who = auth.current(request, store, write=True, role="reviewer")
         if not work_documents(work_id):
             raise HTTPException(404, "No such work")
-        label = str(body.get("label") or "")
         task = str(body.get("task") or "review").strip().lower()
-        claimed = claims.claim_work(store, work_id, who["email"], label, task=task)
+        if task not in claims.TASKS:
+            raise HTTPException(422, f"task must be one of {sorted(claims.TASKS)}")
+        _claims_open(task)
+        label = claims.validate_label(body.get("label"))
+        account = who["email"].strip().lower()
+        person = who["operator"]
+        if person.get("agent"):
+            # By name an agent account reaches only what "Claim next" would hand it.
+            approved, parked = _work_standing(work_id)
+            if approved and not (task == "status" and person.get("may_change_approved")):
+                raise claims.ClaimError(403, claims.MSG_APPROVED, "approved_guard")
+            if parked:
+                raise claims.ClaimError(409, claims.MSG_LEFT_FOR_OWNER, "claim_none")
+        if task == "audit":
+            # An audit is another account's reading of the drawn pages: the reviewer's own account is
+            # never told which pages were drawn, and cannot hold them back from an auditor.
+            reviewers = {
+                row["reviewer"] for row in store.list_audits(work_id=work_id, open_only=True, limit=500)
+            }
+            if not reviewers - {account}:
+                raise claims.ClaimError(404, claims.MSG_NOTHING_TO_CLAIM, "claim_none")
+        claimed = claims.claim_work(store, work_id, account, label, task=task)
         _evict_work(work_id)
         pages_drawn: dict[str, list[int]] | None = None
         if claimed["task"] == "audit":
@@ -1943,8 +1992,73 @@ def create_app(
     def renew_work_claim(request: Request, work_id: str, body: dict | None = OPTIONAL_JSON_BODY):
         """Renew or revive a claim lease; refuses blocked labels with 403."""
         who = auth.current(request, store, write=True, role="reviewer")
+        _claims_open()
         token = request.headers.get("X-Claim-Token") or str((body or {}).get("token") or "")
         return claims.renew_claim(store, work_id, who["email"], token)
+
+    def _draw_audit(work_id: str, released: dict) -> dict:
+        """Draw the audit's pages for a review just released as done: how many, or why none. The audit is
+        off without its salt or with a rate of 0; switched on, a draw that is skipped is written to the
+        log, so a work that was never audited can be found."""
+        cfg = audit_mod.audit_config()
+        if not cfg["salt"] or cfg["rate"] <= 0:
+            return {"drawn": 0, "skipped": "audit_off"}
+
+        def skipped(reason: str) -> dict:
+            store.audit(
+                released["account"],
+                "audit_draw_skipped",
+                detail={"work_id": work_id, "release_id": released["release_id"], "reason": reason},
+            )
+            return {"drawn": 0, "skipped": reason}
+
+        if claims.claims_mode() != "enforce":
+            return skipped("claims_not_enforced")
+        docs = work_documents(work_id)
+        if _work_standing(work_id)[0]:
+            return skipped("approved_document")
+        if not docs:
+            return skipped("no_documents")
+        with store.engine.connect() as db:
+            release_number = (
+                db.execute(
+                    select(func.count(work_release.c.id)).where(
+                        work_release.c.work_id == work_id,
+                        work_release.c.outcome == "done",
+                    )
+                ).scalar()
+                or 1
+            )
+        doc_pages: dict[str, list[int]] = {}
+        latest_by_doc: dict[str, dict[int, dict]] = {}
+        for doc in docs:
+            if doc.get("text_held"):
+                continue
+            reading = library.reading(doc["id"])
+            page_nums = [int(p["page"]) for p in reading["pages"]]
+            if page_nums:
+                doc_pages[doc["id"]] = page_nums
+                latest_by_doc[doc["id"]] = store.latest_pages(doc["id"])
+        drawn = audit_mod.draw_pages(
+            work_id,
+            doc_pages,
+            salt=cfg["salt"],
+            rate=cfg["rate"],
+            minimum=cfg["minimum"],
+            release_number=int(release_number),
+        )
+        for aid, page_num in drawn:
+            rev = (latest_by_doc.get(aid, {}).get(page_num) or {}).get("revision", 0)
+            store.create_audit_draw(
+                work_id=work_id,
+                act_id=aid,
+                page=page_num,
+                release_id=released["release_id"],
+                reviewer=released["account"],
+                reviewer_label=released["label"],
+                reviewer_revision=int(rev),
+            )
+        return {"drawn": len(drawn)}
 
     @app.post("/api/claims/{work_id}/release")
     def release_work_claim(request: Request, work_id: str, body: dict = JSON_BODY):
@@ -1962,62 +2076,16 @@ def create_app(
         _invalidate_work_cache()
 
         if released["outcome"] == "done" and released["task"] == "review":
-            docs = work_documents(work_id)
-            doc_ids = [d["id"] for d in docs]
-            has_approved = False
-            if doc_ids:
-                with store.engine.connect() as db:
-                    for aid in doc_ids:
-                        dec = db.execute(
-                            select(approval.c.decision)
-                            .where(approval.c.act_id == aid)
-                            .order_by(approval.c.revision.desc())
-                            .limit(1)
-                        ).scalar()
-                        if dec == "approved":
-                            has_approved = True
-                            break
-            cfg = audit_mod.audit_config()
-            if not has_approved and cfg["rate"] > 0 and cfg["salt"] and docs:
-                with store.engine.connect() as db:
-                    release_number = (
-                        db.execute(
-                            select(func.count(work_release.c.id)).where(
-                                work_release.c.work_id == work_id,
-                                work_release.c.outcome == "done",
-                            )
-                        ).scalar()
-                        or 1
-                    )
-                doc_pages: dict[str, list[int]] = {}
-                latest_by_doc: dict[str, dict[int, dict]] = {}
-                for doc in docs:
-                    if doc.get("text_held"):
-                        continue
-                    reading = library.reading(doc["id"])
-                    page_nums = [int(p["page"]) for p in reading["pages"]]
-                    if page_nums:
-                        doc_pages[doc["id"]] = page_nums
-                        latest_by_doc[doc["id"]] = store.latest_pages(doc["id"])
-                drawn = audit_mod.draw_pages(
-                    work_id,
-                    doc_pages,
-                    salt=cfg["salt"],
-                    rate=cfg["rate"],
-                    minimum=cfg["minimum"],
-                    release_number=int(release_number),
+            try:
+                released["audit"] = _draw_audit(work_id, released)
+            except Exception as error:  # noqa: BLE001 - the release is saved: a draw that failed is said, not hidden
+                reason = f"error: {error_said(error)}"
+                store.audit(
+                    released["account"],
+                    "audit_draw_skipped",
+                    detail={"work_id": work_id, "release_id": released["release_id"], "reason": reason},
                 )
-                for aid, page_num in drawn:
-                    rev = (latest_by_doc.get(aid, {}).get(page_num) or {}).get("revision", 0)
-                    store.create_audit_draw(
-                        work_id=work_id,
-                        act_id=aid,
-                        page=page_num,
-                        release_id=released["release_id"],
-                        reviewer=released["account"],
-                        reviewer_label=released["label"],
-                        reviewer_revision=int(rev),
-                    )
+                released["audit"] = {"drawn": 0, "skipped": reason}
         return released
 
     @app.get("/api/claims")
@@ -2125,6 +2193,7 @@ def create_app(
                     review_audit.c.reviewer,
                     review_audit.c.reviewer_label,
                     review_audit.c.verdict,
+                    review_audit.c.owner_decision,
                 )
                 .where(
                     review_audit.c.audited_at.is_not(None),
@@ -2182,11 +2251,25 @@ def create_app(
             for (acc, lbl), cnt in sorted(parked_counts_map.items())
         ]
 
+        # A material page the owner decided for the reviewer does not count against the reviewer: there
+        # the auditor was the one wrong. One the owner has not decided yet counts, and is said apart.
         verdicts_by_label: dict[tuple[str, str], list[str]] = {}
+        undecided_by_label: dict[tuple[str, str], int] = {}
         for r in completed_audits:
-            verdicts_by_label.setdefault((r.reviewer, r.reviewer_label), []).append(r.verdict)
+            who_reviewed = (r.reviewer, r.reviewer_label)
+            verdicts = verdicts_by_label.setdefault(who_reviewed, [])
+            if r.owner_decision == "kept_reviewer":
+                continue
+            verdicts.append(r.verdict)
+            if r.verdict == "material" and not r.owner_decision:
+                undecided_by_label[who_reviewed] = undecided_by_label.get(who_reviewed, 0) + 1
         audit_windows = [
-            {"account": acc, "label": lbl, **audit_mod.evaluate_window(verdicts)}
+            {
+                "account": acc,
+                "label": lbl,
+                **audit_mod.evaluate_window(verdicts),
+                "material_undecided": undecided_by_label.get((acc, lbl), 0),
+            }
             for (acc, lbl), verdicts in sorted(verdicts_by_label.items())
         ]
 
@@ -2242,6 +2325,7 @@ def create_app(
 
 def from_environment() -> FastAPI:
     settings.load()
+    claims.check_settings()
     config = auth.OIDCConfig.from_environment()
     return create_app(
         Store(engine_from_environment()),

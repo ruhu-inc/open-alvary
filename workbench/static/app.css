@@ -490,7 +490,9 @@ table.publishing th, table.publishing td { text-align: left; padding: .35rem .5r
 
 /* Multi-agent claims, lightweight #/claim panel, and admin Agents/Sessions views */
 .claim-banner { margin: .5rem 0 .75rem; padding: .5rem .75rem; border: 1px solid var(--line); border-radius: 6px; background: var(--accent-soft); font-size: 14px; }
-.claim-banner.other { background: var(--warn-bg); border-color: var(--medium); }
+.claim-banner.other, .claim-banner.lost { background: var(--warn-bg); border-color: var(--medium); }
+.claim-line .claim-status { margin: 0; flex-basis: 100%; }
+.claim-line .claim-status:empty { display: none; }
 .claim-line { display: flex; gap: .6rem; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .claim-release-form { display: flex; gap: .45rem; align-items: center; flex-wrap: wrap; margin-top: .5rem; padding-top: .5rem; border-top: 1px solid var(--line); }
 .claim-release-form input[type=text] { flex: 1 1 14rem; }
