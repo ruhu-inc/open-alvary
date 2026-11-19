@@ -2295,3 +2295,129 @@ def test_an_amendment_of_the_constitution_begins_at_the_constitution_heading():
         "CE JOUR",
     )
     assert RG.openings(formula, "fr") == []
+
+
+def _filled(columns: list[list[str]], spans: list[tuple[float, float]], across=()) -> dict:
+    """A page whose lines fill their columns up to the gutter, and lines set `across` a gutter (x, y, text)."""
+    words = []
+
+    def put(text, x, y, limit=None):
+        for word in text.split():
+            width = 5.0 * len(word)
+            if limit is not None and x + width > limit:
+                break
+            words.append({"xmin": x, "ymin": y, "xmax": x + width, "ymax": y + 10, "text": word})
+            x += width + 4
+
+    for (x0, x1), lines in zip(spans, columns, strict=True):
+        for k, line in enumerate(lines):
+            put(line, x0, 70.0 + 14 * k, x1)
+    for x, y, text in across:
+        put(text, x, y)
+    return {"width": WIDTH, "height": HEIGHT, "words": words}
+
+
+def test_a_page_whose_gutter_a_line_across_hides_is_read_by_the_three_columns_before_it():
+    """Gazette n° special of 20/05/2010, pages 25-26: a line set across the narrow gutter between English
+    and French hid it, so the page measured two columns and its English was read as French. The English
+    body of Presidential Order n° 06/01 reached no document."""
+    rw = "Ingingo zose z’amateka abanziriza iri kandi zinyuranyije na ryo zivanyweho kandi ntizikurikizwa"
+    en = "All prior provisions contrary to this Order are hereby repealed and shall cease to apply"
+    fr = "Toutes les dispositions antérieures contraires au présent arrêté sont abrogées et cessent"
+    columns = [
+        ["Ingingo ya 3: Ivanwaho ry’ingingo", *[rw] * 8],
+        ["Article 3: Repealing provision", *[en] * 8],
+        ["Article 3: Disposition abrogatoire", *[fr] * 8],
+    ]
+    spans = [(70.0, 290.0), (300.0, 512.0), (520.0, 770.0)]
+    before = _filled(columns, spans)
+    hidden = _filled(columns, spans, across=[(470.0, 200.0, "Kigali 12/09/2022")])
+    split = RG.split_issue([before, hidden])[1]
+    assert [c["language"] for c in split["columns"]] == ["rw", "en", "fr"]
+    assert split["columns"][1]["lines"][0]["text"] == "Article 3: Repealing provision"
+    # Both gutters hidden: the page measured one column, and is read by the three as well (Prime Minister's
+    # Order n° 028/03 of 2018, page 99).
+    one = _filled(
+        columns, spans, across=[(250.0, 200.0, "Kigali 12/09/2022"), (470.0, 228.0, "Kigali 12/09/2022")]
+    )
+    split = RG.split_issue([before, one])[1]
+    assert [c["language"] for c in split["columns"]] == ["rw", "en", "fr"]
+    # A page with no three languages around it keeps its own two columns.
+    assert len(RG.split_issue([hidden])[0]["columns"]) == 2
+    # It takes the columns of the page whose gutter lies where its own does, after it as well as before:
+    # an earlier page set 20 pt to the right would cut its French title (Gazette of 12/11/2022, page 16).
+    shifted = _filled(columns, [(90.0, 310.0), (320.0, 532.0), (540.0, 790.0)])
+    split = RG.split_issue([shifted, hidden, before])[1]
+    assert [(c["language"], c["x0"]) for c in split["columns"]] == [
+        ("rw", 69.5),
+        ("en", 298.9),
+        ("fr", 519.9),
+    ]
+
+
+def test_a_version_of_title_and_contents_goes_on_under_its_title_reprinted_with_a_spoilt_number_or_date():
+    """Iteka rya Minisitiri n° 001/08.11 (2014) reprinted its title over the body "N°° 001/08.11"; Regulation
+    n° 03/2017 of the National Bank printed "OF 22/02/2017" over its contents and "OF 20/02/2017" over its
+    body. Each reprint began an instrument of its own: the first held the contents alone."""
+
+    def lines(*texts):
+        return [{"text": t, "page": 1 + k // 4} for k, t in enumerate(texts)]
+
+    order = lines(
+        "ITEKA RYA MINISITIRI N° 001/08.11 RYO KU WA 11/02/2014 RIGENA AMAFARANGA",
+        "ISHAKIRO",
+        "Ingingo ya mbere: Icyo iri teka rigamije",
+        "ITEKA RYA MINISITIRI N°° 001/08.11 RYO KU WA 11/02/2014 RIGENA AMAFARANGA",
+        "Minisitiri w’Ubutabera;",
+        "ATEGETSE:",
+        "Ingingo ya mbere: Icyo iri teka rigamije",
+    )
+    found = RG.instruments({"rw": order, "en": [], "fr": []})
+    assert [(f["number"], f["versions"]["rw"]["start"], f["versions"]["rw"]["end"]) for f in found] == [
+        ("001/08.11", 0, 7)
+    ]
+    regulation = lines(
+        "REGULATION OF THE NATIONAL BANK OF RWANDA N O 03/2017 OF 22/02/2017 ON SANCTIONS",
+        "TABLE OF CONTENTS",
+        "Article One: Purpose",
+        "REGULATION OF THE NATIONAL BANK OF RWANDA N O 03/2017 OF 20/02/2017 ON SANCTIONS",
+        "The National Bank of Rwanda decrees:",
+        "Article One: Purpose",
+    )
+    found = RG.instruments({"rw": [], "en": regulation, "fr": []})
+    assert [(f["kind"], f["number"], f["versions"]["en"]["end"]) for f in found] == [
+        ("regulations", "03/2017", 6)
+    ]
+
+
+def test_a_regulation_names_its_issuer_before_its_number_and_a_dated_law_stays_dated():
+    en = RG.OPENING["en"].match("REGULATION OF THE NATIONAL BANK OF RWANDA N O 03/2017 OF 22/02/2017 ON")
+    fr = RG.OPENING["fr"].match("REGLEMENT DE LA BANQUE NATIONALE DU RWANDA N° 03/2017 DU 22/02/2017")
+    assert en.group(2) == "03/2017" and fr.group(2) == "03/2017"
+    dated = RG.OPENING["en"].match("LAW OF 19 FEBRUARY 1964 ON THE NORTHERN PROVINCE")
+    assert dated.group(2) is None
+
+
+def test_an_accented_arrete_and_a_minister_ended_by_a_comma_begin_the_body():
+    """Arrêté ministériel n° 2093/08.25 (2015) printed "ARRÊTÉ :" and "Le Ministre de la Justice/Garde des
+    Sceaux," and its title over the body without spaces: its articles stayed contents entries."""
+    assert RG.BODY.match("ARRÊTÉ :") and RG.BODY.match("ARRETE:")
+    assert RG.PREAMBLE.match("Le Ministre de la Justice/Garde des Sceaux,")
+    lines = [
+        {"text": t, "page": 1, "x0": 0, "y0": 20 * k, "x1": 200, "y1": 20 * k + 10}
+        for k, t in enumerate(
+            (
+                "ARRÊTÉ MINISTÉRIEL N°2093/08.25 DU 27/10/2015 PORTANT AUTORISATION DE CHANGEMENT DE NOMS",
+                "TABLE DES MATIERES",
+                "Article premier: Autorisation de changement de noms",
+                "ARRÊTÉMINISTÉRIELN°2093/08.25 DU 27/10/2015 PORTANT AUTORISATION",
+                "Le Ministre de la Justice/Garde des Sceaux,",
+                "Vu la Constitution de la République du Rwanda;",
+                "ARRÊTÉ :",
+                "Article premier: Autorisation de changement de noms",
+            )
+        )
+    ]
+    nodes = RG.structure(lines, "fr")
+    kinds = [n["kind"] for n in nodes if n.get("article")]
+    assert kinds[-1] == "heading"

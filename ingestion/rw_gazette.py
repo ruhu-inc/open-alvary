@@ -17,6 +17,7 @@ import statistics
 import unicodedata
 from bisect import bisect_right
 from collections import Counter
+from difflib import SequenceMatcher
 from functools import cache, lru_cache
 from itertools import accumulate, pairwise
 
@@ -42,6 +43,12 @@ from schema.jurisdictions import registry
 # it); the Constitution's heading under "AMENDMENT N° 04 … OF" still begins the amendment.
 # 2026-11-17.4: the copy kept for an id is chosen as before .2 (the Gazette's first): a reading's
 # article count cannot tell a contents list from a body whose headings were read as a list.
+# 2026-11-19.1: a version holding only its title and contents goes on under its title printed again, however
+# that reprint spoils its number or date ("N°° 001/08.11", "OF 20/02/2017" for "OF 22/02/2017", "ARRÊTÉMINISTÉRIELN°",
+# "N007/03") (_continued_openings); a regulation names its issuer before its number in English and French
+# ("REGULATION OF THE NATIONAL BANK OF RWANDA N O 03/2017"); a page measured with fewer columns than the three
+# languages printed around it is read by the nearest such page's columns whose gutter lies where its own does
+# (_fewer_columns); "ARRÊTÉ :" and a minister's line ended by a comma begin the body.
 # 2026-11-18.3: a version reaches back over contents only to a page where another language of its
 # instrument begins (rwanda.contents_before_first).
 # 2026-11-18.2: a version leaves its contents list where the column wraps the minister's line or the
@@ -51,7 +58,7 @@ from schema.jurisdictions import registry
 # lowers small words a mixed-case title printed and writes "No."; a UN resolution's two title lines are one.
 # 2026-11-18.1: a constitution in RLRC's extract is named by the Gazette issue it prints in its header or
 # masthead, then the date in RLRC's name (rwanda.constitution_date), so it shares the Gazette copy's id.
-PIPELINE = "2026-11-18.3"
+PIPELINE = "2026-11-19.1"
 LANGUAGES = ("rw", "en", "fr")
 
 # Running headers and page numbers: printed on every page, not part of any instrument.
@@ -104,7 +111,14 @@ KIND_WORDS = {
 _DATED = {"rw": r"\s+R?YO\s+KU\s?WA\s+(.*\d{4})", "en": r"\s+OF\s+(.*\d{4})", "fr": r"\s+DU\s+(.*\d{4})"}
 # Kinyarwanda names whose instruction or regulation it is between the kind and its number ("AMABWIRIZA
 # Y'UMWANDITSI MUKURU N° 01/2010/ORG", "AMABWIRIZA YA MINISITIRI N° 001/2014").
-_QUALIFIER = {"rw": r"(?:\s+(?:YA|Y[’'])\s*[A-ZÀ-Ý’' -]{2,60}?)?", "en": "", "fr": ""}
+# English and French name a regulation's issuer the same way ("REGULATION OF THE NATIONAL BANK OF RWANDA N O
+# 03/2017", "RÈGLEMENT DE LA BANQUE NATIONALE DU RWANDA N° 03/2017"; 2026-11-19: read as a date alone, so the
+# English version was its own document), only where a number follows.
+_QUALIFIER = {
+    "rw": r"(?:\s+(?:YA|Y[’'])\s*[A-ZÀ-Ý’' -]{2,60}?)?",
+    "en": r"(?:\s+OF\s+THE\s+[A-Z’' -]{2,60}?(?=\s+N\s?[°ºO0\uf0b0]\.?\s*\d))?",
+    "fr": r"(?:\s+DE\s+LA\s+[A-ZÀ-Ý’' -]{2,60}?(?=\s+N\s?[°ºO0\uf0b0]\.?\s*\d))?",
+}
 OPENING = {
     language: re.compile(rf"^({words}){_QUALIFIER[language]}(?:{_NUMBER}|{_DATED[language]})")
     for language, words in KIND_WORDS.items()
@@ -217,7 +231,7 @@ CONTENTS = re.compile(r"^(ISHAKIRO|TABLE OF CONTENTS|TABLE DES MATI[ÈE]RES)\b",
 # Where the body begins: a law's "We, KAGAME Paul," or an order's own author ("The Minister of …;",
 # "Minisitiri w'…;", "Le Ministre …;"), when an order has no contents list printed again after it.
 PREAMBLE = re.compile(
-    r"^(Twebwe|We|Nous)\s*,\s|^(The\s+(Prime\s+)?Minister|Minisitiri|Le\s+(Premier\s+)?Ministre|La\s+Ministre)\b.{0,120};$"
+    r"^(Twebwe|We|Nous)\s*,\s|^(The\s+(Prime\s+)?Minister|Minisitiri|Le\s+(Premier\s+)?Ministre|La\s+Ministre)\b.{0,120}[;,]$"
     # A treaty (RLRC's international instruments) heads its preamble.
     r"|^(PR[ÉE]AMBULE|PREAMBLE|IRANGASHINGIRO)\s*:?$",
     re.I,
@@ -227,7 +241,7 @@ PREAMBLE = re.compile(
 # ("Kigali, on 22/03/2016"). PREAMBLE alone missed "The Prime Minister," ended by a comma (2026-10-29).
 BODY = re.compile(
     r"^(?:HEREBY\s+)?(?:ORDERS|ADOPTS|ENACTS|DECREES|PROMULGATES|DETERMINES)\s*:\s*$"
-    r"|^(?:ATEGETSE|YEMEJE|ITANGAJE|ARR[ÊE]TE|ADOPTE|D[ÉE]CR[ÈE]TE|PROMULGUE)\s*:\s*$"
+    r"|^(?:ATEGETSE|YEMEJE|ITANGAJE|ARR[ÊE]T[EÉ]|ADOPTE|D[ÉE]CR[ÈE]TE|PROMULGUE)\s*:\s*$"
     r"|^(?:Kigali|Bikorewe\s+i\s+Kigali|Fait\s+[àa]\s+Kigali|Done\s+(?:in|at)\s+Kigali)\s*,?\s+(?:on|ku\s?wa|le)\b",
     re.I,
 )
@@ -486,6 +500,48 @@ def split_page(
     }
 
 
+def _gutter_offset(own: list[tuple[float, float]], spans: list[tuple[float, float]]) -> float:
+    """How far a page's own measured gutters lie from the nearest of another page's (none: a page read as one
+    column measured none)."""
+    theirs = [(a[1] + b[0]) / 2 for a, b in pairwise(spans)]
+    return max((min(abs((a[1] + b[0]) / 2 - t) for t in theirs) for a, b in pairwise(own)), default=0.0)
+
+
+def _fewer_columns(
+    pages: list[dict], out: list[dict], tables: dict[int, list[dict]], carried_at: list[str | None]
+) -> None:
+    """Pages measured with fewer columns than the three languages around them, read by those languages'
+    columns: a narrow gutter not measured read English and French as one French column (Gazette n° special
+    of 20/05/2010, pages 25-26: the English body of Presidential Order 06/01 reached no document), or the
+    three as one (Prime Minister's Order 028/03 of 2018, page 99). Not a front page (cover_page). A page
+    takes the columns of the nearest pages, before or after, that print the three languages side by side,
+    whose gutter lies where the page's own measured one does (within 18 pt), whose gutters hold on it,
+    and each of whose columns reads as its own language there."""
+    threes = [
+        (k, [(c["x0"], c["x1"]) for c in split["columns"]])
+        for k, split in enumerate(out)
+        if split["layout"] == "parallel" and [c["language"] for c in split["columns"]] == list(LANGUAGES)
+    ]
+    for k, split in enumerate(out):
+        own = [(c["x0"], c["x1"]) for c in split["columns"]]
+        if not threes or split["layout"] == "cover" or not own or len(own) >= len(LANGUAGES):
+            continue
+        found = tables.get(k + 1)
+        in_tables = {id(w) for table in found or [] for w in table["words"]}
+        words = [w for w in pages[k]["words"] if id(w) not in in_tables]
+        near = sorted(threes, key=lambda item: abs(item[0] - k))[:6]
+        for _, spans in sorted(near, key=lambda item: _gutter_offset(own, item[1])):
+            if _gutter_offset(own, spans) > 18 or not held_gutters(words, spans):
+                continue
+            kept = split_page(pages[k], k + 1, carried_at[k], found, spans=spans)
+            if all(
+                gazette_layout.language([line["text"] for line in c["lines"]])[0] == expected
+                for c, expected in zip(kept["columns"], LANGUAGES, strict=True)
+            ):
+                out[k] = kept
+                break
+
+
 def split_issue(pages: list[dict], tables: dict[int, list[dict]] | None = None) -> list[dict]:
     """Every page split; `tables` are the ruled tables found on each page (ruled_tables), whose
     words then come out as tables and not as lines of text. A page keeps its own columns unless they
@@ -494,8 +550,10 @@ def split_issue(pages: list[dict], tables: dict[int, list[dict]] | None = None) 
     the gutter moved the measured gutter to the margin and read the Kinyarwanda into the French).
     Pipelines .1 to .3 took an earlier page's columns whenever they held, and lost 3,588 orders."""
     out, carried, previous = [], None, None
+    carried_at: list[str | None] = []  # the language carried into each page
     for number, page in enumerate(pages, 1):
         found = (tables or {}).get(number)
+        carried_at.append(carried)
         split = split_page(page, number, carried, found)
         if previous:
             in_tables = {id(w) for table in found or [] for w in table["words"]}
@@ -533,6 +591,7 @@ def split_issue(pages: list[dict], tables: dict[int, list[dict]] | None = None) 
             and not (tables or {}).get(split["page"])
         ):
             out[k] = cover_page(pages[k], split, [(c["x0"], c["x1"]) for c in nxt["columns"]])
+    _fewer_columns(pages, out, tables or {}, carried_at)
     return out
 
 
@@ -1012,6 +1071,49 @@ def openings(lines: list[dict], language: str) -> list[dict]:
     return found
 
 
+def _title_letters(title: str) -> str:
+    """A title's letters alone, in capitals: what a reprint keeps however it spoils spaces, signs or figures."""
+    return "".join(c for c in unicodedata.normalize("NFKD", title.upper()) if c.isalpha())
+
+
+def _real_number(number: str, date: str | None) -> bool:
+    return any(c.isdigit() for c in number) and number != date
+
+
+def _continued_openings(lines: list[dict], found: list[dict]) -> list[dict]:
+    """A language's openings without the reprints the key cannot join: an opening that holds only its title
+    over a contents list, and no body, goes on under the next opening of its kind whose title has the same
+    words, however that reprint spoils its number or date ("N°° 001/08.11", "OF 20/02/2017" for "OF
+    22/02/2017", "ARRÊTÉMINISTÉRIELN°", "N007/03" read "07/03"): it takes the number printed over the body.
+    Two numbers each read in full that do not agree stay two instruments.
+    Before 2026-11-19 the reprint began an instrument of its own: the first held the contents alone and the
+    body went under a number made from the date or the sign (Iteka rya Minisitiri n° 001/08.11, 2014)."""
+    out: list[dict] = []
+    for opening in found:
+        if out:
+            before = out[-1]
+            end = opening["start"]
+            if (
+                not before["has_body"]
+                and before["kind"] == opening["kind"]
+                and any(CONTENTS.match(line["text"].strip()) for line in lines[before["start"] : end])
+                and not (
+                    _real_number(before["number"], before.get("date"))
+                    and _real_number(opening["number"], opening.get("date"))
+                    and not numbers_agree(before["number"], opening["number"])
+                )
+            ):
+                a, b = _title_letters(before["title"])[:120], _title_letters(opening["title"])[:120]
+                if a and b and SequenceMatcher(None, a, b).ratio() >= 0.9:
+                    before["has_body"] = before["has_body"] or opening["has_body"]
+                    if _real_number(opening["number"], opening.get("date")):
+                        # the number printed over the body ("N007/03" over the contents read "07/03")
+                        before["number"] = opening["number"]
+                    continue
+        out.append(opening)
+    return out
+
+
 def instruments(issue_streams: dict[str, list[dict]]) -> list[dict]:
     """The instruments of an issue, each with its title and line range in every language it is
     printed in, matched across languages by number."""
@@ -1026,6 +1128,7 @@ def instruments(issue_streams: dict[str, list[dict]]) -> list[dict]:
                 PREAMBLE.match(line["text"].strip()) or BODY.match(line["text"].strip())
                 for line in lines[opening["start"] : end]
             )
+        found = _continued_openings(lines, found)
         for k, opening in enumerate(found):
             end = found[k + 1]["start"] if k + 1 < len(found) else len(lines)
             key = _key(by_number, opening, language)
