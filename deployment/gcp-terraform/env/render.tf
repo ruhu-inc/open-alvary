@@ -12,6 +12,18 @@
 # request arrives as internal traffic. Cloud Run limits an HTTP/1 request to 32 MiB, so the container
 # speaks HTTP/2 end to end (h2c), and a Gazette issue larger than that still goes through whole.
 
+variable "render_min_instances" {
+  description = "Page renderer copies kept warm (1 while review agents run; 0 lets it stop when idle)."
+  type        = number
+  default     = 0
+}
+
+variable "render_max_instances" {
+  description = "The most page renderer copies. Each draws one page at a time: about 24 serve 150 review agents."
+  type        = number
+  default     = 4
+}
+
 locals {
   render_enabled = var.render_image != ""
   render_name    = "${local.name_prefix}-render"
@@ -102,8 +114,8 @@ resource "google_cloud_run_v2_service" "render" {
     timeout                          = "180s"
 
     scaling {
-      min_instance_count = 0
-      max_instance_count = 4
+      min_instance_count = var.render_min_instances
+      max_instance_count = var.render_max_instances
     }
 
     vpc_access {

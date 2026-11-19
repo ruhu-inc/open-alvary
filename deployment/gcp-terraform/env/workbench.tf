@@ -7,6 +7,54 @@
 # sign-in in IAP's place). That address is new with the project, so the sign-in's OAuth client must
 # list its callback (README, phase 4).
 
+# Sizes. The defaults are what staging ran on 2026-11-19, so an apply that sets none of them changes
+# nothing. For many review agents at once (design: docs/architecture/multi-agent-review-design.md,
+# section 9) set, in the environment's tfvars: review_postgres_tier = "db-custom-1-3840" (its own core
+# and 100 connections; changing the tier restarts the review database, so do it with no agent running),
+# workbench_min_instances = 1, workbench_max_instances = 6, workbench_cpu = "2",
+# workbench_memory = "4Gi", workbench_cache_mb = 2048.
+#
+# The switches for claims, the guard on approved documents, the status gate and the audit are ordinary
+# settings: put them in workbench_settings (ALVARY_REVIEW_CLAIMS = "warn" or "enforce",
+# ALVARY_REVIEW_APPROVED_GUARD = "enforce", ALVARY_REVIEW_STATUS_GATE = "on",
+# ALVARY_REVIEW_AUDIT_RATE = "0.05"). Unset, each is off. The audit also needs its salt as a secret
+# (OPEN_ALVARY_REVIEW_AUDIT_SALT); nothing here provides it yet, and without it no audit is drawn.
+variable "review_postgres_tier" {
+  description = "The review database's Cloud SQL tier. A shared-core tier allows about 25 connections; six workbench copies at eight each need a tier with its own core."
+  type        = string
+  default     = "db-f1-micro"
+}
+
+variable "workbench_min_instances" {
+  description = "Workbench copies kept warm (1 while review agents run; 0 lets it stop when idle)."
+  type        = number
+  default     = 0
+}
+
+variable "workbench_max_instances" {
+  description = "The most workbench copies. Each holds up to eight database connections: keep copies times eight, plus the jobs, under the review database's limit."
+  type        = number
+  default     = 2
+}
+
+variable "workbench_cpu" {
+  description = "CPUs for each workbench copy."
+  type        = string
+  default     = "1"
+}
+
+variable "workbench_memory" {
+  description = "Memory for each workbench copy. Its page cache (workbench_cache_mb) is held in this memory."
+  type        = string
+  default     = "2Gi"
+}
+
+variable "workbench_cache_mb" {
+  description = "The workbench's page cache in MB. /tmp is memory on Cloud Run: keep it to a quarter to a half of workbench_memory."
+  type        = number
+  default     = 512
+}
+
 locals {
   workbench_enabled = var.workbench_image != ""
   # The workbench's database comes before the workbench when the review data is restored into it: the
@@ -24,7 +72,7 @@ locals {
       ALVARY_REVIEW_STAGING       = "/data/collection"
       ALVARY_REVIEW_COLLECTIONS   = "gs://${local.corpus_bucket}/collections/rw/:gs://${local.corpus_bucket}/collections/ng/"
       ALVARY_REVIEW_CACHE         = "/tmp/review-cache"
-      ALVARY_REVIEW_CACHE_MB      = "512" # /tmp is memory on Cloud Run: a quarter of the instance's 2 GiB
+      ALVARY_REVIEW_CACHE_MB      = tostring(var.workbench_cache_mb) # /tmp is memory on Cloud Run
     },
     # The Publishing page: the job it starts, and when the nightly run is (publish.tf).
     local.publish_enabled ? {
@@ -64,7 +112,7 @@ resource "google_sql_database_instance" "review" {
 
   settings {
     edition                     = "ENTERPRISE"
-    tier                        = "db-f1-micro" # as today's review-db
+    tier                        = var.review_postgres_tier
     availability_type           = "ZONAL"
     disk_type                   = "PD_SSD"
     disk_size                   = 10
@@ -165,8 +213,8 @@ resource "google_cloud_run_v2_service" "workbench" {
     )
 
     scaling {
-      min_instance_count = 0
-      max_instance_count = 2
+      min_instance_count = var.workbench_min_instances
+      max_instance_count = var.workbench_max_instances
     }
 
     vpc_access {
@@ -189,8 +237,8 @@ resource "google_cloud_run_v2_service" "workbench" {
 
       resources {
         limits = {
-          cpu    = "1"
-          memory = "2Gi"
+          cpu    = var.workbench_cpu
+          memory = var.workbench_memory
         }
       }
 
