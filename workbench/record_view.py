@@ -599,6 +599,121 @@ def empty(value) -> bool:
     return value is None or value == "" or value == [] or value == {}
 
 
+def for_form(values: dict, absent: dict, specs: list[FieldSpec]) -> tuple[dict, dict, dict]:
+    """The values and absences this form has fields for, and what was left out (key -> value)."""
+    allowed = {spec.key for spec in specs}
+    kept = {key: value for key, value in values.items() if key in allowed}
+    kept_absent = {key: reason for key, reason in absent.items() if key in allowed}
+    left_out = {key: value for key, value in values.items() if key not in allowed and not empty(value)}
+    for key, reason in absent.items():
+        if key not in allowed and key not in left_out:
+            left_out[key] = R.ABSENT.get(reason, str(reason))
+    return kept, kept_absent, left_out
+
+
+def _step_labels(profile: JurisdictionProfile | None) -> tuple[dict[str, str], list[str]]:
+    labels: dict[str, str] = {}
+    order: list[str] = []
+    if not profile:
+        return labels, order
+    for procedure in profile.procedures:
+        for step in procedure.steps:
+            if step.id not in labels:
+                labels[step.id] = step.label
+                order.append(step.id)
+    return labels, order
+
+
+def _format_left_out_value(value) -> str:
+    if isinstance(value, list):
+        return ", ".join(str(item) for item in value)
+    return str(value)
+
+
+def _readable_key(key: str) -> str:
+    if key.startswith(("step:", "event:")):
+        body, _, suffix = key.split(":", 1)[1].partition(".")
+        name = label_of(body.replace(":", " "))
+        if suffix == "person":
+            return f"{name} (signed by)"
+        if suffix and suffix != "date":
+            return f"{name} ({suffix})"
+        return name
+    return label_of(key.replace(".", " ").replace(":", " "))
+
+
+def _evidence_pages(keys: list[str], evidence: dict | None) -> str:
+    if not evidence:
+        return ""
+    pages = sorted(
+        {
+            ev["page"]
+            for key in keys
+            if isinstance((ev := evidence.get(key)), dict) and ev.get("page") and ev.get("evidence")
+        }
+    )
+    if not pages:
+        return ""
+    return f", p. {pages[0]}" if len(pages) == 1 else f", pp. {', '.join(str(p) for p in pages)}"
+
+
+def left_out_notice(
+    left_out: dict,
+    profile: JurisdictionProfile | None,
+    evidence: dict | None = None,
+    *,
+    saved: bool = False,
+) -> str | None:
+    """One plain-language notice naming every value left out because this form has no field for it."""
+    if not left_out:
+        return None
+    step_labels, step_order = _step_labels(profile)
+    step_groups: dict[str, dict[str, tuple[str, object]]] = {}
+    other_keys: list[str] = []
+    for key, value in left_out.items():
+        if key.startswith("step:") and "." in key:
+            step_id, part = key[len("step:") :].rsplit(".", 1)
+            step_groups.setdefault(step_id, {})[part] = (key, value)
+        else:
+            other_keys.append(key)
+
+    ordered_steps = [sid for sid in step_order if sid in step_groups]
+    ordered_steps.extend(sorted(sid for sid in step_groups if sid not in step_labels))
+
+    items: list[str] = []
+    for step_id in ordered_steps:
+        parts = step_groups[step_id]
+        label = step_labels.get(step_id) or label_of(step_id.replace(":", " "))
+        keys = [k for k, _ in parts.values()]
+        date_val = _format_left_out_value(parts["date"][1]) if "date" in parts else ""
+        person_val = _format_left_out_value(parts["person"][1]) if "person" in parts else ""
+        extras = [
+            f"{part}: {_format_left_out_value(val)}"
+            for part, (_, val) in sorted(parts.items())
+            if part not in ("date", "person")
+        ]
+        bits = []
+        if date_val and person_val:
+            bits.append(f"{date_val} ({person_val})")
+        elif date_val:
+            bits.append(date_val)
+        elif person_val:
+            bits.append(f"({person_val})")
+        bits.extend(extras)
+        items.append(f"{label} {' '.join(bits)}{_evidence_pages(keys, evidence)}")
+
+    for key in sorted(other_keys):
+        shown = _format_left_out_value(left_out[key])
+        items.append(f"{_readable_key(key)}: {shown}{_evidence_pages([key], evidence)}")
+
+    lead = (
+        "The saved details also held these, which this form has no field for"
+        if saved
+        else "The reader also read these, which this form has no field for"
+    )
+    return f"{lead}: {'; '.join(items)}. They are not saved with these details."
+
+
 def missing(values: dict, absent: dict, specs: list[FieldSpec]) -> list[str]:
     return [s.key for s in specs if s.required and empty(values.get(s.key)) and s.key not in absent]
 

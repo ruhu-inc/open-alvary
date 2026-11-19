@@ -1174,6 +1174,233 @@ def test_a_second_collection_reviews_each_language_version_and_shares_the_laws_d
     assert [row["this_text"] for row in french["record"]["details"]["expressions"]] == ["no", "no", "yes"]
 
 
+def _rwanda_constitution_world(tmp_path, monkeypatch, *, kind="constitution", extra_suggested=None):
+    folder = tmp_path / "rw"
+    rwanda_collection(folder, monkeypatch)
+    manifest = json.loads((folder / "manifest.json").read_text())
+    base_suggested = {
+        "identity.family": "constitution",
+        "identity.type": kind,
+        "identity.title": "The Constitution of the Republic of Rwanda",
+        "identity.full_title": "The Constitution of the Republic of Rwanda of 2003 revised in 2015 and 2023",
+        "identity.year": "2023",
+        "publication.name": "Official Gazette of the Republic of Rwanda",
+        "publication.number": "Special",
+        "publication.date": "2023-08-04",
+        "step:adopted:deputies.date": "2023-07-05",
+        "step:promulgated.date": "2023-08-04",
+        "step:promulgated.person": "KAGAME Paul",
+        "step:countersigned.person": "Dr NGIRENTE Edouard",
+        "step:sealed.person": "Dr UGIRASHEBUJA Emmanuel",
+        "step:published.date": "2023-08-04",
+        "made_up.field": "extra reader fact",
+        "expressions": [
+            {"language": "rw", "title": "Itegeko Nshinga rya Repubulika y'u Rwanda"},
+            {"language": "en", "title": "The Constitution of the Republic of Rwanda"},
+            {"language": "fr", "title": "Constitution de la République du Rwanda"},
+        ],
+        **(extra_suggested or {}),
+    }
+    evidence = {
+        "step:promulgated.date": {
+            "value": "2023-08-04",
+            "page": 149,
+            "evidence": "Kigali, on 04/08/2023",
+        }
+    }
+    docs = []
+    for doc in manifest["documents"]:
+        lang = doc["language"]
+        new_id = f"rw-constitution-2023-08-04-{lang}"
+        (folder / f"{doc['id']}.reading.json").rename(folder / f"{new_id}.reading.json")
+        docs.append(
+            {
+                **doc,
+                "id": new_id,
+                "type": kind,
+                "title": "The Constitution of the Republic of Rwanda",
+                "year": 2023,
+                "work": "rw-constitution-2023-08-04",
+                "versions": {"en": "rw-constitution-2023-08-04-en", "fr": "rw-constitution-2023-08-04-fr"},
+                "suggested": base_suggested,
+                "suggested_evidence": evidence,
+            }
+        )
+    manifest["documents"] = docs
+    (folder / "manifest.json").write_text(json.dumps(manifest))
+    (tmp_path / f"{ACT}.reading.json").write_text(json.dumps(reading()))
+    store = Store(connect(f"sqlite:///{tmp_path / 'workbench.db'}"))
+    store.add_operator("reviewer@example.org", "Rev", {"reviewer"})
+    return store, content.Library(tmp_path)
+
+
+def test_rwandan_constitution_details_filter_left_out_steps_save_and_confirm(tmp_path, monkeypatch):
+    world = _rwanda_constitution_world(tmp_path, monkeypatch, kind="constitution")
+    reviewer = signed_in(world, "reviewer@example.org")
+    act_id = "rw-constitution-2023-08-04-en"
+
+    got = reviewer.get(f"/api/documents/{act_id}/details").json()
+    field_keys = {f["key"] for f in got["standard"]["fields"]}
+    details = got["record"]["details"]
+    absent = got["record"]["absent"]
+    assert set(details) <= field_keys
+    assert set(absent) <= field_keys
+    assert details["publication.date"] == "2023-08-04"
+    assert len(got["notices"]) == 1
+    notice = got["notices"][0]
+    assert "Adopted by the Chamber of Deputies 2023-07-05" in notice
+    assert "Promulgated by the President of the Republic 2023-08-04 (KAGAME Paul), p. 149" in notice
+    assert "Countersigned by the Prime Minister (Dr NGIRENTE Edouard)" in notice
+    assert "Seen and sealed with the Seal of the Republic (Dr UGIRASHEBUJA Emmanuel)" in notice
+    assert "Published in the Official Gazette 2023-08-04" in notice
+    assert "Made up field: extra reader fact" in notice
+    assert "They are not saved with these details." in notice
+
+    # Change one visible field and POST what was returned: saves as revision 1.
+    edited = {**details, "publication.volume": "Year 62"}
+    saved = reviewer.post(
+        f"/api/documents/{act_id}/details",
+        json={"expected_revision": 0, "status": "draft", "details": edited, "absent": absent},
+    )
+    assert saved.status_code == 200
+    assert saved.json() == {"revision": 1}
+
+    reloaded = reviewer.get(f"/api/documents/{act_id}/details").json()
+    assert reloaded["record"]["details"]["publication.volume"] == "Year 62"
+    assert reloaded["record"]["details"]["publication.date"] == "2023-08-04"
+    assert reloaded["notices"] == []
+
+    # The same record confirms once every detail is given or accounted for.
+    confirm_details = {
+        **reloaded["record"]["details"],
+        "text.form": "gazette_publication",
+        "event:adopted.date": "2023-07-05",
+        "event:commenced.date": "2023-08-04",
+    }
+    confirm_absent = {
+        **reloaded["record"]["absent"],
+        **{key: "not_in_source" for key in reloaded["missing"] if key not in confirm_details},
+    }
+    confirmed = reviewer.post(
+        f"/api/documents/{act_id}/details",
+        json={
+            "expected_revision": 1,
+            "status": "confirmed",
+            "details": confirm_details,
+            "absent": confirm_absent,
+        },
+    )
+    assert confirmed.status_code == 200, confirmed.json()
+    assert confirmed.json() == {"revision": 2}
+    final = reviewer.get(f"/api/documents/{act_id}/details").json()
+    assert final["record"]["status"] == "confirmed"
+    assert final["missing"] == []
+
+
+def test_rwandan_constitutional_amendment_keeps_signing_steps_across_siblings(tmp_path, monkeypatch):
+    world = _rwanda_constitution_world(tmp_path, monkeypatch, kind="constitutional_amendment")
+    reviewer = signed_in(world, "reviewer@example.org")
+    en_id = "rw-constitution-2023-08-04-en"
+    fr_id = "rw-constitution-2023-08-04-fr"
+
+    got = reviewer.get(f"/api/documents/{en_id}/details").json()
+    field_keys = {f["key"] for f in got["standard"]["fields"]}
+    details = got["record"]["details"]
+    assert set(details) <= field_keys
+    for key in (
+        "step:adopted:deputies.date",
+        "step:promulgated.date",
+        "step:promulgated.person",
+        "step:countersigned.person",
+        "step:sealed.person",
+        "step:published.date",
+    ):
+        assert key in details
+    assert "made_up.field" not in details
+    assert any("Made up field: extra reader fact" in n for n in got["notices"])
+
+    saved = reviewer.post(
+        f"/api/documents/{en_id}/details",
+        json={
+            "expected_revision": 0,
+            "status": "draft",
+            "details": details,
+            "absent": got["record"]["absent"],
+        },
+    )
+    assert saved.status_code == 200
+    assert saved.json() == {"revision": 1}
+
+    sibling = reviewer.get(f"/api/documents/{fr_id}/details").json()
+    assert sibling["record"]["details"]["step:promulgated.date"] == "2023-08-04"
+    assert sibling["record"]["details"]["step:promulgated.person"] == "KAGAME Paul"
+    assert sibling["record"]["details"]["step:countersigned.person"] == "Dr NGIRENTE Edouard"
+    assert sibling["record"]["details"]["step:sealed.person"] == "Dr UGIRASHEBUJA Emmanuel"
+    assert sibling["record"]["details"]["step:adopted:deputies.date"] == "2023-07-05"
+
+
+def test_saved_record_with_unknown_keys_is_filtered_named_and_resaveable(tmp_path, monkeypatch):
+    store, library = _rwanda_constitution_world(tmp_path, monkeypatch, kind="constitution")
+    reviewer = signed_in((store, library), "reviewer@example.org")
+    act_id = "rw-constitution-2023-08-04-en"
+
+    # Simulate a previously saved revision that holds keys the form no longer has.
+    store.save_details(
+        "rw-constitution-2023-08-04",
+        0,
+        "reviewer@example.org",
+        details={
+            "identity.family": "constitution",
+            "identity.type": "constitution",
+            "identity.title": "The Constitution of the Republic of Rwanda",
+            "publication.date": "2023-08-04",
+            "step:promulgated.date": "2023-08-04",
+            "step:promulgated.person": "KAGAME Paul",
+            "stale.key": "old value",
+        },
+        absent={"step:countersigned.date": "not_in_source"},
+        status="draft",
+        comment="legacy revision",
+    )
+
+    got = reviewer.get(f"/api/documents/{act_id}/details").json()
+    field_keys = {f["key"] for f in got["standard"]["fields"]}
+    assert set(got["record"]["details"]) <= field_keys
+    assert set(got["record"]["absent"]) <= field_keys
+    assert len(got["notices"]) == 1
+    assert "Promulgated by the President of the Republic 2023-08-04 (KAGAME Paul)" in got["notices"][0]
+    assert "Stale key: old value" in got["notices"][0]
+
+    saved = reviewer.post(
+        f"/api/documents/{act_id}/details",
+        json={
+            "expected_revision": 1,
+            "status": "draft",
+            "details": got["record"]["details"],
+            "absent": got["record"]["absent"],
+        },
+    )
+    assert saved.status_code == 200
+    assert saved.json() == {"revision": 2}
+    reloaded = reviewer.get(f"/api/documents/{act_id}/details").json()
+    assert reloaded["notices"] == []
+    # History keeps the earlier revision intact.
+    assert len(store.detail_history("rw-constitution-2023-08-04")) == 2
+
+    # Unchanged: a POST naming an unknown key is still refused strictly.
+    refused = reviewer.post(
+        f"/api/documents/{act_id}/details",
+        json={
+            "expected_revision": 2,
+            "status": "draft",
+            "details": {**reloaded["record"]["details"], "step:promulgated.date": "2023-08-04"},
+            "absent": reloaded["record"]["absent"],
+        },
+    )
+    assert refused.status_code == 422
+    assert "unknown details: step:promulgated.date" in refused.json()["message"]
+
+
 def test_a_rwandan_laws_authority_is_suggested_with_its_words_and_stays_blank_until_the_reviewer_uses_it(
     tmp_path, monkeypatch
 ):
