@@ -2048,6 +2048,8 @@ function currentUnits(view) {
 // A paragraph running over from the previous page is joined in the published text only where the
 // reviewer says so (TXP-02 rule 8). The page view keeps the mark; the page's first paragraph carries it.
 const firstWords = (units) => (units || []).findIndex((u) => u.kind !== "table" && ((u.text || "").trim() || u.marker));
+// Mirrors _NUMBERED in workbench/serialize.py so the page never offers a join the server will refuse.
+const NUMBERED_START = /^(?:\d{1,3}[A-Z]{0,2}\.|\([\p{L}\p{N}_]{1,5}\))(?=\s|$)/u;
 
 function joinOf(units) {
   const first = (units || [])[firstWords(units)];
@@ -2075,11 +2077,26 @@ function refreshJoin(view) {
       el("span", { text: `Joined to page ${before.page}'s last paragraph ${view.join === "dehyphenate" ? "(its hyphen removed)" : "(with a space)"}: ${tail}` }),
       el("button", { class: "small", text: "Keep separate", on: { click: () => set(null) } })));
   }
-  const lower = !first.marker && /^[a-z]/.test((first.text || "").trim());
-  if (!lower || before.ends_sentence || view.joinDismissed) return view.joinSlot.replaceChildren();
+  const text = (first.text || "").trim();
+  const joinableKind = first.kind === "paragraph" || first.kind === "list_item";
+  const hasNotes = Array.isArray(first.notes) && first.notes.some((n) => String(n || "").trim());
+  if (
+    before.ends_sentence
+    || view.joinDismissed
+    || !joinableKind
+    || first.marker
+    || !text
+    || NUMBERED_START.test(text)
+    || hasNotes
+  ) return view.joinSlot.replaceChildren();
+  const lower = /^\p{Ll}/u.test(text);
+  const head = `“${text.length > 60 ? `${text.slice(0, 60).trimEnd()}…` : text}”`;
+  const prompt = lower
+    ? `Page ${before.page} ends mid-sentence (${tail}) and this page starts in lower case. The same paragraph?`
+    : `Page ${before.page} ends mid-sentence (${tail}). This page starts ${head}. The same paragraph?`;
   view.joinSlot.replaceChildren(el("div", { class: "joinbar" },
-    el("span", { text: `Page ${before.page} ends mid-sentence (${tail}) and this page starts in lower case. The same paragraph?` }),
-    el("button", { class: "small primary", text: "Join with a space", on: { click: () => set("space") } }),
+    el("span", { text: prompt }),
+    el("button", { class: lower ? "small primary" : "small", text: "Join with a space", on: { click: () => set("space") } }),
     before.hyphen ? el("button", { class: "small", text: "Join, removing the hyphen", on: { click: () => set("dehyphenate") } }) : null,
     el("button", { class: "small", text: "Keep separate", on: { click: () => { view.joinDismissed = true; refreshJoin(view); } } })));
 }

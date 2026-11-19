@@ -115,6 +115,35 @@ def test_reviewed_join_across_a_page_break():
     assert by_locator(result)["sec_5"].page_end == 2
 
 
+def test_reviewed_join_across_page_with_capital_digit_or_accented_start():
+    cap, _ = build(
+        [
+            [para("The sitting is chaired by the")],
+            [para("Speaker of the Chamber of Deputies.", continues_previous=True)],
+        ]
+    )
+    assert cap.text == "The sitting is chaired by the Speaker of the Chamber of Deputies.\n"
+    assert cap.errors == []
+
+    digit, _ = build(
+        [
+            [para("Conformément aux dispositions de l'article")],
+            [para("18 de la présente loi organique.", continues_previous=True)],
+        ]
+    )
+    assert digit.text == "Conformément aux dispositions de l'article 18 de la présente loi organique.\n"
+    assert digit.errors == []
+
+    accented, _ = build(
+        [
+            [para("Le candidat qui ne répond pas")],
+            [para("à ces conditions est écarté.", continues_previous=True)],
+        ]
+    )
+    assert accented.text == "Le candidat qui ne répond pas à ces conditions est écarté.\n"
+    assert accented.errors == []
+
+
 def test_dehyphenated_join_and_join_errors():
     text, _ = build(
         [[para("1. The licen-")], [para("see shall pay.", continues_previous=True, dehyphenate=True)]]
