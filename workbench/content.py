@@ -904,16 +904,23 @@ def validate_units(units) -> list[dict]:
         if notes:
             item["notes"] = notes
         # A paragraph the reviewer marked as continuing the previous page, joined in the published
-        # text with a space, or with the previous page's final hyphen removed (TXP-02 rule 8).
-        for key in ("continues_previous", "dehyphenate"):
+        # text with a space, with the previous page's final hyphen removed, or keeping that hyphen
+        # with no space (TXP-02 rule 8).
+        for key in ("continues_previous", "dehyphenate", "keep_hyphen"):
             if unit.get(key) not in (None, False, True):
                 raise ValueError(f"{key} must be true or false")
+        if unit.get("dehyphenate") and unit.get("keep_hyphen"):
+            raise ValueError("a continuing paragraph cannot both remove and keep a hyphen")
         if unit.get("continues_previous"):
             item["continues_previous"] = True
             if unit.get("dehyphenate"):
                 item["dehyphenate"] = True
+            elif unit.get("keep_hyphen"):
+                item["keep_hyphen"] = True
         elif unit.get("dehyphenate"):
             raise ValueError("dehyphenate applies only to a paragraph continuing the previous page")
+        elif unit.get("keep_hyphen"):
+            raise ValueError("keep_hyphen applies only to a paragraph continuing the previous page")
         clean.append(item)
     return clean
 

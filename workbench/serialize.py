@@ -161,7 +161,14 @@ def serialize(pages: list[dict]) -> Serialized:
                 if problem:
                     issues.append(Issue("error", "join", number, index, problem))
                 else:
-                    _join(last_text, words, bool(unit.get("dehyphenate")), number, index)
+                    _join(
+                        last_text,
+                        words,
+                        bool(unit.get("dehyphenate")),
+                        number,
+                        index,
+                        keep_hyphen=bool(unit.get("keep_hyphen")),
+                    )
                     continue
             if not words:
                 if notes:
@@ -199,13 +206,31 @@ def _join_problem(unit: dict, words: str, notes: list[str], previous: Leaf | Non
         return "A paragraph continuing from the previous page cannot carry margin notes; move them"
     if not words:
         return "Marked as continuing the previous page, but it has no words"
+    if unit.get("dehyphenate") and unit.get("keep_hyphen"):
+        return "A paragraph continuing from the previous page cannot both remove and keep a hyphen"
     if unit.get("dehyphenate") and not previous.text.endswith("-"):
         return "Marked to remove a hyphen, but the previous page does not end in one"
+    if unit.get("keep_hyphen") and not previous.text.endswith("-"):
+        return "Marked to keep a hyphen, but the previous page does not end in one"
     return ""
 
 
-def _join(previous: Leaf, words: str, dehyphenate: bool, page: int, index: int) -> None:
-    """Profile operations join_page_break (one space) and dehyphenate (the hyphen removed, no space)."""
-    previous.text = previous.text[:-1] + words if dehyphenate else f"{previous.text} {words}"
+def _join(
+    previous: Leaf,
+    words: str,
+    dehyphenate: bool,
+    page: int,
+    index: int,
+    *,
+    keep_hyphen: bool = False,
+) -> None:
+    """Profile operations join_page_break (one space), dehyphenate (the hyphen removed, no space),
+    and join_keep_hyphen (the hyphen kept, no space)."""
+    if dehyphenate:
+        previous.text = previous.text[:-1] + words
+    elif keep_hyphen:
+        previous.text = previous.text + words
+    else:
+        previous.text = f"{previous.text} {words}"
     previous.page_end = page
     previous.joined.append((page, index))

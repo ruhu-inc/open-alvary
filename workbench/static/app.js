@@ -2053,15 +2053,23 @@ const NUMBERED_START = /^(?:\d{1,3}[A-Z]{0,2}\.|\([\p{L}\p{N}_]{1,5}\))(?=\s|$)/
 
 function joinOf(units) {
   const first = (units || [])[firstWords(units)];
-  return first && first.continues_previous ? (first.dehyphenate ? "dehyphenate" : "space") : null;
+  if (!first || !first.continues_previous) return null;
+  if (first.dehyphenate) return "dehyphenate";
+  if (first.keep_hyphen) return "keep_hyphen";
+  return "space";
 }
 
 function withJoin(units, join) {
   const at = firstWords(units);
   return (units || []).map((unit, i) => {
-    const { continues_previous: _joined, dehyphenate: _hyphen, ...rest } = unit;
+    const { continues_previous: _joined, dehyphenate: _hyphen, keep_hyphen: _keep, ...rest } = unit;
     if (i !== at || !join) return rest;
-    return { ...rest, continues_previous: true, ...(join === "dehyphenate" ? { dehyphenate: true } : {}) };
+    return {
+      ...rest,
+      continues_previous: true,
+      ...(join === "dehyphenate" ? { dehyphenate: true } : {}),
+      ...(join === "keep_hyphen" ? { keep_hyphen: true } : {}),
+    };
   });
 }
 
@@ -2073,8 +2081,13 @@ function refreshJoin(view) {
   if (!before || !first) return view.joinSlot.replaceChildren();
   const tail = `“…${before.text.slice(-60)}”`;
   if (view.join) {
+    const how = view.join === "dehyphenate"
+      ? "(its hyphen removed)"
+      : view.join === "keep_hyphen"
+        ? "(hyphen kept, no space)"
+        : "(with a space)";
     return view.joinSlot.replaceChildren(el("div", { class: "joinbar on" },
-      el("span", { text: `Joined to page ${before.page}'s last paragraph ${view.join === "dehyphenate" ? "(its hyphen removed)" : "(with a space)"}: ${tail}` }),
+      el("span", { text: `Joined to page ${before.page}'s last paragraph ${how}: ${tail}` }),
       el("button", { class: "small", text: "Keep separate", on: { click: () => set(null) } })));
   }
   const text = (first.text || "").trim();
@@ -2098,6 +2111,7 @@ function refreshJoin(view) {
     el("span", { text: prompt }),
     el("button", { class: lower ? "small primary" : "small", text: "Join with a space", on: { click: () => set("space") } }),
     before.hyphen ? el("button", { class: "small", text: "Join, removing the hyphen", on: { click: () => set("dehyphenate") } }) : null,
+    before.hyphen ? el("button", { class: "small", text: "Join, keeping the hyphen", on: { click: () => set("keep_hyphen") } }) : null,
     el("button", { class: "small", text: "Keep separate", on: { click: () => { view.joinDismissed = true; refreshJoin(view); } } })));
 }
 

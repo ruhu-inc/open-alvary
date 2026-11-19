@@ -2,6 +2,8 @@
 
 import hashlib
 
+import pytest
+
 from workbench import publication, serialize, structure
 
 
@@ -163,6 +165,49 @@ def test_dehyphenated_join_and_join_errors():
 def test_a_join_on_the_same_page_is_refused():
     text, _ = build([[para("1. One"), para("two", continues_previous=True)]])
     assert [issue.code for issue in text.errors] == ["join"]
+
+
+def test_keep_hyphen_join_and_validation_errors():
+    from workbench import content
+
+    text, _ = build(
+        [
+            [para("Itegeko-")],
+            [para("Nshinga rya Repubulika.", continues_previous=True, keep_hyphen=True)],
+        ]
+    )
+    assert text.text == "Itegeko-Nshinga rya Repubulika.\n"
+    assert text.errors == []
+
+    # Without a hyphen on the previous page, keep_hyphen is a join error.
+    no_hyphen, _ = build(
+        [
+            [para("Itegeko")],
+            [para("Nshinga", continues_previous=True, keep_hyphen=True)],
+        ]
+    )
+    assert [(i.code, i.message) for i in no_hyphen.errors] == [
+        ("join", "Marked to keep a hyphen, but the previous page does not end in one")
+    ]
+
+    # Both dehyphenate and keep_hyphen together are refused by serializer and unit validator.
+    both, _ = build(
+        [
+            [para("Itegeko-")],
+            [para("Nshinga", continues_previous=True, dehyphenate=True, keep_hyphen=True)],
+        ]
+    )
+    assert [i.code for i in both.errors] == ["join"]
+
+    with pytest.raises(ValueError, match="both remove and keep"):
+        content.validate_units([para("Nshinga", continues_previous=True, dehyphenate=True, keep_hyphen=True)])
+
+    with pytest.raises(ValueError, match="keep_hyphen applies only"):
+        content.validate_units([para("Nshinga", keep_hyphen=True)])
+
+    valid = content.validate_units([para("Nshinga", continues_previous=True, keep_hyphen=True)])
+    assert valid[0]["continues_previous"] is True and valid[0]["keep_hyphen"] is True
+    assert "dehyphenate" not in valid[0]
 
 
 # --- Nigerian federal Acts -----------------------------------------------------------------------------
