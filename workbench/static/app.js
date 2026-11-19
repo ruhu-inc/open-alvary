@@ -1093,23 +1093,29 @@ async function detailsView(actId) {
   if (turn !== app.turn) return;
   const title = doc.data.act.title;
   setCrumbs(el("a", { href: "#/", text: "Documents" }), el("a", { href: `#/doc/${encodeURIComponent(actId)}`, text: title }), "Details");
-  const { standard, record, suggestions, related = {} } = data;
+  const { record, suggestions, related = {} } = data;
+  let standard = data.standard;
   const firstEvidence = Object.values(suggestions).map((h) => h.page).filter(Boolean).sort((a, b) => a - b)[0];
   const original = sourcePanel(actId, doc.data.pages.map((p) => p.page), doc.data.source || {}, firstEvidence);
   const canEdit = app.me.roles.includes("reviewer");
   const values = structuredClone(record.details);
   const absent = { ...record.absent };
+  const asideValues = {};
+  const asideAbsent = {};
+  const labels = new Map(standard.fields.map((f) => [f.key, f.label]));
   const rows = new Map();
-  const applicable = standard.fields.filter((f) => !f.types || f.types.includes(data.document_type));
+  let currentKind = values["identity.type"] || data.document_type;
+  let schemaTurn = 0;
+  const currentFields = () => standard.fields.filter((f) => !f.types || f.types.includes(currentKind));
 
   const isEmpty = (v) => v === undefined || v === null || v === "" || (Array.isArray(v) && !v.length);
   const pageLink = (page, text = `p. ${page}`) => el("a", { href: `#/doc/${encodeURIComponent(actId)}/page/${page}`, text, title: "Show this page beside the details",
     on: { click: (event) => { event.preventDefault(); original.show(page); } } });
   const refresh = () => {
     let gaps = 0;
-    for (const field of applicable) {
+    for (const field of currentFields()) {
       const gap = field.required && isEmpty(values[field.key]) && !absent[field.key];
-      rows.get(field.key).classList.toggle("missing", gap);
+      rows.get(field.key)?.classList.toggle("missing", gap);
       gaps += gap ? 1 : 0;
     }
     counter.textContent = gaps ? `${gaps} detail${gaps === 1 ? "" : "s"} still to give or account for` : "Every detail is given or accounted for";
@@ -1118,21 +1124,88 @@ async function detailsView(actId) {
   };
   const touched = () => { app.dirty = true; refresh(); };
 
+  const setAsideSlot = el("div");
+  const groupsSlot = el("div");
+  const updateSetAside = () => {
+    const allowed = new Set(currentFields().map((f) => f.key));
+    const keys = [...new Set([
+      ...Object.keys(asideValues).filter((k) => !isEmpty(asideValues[k])),
+      ...Object.keys(asideAbsent).filter((k) => Boolean(asideAbsent[k])),
+    ])].filter((k) => !allowed.has(k));
+    if (!keys.length) return setAsideSlot.replaceChildren();
+    const names = keys.map((k) => labels.get(k) || k);
+    const text = `${keys.length} detail${keys.length === 1 ? " does" : "s do"} not apply to this kind and will not be saved: ${names.join(", ")}.`;
+    setAsideSlot.replaceChildren(el("div", { class: "hint", text }));
+  };
+  const drawGroups = () => {
+    rows.clear();
+    const fields = currentFields();
+    const cards = standard.groups.map((group) => {
+      const groupFields = fields.filter((f) => f.group === group.key);
+      return groupFields.length ? el("div", { class: "card details-group" }, el("h3", { text: group.label }), groupFields.map(row)) : null;
+    });
+    groupsSlot.replaceChildren(...cards.filter(Boolean));
+  };
+  const loadFields = async (family, kind) => {
+    if (!family || !kind) return;
+    const myTurn = ++schemaTurn;
+    const result = await api(`/api/documents/${encodeURIComponent(actId)}/details/fields?family=${encodeURIComponent(family)}&kind=${encodeURIComponent(kind)}`);
+    if (myTurn !== schemaTurn || turn !== app.turn) return;
+    if (!result.ok) return toast(message(result));
+    standard = result.data;
+    currentKind = kind;
+    for (const f of standard.fields) labels.set(f.key, f.label);
+    const allowed = new Set(currentFields().map((f) => f.key));
+    for (const k of Object.keys(values)) {
+      if (!allowed.has(k)) {
+        if (!isEmpty(values[k])) asideValues[k] = values[k];
+        delete values[k];
+      }
+    }
+    for (const k of Object.keys(absent)) {
+      if (!allowed.has(k)) {
+        if (absent[k]) asideAbsent[k] = absent[k];
+        delete absent[k];
+      }
+    }
+    for (const k of allowed) {
+      if (k in asideValues) {
+        if (isEmpty(values[k]) && !absent[k]) values[k] = asideValues[k];
+        delete asideValues[k];
+      }
+      if (k in asideAbsent) {
+        if (isEmpty(values[k]) && !absent[k]) absent[k] = asideAbsent[k];
+        delete asideAbsent[k];
+      }
+    }
+    drawGroups();
+    updateSetAside();
+    touched();
+  };
+
   const control = (field) => {
-    const set = (value) => { values[field.key] = value; if (!isEmpty(value)) { delete absent[field.key]; why.value = ""; } touched(); };
+    const set = (value) => {
+      if (isEmpty(value)) { delete values[field.key]; }
+      else { values[field.key] = value; delete absent[field.key]; why.value = ""; }
+      touched();
+    };
     const value = values[field.key];
     let input;
     if (field.kind === "choice") {
       input = el("select", { on: { change: () => {
         set(input.value);
-        if (field.key === "identity.family") {  // the kinds follow the family; the fields follow on save
+        if (field.key === "identity.family") {
+          const nextKind = (standard.kinds[input.value] || [])[0] || "";
+          if (nextKind) values["identity.type"] = nextKind;
+          else delete values["identity.type"];
           const kind = rows.get("identity.type")?.querySelector("select");
           if (kind) {
             kind.replaceChildren(el("option", { value: "", text: "—" }), (standard.kinds[input.value] || []).map((k) => el("option", { value: k, text: k.replace(/_/g, " ") })));
-            values["identity.type"] = (standard.kinds[input.value] || [])[0] || "";
-            kind.value = values["identity.type"];
+            kind.value = nextKind;
           }
-          toast("Save the draft to see this family's fields");
+          loadFields(input.value, nextKind);
+        } else if (field.key === "identity.type") {
+          loadFields(values["identity.family"] || "", input.value);
         }
       } } }, el("option", { value: "", text: "—" }),
         field.choices.map((c) => el("option", { value: c.value, text: c.label })));
@@ -1204,8 +1277,11 @@ async function detailsView(actId) {
   const comment = el("textarea", { rows: 2, placeholder: "Note for this save (optional)" });
   const commentHelp = el("div", { class: "muted small", text: "The note is kept with this save and listed under “Details record” at the foot of this page, so this box is empty again after each save. Notes stay in the workbench: they are not published." });
   const save = async (status) => {
+    const allowed = new Set(currentFields().map((f) => f.key));
+    const detailsPayload = Object.fromEntries(Object.entries(values).filter(([k, v]) => allowed.has(k) && !isEmpty(v)));
+    const absentPayload = Object.fromEntries(Object.entries(absent).filter(([k, r]) => allowed.has(k) && Boolean(r)));
     const result = await api(`/api/documents/${encodeURIComponent(actId)}/details`, { method: "POST",
-      body: { expected_revision: record.revision, status, details: values, absent, comment: comment.value } });
+      body: { expected_revision: record.revision, status, details: detailsPayload, absent: absentPayload, comment: comment.value } });
     if (!result.ok) {
       if (result.data && result.data.missing) result.data.missing.forEach((key) => rows.get(key)?.classList.add("missing"));
       return toast(message(result));
@@ -1216,10 +1292,7 @@ async function detailsView(actId) {
     detailsView(actId);
   };
   const confirmButton = el("button", { class: "primary", text: "Confirm details", on: { click: () => save("confirmed") } });
-  const groups = standard.groups.map((group) => {
-    const fields = applicable.filter((f) => f.group === group.key);
-    return fields.length ? el("div", { class: "card details-group" }, el("h3", { text: group.label }), fields.map(row)) : null;
-  });
+  drawGroups();
   const history = data.history.length ? el("div", { class: "card" }, el("h3", { text: "Details record" }),
     el("ul", {}, data.history.map((h) => el("li", { text: `${h.at.slice(0, 16).replace("T", " ")} · revision ${h.revision} · ${h.status} by ${h.author}${h.comment ? ` — ${h.comment}` : ""}` })))) : null;
   main(
@@ -1230,10 +1303,11 @@ async function detailsView(actId) {
           el("p", { class: "muted", text: "Each detail was read from the document where it is printed; the page and words are shown beside it. Check each against the original beside the form (a page number opens that page there), correct it, or say why it is not given. Legal facts (what each language version is worth as law, when it commences, whether it is current, the laws it affects) are only suggested: none is filled in until you use the suggestion or give it yourself, and an authority left empty is published as unknown. Confirmed details are approved with the text and shown to the public." }),
           el("p", {}, pill(record.status === "confirmed" ? "ok" : record.status === "draft" ? "warn" : "medium", DETAIL_STATUS[record.status] + (record.revision ? ` · revision ${record.revision} by ${record.author}` : "")), " ", counter),
           ...(data.notices || []).map((notice) => el("div", { class: "hint", text: notice })),
+          setAsideSlot,
           canEdit ? el("p", {}, el("button", { text: "Save draft", on: { click: () => save("draft") } }), " ", confirmButton, " ", previewLink(actId)) : el("p", { class: "muted", text: "Editing needs the reviewer role." }),
           canEdit ? comment : null,
           canEdit ? commentHelp : null),
-        ...groups,
+        groupsSlot,
         history),
       original.panel),
   );

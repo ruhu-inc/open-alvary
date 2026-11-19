@@ -1401,6 +1401,84 @@ def test_saved_record_with_unknown_keys_is_filtered_named_and_resaveable(tmp_pat
     assert "unknown details: step:promulgated.date" in refused.json()["message"]
 
 
+def test_details_fields_endpoint_and_kind_change_both_directions(tmp_path, monkeypatch):
+    world = _rwanda_constitution_world(tmp_path, monkeypatch, kind="constitution")
+    reviewer = signed_in(world, "reviewer@example.org")
+    act_id = "rw-constitution-2023-08-04-en"
+
+    # Unauthenticated caller is refused.
+    anon = TestClient(create_app(*world, dev_login=True), base_url="http://127.0.0.1")
+    assert (
+        anon.get(f"/api/documents/{act_id}/details/fields?family=constitution&kind=constitution").status_code
+        == 401
+    )
+
+    # Returns the form schema for the requested pair at the document's place, read-only.
+    amendment = reviewer.get(
+        f"/api/documents/{act_id}/details/fields?family=constitution&kind=constitutional_amendment"
+    )
+    assert amendment.status_code == 200
+    amendment_keys = {f["key"] for f in amendment.json()["fields"]}
+    assert "step:promulgated.date" in amendment_keys
+    assert "step:sealed.person" in amendment_keys
+    assert "event:adopted.date" not in amendment_keys
+
+    constitution = reviewer.get(
+        f"/api/documents/{act_id}/details/fields?family=constitution&kind=constitution"
+    )
+    assert constitution.status_code == 200
+    constitution_keys = {f["key"] for f in constitution.json()["fields"]}
+    assert "event:adopted.date" in constitution_keys
+    assert "step:promulgated.date" not in constitution_keys
+
+    # Mismatched family and kind is refused with the same 422 the save uses.
+    bad = reviewer.get(f"/api/documents/{act_id}/details/fields?family=constitution&kind=law")
+    assert bad.status_code == 422
+    assert "family" in bad.json()["message"].lower()
+
+    # Switching constitution -> constitutional_amendment and back saves cleanly when sending only new kind's keys.
+    initial = reviewer.get(f"/api/documents/{act_id}/details").json()
+    to_amendment = {
+        k: v
+        for k, v in {
+            **initial["record"]["details"],
+            "identity.family": "constitution",
+            "identity.type": "constitutional_amendment",
+            "step:promulgated.date": "2023-08-04",
+        }.items()
+        if k in amendment_keys
+    }
+    r1 = reviewer.post(
+        f"/api/documents/{act_id}/details",
+        json={"expected_revision": 0, "status": "draft", "details": to_amendment, "absent": {}},
+    )
+    assert r1.status_code == 200 and r1.json() == {"revision": 1}
+
+    after1 = reviewer.get(f"/api/documents/{act_id}/details").json()
+    assert after1["record"]["details"]["identity.type"] == "constitutional_amendment"
+    assert after1["record"]["details"]["step:promulgated.date"] == "2023-08-04"
+
+    to_constitution = {
+        k: v
+        for k, v in {
+            **after1["record"]["details"],
+            "identity.family": "constitution",
+            "identity.type": "constitution",
+            "event:adopted.date": "2023-07-05",
+        }.items()
+        if k in constitution_keys
+    }
+    r2 = reviewer.post(
+        f"/api/documents/{act_id}/details",
+        json={"expected_revision": 1, "status": "draft", "details": to_constitution, "absent": {}},
+    )
+    assert r2.status_code == 200 and r2.json() == {"revision": 2}
+    after2 = reviewer.get(f"/api/documents/{act_id}/details").json()
+    assert after2["record"]["details"]["identity.type"] == "constitution"
+    assert after2["record"]["details"]["event:adopted.date"] == "2023-07-05"
+    assert "step:promulgated.date" not in after2["record"]["details"]
+
+
 def test_a_rwandan_laws_authority_is_suggested_with_its_words_and_stays_blank_until_the_reviewer_uses_it(
     tmp_path, monkeypatch
 ):

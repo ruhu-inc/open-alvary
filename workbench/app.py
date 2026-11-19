@@ -1085,6 +1085,17 @@ def create_app(
             ],
         }
 
+    @app.get("/api/documents/{act_id}/details/fields")
+    def document_details_fields(request: Request, act_id: str, family: str = "", kind: str = ""):
+        """The form fields for a family and kind at this document's place, read-only."""
+        auth.current(request, store)
+        act = act_or_404(act_id)
+        if family not in R.FAMILIES or kind not in R.FAMILIES[family][1]:
+            raise HTTPException(422, "Choose the document's family and a kind within it")
+        _, profile = record_view.place_for(act, library.manifest_for(act_id), profiles)
+        specs = record_view.fields(family, kind, profile)
+        return view_schema({"family": family, "specs": specs})
+
     @app.post("/api/documents/{act_id}/details")
     def save_document_details(request: Request, act_id: str, body: dict = JSON_BODY):
         """A new revision of the details; confirming needs every detail given or accounted for,
