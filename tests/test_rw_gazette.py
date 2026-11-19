@@ -2376,6 +2376,18 @@ def test_a_version_of_title_and_contents_goes_on_under_its_title_reprinted_with_
     assert [(f["number"], f["versions"]["rw"]["start"], f["versions"]["rw"]["end"]) for f in found] == [
         ("001/08.11", 0, 7)
     ]
+    # Of two numbers that agree, the one printed whole, over the contents or over the body.
+    for first, second in (("N007/03", "N° 007/03"), ("N° 004/MININTER/11", "N° 04/MININTER/11")):
+        order = lines(
+            f"PRIME MINISTER’S ORDER {first} OF 29/01/2019 APPOINTING A DIRECTOR",
+            "TABLE OF CONTENTS",
+            "Article One: Appointment",
+            f"PRIME MINISTER’S ORDER {second} OF 29/01/2019 APPOINTING A DIRECTOR",
+            "We, EXAMPLE Name,",
+            "Article One: Appointment",
+        )
+        found = RG.instruments({"rw": [], "en": order, "fr": []})
+        assert [f["number"] for f in found] == [max(first, second, key=len).split()[-1].removeprefix("N")]
     regulation = lines(
         "REGULATION OF THE NATIONAL BANK OF RWANDA N O 03/2017 OF 22/02/2017 ON SANCTIONS",
         "TABLE OF CONTENTS",
@@ -2394,6 +2406,11 @@ def test_a_regulation_names_its_issuer_before_its_number_and_a_dated_law_stays_d
     en = RG.OPENING["en"].match("REGULATION OF THE NATIONAL BANK OF RWANDA N O 03/2017 OF 22/02/2017 ON")
     fr = RG.OPENING["fr"].match("REGLEMENT DE LA BANQUE NATIONALE DU RWANDA N° 03/2017 DU 22/02/2017")
     assert en.group(2) == "03/2017" and fr.group(2) == "03/2017"
+    mines = RG.OPENING["fr"].match(
+        "RÈGLEMENTS DU DIRECTEUR GÉNÉRAL EN CHEF N° 006/MINES/RMB/2019 DU 18/07/2019"
+    )
+    assert mines.group(2) == "006/MINES/RMB/2019"
+    assert RG.OPENING["fr"].match("ARRÊTÉ DU PREMIER MINISTRE N° 079/03 DU 26/07/2019").group(2) == "079/03"
     dated = RG.OPENING["en"].match("LAW OF 19 FEBRUARY 1964 ON THE NORTHERN PROVINCE")
     assert dated.group(2) is None
 

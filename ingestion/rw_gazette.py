@@ -112,12 +112,13 @@ _DATED = {"rw": r"\s+R?YO\s+KU\s?WA\s+(.*\d{4})", "en": r"\s+OF\s+(.*\d{4})", "f
 # Kinyarwanda names whose instruction or regulation it is between the kind and its number ("AMABWIRIZA
 # Y'UMWANDITSI MUKURU N° 01/2010/ORG", "AMABWIRIZA YA MINISITIRI N° 001/2014").
 # English and French name a regulation's issuer the same way ("REGULATION OF THE NATIONAL BANK OF RWANDA N O
-# 03/2017", "RÈGLEMENT DE LA BANQUE NATIONALE DU RWANDA N° 03/2017"; 2026-11-19: read as a date alone, so the
-# English version was its own document), only where a number follows.
+# 03/2017", "RÈGLEMENT DE LA BANQUE NATIONALE DU RWANDA N° 03/2017", "RÈGLEMENTS DU DIRECTEUR GÉNÉRAL EN CHEF N°
+# 006/MINES/RMB/2019"; 2026-11-19: read as a date alone, so a version was its own document or another's), only
+# where a number follows.
 _QUALIFIER = {
     "rw": r"(?:\s+(?:YA|Y[’'])\s*[A-ZÀ-Ý’' -]{2,60}?)?",
     "en": r"(?:\s+OF\s+THE\s+[A-Z’' -]{2,60}?(?=\s+N\s?[°ºO0\uf0b0]\.?\s*\d))?",
-    "fr": r"(?:\s+DE\s+LA\s+[A-ZÀ-Ý’' -]{2,60}?(?=\s+N\s?[°ºO0\uf0b0]\.?\s*\d))?",
+    "fr": r"(?:\s+(?:DE\s+LA|DE\s+L[’']|DU|DES)\s*[A-ZÀ-Ý’' -]{2,60}?(?=\s+N\s?[°ºO0\uf0b0]\.?\s*\d))?",
 }
 OPENING = {
     language: re.compile(rf"^({words}){_QUALIFIER[language]}(?:{_NUMBER}|{_DATED[language]})")
@@ -1084,7 +1085,7 @@ def _continued_openings(lines: list[dict], found: list[dict]) -> list[dict]:
     """A language's openings without the reprints the key cannot join: an opening that holds only its title
     over a contents list, and no body, goes on under the next opening of its kind whose title has the same
     words, however that reprint spoils its number or date ("N°° 001/08.11", "OF 20/02/2017" for "OF
-    22/02/2017", "ARRÊTÉMINISTÉRIELN°", "N007/03" read "07/03"): it takes the number printed over the body.
+    22/02/2017", "ARRÊTÉMINISTÉRIELN°", "N007/03" read "07/03"): of two numbers that agree it keeps the longer.
     Two numbers each read in full that do not agree stay two instruments.
     Before 2026-11-19 the reprint began an instrument of its own: the first held the contents alone and the
     body went under a number made from the date or the sign (Iteka rya Minisitiri n° 001/08.11, 2014)."""
@@ -1106,8 +1107,12 @@ def _continued_openings(lines: list[dict], found: list[dict]) -> list[dict]:
                 a, b = _title_letters(before["title"])[:120], _title_letters(opening["title"])[:120]
                 if a and b and SequenceMatcher(None, a, b).ratio() >= 0.9:
                     before["has_body"] = before["has_body"] or opening["has_body"]
-                    if _real_number(opening["number"], opening.get("date")):
-                        # the number printed over the body ("N007/03" over the contents read "07/03")
+                    if _real_number(opening["number"], opening.get("date")) and (
+                        not _real_number(before["number"], before.get("date"))
+                        or len(opening["number"]) > len(before["number"])
+                    ):
+                        # of two that agree, the one printed whole: "N007/03" over the contents read
+                        # "07/03" and "007/03" over the body; "004/Mininter/11" then "04/Mininter/11"
                         before["number"] = opening["number"]
                     continue
         out.append(opening)
