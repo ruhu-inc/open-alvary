@@ -12,7 +12,9 @@ Cloudflare or Radware challenge page) or a rate limit used up raises Refused: th
 source and records why, never as "nothing listed".
 """
 
+import ipaddress
 import re
+import socket
 import time
 from collections import deque
 from collections.abc import Callable
@@ -27,6 +29,8 @@ MAX_REDIRECTS = 5
 ROBOTS_BYTES = 500 * 1024
 LEAST_DELAY = 2.0
 LONGEST_CRAWL_DELAY = 60.0  # a Crawl-delay above this is read as this (we wait, but not for hours)
+# The most of a server error's body read: enough for a bot check's markers, never the whole of it.
+BOT_CHECK_BYTES = 64 * 1024
 
 
 class Disallowed(Exception):
@@ -137,11 +141,38 @@ def bot_check(status: int, headers, head: bytes) -> str | None:
         return f"HTTP {status}"
     if (headers.get("cf-mitigated") or "").lower() == "challenge":
         return "Cloudflare challenge (cf-mitigated)"
-    text = head[:65536].decode("utf-8", "replace").lower()
+    text = head[:BOT_CHECK_BYTES].decode("utf-8", "replace").lower()
     for marker in CHALLENGE_MARKERS:
         if marker in text:
             return f"bot check page ({marker})"
     return None
+
+
+# --- where a robots.txt may lead -------------------------------------------------------------------
+
+
+def resolve(host: str) -> list[str]:
+    """Every address a host name resolves to (none when it does not resolve)."""
+    try:
+        return sorted({info[4][0] for info in socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)})
+    except (socket.gaierror, UnicodeError):
+        return []
+
+
+def public_host(host: str, resolver: Callable[[str], list[str]] = resolve) -> bool:
+    """Whether a host is on the public internet: an address, or a name all of whose addresses are, that is
+    global (not loopback, private, link-local such as a cloud metadata server, or reserved)."""
+    host = host.strip("[]")
+    try:
+        addresses = [ipaddress.ip_address(host)]
+    except ValueError:
+        addresses = []
+        for found in resolver(host):
+            try:
+                addresses.append(ipaddress.ip_address(found.split("%", 1)[0]))
+            except ValueError:
+                return False
+    return bool(addresses) and all(a.is_global for a in addresses)
 
 
 # --- the client ------------------------------------------------------------------------------------
@@ -190,6 +221,7 @@ class PoliteClient:
         retry_wait: float = 30.0,
         log: Callable[[str], None] = lambda message: None,
         record: Callable[["Answer"], None] | None = None,
+        resolver: Callable[[str], list[str]] = resolve,
     ):
         import httpx
 
@@ -209,6 +241,7 @@ class PoliteClient:
         self.requests: dict[str, int] = {}
         self.refused_paths: list[str] = []
         self.record = record  # called with every answer returned (a Recorder keeps them)
+        self.resolver = resolver
 
     def close(self) -> None:
         self.client.close()
@@ -256,7 +289,11 @@ class PoliteClient:
     def _robots(self, scheme: str, host: str, port: int | None = None) -> Robots:
         """The robots.txt of one origin: scheme, host and port (RFC 9309, 2.3), read once, at most
         ROBOTS_BYTES of it, following up to MAX_REDIRECTS redirects (2.3.1.2: the rules found there apply
-        here); past them, or unreachable, the host is left alone."""
+        here, even on another host); past them, or unreachable, the host is left alone. A redirect off the
+        allowed hosts is followed only onto the public internet: one to a private, loopback or link-local
+        address (a cloud metadata server) leaves the host alone and is never requested. The name is
+        resolved here and again when the request is made, so a name answering differently the second
+        time is not caught; what such a request reads is only ever parsed as robots.txt rules."""
         origin = f"{host}:{port}" if port else host
         key = origin  # kept answers and crawl delays are by host, a port only where one is given
         if key in self.robots:
@@ -267,8 +304,12 @@ class PoliteClient:
                 status, headers, body, _ = self._send(urlsplit(url).hostname or host, url, None, ROBOTS_BYTES)
                 if status in (301, 302, 303, 307, 308) and headers.get("location"):
                     url = urljoin(url, headers["location"])
-                    if urlsplit(url).scheme not in ("https", "http"):
+                    target = urlsplit(url)
+                    if target.scheme not in ("https", "http"):
                         raise Unreachable(f"robots.txt redirected to {url}")
+                    to = (target.hostname or "").lower()
+                    if to not in self.hosts and not public_host(to, self.resolver):
+                        raise Unreachable(f"robots.txt redirected off the public internet, to {to or url}")
                     continue
                 break
             else:
@@ -316,21 +357,22 @@ class PoliteClient:
 
     # requests -----------------------------------------------------------------------------------
 
-    def _send(self, host: str, url: str, limit: int | None, head: int | None, headers: dict | None = None):
+    def _send(self, host: str, url: str, limit: int | None, head: int | None, extra: dict | None = None):
         """One GET, waited for, tried twice when the host does not answer (a timeout, a failed
         connection, a server error); the body read up to `limit` bytes (TooLarge past it), or only
-        its first `head` bytes."""
+        its first `head` bytes. Both tries send the same headers: who we are and the caller's `extra`
+        (a conditional request's validators). Of a server error only BOT_CHECK_BYTES are read."""
         import httpx
 
+        sent = {"User-Agent": user_agent(), **(extra or {})}  # who we are, on every request
         for attempt in (1, 2):
             self._wait(host)
             try:
                 self._started(host)
-                sent = {"User-Agent": user_agent(), **(headers or {})}  # who we are, on every request
                 with self.client.stream("GET", url, headers=sent) as response:
                     headers = {k.lower(): v for k, v in response.headers.items()}
                     if response.status_code >= 500:
-                        reason = bot_check(response.status_code, headers, response.read())
+                        reason = bot_check(response.status_code, headers, _first(response, BOT_CHECK_BYTES))
                         if reason:  # Cloudflare's "under attack" check answers 503
                             raise BotCheck(f"{reason} at {url}")
                         raise _ServerError(response.status_code)
@@ -389,6 +431,16 @@ class PoliteClient:
                 self.record(answer)
             return answer
         raise OffHost(f"more than {MAX_REDIRECTS} redirects from {url}")
+
+
+def _first(response, size: int) -> bytes:
+    """At most the first `size` bytes of a streamed body; the rest is never read."""
+    body = bytearray()
+    for chunk in response.iter_bytes():
+        body.extend(chunk)
+        if len(body) >= size:
+            break
+    return bytes(body[:size])
 
 
 class _ServerError(Exception):

@@ -25,6 +25,7 @@ A development sign-in exists for a local trial only: it must be switched on expl
 """
 
 import base64
+import functools
 import hashlib
 import hmac
 import ipaddress
@@ -43,7 +44,7 @@ from urllib.parse import urlencode, urlsplit
 
 import httpx
 from anyio import CapacityLimiter, to_thread
-from fastapi import BackgroundTasks, FastAPI, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 
@@ -61,6 +62,7 @@ PROVIDER_SESSION_SECONDS = 30 * 86400  # the longest the provider remembers a si
 CLOCK_SKEW_SECONDS = 60
 REGISTRATION_EMAILS_AN_HOUR = 30
 ENDPOINT_SENDS = 4  # verifications and tests to developers' endpoints at once, on threads of their own
+NOT_JSON = object()  # a request body that is not JSON at all
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 RETURN = re.compile(r"^/console(/[A-Za-z0-9/_?=&%.-]*)?$")
 LINKED = "/console/security"  # where adding a sign-in method comes back to
@@ -572,14 +574,20 @@ def create_console_app(
         """For changes to the person, which reach every organisation they belong to."""
         return any(manages_paid_access(o) for o in accounts.organisations(person_id))
 
-    async def body(request: Request) -> dict:
+    # A request's JSON is read on the event loop (json_sent), and the handler then runs on a worker thread:
+    # every handler here talks to the database, and one that did so on the event loop held up every other
+    # request of the process while it waited (findings, 2026-11-19). The body is judged (body) where the
+    # handler asks, after its session checks, as when it was read there.
+    async def json_sent(request: Request) -> object:
         try:
-            data = await request.json()
+            return await request.json()
         except ValueError:
-            raise AccountError("invalid_input", 400, "Send a JSON object.") from None
-        if not isinstance(data, dict):
+            return NOT_JSON
+
+    def body(sent: object) -> dict:
+        if sent is NOT_JSON or not isinstance(sent, dict):
             raise AccountError("invalid_input", 400, "Send a JSON object.")
-        return data
+        return sent
 
     # ---------- you ----------
     @app.get("/api/v1/me")
@@ -603,25 +611,21 @@ def create_console_app(
         }
 
     @app.patch("/api/v1/me")
-    async def update_me(request: Request):
+    def update_me(request: Request, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        accounts.update_profile(
-            session["person_id"], (await body(request)).get("display_name", ""), context(request)
-        )
+        accounts.update_profile(session["person_id"], body(sent).get("display_name", ""), context(request))
         return Response(status_code=204)
 
     @app.post("/api/v1/me/policies")
-    async def accept(request: Request):
+    def accept(request: Request, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        accounts.accept_policies(
-            session["person_id"], (await body(request)).get("versions") or {}, context(request)
-        )
+        accounts.accept_policies(session["person_id"], body(sent).get("versions") or {}, context(request))
         return Response(status_code=204)
 
     @app.post("/api/v1/me/welcome")
-    async def welcome(request: Request):
+    def welcome(request: Request, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        data = await body(request)
+        data = body(sent)
         organisation, made = accounts.first_organisation(
             session["person_id"],
             data.get("display_name", ""),
@@ -636,13 +640,13 @@ def create_console_app(
         return {"identities": accounts.identities(guard(request)["person_id"])}
 
     @app.post("/api/v1/me/identities/link")
-    async def link_method(request: Request):
+    def link_method(request: Request, sent: object = Depends(json_sent)):
         """F08: start adding a sign-in method, bound to this session; where the browser goes next. It is a
         change, with the session's CSRF token and our own Origin, so no other site can start one. It asks
         what a sensitive change asks, as a new method can answer for every organisation of the person, and
         a session that is not fresh gets the same refusal: the page steps up, then asks again."""
         session = guard(request, write=True)
-        method = (await body(request)).get("method")
+        method = body(sent).get("method")
         if not isinstance(method, str) or method not in CONNECTIONS:
             raise AccountError("invalid_input", 400, "Choose Google or an email code.")
         fresh(session, second_factor=needs_second_factor_anywhere(session["person_id"]))
@@ -706,9 +710,9 @@ def create_console_app(
         return privacy.deletion_check(accounts, guard(request)["person_id"])
 
     @app.post("/api/v1/me/delete")
-    async def delete_me(request: Request):
+    def delete_me(request: Request, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        data = await body(request)
+        data = body(sent)
         # Closing an account also deletes the organisations where the person is the only member.
         fresh(session, second_factor=needs_second_factor_anywhere(session["person_id"]))
         me = accounts.person(session["person_id"])
@@ -733,9 +737,9 @@ def create_console_app(
 
     # ---------- organisations ----------
     @app.post("/api/v1/organisations")
-    async def create_organisation(request: Request):
+    def create_organisation(request: Request, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        data = await body(request)
+        data = body(sent)
         organisation = accounts.create_organisation(
             session["person_id"],
             data.get("name", ""),
@@ -751,9 +755,9 @@ def create_console_app(
         return accounts.organisation(guard(request)["person_id"], organisation_id)
 
     @app.patch("/api/v1/organisations/{organisation_id}")
-    async def update_organisation(request: Request, organisation_id: str):
+    def update_organisation(request: Request, organisation_id: str, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        data = await body(request)
+        data = body(sent)
         revision = data.pop("revision", None)
         if not isinstance(revision, int):
             raise AccountError("precondition_required", 428, "Send the revision you are changing.")
@@ -773,9 +777,9 @@ def create_console_app(
         return accounts.access_details(guard(request)["person_id"], organisation_id)
 
     @app.post("/api/v1/organisations/{organisation_id}/access-requests")
-    async def request_access(request: Request, organisation_id: str):
+    def request_access(request: Request, organisation_id: str, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        data = await body(request)
+        data = body(sent)
         request_id = accounts.request_access(session["person_id"], organisation_id, data, context(request))
         notice = accounts.notice_recipients(organisation_id, request_id)
         plan = next((t["name"] for t in accounts.tiers() if t["id"] == data.get("tier")), None)
@@ -801,9 +805,9 @@ def create_console_app(
         return Response(status_code=204)
 
     @app.post("/api/v1/organisations/{organisation_id}/access/countries")
-    async def change_countries(request: Request, organisation_id: str):
+    def change_countries(request: Request, organisation_id: str, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        data = await body(request)
+        data = body(sent)
         accounts.change_countries(
             session["person_id"], organisation_id, data.get("jurisdictions"), context(request)
         )
@@ -827,9 +831,9 @@ def create_console_app(
         return {"keys": accounts.list_keys(guard(request)["person_id"], organisation_id)}
 
     @app.post("/api/v1/organisations/{organisation_id}/keys")
-    async def create_key(request: Request, organisation_id: str):
+    def create_key(request: Request, organisation_id: str, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        data = await body(request)
+        data = body(sent)
         fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id), recent=False)
         created = accounts.create_key(
             session["person_id"],
@@ -842,9 +846,9 @@ def create_console_app(
         return JSONResponse(json.loads(json.dumps(created, default=str)), status_code=201)
 
     @app.post("/api/v1/organisations/{organisation_id}/keys/{key_id}/rotate")
-    async def rotate_key(request: Request, organisation_id: str, key_id: str):
+    def rotate_key(request: Request, organisation_id: str, key_id: str, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        data = await body(request)
+        data = body(sent)
         fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id), recent=False)
         created = accounts.rotate_key(
             session["person_id"],
@@ -878,9 +882,9 @@ def create_console_app(
         return accounts.members(guard(request)["person_id"], organisation_id)
 
     @app.post("/api/v1/organisations/{organisation_id}/invitations")
-    async def invite(request: Request, organisation_id: str):
+    def invite(request: Request, organisation_id: str, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        data = await body(request)
+        data = body(sent)
         # Inviting an owner or admin grants what changing a member's role does, and asks the same.
         if str(data.get("role", "")) in roles.MANAGERS:
             fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id))
@@ -911,9 +915,11 @@ def create_console_app(
         }
 
     @app.patch("/api/v1/organisations/{organisation_id}/members/{membership_id}")
-    async def change_role(request: Request, organisation_id: str, membership_id: str):
+    def change_role(
+        request: Request, organisation_id: str, membership_id: str, sent: object = Depends(json_sent)
+    ):
         session = guard(request, write=True)
-        data = await body(request)
+        data = body(sent)
         fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id))
         accounts.change_role(
             session["person_id"], organisation_id, membership_id, data.get("role", ""), context(request)
@@ -928,9 +934,9 @@ def create_console_app(
         return Response(status_code=204)
 
     @app.post("/api/v1/organisations/{organisation_id}/transfer-ownership")
-    async def transfer(request: Request, organisation_id: str):
+    def transfer(request: Request, organisation_id: str, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        data = await body(request)
+        data = body(sent)
         fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id))
         accounts.transfer_ownership(
             session["person_id"],
@@ -1027,8 +1033,8 @@ def create_console_app(
         }
 
     @app.post("/oauth/api/decision")
-    async def consent_decision(request: Request):
-        data = await body(request)
+    def consent_decision(request: Request, sent: object = Depends(json_sent)):
+        data = body(sent)
         payload = hand_off(str(data.get("session_token") or ""))
         state = str(data.get("state") or "")
         if not re.fullmatch(r"[A-Za-z0-9._~-]{1,2048}", state):
@@ -1101,29 +1107,31 @@ def create_console_app(
         return watches.listing(guard(request)["person_id"], organisation_id)
 
     @app.post(watch_path)
-    async def create_watch(request: Request, organisation_id: str):
+    def create_watch(request: Request, organisation_id: str, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        created = watches.create(session["person_id"], organisation_id, await body(request), context(request))
+        created = watches.create(session["person_id"], organisation_id, body(sent), context(request))
         return JSONResponse(jsonable_encoder(created), status_code=201)
 
     @app.post(watch_path + "/preview")
-    async def preview_watch(request: Request, organisation_id: str):
+    def preview_watch(request: Request, organisation_id: str, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        data = await body(request)
+        data = body(sent)
         return watches.preview(
             session["person_id"], organisation_id, data.get("filters"), site_origin(request)
         )
 
     @app.patch(watch_path + "/{watch_id}")
-    async def update_watch(request: Request, organisation_id: str, watch_id: str):
+    def update_watch(
+        request: Request, organisation_id: str, watch_id: str, sent: object = Depends(json_sent)
+    ):
         session = guard(request, write=True)
-        data = await body(request)
+        data = body(sent)
         return watches.update(session["person_id"], organisation_id, watch_id, data, context(request))
 
     @app.post(watch_path + "/{watch_id}/email")
-    async def watch_email(request: Request, organisation_id: str, watch_id: str):
+    def watch_email(request: Request, organisation_id: str, watch_id: str, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        data = await body(request)
+        data = body(sent)
         watches.set_email(session["person_id"], organisation_id, watch_id, data.get("email"))
         return Response(status_code=204)
 
@@ -1141,9 +1149,9 @@ def create_console_app(
         )
 
     @app.post("/api/v1/organisations/{organisation_id}/inbox/read")
-    async def inbox_read(request: Request, organisation_id: str):
+    def inbox_read(request: Request, organisation_id: str, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        data = await body(request)
+        data = body(sent)
         watches.mark_read(session["person_id"], organisation_id, data.get("ids"))
         return Response(status_code=204)
 
@@ -1152,9 +1160,9 @@ def create_console_app(
         return watches.preferences(guard(request)["person_id"])
 
     @app.patch("/api/v1/me/notifications")
-    async def set_notifications(request: Request):
+    def set_notifications(request: Request, sent: object = Depends(json_sent)):
         session = guard(request, write=True)
-        return watches.set_preferences(session["person_id"], await body(request))
+        return watches.set_preferences(session["person_id"], body(sent))
 
     # The link in each digest: GET describes (link scanners open links), POST unsubscribes; the
     # token is the credential, so neither needs a session (RFC 8058 one-click).
@@ -1180,24 +1188,36 @@ def create_console_app(
     def list_webhooks(request: Request, organisation_id: str):
         return hooks.listing(guard(request)["person_id"], organisation_id)
 
+    # These four wait on a developer's endpoint, on threads of its own (to_endpoint), so they stay on the
+    # event loop; what they ask of the database first runs on a worker thread as every other handler's does.
     @app.post(hook_path)
-    async def create_webhook(request: Request, organisation_id: str):
-        session = guard(request, write=True)
-        data = await body(request)
-        fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id))
+    async def create_webhook(request: Request, organisation_id: str, sent: object = Depends(json_sent)):
+        def checked():
+            session = guard(request, write=True)
+            data = body(sent)
+            fresh(session, second_factor=needs_second_factor(session["person_id"], organisation_id))
+            return session, data
+
+        session, data = await to_thread.run_sync(checked)
         created = await to_endpoint(
             hooks.create, session["person_id"], organisation_id, data, context(request)
         )
         return JSONResponse(jsonable_encoder(created), status_code=201, headers={"Cache-Control": "no-store"})
 
     @app.patch(hook_path + "/{endpoint_id}")
-    async def update_webhook(request: Request, organisation_id: str, endpoint_id: str):
-        session = guard(request, write=True)
-        data = await body(request)
-        # A new address asks what creating an endpoint asks: deliveries go there from now on.
-        person = session["person_id"]
-        if "url" in data and data["url"] != hooks.get(person, organisation_id, endpoint_id)["url"]:
-            fresh(session, second_factor=needs_second_factor(person, organisation_id))
+    async def update_webhook(
+        request: Request, organisation_id: str, endpoint_id: str, sent: object = Depends(json_sent)
+    ):
+        def checked():
+            session = guard(request, write=True)
+            data = body(sent)
+            # A new address asks what creating an endpoint asks: deliveries go there from now on.
+            person = session["person_id"]
+            if "url" in data and data["url"] != hooks.get(person, organisation_id, endpoint_id)["url"]:
+                fresh(session, second_factor=needs_second_factor(person, organisation_id))
+            return person, data
+
+        person, data = await to_thread.run_sync(checked)
         return await to_endpoint(hooks.update, person, organisation_id, endpoint_id, data, context(request))
 
     @app.delete(hook_path + "/{endpoint_id}")
@@ -1215,12 +1235,12 @@ def create_console_app(
 
     @app.post(hook_path + "/{endpoint_id}/verify")
     async def verify_webhook(request: Request, organisation_id: str, endpoint_id: str):
-        session = guard(request, write=True)
+        session = await to_thread.run_sync(functools.partial(guard, request, write=True))
         return await to_endpoint(hooks.verify, session["person_id"], organisation_id, endpoint_id)
 
     @app.post(hook_path + "/{endpoint_id}/test")
     async def test_webhook(request: Request, organisation_id: str, endpoint_id: str):
-        session = guard(request, write=True)
+        session = await to_thread.run_sync(functools.partial(guard, request, write=True))
         return await to_endpoint(
             hooks.test, session["person_id"], organisation_id, endpoint_id, context(request)
         )
@@ -1251,9 +1271,9 @@ def create_console_app(
             event.get("type") == "email.bounced"
             and ((data or {}).get("bounce") or {}).get("type") != "Transient"
         ):
-            watches.mail_event("bounce", to)
+            await to_thread.run_sync(watches.mail_event, "bounce", to)
         elif event.get("type") == "email.complained":
-            watches.mail_event("complaint", to)
+            await to_thread.run_sync(watches.mail_event, "complaint", to)
         return Response(status_code=204)
 
     # Declared last: every console API route above wins over this.

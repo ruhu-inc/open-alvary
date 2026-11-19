@@ -139,10 +139,10 @@ class Retriever:
         self.embedder = embedder
         self.reranker = reranker if reranker is not None else rerank.configured()
         if search_engine is None:
-            from retrieval.engine import Engine, config_from_env
+            from retrieval.engine import config_from_env, shared
 
             configured = config_from_env()
-            search_engine = Engine(*configured) if configured else None
+            search_engine = shared(configured) if configured else None
         self.engine = search_engine
         self._loaded: dict[str, tuple | None] = {}
         self._nodes: dict[str, list] = {}

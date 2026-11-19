@@ -593,17 +593,23 @@ class Store:
         return code
 
     def take_enrolment(self, email: str, code: str) -> bool:
-        """Spend a code: only the operator it was issued to, once, within 24 hours."""
+        """Spend a code: only the operator it was issued to, once, within 24 hours. Spending it is one
+        conditional write, so two requests racing with the same code cannot both succeed."""
         letters = "".join(c for c in code.upper() if c.isalnum())
         code = "-".join(letters[i : i + 4] for i in range(0, len(letters), 4))
         with self.engine.begin() as db:
             row = db.execute(
-                select(enrolment).where(enrolment.c.code_hash == digest(code), enrolment.c.email == email)
+                update(enrolment)
+                .where(
+                    enrolment.c.code_hash == digest(code),
+                    enrolment.c.email == email,
+                    enrolment.c.used_at.is_(None),
+                )
+                .values(used_at=now())
+                .returning(enrolment.c.created_at)
             ).first()
-            if not row or row.used_at or now() - _aware(row.created_at) > ENROLMENT_TTL:
-                return False
-            db.execute(update(enrolment).where(enrolment.c.code_hash == row.code_hash).values(used_at=now()))
-        return True
+        # A code past its time is spent all the same: it was never going to be good again.
+        return row is not None and now() - _aware(row.created_at) <= ENROLMENT_TTL
 
     def passkeys(self, email: str) -> list[dict]:
         with self.engine.connect() as db:
@@ -645,15 +651,19 @@ class Store:
         return challenge
 
     def take_challenge(self, token_hash: str, purpose: str) -> str | None:
-        """The session's open challenge for this purpose, once, within five minutes."""
+        """The session's open challenge for this purpose, once, within five minutes. Taking it clears it,
+        whatever its purpose, and only where it is still the one read: of two requests racing for it, the
+        second finds it gone and gets nothing."""
         with self.engine.begin() as db:
             row = db.execute(select(session).where(session.c.token_hash == token_hash)).first()
-            db.execute(
+            if not row or not row.challenge:
+                return None
+            taken = db.execute(
                 update(session)
-                .where(session.c.token_hash == token_hash)
+                .where(session.c.token_hash == token_hash, session.c.challenge == row.challenge)
                 .values(challenge=None, challenge_purpose=None, challenge_at=None)
-            )
-        if not row or not row.challenge or row.challenge_purpose != purpose:
+            ).rowcount
+        if not taken or row.challenge_purpose != purpose:
             return None
         return row.challenge if now() - _aware(row.challenge_at) <= CHALLENGE_TTL else None
 
@@ -676,12 +686,14 @@ class Store:
         return state
 
     def take_flow(self, state: str) -> dict | None:
-        """One use only, within ten minutes."""
+        """One use only, within ten minutes: deleted by the write that reads it, so two callbacks with the
+        same state cannot both have it."""
         with self.engine.begin() as db:
-            row = db.execute(select(auth_flow).where(auth_flow.c.state == state)).first()
-            if not row:
-                return None
-            db.execute(auth_flow.delete().where(auth_flow.c.state == state))
+            row = db.execute(
+                auth_flow.delete().where(auth_flow.c.state == state).returning(*auth_flow.c)
+            ).first()
+        if not row:
+            return None
         return dict(row._mapping) if now() - _aware(row.created_at) < timedelta(minutes=10) else None
 
     # --- page revisions ------------------------------------------------------------------------

@@ -60,3 +60,30 @@ def test_a_mailbox_is_the_same_however_the_address_is_written():
     assert mailbox("Guest@Example.org") == mailbox("guest+anything@example.org") == "guest@example.org"
     assert mailbox("g.u.e.s.t@gmail.com") == mailbox("GUEST+x@googlemail.com") == "guest@gmail.com"
     assert mailbox("g.uest@example.org") != mailbox("guest@example.org")  # dots count elsewhere
+
+
+def test_no_console_handler_waits_on_the_database_on_the_event_loop():
+    """Findings, 2026-11-19: handlers declared async called the database directly, which held up every
+    request of the process while they waited. A handler is a plain function, run on a worker thread, unless
+    it must wait on the event loop, and those hand their database work to a thread."""
+    import inspect
+    from unittest.mock import MagicMock
+
+    from fastapi.routing import APIRoute
+
+    from api.console import create_console_app
+
+    app = create_console_app(MagicMock(), None)
+    on_the_loop = {
+        r.endpoint.__name__
+        for r in app.routes
+        if isinstance(r, APIRoute) and inspect.iscoroutinefunction(r.endpoint)
+    }
+    # These four wait on a developer's endpoint (threads of their own); the mail events read a raw body.
+    assert on_the_loop == {
+        "create_webhook",
+        "update_webhook",
+        "verify_webhook",
+        "test_webhook",
+        "mail_events",
+    }

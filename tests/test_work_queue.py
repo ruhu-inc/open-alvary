@@ -5,7 +5,7 @@ pages to review like any other."""
 from datetime import UTC, datetime, timedelta
 
 from test_routing import flagged_world as flagged_world  # noqa: F401 - a fixture
-from test_routing import keys_in, readiness
+from test_routing import keys_in, plan_of
 from test_workbench import ACT, flag_id, save, signed_in
 from test_workbench import world as world  # noqa: F401 - a fixture
 
@@ -64,8 +64,7 @@ def test_proposals_awaiting_review_or_a_second_review_are_listed_after_pages(wor
 
 def test_audit_pages_are_queued_as_pages_to_review_with_the_full_ones(flagged_world):  # noqa: F811
     store, library, found = flagged_world
-    approver = signed_in((store, library), "approver@example.org")
-    sampled = readiness(approver)["routing"]["audit_sample"]
+    sampled = plan_of(store, library)["audit_sample"]
     reviewer = signed_in((store, library), "reviewer@example.org")
     listed = tasks(reviewer)
     assert [(t["kind"], t["priority"], t["pages"]) for t in listed["tasks"]] == [

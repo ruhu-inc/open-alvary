@@ -299,3 +299,106 @@ def test_the_file_list_fetcher_obeys_robots_txt_and_reads_a_bounded_page():
         with pytest.raises(filelist.Refused):
             fetch(refused)
     assert "https://example.gov.ng/private/list" not in [url for _, url, _ in seen]
+
+
+def test_a_second_try_sends_what_the_first_did_and_never_the_answers_headers():
+    """Findings, 2026-11-19: the retry after a server error sent the error's own headers (its
+    content-length on a GET with no body) and lost the caller's conditional headers."""
+    tries = []
+
+    def flaky(request):
+        tries.append(dict(request.headers))
+        if len(tries) == 1:
+            return 503, {"set-cookie": "s=1", "x-backend": "b1", "content-type": "text/plain"}, b"x" * 10
+        return 200, {}, b"ok"
+
+    made, _ = client({ROBOTS: (404, {}, b""), "https://example.gov.ng/doc": flaky})
+    answer = made.get("https://example.gov.ng/doc", headers={"If-None-Match": '"abc"'})
+    assert answer.status == 200 and len(tries) == 2
+    first, second = tries
+    assert second["if-none-match"] == first["if-none-match"] == '"abc"'
+    assert second["user-agent"] == first["user-agent"]
+    assert not {"set-cookie", "x-backend", "content-type", "content-length"} & set(second)
+
+
+def test_only_the_first_part_of_a_server_errors_body_is_read():
+    read = []
+
+    class Endless(httpx.SyncByteStream):
+        def __iter__(self):
+            for _ in range(1000):
+                read.append(1)
+                yield b"x" * 4096
+
+    def handler(request):
+        if request.url.path == "/robots.txt":
+            return httpx.Response(404)
+        return httpx.Response(503, stream=Endless())
+
+    clock = Clock()
+    made = polite.PoliteClient(
+        {"example.gov.ng"},
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+        clock=clock,
+        sleep=clock.sleep,
+    )
+    with pytest.raises(polite.Unreachable):
+        made.get("https://example.gov.ng/doc")
+    assert len(read) <= 2 * (polite.BOT_CHECK_BYTES // 4096 + 1)  # two tries, 64 KiB each at most
+    # A bot check page that answers 503 is still recognised from that first part.
+    page = b"<html><title>Just a moment...</title>" + b" " * (2 * polite.BOT_CHECK_BYTES)
+    made, _ = client({ROBOTS: (404, {}, b""), "https://example.gov.ng/doc": (503, {}, page)})
+    with pytest.raises(polite.BotCheck):
+        made.get("https://example.gov.ng/doc")
+
+
+@pytest.mark.parametrize(
+    "target, addresses",
+    [
+        ("http://169.254.169.254/computeMetadata/v1/", []),  # a cloud metadata server
+        ("http://127.0.0.1/robots.txt", []),
+        ("http://[::1]/robots.txt", []),
+        ("http://10.0.0.5/robots.txt", []),
+        ("https://internal.example/robots.txt", ["10.1.2.3"]),  # a name for a private address
+        ("https://mixed.example/robots.txt", ["93.184.215.14", "192.168.1.1"]),
+        ("https://nowhere.example/robots.txt", []),  # a name that does not resolve
+    ],
+)
+def test_a_robots_txt_redirected_off_the_public_internet_is_never_followed(target, addresses):
+    """Findings, 2026-11-19: robots.txt redirects were followed to any address."""
+    made, seen = client(
+        {ROBOTS: (301, {"location": target}, b""), "https://example.gov.ng/a": (200, {}, b"a")},
+        resolver=lambda host: addresses,
+    )
+    with pytest.raises(polite.Disallowed):  # left alone, as for an unreachable robots.txt
+        made.get("https://example.gov.ng/a")
+    assert [url for _, url, _ in seen] == [ROBOTS]
+    assert "public internet" in made.robots["example.gov.ng"].note
+
+
+def test_a_robots_txt_redirected_to_a_public_host_or_an_allowed_one_is_read_there():
+    """RFC 9309, 2.3.1.2: the rules where robots.txt was redirected apply, even on another host."""
+    rules = (200, {"content-type": "text/plain"}, b"User-agent: *\nDisallow: /private/\n")
+    for target, hosts in (
+        ("https://cdn.example.net/robots.txt", {"example.gov.ng"}),
+        ("https://www.example.gov.ng/robots.txt", {"example.gov.ng", "www.example.gov.ng"}),
+    ):
+        asked = []
+        made, _ = client(
+            {ROBOTS: (301, {"location": target}, b""), target: rules},
+            hosts=hosts,
+            resolver=lambda host, asked=asked: asked.append(host) or ["93.184.215.14"],
+        )
+        assert not made.permits("https://example.gov.ng/private/x")
+        assert made.permits("https://example.gov.ng/laws/")
+        assert asked == ([] if "www." in target else ["cdn.example.net"])  # an allowed host is not resolved
+
+
+def test_a_public_host_is_one_whose_every_address_is_global():
+    assert polite.public_host("93.184.215.14")
+    assert polite.public_host(
+        "example.org", lambda host: ["93.184.215.14", "2606:2800:21f:cb07:6820:80da:af6b:8b2c"]
+    )
+    assert not polite.public_host("100.64.0.1")  # shared address space (carrier-grade NAT)
+    assert not polite.public_host("fe80::1")
+    assert not polite.public_host("example.org", lambda host: ["not an address"])

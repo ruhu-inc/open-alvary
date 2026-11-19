@@ -722,3 +722,28 @@ def test_the_two_pieces_of_a_long_section_are_two_candidates():
     first, second = hit(start=0, end=65000, node="n_sec_9"), hit(start=65001, end=90000, node="n_sec_9")
     assert Candidate(first).key != Candidate(second).key
     assert len(fuse({"lexical": [first, second]})) == 2
+
+
+def test_the_reranker_and_the_engine_are_one_client_each_per_process(monkeypatch):
+    """Findings, 2026-11-19: every query made new reranker and engine clients and never closed them, so no
+    connection was kept open and reused."""
+    from retrieval import engine, rerank
+
+    rerank.close_shared()
+    engine.close_shared()
+    monkeypatch.delenv("OPEN_ALVARY_RERANKER_URL", raising=False)
+    assert rerank.configured() is None
+    monkeypatch.setenv("OPEN_ALVARY_RERANKER_URL", "http://10.0.0.9:8081")
+    monkeypatch.setenv("OPEN_ALVARY_RERANKER_PROFILE", "BAAI/bge-reranker-v2-m3@test")
+    first = rerank.configured()
+    assert first is rerank.configured()
+    monkeypatch.setenv("OPEN_ALVARY_RERANKER_PROFILE", "another@test")
+    assert rerank.configured() is not first  # another configuration, another client
+    one = engine.shared(("http://10.0.0.9:8080", None))
+    assert one is engine.shared(("http://10.0.0.9:8080", None))
+    assert one is not engine.shared(("http://10.0.0.9:8080", "http://10.0.0.9:19071"))
+    rerank.close_shared()
+    engine.close_shared()
+    assert first.client.is_closed and one.query.is_closed
+    assert rerank.configured() is not first  # afresh after closing
+    rerank.close_shared()

@@ -728,7 +728,9 @@ def create_app(
         if decision == "approved":
             ready = now["readiness"]
             if not ready["ready"]:
-                raise HTTPException(409, {"message": "Not ready for approval", "readiness": ready})
+                # Blind, as everywhere else: an approver may review pages too (one person may do both),
+                # so the refusal names what is left to do, never which pages are the audit sample.
+                raise HTTPException(409, {"message": "Not ready for approval", "readiness": blind(ready)})
             if wording is not None and wording["names_left"]:
                 raise HTTPException(
                     409,

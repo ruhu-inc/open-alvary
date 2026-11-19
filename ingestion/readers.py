@@ -6,14 +6,17 @@ Document AI pages also carry "nodes" (the structured reading the corpus text is 
 Every reader reports what produced the reading ("version") and how many pages were billed.
 """
 
+import email.utils
 import hashlib
 import json
 import os
+import random
 import subprocess
 import tempfile
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -366,16 +369,45 @@ def azure_pages(result: dict, count: int) -> list[dict]:
     ]
 
 
+# Azure Document Intelligence: what is tried again, how often, and the longest wait between tries.
+RETRIED = frozenset({429, 500, 502, 503, 504})
+THROTTLED = frozenset(
+    {429}
+)  # refused before it was taken in: the only answer an analysis is sent again after
+ATTEMPTS = 6
+LONGEST_WAIT = 300.0
+
+
+def retry_after(headers, default: float) -> float:
+    """The seconds a Retry-After header asks for, given in seconds or as an HTTP date; `default` when it
+    gives neither. Never less than nothing, nor more than LONGEST_WAIT."""
+    value = (headers.get("Retry-After") or "").strip()
+    wait = default
+    if value:
+        try:
+            wait = float(value)
+        except ValueError:
+            try:
+                when = email.utils.parsedate_to_datetime(value)
+            except (TypeError, ValueError, IndexError):
+                when = None
+            if when is not None:
+                when = when if when.tzinfo else when.replace(tzinfo=UTC)
+                wait = (when - datetime.now(UTC)).total_seconds()
+    return min(max(wait, 0.0), LONGEST_WAIT)
+
+
 class AzureReader:
     name = "azure"
     billed = True
 
-    def __init__(self, client: httpx.Client | None = None, sleep=time.sleep):
+    def __init__(self, client: httpx.Client | None = None, sleep=time.sleep, jitter=random.random):
         config = settings.require("AZURE_DI_ENDPOINT", "AZURE_DI_KEY")
         self.endpoint = config["AZURE_DI_ENDPOINT"].rstrip("/")
         self.headers = {"Ocp-Apim-Subscription-Key": config["AZURE_DI_KEY"]}
         self.client = client or httpx.Client(timeout=120)
         self.sleep = sleep
+        self.jitter = jitter  # up to a second more on a backoff, so parallel readers do not retry together
 
     def preflight(self) -> None:
         """A free call: the resource answers and accepts the key."""
@@ -395,23 +427,30 @@ class AzureReader:
         # "geometry": readings keep paragraph positions and Azure's own output (since 2026-10-09).
         return {"model": "prebuilt-layout", "api_version": API_VERSION, "geometry": 1}
 
-    def _send(self, method: str, url: str, **kwargs) -> httpx.Response:
-        """Retry throttling and server errors, honouring Retry-After."""
-        for attempt in range(6):
-            response = self.client.request(
-                method, url, headers={**self.headers, **kwargs.pop("headers", {})}, **kwargs
-            )
-            if response.status_code not in {429, 500, 502, 503, 504}:
+    def _send(
+        self, method: str, url: str, headers: dict | None = None, retried=RETRIED, **kwargs
+    ) -> httpx.Response:
+        """Send, trying again on the `retried` statuses up to ATTEMPTS times in all: after the wait
+        Retry-After asks for, else an exponential backoff with jitter. Every try sends the same headers."""
+        sent = {**self.headers, **(headers or {})}
+        for attempt in range(ATTEMPTS):
+            response = self.client.request(method, url, headers=sent, **kwargs)
+            if response.status_code not in retried or attempt == ATTEMPTS - 1:
                 response.raise_for_status()
                 return response
-            self.sleep(float(response.headers.get("Retry-After") or 2 ** (attempt + 1)))
-        response.raise_for_status()
-        return response
+            self.sleep(retry_after(response.headers, 2 ** (attempt + 1) + self.jitter()))
+        raise RuntimeError("unreachable")
 
     def read(self, pdf: Path, deadline: float = 1800) -> Reading:
         url = f"{self.endpoint}/documentintelligence/documentModels/prebuilt-layout:analyze?api-version={API_VERSION}"
+        # An analysis is billed once Azure takes it in. A 429 says it was not, so it is sent again; a server
+        # error may come after it was, so it is not (the batch records the failure, to be read again later).
         started = self._send(
-            "POST", url, headers={"Content-Type": "application/pdf"}, content=pdf.read_bytes()
+            "POST",
+            url,
+            headers={"Content-Type": "application/pdf"},
+            retried=THROTTLED,
+            content=pdf.read_bytes(),
         )
         location, waited = started.headers["Operation-Location"], 0.0
         while True:
@@ -421,7 +460,7 @@ class AzureReader:
                 break
             if body["status"] == "failed" or waited > deadline:
                 raise RuntimeError(f"Azure analysis {body['status']}: {body.get('error')}")
-            pause = float(poll.headers.get("Retry-After") or 2)
+            pause = max(retry_after(poll.headers, 2.0), 1.0)  # never a tight loop of polls
             self.sleep(pause)
             waited += pause
         result, count = body["analyzeResult"], page_count(pdf)

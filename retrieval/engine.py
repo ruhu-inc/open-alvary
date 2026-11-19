@@ -24,9 +24,11 @@ on ``jurisdiction_id`` (a fast-search attribute). When a jurisdiction's size cal
 its own content cluster (``CLUSTERS``), so a query for one country touches only its nodes.
 """
 
+import atexit
 import io
 import json
 import re
+import threading
 import zipfile
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -186,6 +188,11 @@ class Engine:
             if config_url
             else None
         )
+
+    def close(self) -> None:
+        self.query.close()
+        if self.config is not None:
+            self.config.close()
 
     # --- the application ------------------------------------------------------------------------
 
@@ -434,6 +441,29 @@ def config_from_env() -> tuple[str, str | None] | None:
 
     url = os.environ.get("OPEN_ALVARY_ENGINE_URL")
     return (url, os.environ.get("OPEN_ALVARY_ENGINE_CONFIG_URL")) if url else None
+
+
+_SHARED: dict[tuple[str, str | None], "Engine"] = {}
+_LOCK = threading.Lock()
+
+
+def shared(config: tuple[str, str | None]) -> "Engine":
+    """The engine at this configuration, one per process, for answering queries (findings, 2026-11-19: a
+    client was made for every query and never closed, so no connection was kept open and reused). httpx
+    clients are safe to share between threads; jobs that deploy or feed make their own."""
+    with _LOCK:
+        if config not in _SHARED:
+            _SHARED[config] = Engine(*config)
+        return _SHARED[config]
+
+
+@atexit.register
+def close_shared() -> None:
+    """Close the process's shared engine clients (at exit; tests call it to start afresh)."""
+    with _LOCK:
+        for engine in _SHARED.values():
+            engine.close()
+        _SHARED.clear()
 
 
 __all__ = ["Application", "Engine", "document", "slug", "json"]

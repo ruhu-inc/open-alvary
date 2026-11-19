@@ -4,6 +4,7 @@ only needs its flags resolved, the sample is shown to reviewers exactly like ful
 defect in the sample escalates the document; without the decision every page is checked; calibration
 reports what reviews changed on each route."""
 
+import hashlib
 import json
 
 import pytest
@@ -13,13 +14,17 @@ from ingestion import native
 from workbench import content, routing
 from workbench.store import Store, connect
 
-POLICY = {
+SALT = "a-test-audit-salt-of-forty-three-characters"
+# The decision as recorded (it commits to the salt's SHA-256), and as loaded (with the secret salt).
+DECIDED = {
     "decision": "verification-routing-test",
     "decided_by": "Test",
     "decided_at": "2026-10-19T09:00:00+00:00",
     "audit_rate": 0.5,
     "minimum_per_document": 1,
+    "sample_salt_sha256": hashlib.sha256(SALT.encode()).hexdigest(),
 }
+POLICY = {**DECIDED, "sample_salt": SALT}
 
 
 def page(number, text, flags=(), tables=()):
@@ -246,8 +251,9 @@ def world_of(found, tmp_path, monkeypatch):
     image.write_bytes(b"\xff\xd8\xff\xd9")
     monkeypatch.setattr(library, "image", lambda act_id, page: image)
     policy = tmp_path / "verification-routing.json"
-    policy.write_text(json.dumps(POLICY))
+    policy.write_text(json.dumps(DECIDED))
     monkeypatch.setattr(routing, "POLICY", policy)
+    monkeypatch.setenv(routing.SALT_ENV, SALT)
     return store, library, found
 
 
@@ -276,11 +282,20 @@ def readiness(browser):
     return approve(browser).json()["readiness"]
 
 
+def plan_of(store, library):
+    """The routing plan, as review state reads it: no answer to anyone names it (findings, 2026-11-19)."""
+    from schema.jurisdictions import registry
+    from workbench.review import Review
+
+    return Review(store, library, registry()).state(library.act(ACT), text=True)["readiness"]["routing"]
+
+
 def test_under_the_decision_a_flagged_page_is_done_when_every_flag_is_resolved_unchecked(flagged_world):
     store, library, found = flagged_world
     approver = signed_in((store, library), "approver@example.org")
     ready = readiness(approver)
-    plan = ready["routing"]
+    plan = plan_of(store, library)
+    assert "routing" not in ready
     assert plan["flag_pages"] == [2] and 2 not in plan["required_pages"]
     assert ready["unresolved_flag_pages"] == [2] and 2 not in ready["unchecked_pages"]
     flagged, units = found["pages"][1], content.units_from(found["pages"][1])
@@ -339,7 +354,9 @@ def test_audit_pages_are_shown_to_a_reviewer_exactly_like_full_pages(flagged_wor
     store, library, found = flagged_world
     approver = signed_in((store, library), "approver@example.org")
     reviewer = signed_in((store, library), "reviewer@example.org")
-    plan = readiness(approver)["routing"]  # the approver's refused approval names the plan
+    refused = approve(approver).json()
+    assert not keys_in(refused) & ROUTING_KEYS  # an approver's refused approval does not name it either
+    plan = plan_of(store, library)
     sampled = plan["audit_sample"]
     assert len(sampled) == 2 and set(sampled) < {3, 4, 5}
 
@@ -371,7 +388,8 @@ def test_under_the_decision_only_routed_and_sampled_pages_wait_and_the_approval_
     store, library, found = routed_world
     approver = signed_in((store, library), "approver@example.org")
     refused = approve(approver).json()["readiness"]
-    plan = refused["routing"]
+    assert "routing" not in refused
+    plan = plan_of(store, library)
     assert plan["routes"] == {"1": "full", "2": "agreed", "3": "agreed"} or plan["routes"] == {
         1: "full",
         2: "agreed",
@@ -475,3 +493,34 @@ def test_review_time_is_reported_per_route():
         "full": {"pages_timed": 1, "median": 2.0, "minutes": 2.0},
     }
     assert "by_route" not in timings(rows)
+
+
+def test_the_audit_sample_is_drawn_with_the_secret_salt_the_decision_committed_to(tmp_path, monkeypatch):
+    """Findings, 2026-11-19: the sample was a hash of the decision's name and the document's ID, both
+    public, so anyone could work it out in advance."""
+    agreed = list(range(1, 41))
+    chosen = routing.sample("doc", agreed, POLICY)
+    assert routing.sample("doc", agreed, {**POLICY, "sample_salt": "another" * 6}) != chosen
+    public = sorted(
+        agreed, key=lambda p: hashlib.sha256(f"{POLICY['decision']}:doc:{p}".encode()).hexdigest()
+    )
+    assert chosen != sorted(public[: len(chosen)])  # not the draw anyone could make from public facts
+    decision = tmp_path / "verification-routing.json"
+    decision.write_text(json.dumps(DECIDED))
+    assert routing.load_policy(decision, salt=SALT) == POLICY
+    monkeypatch.setenv(routing.SALT_ENV, SALT)
+    assert routing.load_policy(decision) == POLICY
+    for salt, why in (("", "set OPEN_ALVARY_AUDIT_SALT"), ("short", "at least 32"), ("x" * 43, "committed")):
+        with pytest.raises(ValueError, match=why):
+            routing.load_policy(decision, salt=salt)
+    decision.write_text(json.dumps({k: v for k, v in DECIDED.items() if k != "sample_salt_sha256"}))
+    with pytest.raises(ValueError, match="sample_salt_sha256"):
+        routing.load_policy(decision, salt=SALT)
+    assert routing.load_policy(tmp_path / "absent.json", salt="") is None  # no decision: no salt needed
+
+
+def test_a_new_salt_comes_with_what_the_decision_records_of_it(capsys):
+    assert routing.main(["salt"]) == 0
+    printed = capsys.readouterr().out.splitlines()
+    salt, recorded = printed[0].rsplit(" ", 1)[1], printed[1].rsplit(" ", 1)[1]
+    assert len(salt) >= routing.SALT_LEAST and recorded == hashlib.sha256(salt.encode()).hexdigest()

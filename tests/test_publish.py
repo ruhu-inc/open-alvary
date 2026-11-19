@@ -1484,6 +1484,25 @@ def test_nothing_an_operator_holds_back_is_published_again(both_decisions, store
     assert not rights["rw-b"].metadata_public
 
 
+def test_a_work_held_back_stays_unpublished_after_a_work_whose_text_was_decided(
+    both_decisions, store, tmp_path, monkeypatch
+):
+    """A work an operator held back before it was ever public (corpus.privacy_hold) is skipped however
+    many works come before it in the run, a work with a published text among them (findings, 2026-11-19:
+    the loop reused the name of the holds for that work's source, and every later hold was missed)."""
+    collection = Collection(tmp_path)
+    collection.add("rw-a", "rw-a")
+    collection.run(store)
+    assert public_texts(store) == [("rw-a", "en")]
+    collection.add("rw-b", "rw-b", words="Another.", raw="8" * 64)
+    collection.add("rw-c", "rw-c", words="A third.", raw="9" * 64)
+    monkeypatch.setattr(publish, "privacy_holds", lambda store: {"rw-b", "rw-c"})
+    summary = collection.run(store)["countries"]["rw"]
+    assert public_records(store) == ["rw-a"]
+    assert "confidential reason" in summary["records_skipped"]["rw-b"]
+    assert "confidential reason" in summary["records_skipped"]["rw-c"]
+
+
 @pytest.mark.parametrize(
     "printed, name, published",
     [

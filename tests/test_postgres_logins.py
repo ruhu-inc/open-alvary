@@ -1171,6 +1171,9 @@ def test_on_a_database_owned_by_an_ordinary_login_as_on_cloud_sql(capability_rol
             )
         with pytest.raises(DBAPIError, match="400 days at least"), world.engine(JOBS).begin() as conn:
             conn.execute(text(f"SELECT {namespace.qualified(conn, 'changes', 'purge_change_log')}(30)"))
+        # No number of days is refused too: it once read every event as past retention (migration 0057).
+        with pytest.raises(DBAPIError, match="400 days at least"), world.engine(JOBS).begin() as conn:
+            conn.execute(text(f"SELECT {namespace.qualified(conn, 'changes', 'purge_change_log')}(NULL)"))
         with owner.begin() as conn:
             assert 0 < conn.scalar(text(f"SELECT count(*) FROM {log}")) < before
         assert traffic.maintain(world.engine(JOBS), namespace)["months_dropped"] == 0

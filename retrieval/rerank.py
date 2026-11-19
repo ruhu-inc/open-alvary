@@ -9,8 +9,10 @@ the windows holding most of the query's words are scored, the unit taking the hi
 A weak match, found only by meaning or by some of the query's words, must reach ``SUPPORT_FLOOR`` to be
 evidence (retrieval.pack)."""
 
+import atexit
 import os
 import re
+import threading
 
 MAX_CANDIDATES = 50
 MAX_CHARS = 2_000  # of each candidate's words
@@ -57,7 +59,31 @@ class HttpReranker:
             raise ValueError("The reranker did not score every candidate")
         return [found[i] for i in range(len(texts))]
 
+    def close(self) -> None:
+        self.client.close()
+
+
+_SHARED: dict[tuple[str, str], HttpReranker] = {}
+_LOCK = threading.Lock()
+
 
 def configured():
+    """The reranker the environment names, one per process (findings, 2026-11-19: a client was made for
+    every query and never closed, so no connection to the reranker was ever kept open and reused).
+    httpx clients are safe to share between threads."""
     url, profile = os.environ.get("OPEN_ALVARY_RERANKER_URL"), os.environ.get("OPEN_ALVARY_RERANKER_PROFILE")
-    return HttpReranker(url, profile) if url and profile else None
+    if not (url and profile):
+        return None
+    with _LOCK:
+        if (url, profile) not in _SHARED:
+            _SHARED[(url, profile)] = HttpReranker(url, profile)
+        return _SHARED[(url, profile)]
+
+
+@atexit.register
+def close_shared() -> None:
+    """Close the process's reranker clients (at exit; tests call it to start afresh)."""
+    with _LOCK:
+        for reranker in _SHARED.values():
+            reranker.close()
+        _SHARED.clear()

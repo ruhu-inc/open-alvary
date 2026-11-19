@@ -25,12 +25,27 @@ TXP-06 require today. Under it, ``full`` pages and one audit sample drawn from t
 resolves every one of its flags (only the disagreements go to people); a sampled page whose review
 changed its words or structure (a material defect) escalates every page of the document to review
 whole. The sample is reviewed blind: a reviewer is shown its pages exactly like ``full`` pages.
+
+Which pages are sampled is fixed by a secret salt the decision commits to (findings, 2026-11-19). The
+draw used to be a hash of the decision's name and the document's ID, both in the public repository, so
+anyone could work out every document's sample in advance. Now:
+  - ``python -m workbench.routing salt`` makes a salt and prints it with its SHA-256;
+  - the SHA-256 goes into the decision as ``sample_salt_sha256``, so the salt cannot be changed, nor a
+    sample chosen, after the decision is taken;
+  - the salt itself is a secret (Secret Manager), given to the workbench as OPEN_ALVARY_AUDIT_SALT;
+    a decision whose salt is missing, short or not the one it committed to stops every routed review
+    (an error, never a silent fall back);
+  - when the decision is replaced or ends, its salt may be published, and anyone can then check every
+    sample it drew.
 """
 
 import hashlib
+import hmac
 import json
 import math
+import os
 import re
+import secrets
 from pathlib import Path
 
 from workbench import content
@@ -38,6 +53,8 @@ from workbench import content
 ROUTES = "oa-route-pages-1"
 UNREVIEWED = ("agreed", "native")  # verified without review, and covered by one audit sample
 POLICY = Path(__file__).resolve().parents[1] / "ingestion" / "decisions" / "verification-routing.json"
+SALT_ENV = "OPEN_ALVARY_AUDIT_SALT"
+SALT_LEAST = 32  # characters of the secret salt, at least: 256 bits as `salt` makes them is 43
 # Words that make a disagreement risky (TXP-06's material classes: numbers, amounts, dates,
 # cross-references, negations and exceptions), in each language the corpus prints so far; the Rwandan
 # Gazette prints every law in Kinyarwanda, English and French. Any digit is risky. A word risky in one
@@ -85,18 +102,39 @@ CONTENTS = re.compile(
 )
 
 
-def load_policy(path: Path | None = None) -> dict | None:
-    """The owner's verification-routing decision, or None (every page is then checked)."""
+def load_policy(path: Path | None = None, salt: str | None = None) -> dict | None:
+    """The owner's verification-routing decision with its secret audit salt (`salt`, else
+    OPEN_ALVARY_AUDIT_SALT), or None where there is no decision (every page is then checked)."""
     path = path or POLICY
     if not path.exists():
         return None
     policy = json.loads(path.read_text())
-    for key in ("decision", "decided_by", "decided_at", "audit_rate", "minimum_per_document"):
+    for key in (
+        "decision",
+        "decided_by",
+        "decided_at",
+        "audit_rate",
+        "minimum_per_document",
+        "sample_salt_sha256",
+    ):
         if key not in policy:
             raise ValueError(f"The verification-routing decision lacks {key}")
     if not 0 < policy["audit_rate"] <= 1 or policy["minimum_per_document"] < 1:
         raise ValueError("The audit rate must be in (0, 1] and the minimum at least 1")
-    return policy
+    salt = os.environ.get(SALT_ENV, "") if salt is None else salt
+    if len(salt) < SALT_LEAST:
+        raise ValueError(
+            f"The verification-routing decision draws its audit samples with a secret salt: set {SALT_ENV}"
+            f" (at least {SALT_LEAST} characters)"
+        )
+    if not hmac.compare_digest(salt_sha256(salt), str(policy["sample_salt_sha256"]).lower()):
+        raise ValueError(f"{SALT_ENV} is not the salt the verification-routing decision committed to")
+    return {**policy, "sample_salt": salt}
+
+
+def salt_sha256(salt: str) -> str:
+    """What a decision records of its audit salt."""
+    return hashlib.sha256(salt.encode()).hexdigest()
 
 
 def _flag_words(flag: dict) -> str:
@@ -168,15 +206,17 @@ def routes(reading: dict, issues_by_page: dict[int, int] | None = None) -> dict[
 
 def sample(document_id: str, agreed: list[int], policy: dict) -> list[int]:
     """The audit sample of a document's unreviewed (agreed and native) pages: deterministic for the
-    document and the policy's decision, so it cannot be chosen after the fact; at least the policy's
-    minimum (or all of them)."""
+    document, the policy's decision and the salt it committed to, so it cannot be chosen after the fact,
+    and secret while the salt is; at least the policy's minimum (or all of them)."""
     if not agreed:
         return []
     size = min(
         len(agreed), max(policy["minimum_per_document"], math.ceil(policy["audit_rate"] * len(agreed)))
     )
-    seed = f"{policy['decision']}:{document_id}"
-    ranked = sorted(agreed, key=lambda page: hashlib.sha256(f"{seed}:{page}".encode()).hexdigest())
+    key, seed = policy["sample_salt"].encode(), f"{policy['decision']}:{document_id}"
+    ranked = sorted(
+        agreed, key=lambda page: hmac.new(key, f"{seed}:{page}".encode(), hashlib.sha256).hexdigest()
+    )
     return sorted(ranked[:size])
 
 
@@ -297,7 +337,8 @@ def _upper(failures: int, trials: int) -> float | None:
 
 
 def main(argv=None) -> int:
-    """python -m workbench.routing calibrate --database URL DOCUMENT... : the calibration report."""
+    """python -m workbench.routing calibrate --database URL DOCUMENT... : the calibration report.
+    python -m workbench.routing salt : a new audit salt, and the SHA-256 a decision records of it."""
     import argparse
     import sys
 
@@ -308,7 +349,13 @@ def main(argv=None) -> int:
     run = commands.add_parser("calibrate")
     run.add_argument("--database", required=True, help="The workbench database holding the reviews")
     run.add_argument("documents", nargs="+")
+    commands.add_parser("salt")
     args = parser.parse_args(argv)
+    if args.command == "salt":
+        salt = secrets.token_urlsafe(32)
+        print(f"Salt (a secret: keep it in Secret Manager as {SALT_ENV}, never in the repository): {salt}")
+        print(f"sample_salt_sha256 (for the decision): {salt_sha256(salt)}")
+        return 0
     report = calibrate(content.Library(), Store(connect(args.database)), args.documents)
     json.dump(report, sys.stdout, indent=2)
     print()

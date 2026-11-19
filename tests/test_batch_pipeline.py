@@ -191,12 +191,84 @@ def test_azure_reader_retries_throttling_and_polls_until_done(tmp_path, monkeypa
     monkeypatch.setenv("AZURE_DI_ENDPOINT", "https://example.cognitiveservices.azure.com/")
     monkeypatch.setenv("AZURE_DI_KEY", "test")
     slept = []
-    reader = readers.AzureReader(client=FakeAzure(), sleep=slept.append)
+    reader = readers.AzureReader(client=FakeAzure(), sleep=slept.append, jitter=lambda: 0.0)
     reading = reader.read(blank_pdf(tmp_path / "a.pdf", 2))
     assert [p["page"] for p in reading.pages] == [1, 2] and reading.billed_pages == 2
     assert reading.raw["analyze"]["modelId"] == "prebuilt-layout"
     assert reading.version == reader.version()  # the stored version is the cache key
     assert slept == [1.0, 1.0, 2.0]  # Retry-After, Retry-After, then backoff for the 503
+
+
+class Recording:
+    """An Azure resource answering from a list, keeping each request's method and headers."""
+
+    def __init__(self, *responses):
+        self.responses, self.sent = list(responses), []
+
+    def request(self, method, url, headers=None, **kwargs):
+        self.sent.append((method, dict(headers or {})))
+        return self.responses.pop(0)
+
+
+def azure(monkeypatch, client, slept):
+    monkeypatch.setenv("AZURE_DI_ENDPOINT", "https://example.cognitiveservices.azure.com/")
+    monkeypatch.setenv("AZURE_DI_KEY", "test")
+    return readers.AzureReader(client=client, sleep=slept.append, jitter=lambda: 0.0)
+
+
+def test_an_analysis_throttled_is_sent_again_with_its_content_type(tmp_path, monkeypatch):
+    """Findings, 2026-11-19: the retry of a throttled analysis was sent without Content-Type."""
+    client = Recording(
+        FakeResponse(429, headers={"Retry-After": "3"}),
+        FakeResponse(202, headers={"Operation-Location": "https://x/op"}),
+        FakeResponse(200, {"status": "succeeded", "analyzeResult": {"paragraphs": []}}),
+    )
+    slept = []
+    azure(monkeypatch, client, slept).read(blank_pdf(tmp_path / "a.pdf", 1))
+    posts = [headers for method, headers in client.sent if method == "POST"]
+    assert len(posts) == 2 and all(h["Content-Type"] == "application/pdf" for h in posts)
+    assert all(h["Ocp-Apim-Subscription-Key"] == "test" for _, h in client.sent)
+    assert slept == [3.0]
+
+
+def test_an_analysis_answered_with_a_server_error_is_not_sent_again(tmp_path, monkeypatch):
+    """It may have been taken in, and billed: the batch records the failure instead."""
+    client = Recording(FakeResponse(503), FakeResponse(202, headers={"Operation-Location": "https://x/op"}))
+    with pytest.raises(RuntimeError, match="503"):
+        azure(monkeypatch, client, []).read(blank_pdf(tmp_path / "a.pdf", 1))
+    assert [method for method, _ in client.sent] == ["POST"]
+
+
+def test_throttling_gives_up_after_six_tries_without_a_last_wait(monkeypatch):
+    client = Recording(*[FakeResponse(429) for _ in range(6)])
+    slept = []
+    with pytest.raises(RuntimeError, match="429"):
+        azure(monkeypatch, client, slept)._send("GET", "https://x/op")
+    assert len(client.sent) == 6 and slept == [2.0, 4.0, 8.0, 16.0, 32.0]
+
+
+@pytest.mark.parametrize(
+    "header, wait",
+    [
+        ("7", 7.0),
+        ("0", 0.0),
+        ("-5", 0.0),
+        ("100000", readers.LONGEST_WAIT),
+        ("Wed, 21 Oct 2015 07:28:00 GMT", 0.0),  # a date already past
+        ("soon", 2.0),  # neither seconds nor a date: the backoff
+        ("", 2.0),
+    ],
+)
+def test_retry_after_is_read_as_seconds_or_a_date_within_bounds(header, wait):
+    assert readers.retry_after({"Retry-After": header} if header else {}, 2.0) == wait
+
+
+def test_retry_after_given_as_a_date_to_come_is_waited_for():
+    from datetime import UTC, datetime, timedelta
+    from email.utils import format_datetime
+
+    later = format_datetime(datetime.now(UTC) + timedelta(seconds=30), usegmt=True)
+    assert 25 <= readers.retry_after({"Retry-After": later}, 2.0) <= 30
 
 
 # --- reconciliation -----------------------------------------------------------------------------

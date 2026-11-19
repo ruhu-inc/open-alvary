@@ -772,7 +772,7 @@ def publish_records(
     corpus = store.load()
     by_id = {name: {m.id: m for m in getattr(corpus, name)} for name in Corpus.model_fields}
     report = {"published": [], "updated": [], "taken_down": [], "skipped": {}}
-    held = privacy_holds(store)
+    held: frozenset[str] = frozenset(privacy_holds(store))
     if jurisdiction not in by_id["jurisdictions"]:
         # From the project's jurisdiction profile; a regional body carries no country code (DAT-02).
         languages = {code for item in approved for code in (e.language for e in item.record.expressions)}
@@ -811,9 +811,9 @@ def publish_records(
             # A later text decision or an operator's hold owns this rights record and the note on what
             # text there is, with or without a text public now; the records step never narrows either.
             entry["rights"] = existing.model_copy(update={"metadata_public": True})
-            held = by_id["sources"].get(item.work)
-            if held is not None:
-                entry["source"] = entry["source"].model_copy(update={"catalogue_note": held.catalogue_note})
+            shown = by_id["sources"].get(item.work)
+            if shown is not None:
+                entry["source"] = entry["source"].model_copy(update={"catalogue_note": shown.catalogue_note})
         _put(corpus, "sources", entry["source"])
         _put(corpus, "rights", entry["rights"])
         report["updated" if item.work in by_id["sources"] else "published"].append(item.work)

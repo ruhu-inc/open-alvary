@@ -161,3 +161,67 @@ def test_editing_a_deactivated_operator_leaves_them_deactivated_until_reactivate
     monkeypatch.setattr(admin.settings, "load", lambda: None)
     admin.main(["reactivate", "ada@example.org"])
     assert active()
+
+
+def racing(store, table, competitor):
+    """Run `competitor` (SQL) just before this store's next write to `table`, inside its transaction: as
+    another request that read the same row and wrote first would, under READ COMMITTED."""
+    from sqlalchemy import event
+
+    fired = []
+
+    def before(conn, cursor, statement, parameters, context, executemany):
+        verb = statement.lstrip().split(None, 1)[0].upper()
+        if not fired and verb in ("UPDATE", "DELETE") and f" {table}" in statement:
+            fired.append(statement)
+            cursor.execute(competitor)
+
+    event.listen(store.engine, "before_cursor_execute", before)
+    return fired
+
+
+def test_an_enrolment_code_two_requests_race_for_is_spent_once(tmp_path):
+    """Findings, 2026-11-19: the code was read, then marked used whether or not another request had just
+    marked it, so both could enrol a passkey."""
+    store = Store(connect(f"sqlite:///{tmp_path / 'w.db'}"))
+    store.add_operator("ana@example.org", "Ana", {"reviewer", "access_admin"})
+    code = store.issue_enrolment("ana@example.org")
+    fired = racing(store, "passkey_enrolment", "UPDATE passkey_enrolment SET used_at = CURRENT_TIMESTAMP")
+    assert not store.take_enrolment("ana@example.org", code) and fired
+    fresh = store.issue_enrolment("ana@example.org")
+    assert store.take_enrolment("ana@example.org", fresh)
+    assert not store.take_enrolment("ana@example.org", fresh)  # once
+    assert not store.take_enrolment("bea@example.org", store.issue_enrolment("ana@example.org"))
+
+
+def test_an_expired_enrolment_code_is_refused_and_spent(tmp_path, monkeypatch):
+    store = Store(connect(f"sqlite:///{tmp_path / 'w.db'}"))
+    store.add_operator("ana@example.org", "Ana", {"reviewer", "access_admin"})
+    code = store.issue_enrolment("ana@example.org")
+    later = workbench_store.now() + workbench_store.ENROLMENT_TTL + timedelta(minutes=1)
+    monkeypatch.setattr(workbench_store, "now", lambda: later)
+    assert not store.take_enrolment("ana@example.org", code)
+
+
+def test_a_challenge_two_requests_race_for_is_taken_once(tmp_path):
+    store = Store(connect(f"sqlite:///{tmp_path / 'w.db'}"))
+    token, _ = store.start_session("ana@example.org")
+    token_hash = workbench_store.digest(token)
+    challenge = store.begin_challenge(token_hash, "verify")
+    fired = racing(store, "session", "UPDATE session SET challenge = NULL")
+    assert store.take_challenge(token_hash, "verify") is None and fired
+    challenge = store.begin_challenge(token_hash, "verify")
+    assert store.take_challenge(token_hash, "register") is None  # the wrong purpose spends it
+    challenge = store.begin_challenge(token_hash, "verify")
+    assert store.take_challenge(token_hash, "verify") == challenge
+    assert store.take_challenge(token_hash, "verify") is None
+
+
+def test_a_sign_in_flow_two_callbacks_race_for_is_taken_once(tmp_path):
+    store = Store(connect(f"sqlite:///{tmp_path / 'w.db'}"))
+    state = store.begin_flow("nonce", "verifier")
+    fired = racing(store, "auth_flow", "DELETE FROM auth_flow")
+    assert store.take_flow(state) is None and fired
+    state = store.begin_flow("nonce", "verifier")
+    assert store.take_flow(state)["verifier"] == "verifier"
+    assert store.take_flow(state) is None
